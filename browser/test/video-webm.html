@@ -1,0 +1,5 @@
+<!doctype html><title>video webm</title>
+<style>html,body{margin:0;height:100%;background:#202020;overflow:hidden}video{width:100vw;height:100vh;object-fit:fill}</style>
+<video id="v" src="sync.webm" autoplay loop playsinline></video>
+<script>const v=document.getElementById('v');v.play().catch(e=>console.log('play failed',e));
+v.addEventListener('error',()=>console.log('video error',v.error&&v.error.code));</script>

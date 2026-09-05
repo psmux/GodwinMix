@@ -1,0 +1,646 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>LiveboxMix</title>
+<style>
+  :root {
+    --bg: #0e1013; --panel: #171a1f; --line: #262b33;
+    --text: #e6e9ee; --dim: #8b93a1;
+    --live: #e5484d; --ok: #3dd68c; --warn: #f5a524;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font: 14px/1.45 ui-sans-serif, -apple-system, "Segoe UI", Roboto, sans-serif;
+    height: 100vh; display: flex; flex-direction: column;
+  }
+  header {
+    display: flex; align-items: center; gap: 16px;
+    padding: 10px 16px; border-bottom: 1px solid var(--line); background: var(--panel);
+  }
+  header h1 { font-size: 15px; margin: 0; font-weight: 600; letter-spacing: .2px; }
+  .spacer { flex: 1; }
+  .pill {
+    font-size: 12px; color: var(--dim); border: 1px solid var(--line);
+    padding: 3px 9px; border-radius: 999px; white-space: nowrap;
+  }
+  .pill b { color: var(--text); font-weight: 500; }
+
+  main { flex: 1; display: flex; min-height: 0; }
+  #stage {
+    flex: 1; position: relative; display: flex;
+    align-items: center; justify-content: center; padding: 16px; min-width: 0;
+  }
+  #wrap { position: relative; line-height: 0; }
+  #mosaic { max-width: 100%; max-height: 100%; display: block; background: #000; border-radius: 6px; }
+  #cells { position: absolute; inset: 0; }
+  .cell {
+    position: absolute; cursor: pointer; border: 2px solid transparent;
+    border-radius: 4px; transition: border-color .12s, background .12s;
+  }
+  .cell:hover { border-color: rgba(255,255,255,.45); background: rgba(255,255,255,.06); }
+  .cell.live { border-color: var(--live); }
+  .cell.program-return { cursor: default; border-color: rgba(255,255,255,.18); }
+  .cell.program-return:hover { background: none; }
+  .label {
+    position: absolute; left: 0; bottom: 0; right: 0;
+    font-size: 11px; line-height: 1.3; padding: 3px 6px;
+    background: linear-gradient(transparent, rgba(0,0,0,.85));
+    display: flex; align-items: baseline; gap: 6px;
+  }
+  .key {
+    font-size: 10px; color: #000; background: var(--dim);
+    border-radius: 3px; padding: 0 4px; font-weight: 700;
+  }
+  .cell.live .key { background: var(--live); color: #fff; }
+  .name { font-weight: 600; }
+  .st { color: var(--dim); margin-left: auto; }
+  .st.live { color: var(--ok); } .st.stalled { color: var(--warn); } .st.failed { color: var(--live); }
+
+  aside {
+    width: 280px; border-left: 1px solid var(--line); background: var(--panel);
+    padding: 14px; overflow-y: auto; display: flex; flex-direction: column; gap: 18px;
+  }
+  h2 { font-size: 11px; text-transform: uppercase; letter-spacing: .08em;
+       color: var(--dim); margin: 0 0 8px; font-weight: 600; }
+  .out { border: 1px solid var(--line); border-radius: 6px; padding: 8px 10px; margin-bottom: 8px; }
+  .out .row { display: flex; align-items: baseline; gap: 8px; }
+  .out .id { font-weight: 600; }
+  .out .meta { font-size: 11px; color: var(--dim); margin-top: 3px; word-break: break-all; }
+  .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--dim); flex: none; }
+  .dot.live { background: var(--ok); } .dot.reconnecting { background: var(--warn); }
+  .dot.failed { background: var(--live); } .dot.connecting { background: var(--warn); }
+  button {
+    background: #222731; color: var(--text); border: 1px solid var(--line);
+    border-radius: 5px; padding: 4px 9px; font-size: 12px; cursor: pointer;
+  }
+  button:hover { background: #2b313c; }
+  .meter { height: 6px; background: #0a0c0f; border-radius: 3px; overflow: hidden; margin-bottom: 4px; }
+  .meter i { display: block; height: 100%; width: 0%; background: var(--ok); transition: width .08s linear; }
+  .meter i.hot { background: var(--live); }
+  .kv { display: flex; justify-content: space-between; font-size: 12px; color: var(--dim); }
+  .kv b { color: var(--text); font-weight: 500; }
+  .clips {
+    max-height: 190px; overflow-y: auto; border: 1px solid var(--line);
+    border-radius: 6px; background: #0f1216;
+  }
+  .clip {
+    display: flex; align-items: baseline; gap: 8px; padding: 5px 8px;
+    cursor: pointer; border-bottom: 1px solid rgba(255,255,255,.04); font-size: 12px;
+  }
+  .clip:last-child { border-bottom: 0; }
+  .clip:hover { background: rgba(255,255,255,.05); }
+  .clip.sel { background: rgba(229,72,77,.18); box-shadow: inset 2px 0 0 var(--live); }
+  .clip .cn { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .clip .cd { color: var(--dim); font-variant-numeric: tabular-nums; }
+  .clip .warn { color: var(--warn); }
+  .clips .empty { padding: 10px; color: var(--dim); font-size: 12px; line-height: 1.4; }
+  button.ghost { background: transparent; }
+  #addout, #addsrc { margin-top: 10px; }
+  #addout summary { font-size: 11px; color: var(--dim); cursor: pointer; }
+  #addout input, #addout select { margin-top: 6px; }
+  select {
+    background: #0f1216; color: var(--text); border: 1px solid var(--line);
+    border-radius: 5px; padding: 4px 6px; font-size: 12px; font-family: inherit;
+  }
+  #addsrc summary { font-size: 11px; color: var(--dim); cursor: pointer; }
+  #addsrc input { margin-top: 6px; }
+  .srcrow { display: flex; align-items: baseline; gap: 8px; margin-bottom: 5px; }
+  .srcrow .nm { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .srcrow .kind {
+    font-size: 10px; color: var(--dim); border: 1px solid var(--line);
+    border-radius: 3px; padding: 0 4px; text-transform: uppercase;
+  }
+  .srcrow .del {
+    border: 0; background: transparent; color: var(--dim); cursor: pointer;
+    font-size: 14px; line-height: 1; padding: 0 3px;
+  }
+  .srcrow .del:hover { color: var(--live); background: transparent; }
+  #adcustom { margin-top: 8px; }
+  #adcustom summary { font-size: 11px; color: var(--dim); cursor: pointer; }
+  #adcustom input { margin-top: 6px; }
+  input[type=text], #aduri {
+    width: 100%; background: #0f1216; color: var(--text); border: 1px solid var(--line);
+    border-radius: 5px; padding: 5px 7px; font-size: 12px; font-family: inherit;
+  }
+  .adrow { display: flex; gap: 6px; margin-top: 6px; align-items: center; }
+  .cue { font-size: 12px; color: var(--dim); display: flex; align-items: center; gap: 5px; }
+  .cue input { width: 62px; }
+  .adrow button { flex: 1; }
+  .hint { font-size: 11px; color: var(--dim); margin-top: 6px; line-height: 1.35; }
+  .seg { display: flex; gap: 0; margin-top: 8px; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }
+  .seg button { flex: 1; border: 0; border-radius: 0; background: transparent; color: var(--dim); padding: 6px 4px; }
+  .seg button + button { border-left: 1px solid var(--line); }
+  .seg button.on { background: #2b313c; color: var(--text); font-weight: 600; }
+  #adpill { border-color: var(--live); color: #fff; background: var(--live); font-weight: 600; }
+  #alerts { position: fixed; right: 14px; bottom: 14px; display: flex; flex-direction: column; gap: 6px; }
+  .alert {
+    background: var(--panel); border: 1px solid var(--line); border-left: 3px solid var(--warn);
+    border-radius: 5px; padding: 7px 11px; font-size: 12px; max-width: 380px;
+  }
+  .alert.error { border-left-color: var(--live); }
+  #offline {
+    position: fixed; inset: 0; background: rgba(14,16,19,.9); display: none;
+    align-items: center; justify-content: center; font-size: 15px; color: var(--warn);
+  }
+</style>
+
+<header>
+  <h1>LiveboxMix</h1>
+  <span class="pill">program <b id="pgm">—</b></span>
+  <span class="pill">uptime <b id="uptime">—</b></span>
+  <div class="spacer"></div>
+  <span class="pill" id="backend">—</span>
+  <span class="pill" id="adpill" hidden>AD ON AIR</span>
+  <button id="cut">Cut to black</button>
+</header>
+
+<main>
+  <div id="stage">
+    <div id="wrap">
+      <img id="mosaic" alt="Multiview">
+      <div id="cells"></div>
+    </div>
+  </div>
+  <aside>
+    <section>
+      <h2>Program audio</h2>
+      <div id="meters"></div>
+    </section>
+    <section>
+      <h2>Ad break</h2>
+      <div id="medialist" class="clips"></div>
+      <div class="adrow">
+        <button id="adrefresh" class="ghost" title="Rescan the library">Rescan</button>
+        <label class="cue">in <input id="adcue" type="number" min="0" max="600" step="1" value="0"> s</label>
+      </div>
+      <div class="adrow">
+        <button id="adplay" disabled>Roll ad</button>
+        <button id="adstop" disabled>End early</button>
+      </div>
+      <div class="hint" id="adhint">Pick a clip. Double-click rolls it straight away.</div>
+      <details id="adcustom">
+        <summary>Use a path instead</summary>
+        <input id="aduri" placeholder="/path/on/the/server/ad.mp4" spellcheck="false">
+      </details>
+    </section>
+    <section>
+      <h2>Outputs</h2>
+      <div id="outputs"></div>
+      <details id="addout">
+        <summary>Add a destination</summary>
+        <input id="noid" placeholder="id (e.g. youtube)" spellcheck="false">
+        <input id="nouri" placeholder="rtmp://a.rtmp.youtube.com/live2/KEY" spellcheck="false">
+        <label class="cue" style="margin-top:6px">
+          policy
+          <select id="nopolicy">
+            <option value="own">own server (reconnect fast)</option>
+            <option value="cdn">CDN (back off harder)</option>
+          </select>
+        </label>
+        <div class="adrow"><button id="noadd">Add destination</button></div>
+      </details>
+    </section>
+    <section>
+      <h2>Sources</h2>
+      <div id="sources"></div>
+      <details id="addsrc">
+        <summary>Add a source</summary>
+        <div class="seg" id="nskind">
+          <button data-kind="web" class="on" title="Render a website, with its audio, as a source">Website</button>
+          <button data-kind="stream" title="RTMP, HLS, DASH, RTSP, SRT">Camera or stream</button>
+          <button data-kind="exec" title="A command line whose output is the source">Command</button>
+        </div>
+        <input id="nsuri" placeholder="Paste the page address, e.g. https://www.youtube.com/watch?v=…" spellcheck="false">
+        <input id="nsname" placeholder="name (optional, the site's name by default)" spellcheck="false">
+        <div class="adrow"><button id="nsadd">Add source</button></div>
+        <div class="hint" id="nshint">The page is rendered by a real browser and its sound comes along. Paste and add.</div>
+      </details>
+    </section>
+  </aside>
+</main>
+
+<div id="alerts"></div>
+<div id="offline">Disconnected from the mixer. Retrying…</div>
+
+<script>
+"use strict";
+const $ = (id) => document.getElementById(id);
+let status = null;
+let objectUrl = null;
+
+// --- transport -------------------------------------------------------------
+// One socket carries both state (text) and mosaic frames (binary).
+function connect() {
+  const proto = location.protocol === "https:" ? "wss:" : "ws:";
+  const ws = new WebSocket(`${proto}//${location.host}/ws`);
+  ws.binaryType = "blob";
+
+  ws.onopen = () => { $("offline").style.display = "none"; };
+  ws.onclose = () => {
+    $("offline").style.display = "flex";
+    setTimeout(connect, 1000);
+  };
+  ws.onmessage = (ev) => {
+    if (typeof ev.data === "string") { onEvent(JSON.parse(ev.data)); return; }
+    // Revoke the previous URL or the tab leaks a blob per frame.
+    const url = URL.createObjectURL(ev.data);
+    const img = $("mosaic");
+    const previous = objectUrl;
+    img.onload = () => { if (previous) URL.revokeObjectURL(previous); };
+    img.src = url;
+    objectUrl = url;
+  };
+}
+
+function onEvent(ev) {
+  switch (ev.type) {
+    // Serde flattens the snapshot into the event, so the event *is* the
+    // status, with an extra `type` field. See the shape test in state.rs.
+    case "status": status = ev; render(); break;
+    case "took": if (status) { status.program = ev.source; render(); } break;
+    case "source_state_changed":
+      if (status) {
+        const s = status.sources.find((s) => s.id === ev.source);
+        if (s) { s.state = ev.state; render(); }
+      }
+      break;
+    case "output_state_changed":
+      if (status) {
+        const o = status.outputs.find((o) => o.id === ev.output);
+        if (o) { o.state = ev.state; o.reconnects = ev.reconnects; render(); }
+      }
+      break;
+    case "ad_break_changed":
+      if (status) { status.ad = ev.ad; renderAd(); }
+      break;
+    case "audio_level": drawMeters(ev.peak_db); break;
+    case "alert": alert_(ev.severity, ev.message); break;
+  }
+}
+
+// --- actions ---------------------------------------------------------------
+async function take(source) {
+  try {
+    const r = await fetch("/api/take", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ source }),
+    });
+    if (!r.ok) alert_("error", await r.text());
+  } catch (e) { alert_("error", String(e)); }
+}
+
+async function reconnect(id) {
+  await fetch(`/api/outputs/${encodeURIComponent(id)}/reconnect`, { method: "POST" });
+}
+
+$("cut").onclick = () => take(null);
+
+async function post(path, body) {
+  try {
+    const r = await fetch(path, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: body === undefined ? undefined : JSON.stringify(body),
+    });
+    if (!r.ok) alert_("error", await r.text());
+    return r.ok;
+  } catch (e) { alert_("error", String(e)); return false; }
+}
+
+let media = null;
+let selectedClip = null;
+
+async function loadMedia() {
+  try {
+    const r = await fetch("/api/media");
+    if (!r.ok) { alert_("error", await r.text()); return; }
+    media = await r.json();
+    renderMedia();
+  } catch (e) { alert_("error", String(e)); }
+}
+
+function fmtDur(ms) {
+  if (ms == null) return "";
+  const t = Math.round(ms / 1000);
+  return `${Math.floor(t / 60)}:${String(t % 60).padStart(2, "0")}`;
+}
+
+function renderMedia() {
+  const host = $("medialist");
+  if (!media) { host.innerHTML = `<div class="empty">Loading…</div>`; return; }
+  if (!media.items.length) {
+    host.innerHTML = `<div class="empty">${
+      media.error
+        ? `Cannot read <b>${escapeHtml(media.dir)}</b>: ${escapeHtml(media.error)}`
+        : `No clips in <b>${escapeHtml(media.dir)}</b>. Drop video files there and press Rescan.`
+    }</div>`;
+    return;
+  }
+  host.innerHTML = media.items.map((it, i) => `
+    <div class="clip${it.path === selectedClip ? " sel" : ""}" data-i="${i}" title="${escapeHtml(it.path)}">
+      <span class="cn">${escapeHtml(it.name)}</span>
+      ${it.has_audio ? "" : `<span class="warn" title="No audio track">mute</span>`}
+      <span class="cd">${fmtDur(it.duration_ms)}</span>
+    </div>`).join("");
+  [...host.querySelectorAll(".clip")].forEach((el) => {
+    const it = media.items[Number(el.dataset.i)];
+    el.onclick = () => { selectedClip = it.path; $("aduri").value = it.path; renderMedia(); renderAd(); };
+    el.ondblclick = () => { selectedClip = it.path; rollAd(); };
+  });
+}
+
+$("adrefresh").onclick = loadMedia;
+
+function adTarget() {
+  const typed = $("aduri").value.trim();
+  return typed || selectedClip;
+}
+
+function rollAd() {
+  const uri = adTarget();
+  if (!uri) { alert_("warning", "Pick a clip first."); return; }
+  try { localStorage.setItem("lbx.adUri", uri); } catch {}
+  // A cue is an absolute point on the program's running time, so the mixer can
+  // arm it on the pipeline clock and land it on the intended frame.
+  const delay = Math.max(0, Number($("adcue").value) || 0);
+  const body = { uri };
+  if (delay > 0 && status) {
+    body.at_running_time_ms = status.running_time_ms + delay * 1000;
+  }
+  post("/api/adbreak", body);
+}
+
+$("adplay").onclick = rollAd;
+$("adstop").onclick = () => post("/api/adbreak/end");
+$("aduri").oninput = renderAd;
+try {
+  const saved = localStorage.getItem("lbx.adUri");
+  if (saved) selectedClip = saved;
+} catch {}
+loadMedia();
+
+// Number keys take the camera in that slot. Any operator switching cameras
+// will reach for these before they reach for the mouse.
+document.addEventListener("keydown", (e) => {
+  if (e.target.tagName === "INPUT" || e.metaKey || e.ctrlKey || e.altKey) return;
+  if (e.key >= "1" && e.key <= "9") {
+    const i = Number(e.key) - 1;
+    const s = status?.sources?.[i];
+    if (s) { e.preventDefault(); take(s.id); }
+  } else if (e.key === "0" || e.key === "Escape") {
+    e.preventDefault(); take(null);
+  }
+});
+
+// --- rendering -------------------------------------------------------------
+function render() {
+  if (!status) return;
+  $("pgm").textContent = status.program ?? "black";
+  $("uptime").textContent = fmtDuration(status.uptime_secs);
+  const b = status.backend;
+  $("backend").textContent =
+    `${b.video_encoder} · ${b.hardware_accelerated ? "hardware" : "software"}`;
+
+  renderCells();
+  renderOutputs();
+  renderSources();
+  renderAd();
+}
+
+function renderAd() {
+  const ad = status?.ad;
+  const onAir = !!(ad && ad.on_air);
+  $("adpill").hidden = !onAir;
+  $("adstop").disabled = !ad;
+  $("adplay").disabled = !!ad;
+  $("adcue").disabled = !!ad;
+  $("adplay").disabled = !!ad || !adTarget();
+  $("adhint").textContent = ad
+    ? (onAir
+        ? `On air. Returns to ${ad.return_to ?? "black"} when the file ends.`
+        : `Armed and prerolled, waiting for its cue.`)
+    : "Pick a clip. Double-click rolls it straight away; set a cue to place it exactly.";
+}
+
+// Cells are positioned as percentages of the mosaic so the overlay tracks the
+// image at any display size, and the server stays the single source of truth
+// for the layout.
+function renderCells() {
+  const mv = status.multiview;
+  const host = $("cells");
+  host.innerHTML = "";
+  if (!mv || !mv.enabled || !mv.width) return;
+
+  const order = status.sources.map((s) => s.id);
+  for (const c of mv.cells) {
+    const div = document.createElement("div");
+    div.className = "cell";
+    div.style.left = `${(c.x / mv.width) * 100}%`;
+    div.style.top = `${(c.y / mv.height) * 100}%`;
+    div.style.width = `${(c.w / mv.width) * 100}%`;
+    div.style.height = `${(c.h / mv.height) * 100}%`;
+
+    const label = document.createElement("div");
+    label.className = "label";
+
+    if (c.source === null) {
+      div.classList.add("program-return");
+      label.innerHTML = `<span class="name">PROGRAM</span>`;
+    } else {
+      const src = status.sources.find((s) => s.id === c.source);
+      const slot = order.indexOf(c.source);
+      if (status.program === c.source) div.classList.add("live");
+      div.onclick = () => take(c.source);
+      div.title = src ? `${src.name} — ${src.uri}` : c.source;
+      label.innerHTML =
+        (slot >= 0 && slot < 9 ? `<span class="key">${slot + 1}</span>` : "") +
+        `<span class="name">${escapeHtml(src ? src.name : c.source)}</span>` +
+        `<span class="st ${src ? src.state : ""}">${src ? src.state : "?"}</span>`;
+    }
+    div.appendChild(label);
+    host.appendChild(div);
+  }
+}
+
+function renderOutputs() {
+  $("outputs").innerHTML = status.outputs.map((o) => `
+    <div class="out">
+      <div class="row">
+        <span class="dot ${o.state}"></span>
+        <span class="id">${escapeHtml(o.id)}</span>
+        <span class="st ${o.state}">${o.state}</span>
+      </div>
+      <div class="meta">${escapeHtml(o.uri_host)}</div>
+      <div class="meta">buffer ${o.queue_secs.toFixed(1)}s · ${o.reconnects} reconnect${o.reconnects === 1 ? "" : "s"}</div>
+    </div>`).join("") || `<div class="kv">no outputs configured</div>`;
+
+  // Rebind after innerHTML replaced the nodes.
+  [...$("outputs").querySelectorAll(".out")].forEach((el, i) => {
+    const o = status.outputs[i];
+    if (!o) return;
+    const row = document.createElement("div");
+    row.className = "adrow";
+    const rc = document.createElement("button");
+    rc.textContent = "Reconnect";
+    rc.onclick = () => reconnect(o.id);
+    const rm = document.createElement("button");
+    rm.textContent = "Remove";
+    rm.onclick = async () => {
+      if (!confirm(`Stop sending to "${o.id}"?`)) return;
+      const r = await fetch(`/api/outputs/${encodeURIComponent(o.id)}`, { method: "DELETE" });
+      if (!r.ok) alert_("error", await r.text());
+    };
+    row.append(rc, rm);
+    el.appendChild(row);
+  });
+}
+
+// Mirrors SourceKind::detect on the server, for display only.
+function kindOf(uri) {
+  const u = (uri || "").toLowerCase();
+  if (u.startsWith("exec:")) return "exec";
+  if (u.startsWith("web://") || u.startsWith("web+http://") || u.startsWith("web+https://")) return "web";
+  if (u.startsWith("rtmp://") || u.startsWith("rtmps://")) return "rtmp";
+  if (/^(rtsps?|srt|udp|rtp):\/\//.test(u)) return u.split(":")[0];
+  const path = u.split(/[?#]/)[0];
+  if (path.endsWith(".m3u8")) return "hls";
+  if (path.endsWith(".mpd")) return "dash";
+  return "file";
+}
+
+// What a person sees in the list; the prefixes are the mixer's business.
+const KIND_LABEL = { web: "website", exec: "command", rtmp: "RTMP", hls: "HLS", dash: "DASH", file: "file",
+  rtsp: "RTSP", rtsps: "RTSP", srt: "SRT", udp: "UDP", rtp: "RTP" };
+function shownUri(uri) {
+  const u = uri || "";
+  const m = u.match(/^web\+(https?:\/\/.*)$/i);
+  if (m) return m[1];
+  if (/^web:\/\//i.test(u)) return "https://" + u.slice(6);
+  return u;
+}
+
+function renderSources() {
+  const host = $("sources");
+  host.innerHTML = status.sources.map((s, i) => `
+    <div class="srcrow" data-id="${escapeHtml(s.id)}" title="${escapeHtml(shownUri(s.uri))}">
+      ${i < 9 ? `<span class="key">${i + 1}</span>` : ""}
+      <span class="nm"><b>${escapeHtml(s.name)}</b></span>
+      <span class="kind">${KIND_LABEL[kindOf(s.uri)] || kindOf(s.uri)}</span>
+      <span class="st ${s.state}">${s.state}${s.has_audio ? "" : " · mute"}</span>
+      <button class="del" title="Remove this source">&times;</button>
+    </div>`).join("") || `<div class="kv">no sources</div>`;
+
+  [...host.querySelectorAll(".srcrow")].forEach((row) => {
+    const id = row.dataset.id;
+    row.querySelector(".del").onclick = async (e) => {
+      e.stopPropagation();
+      if (!confirm(`Remove source "${id}"?`)) return;
+      const r = await fetch(`/api/sources/${encodeURIComponent(id)}`, { method: "DELETE" });
+      if (!r.ok) alert_("error", await r.text());
+    };
+  });
+}
+
+// --- adding a source: pick what it is, paste, done -------------------------
+const KIND_UI = {
+  web: {
+    placeholder: "Paste the page address, e.g. https://www.youtube.com/watch?v=…",
+    hint: "The page is rendered by a real browser and its sound comes along. Paste and add.",
+  },
+  stream: {
+    placeholder: "rtmp://host/live/key   https://host/stream.m3u8   rtsp://…   srt://…",
+    hint: "RTMP, HLS (.m3u8), DASH (.mpd), RTSP and SRT are recognised from the address.",
+  },
+  exec: {
+    placeholder: "ffmpeg -re -i … -f matroska -",
+    hint: "Runs on the mixer machine; its output is the source. Needs security.allow_exec_sources.",
+  },
+};
+let nsKind = "web";
+function setKind(k, byUser) {
+  nsKind = k;
+  [...$("nskind").children].forEach((b) => b.classList.toggle("on", b.dataset.kind === k));
+  $("nsuri").placeholder = KIND_UI[k].placeholder;
+  $("nshint").textContent = KIND_UI[k].hint + (byUser ? "" : "");
+}
+[...$("nskind").children].forEach((b) => (b.onclick = () => setKind(b.dataset.kind, true)));
+
+// Guess from what was pasted, so the right tab lights up without a click.
+function guessKind(u) {
+  const l = u.toLowerCase();
+  if (l.startsWith("exec:")) return "exec";
+  if (/^(rtmps?|rtsps?|srt|udp|rtp):\/\//.test(l)) return "stream";
+  if (/^web(\+https?)?:\/\//.test(l)) return "web";
+  if (/^https?:\/\//.test(l)) {
+    const path = l.split(/[?#]/)[0];
+    return /\.(m3u8|mpd|mp4|mkv|flv|ts|webm|mov)$/.test(path) ? "stream" : "web";
+  }
+  return null;
+}
+$("nsuri").oninput = () => {
+  const u = $("nsuri").value.trim();
+  const g = guessKind(u);
+  if (g && g !== nsKind) setKind(g, false);
+  if (u && g === "stream") $("nshint").textContent = `Will be opened as: ${KIND_LABEL[kindOf(u)] || kindOf(u)}`;
+};
+
+$("nsadd").onclick = async () => {
+  let uri = $("nsuri").value.trim();
+  const name = $("nsname").value.trim();
+  if (!uri) { alert_("warning", "Paste an address first."); return; }
+  if (nsKind === "exec" && !uri.toLowerCase().startsWith("exec:")) uri = "exec:" + uri;
+  const body = { uri, name: name || null, kind: nsKind === "web" ? "web" : null };
+  const ok = await post("/api/sources", body);
+  if (ok) { $("nsname").value = ""; $("nsuri").value = ""; $("nshint").textContent = KIND_UI[nsKind].hint; }
+};
+$("noadd").onclick = async () => {
+  const id = $("noid").value.trim();
+  const uri = $("nouri").value.trim();
+  if (!id || !uri) { alert_("warning", "A destination needs an id and a URL."); return; }
+  const ok = await post("/api/outputs", { id, uri, policy: $("nopolicy").value });
+  if (ok) { $("noid").value = ""; $("nouri").value = ""; }
+};
+
+
+function drawMeters(peaks) {
+  const host = $("meters");
+  if (host.children.length !== peaks.length) {
+    host.innerHTML = peaks.map(() => `<div class="meter"><i></i></div>`).join("");
+  }
+  peaks.forEach((db, i) => {
+    // -60 dBFS to 0 dBFS across the width.
+    const pct = Math.max(0, Math.min(100, ((db + 60) / 60) * 100));
+    const bar = host.children[i]?.firstElementChild;
+    if (bar) { bar.style.width = `${pct}%`; bar.classList.toggle("hot", db > -3); }
+  });
+}
+
+function alert_(severity, message) {
+  const el = document.createElement("div");
+  el.className = `alert ${severity}`;
+  el.textContent = message;
+  $("alerts").appendChild(el);
+  setTimeout(() => el.remove(), 8000);
+}
+
+function fmtDuration(s) {
+  const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60);
+  return h ? `${h}h ${m}m` : `${m}m ${s % 60}s`;
+}
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, (c) =>
+    ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
+
+connect();
+setInterval(async () => {
+  // The event stream carries changes; this refreshes the slowly-moving numbers
+  // (uptime, queue depth) and resynchronises if an event was ever missed.
+  try {
+    const r = await fetch("/api/status");
+    if (r.ok) { status = await r.json(); render(); }
+  } catch {}
+}, 2000);
+</script>

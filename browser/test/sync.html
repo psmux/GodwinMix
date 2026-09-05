@@ -1,0 +1,27 @@
+<!doctype html>
+<title>A/V sync probe</title>
+<style>html,body{margin:0;height:100%;background:#000;overflow:hidden}#f{position:fixed;inset:0;background:#fff;display:none}</style>
+<div id="f"></div>
+<script>
+// Every 2 s: a 100 ms white flash and a 100 ms 1 kHz beep, both scheduled on
+// the audio clock so the page itself has zero offset between them.
+const ac = new AudioContext({sampleRate: 48000});
+const f = document.getElementById('f');
+const PERIOD = 2, LEN = 0.1;
+let next = 0.5;
+function schedule() {
+  while (next < ac.currentTime + 1) {
+    const o = ac.createOscillator(), g = ac.createGain();
+    o.frequency.value = 1000; o.connect(g); g.connect(ac.destination);
+    g.gain.setValueAtTime(0, next); g.gain.setValueAtTime(0.8, next); g.gain.setValueAtTime(0, next + LEN);
+    o.start(next); o.stop(next + LEN + 0.01);
+    next += PERIOD;
+  }
+}
+function paint() {
+  const t = ac.currentTime, phase = (t - 0.5) % PERIOD;
+  f.style.display = (phase >= 0 && phase < LEN) ? 'block' : 'none';
+  requestAnimationFrame(paint);
+}
+ac.resume().then(() => { schedule(); setInterval(schedule, 500); paint(); });
+</script>

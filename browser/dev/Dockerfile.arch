@@ -1,0 +1,10 @@
+# Arch Linux x86_64 dev image: Arch packages CEF (extra/cef) built with
+# proprietary codecs, at the same version the cef crate binds. This image is
+# where the sidecar is built and tested against that libcef.
+FROM --platform=linux/amd64 archlinux:latest
+# pacman's download sandbox (seccomp) does not work under Rosetta emulation.
+RUN sed -i "s/^#DisableSandbox/DisableSandbox/; /^\[options\]/a DisableSandbox" /etc/pacman.conf && pacman -Syu --noconfirm && pacman -S --noconfirm \
+    cef rust cmake ninja clang base-devel git pkgconf which \
+    gstreamer gst-plugins-base gst-plugins-good gst-plugins-bad \
+    xorg-server-xvfb ffmpeg python \
+    && pacman -Scc --noconfirm

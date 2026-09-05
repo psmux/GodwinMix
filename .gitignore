@@ -1,0 +1,24 @@
+# Rust build output
+/target/
+browser/target/
+tauri-app/target/
+
+# Tauri generated schemas
+tauri-app/gen/schemas/
+
+# Local test rig: logs, runtime state, captures
+dev/harness/logs/
+dev/harness/*.runtime.toml
+browser/dev/out/
+browser/dev/out-arch/
+browser/dev/rt-ctx/
+browser/dev/liveboxmix-browser
+
+# Self-signed cert mediamtx generates on first run
+auto.crt
+auto.key
+
+# Local tooling state
+.omc/
+
+.DS_Store

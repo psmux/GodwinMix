@@ -1,0 +1,8 @@
+<!doctype html><meta charset=utf-8>
+<style>html,body{margin:0;height:100%;background:#101820;overflow:hidden}
+#b{position:absolute;top:40%;height:140px;width:260px;background:#ff8800;animation:s 2s linear infinite}
+#t{position:absolute;left:40px;top:60px;color:#fff;font:700 72px sans-serif}
+@keyframes s{from{left:-260px}to{left:100%}}</style>
+<div id=b></div><div id=t>CEF SOURCE</div>
+<script>const c=new AudioContext(),o=c.createOscillator(),g=c.createGain();
+o.frequency.value=660;g.gain.value=.4;o.connect(g);g.connect(c.destination);o.start();</script>

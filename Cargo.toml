@@ -1,0 +1,38 @@
+[package]
+name = "liveboxmix"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.82"
+description = "Live RTMP video mixer with hot source switching and uninterrupted output"
+
+[dependencies]
+gstreamer = "0.24"
+gstreamer-video = "0.24"
+gstreamer-audio = "0.24"
+gstreamer-app = "0.24"
+glib = "0.21"
+
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "sync", "signal", "time"] }
+axum = { version = "0.8", features = ["ws"] }
+tower-http = { version = "0.6", features = ["fs", "cors", "trace"] }
+
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+toml = "0.9"
+
+anyhow = "1"
+thiserror = "2"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+clap = { version = "4", features = ["derive", "env"] }
+parking_lot = "0.12"
+futures-util = { version = "0.3.34", default-features = false, features = ["sink", "std"] }
+gstreamer-pbutils = "0.24"
+reqwest = { version = "0.12", default-features = false, features = ["json"] }
+shell-words = "1.1.1"
+libc = "0.2.189"
+
+[profile.release]
+opt-level = 3
+lto = "thin"
+codegen-units = 1

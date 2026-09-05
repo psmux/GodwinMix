@@ -1,0 +1,9 @@
+logLevel: info
+rtmp: yes
+rtmpAddress: :1935
+hls: no
+webrtc: no
+srt: no
+rtsp: no
+paths:
+  all_others:

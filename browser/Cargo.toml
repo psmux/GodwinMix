@@ -1,0 +1,36 @@
+[package]
+name = "liveboxmix-browser"
+version = "0.1.0"
+edition = "2021"
+description = "Headless Chromium (CEF) rendering a page as a raw video and audio source"
+
+# Built on its own: CEF's dependency tree and binary download must not be
+# pulled into the mixer daemon's builds.
+[workspace]
+
+[dependencies]
+# Pinned to the exact CEF version that has builds with H.264 and AAC available
+# (see README, Codecs). The +metadata of this crate version is the CEF version.
+cef = "=150.0.0"
+# The sys crate is what downloads and checks the distribution, and its own
+# +metadata names the CEF version; it must be pinned to the same one.
+cef-dll-sys = "=150.0.0"
+# Only for muxing raw frames and PCM into Matroska on stdout; no codecs here.
+gstreamer = "0.24"
+gstreamer-app = "0.24"
+# Signal handling only.
+libc = "0.2"
+
+# The AppKit application class CEF requires on macOS.
+[target.'cfg(target_os = "macos")'.dependencies]
+objc2 = "0.6"
+objc2-app-kit = { version = "0.3", default-features = false, features = ["std", "NSApplication", "NSEvent", "NSResponder"] }
+
+[[bin]]
+name = "liveboxmix-browser"
+path = "src/main.rs"
+
+# macOS only: Chromium's renderer, GPU and utility processes run this.
+[[bin]]
+name = "liveboxmix-browser-helper"
+path = "src/helper.rs"

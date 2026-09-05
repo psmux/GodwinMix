@@ -1,0 +1,11 @@
+# The browser sidecar as a container, built from whatever CEF the sidecar was
+# built against (with dev/install-cef-dist.sh, the one with H.264 and AAC).
+# Context: dev/rt-ctx, filled from the build's target/release. stdout is the
+# stream; the mixer runs it through dev/sidecar-docker.sh.
+FROM lbx-cef-dev:gst
+RUN mkdir -p /opt/lbx
+COPY . /opt/lbx/
+COPY entrypoint.sh /opt/lbx/entrypoint.sh
+RUN chmod +x /opt/lbx/entrypoint.sh /opt/lbx/liveboxmix-browser
+ENV DISPLAY=:99
+ENTRYPOINT ["/opt/lbx/entrypoint.sh"]

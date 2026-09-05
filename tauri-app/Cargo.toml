@@ -1,0 +1,18 @@
+[package]
+name = "liveboxmix-desktop"
+version = "0.1.0"
+edition = "2021"
+
+# Its own workspace: this crate is built separately from the mixer daemon and
+# should not drag Tauri's dependency tree into the daemon's builds.
+[workspace]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+
+[profile.release]
+opt-level = "s"
+lto = true

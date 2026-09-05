@@ -1,0 +1,135 @@
+# LiveboxMix configuration.
+#
+# The canvas section is the contract every source is normalised to. It cannot
+# change while a broadcast is running, because the output encoder is started
+# once and never restarted. Pick it deliberately.
+
+[canvas]
+width = 1920
+height = 1080
+fps = 30
+sample_rate = 48000
+channels = 2
+
+[program]
+video_bitrate_kbps = 6000
+audio_bitrate_kbps = 160
+# Two seconds is what every CDN asks for.
+keyframe_interval_secs = 2
+# Audio crossfade on a take. Zero gives you an audible click.
+audio_ramp_ms = 180
+# Milliseconds to hold video back relative to audio at the encoders. Unset
+# means the known priming delay of the AAC encoder in use (fdkaacenc 43 ms,
+# avenc_aac 21 ms), which puts a page's beep on its flash to within a frame.
+# av_offset_ms = 43
+
+[multiview]
+enabled = true
+# Size of the whole mosaic, not of one cell. This costs roughly
+# width * height * fps * quality in bandwidth to each connected operator.
+width = 960
+height = 540
+fps = 8
+jpeg_quality = 60
+# Show what is going out as one of the cells.
+include_program = true
+
+# Ad clips available to the operator. Listed by the control server and shown as
+# a clickable library in the UI, so it works the same whether the operator is at
+# this machine or somewhere else: a browser file picker would hand back a file
+# from *their* machine, which the mixer cannot open.
+# Running a command line as a source is arbitrary code execution for anyone who
+# can reach the control port. Off unless you turn it on deliberately.
+[security]
+allow_exec_sources = false
+
+# How `web+` sources are rendered. The CEF sidecar (`liveboxmix-browser`, see
+# browser/) is used when found: here, next to this executable, or on PATH.
+# Without one, `web+` falls back to GStreamer's wpesrc. Not gated by
+# allow_exec_sources: the program is ours and the URL never meets a shell.
+[browser]
+# sidecar = "/opt/liveboxmix/liveboxmix-browser"
+# args = ["--audio-offset-ms", "0"]
+# env = { LBX_BROWSER_SWITCHES = "enable-gpu" }
+
+[media]
+dir = "media"
+# Only `dir` is required; the rest have defaults.
+# max_depth = 3
+# max_files = 500
+# probe_timeout_secs = 3
+
+[control]
+bind = "0.0.0.0:8080"
+
+[hardware]
+# auto, nvidia, va, videotoolbox, mediafoundation, d3d11, software.
+# `auto` picks the best backend present. Naming one makes startup fail if it is
+# missing, which is what you want on a server you control.
+decode = "auto"
+encode = "auto"
+
+# --- sources ---------------------------------------------------------------
+# Each source runs in its own pipeline. One dying cannot disturb the output.
+#
+# The protocol is worked out from the URL: rtmp:// and rtmps:// are demuxed
+# explicitly, .m3u8 is HLS, .mpd is DASH, rtsp/srt/udp/rtp are continuous
+# streams, and anything else is treated as a file.
+#
+# A page can also be a source, rendered headlessly with its audio:
+#   uri = "web+https://example.com/live-game"
+# That needs GStreamer's wpesrc (gstreamer1.0-wpe), which is Linux only. If the
+# page merely plays an HLS stream, adding that .m3u8 directly is cheaper and
+# looks better.
+#
+# Sources added or removed from the UI are saved to <config>.sources.toml
+# beside this file, and that list then takes precedence over the one here.
+
+[[sources]]
+id = "cam1"
+name = "Camera 1"
+uri = "rtmp://127.0.0.1:1935/live/cam1"
+# Seconds without a frame before the source is treated as dead and faded to
+# the slate rather than frozen on its last picture.
+stall_timeout_secs = 2.0
+# Which RTMP client pulls this source: auto, rtmp2, or librtmp.
+#
+# GStreamer ships two and they do not talk to the same servers. rtmp2src is the
+# modern one and works with mediamtx. Against node-media-server it connects, is
+# accepted, and then silently delivers nothing at all: no error, no data. The
+# older librtmp based rtmpsrc works with both.
+#
+# "auto" starts with rtmp2src and switches once, after six seconds without
+# media, so an unfamiliar server recovers on its own. Pin a client here to skip
+# that wait once you know which one your server needs.
+rtmp_client = "auto"
+
+[[sources]]
+id = "cam2"
+name = "Camera 2"
+uri = "rtmp://127.0.0.1:1935/live/cam2"
+
+# --- outputs ---------------------------------------------------------------
+# Each output is supervised separately and has its own reconnect policy.
+
+[[outputs]]
+id = "primary"
+uri = "rtmp://127.0.0.1:1935/live/program"
+# "own" reconnects fast. Use it for an RTMP server you control.
+policy = "own"
+# Seconds of encoded data held before the muxer. This is the buffer that makes
+# a short network hiccup invisible to the viewer.
+queue_secs = 5.0
+
+# [[outputs]]
+# id = "youtube"
+# uri = "rtmp://a.rtmp.youtube.com/live2/YOUR-STREAM-KEY"
+# # "cdn" backs off much harder. Public ingests throttle aggressive reconnects.
+# policy = "cdn"
+# queue_secs = 6.0
+#
+# # Or override the preset outright:
+# [outputs.reconnect]
+# initial_delay_ms = 1000
+# max_delay_ms = 30000
+# multiplier = 2.0

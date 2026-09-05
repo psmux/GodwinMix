@@ -1,0 +1,12 @@
+<!doctype html><title>video mp4</title>
+<style>html,body{margin:0;height:100%;background:#202020;overflow:hidden;font:bold 160px sans-serif;color:#fff}
+video{width:100vw;height:100vh;object-fit:fill}#m{position:fixed;top:40%;left:5%}</style>
+<video id="v" src="sync.mp4" autoplay loop playsinline></video>
+<div id="m"></div>
+<script>
+const v=document.getElementById('v'), m=document.getElementById('m');
+const can=v.canPlayType('video/mp4; codecs="avc1.42E01E, mp4a.40.2"');
+if(!can){ m.textContent='NO H264'; v.remove(); }
+v.play&&v.play().catch(e=>{ m.textContent='PLAY FAILED'; });
+v.addEventListener('error',()=>{ m.textContent='ERR '+(v.error&&v.error.code); });
+</script>
