@@ -37,6 +37,9 @@ struct Opts {
     /// Added to every audio timestamp, in milliseconds. See `mux.rs` for the
     /// default and how it was measured.
     audio_offset_ms: i64,
+    /// Watch the page for the media it is playing and report what it finds on
+    /// stderr as `[browser] media {json}`. See `detect-media.js`.
+    detect_media: bool,
 }
 
 fn opts() -> Opts {
@@ -53,6 +56,7 @@ fn opts() -> Opts {
         // as a process singleton lock, so two sources sharing one would block
         // each other, and `initialize` would hang waiting for the lock.
         cache_dir: std::env::temp_dir().join(format!("lbx-browser-{}", std::process::id())),
+        detect_media: false,
     };
     let mut it = std::env::args().skip(1);
     while let Some(a) = it.next() {
@@ -67,6 +71,7 @@ fn opts() -> Opts {
             "--resources-dir" => o.resources_dir = Some(val()),
             "--locales-dir" => o.locales_dir = Some(val()),
             "--cache-dir" => o.cache_dir = PathBuf::from(val()),
+            "--detect-media" => o.detect_media = true,
             _ => {} // Chromium's own switches pass through untouched.
         }
     }
@@ -238,19 +243,39 @@ wrap_life_span_handler! {
     }
 }
 
+/// Watches the page for the media it is playing. Injected on every load.
+const DETECT_MEDIA_JS: &str = include_str!("detect-media.js");
+
+/// Prefix the injected script puts on its console line, so the page's own
+/// logging is not mistaken for a report.
+const MEDIA_TAG: &str = "LBX_MEDIA ";
+
 wrap_load_handler! {
     struct Load {
         state: State,
+        detect_media: bool,
     }
 
     impl LoadHandler {
         fn on_load_end(
             &self,
             _browser: Option<&mut Browser>,
-            _frame: Option<&mut Frame>,
+            frame: Option<&mut Frame>,
             http_status_code: ::std::os::raw::c_int,
         ) {
             eprintln!("[browser] load finished, http {http_status_code}");
+            // Re-injected per load because a navigation discards the last one.
+            // The script itself is idempotent, which covers same-document
+            // navigations that fire this more than once.
+            if self.detect_media {
+                if let Some(f) = frame {
+                    f.execute_java_script(
+                        Some(&DETECT_MEDIA_JS.into()),
+                        Some(&"lbx://detect-media.js".into()),
+                        0,
+                    );
+                }
+            }
         }
 
         fn on_load_error(
@@ -270,12 +295,44 @@ wrap_load_handler! {
     }
 }
 
+wrap_display_handler! {
+    struct Console;
+
+    impl DisplayHandler {
+        /// The injected detector reports here. The console is what carries it
+        /// out of the renderer process; everything else on it is the page's own
+        /// noise and is dropped.
+        fn on_console_message(
+            &self,
+            _browser: Option<&mut Browser>,
+            _level: LogSeverity,
+            message: Option<&CefString>,
+            _source: Option<&CefString>,
+            _line: ::std::os::raw::c_int,
+        ) -> ::std::os::raw::c_int {
+            if let Some(m) = message {
+                let m = m.to_string();
+                if let Some(report) = m.strip_prefix(MEDIA_TAG) {
+                    eprintln!("[browser] media {report}");
+                    return 1; // Handled: keep it out of Chromium's own log.
+                }
+            }
+            0
+        }
+    }
+}
+
 wrap_client! {
     struct SourceClient {
         state: State,
+        detect_media: bool,
     }
 
     impl Client {
+        fn display_handler(&self) -> Option<DisplayHandler> {
+            Some(Console::new())
+        }
+
         fn render_handler(&self) -> Option<RenderHandler> {
             Some(Renderer::new(self.state.clone()))
         }
@@ -286,7 +343,7 @@ wrap_client! {
             Some(LifeSpan::new(self.state.clone()))
         }
         fn load_handler(&self) -> Option<LoadHandler> {
-            Some(Load::new(self.state.clone()))
+            Some(Load::new(self.state.clone(), self.detect_media))
         }
     }
 }
@@ -296,6 +353,7 @@ wrap_browser_process_handler! {
         state: State,
         url: String,
         fps: i32,
+        detect_media: bool,
     }
 
     impl BrowserProcessHandler {
@@ -314,7 +372,7 @@ wrap_browser_process_handler! {
                 background_color: 0xFF00_0000,
                 ..Default::default()
             };
-            let mut client = SourceClient::new(self.state.clone());
+            let mut client = SourceClient::new(self.state.clone(), self.detect_media);
             let url = CefString::from(self.url.as_str());
             let ok = browser_host_create_browser(
                 Some(&window_info),
@@ -334,6 +392,7 @@ wrap_app! {
         state: State,
         url: String,
         fps: i32,
+        detect_media: bool,
     }
 
     impl App {
@@ -391,7 +450,12 @@ wrap_app! {
         }
 
         fn browser_process_handler(&self) -> Option<BrowserProcessHandler> {
-            Some(ProcessHandler::new(self.state.clone(), self.url.clone(), self.fps))
+            Some(ProcessHandler::new(
+                self.state.clone(),
+                self.url.clone(),
+                self.fps,
+                self.detect_media,
+            ))
         }
     }
 }
@@ -500,7 +564,7 @@ fn main() {
 
     #[cfg(target_os = "macos")]
     mac::create_application();
-    let mut app = SourceApp::new(state.clone(), o.url.clone(), o.fps);
+    let mut app = SourceApp::new(state.clone(), o.url.clone(), o.fps, o.detect_media);
     let _ = std::fs::create_dir_all(&o.cache_dir);
     let cache = o.cache_dir.to_string_lossy().to_string();
     let settings = Settings {

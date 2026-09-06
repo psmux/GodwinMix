@@ -307,6 +307,32 @@ below. `[browser]` also takes extra `args` and `env` for the sidecar.
 # env = { LBX_BROWSER_SWITCHES = "enable-gpu" }
 ```
 
+#### Finding the media a page is playing
+
+`--detect-media` injects a small script that watches the page and reports what
+it is really playing, on stderr, once per change:
+
+```
+[browser] media {"found":true,"count":1,"tag":"video",
+                 "src":"http://host/sync.webm","usable":true,"mse":false,
+                 "drm":false,"paused":false,"rect":{"x":0,"y":0,"w":640,"h":360},
+                 "intrinsic":{"w":1280,"h":720},"viewport":{"w":640,"h":360}}
+```
+
+`usable` is the field that matters: it says a decoder outside the browser could
+open this URL. That is the case for a plain `<video src>` and for an HLS or DASH
+address, and it is not the case for the two things worth knowing about:
+
+* **Media Source Extensions.** The page feeds segments to the decoder from
+  JavaScript and the element's `src` is a `blob:` URL that only exists inside
+  that renderer. YouTube works this way, and reports `"mse":true`.
+* **Encrypted Media Extensions.** Frames are decrypted inside the browser and
+  by design never leave it. Reports `"drm":true`.
+
+`rect` is where the element sits in the viewport and `intrinsic` is the coded
+size the decoder would produce, both of which the mixer needs to put a directly
+decoded picture exactly where the page had it.
+
 Building it. Linux: `cd browser && cargo build --release`, which downloads the
 CEF distribution and stages it next to the binary (`CEF_PATH` picks where the
 download is cached); the binary finds the libraries and resources next to
