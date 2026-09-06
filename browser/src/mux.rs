@@ -7,6 +7,20 @@
 //! carries I420 (not BGRA, so frames are converted) and F32LE, and
 //! `decodebin` round-trips both with zero errors.
 //!
+//! Transparent mode carries the alpha channel instead. `matroskamux` takes no
+//! eight bit format with alpha except AYUV, so that is the format the frames
+//! are converted to, and the premultiplied alpha Skia hands us is undone first.
+//! See `unpremultiply_table`.
+//!
+//! One warning about reading that stream with something other than GStreamer.
+//! GStreamer lays AYUV out as A, Y, U, V per pixel; the AYUV FOURCC Microsoft
+//! defined, which is what FFmpeg matches the tag against, is V, U, Y, A. So
+//! `ffprobe` sees the alpha and reports `vuya`, but `ffmpeg` decodes the four
+//! bytes backwards: a fully transparent black pixel (0, 16, 128, 128) comes out
+//! of `ffmpeg` as opaque-ish green. The mixer reads this with `decodebin`, which
+//! agrees with `matroskamux`, so the round trip is correct; only FFmpeg is not
+//! a way to check it.
+//!
 //! Two timing decisions live here:
 //!
 //! * **Fixed cadence.** A windowless browser only paints when something on the
@@ -56,11 +70,33 @@ pub struct Muxer {
     audio_offset_ns: i64,
     channels: i32,
     rate: i32,
+    /// Present only in transparent mode. See `unpremultiply_table`.
+    unpremultiply: Option<Vec<u8>>,
 }
 
 /// How far the sample count may run from the wall clock before audio is
 /// re-anchored. Two video frames at 30 fps.
 const AUDIO_DRIFT_TOLERANCE_NS: u64 = 66_000_000;
+
+/// `lut[alpha * 256 + channel]` is that channel divided by its alpha again.
+///
+/// Skia gives `on_paint` premultiplied BGRA and GStreamer's BGRA means straight
+/// alpha, so without this every half transparent pixel composites too dark. The
+/// arithmetic is a divide per colour channel, three per pixel, which is 2.7
+/// million divides a frame at 1280x720 and more than the whole rest of the
+/// paint path costs. A byte can only take 256 values and so can its alpha, so
+/// the entire answer fits in 65536 bytes worked out once at startup.
+fn unpremultiply_table() -> Vec<u8> {
+    let mut lut = vec![0u8; 256 * 256];
+    // Row zero stays zero: nothing was painted there, so there is no colour to
+    // recover and dividing by the alpha would be dividing by nothing.
+    for a in 1..256usize {
+        for c in 0..256usize {
+            lut[a * 256 + c] = (c * 255 / a).min(255) as u8;
+        }
+    }
+    lut
+}
 
 impl Muxer {
     /// Build the output pipeline. `fd` is where the stream goes; 1 for stdout.
@@ -73,6 +109,7 @@ impl Muxer {
         rate: i32,
         fd: i32,
         audio_offset_ms: i64,
+        transparent: bool,
     ) -> Result<Arc<Self>, String> {
         gst::init().map_err(|e| e.to_string())?;
 
@@ -106,10 +143,17 @@ impl Muxer {
 
         let mk = |f: &str| gst::ElementFactory::make(f).build().map_err(|e| format!("{f}: {e}"));
         let vconv = mk("videoconvert")?;
-        let i420 = mk("capsfilter")?;
-        i420.set_property(
+        let vfmt = mk("capsfilter")?;
+        // BGRA cannot go into Matroska at all, and I420 has nowhere to put the
+        // alpha. Of the raw formats `matroskamux` advertises (YUY2, I420, YV12,
+        // UYVY, AYUV, GRAY8, GRAY10_LE32, GRAY16_LE, BGR, RGB, RGBA64_LE,
+        // BGRA64_LE) AYUV is the only eight bit one that keeps it, so that is
+        // what transparent mode converts to. Checked with gst-inspect-1.0.
+        vfmt.set_property(
             "caps",
-            gst::Caps::builder("video/x-raw").field("format", "I420").build(),
+            gst::Caps::builder("video/x-raw")
+                .field("format", if transparent { "AYUV" } else { "I420" })
+                .build(),
         );
         let vq = mk("queue")?;
         let aconv = mk("audioconvert")?;
@@ -124,9 +168,9 @@ impl Muxer {
         let velem: gst::Element = video.clone().upcast();
         let aelem: gst::Element = audio.clone().upcast();
         pipeline
-            .add_many([&velem, &vconv, &i420, &vq, &aelem, &aconv, &aq, &mux, &sink])
+            .add_many([&velem, &vconv, &vfmt, &vq, &aelem, &aconv, &aq, &mux, &sink])
             .map_err(|e| e.to_string())?;
-        gst::Element::link_many([&velem, &vconv, &i420, &vq, &mux]).map_err(|e| e.to_string())?;
+        gst::Element::link_many([&velem, &vconv, &vfmt, &vq, &mux]).map_err(|e| e.to_string())?;
         gst::Element::link_many([&aelem, &aconv, &aq, &mux]).map_err(|e| e.to_string())?;
         mux.link(&sink).map_err(|e| e.to_string())?;
 
@@ -148,6 +192,7 @@ impl Muxer {
             audio_offset_ns: audio_offset_ms * 1_000_000,
             channels,
             rate,
+            unpremultiply: transparent.then(unpremultiply_table),
         });
         m.clone().start_pacing();
         Ok(m)
@@ -159,9 +204,21 @@ impl Muxer {
             return;
         }
         let mut latest = self.latest.lock().unwrap();
-        match latest.as_mut() {
-            Some(buf) => buf.copy_from_slice(bgra),
-            None => *latest = Some(bgra.to_vec()),
+        let buf = latest.get_or_insert_with(|| vec![0u8; self.frame_bytes]);
+        buf.copy_from_slice(bgra);
+        if let Some(lut) = &self.unpremultiply {
+            for px in buf.chunks_exact_mut(4) {
+                let a = px[3] as usize;
+                // Opaque is the common case and the table would return the
+                // channel unchanged, so skip the three lookups.
+                if a == 255 {
+                    continue;
+                }
+                let row = &lut[a * 256..(a + 1) * 256];
+                px[0] = row[px[0] as usize];
+                px[1] = row[px[1] as usize];
+                px[2] = row[px[2] as usize];
+            }
         }
     }
 

@@ -12,6 +12,11 @@
 // feeding the decoder from JavaScript (Media Source Extensions) and there is
 // nothing to hand over, so the report says so and the mixer keeps rendering
 // everything in the browser.
+//
+// The sidecar sets window.__lbxHideMedia in front of this script when it runs
+// with --transparent. That is the other half of the handover: the element the
+// mixer is about to draw itself must not also be painted by Chromium. See
+// hide().
 
 (() => {
   "use strict";
@@ -21,6 +26,11 @@
   const TAG = "LBX_MEDIA ";
   let last = "";
 
+  // Set by the one line prelude the sidecar puts in front of this script.
+  const hideMedia = !!window.__lbxHideMedia;
+  // The element hide() has taken over, so the pick does not wander off it.
+  let taken = null;
+
   // A page can hold several media elements: a hero video, a muted background
   // loop, an autoplaying advert. Prefer the one that is actually playing, then
   // the biggest, which is what a viewer would call "the video".
@@ -29,6 +39,10 @@
     const area = Math.max(0, r.width) * Math.max(0, r.height);
     const playing = !el.paused && !el.ended && el.readyState >= 2;
     const visible = area > 0 && getComputedStyle(el).visibility !== "hidden";
+    // An element hide() has already taken over scores nothing on its own
+    // merits, being paused and invisible by our own doing. Keep preferring it,
+    // or the pick would flip to whatever is left and we would hide that too.
+    if (el === taken) return 2e12;
     return (playing ? 1e12 : 0) + (visible ? area : 0);
   };
 
@@ -62,11 +76,39 @@
     };
   };
 
+  // Transparent mode only: stop Chromium painting the element the mixer is
+  // going to draw itself. visibility rather than display, because display:none
+  // takes the element out of the layout and reflows the page, moving the very
+  // chrome we are keeping.
+  //
+  // Pausing is where the saving is. Hiding alone leaves Chromium decoding every
+  // frame into a surface nobody looks at, so pausing is what actually takes the
+  // work off the machine. The trade-off is that it freezes the page's own
+  // player UI: a progress bar stops filling, a running time stops counting.
+  // That is accepted here because the mixer is drawing the real video and the
+  // decode saving is the point of the mode.
+  //
+  // Idempotent, so re-applying it costs nothing and the mutation it makes the
+  // first time does not feed itself.
+  const hide = (el) => {
+    if (!hideMedia || !el) return;
+    taken = el;
+    if (el.style.visibility !== "hidden") {
+      el.style.setProperty("visibility", "hidden", "important");
+    }
+    if (!el.muted) el.muted = true;
+    if (!el.paused) el.pause();
+  };
+
   const report = () => {
     const all = [...document.querySelectorAll("video, audio")];
     const best = all.length
       ? all.reduce((a, b) => (score(b) > score(a) ? b : a))
       : null;
+    // Before describing it, so the report says what the page is actually left
+    // showing. Re-applied on every report, which covers the element being
+    // swapped and a player that puts its own styles back.
+    hide(best);
     const payload = JSON.stringify(
       best ? { found: true, count: all.length, ...describe(best) } : { found: false, count: 0 },
     );

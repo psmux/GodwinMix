@@ -1,0 +1,18 @@
+<!doctype html><title>overlay</title>
+<!-- Fixture for the sidecar's --transparent mode. The page paints no
+     background of its own, so everywhere it draws nothing the frame should
+     come out with alpha 0 and the mixer's own picture shows through. The bars
+     are the measurement: two of them are half transparent, which is what
+     catches a missing un-premultiply, because white clamps and grey does not. -->
+<style>
+  html, body { margin: 0; height: 100%; background: transparent; overflow: hidden }
+  video { position: fixed; inset: 0; width: 100vw; height: 100vh; object-fit: fill }
+  .bar { position: fixed; left: 0; width: 100%; height: 40px }
+  #opaque { top: 0;   background: rgb(255,255,255) }
+  #half   { top: 40px; background: rgba(255,255,255,0.5) }
+  #grey   { top: 80px; background: rgba(128,128,128,0.5) }
+</style>
+<video id="v" src="sync.webm" autoplay loop muted playsinline></video>
+<div class="bar" id="opaque"></div>
+<div class="bar" id="half"></div>
+<div class="bar" id="grey"></div>

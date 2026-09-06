@@ -40,6 +40,11 @@ struct Opts {
     /// Watch the page for the media it is playing and report what it finds on
     /// stderr as `[browser] media {json}`. See `detect-media.js`.
     detect_media: bool,
+    /// Emit the page with a real alpha channel instead of on opaque black, so
+    /// the mixer can put its own picture behind it. With `--detect-media` it
+    /// also stops the page's own video being painted, which is the point: the
+    /// mixer decodes that video on the GPU and draws the page over the top.
+    transparent: bool,
 }
 
 fn opts() -> Opts {
@@ -57,6 +62,7 @@ fn opts() -> Opts {
         // each other, and `initialize` would hang waiting for the lock.
         cache_dir: std::env::temp_dir().join(format!("lbx-browser-{}", std::process::id())),
         detect_media: false,
+        transparent: false,
     };
     let mut it = std::env::args().skip(1);
     while let Some(a) = it.next() {
@@ -72,6 +78,7 @@ fn opts() -> Opts {
             "--locales-dir" => o.locales_dir = Some(val()),
             "--cache-dir" => o.cache_dir = PathBuf::from(val()),
             "--detect-media" => o.detect_media = true,
+            "--transparent" => o.transparent = true,
             _ => {} // Chromium's own switches pass through untouched.
         }
     }
@@ -254,6 +261,7 @@ wrap_load_handler! {
     struct Load {
         state: State,
         detect_media: bool,
+        transparent: bool,
     }
 
     impl LoadHandler {
@@ -269,8 +277,16 @@ wrap_load_handler! {
             // navigations that fire this more than once.
             if self.detect_media {
                 if let Some(f) = frame {
+                    // The prelude goes in front of the script rather than in a
+                    // second injection because the flag has to be set before
+                    // the script reads it, and the script refuses to run twice.
+                    let js = if self.transparent {
+                        format!("window.__lbxHideMedia = true;\n{DETECT_MEDIA_JS}")
+                    } else {
+                        DETECT_MEDIA_JS.to_string()
+                    };
                     f.execute_java_script(
-                        Some(&DETECT_MEDIA_JS.into()),
+                        Some(&js.as_str().into()),
                         Some(&"lbx://detect-media.js".into()),
                         0,
                     );
@@ -326,6 +342,7 @@ wrap_client! {
     struct SourceClient {
         state: State,
         detect_media: bool,
+        transparent: bool,
     }
 
     impl Client {
@@ -343,7 +360,7 @@ wrap_client! {
             Some(LifeSpan::new(self.state.clone()))
         }
         fn load_handler(&self) -> Option<LoadHandler> {
-            Some(Load::new(self.state.clone(), self.detect_media))
+            Some(Load::new(self.state.clone(), self.detect_media, self.transparent))
         }
     }
 }
@@ -354,6 +371,7 @@ wrap_browser_process_handler! {
         url: String,
         fps: i32,
         detect_media: bool,
+        transparent: bool,
     }
 
     impl BrowserProcessHandler {
@@ -368,11 +386,16 @@ wrap_browser_process_handler! {
             let window_info = WindowInfo::default().set_as_windowless(no_parent);
             let settings = BrowserSettings {
                 windowless_frame_rate: self.fps,
-                // Opaque black behind the page rather than transparency.
-                background_color: 0xFF00_0000,
+                // Nothing is painted behind the page in transparent mode, so
+                // whatever the page does not cover leaves the browser with
+                // alpha 0 and the mixer can put its own picture there.
+                // Otherwise opaque black, which is what an ordinary source
+                // wants: no alpha to carry and nothing to composite against.
+                background_color: if self.transparent { 0x0000_0000 } else { 0xFF00_0000 },
                 ..Default::default()
             };
-            let mut client = SourceClient::new(self.state.clone(), self.detect_media);
+            let mut client =
+                SourceClient::new(self.state.clone(), self.detect_media, self.transparent);
             let url = CefString::from(self.url.as_str());
             let ok = browser_host_create_browser(
                 Some(&window_info),
@@ -393,6 +416,7 @@ wrap_app! {
         url: String,
         fps: i32,
         detect_media: bool,
+        transparent: bool,
     }
 
     impl App {
@@ -455,6 +479,7 @@ wrap_app! {
                 self.url.clone(),
                 self.fps,
                 self.detect_media,
+                self.transparent,
             ))
         }
     }
@@ -564,7 +589,8 @@ fn main() {
 
     #[cfg(target_os = "macos")]
     mac::create_application();
-    let mut app = SourceApp::new(state.clone(), o.url.clone(), o.fps, o.detect_media);
+    let mut app =
+        SourceApp::new(state.clone(), o.url.clone(), o.fps, o.detect_media, o.transparent);
     let _ = std::fs::create_dir_all(&o.cache_dir);
     let cache = o.cache_dir.to_string_lossy().to_string();
     let settings = Settings {
@@ -585,7 +611,16 @@ fn main() {
 
     // Stream goes to stdout (fd 1). Stereo 48 kHz is what audio_parameters
     // asks the browser for, so the muxer's caps match what arrives.
-    let mux = match Muxer::new(o.width, o.height, o.fps, 2, 48000, 1, o.audio_offset_ms) {
+    let mux = match Muxer::new(
+        o.width,
+        o.height,
+        o.fps,
+        2,
+        48000,
+        1,
+        o.audio_offset_ms,
+        o.transparent,
+    ) {
         Ok(m) => m,
         Err(e) => {
             eprintln!("[browser] output pipeline failed: {e}");
