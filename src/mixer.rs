@@ -987,6 +987,7 @@ impl Mixer {
             uri: crate::input::to_uri(&uri),
             stall_timeout_secs: f64::MAX, // An ad ends with EOS, never a stall.
             rtmp_client: Default::default(),
+            superimpose: Default::default(), // An ad is a file, never a page.
         };
         if let Err(e) = self.add_source_kind(&cfg, SourceKind::File, false) {
             let _ = self.events.send(Event::Alert {
@@ -1415,6 +1416,7 @@ impl Mixer {
                 cell: cells.get(s.input.id.as_str()).copied(),
                 video_idle_ms: s.input.health.video_idle_ms(),
                 audio_idle_ms: s.input.health.audio_idle_ms(),
+                superimposed: s.input.superimposed(),
             })
             .collect();
 

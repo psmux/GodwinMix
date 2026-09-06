@@ -13,7 +13,7 @@
 //! which is what makes a take a property change rather than a renegotiation.
 
 use crate::caps::CanvasCaps;
-use crate::config::{BrowserConfig, SourceConfig};
+use crate::config::{BrowserConfig, SourceConfig, Superimpose};
 use crate::gstutil::{self, make};
 use crate::probe::Backends;
 use crate::state::{SourceHealth, SourceId, SourceState};
@@ -21,9 +21,10 @@ use anyhow::{Context, Result};
 use gstreamer as gst;
 use gstreamer::prelude::*;
 use parking_lot::Mutex;
+use serde::Deserialize;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 use tracing::{debug, info, warn};
 
 /// Thumbnails are produced at a fixed size in the input pipeline. The
@@ -197,6 +198,9 @@ pub struct InputPipeline {
     pub audio_proxy: gst::Element,
     has_video: Arc<AtomicBool>,
     has_audio: Arc<AtomicBool>,
+    /// Whether the page's media ended up being decoded outside the browser.
+    /// Settled when the pipeline is built and constant for its lifetime.
+    superimposed: bool,
     /// Set when the pipeline posts an error; the supervisor restarts it.
     failed: Arc<AtomicBool>,
     /// The RTMP client element, swappable once if the configured one turns out
@@ -271,6 +275,21 @@ impl ExecSpec {
         argv.extend(browser.args.iter().cloned());
         Ok(Some(Self { argv, env: browser.env.clone() }))
     }
+
+    /// Rewrite the `--fps` this spec was built with.
+    ///
+    /// Edited in place rather than appended. The sidecar's parser takes the
+    /// last spelling of a flag, and `browser.args` is appended after this, so
+    /// appending here would quietly outrank an explicit `--fps` the operator
+    /// put in their own config. Editing the one we built leaves theirs winning,
+    /// which is the way round it should be.
+    fn set_fps(&mut self, fps: u32) {
+        if let Some(i) = self.argv.iter().position(|a| a == "--fps") {
+            if let Some(v) = self.argv.get_mut(i + 1) {
+                *v = fps.to_string();
+            }
+        }
+    }
 }
 
 /// Where `liveboxmix-browser` is: the configured path, else next to this
@@ -301,6 +320,423 @@ fn find_browser_sidecar(browser: &BrowserConfig) -> Result<Option<std::path::Pat
         .map(|paths| std::env::split_paths(&paths).map(|d| d.join(NAME)).find(|p| p.is_file()))
         .unwrap_or(None);
     Ok(found)
+}
+
+/// What the sidecar found the page playing.
+///
+/// The fields the mixer acts on, out of the report `--detect-media` writes on
+/// stderr. Everything else in that report is diagnostic and is ignored, which
+/// is also why unknown fields must not be an error: the sidecar is free to say
+/// more without this failing to parse.
+#[derive(Debug, Clone, Deserialize)]
+struct MediaReport {
+    /// The address a decoder outside the browser can open.
+    #[serde(default)]
+    src: String,
+    /// The sidecar's own verdict on that address. False for a `blob:` URL fed
+    /// by JavaScript, for DRM, and for a page playing nothing at all.
+    #[serde(default)]
+    usable: bool,
+    /// Where the element sat in the page, in CSS pixels.
+    #[serde(default)]
+    rect: MediaRect,
+    /// The size of the viewport that rectangle was measured in.
+    #[serde(default)]
+    viewport: MediaSize,
+}
+
+#[derive(Debug, Clone, Copy, Default, Deserialize)]
+struct MediaRect {
+    #[serde(default)]
+    x: i32,
+    #[serde(default)]
+    y: i32,
+    #[serde(default)]
+    w: i32,
+    #[serde(default)]
+    h: i32,
+}
+
+#[derive(Debug, Clone, Copy, Default, Deserialize)]
+struct MediaSize {
+    #[serde(default)]
+    w: i32,
+    #[serde(default)]
+    h: i32,
+}
+
+impl MediaReport {
+    /// Where the decoded picture goes on the canvas.
+    ///
+    /// The page measured its video in viewport pixels and the canvas may be a
+    /// different size, so the rectangle is scaled by the ratio between them.
+    /// A video filling its viewport therefore fills the canvas, and one sitting
+    /// in a corner of the page stays in that corner.
+    ///
+    /// A rectangle that makes no sense, which is what a report from a page
+    /// mid-layout looks like, falls back to the whole canvas.
+    fn placement(&self, canvas: &CanvasCaps) -> (i32, i32, i32, i32) {
+        let full = (0, 0, canvas.width, canvas.height);
+        if self.rect.w <= 0 || self.rect.h <= 0 || self.viewport.w <= 0 || self.viewport.h <= 0 {
+            return full;
+        }
+        let sx = f64::from(canvas.width) / f64::from(self.viewport.w);
+        let sy = f64::from(canvas.height) / f64::from(self.viewport.h);
+        let scale = |v: i32, s: f64| (f64::from(v) * s).round() as i32;
+        let (w, h) = (scale(self.rect.w, sx), scale(self.rect.h, sy));
+        if w <= 0 || h <= 0 {
+            return full;
+        }
+        (scale(self.rect.x, sx), scale(self.rect.y, sy), w, h)
+    }
+}
+
+/// The prefix the sidecar puts on every media report.
+const MEDIA_LINE: &str = "[browser] media ";
+
+/// How long to give the sidecar to say what the page is playing.
+///
+/// Long enough that a page has loaded, autoplay has started and the first
+/// report has been written, which took about three seconds against the local
+/// test pages and longer against a real site. Nothing is lost by waiting: this
+/// runs before the pipeline exists, so what it costs is how long the operator
+/// waits for a source to appear, not a gap in the programme.
+const MEDIA_PROBE_TIMEOUT: Duration = Duration::from_secs(10);
+
+/// The report line's payload, if this is one.
+fn media_report(line: &str) -> Option<MediaReport> {
+    let (_, json) = line.split_once(MEDIA_LINE)?;
+    serde_json::from_str(json).ok()
+}
+
+/// Run the sidecar once, purely to find out whether the page's video has an
+/// address we can open ourselves.
+///
+/// This is a throwaway render: the page is loaded, given a few seconds to start
+/// playing, and the process is killed as soon as it has reported. Deciding
+/// before anything is built is what keeps the pipeline shape fixed for the
+/// source's lifetime. The alternative, starting the ordinary web source and
+/// rebuilding it around a compositor once a report arrives, means relinking a
+/// running pipeline in front of the programme output, and there is no
+/// version of that which is worth the seconds it saves.
+///
+/// Its stdout goes to /dev/null on purpose. The sidecar writes raw video there
+/// at tens of megabytes a second, and a pipe nobody drains would block it
+/// before it ever loaded the page.
+fn probe_page_media(id: &SourceId, spec: &ExecSpec, timeout: Duration) -> Option<MediaReport> {
+    let mut spec = spec.clone();
+    spec.argv.push("--detect-media".into());
+    // A backstop, so a sidecar that somehow outlives the kill below still ends.
+    spec.argv.push("--seconds".into());
+    spec.argv.push(timeout.as_secs().max(1).to_string());
+
+    let mut child = match exec_process(&spec, std::process::Stdio::null()) {
+        Ok(c) => c,
+        Err(e) => {
+            warn!(source = %id, ?e, "could not probe the page for media; rendering it whole");
+            return None;
+        }
+    };
+    let Some(err) = child.stderr.take() else {
+        warn!(source = %id, "probe child has no stderr; rendering the page whole");
+        stop_process_group(child.id());
+        let _ = child.wait();
+        return None;
+    };
+
+    // The read happens on its own thread because a pipe read cannot be given a
+    // deadline. The thread ends when the pipe closes, which the kill below
+    // guarantees, or when this function returns and drops the receiver.
+    let (tx, rx) = std::sync::mpsc::channel();
+    std::thread::Builder::new()
+        .name(format!("media-probe-{id}"))
+        .spawn(move || {
+            use std::io::BufRead;
+            for line in std::io::BufReader::new(err).lines().map_while(Result::ok) {
+                if let Some(report) = media_report(&line) {
+                    if tx.send(report).is_err() {
+                        return;
+                    }
+                }
+            }
+        })
+        .ok();
+
+    let started = Instant::now();
+    let deadline = started + timeout;
+    let mut found = None;
+    loop {
+        let left = deadline.saturating_duration_since(Instant::now());
+        if left.is_zero() {
+            break;
+        }
+        match rx.recv_timeout(left) {
+            Ok(report) if report.usable => {
+                found = Some(report);
+                break;
+            }
+            // A page reports as it loads, and the first report is often from
+            // before the player has a source. Keep listening until the timeout.
+            Ok(_) => continue,
+            Err(_) => break,
+        }
+    }
+
+    stop_process_group(child.id());
+    let _ = child.wait();
+    match &found {
+        Some(r) => info!(
+            source = %id,
+            src = %r.src,
+            secs = started.elapsed().as_secs_f64(),
+            "the page's video has an address we can open"
+        ),
+        None => info!(
+            source = %id,
+            secs = started.elapsed().as_secs_f64(),
+            "no usable media on this page; rendering it whole"
+        ),
+    }
+    found
+}
+
+/// The elements that exist only on the layered path.
+///
+/// The page's video decoded here as the bottom layer, the page itself drawn
+/// over the top, and a compositor joining them. Everything downstream of
+/// `comp_caps` is the ordinary normalising chain, so the mixer above cannot
+/// tell a superimposed source from any other one.
+struct Layers {
+    media_src: gst::Element,
+    media_q: gst::Element,
+    media_conv: gst::Element,
+    media_scale: gst::Element,
+    over_q: gst::Element,
+    over_conv: gst::Element,
+    comp: gst::Element,
+    comp_caps: gst::Element,
+    flat_conv: gst::Element,
+    flat_caps: gst::Element,
+}
+
+impl Layers {
+    fn build(id: &SourceId, report: &MediaReport) -> Result<Self> {
+        let media_src = make("uridecodebin", &format!("{id}-src-media"))?;
+        media_src.set_property("uri", &report.src);
+        // No use-buffering here, unlike a plain media source. It posts buffering
+        // messages that put the pipeline into PAUSED, and pausing this pipeline
+        // would also stop the page, which is live and cannot be paused. The
+        // queue below is what absorbs a slow server instead.
+
+        Ok(Self {
+            media_src,
+            // Two seconds on the media side. A file over HTTP decodes far
+            // faster than real time and then waits on the compositor, which is
+            // paced by the page; the queue is where those frames sit.
+            media_q: gstutil::queue_time(&format!("{id}-media-q"), 2.0, false)?,
+            media_conv: make("videoconvert", &format!("{id}-media-conv"))?,
+            media_scale: make("videoscale", &format!("{id}-media-scale"))?,
+            over_q: gstutil::queue_thread(&format!("{id}-over-q"))?,
+            over_conv: make("videoconvert", &format!("{id}-over-conv"))?,
+            comp: make("compositor", &format!("{id}-sup-comp"))?,
+            // The compositor must be asked for a format that has alpha, and
+            // this is the one thing here that is not obvious. `compositor`
+            // converts every input to its *output* format before blending, so
+            // an I420 output converts the page's AYUV first and the alpha is
+            // gone by the time the blend happens: the page comes out opaque and
+            // hides the video completely. Measured on the programme with an
+            // I420 output, the half transparent white bar read 255 instead of
+            // the 135 it should be over black, and the video never appeared.
+            // AYUV costs a 4:4:4 blend and one conversion back, and is what
+            // makes the feature work at all.
+            comp_caps: gstutil::capsfilter(
+                &format!("{id}-sup-caps"),
+                &gst::Caps::builder("video/x-raw").field("format", "AYUV").build(),
+            )?,
+            // And back to I420 immediately, so what leaves this bin is what
+            // every other source produces and nothing downstream has to know
+            // the page ever had transparency.
+            flat_conv: make("videoconvert", &format!("{id}-sup-flat-conv"))?,
+            flat_caps: gstutil::capsfilter(
+                &format!("{id}-sup-flat-caps"),
+                &gst::Caps::builder("video/x-raw").field("format", "I420").build(),
+            )?,
+        })
+    }
+
+    fn elements(&self) -> [&gst::Element; 10] {
+        [
+            &self.media_src,
+            &self.media_q,
+            &self.media_conv,
+            &self.media_scale,
+            &self.over_q,
+            &self.over_conv,
+            &self.comp,
+            &self.comp_caps,
+            &self.flat_conv,
+            &self.flat_caps,
+        ]
+    }
+
+    /// Link both layers into the compositor and the compositor into `vrate`,
+    /// the head of the normalising chain every source shares.
+    ///
+    /// Deliberately not a `force-live` aggregator, which is what the mixer's own
+    /// compositor is. A live aggregator times its output against the pipeline
+    /// clock and discards whatever arrives late, and the page is always a
+    /// little late: the sidecar stamps from its own start and delivers at its
+    /// own pace, so its frames would be judged late and dropped and the overlay
+    /// would flicker or never appear at all. That is the failure
+    /// `wants_livesync` describes. Composing on timestamps instead, with the
+    /// two branches placed relative to each other by `shift_to_arrival`, lets
+    /// the composite come out on the pipeline's own time, and it is then
+    /// rebased onto programme time at the mixer pad like any other source.
+    ///
+    /// Two costs come with that choice, both real.
+    ///
+    /// The compositor produces nothing until both branches have delivered a
+    /// frame, so the source spends its first second or two connecting rather
+    /// than showing the video on its own.
+    ///
+    /// And the page paces the whole source. The media's video waits for it at
+    /// the compositor, and the media's audio waits with it, because both come
+    /// out of one demuxer whose queues fill when either side stops being read.
+    /// So a machine that cannot take the page's frames as fast as the sidecar
+    /// draws them does not merely stutter: the whole source falls behind
+    /// programme time, and the programme's audio mixer discards audio it
+    /// judges late. That is the failure to look for first if a superimposed
+    /// source goes quiet.
+    fn link(&self, report: &MediaReport, canvas: &CanvasCaps, vrate: &gst::Element) -> Result<()> {
+        // Anywhere neither layer covers is black, not the checkerboard the
+        // element defaults to.
+        self.comp.set_property_from_str("background", "black");
+
+        gst::Element::link_many([&self.media_q, &self.media_conv, &self.media_scale])
+            .context("linking the decoded media branch")?;
+        gst::Element::link_many([&self.over_q, &self.over_conv])
+            .context("linking the page overlay branch")?;
+
+        let (x, y, w, h) = report.placement(canvas);
+        let media_pad = self
+            .comp
+            .request_pad_simple("sink_%u")
+            .context("compositor refused a pad for the page's media")?;
+        media_pad.set_property("zorder", 0u32);
+        media_pad.set_property("xpos", x);
+        media_pad.set_property("ypos", y);
+        media_pad.set_property("width", w);
+        media_pad.set_property("height", h);
+        // Letterbox inside the rectangle the page gave the video rather than
+        // stretching it, the same choice the mixer makes for a source pad.
+        media_pad.set_property_from_str("sizing-policy", "keep-aspect-ratio");
+        // Set explicitly rather than trusted: the mixer never sets this
+        // property anywhere else, so nothing here has ever depended on the
+        // default being `over`.
+        media_pad.set_property_from_str("operator", "over");
+
+        let over_pad = self
+            .comp
+            .request_pad_simple("sink_%u")
+            .context("compositor refused a pad for the page")?;
+        over_pad.set_property("zorder", 1u32);
+        over_pad.set_property("xpos", 0i32);
+        over_pad.set_property("ypos", 0i32);
+        over_pad.set_property("width", canvas.width);
+        over_pad.set_property("height", canvas.height);
+        over_pad.set_property_from_str("sizing-policy", "keep-aspect-ratio");
+        // The page carries a real alpha channel and this is what makes the
+        // compositor honour it. `source` would paint the transparent parts of
+        // the page over the video as black.
+        over_pad.set_property_from_str("operator", "over");
+
+        for (branch, pad) in [(&self.media_scale, &media_pad), (&self.over_conv, &over_pad)] {
+            let src = branch
+                .static_pad("src")
+                .with_context(|| format!("{} has no src pad", branch.name()))?;
+            src.link(pad).context("linking a layer into the compositor")?;
+        }
+
+        // Both layers claim to start at zero and neither really does. See
+        // `shift_to_arrival`.
+        let first = Arc::new(Mutex::new(None));
+        shift_to_arrival(&self.media_scale, &media_pad, "media", &first)?;
+        shift_to_arrival(&self.over_conv, &over_pad, "page", &first)?;
+
+        gst::Element::link_many([
+            &self.comp,
+            &self.comp_caps,
+            &self.flat_conv,
+            &self.flat_caps,
+            vrate,
+        ])
+        .context("linking the composed layers into the normaliser")?;
+        info!(x, y, width = w, height = h, "page media placed on the canvas");
+        Ok(())
+    }
+}
+
+/// Move each layer's timeline to where its data actually arrived.
+///
+/// The sidecar stamps from its own start. It takes a second or two to launch a
+/// browser and load a page, and its first frame still says zero, so an
+/// untouched overlay branch drags the whole composite that far behind the media
+/// it is being drawn over. Video survives being late, because the mixer's
+/// compositor holds the last frame it has; audio does not, because an
+/// audiomixer discards samples that claim to belong in the past. Left alone
+/// this cost the source all of its sound: the programme measured -91 dB, which
+/// is digital silence, while the picture looked perfect.
+///
+/// So each branch is shifted by how much later than the other one it started.
+/// Whichever arrives first is left alone and the other is pushed forward to
+/// meet it, which puts the page's first frame beside the media frame that was
+/// playing when the page finally drew it, and leaves composite time equal to
+/// the time the pipeline had been running.
+///
+/// The offsets are set from probes on the *upstream* src pads so that the
+/// segment is still travelling: a pad offset rewrites the segment as it crosses
+/// the pad, so setting one after the segment has gone past changes nothing. The
+/// same reason the mixer's `TimelineAligner` works the way it does.
+fn shift_to_arrival(
+    branch: &gst::Element,
+    pad: &gst::Pad,
+    tag: &'static str,
+    first: &Arc<Mutex<Option<Instant>>>,
+) -> Result<()> {
+    let src = branch
+        .static_pad("src")
+        .with_context(|| format!("{} has no src pad", branch.name()))?;
+    let (pad, first) = (pad.clone(), first.clone());
+    src.add_probe(gst::PadProbeType::EVENT_DOWNSTREAM, move |_p, info| {
+        let Some(gst::PadProbeData::Event(e)) = &info.data else {
+            return gst::PadProbeReturn::Ok;
+        };
+        if !matches!(e.view(), gst::EventView::Segment(_)) {
+            return gst::PadProbeReturn::Ok;
+        }
+        // Wall clock, not the pipeline's running time. What is wanted is a
+        // duration between two arrivals, and the pipeline's own clock cannot
+        // give one here: the media layer's segment goes past while the pipeline
+        // is still prerolling and has no base time, so its running time reads
+        // as zero, and the page's then reads as however long the *programme*
+        // has been up. That produced an eleven second offset where the real gap
+        // was a third of a second.
+        let now = Instant::now();
+        let started = {
+            let mut guard = first.lock();
+            *guard.get_or_insert(now)
+        };
+        let late = now.saturating_duration_since(started);
+        pad.set_offset(late.as_nanos() as i64);
+        info!(
+            layer = tag,
+            late_ms = late.as_millis() as u64,
+            "layer placed on the composite's timeline"
+        );
+        gst::PadProbeReturn::Remove
+    })
+    .context("installing the arrival probe")?;
+    Ok(())
 }
 
 impl InputPipeline {
@@ -341,11 +777,40 @@ impl InputPipeline {
         // A page is rendered by the sidecar when there is one, and the sidecar
         // is just another process writing a container to stdout. From here on
         // such a source is an exec source in every respect.
-        let exec = match kind {
+        let mut exec = match kind {
             SourceKind::Exec => Some(ExecSpec::from_uri(&cfg.uri, allow_exec)?),
             SourceKind::Web => ExecSpec::browser(&cfg.uri, canvas, browser)?,
             _ => None,
         };
+
+        // A page asking for `superimpose = "auto"` is rendered twice over: once
+        // now, thrown away, only to find out whether its video has an address
+        // this machine can open, and then for real. When it has, the source is
+        // built as two layers and the browser stops decoding video altogether.
+        // When it has not, which is every page feeding its own player from
+        // JavaScript, nothing below this changes and the page is rendered whole
+        // exactly as before.
+        let overlay = match (kind, cfg.superimpose, exec.as_ref()) {
+            (SourceKind::Web, Superimpose::Auto, Some(spec)) => {
+                probe_page_media(&id, spec, MEDIA_PROBE_TIMEOUT)
+            }
+            _ => None,
+        };
+        if let (Some(spec), true) = (exec.as_mut(), overlay.is_some()) {
+            // `--transparent` gives the page a real alpha channel, and with
+            // `--detect-media` it also hides and pauses the video the mixer is
+            // taking over, so Chromium neither paints nor decodes it. It costs
+            // the page's audio, which is why the media's audio is used instead.
+            spec.argv.push("--transparent".into());
+            spec.argv.push("--detect-media".into());
+            // And it draws slower, because now it is only drawing chrome. An
+            // alpha frame is 4 bytes a pixel where I420 is 1.5, so a 720p page
+            // at the canvas rate would put 107 MB/s down a pipe that carries
+            // 41 MB/s for an ordinary source. See `default_overlay_fps`.
+            spec.set_fps(browser.overlay_fps);
+        }
+        let exec = exec;
+
         let kind = if exec.is_some() { SourceKind::Exec } else { kind };
         let pipeline = gst::Pipeline::with_name(&format!("input-{id}"));
         let health = SourceHealth::new(origin);
@@ -357,6 +822,13 @@ impl InputPipeline {
         // the hardware probe.
         let decode_bin = (kind == SourceKind::Exec)
             .then(|| make("decodebin", &format!("{id}-decode")))
+            .transpose()?;
+
+        // The second decoder and the compositor that joins the two layers.
+        // Built only when the probe above found something to decode.
+        let layers = overlay
+            .as_ref()
+            .map(|r| Layers::build(&id, r))
             .transpose()?;
 
         let src = match kind {
@@ -500,6 +972,9 @@ impl InputPipeline {
         if let Some(s) = &async_ {
             all.push(s);
         }
+        if let Some(l) = &layers {
+            all.extend(l.elements());
+        }
         pipeline.add_many(&all).context("adding input elements")?;
 
         if let (Some(q), Some(d)) = (&src_queue, &demux) {
@@ -507,6 +982,9 @@ impl InputPipeline {
         }
         if let Some(dec) = &decode_bin {
             gst::Element::link(&src, dec).context("linking exec source to decoder")?;
+        }
+        if let (Some(l), Some(r)) = (&layers, &overlay) {
+            l.link(r, canvas, &vrate).context("linking the superimposed layers")?;
         }
 
         // Video chain: for RTMP, parse and decode first, optionally downloading
@@ -572,11 +1050,14 @@ impl InputPipeline {
                 .context("linking the web render chain")?;
         }
 
-        // Entry points for dynamically added pads: the parsers for RTMP, the GL
+        // Entry points for dynamically added pads: the overlay queue when the
+        // page is being drawn over its own video, the parsers for RTMP, the GL
         // conversion for a web page, the normaliser itself for an
         // already-decoded media URI.
-        let video_entry = h264parse
-            .clone()
+        let video_entry = layers
+            .as_ref()
+            .map(|l| l.over_q.clone())
+            .or_else(|| h264parse.clone())
             .or_else(|| gl_convert.clone())
             .unwrap_or_else(|| vrate.clone());
         let audio_entry = aacparse.clone().unwrap_or_else(|| aconv.clone());
@@ -601,43 +1082,29 @@ impl InputPipeline {
             .clone()
             .or_else(|| decode_bin.clone())
             .unwrap_or_else(|| src.clone());
-        {
-            let id = id.clone();
-            let has_video = has_video.clone();
-            let has_audio = has_audio.clone();
-            dynamic.connect_pad_added(move |_el, pad| {
-                // flvdemux names its pads; uridecodebin does not, so fall back
-                // to the media type on the pad's caps.
-                let name = pad.name();
-                let media = pad
-                    .current_caps()
-                    .and_then(|c| c.structure(0).map(|s| s.name().to_string()))
-                    .unwrap_or_default();
-
-                let is_video = name.starts_with("video") || media.starts_with("video/");
-                let is_audio = name.starts_with("audio") || media.starts_with("audio/");
-
-                let target = if is_video {
-                    has_video.store(true, Ordering::Relaxed);
-                    &video_entry
-                } else if is_audio {
-                    has_audio.store(true, Ordering::Relaxed);
-                    &audio_entry
-                } else {
-                    debug!(source = %id, pad = %name, %media, "ignoring unrecognised pad");
-                    return;
-                };
-
-                let Some(sink) = target.static_pad("sink") else { return };
-                if sink.is_linked() {
-                    debug!(source = %id, pad = %name, "entry already linked, ignoring extra stream");
-                    return;
-                }
-                match pad.link(&sink) {
-                    Ok(_) => info!(source = %id, pad = %name, %media, "linked source pad"),
-                    Err(e) => warn!(source = %id, pad = %name, ?e, "failed to link source pad"),
-                }
-            });
+        route_pads(
+            &dynamic,
+            &id,
+            Some(video_entry),
+            // On the layered path this decoder is the page, and the page's
+            // audio is not wanted: transparent mode produces none, and if a
+            // future sidecar did produce some it would fight the media's own
+            // audio for the one audio chain. The media branch below owns it.
+            (layers.is_none()).then(|| audio_entry.clone()),
+            &has_video,
+            &has_audio,
+        );
+        if let Some(l) = &layers {
+            // The page's own video, decoded here. Its audio is the source's
+            // audio, since the page has none in transparent mode.
+            route_pads(
+                &l.media_src,
+                &id,
+                Some(l.media_q.clone()),
+                Some(audio_entry),
+                &has_video,
+                &has_audio,
+            );
         }
 
         Ok(Self {
@@ -650,6 +1117,7 @@ impl InputPipeline {
             audio_proxy,
             has_video,
             has_audio,
+            superimposed: layers.is_some(),
             failed: Arc::new(AtomicBool::new(false)),
             source: Mutex::new(src),
             src_queue,
@@ -796,6 +1264,12 @@ impl InputPipeline {
         self.has_audio.load(Ordering::Relaxed)
     }
 
+    /// True when this source is running with the page's media decoded here
+    /// rather than in the browser. Decided once when the pipeline is built.
+    pub fn superimposed(&self) -> bool {
+        self.superimposed
+    }
+
     pub fn observed_state(&self) -> SourceState {
         if self.failed.load(Ordering::Relaxed) {
             SourceState::Failed
@@ -807,6 +1281,62 @@ impl InputPipeline {
             SourceState::Connecting
         }
     }
+}
+
+/// Send a decoder's pads to the branches that want them, as they appear.
+///
+/// `flvdemux` names its pads; `uridecodebin` does not, so the media type on the
+/// pad's caps is the fallback. The destinations are arguments rather than fixed
+/// because a superimposed source runs two decoders in one bin, the page and its
+/// video, and each one has its own branch to reach. A `None` destination means
+/// that decoder's stream of that kind is deliberately dropped.
+fn route_pads(
+    el: &gst::Element,
+    id: &SourceId,
+    video: Option<gst::Element>,
+    audio: Option<gst::Element>,
+    has_video: &Arc<AtomicBool>,
+    has_audio: &Arc<AtomicBool>,
+) {
+    let id = id.clone();
+    let has_video = has_video.clone();
+    let has_audio = has_audio.clone();
+    el.connect_pad_added(move |_el, pad| {
+        let name = pad.name();
+        let media = pad
+            .current_caps()
+            .and_then(|c| c.structure(0).map(|s| s.name().to_string()))
+            .unwrap_or_default();
+
+        let is_video = name.starts_with("video") || media.starts_with("video/");
+        let is_audio = name.starts_with("audio") || media.starts_with("audio/");
+
+        let (target, seen) = if is_video {
+            (video.as_ref(), &has_video)
+        } else if is_audio {
+            (audio.as_ref(), &has_audio)
+        } else {
+            debug!(source = %id, pad = %name, %media, "ignoring unrecognised pad");
+            return;
+        };
+        let Some(target) = target else {
+            debug!(source = %id, pad = %name, %media, "no branch wants this stream");
+            return;
+        };
+
+        let Some(sink) = target.static_pad("sink") else { return };
+        if sink.is_linked() {
+            debug!(source = %id, pad = %name, "entry already linked, ignoring extra stream");
+            return;
+        }
+        match pad.link(&sink) {
+            Ok(_) => {
+                seen.store(true, Ordering::Relaxed);
+                info!(source = %id, pad = %name, %media, "linked source pad");
+            }
+            Err(e) => warn!(source = %id, pad = %name, ?e, "failed to link source pad"),
+        }
+    });
 }
 
 /// Stop a child and everything it started.
@@ -838,6 +1368,32 @@ fn stop_process_group(pid: u32) {
 #[cfg(not(unix))]
 fn stop_process_group(_pid: u32) {}
 
+/// Start a command in its own process group, with its stderr on a pipe.
+///
+/// The process group is what makes stopping one work. A capture command is
+/// often a script that starts a browser and an X server, and signalling only
+/// the script leaves those orphaned; `stop_process_group` signals the tree.
+/// Callers choose what happens to stdout, because a source reads it and the
+/// media probe must throw it away.
+fn exec_process(spec: &ExecSpec, stdout: std::process::Stdio) -> Result<std::process::Child> {
+    let (program, args) = spec.argv.split_first().context("exec source has an empty command")?;
+
+    let mut cmd = std::process::Command::new(program);
+    cmd.args(args)
+        .envs(&spec.env)
+        .stdout(stdout)
+        // Keep the child's noise out of our own stderr; it is logged separately.
+        .stderr(std::process::Stdio::piped());
+
+    #[cfg(unix)]
+    {
+        use std::os::unix::process::CommandExt;
+        cmd.process_group(0);
+    }
+
+    cmd.spawn().with_context(|| format!("starting `{program}`"))
+}
+
 /// Start the command behind an `exec:` source and hand its stdout to `fdsrc`.
 ///
 /// Anything that can write a container to stdout becomes a source: ffmpeg, a
@@ -848,25 +1404,7 @@ fn stop_process_group(_pid: u32) {}
 fn spawn_exec(id: &str, spec: &ExecSpec) -> Result<(i32, std::process::Child)> {
     use std::os::fd::IntoRawFd;
 
-    let (program, args) = spec.argv.split_first().context("exec source has an empty command")?;
-
-    let mut cmd = std::process::Command::new(program);
-    cmd.args(args)
-        .envs(&spec.env)
-        .stdout(std::process::Stdio::piped())
-        // Keep the child's noise out of our own stderr; it is logged separately.
-        .stderr(std::process::Stdio::piped());
-
-    // Put the child in its own process group so the whole tree can be signalled
-    // together. A capture command is often a script that starts a browser and
-    // an X server, and signalling only the script leaves those orphaned.
-    #[cfg(unix)]
-    {
-        use std::os::unix::process::CommandExt;
-        cmd.process_group(0);
-    }
-
-    let mut child = cmd.spawn().with_context(|| format!("starting `{program}`"))?;
+    let mut child = exec_process(spec, std::process::Stdio::piped())?;
 
     if let Some(err) = child.stderr.take() {
         let id = id.to_string();
@@ -885,6 +1423,7 @@ fn spawn_exec(id: &str, spec: &ExecSpec) -> Result<(i32, std::process::Child)> {
     // Hand the descriptor to GStreamer. `into_raw_fd` gives up Rust's ownership
     // so the pipe is not closed when this goes out of scope.
     let fd = stdout.into_raw_fd();
+    let program = spec.argv.first().map(String::as_str).unwrap_or_default();
     info!(source = %id, %program, "started exec source");
     Ok((fd, child))
 }
@@ -893,6 +1432,16 @@ fn make_exec_source(id: &str, spec: &ExecSpec) -> Result<(gst::Element, std::pro
     let (fd, child) = spawn_exec(id, spec)?;
     let src = make("fdsrc", &format!("{id}-src-exec"))?;
     src.set_property("fd", fd);
+    // Read the pipe in frame-sized bites rather than the 4 KB default.
+    //
+    // A source writing raw video moves a lot through that pipe: the browser
+    // sidecar in transparent mode is 1280x720 AYUV at 30, which is 107 MB a
+    // second. Measured against it on this machine, 4 KB reads carried 93 MB/s
+    // and 4 MB reads carried 177 MB/s, and the difference is the difference
+    // between the page keeping up and falling behind. A short read still
+    // returns immediately, so a source producing very little is not made to
+    // wait for a full block.
+    src.set_property("blocksize", 4u32 * 1024 * 1024);
     // Deliberately no do-timestamp. The process writes a container, and
     // stamping buffers with their arrival time before the demuxer sees them
     // destroys the timing the container carries. The demuxer's own timestamps
@@ -992,7 +1541,7 @@ fn optional_livesync(name: &str) -> Result<Option<gst::Element>> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::config::{Accel, Canvas, RtmpClient};
+    use crate::config::{Accel, Canvas, RtmpClient, Superimpose};
 
     fn init() {
         let _ = gst::init();
@@ -1005,6 +1554,7 @@ mod tests {
             uri: "rtmp://127.0.0.1/live/cam1".into(),
             stall_timeout_secs: 2.0,
             rtmp_client: RtmpClient::Auto,
+            superimpose: Superimpose::Off,
         }
     }
 
@@ -1091,6 +1641,81 @@ mod tests {
         assert!(msg.contains("gstreamer1.0-wpe"), "should name the package: {msg}");
     }
 
+    /// The sidecar's report is the whole basis for taking the layered path, so
+    /// a line that says the media cannot be opened must not be read as one that
+    /// says it can.
+    #[test]
+    fn media_reports_are_read_off_the_sidecars_stderr() {
+        let usable = r#"[browser] media {"found":true,"count":1,"tag":"video","src":"http://h/v.webm","usable":true,"mse":false,"drm":false,"paused":false,"rect":{"x":0,"y":0,"w":640,"h":360},"intrinsic":{"w":1280,"h":720},"viewport":{"w":1280,"h":720}}"#;
+        let r = media_report(usable).expect("a real report parses");
+        assert!(r.usable);
+        assert_eq!(r.src, "http://h/v.webm");
+
+        // A page feeding its own player has nothing to hand over.
+        let mse = r#"[browser] media {"found":true,"count":1,"src":"blob:https://x/1","usable":false,"mse":true}"#;
+        assert!(!media_report(mse).expect("an mse report parses").usable);
+        // And a page with no media at all reports that much.
+        assert!(!media_report(r#"[browser] media {"found":false,"count":0}"#).unwrap().usable);
+
+        // Anything else on stderr is the browser's own noise.
+        assert!(media_report("[browser] painted 30 frames").is_none());
+        assert!(media_report("[browser] media not json").is_none());
+    }
+
+    /// The page measures its video in viewport pixels; the canvas may be a
+    /// different size and the picture still has to land where the page had it.
+    #[test]
+    fn page_geometry_is_scaled_onto_the_canvas() {
+        let canvas = CanvasCaps::new(&Canvas::default()); // 1920x1080
+        let report = |x, y, w, h, vw, vh| MediaReport {
+            src: "http://h/v".into(),
+            usable: true,
+            rect: MediaRect { x, y, w, h },
+            viewport: MediaSize { w: vw, h: vh },
+        };
+
+        // A video filling its viewport fills the canvas, whatever size the
+        // page was rendered at.
+        assert_eq!(report(0, 0, 1280, 720, 1280, 720).placement(&canvas), (0, 0, 1920, 1080));
+        assert_eq!(report(0, 0, 1920, 1080, 1920, 1080).placement(&canvas), (0, 0, 1920, 1080));
+        // A quarter of the viewport, in its middle, is a quarter of the canvas.
+        assert_eq!(report(160, 90, 320, 180, 640, 360).placement(&canvas), (480, 270, 960, 540));
+        // A rectangle from a page still laying itself out is not usable
+        // geometry, so the video takes the whole canvas rather than vanishing.
+        assert_eq!(report(0, 0, 0, 0, 1280, 720).placement(&canvas), (0, 0, 1920, 1080));
+        assert_eq!(report(0, 0, 640, 360, 0, 0).placement(&canvas), (0, 0, 1920, 1080));
+    }
+
+    /// End to end against a stand-in sidecar: the probe must return on the
+    /// first usable report rather than on its timeout, and it must leave
+    /// nothing running behind it.
+    #[test]
+    fn the_probe_returns_on_the_first_usable_report() {
+        let spec = ExecSpec::from_uri(
+            "exec:sh -c 'echo one >&2; \
+             echo \"[browser] media {\\\"found\\\":false}\" >&2; \
+             echo \"[browser] media {\\\"src\\\":\\\"http://h/v.webm\\\",\\\"usable\\\":true}\" >&2; \
+             while :; do echo data; sleep 0.1; done'",
+            true,
+        )
+        .unwrap();
+
+        let started = Instant::now();
+        let report = probe_page_media(&"s".to_string(), &spec, Duration::from_secs(10))
+            .expect("the usable report should be taken");
+        assert_eq!(report.src, "http://h/v.webm");
+        assert!(
+            started.elapsed() < Duration::from_secs(5),
+            "should return on the report, not the timeout: {:?}",
+            started.elapsed()
+        );
+
+        // A sidecar that says nothing gives up at the timeout, and the source
+        // is then built exactly as it is today.
+        let quiet = ExecSpec::from_uri("exec:sh -c 'sleep 30'", true).unwrap();
+        assert!(probe_page_media(&"s".to_string(), &quiet, Duration::from_secs(1)).is_none());
+    }
+
     #[test]
     fn exec_commands_are_recognised_and_unwrapped() {
         assert_eq!(exec_command("exec:ffmpeg -i x -f mpegts -"), Some("ffmpeg -i x -f mpegts -"));
@@ -1135,6 +1760,47 @@ mod tests {
         browser.sidecar = Some(dir.join("nope").to_string_lossy().to_string());
         assert!(ExecSpec::browser("web://example.com", &canvas, &browser).is_err());
         std::fs::remove_dir_all(&dir).ok();
+    }
+
+    /// A superimposed page draws chrome, not video, and its frames cross to the
+    /// mixer raw with an alpha channel at 4 bytes a pixel. At the canvas rate a
+    /// 720p page is 110 MB/s, measured, where an ordinary I420 source is 41.
+    /// Dropping the page to `overlay_fps` puts it at 37 MB/s, under what the
+    /// pipe already carries every day. Getting this wrong does not fail a test
+    /// anywhere else, it just makes the feature cost more than it saves.
+    #[test]
+    fn a_superimposed_page_draws_slower_than_the_canvas() {
+        let canvas = CanvasCaps::new(&crate::config::Canvas::default());
+        let browser = BrowserConfig {
+            // Appended after the built argv, and the sidecar takes the last
+            // spelling of a flag, so this must keep beating the overlay rate.
+            args: vec!["--fps".into(), "60".into()],
+            ..Default::default()
+        };
+        let mut spec = ExecSpec {
+            argv: vec![
+                "liveboxmix-browser".into(),
+                "--fps".into(),
+                canvas.fps.numer().to_string(),
+            ],
+            env: browser.env.clone(),
+        };
+        spec.argv.extend(browser.args.iter().cloned());
+
+        spec.set_fps(default_overlay_fps_for_test());
+        let fps: Vec<&String> = spec
+            .argv
+            .iter()
+            .enumerate()
+            .filter(|(i, _)| *i > 0 && spec.argv[i - 1] == "--fps")
+            .map(|(_, v)| v)
+            .collect();
+        assert_eq!(fps, ["10", "60"], "ours is lowered, the operator's still wins");
+    }
+
+    /// Kept next to the test so a change to the default is noticed here.
+    fn default_overlay_fps_for_test() -> u32 {
+        BrowserConfig::default().overlay_fps
     }
 
     #[test]

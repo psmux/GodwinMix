@@ -50,6 +50,12 @@ pub struct SourceStatus {
     /// Same for audio. `None` here while `has_audio` is true means the source
     /// advertised an audio track that never produced a decoded sample.
     pub audio_idle_ms: Option<u64>,
+    /// True when this website source is running with its media decoded outside
+    /// the browser and the page drawn over it. False covers both a source that
+    /// never asked for it and one that asked and could not get it, because the
+    /// page turned out to have no address worth handing over.
+    #[serde(default)]
+    pub superimposed: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -271,7 +277,18 @@ mod tests {
     fn event_json_shape_matches_what_the_ui_parses() {
         let status = MixerStatus {
             program: Some("cam1".into()),
-            sources: vec![],
+            sources: vec![SourceStatus {
+                id: "page".into(),
+                name: "Live game".into(),
+                uri: "web+https://example.com/live-game".into(),
+                state: SourceState::Live,
+                has_video: true,
+                has_audio: true,
+                cell: Some(1),
+                video_idle_ms: Some(12),
+                audio_idle_ms: Some(9),
+                superimposed: true,
+            }],
             outputs: vec![],
             multiview: MultiviewStatus {
                 enabled: true,
@@ -303,6 +320,14 @@ mod tests {
         assert_eq!(v["multiview"]["fps"], 8);
         assert_eq!(v["running_time_ms"], 4200);
         assert_eq!(v["backend"]["hardware_accelerated"], true);
+        // The source list drives both the row badges and the multiview labels,
+        // and the UI reads these keys by name off the parsed object.
+        assert_eq!(v["sources"][0]["id"], "page");
+        assert_eq!(v["sources"][0]["state"], "live");
+        // Always written, never skipped when false: the UI branches on it
+        // directly and `undefined` would read as "not superimposed" by luck
+        // rather than by contract.
+        assert_eq!(v["sources"][0]["superimposed"], true);
 
         let v: serde_json::Value = serde_json::to_value(Event::Took {
             source: None,
@@ -334,6 +359,21 @@ mod tests {
         .unwrap();
         assert_eq!(v["type"], "source_state_changed");
         assert_eq!(v["state"], "stalled");
+    }
+
+    /// A snapshot written before `superimposed` existed has to keep parsing:
+    /// a saved status file, or a peer on an older build. Without the serde
+    /// default that is a hard failure rather than a source that simply
+    /// reports itself as not superimposed.
+    #[test]
+    fn a_snapshot_from_before_superimpose_still_parses() {
+        let older = serde_json::json!({
+            "id": "cam1", "name": "Camera 1", "uri": "rtmp://host/live/cam1",
+            "state": "live", "has_video": true, "has_audio": false,
+            "cell": 0, "video_idle_ms": 12, "audio_idle_ms": null,
+        });
+        let s: SourceStatus = serde_json::from_value(older).unwrap();
+        assert!(!s.superimposed);
     }
 
     #[test]

@@ -140,7 +140,7 @@ does not exist on one of them is a logged warning rather than a crash.
 | `GET /api/status` | full snapshot |
 | `GET /api/media` | ad clips found in the configured library |
 | `POST /api/take` | `{"source": "cam1"}`, or `{"source": null}` for black |
-| `POST /api/sources` | add a source at runtime: `{"id","uri","name"}` |
+| `POST /api/sources` | add a source at runtime: `{"id","uri","name","kind","superimpose"}` |
 | `DELETE /api/sources/{id}` | remove one |
 | `POST /api/adbreak` | `{"uri": "/path/to/ad.mp4"}`, optional `at_running_time_ms` and `return_to` |
 | `POST /api/adbreak/end` | cut the ad short and return early |
@@ -276,6 +276,11 @@ liveboxmix ctl source add - https://www.youtube.com/watch?v=aqz-KE-bpKQ --web --
 liveboxmix ctl take youtube
 curl -X POST localhost:8080/api/sources -H 'content-type: application/json' \
   -d '{"uri":"https://www.youtube.com/watch?v=aqz-KE-bpKQ","kind":"web","name":"YouTube"}'
+
+# Let the mixer decode the page's own video where it can. See superimpose below.
+liveboxmix ctl source add game https://example.com/live-game --web --superimpose auto
+curl -X POST localhost:8080/api/sources -H 'content-type: application/json' \
+  -d '{"uri":"https://example.com/live-game","kind":"web","superimpose":"auto"}'
 ```
 
 `kind: "web"` (or `--web`) says "this is a website"; `id` may be omitted and
@@ -285,6 +290,9 @@ Two things about sites: players that autoplay start on their own (the
 browser is told no gesture is needed); a player that waits for a click shows
 its poster. And YouTube's `/embed/` URLs refuse to load as a top level page
 (Error 153); paste the normal `/watch?v=` address.
+
+`superimpose` is described further down. It is `"off"` unless you ask for it,
+and a source that is not a website accepts the field and never looks at it.
 
 `browser/` holds the renderer, `liveboxmix-browser`. It embeds Chromium
 through CEF with off screen rendering: Chromium paints each frame into memory
@@ -332,6 +340,55 @@ address, and it is not the case for the two things worth knowing about:
 `rect` is where the element sits in the viewport and `intrinsic` is the coded
 size the decoder would produce, both of which the mixer needs to put a directly
 decoded picture exactly where the page had it.
+
+#### Handing the video over: `superimpose`
+
+`--detect-media` only reports. `superimpose` is the per-source option that acts
+on the report, in the config file, over the API, or from the CLI:
+
+```toml
+[[sources]]
+id = "game"
+uri = "web+https://example.com/live-game"
+superimpose = "auto"   # "off" is the default and is what every web source did before
+```
+
+`auto` means: when the page's media has an address a decoder can open, the
+mixer decodes it on the GPU like any other source and the browser draws only
+the page over the top, transparent where the video was. `off` renders the
+whole page in the browser.
+
+The saving is the reason to bother. A page playing video costs about a whole
+CPU core. Chromium decodes every frame in software, repaints the page around
+it, and the result crosses to the mixer as raw frames, which is three jobs to
+put one video on the canvas. Decoding that video on the GPU and painting a
+nearly static page over it is a fraction of the same work.
+
+It does not always apply, and `auto` falls back rather than failing:
+
+* Media Source Extensions. The page feeds its player from JavaScript and the
+  element's `src` is a `blob:` URL that exists only inside that renderer, so
+  there is no address to hand over. **YouTube is MSE**, and so are most
+  streaming sites. Those keep rendering in the browser and cost what they
+  always cost.
+* DRM. Frames are decrypted inside the browser and by design never leave it.
+* A page with no media element at all, which is most pages, and which is why
+  `off` remains the default.
+
+The trade-off where it does apply is the page's own player UI. The element the
+mixer takes over is paused as well as hidden, because hiding alone leaves
+Chromium decoding every frame into a surface nobody looks at and the decode is
+the whole cost. Paused means the page's progress bar stops filling and its
+running time stops counting, while the video itself, now the mixer's, plays
+normally. On a page whose player chrome is part of what you are broadcasting,
+leave this `off`.
+
+Since the fallback is silent, the mixer reports what actually happened rather
+than what was asked for. `GET /api/status` carries `superimposed` on every
+source, `liveboxmix ctl status` and `ctl source list` mark those sources
+`(superimposed)`, and the UI puts a green `direct` badge on the row. A website
+source set to `auto` with no badge is working normally; it simply had nothing
+to give.
 
 Building it. Linux: `cd browser && cargo build --release`, which downloads the
 CEF distribution and stages it next to the binary (`CEF_PATH` picks where the

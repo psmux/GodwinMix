@@ -65,6 +65,12 @@ pub enum SourceCmd {
         /// it as a stream. Same as writing web+ in front of it.
         #[arg(long)]
         web: bool,
+        /// Websites only: "auto" decodes the page's own video outside the
+        /// browser and draws the page over the top, which saves about a CPU
+        /// core. Falls back to "off" without saying so when the page has no
+        /// address to hand over, which is the case for YouTube and for DRM.
+        #[arg(long, default_value = "off")]
+        superimpose: String,
     },
     Remove {
         id: String,
@@ -109,17 +115,20 @@ pub async fn run(base: &str, cmd: Ctl) -> Result<()> {
             let body: serde_json::Value = get(base, "/api/status").await?;
             for s in body["sources"].as_array().into_iter().flatten() {
                 println!(
-                    "{:<10} {:<10} {}",
+                    "{:<10} {:<10} {}{}",
                     s["id"].as_str().unwrap_or(""),
                     s["state"].as_str().unwrap_or(""),
-                    s["uri"].as_str().unwrap_or("")
+                    s["uri"].as_str().unwrap_or(""),
+                    superimposed_mark(s)
                 );
             }
         }
-        Ctl::Source(SourceCmd::Add { id, uri, name, web }) => {
+        Ctl::Source(SourceCmd::Add { id, uri, name, web, superimpose }) => {
             let id = (id != "-").then_some(id);
             let kind = web.then_some("web");
-            post(base, "/api/sources", json!({ "id": id, "uri": uri, "name": name, "kind": kind })).await?;
+            let body =
+                json!({ "id": id, "uri": uri, "name": name, "kind": kind, "superimpose": superimpose });
+            post(base, "/api/sources", body).await?;
             println!("added source {}", id.as_deref().unwrap_or("(id derived from the URL)"));
         }
         Ctl::Source(SourceCmd::Remove { id }) => {
@@ -182,6 +191,14 @@ pub async fn run(base: &str, cmd: Ctl) -> Result<()> {
     Ok(())
 }
 
+/// The only feedback an operator gets that the handover really happened.
+/// `--superimpose auto` falls back quietly, so a page that could not give up
+/// its media looks exactly like one that never asked, and the difference is
+/// about a core of CPU.
+fn superimposed_mark(s: &serde_json::Value) -> &'static str {
+    if s["superimposed"].as_bool().unwrap_or(false) { "  (superimposed)" } else { "" }
+}
+
 fn print_status(b: &serde_json::Value) {
     println!("program : {}", b["program"].as_str().unwrap_or("black"));
     if let Some(ad) = b["ad"].as_object() {
@@ -199,10 +216,11 @@ fn print_status(b: &serde_json::Value) {
     );
     for s in b["sources"].as_array().into_iter().flatten() {
         println!(
-            "source  : {:<10} {:<10} {}",
+            "source  : {:<10} {:<10} {}{}",
             s["id"].as_str().unwrap_or(""),
             s["state"].as_str().unwrap_or(""),
-            s["uri"].as_str().unwrap_or("")
+            s["uri"].as_str().unwrap_or(""),
+            superimposed_mark(s)
         );
     }
     for o in b["outputs"].as_array().into_iter().flatten() {

@@ -166,6 +166,18 @@ struct AddSourceRequest {
     /// out from the URL.
     #[serde(default)]
     kind: Option<String>,
+    /// "off" or "auto", the same spellings the config file uses. "auto" lets
+    /// the mixer decode the page's own video itself and draw the page over
+    /// the top, when the page turns out to have an address worth handing
+    /// over. See `Superimpose`.
+    ///
+    /// Only a website source ever reads it. It is accepted on any source and
+    /// ignored by the rest rather than refused, because the field is part of
+    /// every `SourceConfig` and a camera simply never consults it. Refusing
+    /// would mean the API knowing which URLs are pages, which is the one
+    /// thing this endpoint deliberately works out later.
+    #[serde(default)]
+    superimpose: Option<String>,
 }
 
 async fn add_source(
@@ -181,6 +193,15 @@ async fn add_source(
         _ => uri,
     };
     let name = req.name.filter(|n| !n.trim().is_empty());
+    // Spelled out rather than left off. `SourceConfig::superimpose` has a
+    // serde default, but a default fills in for a missing key and not for a
+    // null one, and the UI sends null for the sources this cannot apply to.
+    let superimpose = req
+        .superimpose
+        .as_deref()
+        .map(|s| s.trim().to_ascii_lowercase())
+        .filter(|s| !s.is_empty())
+        .unwrap_or_else(|| "off".to_string());
     let base_id = req
         .id
         .filter(|i| !i.trim().is_empty())
@@ -189,7 +210,7 @@ async fn add_source(
     let candidates = std::iter::once(base_id.clone()).chain((2..10).map(|n| format!("{base_id}-{n}")));
     for id in candidates {
         let cfg: SourceConfig = serde_json::from_value(serde_json::json!({
-            "id": id, "uri": uri, "name": name,
+            "id": id, "uri": uri, "name": name, "superimpose": superimpose,
         }))
         .map_err(|e| anyhow::anyhow!("bad source: {e}"))?;
         match app
@@ -366,6 +387,33 @@ pub async fn serve(bind: &str, state: AppState) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::config::Superimpose;
+
+    /// `add_source` builds its `SourceConfig` through JSON, so the strings the
+    /// API accepts have to be exactly the ones serde knows. A spelling that
+    /// drifts, "on" or `true`, would be a 400 on a field that reads as
+    /// obviously correct to whoever sent it.
+    #[test]
+    fn superimpose_spellings_survive_the_trip_through_json() {
+        let cfg = |v: serde_json::Value| -> Result<SourceConfig, _> {
+            serde_json::from_value(serde_json::json!({
+                "id": "page", "uri": "web+https://example.com/live", "name": null,
+                "superimpose": v,
+            }))
+        };
+        assert_eq!(cfg("auto".into()).unwrap().superimpose, Superimpose::Auto);
+        assert_eq!(cfg("off".into()).unwrap().superimpose, Superimpose::Off);
+        assert!(cfg("on".into()).is_err());
+        // Why the handler substitutes "off" rather than passing a null on:
+        // the serde default fills in a missing key, not a null one.
+        assert!(cfg(serde_json::Value::Null).is_err());
+        // And omitting it entirely is the default, which is today's behaviour.
+        let bare: SourceConfig = serde_json::from_value(serde_json::json!({
+            "id": "page", "uri": "web+https://example.com/live",
+        }))
+        .unwrap();
+        assert_eq!(bare.superimpose, Superimpose::Off);
+    }
 
     #[test]
     fn ids_are_derived_from_hosts_and_names() {

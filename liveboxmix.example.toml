@@ -51,6 +51,15 @@ allow_exec_sources = false
 # sidecar = "/opt/liveboxmix/liveboxmix-browser"
 # args = ["--audio-offset-ms", "0"]
 # env = { LBX_BROWSER_SWITCHES = "enable-gpu" }
+#
+# How fast the browser draws when a source is superimposing, which is when it
+# is only drawing the page over video the mixer decodes itself. Those frames
+# carry an alpha channel and cross raw, at 4 bytes a pixel against I420's 1.5,
+# so a 720p page at the full canvas rate is 110 MB/s where an ordinary source
+# is 41. The compositor holds the last page frame between updates, so the
+# picture still leaves at the canvas rate with the video moving underneath.
+# Raise it for a page with real animation and expect to pay for it.
+# overlay_fps = 10
 
 [media]
 dir = "media"
@@ -103,6 +112,28 @@ stall_timeout_secs = 2.0
 # media, so an unfamiliar server recovers on its own. Pin a client here to skip
 # that wait once you know which one your server needs.
 rtmp_client = "auto"
+# What to do about the video a website plays. Websites only: it is accepted
+# here on any source and never read by one that is not a web+ page, so it is
+# shown on this camera only because this is where the per-source options are
+# documented.
+#
+# A page that plays a video normally costs about a whole CPU core. Chromium
+# decodes every frame in software and repaints the page around it, and all of
+# that crosses to the mixer as raw frames. When the media has an address a
+# decoder can open on its own, "auto" has the mixer decode it on the GPU like
+# any other source and leaves the browser drawing only the page over the top,
+# transparent where the video was.
+#
+# It cannot always be done. A page that feeds its player from JavaScript, which
+# is what YouTube and most streaming sites do, has no address to hand over, and
+# neither has anything behind DRM. "auto" looks, takes it when it is there, and
+# renders the whole page in the browser when it is not, without complaining.
+# `liveboxmix ctl source list` marks the sources where it actually happened.
+#
+# The page's own player UI freezes when this applies, because the element the
+# mixer took over is paused: a progress bar stops filling, a running time stops
+# counting. The video itself is the mixer's now and plays normally.
+superimpose = "off"
 
 [[sources]]
 id = "cam2"

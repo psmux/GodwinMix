@@ -206,7 +206,7 @@ pub struct SecurityConfig {
 /// `browser/`: a full Chromium drawing off screen, handing over raw frames and
 /// PCM with no encoder in between. When it is found, every `web+` source runs
 /// through it. When it is not, `web+` falls back to GStreamer's `wpesrc`.
-#[derive(Debug, Clone, Default, Deserialize, Serialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct BrowserConfig {
     /// Path to `liveboxmix-browser`. Unset means: look next to this executable,
     /// then on PATH. Set to a path that does not exist and `web+` sources fail
@@ -220,6 +220,40 @@ pub struct BrowserConfig {
     /// Linux box this is where `DISPLAY` and `PULSE_SINK` go.
     #[serde(default)]
     pub env: std::collections::BTreeMap<String, String>,
+    /// Frames per second the browser draws at when it is only drawing the page
+    /// over video the mixer decodes itself. See `default_overlay_fps`.
+    #[serde(default = "default_overlay_fps")]
+    pub overlay_fps: u32,
+}
+
+// Written out rather than derived. A derived Default would ignore the serde
+// field defaults and give `overlay_fps` a zero, and a config file with no
+// `[browser]` section takes exactly this path, so the sidecar would be told to
+// draw at zero frames a second.
+impl Default for BrowserConfig {
+    fn default() -> Self {
+        Self {
+            sidecar: None,
+            args: Vec::new(),
+            env: std::collections::BTreeMap::new(),
+            overlay_fps: default_overlay_fps(),
+        }
+    }
+}
+
+/// A superimposed page is chrome: a scoreboard, a lower third, a logo. It does
+/// not need the canvas frame rate, and asking for it is expensive in a way that
+/// is easy to miss. Those frames cross to the mixer raw, and raw frames with an
+/// alpha channel are 4 bytes a pixel against I420's 1.5, so a 720p page at 30
+/// fps is 107 MB/s down the pipe where an ordinary source is 41 MB/s. The
+/// compositor holds the last page frame between updates, so the picture still
+/// leaves at the canvas rate with the video moving at full speed underneath.
+///
+/// Ten is a compromise: fast enough that a running clock does not visibly
+/// stutter, slow enough that the page costs a third of what it would. Raise it
+/// for a page with real animation in it, and expect to pay for that.
+fn default_overlay_fps() -> u32 {
+    10
 }
 
 /// Where the ad library lives on the machine running the mixer.
@@ -265,6 +299,31 @@ impl Default for MediaConfig {
     }
 }
 
+/// What to do about the video a website is playing.
+///
+/// A page that plays a video normally costs a whole CPU core: Chromium decodes
+/// every frame in software and repaints the whole page around it, and the
+/// result crosses to the mixer as raw frames. Almost all of that is avoidable
+/// when the media has an address a decoder can open on its own. The mixer then
+/// decodes it on the GPU like any other source and has the browser draw only
+/// the page over the top, transparent where the video was.
+///
+/// It does not always apply. A page that feeds its player from JavaScript, which
+/// is what YouTube and most streaming sites do, has no address to hand over, and
+/// neither does anything behind DRM. `Auto` looks, uses it when it is there, and
+/// silently renders the whole page in the browser when it is not.
+#[derive(Debug, Clone, Copy, Default, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum Superimpose {
+    /// Render everything in the browser. What every source did before this
+    /// existed, and still the default.
+    #[default]
+    Off,
+    /// Decode the page's media directly when it can be, and draw the page over
+    /// it. Falls back to `Off` for that source when it cannot.
+    Auto,
+}
+
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct SourceConfig {
     pub id: String,
@@ -278,6 +337,10 @@ pub struct SourceConfig {
     /// Which RTMP client to pull with. See `RtmpClient`.
     #[serde(default)]
     pub rtmp_client: RtmpClient,
+    /// Website sources only: whether to decode the page's own video directly
+    /// and superimpose the page on it. See `Superimpose`.
+    #[serde(default)]
+    pub superimpose: Superimpose,
 }
 
 fn default_stall_timeout() -> f64 {
@@ -487,6 +550,28 @@ mod tests {
         // And omitting the section entirely is fine too.
         let cfg: Config = toml::from_str("").unwrap();
         assert_eq!(cfg.media.dir, "media");
+    }
+
+    /// A serde field default only runs when the field's own struct is being
+    /// deserialised. A config with no `[browser]` section never gets that far:
+    /// the section falls back to `BrowserConfig::default()`, and while that was
+    /// derived it handed out a zero here, which reaches the sidecar as
+    /// `--fps 0`. Both routes must arrive at the same number.
+    #[test]
+    fn the_overlay_frame_rate_defaults_the_same_either_way() {
+        let missing: Config = toml::from_str("").unwrap();
+        let present: Config = toml::from_str("[browser]
+").unwrap();
+        let partial: Config = toml::from_str("[browser]
+sidecar = \"/opt/b\"\n").unwrap();
+        assert_eq!(missing.browser.overlay_fps, default_overlay_fps());
+        assert_eq!(present.browser.overlay_fps, default_overlay_fps());
+        assert_eq!(partial.browser.overlay_fps, default_overlay_fps());
+        assert!(default_overlay_fps() > 0, "zero would stop the page painting");
+
+        // And it is still overridable, which is the point of it being config.
+        let set: Config = toml::from_str("[browser]\noverlay_fps = 25\n").unwrap();
+        assert_eq!(set.browser.overlay_fps, 25);
     }
 
     #[test]

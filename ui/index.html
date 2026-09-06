@@ -111,6 +111,8 @@
     font-size: 10px; color: var(--dim); border: 1px solid var(--line);
     border-radius: 3px; padding: 0 4px; text-transform: uppercase;
   }
+  /* Green, because it means the mixer got the cheap path it asked for. */
+  .srcrow .sup { color: var(--ok); border-color: var(--ok); }
   .srcrow .del {
     border: 0; background: transparent; color: var(--dim); cursor: pointer;
     font-size: 14px; line-height: 1; padding: 0 3px;
@@ -126,6 +128,9 @@
   .adrow { display: flex; gap: 6px; margin-top: 6px; align-items: center; }
   .cue { font-size: 12px; color: var(--dim); display: flex; align-items: center; gap: 5px; }
   .cue input { width: 62px; }
+  /* display: flex above beats the browser's own rule for [hidden], so a .cue
+     that is hidden would otherwise still be laid out. */
+  .cue[hidden] { display: none; }
   .adrow button { flex: 1; }
   .hint { font-size: 11px; color: var(--dim); margin-top: 6px; line-height: 1.35; }
   .seg { display: flex; gap: 0; margin-top: 8px; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }
@@ -213,6 +218,13 @@
         </div>
         <input id="nsuri" placeholder="Paste the page address, e.g. https://www.youtube.com/watch?v=…" spellcheck="false">
         <input id="nsname" placeholder="name (optional, the site's name by default)" spellcheck="false">
+        <label class="cue" id="nssuperrow" style="margin-top:6px">
+          page video
+          <select id="nssuper">
+            <option value="off">browser renders it</option>
+            <option value="auto">mixer decodes it</option>
+          </select>
+        </label>
         <div class="adrow"><button id="nsadd">Add source</button></div>
         <div class="hint" id="nshint">The page is rendered by a real browser and its sound comes along. Paste and add.</div>
       </details>
@@ -527,7 +539,9 @@ function renderSources() {
     <div class="srcrow" data-id="${escapeHtml(s.id)}" title="${escapeHtml(shownUri(s.uri))}">
       ${i < 9 ? `<span class="key">${i + 1}</span>` : ""}
       <span class="nm"><b>${escapeHtml(s.name)}</b></span>
-      <span class="kind">${KIND_LABEL[kindOf(s.uri)] || kindOf(s.uri)}</span>
+      ${s.superimposed
+        ? `<span class="kind sup" title="Website. The mixer is decoding this page's video itself and drawing the page over it, so Chromium is not rendering the video. That is where the CPU saving is.">direct</span>`
+        : `<span class="kind">${KIND_LABEL[kindOf(s.uri)] || kindOf(s.uri)}</span>`}
       <span class="st ${s.state}">${s.state}${s.has_audio ? "" : " · mute"}</span>
       <button class="del" title="Remove this source">&times;</button>
     </div>`).join("") || `<div class="kv">no sources</div>`;
@@ -559,13 +573,31 @@ const KIND_UI = {
   },
 };
 let nsKind = "web";
-function setKind(k, byUser) {
+
+// "auto" can quietly do nothing, and an operator who was not told that would
+// read a page still costing a whole core as a fault. So choosing it says up
+// front what will and will not work, and the source list marks the sources
+// where it actually happened.
+function srcHint() {
+  const base = KIND_UI[nsKind].hint;
+  if (nsKind !== "web" || $("nssuper").value !== "auto") return base;
+  return base + " Its video is decoded here when the page has an address to hand over. Sites that feed their player from JavaScript, YouTube among them, and anything with DRM have none, and those keep rendering in the browser with nothing to show for it.";
+}
+
+// Only a page has a video that could be handed over, so the superimpose
+// control follows the type rather than sitting on a camera doing nothing.
+function setKind(k) {
   nsKind = k;
   [...$("nskind").children].forEach((b) => b.classList.toggle("on", b.dataset.kind === k));
   $("nsuri").placeholder = KIND_UI[k].placeholder;
-  $("nshint").textContent = KIND_UI[k].hint + (byUser ? "" : "");
+  $("nssuperrow").hidden = k !== "web";
+  $("nshint").textContent = srcHint();
 }
-[...$("nskind").children].forEach((b) => (b.onclick = () => setKind(b.dataset.kind, true)));
+[...$("nskind").children].forEach((b) => (b.onclick = () => setKind(b.dataset.kind)));
+$("nssuper").onchange = () => ($("nshint").textContent = srcHint());
+// Once at load, so the panel's starting state comes from one place rather
+// than from the markup agreeing with the code by hand.
+setKind(nsKind);
 
 // Guess from what was pasted, so the right tab lights up without a click.
 function guessKind(u) {
@@ -582,7 +614,7 @@ function guessKind(u) {
 $("nsuri").oninput = () => {
   const u = $("nsuri").value.trim();
   const g = guessKind(u);
-  if (g && g !== nsKind) setKind(g, false);
+  if (g && g !== nsKind) setKind(g);
   if (u && g === "stream") $("nshint").textContent = `Will be opened as: ${KIND_LABEL[kindOf(u)] || kindOf(u)}`;
 };
 
@@ -591,9 +623,16 @@ $("nsadd").onclick = async () => {
   const name = $("nsname").value.trim();
   if (!uri) { alert_("warning", "Paste an address first."); return; }
   if (nsKind === "exec" && !uri.toLowerCase().startsWith("exec:")) uri = "exec:" + uri;
-  const body = { uri, name: name || null, kind: nsKind === "web" ? "web" : null };
+  const body = {
+    uri,
+    name: name || null,
+    kind: nsKind === "web" ? "web" : null,
+    // Null on anything that is not a page. The server takes it on any source
+    // and ignores it, but sending it would imply it does something.
+    superimpose: nsKind === "web" ? $("nssuper").value : null,
+  };
   const ok = await post("/api/sources", body);
-  if (ok) { $("nsname").value = ""; $("nsuri").value = ""; $("nshint").textContent = KIND_UI[nsKind].hint; }
+  if (ok) { $("nsname").value = ""; $("nsuri").value = ""; $("nshint").textContent = srcHint(); }
 };
 $("noadd").onclick = async () => {
   const id = $("noid").value.trim();
