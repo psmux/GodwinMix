@@ -22,7 +22,7 @@ use gstreamer as gst;
 use gstreamer::prelude::*;
 use parking_lot::Mutex;
 use serde::Deserialize;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tracing::{debug, info, warn};
@@ -201,6 +201,10 @@ pub struct InputPipeline {
     /// Whether the page's media ended up being decoded outside the browser.
     /// Settled when the pipeline is built and constant for its lifetime.
     superimposed: bool,
+    /// Where a layered source's layers sit in time. Reset on restart.
+    placement: Option<Arc<Placement>>,
+    /// The local copy of the page's video, if one was made. See `cache_media`.
+    media_cache: Option<std::path::PathBuf>,
     /// Set when the pipeline posts an error; the supervisor restarts it.
     failed: Arc<AtomicBool>,
     /// The RTMP client element, swappable once if the configured one turns out
@@ -329,7 +333,10 @@ fn find_browser_sidecar(browser: &BrowserConfig) -> Result<Option<std::path::Pat
 /// is also why unknown fields must not be an error: the sidecar is free to say
 /// more without this failing to parse.
 #[derive(Debug, Clone, Deserialize)]
-struct MediaReport {
+pub struct MediaReport {
+    /// Whether the page had a media element at all when this was written.
+    #[serde(default)]
+    found: bool,
     /// The address a decoder outside the browser can open.
     #[serde(default)]
     src: String,
@@ -337,6 +344,17 @@ struct MediaReport {
     /// by JavaScript, for DRM, and for a page playing nothing at all.
     #[serde(default)]
     usable: bool,
+    /// The element is fed from JavaScript through Media Source Extensions, so
+    /// its address is a `blob:` that exists only inside that renderer.
+    #[serde(default)]
+    mse: bool,
+    /// Encrypted Media Extensions: decrypted inside the browser, never leaves.
+    #[serde(default)]
+    drm: bool,
+    /// A local copy of a finite clip, when one was fetched. See `cache_media`.
+    /// Deleted when the source stops.
+    #[serde(skip)]
+    cache: Option<std::path::PathBuf>,
     /// Where the element sat in the page, in CSS pixels.
     #[serde(default)]
     rect: MediaRect,
@@ -397,11 +415,21 @@ const MEDIA_LINE: &str = "[browser] media ";
 /// How long to give the sidecar to say what the page is playing.
 ///
 /// Long enough that a page has loaded, autoplay has started and the first
-/// report has been written, which took about three seconds against the local
-/// test pages and longer against a real site. Nothing is lost by waiting: this
-/// runs before the pipeline exists, so what it costs is how long the operator
-/// waits for a source to appear, not a gap in the programme.
-const MEDIA_PROBE_TIMEOUT: Duration = Duration::from_secs(10);
+/// report has been written. That took about three seconds against the local
+/// test pages from a native sidecar, six from one in a container, and eleven
+/// on a machine under load, where a ten second ceiling quietly gave up and the
+/// source rendered the page whole without anyone being told why. Nothing is
+/// lost by waiting: the probe runs on its own thread before the pipeline
+/// exists, so what it costs is how long the operator waits for the source to
+/// appear, not a gap in the programme, and a page whose media can never be
+/// handed over ends the wait as soon as it says so.
+pub const MEDIA_PROBE_TIMEOUT: Duration = Duration::from_secs(20);
+
+/// Upstream latency the layered compositor claims, the same figure as the
+/// mixer's own compositor. It is how late a page frame may be before it is
+/// dropped, and how long the media's next round may take to arrive before the
+/// gap shows on air.
+const LAYER_LATENCY_NS: i64 = 500_000_000;
 
 /// The report line's payload, if this is one.
 fn media_report(line: &str) -> Option<MediaReport> {
@@ -423,7 +451,7 @@ fn media_report(line: &str) -> Option<MediaReport> {
 /// Its stdout goes to /dev/null on purpose. The sidecar writes raw video there
 /// at tens of megabytes a second, and a pipe nobody drains would block it
 /// before it ever loaded the page.
-fn probe_page_media(id: &SourceId, spec: &ExecSpec, timeout: Duration) -> Option<MediaReport> {
+pub fn probe_page_media(id: &SourceId, spec: &ExecSpec, timeout: Duration) -> Option<MediaReport> {
     let mut spec = spec.clone();
     spec.argv.push("--detect-media".into());
     // A backstop, so a sidecar that somehow outlives the kill below still ends.
@@ -475,6 +503,17 @@ fn probe_page_media(id: &SourceId, spec: &ExecSpec, timeout: Duration) -> Option
                 found = Some(report);
                 break;
             }
+            // The player is there and what it has can never be handed over.
+            // No point waiting out the clock for that to change.
+            Ok(report) if report.found && (report.mse || report.drm) => {
+                info!(
+                    source = %id,
+                    mse = report.mse,
+                    drm = report.drm,
+                    "the page's video cannot be handed over; rendering the page whole"
+                );
+                break;
+            }
             // A page reports as it loads, and the first report is often from
             // before the player has a source. Keep listening until the timeout.
             Ok(_) => continue,
@@ -484,6 +523,9 @@ fn probe_page_media(id: &SourceId, spec: &ExecSpec, timeout: Duration) -> Option
 
     stop_process_group(child.id());
     let _ = child.wait();
+    if let Some(r) = found.as_mut() {
+        r.cache = cache_media(id, &mut r.src);
+    }
     match &found {
         Some(r) => info!(
             source = %id,
@@ -500,6 +542,80 @@ fn probe_page_media(id: &SourceId, spec: &ExecSpec, timeout: Duration) -> Option
     found
 }
 
+/// How far ahead of the picture the page's media is decoded, in seconds. See
+/// the media queue in `Layers::build`.
+const MEDIA_LEAD_SECS: f64 = 4.0;
+
+/// How long a clip may take to fetch before it is streamed instead.
+const MEDIA_FETCH_TIMEOUT: Duration = Duration::from_secs(60);
+
+/// Fetch a finite clip to a local file once, and point `src` at the copy.
+///
+/// The mixer loops the page's video itself, and looping over the network costs
+/// a fresh connection, an index read and a decoder start every time round.
+/// Measured on the rig that was 2.6 to 4.6 seconds of frozen picture at each
+/// loop, and it was worse the busier the machine. From a local file the same
+/// switch is tens of milliseconds, inside the latency the compositor already
+/// claims, so the join does not show. It also stops the loop depending on the
+/// server: one that will not honour a range request cannot be seeked back to
+/// the start, and a Python test server is exactly such a one.
+///
+/// Only for what looks like a clip. An HLS or DASH address is a stream, plays
+/// directly and never loops. Anything that has not finished arriving after
+/// `MEDIA_FETCH_TIMEOUT` is treated as a stream too and played from the
+/// address; the partial file is removed.
+fn cache_media(id: &SourceId, src: &mut String) -> Option<std::path::PathBuf> {
+    let path_part = src.split(['?', '#']).next().unwrap_or("").to_ascii_lowercase();
+    if path_part.ends_with(".m3u8") || path_part.ends_with(".mpd") {
+        debug!(source = %id, "the page's video is a stream; playing it from its address");
+        return None;
+    }
+    let factory = ["souphttpsrc", "curlhttpsrc"]
+        .into_iter()
+        .find(|f| crate::probe::exists(f))?;
+    let file = std::env::temp_dir().join(format!("lbx-media-{id}-{}.bin", std::process::id()));
+    let fetch = || -> Result<()> {
+        let pipeline = gst::Pipeline::with_name(&format!("fetch-{id}"));
+        let http = make(factory, &format!("{id}-fetch-src"))?;
+        http.set_property("location", &*src);
+        let sink = make("filesink", &format!("{id}-fetch-sink"))?;
+        sink.set_property("location", file.to_string_lossy().as_ref());
+        pipeline.add_many([&http, &sink]).context("adding fetch elements")?;
+        http.link(&sink).context("linking fetch")?;
+        pipeline.set_state(gst::State::Playing).context("starting fetch")?;
+        let bus = pipeline.bus().context("fetch pipeline has no bus")?;
+        let msg = bus.timed_pop_filtered(
+            gst::ClockTime::from_seconds(MEDIA_FETCH_TIMEOUT.as_secs()),
+            &[gst::MessageType::Eos, gst::MessageType::Error],
+        );
+        let _ = pipeline.set_state(gst::State::Null);
+        match msg.as_ref().map(|m| m.view()) {
+            Some(gst::MessageView::Eos(_)) => Ok(()),
+            Some(gst::MessageView::Error(e)) => anyhow::bail!("{}", e.error()),
+            _ => anyhow::bail!("not finished after {}s", MEDIA_FETCH_TIMEOUT.as_secs()),
+        }
+    };
+    let started = Instant::now();
+    match fetch() {
+        Ok(()) => {
+            let bytes = std::fs::metadata(&file).map(|m| m.len()).unwrap_or(0);
+            info!(
+                source = %id,
+                bytes,
+                secs = started.elapsed().as_secs_f64(),
+                "fetched the page's video once, to loop it from disk"
+            );
+            *src = format!("file://{}", file.to_string_lossy());
+            Some(file)
+        }
+        Err(e) => {
+            warn!(source = %id, ?e, "could not fetch the page's video; playing it from its address");
+            let _ = std::fs::remove_file(&file);
+            None
+        }
+    }
+}
+
 /// The elements that exist only on the layered path.
 ///
 /// The page's video decoded here as the bottom layer, the page itself drawn
@@ -508,8 +624,9 @@ fn probe_page_media(id: &SourceId, spec: &ExecSpec, timeout: Duration) -> Option
 /// tell a superimposed source from any other one.
 struct Layers {
     media_src: gst::Element,
-    media_q: gst::Element,
     media_conv: gst::Element,
+    media_caps: gst::Element,
+    media_q: gst::Element,
     media_scale: gst::Element,
     over_q: gst::Element,
     over_conv: gst::Element,
@@ -527,18 +644,42 @@ impl Layers {
         // messages that put the pipeline into PAUSED, and pausing this pipeline
         // would also stop the page, which is live and cannot be paused. The
         // queue below is what absorbs a slow server instead.
+        //
+        // Not `uridecodebin3` with its gapless `about-to-finish`, which was
+        // tried: on the rig it took ten seconds to move to the next item even
+        // from a local file, for reasons that did not show in the logs. The
+        // loop is done in `Placement` instead, by restarting this element from
+        // the local copy `cache_media` made, which is tens of milliseconds and
+        // entirely in view.
 
         Ok(Self {
             media_src,
-            // Two seconds on the media side. A file over HTTP decodes far
-            // faster than real time and then waits on the compositor, which is
-            // paced by the page; the queue is where those frames sit.
-            media_q: gstutil::queue_time(&format!("{id}-media-q"), 2.0, false)?,
+            // The media decodes far faster than real time and then waits on
+            // the compositor, and this queue is where those frames sit. Its
+            // length is the lead the loop gets: the end of stream passes the
+            // decoder's pad when the last frame enters the queue, so the
+            // decoder is started again that long before the picture runs out,
+            // and it measured three seconds from restart to first frame on a
+            // loaded machine. Four seconds of decoded frames is 170 MB at 720p
+            // and twice that at 1080p, held only while a superimposed source
+            // exists; with the two seconds it had, every loop froze for three.
+            media_q: gstutil::queue_time(&format!("{id}-media-q"), MEDIA_LEAD_SECS, false)?,
+            // Before the queue, not after it, and forced to a real conversion.
+            // A hardware decoder hands out frames from a small pool of its own
+            // surfaces and stops decoding when they are all held, so a queue
+            // full of its frames holds a handful, whatever its time limit says:
+            // the lead above measured as a fifth of a second. Copying each frame
+            // into ordinary memory here gives the surface back at once, and the
+            // queue then holds what it was asked to.
             media_conv: make("videoconvert", &format!("{id}-media-conv"))?,
+            media_caps: gstutil::capsfilter(
+                &format!("{id}-media-caps"),
+                &gst::Caps::builder("video/x-raw").field("format", "I420").build(),
+            )?,
             media_scale: make("videoscale", &format!("{id}-media-scale"))?,
             over_q: gstutil::queue_thread(&format!("{id}-over-q"))?,
             over_conv: make("videoconvert", &format!("{id}-over-conv"))?,
-            comp: make("compositor", &format!("{id}-sup-comp"))?,
+            comp: gstutil::make_live_aggregator("compositor", &format!("{id}-sup-comp"))?,
             // The compositor must be asked for a format that has alpha, and
             // this is the one thing here that is not obvious. `compositor`
             // converts every input to its *output* format before blending, so
@@ -564,11 +705,12 @@ impl Layers {
         })
     }
 
-    fn elements(&self) -> [&gst::Element; 10] {
+    fn elements(&self) -> [&gst::Element; 11] {
         [
             &self.media_src,
-            &self.media_q,
             &self.media_conv,
+            &self.media_caps,
+            &self.media_q,
             &self.media_scale,
             &self.over_q,
             &self.over_conv,
@@ -580,39 +722,46 @@ impl Layers {
     }
 
     /// Link both layers into the compositor and the compositor into `vrate`,
-    /// the head of the normalising chain every source shares.
+    /// the head of the normalising chain every source shares. Returns the two
+    /// compositor pads, media then page, for `place_in_time`.
     ///
-    /// Deliberately not a `force-live` aggregator, which is what the mixer's own
-    /// compositor is. A live aggregator times its output against the pipeline
-    /// clock and discards whatever arrives late, and the page is always a
-    /// little late: the sidecar stamps from its own start and delivers at its
-    /// own pace, so its frames would be judged late and dropped and the overlay
-    /// would flicker or never appear at all. That is the failure
-    /// `wants_livesync` describes. Composing on timestamps instead, with the
-    /// two branches placed relative to each other by `shift_to_arrival`, lets
-    /// the composite come out on the pipeline's own time, and it is then
-    /// rebased onto programme time at the mixer pad like any other source.
+    /// The compositor is a live aggregator, built the same way as the mixer's
+    /// own and for the same reason. It times its output against the pipeline
+    /// clock, so it produces frames as soon as the first layer has one and
+    /// keeps producing them when a layer stops: a media branch that ends, or a
+    /// server that goes quiet, leaves the page over whatever was last drawn
+    /// instead of freezing the whole source until the supervisor rebuilds it.
+    /// An earlier version composed on timestamps instead and did exactly that,
+    /// every fifty seconds, on a twenty second clip.
     ///
-    /// Two costs come with that choice, both real.
-    ///
-    /// The compositor produces nothing until both branches have delivered a
-    /// frame, so the source spends its first second or two connecting rather
-    /// than showing the video on its own.
-    ///
-    /// And the page paces the whole source. The media's video waits for it at
-    /// the compositor, and the media's audio waits with it, because both come
-    /// out of one demuxer whose queues fill when either side stops being read.
-    /// So a machine that cannot take the page's frames as fast as the sidecar
-    /// draws them does not merely stutter: the whole source falls behind
-    /// programme time, and the programme's audio mixer discards audio it
-    /// judges late. That is the failure to look for first if a superimposed
-    /// source goes quiet.
-    fn link(&self, report: &MediaReport, canvas: &CanvasCaps, vrate: &gst::Element) -> Result<()> {
+    /// A live aggregator discards what arrives late, and the page's frames
+    /// would all be late on their own: the sidecar stamps them from its own
+    /// start, and its start is seconds before its first frame reaches us.
+    /// `Placement` moves each layer's timeline to where its frames actually
+    /// turned up, which is what makes the two agree.
+    fn link(
+        &self,
+        report: &MediaReport,
+        canvas: &CanvasCaps,
+        vrate: &gst::Element,
+    ) -> Result<(gst::Pad, gst::Pad)> {
         // Anywhere neither layer covers is black, not the checkerboard the
         // element defaults to.
         self.comp.set_property_from_str("background", "black");
+        crate::probe::set_bool(&self.comp, "ignore-inactive-pads", true);
+        crate::probe::set_int(&self.comp, "min-upstream-latency", LAYER_LATENCY_NS);
+        // The page draws at a tenth of the canvas rate and the compositor
+        // would happily pick that as its output rate. Pin it, so the video
+        // underneath keeps every frame it has.
+        self.comp_caps.set_property(
+            "caps",
+            &gst::Caps::builder("video/x-raw")
+                .field("format", "AYUV")
+                .field("framerate", canvas.fps)
+                .build(),
+        );
 
-        gst::Element::link_many([&self.media_q, &self.media_conv, &self.media_scale])
+        gst::Element::link_many([&self.media_conv, &self.media_caps, &self.media_q, &self.media_scale])
             .context("linking the decoded media branch")?;
         gst::Element::link_many([&self.over_q, &self.over_conv])
             .context("linking the page overlay branch")?;
@@ -657,12 +806,6 @@ impl Layers {
             src.link(pad).context("linking a layer into the compositor")?;
         }
 
-        // Both layers claim to start at zero and neither really does. See
-        // `shift_to_arrival`.
-        let first = Arc::new(Mutex::new(None));
-        shift_to_arrival(&self.media_scale, &media_pad, "media", &first)?;
-        shift_to_arrival(&self.over_conv, &over_pad, "page", &first)?;
-
         gst::Element::link_many([
             &self.comp,
             &self.comp_caps,
@@ -672,74 +815,281 @@ impl Layers {
         ])
         .context("linking the composed layers into the normaliser")?;
         info!(x, y, width = w, height = h, "page media placed on the canvas");
-        Ok(())
+        Ok((media_pad, over_pad))
+    }
+
+    /// Put the layers on the composite's timeline and keep them there. See
+    /// `Placement`.
+    ///
+    /// Separate from `link` because the media's placement applies to its audio
+    /// as well as its picture, and the audio's destination exists only later in
+    /// the build. Placing one without the other would move the picture and
+    /// leave the sound where it was.
+    fn place_in_time(
+        &self,
+        id: &SourceId,
+        report: &MediaReport,
+        media_pad: &gst::Pad,
+        over_pad: &gst::Pad,
+        audio_in: &gst::Pad,
+    ) -> Result<Arc<Placement>> {
+        let placement = Placement::new();
+        let page_out = self
+            .over_conv
+            .static_pad("src")
+            .context("page branch has no src pad")?;
+        placement.watch(id, Stream::Page, &page_out, over_pad, None);
+        // Only a clip held locally is looped. A stream is played from its
+        // address and left to end; see `cache_media`.
+        let again = report.cache.is_some().then(|| self.media_src.clone());
+        // The media's pads only exist once it has connected, so they are
+        // watched as they appear. The same caps test `route_pads` makes.
+        let (me, id, media_pad, audio_in) =
+            (placement.clone(), id.clone(), media_pad.clone(), audio_in.clone());
+        self.media_src.connect_pad_added(move |_el, pad| {
+            // By name as well as by caps. `uridecodebin3` names its pads
+            // `video_%u` and `audio_%u` and can announce them before their caps
+            // are known, and a pad classified by caps alone was skipped here,
+            // never placed, and its frames were all late and dropped: a
+            // superimposed source with no video in it.
+            let name = pad.name();
+            let media = pad
+                .current_caps()
+                .and_then(|c| c.structure(0).map(|s| s.name().to_string()))
+                .unwrap_or_default();
+            if name.starts_with("video") || media.starts_with("video/") {
+                me.watch(&id, Stream::Video, pad, &media_pad, again.clone());
+            } else if name.starts_with("audio") || media.starts_with("audio/") {
+                me.watch(&id, Stream::Audio, pad, &audio_in, again.clone());
+            }
+        });
+        Ok(placement)
     }
 }
 
-/// Move each layer's timeline to where its data actually arrived.
-///
-/// The sidecar stamps from its own start. It takes a second or two to launch a
-/// browser and load a page, and its first frame still says zero, so an
-/// untouched overlay branch drags the whole composite that far behind the media
-/// it is being drawn over. Video survives being late, because the mixer's
-/// compositor holds the last frame it has; audio does not, because an
-/// audiomixer discards samples that claim to belong in the past. Left alone
-/// this cost the source all of its sound: the programme measured -91 dB, which
-/// is digital silence, while the picture looked perfect.
-///
-/// So each branch is shifted by how much later than the other one it started.
-/// Whichever arrives first is left alone and the other is pushed forward to
-/// meet it, which puts the page's first frame beside the media frame that was
-/// playing when the page finally drew it, and leaves composite time equal to
-/// the time the pipeline had been running.
-///
-/// The offsets are set from probes on the *upstream* src pads so that the
-/// segment is still travelling: a pad offset rewrites the segment as it crosses
-/// the pad, so setting one after the segment has gone past changes nothing. The
-/// same reason the mixer's `TimelineAligner` works the way it does.
-fn shift_to_arrival(
-    branch: &gst::Element,
-    pad: &gst::Pad,
-    tag: &'static str,
-    first: &Arc<Mutex<Option<Instant>>>,
-) -> Result<()> {
-    let src = branch
-        .static_pad("src")
-        .with_context(|| format!("{} has no src pad", branch.name()))?;
-    let (pad, first) = (pad.clone(), first.clone());
-    src.add_probe(gst::PadProbeType::EVENT_DOWNSTREAM, move |_p, info| {
-        let Some(gst::PadProbeData::Event(e)) = &info.data else {
-            return gst::PadProbeReturn::Ok;
-        };
-        if !matches!(e.view(), gst::EventView::Segment(_)) {
-            return gst::PadProbeReturn::Ok;
-        }
-        // Wall clock, not the pipeline's running time. What is wanted is a
-        // duration between two arrivals, and the pipeline's own clock cannot
-        // give one here: the media layer's segment goes past while the pipeline
-        // is still prerolling and has no base time, so its running time reads
-        // as zero, and the page's then reads as however long the *programme*
-        // has been up. That produced an eleven second offset where the real gap
-        // was a third of a second.
-        let now = Instant::now();
-        let started = {
-            let mut guard = first.lock();
-            *guard.get_or_insert(now)
-        };
-        let late = now.saturating_duration_since(started);
-        pad.set_offset(late.as_nanos() as i64);
-        info!(
-            layer = tag,
-            late_ms = late.as_millis() as u64,
-            "layer placed on the composite's timeline"
-        );
-        gst::PadProbeReturn::Remove
-    })
-    .context("installing the arrival probe")?;
-    Ok(())
+/// Which of a layered source's streams a `Placement` probe is watching.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+enum Stream {
+    /// The browser's rendering of the page. One segment, placed once.
+    Page,
+    /// The media's picture. Its buffers say where each round ends.
+    Video,
+    /// The media's sound. Placed where the picture is, not where it would put
+    /// itself, so the two cannot drift apart round after round.
+    Audio,
 }
 
+/// Where each layer sits on the composite's timeline.
+///
+/// Every layer stamps its frames from its own zero, and none of them starts
+/// when the pipeline does: the browser takes seconds to launch and load, the
+/// media takes a moment to connect, and the pipeline clock runs throughout. The
+/// compositor is live and shows a frame when its running time comes up, so a
+/// layer left on its own timeline is late by however long it took to appear,
+/// and a live aggregator drops what is late. So as each segment passes on its
+/// way to its compositor pad, that pad's offset moves the layer to the running
+/// time of that moment. The offset is set upstream of the pad, while the
+/// segment is still travelling, because one set after the segment has gone by
+/// changes nothing. The same reason the mixer's `TimelineAligner` works the
+/// way it does.
+///
+/// The media sends a new segment every time it goes round, which is every time
+/// its decoder is started again from the local copy when the clip runs out (see
+/// the end of stream handling in `watch`). That one is placed at the end
+/// of the round before, measured from the picture's buffers, so the picture
+/// carries straight on; or at now, if the next round was not ready in time, in
+/// which case the gap is what it is and the log says so. The sound is placed
+/// by the picture's end rather than its own, or a clip whose audio runs a few
+/// milliseconds longer than its video would pull the two apart a little more
+/// on every round.
+struct Placement {
+    /// Where the picture of the current round ends, in running time at its
+    /// compositor pad, as far as has been seen.
+    end: Mutex<gst::ClockTime>,
+    /// Where the round before ended, frozen as the picture's next segment
+    /// passes, for the sound to follow.
+    prev_end: Mutex<gst::ClockTime>,
+    video_rounds: AtomicU32,
+    audio_rounds: AtomicU32,
+    /// A restart of the media decoder in flight. Picture and sound reach their
+    /// end within a frame of each other and one restart is wanted, not two.
+    restarting: AtomicBool,
+}
+
+impl Placement {
+    fn new() -> Arc<Self> {
+        Arc::new(Self {
+            end: Mutex::new(gst::ClockTime::ZERO),
+            prev_end: Mutex::new(gst::ClockTime::ZERO),
+            video_rounds: AtomicU32::new(0),
+            audio_rounds: AtomicU32::new(0),
+            restarting: AtomicBool::new(false),
+        })
+    }
+
+    /// Forget everything. The pipeline has been restarted and its running time
+    /// starts from zero again; an end remembered from before it would place
+    /// the first frames minutes into the future.
+    fn reset(&self) {
+        *self.end.lock() = gst::ClockTime::ZERO;
+        *self.prev_end.lock() = gst::ClockTime::ZERO;
+        self.video_rounds.store(0, Ordering::SeqCst);
+        self.audio_rounds.store(0, Ordering::SeqCst);
+        self.restarting.store(false, Ordering::SeqCst);
+    }
+
+    /// Watch the segments and buffers passing `probe_on` and keep `target`,
+    /// downstream of it, placed.
+    fn watch(
+        self: &Arc<Self>,
+        id: &SourceId,
+        stream: Stream,
+        probe_on: &gst::Pad,
+        target: &gst::Pad,
+        again: Option<gst::Element>,
+    ) {
+        let (me, id, target) = (self.clone(), id.clone(), target.clone());
+        // This pad's segment, kept to turn buffer times into running time.
+        let segment: Mutex<Option<gst::FormattedSegment<gst::ClockTime>>> = Mutex::new(None);
+        probe_on.add_probe(
+            gst::PadProbeType::EVENT_DOWNSTREAM | gst::PadProbeType::BUFFER,
+            move |p, info| {
+                match &info.data {
+                    Some(gst::PadProbeData::Buffer(b)) if stream == Stream::Video => {
+                        if let (Some(seg), Some(pts)) = (segment.lock().as_ref(), b.pts()) {
+                            let dur = b.duration().unwrap_or(gst::ClockTime::ZERO);
+                            if let Some(rt) = seg.to_running_time(pts + dur) {
+                                // Running time at `target`, where the offset is
+                                // applied, not here.
+                                let at = rt
+                                    + gst::ClockTime::from_nseconds(target.offset().max(0) as u64);
+                                let mut end = me.end.lock();
+                                if at > *end {
+                                    *end = at;
+                                }
+                            }
+                        }
+                    }
+                    Some(gst::PadProbeData::Event(e)) => {
+                        if let gst::EventView::Segment(s) = e.view() {
+                            *segment.lock() = s.segment().downcast_ref::<gst::ClockTime>().cloned();
+                            // None only while the pipeline has no base time yet,
+                            // which is the start, and zero is right then.
+                            let now = p
+                                .parent_element()
+                                .and_then(|e| e.parent())
+                                .and_then(|o| o.downcast::<gst::Element>().ok())
+                                .and_then(|pipeline| pipeline.current_running_time())
+                                .unwrap_or(gst::ClockTime::ZERO);
+                            let after = match stream {
+                                Stream::Page => gst::ClockTime::ZERO,
+                                Stream::Video => {
+                                    let end = *me.end.lock();
+                                    *me.prev_end.lock() = end;
+                                    me.video_rounds.fetch_add(1, Ordering::SeqCst);
+                                    end
+                                }
+                                Stream::Audio => {
+                                    // The picture's end. If the picture's own
+                                    // new segment has already gone past it is
+                                    // frozen in `prev_end`; if not, the old
+                                    // picture has fully drained by the time the
+                                    // new sound arrives, so `end` is final.
+                                    let k = me.audio_rounds.fetch_add(1, Ordering::SeqCst) + 1;
+                                    if me.video_rounds.load(Ordering::SeqCst) >= k {
+                                        *me.prev_end.lock()
+                                    } else {
+                                        *me.end.lock()
+                                    }
+                                }
+                            };
+                            let place = now.max(after);
+                            target.set_offset(place.nseconds() as i64);
+                            if after == gst::ClockTime::ZERO {
+                                info!(
+                                    source = %id,
+                                    layer = ?stream,
+                                    at_ms = place.mseconds(),
+                                    "layer placed on the composite's timeline"
+                                );
+                            } else if stream == Stream::Video {
+                                info!(
+                                    source = %id,
+                                    at_ms = place.mseconds(),
+                                    gap_ms = now.saturating_sub(after).mseconds(),
+                                    "placed the next round of the page's media"
+                                );
+                            }
+                        }
+                        if let gst::EventView::Eos(_) = e.view() {
+                            // The clip has run out. For one held locally the
+                            // decoder is started again from the copy, and the
+                            // end of stream is kept from the compositor, which
+                            // would otherwise mark the layer finished and
+                            // ignore everything after. A stream is left to end.
+                            let Some(el) = again.as_ref() else {
+                                return gst::PadProbeReturn::Ok;
+                            };
+                            if stream == Stream::Video
+                                && !me.restarting.swap(true, Ordering::SeqCst)
+                            {
+                                let (el, me, id) = (el.clone(), me.clone(), id.clone());
+                                // Off the streaming thread. A state change made
+                                // from a probe on the element's own pad deadlocks
+                                // against the thread it is asking to stop.
+                                std::thread::spawn(move || {
+                                    let started = Instant::now();
+                                    let down = el.set_state(gst::State::Null);
+                                    if down.is_ok() && el.sync_state_with_parent().is_ok() {
+                                        info!(
+                                            source = %id,
+                                            took_ms = started.elapsed().as_millis() as u64,
+                                            "started the page's media again from its local copy"
+                                        );
+                                    } else {
+                                        warn!(
+                                            source = %id,
+                                            ?down,
+                                            "the page's media could not be started again; the page stays over its last frame"
+                                        );
+                                    }
+                                    me.restarting.store(false, Ordering::SeqCst);
+                                });
+                            }
+                            return gst::PadProbeReturn::Drop;
+                        }
+                    }
+                    _ => {}
+                }
+                gst::PadProbeReturn::Ok
+            },
+        );
+    }
+}
+
+
+
 impl InputPipeline {
+    /// The sidecar command that would ask this source's page what it plays.
+    ///
+    /// Some only for a website with `superimpose = "auto"` and a sidecar to
+    /// run. The mixer runs the probe itself, on a thread of its own, and hands
+    /// the answer to `build_kind` as `overlay`: launching a browser and waiting
+    /// for a page to start playing takes seconds, and the mixer thread is what
+    /// answers every other command in the meantime. A configured sidecar that
+    /// is missing gives None here too, so that `build_kind` gets to fail with
+    /// its usual message rather than the failure being swallowed.
+    pub fn media_probe_spec(
+        cfg: &SourceConfig,
+        canvas: &CanvasCaps,
+        browser: &BrowserConfig,
+    ) -> Option<ExecSpec> {
+        if SourceKind::detect(&cfg.uri) != SourceKind::Web || cfg.superimpose != Superimpose::Auto {
+            return None;
+        }
+        ExecSpec::browser(&cfg.uri, canvas, browser).ok().flatten()
+    }
+
     /// Build the pipeline in NULL state. Call `start` to run it.
     #[cfg(test)]
     pub fn build(
@@ -758,6 +1108,7 @@ impl InputPipeline {
             SourceKind::Rtmp,
             false,
             &BrowserConfig::default(),
+            None,
         )
     }
 
@@ -771,6 +1122,7 @@ impl InputPipeline {
         kind: SourceKind,
         allow_exec: bool,
         browser: &BrowserConfig,
+        overlay: Option<MediaReport>,
     ) -> Result<Self> {
         let id = cfg.id.clone();
         let mut exec_child: Option<std::process::Child> = None;
@@ -783,17 +1135,16 @@ impl InputPipeline {
             _ => None,
         };
 
-        // A page asking for `superimpose = "auto"` is rendered twice over: once
-        // now, thrown away, only to find out whether its video has an address
-        // this machine can open, and then for real. When it has, the source is
-        // built as two layers and the browser stops decoding video altogether.
-        // When it has not, which is every page feeding its own player from
-        // JavaScript, nothing below this changes and the page is rendered whole
-        // exactly as before.
-        let overlay = match (kind, cfg.superimpose, exec.as_ref()) {
-            (SourceKind::Web, Superimpose::Auto, Some(spec)) => {
-                probe_page_media(&id, spec, MEDIA_PROBE_TIMEOUT)
-            }
+        // A page asking for `superimpose = "auto"` has already been probed by
+        // the mixer, off the mixer's own thread, and `overlay` is what the page
+        // said it plays. With a report the source is built as two layers and
+        // the browser stops decoding video altogether. Without one, which is
+        // every page feeding its own player from JavaScript, nothing below this
+        // changes and the page is rendered whole exactly as before. A report
+        // only counts for a page the sidecar renders: nothing else has a
+        // browser to take the video back from.
+        let overlay = match (kind, exec.as_ref()) {
+            (SourceKind::Web, Some(_)) => overlay,
             _ => None,
         };
         if let (Some(spec), true) = (exec.as_mut(), overlay.is_some()) {
@@ -983,9 +1334,12 @@ impl InputPipeline {
         if let Some(dec) = &decode_bin {
             gst::Element::link(&src, dec).context("linking exec source to decoder")?;
         }
-        if let (Some(l), Some(r)) = (&layers, &overlay) {
-            l.link(r, canvas, &vrate).context("linking the superimposed layers")?;
-        }
+        let layer_pads = match (&layers, &overlay) {
+            (Some(l), Some(r)) => {
+                Some(l.link(r, canvas, &vrate).context("linking the superimposed layers")?)
+            }
+            _ => None,
+        };
 
         // Video chain: for RTMP, parse and decode first, optionally downloading
         // from GPU memory. Rate before scale so we convert as few frames as we
@@ -1094,14 +1448,24 @@ impl InputPipeline {
             &has_video,
             &has_audio,
         );
+        let mut placement = None;
         if let Some(l) = &layers {
+            // Before the routing below, so the placement probes are on each new
+            // pad before anything is linked to it.
+            if let Some((media_pad, over_pad)) = &layer_pads {
+                let audio_in = audio_entry
+                    .static_pad("sink")
+                    .context("audio chain has no sink pad")?;
+                let report = overlay.as_ref().context("layers without a report")?;
+                placement = Some(l.place_in_time(&id, report, media_pad, over_pad, &audio_in)?);
+            }
             // The page's own video, decoded here. Its audio is the source's
             // audio, since the page has none in transparent mode.
             route_pads(
                 &l.media_src,
                 &id,
-                Some(l.media_q.clone()),
-                Some(audio_entry),
+                Some(l.media_conv.clone()),
+                Some(audio_entry.clone()),
                 &has_video,
                 &has_audio,
             );
@@ -1118,6 +1482,8 @@ impl InputPipeline {
             has_video,
             has_audio,
             superimposed: layers.is_some(),
+            placement,
+            media_cache: overlay.as_ref().and_then(|r| r.cache.clone()),
             failed: Arc::new(AtomicBool::new(false)),
             source: Mutex::new(src),
             src_queue,
@@ -1159,6 +1525,9 @@ impl InputPipeline {
     pub fn stop(&self) {
         let _ = self.pipeline.set_state(gst::State::Null);
         self.kill_exec_child();
+        if let Some(f) = &self.media_cache {
+            let _ = std::fs::remove_file(f);
+        }
     }
 
     fn kill_exec_child(&self) {
@@ -1232,6 +1601,9 @@ impl InputPipeline {
         info!(source = %self.id, "restarting input pipeline");
         self.restart_armed.store(false, Ordering::SeqCst);
         self.pipeline.set_state(gst::State::Null).ok();
+        if let Some(p) = &self.placement {
+            p.reset();
+        }
 
         // An exec source's process has to come back with its pipeline. The old
         // one is killed and a fresh fd handed to the same fdsrc, so a command
@@ -1668,6 +2040,10 @@ mod tests {
     fn page_geometry_is_scaled_onto_the_canvas() {
         let canvas = CanvasCaps::new(&Canvas::default()); // 1920x1080
         let report = |x, y, w, h, vw, vh| MediaReport {
+            found: true,
+            mse: false,
+            drm: false,
+            cache: None,
             src: "http://h/v".into(),
             usable: true,
             rect: MediaRect { x, y, w, h },

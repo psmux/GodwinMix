@@ -28,7 +28,7 @@
 use crate::caps::CanvasCaps;
 use crate::config::{Config, OutputConfig, SourceConfig};
 use crate::gstutil::{self, make, BusEvent};
-use crate::input::{InputPipeline, SourceKind};
+use crate::input::{MediaReport, InputPipeline, SourceKind};
 use crate::multiview::Multiview;
 use crate::output::OutputSlot;
 use crate::probe::Backends;
@@ -105,6 +105,10 @@ pub enum Command {
     /// Cut the ad short and go back early.
     EndAdBreak(Option<Ack>),
     AddSource(Box<SourceConfig>, Option<Ack>),
+    /// A source whose page has been probed for its media, coming back to be
+    /// built. Sent by the probe thread `begin_add_source` starts; never by the
+    /// API. The report is None when the page had nothing to hand over.
+    AddSourceProbed(Box<SourceConfig>, Option<MediaReport>, Option<Ack>),
     RemoveSource(SourceId, Option<Ack>),
     ReconnectOutput(OutputId, Option<Ack>),
     AddOutput(Box<OutputConfig>, Option<Ack>),
@@ -551,8 +555,9 @@ impl Mixer {
         }
 
         for src in self.cfg.sources.clone() {
-            if let Err(e) = self.add_source(&src) {
-                error!(source = %src.id, ?e, "failed to add source");
+            let id = src.id.clone();
+            if let Err(e) = self.begin_add_source(src, None) {
+                error!(source = %id, ?e, "failed to add source");
             }
         }
 
@@ -575,13 +580,49 @@ impl Mixer {
 
     // -- sources ---------------------------------------------------------
 
-    pub fn add_source(&mut self, cfg: &SourceConfig) -> Result<()> {
+    /// Start adding a source. Most are built here and now. A website asking
+    /// to superimpose is probed first, which means launching a browser and
+    /// waiting up to `MEDIA_PROBE_TIMEOUT` for the page to say what it plays,
+    /// so that runs on a thread of its own and comes back as
+    /// `Command::AddSourceProbed`. This thread answers every other command,
+    /// and ten seconds of it standing still would freeze the operator's UI
+    /// while the programme carried on underneath.
+    fn begin_add_source(&mut self, cfg: SourceConfig, ack: Option<Ack>) -> Result<()> {
+        let Some(spec) = InputPipeline::media_probe_spec(&cfg, &self.canvas, &self.cfg.browser)
+        else {
+            let r = self.add_source(&cfg, None);
+            reply(ack, &r);
+            return r;
+        };
+        let handle = self.handle.clone();
+        let id = cfg.id.clone();
+        info!(source = %id, "asking the page what it plays before building the source");
+        let spawned = std::thread::Builder::new()
+            .name(format!("probe-{id}"))
+            .spawn(move || {
+                let report =
+                    crate::input::probe_page_media(&id, &spec, crate::input::MEDIA_PROBE_TIMEOUT);
+                // A send fails only when the mixer has already gone.
+                let _ = handle.send(Command::AddSourceProbed(Box::new(cfg), report, ack));
+            });
+        match spawned {
+            Ok(_) => Ok(()),
+            Err(e) => {
+                let r = Err(anyhow::Error::from(e).context("spawning the media probe thread"));
+                // The ack moved into the closure that never ran; nothing left
+                // to answer on. The API gets the error through the log.
+                r
+            }
+        }
+    }
+
+    pub fn add_source(&mut self, cfg: &SourceConfig, overlay: Option<MediaReport>) -> Result<()> {
         anyhow::ensure!(cfg.id != AD_ID, "{AD_ID} is reserved for ad breaks");
         anyhow::ensure!(!cfg.id.trim().is_empty(), "a source needs an id");
         anyhow::ensure!(!cfg.uri.trim().is_empty(), "a source needs a uri");
         let kind = SourceKind::detect(&cfg.uri);
-        info!(source = %cfg.id, uri = %cfg.uri, ?kind, "adding source");
-        self.add_source_kind(cfg, kind, true)?;
+        info!(source = %cfg.id, uri = %cfg.uri, ?kind, superimposed = overlay.is_some(), "adding source");
+        self.add_source_kind(cfg, kind, true, overlay)?;
         self.persist_runtime();
         Ok(())
     }
@@ -591,6 +632,7 @@ impl Mixer {
         cfg: &SourceConfig,
         kind: SourceKind,
         in_multiview: bool,
+        overlay: Option<MediaReport>,
     ) -> Result<()> {
         if self.sources.iter().any(|s| s.input.id == cfg.id) {
             anyhow::bail!("source {} already exists", cfg.id);
@@ -605,6 +647,7 @@ impl Mixer {
             kind,
             self.cfg.security.allow_exec_sources,
             &self.cfg.browser,
+            overlay,
         )?;
 
         let id = &cfg.id;
@@ -989,7 +1032,7 @@ impl Mixer {
             rtmp_client: Default::default(),
             superimpose: Default::default(), // An ad is a file, never a page.
         };
-        if let Err(e) = self.add_source_kind(&cfg, SourceKind::File, false) {
+        if let Err(e) = self.add_source_kind(&cfg, SourceKind::File, false, None) {
             let _ = self.events.send(Event::Alert {
                 severity: Severity::Error,
                 message: format!("ad break could not start: {e:#}"),
@@ -1123,7 +1166,10 @@ impl Mixer {
                 r?;
             }
             Command::AddSource(cfg, ack) => {
-                let r = self.add_source(&cfg);
+                self.begin_add_source(*cfg, ack)?;
+            }
+            Command::AddSourceProbed(cfg, report, ack) => {
+                let r = self.add_source(&cfg, report);
                 reply(ack, &r);
                 r?;
             }

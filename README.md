@@ -265,6 +265,20 @@ Adding a page by URL renders it in a real Chromium and puts what it draws and
 plays on the canvas like any other source. No tricks with screen capture, no
 encoder in between.
 
+Three ways a page can reach the canvas, from most to least expensive:
+
+1. **The sidecar renders the whole page.** What every `web+` source does when
+   `liveboxmix-browser` is found. Works everywhere, and a page playing video
+   costs about a CPU core, because Chromium decodes the video in software and
+   repaints the whole page around it thirty times a second.
+2. **A renderer inside GStreamer, or a screen grab.** Without a sidecar the
+   mixer falls back to `wpesrc`, and there is the older `browser-source.sh`
+   under `exec:`. Both Linux only. See the sections above and below.
+3. **Superimpose.** The sidecar finds the video the page is playing, the mixer
+   decodes that itself on the GPU, and the browser draws only the page over it,
+   transparent where the video was. Opt in, per source, and the cheap one. See
+   "Handing the video over" below.
+
 In the UI, "Add a source" starts on **Website**: paste the address as it is
 in your browser's address bar and click Add. The type lights up by itself
 from what was pasted (an `rtmp://` or `.m3u8` address switches to "Camera or
@@ -382,6 +396,38 @@ the whole cost. Paused means the page's progress bar stops filling and its
 running time stops counting, while the video itself, now the mixer's, plays
 normally. On a page whose player chrome is part of what you are broadcasting,
 leave this `off`.
+
+How it happens, because three of the details show:
+
+* **Adding takes a few seconds longer.** The page is loaded once first, just to
+  ask what it plays, and the source is built only when the answer is in. That
+  took 1 to 6 seconds against the local pages when the video was found, less
+  when the page said straight away that its video cannot be handed over (MSE,
+  DRM), and up to 20 when there was nothing to find. It runs on its own
+  thread, so the API and the UI keep answering meanwhile; only the add call
+  itself waits.
+* **The page's video is looped by the mixer.** A page that loops a background
+  video does it in the browser, and the browser's copy is now paused, so the
+  mixer loops its own copy. A clip is fetched once to a temporary file when
+  the source is added, so going round again costs an open and a decoder start
+  rather than a connection and an index read, and the join does not show. A
+  stream (HLS, DASH, or anything still arriving after 60 seconds) is played
+  from its address and never loops; one that ends leaves the page over its
+  last frame.
+* **The page draws at `browser.overlay_fps`, default 10,** not the canvas rate.
+  It is drawing chrome, not video, and its frames now carry an alpha channel at
+  4 bytes a pixel against I420's 1.5: a 720p page at 30 fps measured 110 MB/s
+  down a pipe that carries 41 MB/s for an ordinary source, and 36.9 MB/s at 10.
+  The compositor holds the last page frame between updates, so the output still
+  leaves at the canvas rate with the video moving underneath. Raise it for a
+  page with real animation in it, and expect to pay for that.
+
+If the sidecar runs in a container through `browser/dev/sidecar-docker.sh`,
+the mixer must be able to open the media address the page reports. That is
+automatic when both run on one machine, which is the production arrangement.
+On a laptop with Docker in a VM, a page reached as `host.docker.internal` hands
+back a `host.docker.internal` media URL that the host itself cannot resolve; use
+an address both sides can reach.
 
 Since the fallback is silent, the mixer reports what actually happened rather
 than what was asked for. `GET /api/status` carries `superimposed` on every
@@ -634,6 +680,13 @@ pointed at the same URL, local or remote. There is no second implementation to
 keep in step, and remote operation is the default case with the address changed.
 
 ## Known limitations
+
+* **Superimpose cannot take over MSE or DRM playback**, and YouTube is MSE.
+  Those pages fall back to full rendering, which is reported rather than
+  failed. The page's own player UI freezes on pages it does apply to, because
+  the browser's copy of the video is paused; and a superimposed live stream
+  that ends leaves the page over its last frame rather than restarting the
+  source.
 
 * **An ad whose duration cannot be queried** (a live URI rather than a file)
   ends on end-of-stream instead, which truncates the tail as described above.

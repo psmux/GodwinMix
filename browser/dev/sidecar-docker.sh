@@ -8,8 +8,12 @@
 NAME="lbx-browser-$$"
 stop() { docker kill -s TERM "$NAME" >/dev/null 2>&1; wait "$CHILD" 2>/dev/null; exit 0; }
 trap stop TERM INT HUP
-# LBX_SIDECAR_LOG=<file> keeps the sidecar's stderr, which the mixer only logs at debug level.
-if [ -n "$LBX_SIDECAR_LOG" ]; then exec 2>>"$LBX_SIDECAR_LOG"; fi
+# LBX_SIDECAR_LOG=<file> keeps a copy of the sidecar's stderr, which the mixer
+# only logs at debug level. A copy, through tee, and not a redirect: the mixer
+# reads this stderr when it probes a page for superimpose, and a plain
+# `exec 2>>file` closed that pipe on it, so every probe through this script
+# came back empty and the source quietly rendered the page whole.
+if [ -n "$LBX_SIDECAR_LOG" ]; then exec 2> >(tee -a "$LBX_SIDECAR_LOG" >&2); fi
 # --log-driver none: the stream is stdout, and the default json-file driver copies
 # everything a container writes to disk. 41 MB/s of raw video filled a 30 GB
 # disk in minutes, and the players stalled on the full disk.

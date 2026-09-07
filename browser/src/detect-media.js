@@ -90,6 +90,15 @@
   //
   // Idempotent, so re-applying it costs nothing and the mutation it makes the
   // first time does not feed itself.
+  // Boxes already made transparent by hide(), so re-running it is free and
+  // the style mutation it makes does not feed the observer forever.
+  const cleared = new WeakSet();
+  const clear = (box) => {
+    if (!box || cleared.has(box)) return;
+    cleared.add(box);
+    box.style.setProperty("background", "transparent", "important");
+  };
+
   const hide = (el) => {
     if (!hideMedia || !el) return;
     taken = el;
@@ -98,6 +107,15 @@
     }
     if (!el.muted) el.muted = true;
     if (!el.paused) el.pause();
+    // Whatever is behind the element must stop painting too, or the page's
+    // own background covers the very video the mixer is drawing underneath.
+    // Nearly every real page has one: a body colour, a black letterbox box
+    // around the player. Those are the element's ancestors, so they go
+    // transparent all the way up. Anything laid over the video, controls and
+    // captions, is not an ancestor and is left exactly as it was.
+    for (let box = el.parentElement; box; box = box.parentElement) clear(box);
+    clear(document.documentElement);
+    clear(document.body);
   };
 
   const report = () => {
