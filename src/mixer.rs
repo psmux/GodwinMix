@@ -319,6 +319,9 @@ pub struct Mixer {
     /// came while a superimposed source was still probing left it out of the
     /// store, and it was gone at the next start.
     pending: Vec<SourceConfig>,
+    /// Superimposed sources being built again from scratch after a failure,
+    /// with whether each was on programme when it failed, to put it back.
+    rebuilding: std::collections::HashMap<SourceId, bool>,
 }
 
 impl Mixer {
@@ -521,6 +524,7 @@ impl Mixer {
             watches: Vec::new(),
             runtime_store: None,
             pending: Vec::new(),
+            rebuilding: std::collections::HashMap::new(),
         };
         Ok((mixer, handle, rx, bus_rx))
     }
@@ -597,6 +601,7 @@ impl Mixer {
         let Some(spec) = InputPipeline::media_probe_spec(&cfg, &self.canvas, &self.cfg.browser)
         else {
             let r = self.add_source(&cfg, None);
+            self.finish_rebuild(&cfg, &r);
             reply(ack, &r);
             return r;
         };
@@ -693,7 +698,15 @@ impl Mixer {
         // Only live sources. An ad sets its own offset from its cue, and two
         // things writing the same pad offset fight: the ad lost a second and a
         // half and opened with a gap.
-        let aligner = if is_ad {
+        //
+        // Not a superimposed source either. Its layers are composited on this
+        // pipeline's own clock and base time, so what it emits is already at
+        // the programme's running time; shifting that by the programme's age
+        // again put a source rebuilt two minutes in two minutes into the
+        // future, where the compositor's queue held its frames unconsumed,
+        // the push into that queue never returned, and every teardown that
+        // needed the pad's stream lock afterwards waited on it for good.
+        let aligner = if is_ad || input.superimposed() {
             None
         } else {
             Some(TimelineAligner::install(
@@ -776,6 +789,73 @@ impl Mixer {
     }
 
     pub fn remove_source(&mut self, id: &SourceId) -> Result<()> {
+        let slot = self.detach_source(id)?;
+        slot.input.stop();
+        Ok(())
+    }
+
+    /// Build a superimposed source again from nothing, as if it had just been
+    /// added: probe the page, fetch its clips, new pipeline.
+    ///
+    /// The in-place restart that serves every other source does not serve
+    /// this one. Brought back in place, the layered pipeline's audio mixer
+    /// spun on a failing latency query and its compositor managed under a
+    /// frame a second, and the stall restart that followed blocked this thread
+    /// for minutes inside the teardown. Building from scratch is the path that
+    /// has worked every time, so a failure takes it. The source comes back on
+    /// programme if it was there; the programme shows the slate meanwhile, as
+    /// for any dead source.
+    fn rebuild_source(&mut self, id: &SourceId) {
+        let Some(slot) = self.sources.iter().find(|s| &s.input.id == id) else { return };
+        let cfg = slot.input.config.clone();
+        let was_program = self.program_source.as_ref() == Some(id);
+        // Removed the way the API removes a source: its pipeline stopped first,
+        // then its branch taken out of the programme. That order matters. The
+        // branch's proxy source shares a stream lock with the thread that
+        // pushes this source's frames into the programme; stop the branch
+        // while that thread is still pushing and the two wait on each other.
+        if let Err(e) = self.remove_source(id) {
+            warn!(source = %id, ?e, "could not remove the failed source before building it again");
+        }
+        info!(source = %id, was_program, "building the superimposed source again from scratch");
+        self.rebuilding.insert(id.clone(), was_program);
+        if let Err(e) = self.begin_add_source(cfg, None) {
+            error!(source = %id, ?e, "could not begin building the source again");
+            self.rebuilding.remove(id);
+        }
+    }
+
+    /// The end of a rebuild: the source is back (or is not), so finish what
+    /// `rebuild_source` began. Called wherever an add completes.
+    fn finish_rebuild(&mut self, cfg: &SourceConfig, added: &Result<()>) {
+        let Some(was_program) = self.rebuilding.remove(&cfg.id) else { return };
+        match added {
+            Ok(()) => {
+                info!(source = %cfg.id, was_program, "source built again");
+                if was_program {
+                    if let Err(e) = self.take(Some(cfg.id.clone()), None) {
+                        warn!(source = %cfg.id, ?e, "rebuilt source could not be put back on programme");
+                    }
+                }
+            }
+            Err(e) => {
+                // Try again in a while, and keep trying: a browser that will
+                // not start now may start later, and the source was wanted.
+                warn!(source = %cfg.id, ?e, "building the source again failed; trying once more in 10 seconds");
+                self.rebuilding.insert(cfg.id.clone(), was_program);
+                let handle = self.handle.clone();
+                let again = Box::new(cfg.clone());
+                self.rt.spawn(async move {
+                    tokio::time::sleep(Duration::from_secs(10)).await;
+                    let _ = handle.send(Command::AddSource(again, None));
+                });
+            }
+        }
+    }
+
+    /// Take a source out of the desk without stopping its pipeline. What
+    /// remains is the caller's, to stop here or elsewhere.
+    fn detach_source(&mut self, id: &SourceId) -> Result<SourceSlot> {
         let Some(pos) = self.sources.iter().position(|s| &s.input.id == id) else {
             anyhow::bail!("no such source {id}");
         };
@@ -783,7 +863,6 @@ impl Mixer {
             self.take(None, None)?;
         }
         let slot = self.sources.remove(pos);
-        slot.input.stop();
         if let Some(mv) = &mut self.multiview {
             mv.remove_tile(id).ok();
         }
@@ -798,7 +877,7 @@ impl Mixer {
             self.persist_runtime();
         }
         self.broadcast_status();
-        Ok(())
+        Ok(slot)
     }
 
     /// Attach a new RTMP destination while the broadcast is running.
@@ -1183,6 +1262,7 @@ impl Mixer {
             Command::AddSourceProbed(cfg, report, ack) => {
                 self.pending.retain(|c| c.id != cfg.id);
                 let r = self.add_source(&cfg, report);
+                self.finish_rebuild(&cfg, &r);
                 reply(ack, &r);
                 r?;
             }
@@ -1192,7 +1272,9 @@ impl Mixer {
                 r?;
             }
             Command::RestartSource(id) => {
-                if let Some(slot) = self.sources.iter_mut().find(|s| s.input.id == id) {
+                if self.sources.iter().any(|s| s.input.id == id && s.input.superimposed()) {
+                    self.rebuild_source(&id);
+                } else if let Some(slot) = self.sources.iter_mut().find(|s| s.input.id == id) {
                     slot.stalled_ticks = 0;
                     // A restarted source starts counting from zero again.
                     if let Some(a) = &slot.aligner {

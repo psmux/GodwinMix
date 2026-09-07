@@ -692,7 +692,13 @@ fn cache_media(id: &SourceId, src: &mut String) -> Fetched {
         return Fetched::Stream;
     };
     let stem = path_part.rsplit('/').next().unwrap_or("clip").replace(|c: char| !c.is_ascii_alphanumeric() && c != '.', "_");
-    let file = std::env::temp_dir().join(format!("lbx-media-{id}-{}-{stem}", std::process::id()));
+    // Numbered per fetch, not only per process: a source rebuilt after its
+    // browser died fetches its clips again while the old pipeline, torn down
+    // on another thread, is deleting its own, and with the same names the new
+    // copy would go with the old.
+    static FETCHES: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+    let n = FETCHES.fetch_add(1, Ordering::SeqCst);
+    let file = std::env::temp_dir().join(format!("lbx-media-{id}-{}-{n}-{stem}", std::process::id()));
     let fetch = || -> Result<()> {
         let pipeline = gst::Pipeline::with_name(&format!("fetch-{id}"));
         let http = make(factory, &format!("{id}-fetch-src"))?;
