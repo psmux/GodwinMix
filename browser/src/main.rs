@@ -377,11 +377,13 @@ wrap_browser_process_handler! {
     impl BrowserProcessHandler {
         /// CEF is up; create the windowless browser.
         fn on_context_initialized(&self) {
-            // A null parent: the window handle type is an integer on Linux and
-            // Windows and a pointer on macOS.
+            // A null parent. The window handle type is a pointer on macOS, a
+            // newtype around one (HWND) on Windows, and an integer on Linux.
             #[cfg(target_os = "macos")]
             let no_parent = std::ptr::null_mut();
-            #[cfg(not(target_os = "macos"))]
+            #[cfg(target_os = "windows")]
+            let no_parent = cef_dll_sys::HWND(std::ptr::null_mut());
+            #[cfg(not(any(target_os = "macos", target_os = "windows")))]
             let no_parent = 0;
             let window_info = WindowInfo::default().set_as_windowless(no_parent);
             let settings = BrowserSettings {
