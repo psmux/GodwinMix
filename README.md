@@ -121,6 +121,29 @@ cargo build --release
 Open `http://localhost:8080`. Click a cell to take that camera. Number keys 1
 to 9 take directly, 0 or Escape cuts to black.
 
+## Platforms
+
+Linux, macOS and Windows, the same code on all three. The mixer, its tests and
+the desktop app are built on every push on all three by the GitHub Actions
+workflow in `.github/workflows/build.yml`, and each run leaves the binaries
+behind as artifacts. What differs by platform:
+
+| | GStreamer | hardware codecs | browser sidecar | desktop app |
+|---|---|---|---|---|
+| Linux | distro packages | NVIDIA, VA | native, with H.264 from a prebuilt CEF (see Codecs) | `.deb`, AppImage |
+| macOS | `brew install gstreamer` | VideoToolbox | `.app` bundle from `browser/dev/mac-bundle.sh`, or the Linux one in a container | `.app` |
+| Windows | the MSVC runtime and development MSIs from gstreamer.freedesktop.org, or `choco install gstreamer gstreamer-devel`; put `C:\gstreamer\1.0\msvc_x86_64\bin` on `PATH` | Media Foundation, NVIDIA | `liveboxmix-browser.exe` next to the mixer, from `cd browser; cargo build --release` | `.msi`, NSIS |
+
+Two things are worth knowing on Windows. Sources whose media arrives on a
+pipe (the browser sidecar, `exec:` sources) are read by a thread of the mixer
+into an `appsrc` rather than by `fdsrc`, because there is no file descriptor
+GStreamer could read; the bytes and the timing are the same. And the official
+CEF build has no H.264 or AAC, on Windows as on macOS, which is exactly the
+case `superimpose` is for: the mixer decodes the page's video with Media
+Foundation and the browser draws only the page. The development scripts under
+`dev/` are bash; `dev/desktop.ps1` is the Windows launcher for the desktop app,
+and the test rig (mediamtx, synthetic camera) runs under WSL if you want it.
+
 ## Hardware
 
 The same binary picks its codecs at startup and works with or without a GPU.

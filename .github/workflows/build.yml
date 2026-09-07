@@ -1,0 +1,86 @@
+name: build
+
+# The mixer, its tests and the desktop app on the three platforms it runs on.
+# Every push to main and every tag. GStreamer comes from each platform's usual
+# package source; the CEF sidecar is compiled (checked) separately because its
+# build downloads a Chromium distribution and is the slow part.
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  mixer:
+    name: mixer (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+
+      - name: GStreamer (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev \
+            libgstreamer-plugins-bad1.0-dev gstreamer1.0-plugins-base gstreamer1.0-plugins-good \
+            gstreamer1.0-plugins-bad gstreamer1.0-plugins-ugly gstreamer1.0-libav gstreamer1.0-tools
+
+      - name: GStreamer (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          brew install gstreamer
+          echo "PKG_CONFIG_PATH=$(brew --prefix gstreamer)/lib/pkgconfig:$(brew --prefix)/lib/pkgconfig" >> "$GITHUB_ENV"
+
+      - name: GStreamer (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          choco install -y --no-progress gstreamer gstreamer-devel
+          $gst = "C:\gstreamer\1.0\msvc_x86_64"
+          "PKG_CONFIG_PATH=$gst\lib\pkgconfig" | Out-File -FilePath $env:GITHUB_ENV -Append
+          "GSTREAMER_1_0_ROOT_MSVC_X86_64=$gst\" | Out-File -FilePath $env:GITHUB_ENV -Append
+          "$gst\bin" | Out-File -FilePath $env:GITHUB_PATH -Append
+
+      - name: Build
+        run: cargo build --release --locked
+
+      - name: Test
+        run: cargo test --release --locked
+
+      - name: Sidecar compiles (Windows and Linux; macOS is bundled by dev/mac-bundle.sh)
+        if: runner.os != 'macOS'
+        working-directory: browser
+        run: cargo check --release
+
+      - name: Desktop app dependencies (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev patchelf libssl-dev
+
+      - name: Desktop app
+        working-directory: tauri-app
+        run: cargo build --release --locked
+
+      - name: Collect
+        shell: bash
+        run: |
+          mkdir -p dist
+          cp target/release/liveboxmix* dist/ 2>/dev/null || true
+          cp tauri-app/target/release/liveboxmix-desktop* dist/ 2>/dev/null || true
+          rm -f dist/*.d dist/*.pdb
+          ls -la dist
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: liveboxmix-${{ runner.os }}
+          path: dist/

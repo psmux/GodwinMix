@@ -182,7 +182,16 @@ pub fn to_uri(input: &str) -> String {
     } else {
         std::env::current_dir().unwrap_or_default().join(path)
     };
-    format!("file://{}", abs.display())
+    file_uri(&abs)
+}
+
+/// A `file:` URI for a path, spelled the way GLib spells it on this platform.
+/// `format!("file://{}")` gives `file://C:\clips\a.mp4` on Windows, which no
+/// element opens; GLib percent-encodes and puts the drive where a URI wants it.
+pub fn file_uri(path: &std::path::Path) -> String {
+    gst::glib::filename_to_uri(path, None)
+        .map(|u| u.to_string())
+        .unwrap_or_else(|_| format!("file://{}", path.display()))
 }
 
 pub struct InputPipeline {
@@ -314,7 +323,7 @@ fn find_browser_sidecar(browser: &BrowserConfig) -> Result<Option<std::path::Pat
         // On macOS CEF only runs from an app bundle, so that is what sits
         // next to the mixer there.
         let candidates = [
-            dir.join(NAME),
+            dir.join(format!("{NAME}{}", std::env::consts::EXE_SUFFIX)),
             dir.join(format!("{NAME}.app")).join("Contents/MacOS").join(NAME),
         ];
         if let Some(p) = candidates.into_iter().find(|p| p.is_file()) {
@@ -322,7 +331,11 @@ fn find_browser_sidecar(browser: &BrowserConfig) -> Result<Option<std::path::Pat
         }
     }
     let found = std::env::var_os("PATH")
-        .map(|paths| std::env::split_paths(&paths).map(|d| d.join(NAME)).find(|p| p.is_file()))
+        .map(|paths| {
+            std::env::split_paths(&paths)
+                .map(|d| d.join(format!("{NAME}{}", std::env::consts::EXE_SUFFIX)))
+                .find(|p| p.is_file())
+        })
         .unwrap_or(None);
     Ok(found)
 }
@@ -730,7 +743,7 @@ fn cache_media(id: &SourceId, src: &mut String) -> Fetched {
                 secs = started.elapsed().as_secs_f64(),
                 "fetched the page's video once, to loop it from disk"
             );
-            *src = format!("file://{}", file.to_string_lossy());
+            *src = file_uri(&file);
             Fetched::Copy(file)
         }
         Err(e) => {
@@ -1907,6 +1920,10 @@ impl InputPipeline {
     fn kill_exec_child(&self) {
         let Some(mut child) = self.exec_child.lock().take() else { return };
         stop_process_group(child.id());
+        // Where there is no process group to signal, end the process itself.
+        // Chromium's own helper processes watch their parent and follow it.
+        #[cfg(not(unix))]
+        let _ = child.kill();
         let _ = child.wait();
         debug!(source = %self.id, "stopped exec child process");
     }
@@ -1985,8 +2002,8 @@ impl InputPipeline {
         if let Some(spec) = &self.exec {
             self.kill_exec_child();
             match spawn_exec(&self.id, spec) {
-                Ok((fd, child)) => {
-                    self.source.lock().set_property("fd", fd);
+                Ok((out, child)) => {
+                    attach_exec_stdout(&self.id, &self.source.lock(), out);
                     *self.exec_child.lock() = Some(child);
                 }
                 Err(e) => {
@@ -2140,16 +2157,28 @@ fn exec_process(spec: &ExecSpec, stdout: std::process::Stdio) -> Result<std::pro
     cmd.spawn().with_context(|| format!("starting `{program}`"))
 }
 
-/// Start the command behind an `exec:` source and hand its stdout to `fdsrc`.
+/// An exec child's stdout, on its way into GStreamer.
+///
+/// On unix the pipe's descriptor is handed to `fdsrc`, which reads it in the
+/// streaming thread with no copy in between. Windows has no descriptor a
+/// GStreamer element could read (the pipe is a HANDLE, and the C runtime's
+/// descriptor table is per DLL), so there a thread of ours reads the pipe and
+/// pushes into an `appsrc`. Same bytes, same downstream.
+enum ExecStdout {
+    #[cfg(unix)]
+    Fd(i32),
+    #[cfg(not(unix))]
+    Pipe(std::process::ChildStdout),
+}
+
+/// Start the command behind an `exec:` source and take its stdout.
 ///
 /// Anything that can write a container to stdout becomes a source: ffmpeg, a
 /// script, a purpose-built capture binary. Decoding happens downstream through
 /// `decodebin`, which picks up the raised ranks of whatever hardware decoder
 /// this machine has, so an exec source is accelerated on a GPU box and falls
 /// back to software on one without, exactly like every other source.
-fn spawn_exec(id: &str, spec: &ExecSpec) -> Result<(i32, std::process::Child)> {
-    use std::os::fd::IntoRawFd;
-
+fn spawn_exec(id: &str, spec: &ExecSpec) -> Result<(ExecStdout, std::process::Child)> {
     let mut child = exec_process(spec, std::process::Stdio::piped())?;
 
     if let Some(err) = child.stderr.take() {
@@ -2166,32 +2195,121 @@ fn spawn_exec(id: &str, spec: &ExecSpec) -> Result<(i32, std::process::Child)> {
     }
 
     let stdout = child.stdout.take().context("child produced no stdout")?;
-    // Hand the descriptor to GStreamer. `into_raw_fd` gives up Rust's ownership
-    // so the pipe is not closed when this goes out of scope.
-    let fd = stdout.into_raw_fd();
+    #[cfg(unix)]
+    let out = {
+        // Hand the descriptor to GStreamer. `into_raw_fd` gives up Rust's
+        // ownership so the pipe is not closed when this goes out of scope.
+        use std::os::fd::IntoRawFd;
+        ExecStdout::Fd(stdout.into_raw_fd())
+    };
+    #[cfg(not(unix))]
+    let out = ExecStdout::Pipe(stdout);
     let program = spec.argv.first().map(String::as_str).unwrap_or_default();
     info!(source = %id, %program, "started exec source");
-    Ok((fd, child))
+    Ok((out, child))
+}
+
+/// Reads of the exec pipe, in frame-sized bites rather than the 4 KB default.
+///
+/// A source writing raw video moves a lot through that pipe: the browser
+/// sidecar in transparent mode is 1280x720 AYUV at 30, which is 107 MB a
+/// second. Measured against it on this machine, 4 KB reads carried 93 MB/s
+/// and 4 MB reads carried 177 MB/s, and the difference is the difference
+/// between the page keeping up and falling behind. A short read still
+/// returns immediately, so a source producing very little is not made to
+/// wait for a full block.
+const EXEC_READ_BYTES: u32 = 4 * 1024 * 1024;
+
+/// The element an exec child's stdout flows out of.
+///
+/// Deliberately no timestamping. The process writes a container, and stamping
+/// buffers with their arrival time before the demuxer sees them destroys the
+/// timing the container carries. The demuxer's own timestamps are the correct
+/// ones, and the mixer pad offset aligns them afterwards.
+#[cfg(unix)]
+fn new_exec_source(id: &str) -> Result<gst::Element> {
+    let src = make("fdsrc", &format!("{id}-src-exec"))?;
+    src.set_property("blocksize", EXEC_READ_BYTES);
+    Ok(src)
+}
+
+#[cfg(not(unix))]
+fn new_exec_source(id: &str) -> Result<gst::Element> {
+    let src = gstreamer_app::AppSrc::builder()
+        .name(format!("{id}-src-exec"))
+        .format(gst::Format::Bytes)
+        .stream_type(gstreamer_app::AppStreamType::Stream)
+        .block(true)
+        .max_bytes(4 * EXEC_READ_BYTES as u64)
+        .build();
+    Ok(src.upcast())
+}
+
+/// Connect a freshly started child's stdout to the source element.
+///
+/// Called when the source is built and again on every restart, when the old
+/// child is gone and a new one has been started: the element stays, the pipe
+/// behind it changes.
+#[cfg(unix)]
+fn attach_exec_stdout(_id: &str, src: &gst::Element, out: ExecStdout) {
+    let ExecStdout::Fd(fd) = out;
+    src.set_property("fd", fd);
+}
+
+#[cfg(not(unix))]
+fn attach_exec_stdout(id: &str, src: &gst::Element, out: ExecStdout) {
+    use std::collections::HashMap;
+    use std::io::Read;
+    // One reader per element at a time. A restart starts a new child and a
+    // new reader while the old reader may still be draining the old pipe; the
+    // old one must not push, and above all must not end the stream, into the
+    // element the new one now owns. Each reader holds a token that the next
+    // attach revokes.
+    static READERS: std::sync::OnceLock<Mutex<HashMap<String, Arc<AtomicBool>>>> =
+        std::sync::OnceLock::new();
+    let ExecStdout::Pipe(mut pipe) = out;
+    let Ok(appsrc) = src.clone().downcast::<gstreamer_app::AppSrc>() else {
+        warn!(source = %id, "exec source is not an appsrc; stdout not attached");
+        return;
+    };
+    let token = Arc::new(AtomicBool::new(true));
+    {
+        let mut readers = READERS.get_or_init(|| Mutex::new(HashMap::new())).lock();
+        if let Some(old) = readers.insert(src.name().to_string(), token.clone()) {
+            old.store(false, Ordering::SeqCst);
+        }
+    }
+    let id = id.to_string();
+    std::thread::Builder::new()
+        .name(format!("exec-stdout-{id}"))
+        .spawn(move || {
+            let mut buf = vec![0u8; EXEC_READ_BYTES as usize];
+            loop {
+                let n = match pipe.read(&mut buf) {
+                    Ok(0) | Err(_) => break,
+                    Ok(n) => n,
+                };
+                if !token.load(Ordering::SeqCst) {
+                    return;
+                }
+                let buffer = gst::Buffer::from_slice(buf[..n].to_vec());
+                if appsrc.push_buffer(buffer).is_err() {
+                    // Flushing: the pipeline is stopping or restarting. The
+                    // child will be killed and this pipe will end.
+                    break;
+                }
+            }
+            if token.load(Ordering::SeqCst) {
+                let _ = appsrc.end_of_stream();
+            }
+        })
+        .ok();
 }
 
 fn make_exec_source(id: &str, spec: &ExecSpec) -> Result<(gst::Element, std::process::Child)> {
-    let (fd, child) = spawn_exec(id, spec)?;
-    let src = make("fdsrc", &format!("{id}-src-exec"))?;
-    src.set_property("fd", fd);
-    // Read the pipe in frame-sized bites rather than the 4 KB default.
-    //
-    // A source writing raw video moves a lot through that pipe: the browser
-    // sidecar in transparent mode is 1280x720 AYUV at 30, which is 107 MB a
-    // second. Measured against it on this machine, 4 KB reads carried 93 MB/s
-    // and 4 MB reads carried 177 MB/s, and the difference is the difference
-    // between the page keeping up and falling behind. A short read still
-    // returns immediately, so a source producing very little is not made to
-    // wait for a full block.
-    src.set_property("blocksize", 4u32 * 1024 * 1024);
-    // Deliberately no do-timestamp. The process writes a container, and
-    // stamping buffers with their arrival time before the demuxer sees them
-    // destroys the timing the container carries. The demuxer's own timestamps
-    // are the correct ones, and the mixer pad offset aligns them afterwards.
+    let (out, child) = spawn_exec(id, spec)?;
+    let src = new_exec_source(id)?;
+    attach_exec_stdout(id, &src, out);
     Ok((src, child))
 }
 
@@ -2565,9 +2683,10 @@ mod tests {
     }
 
     #[test]
+    #[cfg(unix)] // `sh`, and a descriptor to read back; Windows hands a pipe to a reader thread instead
     fn an_enabled_exec_source_starts_its_process() {
         let spec = ExecSpec::from_uri("exec:sh -c 'printf hello; sleep 5'", true).unwrap();
-        let (fd, mut child) = spawn_exec("s", &spec).unwrap();
+        let (ExecStdout::Fd(fd), mut child) = spawn_exec("s", &spec).unwrap();
         assert!(fd > 2, "should hand back a real pipe descriptor, got {fd}");
         // The descriptor is GStreamer's now; read it back to prove it is live.
         use std::io::Read;
