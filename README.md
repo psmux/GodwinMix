@@ -81,8 +81,15 @@ mixer's own GStreamer stack.
 | adding or removing a source at runtime | no gap, largest inter-frame interval 34 ms (one frame at 30 fps) |
 | multiview over WebSocket | 8.0 fps, 22.7 KB/frame, about 1.5 Mbit/s |
 
-39 unit tests, including a regression for every bug found during that testing.
+63 unit tests, including a regression for every bug found during that testing.
 
+* **Superimpose on air, indistinguishable from the whole page.** A demo page
+  with three videos (a lead clip with sound and two muted sidebar clips) was
+  taken to programme with `superimpose = "auto"`. All three played in place,
+  the header, clock, captions, sidebar labels and body text stayed visible over
+  them, and the lead clip's sound came through at its own level. On this Mac the
+  browser side of that page fell from about 130% CPU rendering the whole page to
+  about 28% superimposed, with the three decodes moving to the hardware decoder.
 * **Browser source at full quality.** The CEF sidecar's raw frames arrive on air
   sample for sample (background Y 35, orange 146, white 235 in capture and
   programme), after fixing the colorimetry drift described under Colour.
@@ -336,11 +343,18 @@ below. `[browser]` also takes extra `args` and `env` for the sidecar.
 it is really playing, on stderr, once per change:
 
 ```
-[browser] media {"found":true,"count":1,"tag":"video",
-                 "src":"http://host/sync.webm","usable":true,"mse":false,
-                 "drm":false,"paused":false,"rect":{"x":0,"y":0,"w":640,"h":360},
-                 "intrinsic":{"w":1280,"h":720},"viewport":{"w":640,"h":360}}
+[browser] media {"found":true,"count":3,"tag":"video",
+                 "src":"http://host/lead.mp4","usable":true,"mse":false,
+                 "drm":false,"paused":false,"rect":{"x":50,"y":80,"w":890,"h":501},
+                 "intrinsic":{"w":960,"h":540},"viewport":{"w":1280,"h":720},
+                 "media":[ {"index":0,"src":"http://host/lead.mp4","muted":false,...},
+                           {"index":1,"src":"http://host/side1.mp4","muted":true,...},
+                           {"index":2,"src":"http://host/side2.mp4","muted":true,...} ]}
 ```
+
+The top-level fields describe the first video, for readers that only want one;
+`media` is the full list, one entry per `<video>` on the page, each with its own
+`rect`, `usable`, `muted` and the rest. `superimpose` acts on the whole list.
 
 `usable` is the field that matters: it says a decoder outside the browser could
 open this URL. That is the case for a plain `<video src>` and for an HLS or DASH
@@ -372,6 +386,23 @@ superimpose = "auto"   # "off" is the default and is what every web source did b
 mixer decodes it on the GPU like any other source and the browser draws only
 the page over the top, transparent where the video was. `off` renders the
 whole page in the browser.
+
+Every `<video>` on the page is handed over, not just one. A page with a lead
+clip and two sidebar clips has all three decoded by the mixer, each placed at
+the rectangle the page gave it, each looped or streamed on its own, and the
+lead clip's sound mixed in while the muted ones stay muted, exactly as the
+page had them. The page is drawn over all of them at once.
+
+What the page draws over its videos survives the hand-over. A caption, a
+lower third, a logo, a headline, an animation: anything the page paints on top
+of a video, at any transparency, comes through as it looked in the browser.
+The page paints a key colour where each taken-over video sat, and the sidecar
+both removes that key and recovers the real colour of whatever the page
+blended over it, so a caption's dark gradient or a control's soft edge is not
+lost with the key. The one thing it cannot keep is page content that is itself
+the key colour, a near-pure magenta, which is taken for the key; nothing else
+is affected. The intent is that a viewer cannot tell a superimposed page from
+the same page rendered whole.
 
 The saving is the reason to bother. A page playing video costs about a whole
 CPU core. Chromium decodes every frame in software, repaints the page around
@@ -708,9 +739,14 @@ binary from `cargo build --release` in `tauri-app/`.
 * **Superimpose cannot take over MSE or DRM playback**, and YouTube is MSE.
   Those pages fall back to full rendering, which is reported rather than
   failed. The page's own player UI freezes on pages it does apply to, because
-  the browser's copy of the video is paused; and a superimposed live stream
-  that ends leaves the page over its last frame rather than restarting the
-  source.
+  the browser's copy of each taken-over video is paused; and a superimposed
+  live stream that ends leaves the page over its last frame rather than
+  restarting the source.
+* **Page content in the key colour is treated as spill.** The page paints a
+  near-pure magenta where each video sat, and the sidecar removes it. A page
+  element that is itself that magenta would be removed with it. Nothing else is
+  affected, and no ordinary page uses that colour, but it is the one thing that
+  does not survive the hand-over.
 
 * **An ad whose duration cannot be queried** (a live URI rather than a file)
   ends on end-of-stream instead, which truncates the tail as described above.
