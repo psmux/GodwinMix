@@ -687,11 +687,15 @@ dev/desktop.sh              # starts the test rig if no mixer answers on 8080, t
 dev/desktop.sh mine.toml    # same, but the mixer runs on your own config
 ```
 
-Two ways out, in the app menu. **Quit** (or closing the window) leaves the
-mixer running: the stream does not live in this window and closing it by
-accident must not take the programme down. **Quit and stop the mixer** asks
-the mixer to shut down over `POST /api/shutdown`, then exits with status 2,
-which `dev/desktop.sh` takes as the cue to stop the rest of the rig as well.
+Two ways out, as buttons at the top right of the window and as items in the
+application menu. **Close window** (or the window's close button, or Quit)
+leaves the mixer running: the stream does not live in this window and closing
+it by accident must not take the programme down. **Stop everything** asks
+twice, then has the mixer shut down over `POST /api/shutdown` and exits with
+status 2, which `dev/desktop.sh` takes as the cue to stop the rest of the rig
+as well: mediamtx, the camera and the page server. Nothing is left running.
+The buttons appear only inside the desktop shell, which announces itself in
+the user agent; in a browser the same page does not show them.
 
 The window has nothing to show until a mixer answers on `localhost:8080`,
 which is why the script starts one first. It opens the bundle at

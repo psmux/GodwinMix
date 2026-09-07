@@ -314,6 +314,11 @@ pub struct Mixer {
     watches: Vec<gstutil::BusWatch>,
     /// Where to persist runtime source changes, if anywhere.
     runtime_store: Option<std::path::PathBuf>,
+    /// Sources whose page is still being probed, so not yet in `sources`.
+    /// They are written to the runtime store with the rest: a shutdown that
+    /// came while a superimposed source was still probing left it out of the
+    /// store, and it was gone at the next start.
+    pending: Vec<SourceConfig>,
 }
 
 impl Mixer {
@@ -515,6 +520,7 @@ impl Mixer {
             bus_tx,
             watches: Vec::new(),
             runtime_store: None,
+            pending: Vec::new(),
         };
         Ok((mixer, handle, rx, bus_rx))
     }
@@ -597,6 +603,7 @@ impl Mixer {
         let handle = self.handle.clone();
         let id = cfg.id.clone();
         info!(source = %id, "asking the page what it plays before building the source");
+        self.pending.push(cfg.clone());
         let spawned = std::thread::Builder::new()
             .name(format!("probe-{id}"))
             .spawn(move || {
@@ -840,12 +847,17 @@ impl Mixer {
     /// keeps "where do sources come from" a question with a single answer.
     fn persist_runtime(&self) {
         let Some(path) = &self.runtime_store else { return };
-        let live: Vec<SourceConfig> = self
+        let mut live: Vec<SourceConfig> = self
             .sources
             .iter()
             .filter(|s| s.input.id != AD_ID)
             .map(|s| s.input.config.clone())
             .collect();
+        for p in &self.pending {
+            if !live.iter().any(|c| c.id == p.id) {
+                live.push(p.clone());
+            }
+        }
 
         let outputs: Vec<OutputConfig> =
             self.outputs.iter().map(|o| o.cfg.clone()).collect();
@@ -1169,6 +1181,7 @@ impl Mixer {
                 self.begin_add_source(*cfg, ack)?;
             }
             Command::AddSourceProbed(cfg, report, ack) => {
+                self.pending.retain(|c| c.id != cfg.id);
                 let r = self.add_source(&cfg, report);
                 reply(ack, &r);
                 r?;

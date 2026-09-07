@@ -15,7 +15,9 @@
         "height": 900,
         "minWidth": 900,
         "minHeight": 600,
-        "resizable": true
+        "resizable": true,
+        "create": false,
+        "label": "main"
       }
     ],
     "security": {
@@ -24,7 +26,11 @@
   },
   "bundle": {
     "active": true,
-    "targets": ["app"],
-    "icon": ["icons/icon.png"]
+    "targets": [
+      "app"
+    ],
+    "icon": [
+      "icons/icon.png"
+    ]
   }
 }

@@ -5,7 +5,8 @@
 // remotely means there is only one implementation to keep in step: a remote
 // operator gets the identical page by changing the address.
 //
-// The one thing the shell adds is a way out. Closing the window, or Quit,
+// The one thing the shell adds is a way out, as two buttons in the page's
+// top bar and two items in the application menu. Closing the window, or Quit,
 // leaves the mixer running: the stream is not on this window, and an operator
 // who closes it by accident must not take the programme down with it. "Quit
 // and stop the mixer" is the deliberate version: it asks the mixer to shut
@@ -17,6 +18,11 @@ use std::io::{Read, Write};
 use std::net::TcpStream;
 use std::time::Duration;
 use tauri::menu::{MenuBuilder, MenuItemBuilder, PredefinedMenuItem, SubmenuBuilder};
+use tauri::{Manager, WebviewWindowBuilder};
+
+/// What the page sees in `navigator.userAgent`, so the UI can show the two
+/// exit buttons only when it is running in this window and not in a browser.
+const USER_AGENT: &str = "LiveboxMix-Desktop";
 
 /// Where the mixer is. The same address the window is pointed at.
 const MIXER: &str = "127.0.0.1:8080";
@@ -45,6 +51,28 @@ fn stop_mixer() {
 fn main() {
     tauri::Builder::default()
         .setup(|app| {
+            // The window is built here rather than by the config so that
+            // navigations can be watched: the UI's two exit buttons navigate
+            // to liveboxmix://quit and liveboxmix://quit-all, which is the
+            // one channel a page has into this shell without a plugin.
+            let cfg = app.config().app.windows[0].clone();
+            WebviewWindowBuilder::from_config(app, &cfg)?
+                .user_agent(USER_AGENT)
+                .on_navigation(|url| {
+                    if url.scheme() != "liveboxmix" {
+                        return true;
+                    }
+                    match url.host_str().unwrap_or("") {
+                        "quit" => std::process::exit(0),
+                        "quit-all" => {
+                            stop_mixer();
+                            std::process::exit(EXIT_STOP_EVERYTHING);
+                        }
+                        _ => false,
+                    }
+                })
+                .build()?;
+
             let quit = MenuItemBuilder::with_id("quit", "Quit (leave the mixer running)")
                 .accelerator("CmdOrCtrl+Q")
                 .build(app)?;

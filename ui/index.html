@@ -96,6 +96,7 @@
   .clip .warn { color: var(--warn); }
   .clips .empty { padding: 10px; color: var(--dim); font-size: 12px; line-height: 1.4; }
   button.ghost { background: transparent; }
+  button.warn { border-color: var(--warn); color: var(--warn) }
   #addout, #addsrc { margin-top: 10px; }
   #addout summary { font-size: 11px; color: var(--dim); cursor: pointer; }
   #addout input, #addout select { margin-top: 6px; }
@@ -157,6 +158,10 @@
   <div class="spacer"></div>
   <span class="pill" id="backend">—</span>
   <span class="pill" id="adpill" hidden>AD ON AIR</span>
+  <span id="desk" hidden>
+    <button class="ghost" id="closewin" title="Close this window. The mixer and the stream keep running.">Close window</button>
+    <button class="ghost warn" id="stopall" title="Stop the mixer, the stream and this window.">Stop everything</button>
+  </span>
   <button id="cut">Cut to black</button>
 </header>
 
@@ -237,6 +242,22 @@
 
 <script>
 "use strict";
+  // The desktop shell announces itself in the user agent. In a browser these
+  // two buttons mean nothing and stay hidden.
+  if (navigator.userAgent.includes("LiveboxMix-Desktop")) {
+    const desk = document.getElementById("desk");
+    desk.hidden = false;
+    document.getElementById("closewin").onclick = () => { location.href = "liveboxmix://quit"; };
+    const stop = document.getElementById("stopall");
+    let armed = 0;
+    // Two clicks, four seconds apart at most. A modal confirm would do the
+    // same job and freeze the window while it asked.
+    stop.onclick = () => {
+      if (Date.now() - armed < 4000) { location.href = "liveboxmix://quit-all"; return; }
+      armed = Date.now(); stop.textContent = "Click again to stop everything";
+      setTimeout(() => { if (Date.now() - armed >= 4000) stop.textContent = "Stop everything"; }, 4200);
+    };
+  }
 const $ = (id) => document.getElementById(id);
 let status = null;
 let objectUrl = null;
