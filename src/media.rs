@@ -120,11 +120,16 @@ impl MediaLibrary {
             if !is_media(&path) {
                 continue;
             }
+            // Spelled with `/` on every platform. The name is how the API and
+            // an ad break refer to the file, and a name that reads `sub\c.mkv`
+            // on one machine and `sub/c.mkv` on another is two names.
             let name = path
                 .strip_prefix(root)
                 .unwrap_or(&path)
-                .display()
-                .to_string();
+                .components()
+                .map(|c| c.as_os_str().to_string_lossy().into_owned())
+                .collect::<Vec<_>>()
+                .join("/");
             let probed = self.probe(&path, &meta);
             out.push(MediaItem {
                 name,
