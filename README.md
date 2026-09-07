@@ -742,6 +742,13 @@ binary from `cargo build --release` in `tauri-app/`.
   the browser's copy of each taken-over video is paused; and a superimposed
   live stream that ends leaves the page over its last frame rather than
   restarting the source.
+* **A superimposed source whose browser dies is rebuilt, not restarted.** The
+  page is probed again, its clips fetched again and a new pipeline built, and
+  the source goes back on programme if it was there. Measured at 14 seconds
+  from the browser being killed to the page back on air with sound; the
+  programme shows the slate meanwhile. Every other kind of source restarts in
+  place in about two seconds. The difference is deliberate: brought back in
+  place, the layered pipeline did not recover reliably.
 * **Page content in the key colour is treated as spill.** The page paints a
   near-pure magenta where each video sat, and the sidecar removes it. A page
   element that is itself that magenta would be removed with it. Nothing else is
