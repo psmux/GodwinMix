@@ -1,20 +1,20 @@
 // Injected into the page when the sidecar runs with --detect-media.
 //
-// It finds the element the page is really playing and reports it on the
-// console, where the browser process picks it up in on_console_message. The
+// It finds every video the page is playing and reports them on the console,
+// where the browser process picks the line up in on_console_message. The
 // console is the channel because it crosses the renderer/browser process
 // boundary on its own: CEF's message router would need an App in the renderer
 // process, which this build does not have on macOS.
 //
-// What the mixer does with the report: if the media has a URL a decoder can
-// open, it decodes that directly on the GPU and superimposes the page over it,
-// leaving the browser to draw only the chrome. A blob: URL means the page is
-// feeding the decoder from JavaScript (Media Source Extensions) and there is
-// nothing to hand over, so the report says so and the mixer keeps rendering
-// everything in the browser.
+// What the mixer does with the report: every video whose address a decoder
+// can open is decoded by the mixer itself and drawn where the page had it, and
+// the page is drawn over the top. A blob: URL means the page is feeding the
+// decoder from JavaScript (Media Source Extensions) and there is nothing to
+// hand over; that video is left to the browser, which keeps drawing it, and
+// the report says so.
 //
 // The sidecar sets window.__lbxHideMedia in front of this script when it runs
-// with --transparent. That is the other half of the handover: the element the
+// with --transparent. That is the other half of the handover: a video the
 // mixer is about to draw itself must not also be painted by Chromium. See
 // hide().
 
@@ -28,25 +28,23 @@
 
   // Set by the one line prelude the sidecar puts in front of this script.
   const hideMedia = !!window.__lbxHideMedia;
-  // The element hide() has taken over, so the pick does not wander off it.
-  let taken = null;
+  // Elements hide() has taken over. Their paused and muted state is ours from
+  // then on, so what the page itself asked for is remembered separately.
+  const taken = new WeakSet();
+  const pageMuted = new WeakMap();
 
-  // A page can hold several media elements: a hero video, a muted background
-  // loop, an autoplaying advert. Prefer the one that is actually playing, then
-  // the biggest, which is what a viewer would call "the video".
+  // Ranks the elements so that the report's headline fields describe what a
+  // viewer would call "the video": the one playing, then the biggest.
   const score = (el) => {
     const r = el.getBoundingClientRect();
     const area = Math.max(0, r.width) * Math.max(0, r.height);
     const playing = !el.paused && !el.ended && el.readyState >= 2;
     const visible = area > 0 && getComputedStyle(el).visibility !== "hidden";
-    // An element hide() has already taken over scores nothing on its own
-    // merits, being paused and invisible by our own doing. Keep preferring it,
-    // or the pick would flip to whatever is left and we would hide that too.
-    if (el === taken) return 2e12;
+    if (taken.has(el)) return 2e12 + area;
     return (playing ? 1e12 : 0) + (visible ? area : 0);
   };
 
-  const describe = (el) => {
+  const describe = (el, index) => {
     const r = el.getBoundingClientRect();
     const src = el.currentSrc || el.src || "";
     // Media Source Extensions and the File API both hand the element a blob:
@@ -54,7 +52,9 @@
     // means the frames are decrypted in the browser and never leave it.
     const mse = src.startsWith("blob:");
     const drm = !!el.mediaKeys;
+    if (!pageMuted.has(el)) pageMuted.set(el, el.muted);
     return {
+      index,
       tag: el.tagName.toLowerCase(),
       src,
       // Whether anything downstream can open this URL on its own.
@@ -62,6 +62,9 @@
       mse,
       drm,
       paused: el.paused,
+      // Whether the page itself plays this one silently, which is how sidebar
+      // clips usually are. The mixer mutes its copy to match.
+      muted: pageMuted.get(el),
       // Where the element sits in the viewport, in CSS pixels, so the mixer
       // can place the decoded video exactly where the page had it.
       rect: {
@@ -76,59 +79,61 @@
     };
   };
 
-  // Transparent mode only: stop Chromium painting the element the mixer is
-  // going to draw itself. visibility rather than display, because display:none
-  // takes the element out of the layout and reflows the page, moving the very
-  // chrome we are keeping.
-  //
-  // Pausing is where the saving is. Hiding alone leaves Chromium decoding every
-  // frame into a surface nobody looks at, so pausing is what actually takes the
-  // work off the machine. The trade-off is that it freezes the page's own
-  // player UI: a progress bar stops filling, a running time stops counting.
-  // That is accepted here because the mixer is drawing the real video and the
-  // decode saving is the point of the mode.
-  //
-  // Idempotent, so re-applying it costs nothing and the mutation it makes the
-  // first time does not feed itself.
-  // Boxes already made transparent by hide(), so re-running it is free and
-  // the style mutation it makes does not feed the observer forever.
-  const cleared = new WeakSet();
-  const clear = (box) => {
-    if (!box || cleared.has(box)) return;
-    cleared.add(box);
-    box.style.setProperty("background", "transparent", "important");
-  };
+  // The colour a taken-over video is painted in the page, for the mixer to
+  // key out. Chosen to be nothing a page is likely to contain.
+  const KEY = "rgb(255, 0, 254)";
 
+  // Transparent mode only: stop Chromium decoding and painting a video the
+  // mixer is going to draw itself, and leave a flat key colour exactly where
+  // it was. The mixer keys that colour out of the page and its own decode of
+  // the video shows through, in the element's own box, under whatever the
+  // page lays over it, captions and controls included.
+  //
+  // Earlier versions hid the element and made its ancestors transparent, and
+  // that removed the page's own background everywhere, which a viewer sees at
+  // once. A key colour touches only the element's box.
+  //
+  // Emptying the element rather than pausing it is what stops the decode and
+  // drops the last frame, so the box paints its background and nothing else.
+  // The address was already reported before this runs; it is not needed again
+  // in this browser. The trade-off is that the page's own player UI for that
+  // element goes quiet, which is accepted: the mixer is drawing the real video.
   const hide = (el) => {
-    if (!hideMedia || !el) return;
-    taken = el;
-    if (el.style.visibility !== "hidden") {
-      el.style.setProperty("visibility", "hidden", "important");
-    }
-    if (!el.muted) el.muted = true;
-    if (!el.paused) el.pause();
-    // Whatever is behind the element must stop painting too, or the page's
-    // own background covers the very video the mixer is drawing underneath.
-    // Nearly every real page has one: a body colour, a black letterbox box
-    // around the player. Those are the element's ancestors, so they go
-    // transparent all the way up. Anything laid over the video, controls and
-    // captions, is not an ancestor and is left exactly as it was.
-    for (let box = el.parentElement; box; box = box.parentElement) clear(box);
-    clear(document.documentElement);
-    clear(document.body);
+    if (!hideMedia || !el || taken.has(el)) return;
+    if (!pageMuted.has(el)) pageMuted.set(el, el.muted);
+    taken.add(el);
+    // Freeze the box first. An emptied video has no picture to size itself by
+    // and falls back to 300 by 150, and where the page sized the element by
+    // its picture the layout shifts, moving the very box the mixer is about to
+    // fill from the rectangle it was told about.
+    const r = el.getBoundingClientRect();
+    el.style.setProperty("width", r.width + "px", "important");
+    el.style.setProperty("height", r.height + "px", "important");
+    el.style.setProperty("aspect-ratio", "auto", "important");
+    el.muted = true;
+    el.pause();
+    for (const src of el.querySelectorAll("source")) src.remove();
+    el.removeAttribute("src");
+    el.removeAttribute("poster");
+    el.load();
+    el.style.setProperty("background", KEY, "important");
+    el.style.setProperty("visibility", "visible", "important");
   };
 
   const report = () => {
-    const all = [...document.querySelectorAll("video, audio")];
-    const best = all.length
-      ? all.reduce((a, b) => (score(b) > score(a) ? b : a))
-      : null;
-    // Before describing it, so the report says what the page is actually left
-    // showing. Re-applied on every report, which covers the element being
-    // swapped and a player that puts its own styles back.
-    hide(best);
+    const all = [...document.querySelectorAll("video")];
+    // Every video with an address is handed over. One that cannot be (MSE,
+    // DRM) is left to the browser, so the page still looks whole.
+    const before = all.map(describe);
+    for (const it of before) if (it.usable) hide(all[it.index]);
+    // Described before the hand-over, so the addresses are the page's own and
+    // not the emptied element's. The rectangles are the same either way.
+    const media = before;
+    const best = all.length ? all.reduce((a, b) => (score(b) > score(a) ? b : a)) : null;
     const payload = JSON.stringify(
-      best ? { found: true, count: all.length, ...describe(best) } : { found: false, count: 0 },
+      best
+        ? { found: true, count: all.length, ...describe(best, all.indexOf(best)), media }
+        : { found: false, count: 0, media: [] },
     );
     // Only speak up when something changed. The page is repainting 30 times a
     // second; the console does not need to.

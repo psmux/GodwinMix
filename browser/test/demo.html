@@ -1,0 +1,41 @@
+<!doctype html><title>demo</title>
+<!-- A page the way pages are: an article with three videos in it, the main
+     one with sound, two smaller ones muted, text around them. Streamed whole
+     through the browser it costs a video decode per video; superimposed, the
+     mixer decodes each video itself and the browser draws only the rest. The
+     viewer is meant to see no difference. -->
+<style>
+  html, body { margin: 0; background: #f4f1ea; color: #1c1a17; font: 17px/1.5 Georgia, serif }
+  .wrap { max-width: 1180px; margin: 0 auto; padding: 22px 30px }
+  header { display: flex; justify-content: space-between; align-items: baseline; border-bottom: 2px solid #1c1a17; padding-bottom: 8px }
+  header h1 { margin: 0; font: 700 30px/1 Georgia, serif; letter-spacing: -0.5px }
+  #clock { font: 15px/1 monospace; color: #6b6660 }
+  .hero { margin-top: 18px; display: grid; grid-template-columns: 2fr 1fr; gap: 18px }
+  .hero video { width: 100%; height: 100%; object-fit: cover; background: #000; display: block }
+  .main { position: relative; aspect-ratio: 16 / 9 }
+  .caption { position: absolute; left: 0; right: 0; bottom: 0; padding: 12px 16px; color: #fff;
+             background: linear-gradient(transparent, rgba(0,0,0,0.75)); font-size: 15px }
+  .side { display: grid; grid-template-rows: 1fr 1fr; gap: 18px }
+  .side figure { margin: 0; display: grid; grid-template-rows: 1fr auto }
+  .side figcaption { font-size: 13px; color: #6b6660; padding-top: 4px }
+  p { margin: 14px 0 0 }
+</style>
+<div class="wrap">
+  <header><h1>The Weekend Report</h1><span id="clock"></span></header>
+  <div class="hero">
+    <div class="main">
+      <video src="demo/sintel.mp4" autoplay loop playsinline></video>
+      <div class="caption">Lead story: the Sintel trailer. With sound.</div>
+    </div>
+    <div class="side">
+      <figure><video src="demo/bunny.mp4" autoplay loop muted playsinline></video><figcaption>Big Buck Bunny, muted</figcaption></figure>
+      <figure><video src="demo/jellyfish.mp4" autoplay loop muted playsinline></video><figcaption>Jellyfish, muted</figcaption></figure>
+    </div>
+  </div>
+  <p>Three videos on one page. The large one plays with its sound; the two on the right are muted, as sidebar clips usually are. Streamed as a whole page, the browser decodes all three. Superimposed, the mixer decodes them itself and the browser draws only this text, the captions and the clock.</p>
+</div>
+<script>
+  const c = document.getElementById('clock');
+  const tick = () => { c.textContent = new Date().toLocaleTimeString(); };
+  tick(); setInterval(tick, 1000);
+</script>

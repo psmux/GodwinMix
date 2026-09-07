@@ -76,6 +76,18 @@ pub struct Muxer {
     dropped: std::sync::atomic::AtomicU64,
 }
 
+/// rgb(255, 0, 254), the colour `detect-media.js` paints in a taken-over
+/// video's box. Chosen to be nothing a page is likely to contain.
+const KEY_R: i32 = 255;
+const KEY_B: i32 = 254;
+/// Least magenta excess, min(R,B) - G, that counts as key showing through.
+/// Below it a pixel is taken as the page's own colour and left alone. Real
+/// page colours rarely have red and blue both well above green; a pure blue
+/// or a pure red has one of them low and reads as zero here.
+const SPILL_MIN: i32 = 12;
+/// Coverage below which a pixel over the key is simply the key: alpha zero.
+const COVER_MIN: i32 = 10;
+
 /// How far the sample count may run from the wall clock before audio is
 /// re-anchored. Two video frames at 30 fps.
 const AUDIO_DRIFT_TOLERANCE_NS: u64 = 66_000_000;
@@ -211,6 +223,38 @@ impl Muxer {
         buf.copy_from_slice(bgra);
         if let Some(lut) = &self.unpremultiply {
             for px in buf.chunks_exact_mut(4) {
+                // The key colour the injected script paints where a video the
+                // mixer draws itself used to be. Keyed here, where every pixel
+                // is being visited anyway, rather than by a chroma key element
+                // in the mixer: that one managed four frames a second at 720p
+                // on a busy machine, and a page whose frames arrive late is a
+                // page the compositor drops as old.
+                //
+                // Not only the pure key. A caption's dark gradient, a control
+                // bar, the soft edge of a letter: anything the page draws over
+                // its video with some transparency has been blended with the
+                // key by the browser, and comes out tinted. Chromium gave us
+                // P = a*C + (1-a)*K for content C at coverage a, and the key
+                // is red and blue with no green at all, so for the neutral
+                // colours such overlays are made of, min(R,B) - G reads (1-a)
+                // straight off the pixel. C and a follow, and the mixer blends
+                // the recovered overlay over its own decode of the video, which
+                // is how the page looked in the browser. Page content that is
+                // itself magenta is taken for spill; that is the trade.
+                let (b, g, r) = (px[0] as i32, px[1] as i32, px[2] as i32);
+                let spill = b.min(r) - g;
+                if spill > SPILL_MIN {
+                    let cover = 255 - spill;
+                    if cover <= COVER_MIN {
+                        px[3] = 0;
+                    } else {
+                        px[0] = ((b * 255 - spill * KEY_B) / cover).clamp(0, 255) as u8;
+                        px[1] = ((g * 255) / cover).clamp(0, 255) as u8;
+                        px[2] = ((r * 255 - spill * KEY_R) / cover).clamp(0, 255) as u8;
+                        px[3] = ((px[3] as i32 * cover) / 255) as u8;
+                    }
+                    continue;
+                }
                 let a = px[3] as usize;
                 // Opaque is the common case and the table would return the
                 // channel unchanged, so skip the three lookups.
