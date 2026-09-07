@@ -887,8 +887,9 @@ enum Stream {
 /// compositor is live and shows a frame when its running time comes up, so a
 /// layer left on its own timeline is late by however long it took to appear,
 /// and a live aggregator drops what is late. So as each segment passes on its
-/// way to its compositor pad, that pad's offset moves the layer to the running
-/// time of that moment. The offset is set upstream of the pad, while the
+/// way to its compositor pad, that pad's offset moves the layer to that moment,
+/// measured from when this pipeline started, which is where the compositor's
+/// timeline begins. The offset is set upstream of the pad, while the
 /// segment is still travelling, because one set after the segment has gone by
 /// changes nothing. The same reason the mixer's `TimelineAligner` works the
 /// way it does.
@@ -914,6 +915,14 @@ struct Placement {
     /// A restart of the media decoder in flight. Picture and sound reach their
     /// end within a frame of each other and one restart is wanted, not two.
     restarting: AtomicBool,
+    /// When this pipeline last started, which is where its compositor's own
+    /// timeline begins. Not the pipeline's running time: an input pipeline
+    /// runs on the programme's clock and base time, so that read as 151
+    /// seconds on a rig that had been up that long, and the layers were then
+    /// placed 151 seconds into the future. The source showed black for
+    /// exactly that long, and the earlier runs had only looked right because
+    /// the rig was a few seconds old.
+    started: Mutex<Instant>,
 }
 
 impl Placement {
@@ -924,6 +933,7 @@ impl Placement {
             video_rounds: AtomicU32::new(0),
             audio_rounds: AtomicU32::new(0),
             restarting: AtomicBool::new(false),
+            started: Mutex::new(Instant::now()),
         })
     }
 
@@ -936,6 +946,7 @@ impl Placement {
         self.video_rounds.store(0, Ordering::SeqCst);
         self.audio_rounds.store(0, Ordering::SeqCst);
         self.restarting.store(false, Ordering::SeqCst);
+        *self.started.lock() = Instant::now();
     }
 
     /// Watch the segments and buffers passing `probe_on` and keep `target`,
@@ -951,77 +962,24 @@ impl Placement {
         let (me, id, target) = (self.clone(), id.clone(), target.clone());
         // This pad's segment, kept to turn buffer times into running time.
         let segment: Mutex<Option<gst::FormattedSegment<gst::ClockTime>>> = Mutex::new(None);
+        // Placed on the first buffer after each segment, not on the segment.
+        // The sidecar stamps frames from its own start, so the page's first
+        // frame arrives carrying six seconds or so of timestamp, and a layer
+        // placed by its segment then sat that far in the future: the
+        // compositor held the one frame it had, opaque and from before the
+        // page had hidden its video, while the branch behind it blocked and
+        // the sidecar dropped the transparent frames that should have
+        // followed. The first frame is what has to land at now.
+        let pending = std::sync::atomic::AtomicBool::new(false);
         probe_on.add_probe(
             gst::PadProbeType::EVENT_DOWNSTREAM | gst::PadProbeType::BUFFER,
-            move |p, info| {
+            move |_p, info| {
                 match &info.data {
-                    Some(gst::PadProbeData::Buffer(b)) if stream == Stream::Video => {
-                        if let (Some(seg), Some(pts)) = (segment.lock().as_ref(), b.pts()) {
-                            let dur = b.duration().unwrap_or(gst::ClockTime::ZERO);
-                            if let Some(rt) = seg.to_running_time(pts + dur) {
-                                // Running time at `target`, where the offset is
-                                // applied, not here.
-                                let at = rt
-                                    + gst::ClockTime::from_nseconds(target.offset().max(0) as u64);
-                                let mut end = me.end.lock();
-                                if at > *end {
-                                    *end = at;
-                                }
-                            }
-                        }
-                    }
                     Some(gst::PadProbeData::Event(e)) => {
-                        if let gst::EventView::Segment(s) = e.view() {
-                            *segment.lock() = s.segment().downcast_ref::<gst::ClockTime>().cloned();
-                            // None only while the pipeline has no base time yet,
-                            // which is the start, and zero is right then.
-                            let now = p
-                                .parent_element()
-                                .and_then(|e| e.parent())
-                                .and_then(|o| o.downcast::<gst::Element>().ok())
-                                .and_then(|pipeline| pipeline.current_running_time())
-                                .unwrap_or(gst::ClockTime::ZERO);
-                            let after = match stream {
-                                Stream::Page => gst::ClockTime::ZERO,
-                                Stream::Video => {
-                                    let end = *me.end.lock();
-                                    *me.prev_end.lock() = end;
-                                    me.video_rounds.fetch_add(1, Ordering::SeqCst);
-                                    end
-                                }
-                                Stream::Audio => {
-                                    // The picture's end. If the picture's own
-                                    // new segment has already gone past it is
-                                    // frozen in `prev_end`; if not, the old
-                                    // picture has fully drained by the time the
-                                    // new sound arrives, so `end` is final.
-                                    let k = me.audio_rounds.fetch_add(1, Ordering::SeqCst) + 1;
-                                    if me.video_rounds.load(Ordering::SeqCst) >= k {
-                                        *me.prev_end.lock()
-                                    } else {
-                                        *me.end.lock()
-                                    }
-                                }
-                            };
-                            let place = now.max(after);
-                            target.set_offset(place.nseconds() as i64);
-                            if after == gst::ClockTime::ZERO {
-                                info!(
-                                    source = %id,
-                                    layer = ?stream,
-                                    at_ms = place.mseconds(),
-                                    "layer placed on the composite's timeline"
-                                );
-                            } else if stream == Stream::Video {
-                                info!(
-                                    source = %id,
-                                    at_ms = place.mseconds(),
-                                    gap_ms = now.saturating_sub(after).mseconds(),
-                                    "placed the next round of the page's media"
-                                );
-                            }
-                        }
-                        if let gst::EventView::Eos(_) = e.view() {
+                        if let gst::EventView::Segment(sg) = e.view() {
+                            *segment.lock() = sg.segment().downcast_ref::<gst::ClockTime>().cloned();
+                            pending.store(true, Ordering::SeqCst);
+                        } else if let gst::EventView::Eos(_) = e.view() {
                             // The clip has run out. For one held locally the
                             // decoder is started again from the copy, and the
                             // end of stream is kept from the compositor, which
@@ -1057,6 +1015,76 @@ impl Placement {
                                 });
                             }
                             return gst::PadProbeReturn::Drop;
+                        }
+                    }
+                    Some(gst::PadProbeData::Buffer(b)) => {
+                        let Some(pts) = b.pts() else {
+                            return gst::PadProbeReturn::Ok;
+                        };
+                        let guard = segment.lock();
+                        let Some(seg) = guard.as_ref() else {
+                            return gst::PadProbeReturn::Ok;
+                        };
+                        let rt = seg.to_running_time(pts).unwrap_or(gst::ClockTime::ZERO);
+                        if pending.swap(false, Ordering::SeqCst) {
+                            // Time since this pipeline started. See `started`.
+                            let now = gst::ClockTime::from_nseconds(
+                                me.started.lock().elapsed().as_nanos() as u64,
+                            );
+                            let after = match stream {
+                                Stream::Page => gst::ClockTime::ZERO,
+                                Stream::Video => {
+                                    let end = *me.end.lock();
+                                    *me.prev_end.lock() = end;
+                                    me.video_rounds.fetch_add(1, Ordering::SeqCst);
+                                    end
+                                }
+                                Stream::Audio => {
+                                    // The picture's end. If the picture's own
+                                    // new round has already begun it is frozen
+                                    // in `prev_end`; if not, the old picture has
+                                    // fully drained by the time the new sound
+                                    // arrives, so `end` is final.
+                                    let k = me.audio_rounds.fetch_add(1, Ordering::SeqCst) + 1;
+                                    if me.video_rounds.load(Ordering::SeqCst) >= k {
+                                        *me.prev_end.lock()
+                                    } else {
+                                        *me.end.lock()
+                                    }
+                                }
+                            };
+                            // This buffer, the first of its segment, lands at
+                            // `place`, wherever its own timestamp started.
+                            let place = now.max(after);
+                            let offset = place.saturating_sub(rt);
+                            target.set_offset(offset.nseconds() as i64);
+                            if after == gst::ClockTime::ZERO {
+                                info!(
+                                    source = %id,
+                                    layer = ?stream,
+                                    at_ms = place.mseconds(),
+                                    first_frame_ms = rt.mseconds(),
+                                    "layer placed on the composite's timeline"
+                                );
+                            } else if stream == Stream::Video {
+                                info!(
+                                    source = %id,
+                                    at_ms = place.mseconds(),
+                                    gap_ms = now.saturating_sub(after).mseconds(),
+                                    "placed the next round of the page's media"
+                                );
+                            }
+                        }
+                        if stream == Stream::Video {
+                            // Running time at `target`, where the offset is
+                            // applied, not here.
+                            let dur = b.duration().unwrap_or(gst::ClockTime::ZERO);
+                            let at = rt + dur
+                                + gst::ClockTime::from_nseconds(target.offset().max(0) as u64);
+                            let mut end = me.end.lock();
+                            if at > *end {
+                                *end = at;
+                            }
                         }
                     }
                     _ => {}

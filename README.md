@@ -679,6 +679,19 @@ The UI is a plain web app served by the binary, so a Tauri shell is a webview
 pointed at the same URL, local or remote. There is no second implementation to
 keep in step, and remote operation is the default case with the address changed.
 
+To open it:
+
+```sh
+dev/desktop.sh              # starts the test rig if no mixer answers on 8080, then the app
+dev/desktop.sh mine.toml    # same, but the mixer runs on your own config
+```
+
+The window has nothing to show until a mixer answers on `localhost:8080`,
+which is why the script starts one first. It opens the bundle at
+`tauri-app/target/release/bundle/macos/LiveboxMix.app` when one has been
+built (`cd tauri-app && cargo tauri build --bundles app`), else the bare
+binary from `cargo build --release` in `tauri-app/`.
+
 ## Known limitations
 
 * **Superimpose cannot take over MSE or DRM playback**, and YouTube is MSE.

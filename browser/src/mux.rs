@@ -72,6 +72,8 @@ pub struct Muxer {
     rate: i32,
     /// Present only in transparent mode. See `unpremultiply_table`.
     unpremultiply: Option<Vec<u8>>,
+    /// Buffers dropped because the reader was behind. See `behind`.
+    dropped: std::sync::atomic::AtomicU64,
 }
 
 /// How far the sample count may run from the wall clock before audio is
@@ -193,6 +195,7 @@ impl Muxer {
             channels,
             rate,
             unpremultiply: transparent.then(unpremultiply_table),
+            dropped: std::sync::atomic::AtomicU64::new(0),
         });
         m.clone().start_pacing();
         Ok(m)
@@ -230,6 +233,27 @@ impl Muxer {
 
     /// Interleaved float PCM straight from the browser, with the presentation
     /// time Chromium gave it (milliseconds since the Unix epoch; 0 if none).
+    /// Whether `src` already holds more than `limit` bytes the reader has not
+    /// taken, in which case the next push is dropped rather than queued.
+    ///
+    /// This is a live source and the reader is the mixer at the other end of
+    /// a pipe. When it falls behind, even briefly, an appsrc left to itself
+    /// queues everything it is given, and at 41 MB/s of raw frames that was 3
+    /// GB inside a minute, measured: the container was then killed for memory
+    /// or lost its X server first and painted black until it was. Dropping is
+    /// what a live feed should do; the mixer holds the last frame it has and
+    /// the picture skips instead of the source dying.
+    fn behind(src: &gst_app::AppSrc, limit: u64, dropped: &std::sync::atomic::AtomicU64) -> bool {
+        if src.current_level_bytes() <= limit {
+            return false;
+        }
+        let n = dropped.fetch_add(1, std::sync::atomic::Ordering::Relaxed) + 1;
+        if n == 1 || n % 300 == 0 {
+            eprintln!("[browser] the reader is not keeping up; dropped {n} buffers so far");
+        }
+        true
+    }
+
     pub fn audio_packet(&self, interleaved_f32le: &[u8], pts_unix_ms: i64) {
         let rate = self.rate.max(1) as u64;
         let frames = interleaved_f32le.len() as u64 / (4 * self.channels.max(1) as u64);
@@ -273,6 +297,10 @@ impl Muxer {
             b.set_pts(pts);
             b.set_duration(dur);
         }
+        // A second of audio.
+        if Self::behind(&self.audio, 48_000 * 2 * 4, &self.dropped) {
+            return;
+        }
         let _ = self.audio.push_buffer(buf);
     }
 
@@ -302,7 +330,10 @@ impl Muxer {
                             b.set_pts(pts);
                             b.set_duration(gst::ClockTime::from_nseconds(period.as_nanos() as u64));
                         }
-                        if self.video.push_buffer(buf).is_err() {
+                        // Four frames.
+                        if !Self::behind(&self.video, 4 * self.frame_bytes as u64, &self.dropped)
+                            && self.video.push_buffer(buf).is_err()
+                        {
                             return;
                         }
                     }

@@ -7,8 +7,11 @@ H="$(cd "$(dirname "$0")" && pwd)"; LB="$H/../../target/release/liveboxmix"
 nohup mediamtx "$H/mediamtx.yml" > "$H/logs/mediamtx.log" 2>&1 &
 sleep 1
 nohup "$H/cams.sh" > "$H/logs/cams.log" 2>&1 &
-# Test pages for web+ sources (browser/test) on http://127.0.0.1:8090/.
-nohup python3 -m http.server 8090 --bind 127.0.0.1 --directory "$H/../../browser/test" > "$H/logs/http.log" 2>&1 < /dev/null &
+# Test pages for web+ sources (browser/test) on port 8090. Bound to every
+# interface, not loopback: the sidecar runs in a container and reaches this
+# machine as host.docker.internal, which a loopback-only server does not answer,
+# and the page then loads nothing and renders black.
+nohup python3 -m http.server 8090 --bind 0.0.0.0 --directory "$H/../../browser/test" > "$H/logs/http.log" 2>&1 < /dev/null &
 sleep 2
 cd "$H"
 if [ -n "$GST_DEBUG" ]; then export GST_DEBUG_NO_COLOR=1 GST_DEBUG_FILE="$H/logs/gst.log"; fi
