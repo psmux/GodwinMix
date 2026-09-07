@@ -924,6 +924,16 @@ impl Layers {
         // with nothing yet and carries on, which is the behaviour wanted.
         for agg in [&self.comp, &self.amix] {
             crate::probe::set_int(agg, "min-upstream-latency", LAYER_LATENCY_NS);
+            // Begin the output timeline at the first buffer, not at running
+            // time zero. This pipeline runs on the programme's clock and base
+            // time (see the mixer, where a source is started), so its running
+            // time is the programme's age; left at the default, a source added
+            // five minutes into a broadcast had a compositor that started five
+            // minutes in the past and composited black at whatever rate the
+            // machine allowed until it caught up, which on a busy one it never
+            // did. The page's frames, stamped at their arrival, sat that far in
+            // its future and were never shown.
+            agg.set_property_from_str("start-time-selection", "first");
         }
         // The page draws at a tenth of the canvas rate and the compositor
         // would happily pick that as its output rate. Pin it, so the videos
@@ -1151,6 +1161,25 @@ impl Placement {
     /// Forget everything. The pipeline has been restarted and its running time
     /// starts from zero again; an end remembered from before it would place
     /// the first frames minutes into the future.
+    /// The composite's clock, read where the layers are placed on it.
+    ///
+    /// The pipeline's own running time, not time since this source started.
+    /// The mixer gives every source pipeline the programme's clock and base
+    /// time (see `mixer.rs`, where a new source is started), so inside a source
+    /// running time is the programme's age, and a source added ten seconds
+    /// into a broadcast has a compositor whose clock reads ten seconds when it
+    /// starts. Placing against a stopwatch started with the source put every
+    /// page frame that far into the past, and the compositor dropped them as
+    /// old: the page stood still at its first frame. Video from a file got away
+    /// with it by skipping ahead until it caught up, which hid the error.
+    /// Before the pipeline is playing there is no running time; the stopwatch
+    /// stands in, which only affects a segment that arrives during preroll.
+    fn now(&self, pad: &gst::Pad) -> gst::ClockTime {
+        pad.parent_element()
+            .and_then(|el| el.current_running_time())
+            .unwrap_or_else(|| gst::ClockTime::from_nseconds(self.started.lock().elapsed().as_nanos() as u64))
+    }
+
     fn reset(&self) {
         *self.end.lock() = gst::ClockTime::ZERO;
         *self.prev_end.lock() = gst::ClockTime::ZERO;
@@ -1212,10 +1241,7 @@ impl Placement {
                                 // The resend our own offset change caused.
                                 return gst::PadProbeReturn::Ok;
                             }
-                            // Time since this pipeline started. See `started`.
-                            let now = gst::ClockTime::from_nseconds(
-                                me.started.lock().elapsed().as_nanos() as u64,
-                            );
+                            let now = me.now(&target);
                             let after = match stream {
                                 Stream::Page => gst::ClockTime::ZERO,
                                 Stream::Video => {
@@ -1265,6 +1291,28 @@ impl Placement {
                             // would otherwise mark the layer finished and
                             // ignore everything after. A stream is left to end.
                             let Some(el) = again.as_ref() else {
+                                if stream == Stream::Page {
+                                    // The browser drawing the page has gone: it
+                                    // crashed, or its container was stopped. Left
+                                    // alone, the compositor marks this one pad
+                                    // finished and goes on compositing the videos
+                                    // over black, and the source reports itself
+                                    // live for as long as they play. That is the
+                                    // one failure a viewer sees and nothing
+                                    // reports. Posted as an error on the bus, it
+                                    // is the supervisor's ordinary restart: a
+                                    // fresh browser, the same source.
+                                    if let Some(parent) = _p.parent_element() {
+                                        warn!(source = %id, "the page's browser stopped; restarting the source");
+                                        let msg = gst::message::Error::builder(
+                                            gst::StreamError::Failed,
+                                            "the page's browser stopped",
+                                        )
+                                        .src(&parent)
+                                        .build();
+                                        let _ = parent.post_message(msg);
+                                    }
+                                }
                                 return gst::PadProbeReturn::Ok;
                             };
                             if stream == Stream::Video
@@ -1309,9 +1357,7 @@ impl Placement {
                             .to_running_time(pts)
                             .unwrap_or(gst::ClockTime::ZERO)
                             .saturating_sub(*folded);
-                        let now = gst::ClockTime::from_nseconds(
-                            me.started.lock().elapsed().as_nanos() as u64,
-                        );
+                        let now = me.now(&target);
                         if stream == Stream::Page {
                             // The page is chrome, and the right time to show a
                             // frame of it is the moment it arrives. So every
