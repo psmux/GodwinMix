@@ -563,6 +563,8 @@ pub fn probe_page_media(id: &SourceId, spec: &ExecSpec, timeout: Duration) -> Op
     let Some(err) = child.stderr.take() else {
         warn!(source = %id, "probe child has no stderr; rendering the page whole");
         stop_process_group(child.id());
+        #[cfg(not(unix))]
+        let _ = child.kill();
         let _ = child.wait();
         return None;
     };
@@ -621,6 +623,8 @@ pub fn probe_page_media(id: &SourceId, spec: &ExecSpec, timeout: Duration) -> Op
     }
 
     stop_process_group(child.id());
+    #[cfg(not(unix))]
+    let _ = child.kill();
     let _ = child.wait();
     // Fetch each clip once, and keep only what can actually be played. A video
     // whose address turns out to be dead (a 404 was the case that found this)

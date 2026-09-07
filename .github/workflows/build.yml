@@ -18,6 +18,8 @@ jobs:
   mixer:
     name: mixer (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
+    # A hung test must not hold a runner for the six hours GitHub allows.
+    timeout-minutes: 45
     strategy:
       fail-fast: false
       matrix:
