@@ -131,14 +131,18 @@ async fn main() -> Result<()> {
     let mixer_thread = mixer::spawn(mix, cmd_rx, handle.clone());
 
     let library = Arc::new(media::MediaLibrary::new(cfg_media));
-    let state = control::AppState { mixer: handle.clone(), frames, library };
+    let quit = Arc::new(tokio::sync::Notify::new());
+    let state = control::AppState { mixer: handle.clone(), frames, library, quit: quit.clone() };
     let server = tokio::spawn(async move {
         if let Err(e) = control::serve(&bind, state).await {
             error!(?e, "control server stopped");
         }
     });
 
-    tokio::signal::ctrl_c().await.ok();
+    tokio::select! {
+        _ = tokio::signal::ctrl_c() => {}
+        _ = quit.notified() => {}
+    }
     info!("shutting down");
     let _ = handle.send(mixer::Command::Shutdown);
     server.abort();

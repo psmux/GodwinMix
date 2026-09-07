@@ -36,6 +36,9 @@ pub struct AppState {
     pub frames: Option<Arc<broadcast::Sender<Arc<[u8]>>>>,
     /// Ad clips available on this machine.
     pub library: Arc<MediaLibrary>,
+    /// Rung by `POST /api/shutdown`. `main` waits on it alongside Ctrl-C and
+    /// takes the whole process down the same way for either.
+    pub quit: Arc<tokio::sync::Notify>,
 }
 
 pub fn router(state: AppState) -> Router {
@@ -43,6 +46,7 @@ pub fn router(state: AppState) -> Router {
         .route("/", get(index))
         .route("/api/status", get(status))
         .route("/api/take", post(take))
+        .route("/api/shutdown", post(shutdown))
         .route("/api/media", get(list_media))
         .route("/api/adbreak", post(start_ad_break))
         .route("/api/adbreak/end", post(end_ad_break))
@@ -141,6 +145,16 @@ async fn start_ad_break(
         })
         .await?;
     Ok(StatusCode::OK)
+}
+
+/// Stop the mixer, and with it the programme. Deliberately a separate call
+/// from anything the UI does by itself: closing a window must never take the
+/// stream down, so only the desktop shell's "Quit and stop the mixer" and the
+/// CLI send this.
+async fn shutdown(State(app): State<AppState>) -> StatusCode {
+    info!("shutdown requested over the API");
+    app.quit.notify_one();
+    StatusCode::ACCEPTED
 }
 
 async fn end_ad_break(State(app): State<AppState>) -> Result<StatusCode, ApiError> {

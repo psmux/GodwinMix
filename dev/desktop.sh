@@ -24,14 +24,21 @@ if ! curl -sf "$API" >/dev/null 2>&1; then
   curl -sf "$API" >/dev/null 2>&1 || { echo "the mixer did not come up; see dev/harness/logs/mixer.log"; exit 1; }
 fi
 
-# The bundle, if it has been built, else the bare binary from cargo.
-APP="$ROOT/tauri-app/target/release/bundle/macos/LiveboxMix.app"
+# The bundle, if it has been built, else the bare binary from cargo. Run in
+# the foreground so its exit status is known: "Quit and stop the mixer" in
+# the app menu exits with 2 after stopping the mixer, and that is when the
+# rest of the rig (mediamtx, the camera, the page server) is stopped too.
+# Plain Quit, or closing the window, leaves everything running.
+APP="$ROOT/tauri-app/target/release/bundle/macos/LiveboxMix.app/Contents/MacOS/liveboxmix-desktop"
 BIN="$ROOT/tauri-app/target/release/liveboxmix-desktop"
-if [ -d "$APP" ]; then
-  open "$APP"
-elif [ -x "$BIN" ]; then
-  nohup "$BIN" > "$ROOT/dev/harness/logs/desktop.log" 2>&1 &
-else
+if [ -x "$APP" ]; then RUN="$APP"; elif [ -x "$BIN" ]; then RUN="$BIN"; else
   echo "no desktop build yet: cd tauri-app && cargo tauri build --bundles app"; exit 1
 fi
-echo "desktop app opened against http://localhost:8080"
+echo "desktop app open against http://localhost:8080 (this waits until it quits)"
+"$RUN" 2>> "$ROOT/dev/harness/logs/desktop.log"
+STATUS=$?
+if [ "$STATUS" = 2 ]; then
+  echo "stopping the rig"
+  "$ROOT/dev/harness/down.sh"
+fi
+exit 0

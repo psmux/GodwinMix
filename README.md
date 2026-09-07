@@ -148,6 +148,7 @@ does not exist on one of them is a logged warning rather than a crash.
 | `POST /api/outputs` | add a destination: `{"id","uri","policy"}` |
 | `DELETE /api/outputs/{id}` | stop sending to one |
 | `POST /api/outputs/{id}/reconnect` | force a reconnect |
+| `POST /api/shutdown` | stop the mixer; what the desktop app's "Quit and stop the mixer" sends |
 | `GET /ws` | JSON events and state, plus mosaic JPEGs as binary frames |
 
 A scheduled take takes `at_running_time_ms`, armed on the pipeline clock so it
@@ -685,6 +686,12 @@ To open it:
 dev/desktop.sh              # starts the test rig if no mixer answers on 8080, then the app
 dev/desktop.sh mine.toml    # same, but the mixer runs on your own config
 ```
+
+Two ways out, in the app menu. **Quit** (or closing the window) leaves the
+mixer running: the stream does not live in this window and closing it by
+accident must not take the programme down. **Quit and stop the mixer** asks
+the mixer to shut down over `POST /api/shutdown`, then exits with status 2,
+which `dev/desktop.sh` takes as the cue to stop the rest of the rig as well.
 
 The window has nothing to show until a mixer answers on `localhost:8080`,
 which is why the script starts one first. It opens the bundle at
