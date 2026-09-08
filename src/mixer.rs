@@ -368,6 +368,18 @@ impl Mixer {
         vraw_tee.set_property("allow-not-linked", true);
 
         let venc_q = gstutil::queue_thread("venc-q")?;
+
+        // Whatever the encoder wants, from the canvas's I420. x264enc takes I420 and
+
+        // this passes it through untouched; nvh264enc takes NV12 and RGB formats
+
+        // only, and without this the programme failed to link on the first machine
+
+        // with an NVIDIA GPU. One 720p conversion per frame is the cost, and only
+
+        // where an encoder needs it.
+
+        let venc_conv = make("videoconvert", "venc-conv")?;
         let venc = make(backends.video_encode.element, "venc")?;
         crate::probe::configure_video_encoder(
             &venc,
@@ -454,7 +466,7 @@ impl Mixer {
 
         program
             .add_many([
-                &vmix, &vmix_caps, &vraw_tee, &venc_q, &venc, &vparse, &venc_tee,
+                &vmix, &vmix_caps, &vraw_tee, &venc_q, &venc_conv, &venc, &vparse, &venc_tee,
                 &pgm_v_q, &pgm_v_rate, &pgm_v_scale, &pgm_v_caps, &pgm_video_proxy,
                 &amix, &amix_caps, &level, &araw_tee, &aenc_q, &aconv, &aenc, &aparse, &aenc_tee,
                 &slate, &slate_caps, &silence, &silence_caps,
@@ -462,7 +474,7 @@ impl Mixer {
             .context("adding program elements")?;
 
         gst::Element::link_many([&vmix, &vmix_caps, &vraw_tee]).context("linking video mixer")?;
-        gst::Element::link_many([&vraw_tee, &venc_q, &venc, &vparse, &venc_tee])
+        gst::Element::link_many([&vraw_tee, &venc_q, &venc_conv, &venc, &vparse, &venc_tee])
             .context("linking video encoder")?;
         gst::Element::link_many([
             &vraw_tee, &pgm_v_q, &pgm_v_rate, &pgm_v_scale, &pgm_v_caps, &pgm_video_proxy,
