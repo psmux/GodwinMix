@@ -1,0 +1,86 @@
+# The quiz, its simulator, an RTMP server and the LiveboxMix mixer, on one
+# internal network. Only loopback ports are published; the Cloudflare tunnel on
+# the host is what reaches them from outside.
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: faithiq_user
+      POSTGRES_PASSWORD: faithiq_password123
+      POSTGRES_DB: bible_trivia_db
+    volumes:
+      - dbdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U faithiq_user -d bible_trivia_db"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  btq:
+    build: ./app
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgresql://faithiq_user:faithiq_password123@db:5432/bible_trivia_db
+      SESSION_SECRET: "${SESSION_SECRET}"
+      CLIENT_URL: https://quiz.spinber.com
+      CORS_ORIGINS: https://quiz.spinber.com
+      CHAMPIONSHIP_TIME_ZONE: Asia/Kolkata
+    volumes:
+      - uploads:/app/uploads
+    ports:
+      - "127.0.0.1:5001:5001"
+
+  simulator:
+    build: ./simulator
+    restart: unless-stopped
+    depends_on:
+      - btq
+    environment:
+      BTQ_BASE_URL: http://btq:5001
+      BTQ_ADMIN_USER: admin
+      BTQ_ADMIN_PASS: admin123
+    # Around the clock: a match is always on, the championship URL never changes.
+    # --end-live-matches: when this container restarts mid-match (a reboot, a
+    # crash) the fixture it was playing stays "live" on the server with nobody
+    # driving it, and the simulator refuses to touch a live fixture unless told
+    # to. Here it is the only thing that ever plays, so ending its own leftover
+    # is right.
+    command: ["npm", "run", "play", "--", "--forever", "--allow-remote", "--end-live-matches", "--teams", "6", "--fixtures-per-round", "3", "--advance-delay", "20000"]
+
+  # Test pages for the mixer (the three-video demo page), on the compose
+  # network as http://www/.
+  www:
+    image: nginx:alpine
+    restart: unless-stopped
+    volumes:
+      - ./www:/usr/share/nginx/html:ro
+
+  mediamtx:
+    image: bluenviron/mediamtx:latest
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:1935:1935"
+      - "127.0.0.1:8888:8888"
+
+  lbx:
+    build: ./lbx
+    restart: unless-stopped
+    depends_on:
+      - mediamtx
+      - btq
+    shm_size: "1g"
+    volumes:
+      - ./lbx/config:/etc/liveboxmix
+      - ./lbx/media:/var/lib/liveboxmix/media
+    ports:
+      - "127.0.0.1:8080:8080"   # the mixer: CEF whole page and superimpose
+      - "127.0.0.1:8081:8081"   # the wpesrc mixer
+
+volumes:
+  dbdata:
+  uploads:

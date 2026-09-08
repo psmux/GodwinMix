@@ -1,0 +1,52 @@
+# A second mixer in the same container, for the wpesrc method: no CEF sidecar
+# configured and none next to this copy of the binary, so web+ goes to wpesrc.
+# LiveboxMix on the isp server, inside the lbx container of /opt/btq.
+# Sources are added from the UI or the API and kept in liveboxmix.runtime.toml
+# next to this file. The programme goes to the mediamtx container on the same
+# network; point `outputs` at the real RTMP destination when there is one, or
+# add it while live with `POST /api/outputs`.
+
+[canvas]
+width = 1280
+height = 720
+fps = 30
+sample_rate = 48000
+channels = 2
+
+[program]
+video_bitrate_kbps = 4000
+audio_bitrate_kbps = 160
+keyframe_interval_secs = 2
+audio_ramp_ms = 180
+
+[multiview]
+enabled = true
+width = 960
+height = 540
+fps = 8
+jpeg_quality = 60
+include_program = true
+
+[security]
+allow_exec_sources = false
+
+[browser]
+# The CEF sidecar with H.264 and AAC, shipped in the image next to the mixer.
+# no sidecar: web+ pages render through GStreamer's wpesrc (WPE WebKit)
+overlay_fps = 10
+
+[media]
+dir = "/var/lib/liveboxmix/media-wpe"
+
+[control]
+bind = "0.0.0.0:8081"
+
+[hardware]
+decode = "auto"
+encode = "auto"
+
+[[outputs]]
+id = "primary"
+uri = "rtmp://mediamtx:1935/live/program2"
+policy = "own"
+queue_secs = 5.0
