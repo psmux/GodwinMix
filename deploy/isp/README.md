@@ -60,3 +60,19 @@ up -d lbx`. Sources come back from `lbx/config/liveboxmix.runtime.toml`.
   superimpose, are what the box runs, and both are verified on air there.
 * The quiz server bound to `"localhost"`, which Node 20 resolves to `::1`
   only; it binds `0.0.0.0` now (or `HOST`).
+
+## The GPU
+
+The box has an RTX 3060. `gpu-install.sh` is what put the driver on it:
+`nvidia-driver-580-server` (the production branch; the "recommended" 595-open
+is the newest desktop branch) plus the NVIDIA container toolkit, registered
+as Docker's `nvidia` runtime. Secure Boot is off on this machine, so Ubuntu's
+DKMS module loads as built; a reboot replaced nouveau. The compose file gives
+the `lbx` service every GPU with `compute,video,graphics,utility`, and the
+mixer's probe then picks `nvh264dec` and `nvh264enc` on its own
+(`hardware.decode/encode = "auto"`). The same image on a host without the
+driver runs on `avdec_h264` and `x264enc`; nothing else changes.
+
+`nvh264enc` accepts NV12 and RGB formats, not the canvas's I420, which is why
+the mixer converts into the encoder's format before it (commit 99ebabd); the
+first start on this machine failed to link the encoder without that.

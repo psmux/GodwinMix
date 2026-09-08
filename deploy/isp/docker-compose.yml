@@ -74,6 +74,20 @@ services:
       - mediamtx
       - btq
     shm_size: "1g"
+    # The GPU, when the host has the NVIDIA driver and container toolkit. The
+    # mixer's codec probe then finds nvh264enc and nvh264dec and uses them
+    # (hardware.encode/decode = "auto" in liveboxmix.toml); on a host without
+    # them the same image runs on x264 and avdec. "graphics" is what gives the
+    # browsers EGL; "video" is NVENC and NVDEC.
+    environment:
+      NVIDIA_DRIVER_CAPABILITIES: compute,video,graphics,utility
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
     volumes:
       - ./lbx/config:/etc/liveboxmix
       - ./lbx/media:/var/lib/liveboxmix/media
