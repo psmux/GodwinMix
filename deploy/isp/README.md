@@ -27,6 +27,7 @@ only; its source stays in this repository.
 | db | postgres 16 | inside the stack |
 | btq | the quiz, port 5001 | https://quiz.spinber.com |
 | simulator | plays a championship forever (`--forever --end-live-matches`) | logs: `docker compose logs -f simulator` |
+| director | follows the quiz: the live match's watch page on programme, the championship page between matches (`director/director.py`) | logs: `docker compose logs -f director` |
 | mediamtx | RTMP in | inside the stack |
 | hls | ffmpeg writing plain HLS of the programme | inside the stack |
 | player | nginx: the player page and the HLS files | **https://stream.spinber.com/watch** (HLS at `/hls/program.m3u8`, for VLC or OBS) |

@@ -60,6 +60,21 @@ services:
     volumes:
       - ./www:/usr/share/nginx/html:ro
 
+  # Keeps the programme on the live match, and on the championship page
+  # between matches. See director/director.py.
+  director:
+    image: python:3-alpine
+    restart: unless-stopped
+    depends_on:
+      - btq
+      - lbx
+    environment:
+      QUIZ_URL: http://btq:5001
+      MIXER_URL: http://lbx:8080
+    volumes:
+      - ./director/director.py:/director.py:ro
+    command: ["python3", "-u", "/director.py"]
+
   # Plain HLS of the programme, as files. mediamtx's own HLS gates each media
   # playlist behind a per-viewer session cookie set on a redirect, and through
   # Cloudflare and a proxy that cookie never came back: every media playlist
