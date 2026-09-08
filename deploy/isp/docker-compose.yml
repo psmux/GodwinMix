@@ -60,9 +60,55 @@ services:
     volumes:
       - ./www:/usr/share/nginx/html:ro
 
+  # Plain HLS of the programme, as files. mediamtx's own HLS gates each media
+  # playlist behind a per-viewer session cookie set on a redirect, and through
+  # Cloudflare and a proxy that cookie never came back: every media playlist
+  # answered 401. ffmpeg pulls the programme over RTMP and writes an ordinary
+  # playlist and MPEG-TS segments; nothing to negotiate, nothing per viewer.
+  hls:
+    image: linuxserver/ffmpeg:latest
+    restart: unless-stopped
+    depends_on:
+      - mediamtx
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        while true; do
+          ffmpeg -loglevel warning -rw_timeout 10000000 -i rtmp://mediamtx:1935/live/program \
+            -c copy -f hls -hls_time 2 -hls_list_size 6 \
+            -hls_flags delete_segments+independent_segments+omit_endlist+temp_file \
+            -hls_segment_filename /hls/program_%06d.ts /hls/program.m3u8
+          rm -f /hls/program.m3u8 /hls/program_*.ts
+          sleep 2
+        done
+    volumes:
+      - hls:/hls
+
+  # The public player for the programme: https://stream.spinber.com/
+  player:
+    image: nginx:alpine
+    restart: unless-stopped
+    depends_on:
+      - hls
+    volumes:
+      - ./player/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./player/index.html:/usr/share/nginx/html/index.html:ro
+      - ./player/hls-1.5.min.js:/usr/share/nginx/html/hls-1.5.min.js:ro
+      - hls:/usr/share/nginx/html/hls:ro
+    ports:
+      - "127.0.0.1:8889:80"
+
   mediamtx:
     image: bluenviron/mediamtx:latest
     restart: unless-stopped
+    environment:
+      # Plain fMP4 HLS, not low-latency: LL-HLS holds playlist requests open,
+      # which a proxy in front (Cloudflare) does not carry well. Remux from
+      # the moment the stream arrives, so the first viewer does not wait.
+      MTX_HLSVARIANT: fmp4
+      MTX_HLSALWAYSREMUX: "yes"
+      MTX_HLSSEGMENTDURATION: 2s
+      MTX_HLSSEGMENTCOUNT: "7"
     ports:
       - "127.0.0.1:1935:1935"
       - "127.0.0.1:8888:8888"
@@ -98,3 +144,4 @@ services:
 volumes:
   dbdata:
   uploads:
+  hls:

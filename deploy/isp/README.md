@@ -27,7 +27,9 @@ only; its source stays in this repository.
 | db | postgres 16 | inside the stack |
 | btq | the quiz, port 5001 | https://quiz.spinber.com |
 | simulator | plays a championship forever (`--forever --end-live-matches`) | logs: `docker compose logs -f simulator` |
-| mediamtx | RTMP in, HLS out | programme at https://stream.spinber.com/live/program/ |
+| mediamtx | RTMP in | inside the stack |
+| hls | ffmpeg writing plain HLS of the programme | inside the stack |
+| player | nginx: the player page and the HLS files | **https://stream.spinber.com/index.html** (HLS at `/hls/program.m3u8`, for VLC or OBS) |
 | lbx | LiveboxMix, `:8080` mixer, `:8081` wpesrc mixer, loopback only | `ssh -L 8080:localhost:8080 isp`, then http://localhost:8080 |
 | www | nginx with the demo pages | http://www/demo.html from inside the stack |
 
@@ -76,3 +78,24 @@ driver runs on `avdec_h264` and `x264enc`; nothing else changes.
 `nvh264enc` accepts NV12 and RGB formats, not the canvas's I420, which is why
 the mixer converts into the encoder's format before it (commit 99ebabd); the
 first start on this machine failed to link the encoder without that.
+
+## Watching the programme through Cloudflare
+
+Three things stood between mediamtx's built-in HLS page and a viewer behind
+Cloudflare, each found by loading the page in a browser rather than with curl:
+
+* Cloudflare's Rocket Loader rewrote the page's inline script and the player
+  never requested a playlist. Our page marks its scripts `data-cfasync="false"`.
+* The zone caches generously and mediamtx sent `max-age=1800` on a live
+  playlist. Playlists are served `no-store` and the player adds a unique query
+  to every playlist request; segments are named uniquely and may be cached.
+* mediamtx gates every media playlist behind a per-viewer session cookie set on
+  a redirect, and through Cloudflare that cookie did not come back: 401 on
+  every media playlist. The `hls` service writes plain HLS files with ffmpeg
+  instead; nothing per viewer, nothing to negotiate.
+
+hls.js 1.7 (as bundled by mediamtx) sat idle on this stream; the page ships
+hls.js 1.5.20. Verified by rendering the public page in the server's own
+Chromium (the CEF sidecar) and measuring the frames. Chrome does not start media
+in a hidden tab, so a background tab shows a spinner until it is brought to the
+front.

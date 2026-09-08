@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>LiveboxMix programme</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #000; color: #ddd; font: 14px system-ui, sans-serif }
+  video { width: 100vw; height: 100vh; object-fit: contain; background: #000; display: block }
+  #status { position: fixed; left: 12px; bottom: 12px; padding: 4px 8px; background: rgba(0,0,0,.6); border-radius: 4px }
+</style>
+</head>
+<body>
+<video id="v" controls autoplay muted playsinline></video>
+<div id="status">connecting</div>
+<script data-cfasync="false" src="/hls-1.5.min.js"></script>
+<script data-cfasync="false">
+  var v = document.getElementById("v"), s = document.getElementById("status");
+  var src = "/hls/program.m3u8";
+  function say(t) { s.textContent = t; }
+  function start() {
+    if (!Hls.isSupported()) {
+      v.src = src; v.addEventListener("loadedmetadata", function () { say("live"); }); return;
+    }
+    var h = new Hls({
+      debug: location.search.indexOf("debug") !== -1,
+      lowLatencyMode: false, liveSyncDurationCount: 3, enableWorker: false,
+      // hls.js 1.7 as bundled by mediamtx sat IDLE with its interstitials
+      // controller claiming to have started; off, it loads fragments.
+      enableInterstitialPlayback: false,
+      // Cloudflare in front caches by URL and this zone caches everything
+      // for a while regardless of what the origin says. A live playlist
+      // fetched from a cache is a stream that never advances, so every
+      // playlist request gets a URL of its own. Segments are named uniquely
+      // by mediamtx and are welcome to be cached.
+      xhrSetup: function (xhr, url) {
+        if (url.indexOf(".m3u8") !== -1) {
+          xhr.open("GET", url + (url.indexOf("?") === -1 ? "?" : "&") + "t=" + Date.now(), true);
+        }
+      }
+    });
+    h.on(Hls.Events.MANIFEST_PARSED, function () { say("live"); v.play().catch(function () {}); });
+    h.on(Hls.Events.ERROR, function (e, d) {
+      say((d.fatal ? "error: " : "recovering: ") + d.details);
+      if (d.fatal) { setTimeout(function () { h.destroy(); start(); }, 3000); }
+    });
+    window.hls = h;
+    h.loadSource(src); h.attachMedia(v);
+  }
+  start();
+  v.addEventListener("playing", function () { say("live (click for sound)"); });
+  v.addEventListener("volumechange", function () { if (!v.muted) say("live"); });
+</script>
+</body>
+</html>
