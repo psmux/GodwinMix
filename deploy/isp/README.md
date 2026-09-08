@@ -48,7 +48,15 @@ up -d lbx`. Sources come back from `lbx/config/liveboxmix.runtime.toml`.
   message and Chromium reports "Missing X server or $DISPLAY".
 * WPE's web process sandbox is bubblewrap, which cannot set up its namespaces
   in an unprivileged container: `WEBKIT_DISABLE_SANDBOX_THIS_IS_DANGEROUS=1`.
-* wpesrc needs an EGL context and the mixer's GL elements create theirs first,
-  as GLX under X11: `GST_GL_PLATFORM=egl` for the wpesrc mixer.
+* wpesrc does not work in this container, and it is not a configuration
+  matter. Under GLX (the default on X11) the mixer's GL context is not EGL and
+  wpesrc fails "EGL_KHR_image_base is not supported"; pinned to EGL, in every
+  window, API and Mesa driver variant tried, the process dies in
+  WPEBackend-fdo's Wayland dispatch calling a null handler (backtrace in the
+  commit that added this line). That points at the trixie packaging of
+  WPEBackend-fdo against wpewebkit rather than at anything this stack does.
+  The wpesrc mixer still starts on :8081 so the arrangement is in place; a
+  web source added to it fails. The two CEF methods, whole page and
+  superimpose, are what the box runs, and both are verified on air there.
 * The quiz server bound to `"localhost"`, which Node 20 resolves to `::1`
   only; it binds `0.0.0.0` now (or `HOST`).
