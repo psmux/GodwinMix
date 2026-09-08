@@ -12,10 +12,19 @@
 </head>
 <body>
 <video id="v" controls autoplay muted playsinline></video>
-<div id="status">connecting</div>
-<script data-cfasync="false" src="/hls-1.5.min.js"></script>
+<div id="status">connecting to the stream</div>
+<script data-cfasync="false">
+  // Whatever goes wrong is written on the page. A player that says
+  // "connecting" for ever tells nobody anything.
+  window.addEventListener("error", function (e) {
+    var el = document.getElementById("status");
+    if (el) el.textContent = "error: " + (e.message || (e.target && e.target.src ? "could not load " + e.target.src : "unknown"));
+  }, true);
+</script>
+<script data-cfasync="false" src="/hls-1.5.min.js?v=20260909"></script>
 <script data-cfasync="false">
   var v = document.getElementById("v"), s = document.getElementById("status");
+  if (typeof Hls === "undefined") { s.textContent = "error: the player library did not load; reload the page"; }
   var src = "/hls/program.m3u8";
   function say(t) { s.textContent = t; }
   function start() {

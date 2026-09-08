@@ -29,7 +29,7 @@ only; its source stays in this repository.
 | simulator | plays a championship forever (`--forever --end-live-matches`) | logs: `docker compose logs -f simulator` |
 | mediamtx | RTMP in | inside the stack |
 | hls | ffmpeg writing plain HLS of the programme | inside the stack |
-| player | nginx: the player page and the HLS files | **https://stream.spinber.com/index.html** (HLS at `/hls/program.m3u8`, for VLC or OBS) |
+| player | nginx: the player page and the HLS files | **https://stream.spinber.com/watch** (HLS at `/hls/program.m3u8`, for VLC or OBS) |
 | lbx | LiveboxMix, `:8080` mixer, `:8081` wpesrc mixer, loopback only | `ssh -L 8080:localhost:8080 isp`, then http://localhost:8080 |
 | www | nginx with the demo pages | http://www/demo.html from inside the stack |
 
