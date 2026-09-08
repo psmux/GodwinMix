@@ -60,10 +60,19 @@ jobs:
       - name: Test
         run: cargo test --release --locked
 
-      - name: Sidecar compiles (Windows and Linux; macOS is bundled by dev/mac-bundle.sh)
-        if: runner.os != 'macOS'
+      - name: Sidecar compiles (Windows; macOS is bundled by dev/mac-bundle.sh)
+        if: runner.os == 'Windows'
         working-directory: browser
         run: cargo check --release
+
+      # The Linux sidecar is what production runs, so it is built, not only
+      # checked, and shipped in the artifact. It links libcef.so by name with
+      # an $ORIGIN rpath; the CEF distribution with codecs is placed next to it
+      # on the server (see README, Codecs).
+      - name: Sidecar (Linux)
+        if: runner.os == 'Linux'
+        working-directory: browser
+        run: cargo build --release
 
       - name: Desktop app dependencies (Linux)
         if: runner.os == 'Linux'
@@ -80,6 +89,7 @@ jobs:
           mkdir -p dist
           cp target/release/liveboxmix* dist/ 2>/dev/null || true
           cp tauri-app/target/release/liveboxmix-desktop* dist/ 2>/dev/null || true
+          cp browser/target/release/liveboxmix-browser dist/ 2>/dev/null || true
           rm -f dist/*.d dist/*.pdb
           ls -la dist
 
