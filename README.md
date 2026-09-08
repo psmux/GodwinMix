@@ -1,5 +1,7 @@
 # LiveboxMix
 
+[![build](https://github.com/psmux/LiveboxMix/actions/workflows/build.yml/badge.svg)](https://github.com/psmux/LiveboxMix/actions/workflows/build.yml)
+
 A live RTMP video mixer. Several RTMP sources come in, one of them is on
 program at a time, and the program feed goes out to one or more RTMP
 destinations without ever stopping. Switching source is instant and does not
