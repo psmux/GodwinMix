@@ -10,7 +10,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     gstreamer1.0-plugins-bad gstreamer1.0-plugins-ugly gstreamer1.0-libav \
     gstreamer1.0-gl gstreamer1.0-x gstreamer1.0-wpe gstreamer1.0-alsa \
     xvfb xauth xfonts-base ca-certificates curl \
-    fonts-liberation fonts-dejavu-core fonts-noto-core \
+    fonts-liberation fonts-dejavu-core fonts-noto-core fonts-noto-color-emoji \
     libgl1-mesa-dri libegl1 libgles2 libgl1 \
     libnss3 libnspr4 libatk1.0-0t64 libatk-bridge2.0-0t64 libatspi2.0-0t64 libcups2t64 \
     libdrm2 libxkbcommon0 libxcomposite1 libxdamage1 libxfixes3 libxrandr2 libgbm1 \
