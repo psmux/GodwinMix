@@ -7,6 +7,7 @@
 
 use anyhow::{bail, Context, Result};
 use clap::Subcommand;
+use reqwest::header::{HeaderMap, HeaderValue, AUTHORIZATION};
 use serde_json::json;
 
 #[derive(Subcommand, Debug)]
@@ -45,6 +46,21 @@ pub enum Ctl {
     EndAd,
     /// List the clips available in the media library.
     Media,
+    /// Put a web page on air in one go: add it as a source, add the RTMP
+    /// destination if given, and take it to programme once it renders.
+    Golive {
+        /// The page to put on air.
+        url: String,
+        /// RTMP destination. Added as an output unless one already sends there.
+        #[arg(long)]
+        rtmp: Option<String>,
+        /// "auto" or "off". See `source add --superimpose`.
+        #[arg(long, default_value = "auto")]
+        superimpose: String,
+        /// Source id. Derived from the host when omitted.
+        #[arg(long)]
+        id: Option<String>,
+    },
 }
 
 #[derive(Subcommand, Debug)]
@@ -96,11 +112,12 @@ pub enum OutputCmd {
     },
 }
 
-pub async fn run(base: &str, cmd: Ctl) -> Result<()> {
-    let base = base.trim_end_matches('/');
+pub async fn run(base: &str, token: Option<&str>, cmd: Ctl) -> Result<()> {
+    let api = Api::new(base, token)?;
+    let api = &api;
     match cmd {
         Ctl::Status { json } => {
-            let body: serde_json::Value = get(base, "/api/status").await?;
+            let body: serde_json::Value = get(api, "/api/status").await?;
             if json {
                 println!("{}", serde_json::to_string_pretty(&body)?);
             } else {
@@ -108,11 +125,11 @@ pub async fn run(base: &str, cmd: Ctl) -> Result<()> {
             }
         }
         Ctl::Take { source, at } => {
-            post(base, "/api/take", json!({ "source": source, "at_running_time_ms": at })).await?;
+            post(api, "/api/take", json!({ "source": source, "at_running_time_ms": at })).await?;
             println!("on program: {}", source.as_deref().unwrap_or("black"));
         }
         Ctl::Source(SourceCmd::List) => {
-            let body: serde_json::Value = get(base, "/api/status").await?;
+            let body: serde_json::Value = get(api, "/api/status").await?;
             for s in body["sources"].as_array().into_iter().flatten() {
                 println!(
                     "{:<10} {:<10} {}{}",
@@ -128,15 +145,15 @@ pub async fn run(base: &str, cmd: Ctl) -> Result<()> {
             let kind = web.then_some("web");
             let body =
                 json!({ "id": id, "uri": uri, "name": name, "kind": kind, "superimpose": superimpose });
-            post(base, "/api/sources", body).await?;
+            post(api, "/api/sources", body).await?;
             println!("added source {}", id.as_deref().unwrap_or("(id derived from the URL)"));
         }
         Ctl::Source(SourceCmd::Remove { id }) => {
-            delete(base, &format!("/api/sources/{id}")).await?;
+            delete(api, &format!("/api/sources/{id}")).await?;
             println!("removed source {id}");
         }
         Ctl::Output(OutputCmd::List) => {
-            let body: serde_json::Value = get(base, "/api/outputs").await?;
+            let body: serde_json::Value = get(api, "/api/outputs").await?;
             for o in body.as_array().into_iter().flatten() {
                 println!(
                     "{:<12} {:<13} {} reconnects, {:.1}s buffered",
@@ -148,20 +165,20 @@ pub async fn run(base: &str, cmd: Ctl) -> Result<()> {
             }
         }
         Ctl::Output(OutputCmd::Add { id, uri, policy }) => {
-            post(base, "/api/outputs", json!({ "id": id, "uri": uri, "policy": policy })).await?;
+            post(api, "/api/outputs", json!({ "id": id, "uri": uri, "policy": policy })).await?;
             println!("added output {id}");
         }
         Ctl::Output(OutputCmd::Remove { id }) => {
-            delete(base, &format!("/api/outputs/{id}")).await?;
+            delete(api, &format!("/api/outputs/{id}")).await?;
             println!("removed output {id}");
         }
         Ctl::Output(OutputCmd::Reconnect { id }) => {
-            post(base, &format!("/api/outputs/{id}/reconnect"), json!({})).await?;
+            post(api, &format!("/api/outputs/{id}/reconnect"), json!({})).await?;
             println!("reconnecting output {id}");
         }
         Ctl::Ad { uri, at, return_to } => {
             post(
-                base,
+                api,
                 "/api/adbreak",
                 json!({ "uri": uri, "at_running_time_ms": at, "return_to": return_to }),
             )
@@ -169,11 +186,24 @@ pub async fn run(base: &str, cmd: Ctl) -> Result<()> {
             println!("ad break: {uri}");
         }
         Ctl::EndAd => {
-            post(base, "/api/adbreak/end", json!({})).await?;
+            post(api, "/api/adbreak/end", json!({})).await?;
             println!("ad break ended");
         }
+        Ctl::Golive { url, rtmp, superimpose, id } => {
+            let body = json!({ "url": url, "rtmp": rtmp, "superimpose": superimpose, "id": id });
+            let reply: serde_json::Value = post_json(api, "/api/golive", body).await?;
+            println!(
+                "source {} is {}; it goes on programme as soon as it is live{}",
+                reply["source"].as_str().unwrap_or("?"),
+                reply["state"].as_str().unwrap_or("connecting"),
+                match reply["output"].as_str() {
+                    Some(o) => format!(", sending to output {o}"),
+                    None => String::new(),
+                }
+            );
+        }
         Ctl::Media => {
-            let body: serde_json::Value = get(base, "/api/media").await?;
+            let body: serde_json::Value = get(api, "/api/media").await?;
             if let Some(err) = body["error"].as_str() {
                 bail!("{}: {err}", body["dir"].as_str().unwrap_or("library"));
             }
@@ -233,30 +263,61 @@ fn print_status(b: &serde_json::Value) {
     }
 }
 
-async fn get<T: serde::de::DeserializeOwned>(base: &str, path: &str) -> Result<T> {
-    let r = reqwest::get(format!("{base}{path}"))
-        .await
-        .with_context(|| format!("GET {base}{path}"))?;
+/// Where the mixer is and how to be let in. The token, when there is one,
+/// rides as a default header so no call site can forget it.
+struct Api {
+    base: String,
+    client: reqwest::Client,
+}
+
+impl Api {
+    fn new(base: &str, token: Option<&str>) -> Result<Self> {
+        let mut headers = HeaderMap::new();
+        if let Some(t) = token.map(str::trim).filter(|t| !t.is_empty()) {
+            let mut v = HeaderValue::from_str(&format!("Bearer {t}"))
+                .context("the token has characters a header cannot carry")?;
+            v.set_sensitive(true);
+            headers.insert(AUTHORIZATION, v);
+        }
+        let client = reqwest::Client::builder()
+            .default_headers(headers)
+            .build()
+            .context("building the HTTP client")?;
+        Ok(Self { base: base.trim_end_matches('/').to_string(), client })
+    }
+
+    fn url(&self, path: &str) -> String {
+        format!("{}{path}", self.base)
+    }
+}
+
+async fn get<T: serde::de::DeserializeOwned>(api: &Api, path: &str) -> Result<T> {
+    let url = api.url(path);
+    let r = api.client.get(&url).send().await.with_context(|| format!("GET {url}"))?;
     check(r).await?.json().await.context("decoding response")
 }
 
-async fn post(base: &str, path: &str, body: serde_json::Value) -> Result<()> {
-    let r = reqwest::Client::new()
-        .post(format!("{base}{path}"))
-        .json(&body)
-        .send()
-        .await
-        .with_context(|| format!("POST {base}{path}"))?;
+async fn post(api: &Api, path: &str, body: serde_json::Value) -> Result<()> {
+    let url = api.url(path);
+    let r = api.client.post(&url).json(&body).send().await.with_context(|| format!("POST {url}"))?;
     check(r).await?;
     Ok(())
 }
 
-async fn delete(base: &str, path: &str) -> Result<()> {
-    let r = reqwest::Client::new()
-        .delete(format!("{base}{path}"))
-        .send()
-        .await
-        .with_context(|| format!("DELETE {base}{path}"))?;
+/// A POST whose answer is worth reading.
+async fn post_json<T: serde::de::DeserializeOwned>(
+    api: &Api,
+    path: &str,
+    body: serde_json::Value,
+) -> Result<T> {
+    let url = api.url(path);
+    let r = api.client.post(&url).json(&body).send().await.with_context(|| format!("POST {url}"))?;
+    check(r).await?.json().await.context("decoding response")
+}
+
+async fn delete(api: &Api, path: &str) -> Result<()> {
+    let url = api.url(path);
+    let r = api.client.delete(&url).send().await.with_context(|| format!("DELETE {url}"))?;
     check(r).await?;
     Ok(())
 }

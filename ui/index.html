@@ -262,11 +262,50 @@ const $ = (id) => document.getElementById(id);
 let status = null;
 let objectUrl = null;
 
+// --- token -----------------------------------------------------------------
+// A mixer with a token configured answers 401 until it gets one. It is asked
+// for once and kept in this browser; fetches carry it as a header, the socket
+// in its query because a WebSocket has nowhere else to put it. Without a token
+// configured none of this is ever exercised.
+let token = null;
+try { token = localStorage.getItem("lbx.token"); } catch {}
+let tokenAsked = false;
+
+function askToken() {
+  // Once per page load. The status poll runs every two seconds and a refused
+  // prompt must not turn into a dialog every two seconds.
+  if (tokenAsked) return false;
+  tokenAsked = true;
+  const t = window.prompt("This mixer needs a token.");
+  if (!t || !t.trim()) return false;
+  token = t.trim();
+  try { localStorage.setItem("lbx.token", token); } catch {}
+  return true;
+}
+
+async function api(path, init = {}) {
+  const send = () => {
+    const headers = Object.assign({}, init.headers || {});
+    if (token) headers["Authorization"] = `Bearer ${token}`;
+    return fetch(path, Object.assign({}, init, { headers }));
+  };
+  let r = await send();
+  if (r.status === 401 && askToken()) r = await send();
+  if (r.status === 401 && token) {
+    // A stored token that no longer works is worse than none: forget it so a
+    // reload asks again instead of failing quietly forever.
+    token = null;
+    try { localStorage.removeItem("lbx.token"); } catch {}
+  }
+  return r;
+}
+
 // --- transport -------------------------------------------------------------
 // One socket carries both state (text) and mosaic frames (binary).
 function connect() {
   const proto = location.protocol === "https:" ? "wss:" : "ws:";
-  const ws = new WebSocket(`${proto}//${location.host}/ws`);
+  const query = token ? `?token=${encodeURIComponent(token)}` : "";
+  const ws = new WebSocket(`${proto}//${location.host}/ws${query}`);
   ws.binaryType = "blob";
 
   ws.onopen = () => { $("offline").style.display = "none"; };
@@ -315,7 +354,7 @@ function onEvent(ev) {
 // --- actions ---------------------------------------------------------------
 async function take(source) {
   try {
-    const r = await fetch("/api/take", {
+    const r = await api("/api/take", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ source }),
@@ -325,14 +364,14 @@ async function take(source) {
 }
 
 async function reconnect(id) {
-  await fetch(`/api/outputs/${encodeURIComponent(id)}/reconnect`, { method: "POST" });
+  await api(`/api/outputs/${encodeURIComponent(id)}/reconnect`, { method: "POST" });
 }
 
 $("cut").onclick = () => take(null);
 
 async function post(path, body) {
   try {
-    const r = await fetch(path, {
+    const r = await api(path, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: body === undefined ? undefined : JSON.stringify(body),
@@ -347,7 +386,7 @@ let selectedClip = null;
 
 async function loadMedia() {
   try {
-    const r = await fetch("/api/media");
+    const r = await api("/api/media");
     if (!r.ok) { alert_("error", await r.text()); return; }
     media = await r.json();
     renderMedia();
@@ -522,7 +561,7 @@ function renderOutputs() {
     rm.textContent = "Remove";
     rm.onclick = async () => {
       if (!confirm(`Stop sending to "${o.id}"?`)) return;
-      const r = await fetch(`/api/outputs/${encodeURIComponent(o.id)}`, { method: "DELETE" });
+      const r = await api(`/api/outputs/${encodeURIComponent(o.id)}`, { method: "DELETE" });
       if (!r.ok) alert_("error", await r.text());
     };
     row.append(rc, rm);
@@ -572,7 +611,7 @@ function renderSources() {
     row.querySelector(".del").onclick = async (e) => {
       e.stopPropagation();
       if (!confirm(`Remove source "${id}"?`)) return;
-      const r = await fetch(`/api/sources/${encodeURIComponent(id)}`, { method: "DELETE" });
+      const r = await api(`/api/sources/${encodeURIComponent(id)}`, { method: "DELETE" });
       if (!r.ok) alert_("error", await r.text());
     };
   });
@@ -694,13 +733,16 @@ function escapeHtml(s) {
     ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 }
 
-connect();
-setInterval(async () => {
+async function refreshStatus() {
   // The event stream carries changes; this refreshes the slowly-moving numbers
   // (uptime, queue depth) and resynchronises if an event was ever missed.
   try {
-    const r = await fetch("/api/status");
+    const r = await api("/api/status");
     if (r.ok) { status = await r.json(); render(); }
   } catch {}
-}, 2000);
+}
+// Status first, so a mixer that wants a token asks for it before the socket
+// tries without one; the socket reconnects on its own once the token is in.
+refreshStatus().then(connect);
+setInterval(refreshStatus, 2000);
 </script>

@@ -115,11 +115,18 @@ pub struct ControlConfig {
     pub bind: String,
     /// Directory of static UI assets. Falls back to the embedded page.
     pub ui_dir: Option<String>,
+    /// Bearer token every `/api/*` request and the WebSocket must carry.
+    /// Unset means the control port is open to whoever can reach it, which is
+    /// how it has always worked and is fine behind a firewall. The
+    /// `LIVEBOXMIX_TOKEN` environment variable overrides this, so a deployment
+    /// can keep the secret out of the config file. See `Config::token`.
+    #[serde(default)]
+    pub token: Option<String>,
 }
 
 impl Default for ControlConfig {
     fn default() -> Self {
-        Self { bind: "0.0.0.0:8080".into(), ui_dir: None }
+        Self { bind: "0.0.0.0:8080".into(), ui_dir: None, token: None }
     }
 }
 
@@ -436,6 +443,20 @@ impl Config {
         let mut name = config.file_stem().unwrap_or_default().to_os_string();
         name.push(".runtime.toml");
         config.with_file_name(name)
+    }
+
+    /// The control token in force: the environment first, then the config
+    /// file. Empty strings count as unset, so `LIVEBOXMIX_TOKEN=` in a unit
+    /// file does not lock everyone out with a token nobody can type.
+    pub fn token(&self) -> Option<String> {
+        let present = |t: String| {
+            let t = t.trim().to_string();
+            (!t.is_empty()).then_some(t)
+        };
+        std::env::var("LIVEBOXMIX_TOKEN")
+            .ok()
+            .and_then(present)
+            .or_else(|| self.control.token.clone().and_then(present))
     }
 
     pub fn load(path: &Path) -> Result<Self> {
