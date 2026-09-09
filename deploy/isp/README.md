@@ -1,8 +1,9 @@
 # The isp server: quiz, simulator and mixer in one compose stack
 
 The step by step installation checklist for the whole thing (all three
-projects, the tunnel, the binaries, the first start) is `docs/server-setup.md`
-in the BTQ-Simulator repository. This file is the reasoning behind the pieces.
+projects, the tunnel, the binaries, the first start) is kept with the server
+administrator's notes, outside the repositories. This file is the reasoning
+behind the pieces.
 
 What runs on the customer's Ubuntu 24.04 box (`ssh isp`, through its
 Cloudflare tunnel), under `/opt/btq`. LiveboxMix is present there as binaries
