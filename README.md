@@ -181,10 +181,19 @@ does not exist on one of them is a logged warning rather than a crash.
 | `DELETE /api/outputs/{id}` | stop sending to one |
 | `POST /api/outputs/{id}/reconnect` | force a reconnect |
 | `POST /api/shutdown` | stop the mixer; what the desktop app's "Quit and stop the mixer" sends |
+| `GET /api/agent/state` | the state a language model needs, compact: programme, sources with motion and audio, outputs, snapshot URLs |
+| `GET /api/snapshot/sheet.jpg` | every source and the programme in one mosaic JPEG; `?width=N` scales it |
+| `GET /api/snapshot/program.jpg` | the programme alone |
+| `GET /api/snapshot/{source_id}.jpg` | one source alone |
+| `POST /api/golive` | `{"url", "rtmp", "superimpose", "id"}`: add a page as a source, add the destination, take it once live; answers 202 |
 | `GET /ws` | JSON events and state, plus mosaic JPEGs as binary frames |
 
 A scheduled take takes `at_running_time_ms`, armed on the pipeline clock so it
 lands on the intended frame rather than whenever the request happened to arrive.
+
+With `[control] token` set (or `LIVEBOXMIX_TOKEN` in the environment) every
+request carries `Authorization: Bearer <token>`. `GET` requests and the
+WebSocket also accept `?token=`, so an `<img>` tag can fetch a snapshot.
 
 ## Sources
 
@@ -707,7 +716,8 @@ one held paused for six seconds rolled to black for its whole duration.
 
 The daemon is headless and controlled entirely over HTTP. `liveboxmix ctl` is a
 thin client for that same API, so scripting it does not mean assembling JSON by
-hand. Point it elsewhere with `--url` or `LIVEBOXMIX_URL`.
+hand. Point it elsewhere with `--url` or `LIVEBOXMIX_URL`, and pass `--token`
+when the mixer has one.
 
 ```sh
 liveboxmix ctl status
@@ -718,6 +728,18 @@ liveboxmix ctl output add youtube rtmp://a.rtmp.youtube.com/live2/KEY --policy c
 liveboxmix ctl output list
 liveboxmix ctl ad /srv/ads/spot.mp4 --return-to cam1
 liveboxmix ctl media
+liveboxmix ctl golive https://example.com/event/42 --rtmp rtmp://a.rtmp.youtube.com/live2/KEY --superimpose auto
+```
+
+`golive` is `POST /api/golive`: the page becomes a web source, the destination
+is added if given, and the mixer takes the page to programme by itself once it
+is live. It is the call a customer's backend makes behind a "Go Live" button.
+
+`liveboxmix mcp` is the same client dressed as an MCP server over stdio, for a
+model rather than a shell:
+
+```sh
+liveboxmix mcp --url http://127.0.0.1:8080 --token TOKEN
 ```
 
 Requests answer with the mixer's own reason for refusing rather than a bare
@@ -797,6 +819,37 @@ which is why the script starts one first. It opens the bundle at
 `tauri-app/target/release/bundle/macos/LiveboxMix.app` when one has been
 built (`cd tauri-app && cargo tauri build --bundles app`), else the bare
 binary from `cargo build --release` in `tauri-app/`.
+
+## For AI agents
+
+Nothing in the API assumes a human operator. Three endpoints exist for the case
+where the operator is a language model. `GET /api/agent/state` is the state cut
+down to what a director needs: what is on programme, every source with its
+state, whether it has audio, how long since its last frame and a `motion` number
+from 0.0 to 1.0 for how much its picture is changing, plus the outputs.
+`GET /api/snapshot/sheet.jpg` is every source and the programme in one labelled
+mosaic, so a model compares them in a single image. `POST /api/take` is the
+take the UI makes.
+
+The loop: read the state, look at the sheet only when the numbers do not settle
+it (a scoreboard's `motion` spiking, a source going quiet), decide, take if the
+answer differs from what is on air, wait 1 to 3 seconds. A take lands on the
+next frame; a new web source needs 5 to 20 seconds, a superimposed one a few
+more for the probe. Never take a source that is not `live`, poll faster than
+the frame rate, or remove the source on programme without taking another first.
+
+`liveboxmix mcp` serves the same API as MCP tools over stdio, so Claude Code
+gets the mixer with one line:
+
+```sh
+claude mcp add liveboxmix -- liveboxmix mcp --url http://HOST:8080 --token TOKEN
+```
+
+`POST /api/golive` is for a customer's "Go Live" button: their backend sends
+the URL and destination with the token, gets a 202, and the mixer puts the page
+on programme once it is live. `docs/agents.md` is the playbook, and
+`examples/ai-director.py` is a working director on the `anthropic` SDK that
+runs the loop above against a Claude model.
 
 ## Known limitations
 
