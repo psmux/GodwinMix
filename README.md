@@ -730,6 +730,45 @@ Error: 400 Bad Request: source cam1 already exists
 
 Nothing here needs the desktop app; it is only a window onto the same API.
 
+### Token
+
+Set `[control] token = "..."` in the config, or `LIVEBOXMIX_TOKEN` in the
+environment, and every `/api/*` route and `/ws` demand
+`Authorization: Bearer <token>`. A GET, which is what a WebSocket upgrade is,
+may send `?token=<token>` instead, because a browser cannot put a header on a
+socket. Missing or wrong is a 401 with a one line JSON body. With no token
+configured nothing changes and the port is open, as it always was.
+
+The UI at `/` asks for the token once when it meets a 401 and keeps it in the
+browser's localStorage. `ctl` takes `--token` or reads `LIVEBOXMIX_TOKEN`:
+
+```sh
+LIVEBOXMIX_TOKEN=change-me liveboxmix ctl status
+curl -H 'Authorization: Bearer change-me' http://mixer:8080/api/status
+```
+
+### Go live in one call
+
+`POST /api/golive` is the "Go Live" button: a customer's page asks their
+backend, the backend makes one request, and the page is on air as soon as it
+renders. It adds the URL as a web source (id from the host unless `id` is
+given; a source that already shows that URL is reused), adds an output for
+`rtmp` unless one already sends there, and takes the source to programme the
+moment it is live, waiting up to a minute before it gives up with a log line.
+The reply is an immediate 202.
+
+```sh
+liveboxmix ctl golive https://example.com/live-game --rtmp rtmp://a.rtmp.youtube.com/live2/KEY
+curl -X POST localhost:8080/api/golive -H 'content-type: application/json' \
+  -H 'Authorization: Bearer change-me' \
+  -d '{"url": "https://example.com/live-game", "rtmp": "rtmp://a.rtmp.youtube.com/live2/KEY"}'
+# {"source":"example-com","output":"a-rtmp-youtube-com","state":"connecting"}
+```
+
+`superimpose` defaults to `"auto"` here, the opposite of `/api/sources`,
+because the caller is a machine and the saving is a CPU core. Pass `"off"`
+to render the whole page in the browser.
+
 ## Desktop app
 
 The UI is a plain web app served by the binary, so a Tauri shell is a webview

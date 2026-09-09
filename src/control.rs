@@ -18,17 +18,20 @@ use crate::config::{OutputConfig, SourceConfig};
 use crate::media::{MediaLibrary, MediaListing};
 use crate::mixer::{Command, MixerHandle};
 use crate::snapshot::{self, Pick, Tracker};
-use crate::state::{Event, MixerStatus};
+use crate::state::{Event, MixerStatus, SourceState};
 use anyhow::Result;
 use axum::extract::ws::{Message, WebSocket, WebSocketUpgrade};
-use axum::extract::{FromRef, Path, Query, State};
-use axum::http::{header, StatusCode};
+use axum::extract::{FromRef, Path, Query, Request, State};
+use axum::http::{header, HeaderMap, Method, StatusCode, Uri};
+use axum::middleware::{self, Next};
 use axum::response::{Html, IntoResponse, Response};
 use axum::routing::{delete, get, post};
 use axum::{Json, Router};
 use futures_util::{sink::SinkExt, stream::StreamExt};
 use serde::Deserialize;
+use serde_json::json;
 use std::sync::Arc;
+use std::time::Duration;
 use tokio::sync::broadcast;
 use tower_http::cors::CorsLayer;
 use tracing::{debug, info, warn};
@@ -45,6 +48,10 @@ pub struct AppState {
     /// Rung by `POST /api/shutdown`. `main` waits on it alongside Ctrl-C and
     /// takes the whole process down the same way for either.
     pub quit: Arc<tokio::sync::Notify>,
+    /// Bearer token the API and the WebSocket demand. `None` leaves them open,
+    /// which is the original behaviour and right for a mixer that only
+    /// listens on a LAN nobody else is on.
+    pub token: Option<Arc<str>>,
 }
 
 /// What the router actually carries: the shared `AppState` plus the snapshot
@@ -71,12 +78,15 @@ impl FromRef<Ctx> for Arc<Tracker> {
 
 pub fn router(app: AppState, snapshots: Arc<Tracker>) -> Router {
     let state = Ctx { app, snapshots };
-    Router::new()
-        .route("/", get(index))
+    // Everything that reads or drives the mixer sits behind the token. The
+    // page at `/` does not: it is the same for everyone, contains nothing
+    // secret, and is where a browser finds out that it needs a token at all.
+    let guarded = Router::new()
         .route("/api/status", get(status))
         .route("/api/agent/state", get(agent_state))
         .route("/api/snapshot/{name}", get(snapshot_image))
         .route("/api/take", post(take))
+        .route("/api/golive", post(golive))
         .route("/api/shutdown", post(shutdown))
         .route("/api/media", get(list_media))
         .route("/api/adbreak", post(start_ad_break))
@@ -87,13 +97,81 @@ pub fn router(app: AppState, snapshots: Arc<Tracker>) -> Router {
         .route("/api/outputs/{id}", delete(remove_output))
         .route("/api/outputs/{id}/reconnect", post(reconnect_output))
         .route("/ws", get(ws_upgrade))
-        // The Tauri shell and a browser on another origin both need this.
+        .route_layer(middleware::from_fn_with_state(state.clone(), require_token));
+    Router::new()
+        .route("/", get(index))
+        .merge(guarded)
+        // The Tauri shell and a browser on another origin both need this. It
+        // sits outside the token check so that a preflight, which carries no
+        // Authorization header by design, is answered rather than refused.
         .layer(CorsLayer::permissive())
         .with_state(state)
 }
 
 async fn index() -> Html<&'static str> {
     Html(UI)
+}
+
+/// Turn away a request without the token. Does nothing when none is set.
+async fn require_token(State(app): State<AppState>, req: Request, next: Next) -> Response {
+    match token_check(app.token.as_deref(), req.method(), req.headers(), req.uri()) {
+        Ok(()) => next.run(req).await,
+        Err(reason) => (
+            StatusCode::UNAUTHORIZED,
+            [(header::WWW_AUTHENTICATE, "Bearer")],
+            Json(json!({ "error": reason })),
+        )
+            .into_response(),
+    }
+}
+
+/// Whether a request carries the token. `Authorization: Bearer <token>` is
+/// the normal form. A GET may put it in the query as `token=` instead,
+/// because a browser opening a WebSocket has no way to set a header. Other
+/// methods do not get the query form: they come from code that can set the
+/// header, and a token in a POST's URL ends up in more logs than it should.
+fn token_check(
+    expected: Option<&str>,
+    method: &Method,
+    headers: &HeaderMap,
+    uri: &Uri,
+) -> Result<(), &'static str> {
+    let Some(expected) = expected else { return Ok(()) };
+    let presented =
+        bearer_token(headers).or_else(|| if method == Method::GET { query_token(uri) } else { None });
+    match presented {
+        None => Err("missing token"),
+        Some(t) if constant_time_eq(t.as_bytes(), expected.as_bytes()) => Ok(()),
+        Some(_) => Err("wrong token"),
+    }
+}
+
+fn bearer_token(headers: &HeaderMap) -> Option<String> {
+    let value = headers.get(header::AUTHORIZATION)?.to_str().ok()?;
+    let (scheme, token) = value.trim().split_once(' ')?;
+    if !scheme.eq_ignore_ascii_case("bearer") {
+        return None;
+    }
+    let token = token.trim();
+    (!token.is_empty()).then(|| token.to_string())
+}
+
+fn query_token(uri: &Uri) -> Option<String> {
+    let Query(pairs) = Query::<Vec<(String, String)>>::try_from_uri(uri).ok()?;
+    pairs.into_iter().find(|(k, _)| k == "token").map(|(_, v)| v).filter(|v| !v.is_empty())
+}
+
+/// Compare without stopping at the first difference, so how long the check
+/// takes says nothing about how much of a guess was right. The length goes
+/// into the same accumulator rather than being tested up front.
+fn constant_time_eq(a: &[u8], b: &[u8]) -> bool {
+    let mut diff = a.len() ^ b.len();
+    for i in 0..a.len().max(b.len()) {
+        let x = a.get(i).copied().unwrap_or(0);
+        let y = b.get(i).copied().unwrap_or(0);
+        diff |= usize::from(x ^ y);
+    }
+    std::hint::black_box(diff) == 0
 }
 
 /// Anything that goes wrong becomes a 400 with the message. The UI shows it
@@ -247,14 +325,26 @@ async fn add_source(
         .map(|s| s.trim().to_ascii_lowercase())
         .filter(|s| !s.is_empty())
         .unwrap_or_else(|| "off".to_string());
-    let base_id = req
-        .id
-        .filter(|i| !i.trim().is_empty())
-        .unwrap_or_else(|| slug(name.as_deref().unwrap_or(&host_of(&uri))));
-    // A derived id may collide with an existing source; try a few suffixes.
-    let candidates = std::iter::once(base_id.clone()).chain((2..10).map(|n| format!("{base_id}-{n}")));
-    for id in candidates {
-        let cfg: SourceConfig = serde_json::from_value(serde_json::json!({
+    let base_id = req.id.filter(|i| !i.trim().is_empty()).unwrap_or_else(|| match &name {
+        Some(n) => slug(n),
+        None => derived_id(&uri),
+    });
+    create_source(&app, base_id, uri, name, &superimpose).await?;
+    Ok(StatusCode::OK)
+}
+
+/// Add a source under `base_id` or the first free suffix of it, and say which
+/// id it got. A derived id can easily collide: two pages on the same host
+/// both want to be called after it.
+async fn create_source(
+    app: &AppState,
+    base_id: String,
+    uri: String,
+    name: Option<String>,
+    superimpose: &str,
+) -> Result<String> {
+    for id in id_candidates(&base_id) {
+        let cfg: SourceConfig = serde_json::from_value(json!({
             "id": id, "uri": uri, "name": name, "superimpose": superimpose,
         }))
         .map_err(|e| anyhow::anyhow!("bad source: {e}"))?;
@@ -263,12 +353,181 @@ async fn add_source(
             .request(|ack| Command::AddSource(Box::new(cfg), Some(ack)))
             .await
         {
-            Ok(()) => return Ok(StatusCode::OK),
+            Ok(()) => return Ok(id),
             Err(e) if e.to_string().contains("already exists") => continue,
-            Err(e) => return Err(e.into()),
+            Err(e) => return Err(e),
         }
     }
-    Err(anyhow::anyhow!("could not find a free id for {base_id}").into())
+    anyhow::bail!("could not find a free id for {base_id}")
+}
+
+/// Same again for an output, named after the host it sends to. The reconnect
+/// policy is the default one; golive has no way to ask for another, and a
+/// caller who cares can add the output through `/api/outputs` first.
+async fn create_output(app: &AppState, uri: &str) -> Result<String> {
+    let base_id = derived_id(uri);
+    for id in id_candidates(&base_id) {
+        let cfg: OutputConfig = serde_json::from_value(json!({ "id": id, "uri": uri }))
+            .map_err(|e| anyhow::anyhow!("bad output: {e}"))?;
+        match app
+            .mixer
+            .request(|ack| Command::AddOutput(Box::new(cfg), Some(ack)))
+            .await
+        {
+            Ok(()) => return Ok(id),
+            Err(e) if e.to_string().contains("already exists") => continue,
+            Err(e) => return Err(e),
+        }
+    }
+    anyhow::bail!("could not find a free id for {base_id}")
+}
+
+/// The id itself, then a few numbered variants of it.
+fn id_candidates(base_id: &str) -> impl Iterator<Item = String> + '_ {
+    std::iter::once(base_id.to_string()).chain((2..10).map(move |n| format!("{base_id}-{n}")))
+}
+
+/// The id a URL gets when nobody chose one: its host, as a slug.
+fn derived_id(uri: &str) -> String {
+    slug(&host_of(uri))
+}
+
+/// What a "Go Live" button sends. One request, from the customer's backend
+/// so the page itself never holds the mixer's token, and the page is on air
+/// as soon as it renders.
+#[derive(Debug, Deserialize)]
+struct GoLiveRequest {
+    /// The page to put on air. Plain http(s); `web+` is added here.
+    url: String,
+    /// Where to send the programme. Added as an output unless one already
+    /// sends there. Omit to keep the outputs as they are.
+    #[serde(default)]
+    rtmp: Option<String>,
+    /// "auto" (the default) or "off". See `AddSourceRequest::superimpose`.
+    #[serde(default)]
+    superimpose: Option<String>,
+    /// Source id. Derived from the host when omitted.
+    #[serde(default)]
+    id: Option<String>,
+}
+
+/// How long golive waits for the page to produce a frame before giving up on
+/// the take. A page that has not rendered in a minute is not about to.
+const GOLIVE_WAIT: Duration = Duration::from_secs(60);
+
+async fn golive(
+    State(app): State<AppState>,
+    Json(req): Json<GoLiveRequest>,
+) -> Result<Response, ApiError> {
+    let url = req.url.trim();
+    if url.is_empty() {
+        return Err(anyhow::anyhow!("golive needs a url").into());
+    }
+    let uri = crate::input::as_web_uri(url);
+    let superimpose = match req
+        .superimpose
+        .as_deref()
+        .map(|s| s.trim().to_ascii_lowercase())
+        .as_deref()
+    {
+        None | Some("") | Some("auto") => "auto",
+        Some("off") => "off",
+        Some(other) => {
+            return Err(anyhow::anyhow!("superimpose must be \"auto\" or \"off\", not {other:?}").into())
+        }
+    };
+    let wanted_id = req.id.map(|i| i.trim().to_string()).filter(|i| !i.is_empty());
+
+    // Reuse before adding. The same page already a source, under the id asked
+    // for or under any id when none was, is the same page; adding it again
+    // would start a second browser for nothing. The status masks URLs, so the
+    // real configs are what gets compared.
+    let configs = app.mixer.configs().await?;
+    let existing = configs
+        .sources
+        .iter()
+        .find(|s| s.uri == uri && wanted_id.as_deref().is_none_or(|w| w == s.id));
+    let source = match existing {
+        Some(s) => s.id.clone(),
+        None => {
+            if let Some(w) = &wanted_id {
+                if configs.sources.iter().any(|s| &s.id == w) {
+                    return Err(anyhow::anyhow!("source {w} already exists with a different URL").into());
+                }
+            }
+            let base_id = wanted_id.unwrap_or_else(|| derived_id(&uri));
+            create_source(&app, base_id, uri, None, superimpose).await?
+        }
+    };
+
+    let output = match req.rtmp.as_deref().map(str::trim).filter(|r| !r.is_empty()) {
+        None => None,
+        Some(rtmp) => match configs.outputs.iter().find(|o| o.uri == rtmp) {
+            Some(o) => Some(o.id.clone()),
+            None => Some(create_output(&app, rtmp).await?),
+        },
+    };
+
+    // A reused source may be live already, in which case the take lands on
+    // the poller's first tick and the caller should not be told to wait.
+    let state = app
+        .mixer
+        .status()
+        .await?
+        .sources
+        .iter()
+        .find(|s| s.id == source)
+        .map(|s| s.state)
+        .unwrap_or(SourceState::Connecting);
+    take_when_live(app, source.clone());
+    info!(%source, output = output.as_deref().unwrap_or("none"), "golive accepted");
+    Ok((
+        StatusCode::ACCEPTED,
+        Json(json!({ "source": source, "output": output, "state": state })),
+    )
+        .into_response())
+}
+
+/// Take the source to programme the moment it is live. Runs on its own
+/// because a page can take a while to load and the caller has its answer
+/// already. A source missing from the status is treated as not yet there
+/// rather than gone, since a superimposed page drops out briefly while it is
+/// rebuilt; the deadline covers the case where it really was removed.
+fn take_when_live(app: AppState, id: String) {
+    tokio::spawn(async move {
+        let deadline = tokio::time::Instant::now() + GOLIVE_WAIT;
+        let mut ticks = tokio::time::interval(Duration::from_millis(250));
+        loop {
+            ticks.tick().await;
+            // A failed status means the mixer is gone; nothing left to take on.
+            let Ok(status) = app.mixer.status().await else { return };
+            let live = status.sources.iter().any(|s| s.id == id && s.state == SourceState::Live);
+            if live {
+                let source = id.clone();
+                let r = app
+                    .mixer
+                    .request(|ack| Command::Take {
+                        source: Some(source),
+                        at_running_time_ms: None,
+                        ack: Some(ack),
+                    })
+                    .await;
+                match r {
+                    Ok(()) => info!(source = %id, "golive: on programme"),
+                    Err(e) => warn!(source = %id, error = %e, "golive: take failed"),
+                }
+                return;
+            }
+            if tokio::time::Instant::now() >= deadline {
+                warn!(
+                    source = %id,
+                    waited_secs = GOLIVE_WAIT.as_secs(),
+                    "golive: source never went live, leaving the programme as it is"
+                );
+                return;
+            }
+        }
+    });
 }
 
 /// The host part of a URL, or the whole thing when it has none; used to name
@@ -569,5 +828,95 @@ mod tests {
         assert_eq!(slug("youtube.com"), "youtube-com");
         assert_eq!(slug("  Camera #2 (wide) "), "camera-2-wide");
         assert_eq!(slug("***"), "source");
+    }
+
+    /// golive names a source and an output after their host. The web+ prefix
+    /// and the port must not leak into the id, and a bare host given to
+    /// `as_web_uri` must come out the same as its https form.
+    #[test]
+    fn golive_ids_come_from_the_host() {
+        assert_eq!(derived_id("web+http://127.0.0.1:8090/demo.html"), "127-0-0-1");
+        assert_eq!(derived_id("web+https://www.example.com/live?x=1"), "example-com");
+        assert_eq!(derived_id(&crate::input::as_web_uri("example.com/page")), "example-com");
+        assert_eq!(derived_id("rtmp://a.rtmp.youtube.com/live2/KEY"), "a-rtmp-youtube-com");
+        assert_eq!(derived_id("web+"), "source");
+        let mut c = id_candidates("demo");
+        assert_eq!(c.next().as_deref(), Some("demo"));
+        assert_eq!(c.next().as_deref(), Some("demo-2"));
+        assert_eq!(c.last().as_deref(), Some("demo-9"));
+    }
+
+    fn headers_with(auth: Option<&str>) -> HeaderMap {
+        let mut h = HeaderMap::new();
+        if let Some(a) = auth {
+            h.insert(header::AUTHORIZATION, a.parse().unwrap());
+        }
+        h
+    }
+
+    fn uri(s: &str) -> Uri {
+        s.parse().unwrap()
+    }
+
+    #[test]
+    fn no_token_configured_means_everything_is_open() {
+        let plain = uri("/api/status");
+        assert_eq!(token_check(None, &Method::GET, &headers_with(None), &plain), Ok(()));
+        assert_eq!(token_check(None, &Method::POST, &headers_with(Some("Bearer junk")), &plain), Ok(()));
+    }
+
+    #[test]
+    fn token_in_the_header_is_checked_on_every_method() {
+        let plain = uri("/api/take");
+        let ok = headers_with(Some("Bearer s3cret"));
+        assert_eq!(token_check(Some("s3cret"), &Method::POST, &ok, &plain), Ok(()));
+        assert_eq!(token_check(Some("s3cret"), &Method::GET, &ok, &plain), Ok(()));
+        assert_eq!(token_check(Some("s3cret"), &Method::DELETE, &ok, &plain), Ok(()));
+        // The scheme is case insensitive, as HTTP says it is.
+        let lower = headers_with(Some("bearer s3cret"));
+        assert_eq!(token_check(Some("s3cret"), &Method::POST, &lower, &plain), Ok(()));
+
+        assert_eq!(
+            token_check(Some("s3cret"), &Method::POST, &headers_with(None), &plain),
+            Err("missing token")
+        );
+        let wrong = headers_with(Some("Bearer s3cres"));
+        assert_eq!(token_check(Some("s3cret"), &Method::POST, &wrong, &plain), Err("wrong token"));
+        let short = headers_with(Some("Bearer s3cre"));
+        assert_eq!(token_check(Some("s3cret"), &Method::POST, &short, &plain), Err("wrong token"));
+        let long = headers_with(Some("Bearer s3cret1"));
+        assert_eq!(token_check(Some("s3cret"), &Method::POST, &long, &plain), Err("wrong token"));
+        // Another scheme is not a bearer token at all.
+        let basic = headers_with(Some("Basic czNjcmV0"));
+        assert_eq!(token_check(Some("s3cret"), &Method::GET, &basic, &plain), Err("missing token"));
+    }
+
+    #[test]
+    fn token_in_the_query_is_taken_on_get_only() {
+        let none = headers_with(None);
+        let right = uri("/ws?token=s3cret");
+        assert_eq!(token_check(Some("s3cret"), &Method::GET, &none, &right), Ok(()));
+        // Percent encoded, as a browser would send it, and among other keys.
+        let encoded = uri("/ws?x=1&token=s3%63ret&y=2");
+        assert_eq!(token_check(Some("s3cret"), &Method::GET, &none, &encoded), Ok(()));
+        let wrong = uri("/ws?token=nope");
+        assert_eq!(token_check(Some("s3cret"), &Method::GET, &none, &wrong), Err("wrong token"));
+        let empty = uri("/ws?token=");
+        assert_eq!(token_check(Some("s3cret"), &Method::GET, &none, &empty), Err("missing token"));
+        // A POST does not get to put the token in its URL.
+        assert_eq!(token_check(Some("s3cret"), &Method::POST, &none, &right), Err("missing token"));
+        // A header wins over a query when both are present, wrong or not.
+        let bad_header = headers_with(Some("Bearer nope"));
+        assert_eq!(token_check(Some("s3cret"), &Method::GET, &bad_header, &right), Err("wrong token"));
+    }
+
+    #[test]
+    fn constant_time_eq_agrees_with_plain_equality() {
+        assert!(constant_time_eq(b"", b""));
+        assert!(constant_time_eq(b"abc", b"abc"));
+        assert!(!constant_time_eq(b"abc", b"abd"));
+        assert!(!constant_time_eq(b"abc", b"ab"));
+        assert!(!constant_time_eq(b"ab", b"abc"));
+        assert!(!constant_time_eq(b"abc", b""));
     }
 }
