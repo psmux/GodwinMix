@@ -1,9 +1,8 @@
 # A second mixer in the same container, for the wpesrc method: no CEF sidecar
 # configured and none next to this copy of the binary, so web+ goes to wpesrc.
-# LiveboxMix on the isp server, inside the lbx container of /opt/btq.
+# LiveboxMix inside the container built from deploy/docker/Dockerfile.
 # Sources are added from the UI or the API and kept in liveboxmix.runtime.toml
-# next to this file. The programme goes to the mediamtx container on the same
-# network; point `outputs` at the real RTMP destination when there is one, or
+# next to this file. The programme goes to an RTMP server; point `outputs` at the real RTMP destination when there is one, or
 # add it while live with `POST /api/outputs`.
 
 [canvas]
@@ -47,6 +46,6 @@ encode = "auto"
 
 [[outputs]]
 id = "primary"
-uri = "rtmp://mediamtx:1935/live/program2"
+uri = "rtmp://rtmp-server/live/program2"
 policy = "own"
 queue_secs = 5.0
