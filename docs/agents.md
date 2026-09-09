@@ -314,6 +314,7 @@ between pictures when nothing moves, and `--motion-delta` sets how much a
 source's `motion` must change to trigger a look early. `ANTHROPIC_MODEL`
 picks the model; the default is `claude-sonnet-5`.
 
-A rule based director with no model in it, which follows an external schedule
-instead, is at `deploy/isp/director/director.py`. It is the other shape a
-director takes: when the decision is a lookup, no model is needed.
+The other shape a director takes is a rule based one with no model in it,
+which follows an external application's state (a schedule, a match that has
+just gone live) and calls `POST /api/take` when it changes: when the decision
+is a lookup, no model is needed. The same endpoints serve both.
