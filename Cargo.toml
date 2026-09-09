@@ -31,6 +31,9 @@ gstreamer-pbutils = "0.24"
 reqwest = { version = "0.12", default-features = false, features = ["json"] }
 shell-words = "1.1.1"
 libc = "0.2.189"
+# Only the JPEG codec: the snapshot endpoints crop cells out of the mosaic
+# frames, which are already JPEG, and hand them back as JPEG.
+image = { version = "0.25", default-features = false, features = ["jpeg"] }
 
 [profile.release]
 opt-level = 3
