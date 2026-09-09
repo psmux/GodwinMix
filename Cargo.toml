@@ -12,7 +12,7 @@ gstreamer-audio = "0.24"
 gstreamer-app = "0.24"
 glib = "0.21"
 
-tokio = { version = "1", features = ["rt-multi-thread", "macros", "sync", "signal", "time"] }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "sync", "signal", "time", "io-std", "io-util"] }
 axum = { version = "0.8", features = ["ws"] }
 tower-http = { version = "0.6", features = ["fs", "cors", "trace"] }
 
@@ -34,6 +34,7 @@ libc = "0.2.189"
 # Only the JPEG codec: the snapshot endpoints crop cells out of the mosaic
 # frames, which are already JPEG, and hand them back as JPEG.
 image = { version = "0.25", default-features = false, features = ["jpeg"] }
+base64 = "0.22"
 
 [profile.release]
 opt-level = 3
