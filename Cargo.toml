@@ -28,7 +28,12 @@ clap = { version = "4", features = ["derive", "env"] }
 parking_lot = "0.12"
 futures-util = { version = "0.3.34", default-features = false, features = ["sink", "std"] }
 gstreamer-pbutils = "0.24"
-reqwest = { version = "0.12", default-features = false, features = ["json"] }
+# rustls rather than the platform's TLS: the same binary reaches an https
+# mixer or media address on Linux, macOS and Windows, and CI needs no OpenSSL
+# headers. Without a TLS feature at all, which is how this stood, every https
+# URL failed at connect: ctl and mcp against a mixer behind Cloudflare, and a
+# page's media on an https CDN.
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
 shell-words = "1.1.1"
 libc = "0.2.189"
 # Only the JPEG codec: the snapshot endpoints crop cells out of the mosaic
