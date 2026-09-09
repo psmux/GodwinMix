@@ -22,3 +22,4 @@ auto.key
 .omc/
 
 .DS_Store
+dev/linux-x86/out/
