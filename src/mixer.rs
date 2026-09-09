@@ -83,6 +83,13 @@ fn reply(ack: Option<Ack>, outcome: &Result<()>) {
     }
 }
 
+/// What `Command::Configs` answers with.
+#[derive(Debug, Clone, Default)]
+pub struct RuntimeConfigs {
+    pub sources: Vec<SourceConfig>,
+    pub outputs: Vec<OutputConfig>,
+}
+
 pub enum Command {
     /// Put a source on program. `None` cuts to the slate.
     Take {
@@ -115,6 +122,9 @@ pub enum Command {
     RemoveOutput(OutputId, Option<Ack>),
     RestartSource(SourceId),
     Status(oneshot::Sender<MixerStatus>),
+    /// The configured sources and outputs with their URLs intact. `Status`
+    /// masks those, so anything that must match on a URL asks here.
+    Configs(oneshot::Sender<RuntimeConfigs>),
     Bus(BusEvent),
     Tick,
     Shutdown,
@@ -144,6 +154,12 @@ impl MixerHandle {
         let (tx, rx) = oneshot::channel();
         self.send(Command::Status(tx))?;
         rx.await.map_err(|_| anyhow::anyhow!("mixer dropped the status request"))
+    }
+
+    pub async fn configs(&self) -> Result<RuntimeConfigs> {
+        let (tx, rx) = oneshot::channel();
+        self.send(Command::Configs(tx))?;
+        rx.await.map_err(|_| anyhow::anyhow!("mixer dropped the configs request"))
     }
 
     pub fn subscribe(&self) -> broadcast::Receiver<Event> {
@@ -930,6 +946,26 @@ impl Mixer {
         Ok(())
     }
 
+    /// The sources and outputs as configured, live ones and those still being
+    /// probed. This is the list the runtime store is written from, and what
+    /// the API reads when it needs real URLs: `status()` masks them, because
+    /// an RTMP address carries the stream key.
+    fn runtime_configs(&self) -> RuntimeConfigs {
+        let mut sources: Vec<SourceConfig> = self
+            .sources
+            .iter()
+            .filter(|s| s.input.id != AD_ID)
+            .map(|s| s.input.config.clone())
+            .collect();
+        for p in &self.pending {
+            if !sources.iter().any(|c| c.id == p.id) {
+                sources.push(p.clone());
+            }
+        }
+        let outputs: Vec<OutputConfig> = self.outputs.iter().map(|o| o.cfg.clone()).collect();
+        RuntimeConfigs { sources, outputs }
+    }
+
     /// Write the current source list beside the config file.
     ///
     /// Sources added or removed from the UI have to survive a restart, and
@@ -938,20 +974,7 @@ impl Mixer {
     /// keeps "where do sources come from" a question with a single answer.
     fn persist_runtime(&self) {
         let Some(path) = &self.runtime_store else { return };
-        let mut live: Vec<SourceConfig> = self
-            .sources
-            .iter()
-            .filter(|s| s.input.id != AD_ID)
-            .map(|s| s.input.config.clone())
-            .collect();
-        for p in &self.pending {
-            if !live.iter().any(|c| c.id == p.id) {
-                live.push(p.clone());
-            }
-        }
-
-        let outputs: Vec<OutputConfig> =
-            self.outputs.iter().map(|o| o.cfg.clone()).collect();
+        let RuntimeConfigs { sources: live, outputs } = self.runtime_configs();
 
         #[derive(serde::Serialize)]
         struct Stored<'a> {
@@ -1319,6 +1342,9 @@ impl Mixer {
             }
             Command::Status(reply) => {
                 let _ = reply.send(self.status());
+            }
+            Command::Configs(reply) => {
+                let _ = reply.send(self.runtime_configs());
             }
             Command::Bus(ev) => self.on_bus(ev),
             Command::Tick => self.tick(),
