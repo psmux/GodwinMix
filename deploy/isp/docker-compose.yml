@@ -30,6 +30,8 @@ services:
       CLIENT_URL: https://quiz.spinber.com
       CORS_ORIGINS: https://quiz.spinber.com
       CHAMPIONSHIP_TIME_ZONE: Asia/Kolkata
+      # The Go Live button in the admin panel talks to the director.
+      DIRECTOR_URL: http://director:8090
     volumes:
       - uploads:/app/uploads
     ports:
@@ -72,6 +74,7 @@ services:
       QUIZ_URL: http://btq:5001
       MIXER_URL: http://lbx:8080
       MIXER_TOKEN: "${MIXER_TOKEN}"
+      STREAM_URL: https://stream.spinber.com/watch
     volumes:
       - ./director/director.py:/director.py:ro
     command: ["python3", "-u", "/director.py"]

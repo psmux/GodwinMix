@@ -7,13 +7,21 @@ programme; when none is, the championship page is. Matches come and go every
 few minutes under the simulator, and their watch pages are per match, so
 nobody could keep up by hand. Standard library only; runs in python:alpine.
 """
-import json, os, sys, time, urllib.request, urllib.error
+import json, os, sys, threading, time, urllib.request, urllib.error
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 QUIZ = os.environ.get("QUIZ_URL", "http://btq:5001")
 MIXER = os.environ.get("MIXER_URL", "http://lbx:8080")
 MIXER_TOKEN = os.environ.get("MIXER_TOKEN", "")
 CHAMP = os.environ.get("CHAMPIONSHIP_ID", "")
 PERIOD = float(os.environ.get("PERIOD_SECS", "4"))
+BIND = os.environ.get("DIRECTOR_BIND", "0.0.0.0:8090")
+STREAM_URL = os.environ.get("STREAM_URL", "")
+
+# The switch the quiz's admin panel flips. On: follow the live match. Off:
+# cut to black and leave the programme alone until told otherwise.
+following = os.environ.get("DIRECTOR_START", "on") != "off"
+last = {"program": None, "match": None, "error": None}
 
 
 def log(msg):
@@ -93,13 +101,66 @@ def ensure_source(status, sid, name, uri, current_uri_by_id):
     return None
 
 
+class Control(BaseHTTPRequestHandler):
+    """GET /state, POST /on, POST /off. What the quiz's Go Live button talks to."""
+
+    def _send(self, code, body):
+        data = json.dumps(body).encode()
+        self.send_response(code)
+        self.send_header("content-type", "application/json")
+        self.send_header("content-length", str(len(data)))
+        self.end_headers()
+        self.wfile.write(data)
+
+    def do_GET(self):
+        if self.path.startswith("/state"):
+            self._send(200, {"following": following, "program": last["program"], "match": last["match"],
+                             "error": last["error"], "stream_url": STREAM_URL})
+        else:
+            self._send(404, {"error": "no such path"})
+
+    def do_POST(self):
+        global following
+        if self.path.startswith("/on"):
+            following = True
+            log("switched on by the control endpoint")
+            self._send(200, {"following": True})
+        elif self.path.startswith("/off"):
+            following = False
+            try:
+                post(f"{MIXER}/api/take", {"source": None})
+                last["program"] = None
+                log("switched off: programme cut to black")
+            except Exception as e:
+                log(f"off: could not cut the programme: {e}")
+            self._send(200, {"following": False})
+        else:
+            self._send(404, {"error": "no such path"})
+
+    def log_message(self, *_):
+        pass
+
+
+def serve_control():
+    host, port = BIND.rsplit(":", 1)
+    ThreadingHTTPServer((host, int(port)), Control).serve_forever()
+
+
 def main():
+    threading.Thread(target=serve_control, daemon=True).start()
+    log(f"control endpoint on {BIND}, following={'on' if following else 'off'}")
     uris = {}
     wanted = None
     while True:
         try:
+            if not following:
+                time.sleep(PERIOD)
+                continue
             cid, match = live_match()
             status = mixer_status()
+            last["program"] = status.get("program")
+            last["match"] = match["id"] if match else None
+            last["error"] = None
             if match:
                 uri = f"{QUIZ}/watch/{match['id']}"
                 src = ensure_source(status, "match", "Live match", uri, uris)
@@ -115,6 +176,7 @@ def main():
                 log(f"waiting for {target} to come up ({uri})")
             wanted = target
         except Exception as e:
+            last["error"] = str(e)
             log(f"error: {e}")
         time.sleep(PERIOD)
 

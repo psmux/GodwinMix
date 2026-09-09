@@ -114,3 +114,13 @@ once. It stores the token where the UI looks and opens the UI. Typing into the
 UI's own prompt also works, but a wrong token typed there is discarded and the
 page then retries its socket without one until it is reloaded, which reads as
 "Disconnected from the mixer. Retrying…".
+
+## The Go Live button
+
+The quiz's admin panel (Championship Management) has a Live stream card with
+Go Live and Off Air. Go Live turns the director on: the live match goes on
+the stream and every following match follows by itself. Off Air cuts the
+stream to black and stops following. The quiz server proxies these to the
+director's control endpoint (`GET /state`, `POST /on`, `POST /off` on
+`director:8090`, set as `DIRECTOR_URL` in the compose file); the browser never
+touches the mixer. The card links to https://stream.spinber.com/watch.
