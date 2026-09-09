@@ -252,6 +252,8 @@ wrap_life_span_handler! {
 
 /// Watches the page for the media it is playing. Injected on every load.
 const DETECT_MEDIA_JS: &str = include_str!("detect-media.js");
+/// Presses the page's own "Enable Sound" for it. See `unmute.js`.
+const UNMUTE_JS: &str = include_str!("unmute.js");
 
 /// Prefix the injected script puts on its console line, so the page's own
 /// logging is not mistaken for a report.
@@ -275,6 +277,19 @@ wrap_load_handler! {
             // Re-injected per load because a navigation discards the last one.
             // The script itself is idempotent, which covers same-document
             // navigations that fire this more than once.
+            // A whole page keeps its own players, and they start muted until
+            // someone clicks. Nobody will, so the sidecar does. Not in
+            // superimpose mode: there the mixer plays the media itself and the
+            // page's copy is paused on purpose.
+            if !self.transparent {
+                if let Some(f) = frame.as_deref() {
+                    f.execute_java_script(
+                        Some(&UNMUTE_JS.into()),
+                        Some(&"lbx://unmute.js".into()),
+                        0,
+                    );
+                }
+            }
             if self.detect_media {
                 if let Some(f) = frame {
                     // The prelude goes in front of the script rather than in a
@@ -459,6 +474,15 @@ wrap_app! {
             cl.append_switch_with_value(
                 Some(&CefString::from("autoplay-policy")),
                 Some(&CefString::from("no-user-gesture-required")),
+            );
+            // Say who we are. A page can tell a broadcast capture from a
+            // viewer by the user agent and start with sound (the BTQ watch
+            // page does), instead of waiting for a click nobody will make.
+            cl.append_switch_with_value(
+                Some(&CefString::from("user-agent-product")),
+                Some(&CefString::from(
+                    concat!("LiveboxMix/", env!("CARGO_PKG_VERSION")).to_string().as_str(),
+                )),
             );
             // Extra Chromium switches from the operator, comma separated,
             // without the leading dashes: LBX_BROWSER_SWITCHES="enable-gpu,foo=bar".

@@ -162,7 +162,9 @@ def main():
             last["match"] = match["id"] if match else None
             last["error"] = None
             if match:
-                uri = f"{QUIZ}/watch/{match['id']}"
+                # broadcast=1: the watch page starts with sound and hides its
+                # Enable Sound control; it knows nobody sits at this browser.
+                uri = f"{QUIZ}/watch/{match['id']}?broadcast=1"
                 src = ensure_source(status, "match", "Live match", uri, uris)
                 target = "match"
             else:

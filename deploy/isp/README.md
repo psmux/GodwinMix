@@ -124,3 +124,18 @@ stream to black and stops following. The quiz server proxies these to the
 director's control endpoint (`GET /state`, `POST /on`, `POST /off` on
 `director:8090`, set as `DIRECTOR_URL` in the compose file); the browser never
 touches the mixer. The card links to https://stream.spinber.com/watch.
+
+## Sound from the page
+
+A page that plays video usually starts it muted and waits for a click (the
+quiz's watch page shows "Enable Sound"). Nobody is at the mixer's browser to
+click, so two things take care of it. The director opens watch pages with
+`?broadcast=1`, and the mixer's browser announces itself as `LiveboxMix/<version>`
+in its user agent; the watch page treats either as a broadcast capture,
+starts its video with sound, and does not show the control. For any other
+site, the browser presses the page's own unmute for it: every whole page gets
+a small script on load that unmutes media elements and clicks a control whose
+label reads "Enable Sound", "Unmute", "Tap for sound" or the like, once,
+retrying for a minute while players appear. Superimposed pages are left alone:
+there the mixer plays the media itself.
+
