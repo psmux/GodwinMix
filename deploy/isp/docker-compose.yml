@@ -112,7 +112,8 @@ services:
       - ./player/hls-1.5.min.js:/usr/share/nginx/html/hls-1.5.min.js:ro
       - hls:/usr/share/nginx/html/hls:ro
     ports:
-      - "127.0.0.1:8889:80"
+      - "127.0.0.1:8889:80"   # the player
+      - "127.0.0.1:8083:81"   # the mixer, for mixer.spinber.com
 
   mediamtx:
     image: bluenviron/mediamtx:latest

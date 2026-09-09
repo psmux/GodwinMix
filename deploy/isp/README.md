@@ -101,3 +101,10 @@ hls.js 1.5.20. Verified by rendering the public page in the server's own
 Chromium (the CEF sidecar) and measuring the frames. Chrome does not start media
 in a hidden tab, so a background tab shows a spinner until it is brought to the
 front.
+
+The mixer's hostname goes through the same nginx (port 81 in the `player`
+container, 8083 on the host) rather than straight to the mixer, so that every
+response carries `Cache-Control: no-transform`: without it Cloudflare's Rocket
+Loader rewrote the UI's inline script and the page painted once and went blank,
+and the edge cached the page for half an hour. The WebSocket that carries the
+state and the mosaic is proxied with its upgrade headers.
