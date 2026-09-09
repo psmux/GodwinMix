@@ -8,10 +8,13 @@
   html, body { margin: 0; height: 100%; background: #000; color: #ddd; font: 14px system-ui, sans-serif }
   video { width: 100vw; height: 100vh; object-fit: contain; background: #000; display: block }
   #status { position: fixed; left: 12px; bottom: 12px; padding: 4px 8px; background: rgba(0,0,0,.6); border-radius: 4px }
+  #unmute { position: fixed; inset: 0; display: none; align-items: center; justify-content: center; background: rgba(0,0,0,.35); cursor: pointer; border: 0; color: #fff; font: 600 22px system-ui, sans-serif }
+  #unmute span { padding: 16px 28px; border-radius: 999px; background: rgba(0,0,0,.75); border: 1px solid rgba(255,255,255,.4) }
 </style>
 </head>
 <body>
-<video id="v" controls autoplay muted playsinline></video>
+<video id="v" controls autoplay playsinline></video>
+<button id="unmute" type="button"><span>Tap for sound</span></button>
 <div id="status">connecting to the stream</div>
 <script data-cfasync="false">
   // Whatever goes wrong is written on the page. A player that says
@@ -57,8 +60,21 @@
     h.loadSource(src); h.attachMedia(v);
   }
   start();
-  v.addEventListener("playing", function () { say("live (click for sound)"); });
-  v.addEventListener("volumechange", function () { if (!v.muted) say("live"); });
+  // Sound first. A browser that refuses to start with sound gets a muted
+  // start and one large button; the tap is the user gesture the browser
+  // wants, and after it the stream plays with sound.
+  var unmute = document.getElementById("unmute");
+  function withSound() { v.muted = false; unmute.style.display = "none"; v.play().catch(function () {}); say("live"); }
+  unmute.addEventListener("click", withSound);
+  v.addEventListener("playing", function () { say(v.muted ? "live, muted" : "live"); });
+  v.addEventListener("loadedmetadata", function () {
+    v.muted = false;
+    v.play().catch(function () {
+      v.muted = true;
+      v.play().catch(function () {});
+      unmute.style.display = "flex";
+    });
+  });
 </script>
 </body>
 </html>
