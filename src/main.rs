@@ -19,6 +19,7 @@ mod mixer;
 mod multiview;
 mod output;
 mod probe;
+mod snapshot;
 mod state;
 
 use anyhow::{Context, Result};

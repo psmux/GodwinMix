@@ -8,15 +8,21 @@
 //! One WebSocket carries everything the UI needs: JSON text frames for state
 //! and events, binary frames for mosaic JPEGs. One connection, one port, which
 //! matters when the only way in is a firewall rule somebody else has to write.
+//!
+//! Alongside the UI's endpoints sit a few meant for software rather than
+//! people: still snapshots cut from the mosaic and a compact state document.
+//! They exist so that an AI agent can look at the mixer for the price of one
+//! small request rather than a video stream. See `snapshot.rs`.
 
 use crate::config::{OutputConfig, SourceConfig};
 use crate::media::{MediaLibrary, MediaListing};
 use crate::mixer::{Command, MixerHandle};
+use crate::snapshot::{self, Pick, Tracker};
 use crate::state::{Event, MixerStatus};
 use anyhow::Result;
 use axum::extract::ws::{Message, WebSocket, WebSocketUpgrade};
-use axum::extract::{Path, State};
-use axum::http::StatusCode;
+use axum::extract::{FromRef, Path, Query, State};
+use axum::http::{header, StatusCode};
 use axum::response::{Html, IntoResponse, Response};
 use axum::routing::{delete, get, post};
 use axum::{Json, Router};
@@ -41,10 +47,35 @@ pub struct AppState {
     pub quit: Arc<tokio::sync::Notify>,
 }
 
-pub fn router(state: AppState) -> Router {
+/// What the router actually carries: the shared `AppState` plus the snapshot
+/// tracker, which is started by `serve` because it needs a running runtime and
+/// the mosaic broadcast, and nothing outside this module needs to know it
+/// exists. `FromRef` lets every existing handler keep asking for `AppState`.
+#[derive(Clone)]
+struct Ctx {
+    app: AppState,
+    snapshots: Arc<Tracker>,
+}
+
+impl FromRef<Ctx> for AppState {
+    fn from_ref(ctx: &Ctx) -> Self {
+        ctx.app.clone()
+    }
+}
+
+impl FromRef<Ctx> for Arc<Tracker> {
+    fn from_ref(ctx: &Ctx) -> Self {
+        ctx.snapshots.clone()
+    }
+}
+
+pub fn router(app: AppState, snapshots: Arc<Tracker>) -> Router {
+    let state = Ctx { app, snapshots };
     Router::new()
         .route("/", get(index))
         .route("/api/status", get(status))
+        .route("/api/agent/state", get(agent_state))
+        .route("/api/snapshot/{name}", get(snapshot_image))
         .route("/api/take", post(take))
         .route("/api/shutdown", post(shutdown))
         .route("/api/media", get(list_media))
@@ -317,6 +348,106 @@ async fn remove_output(
     Ok(StatusCode::OK)
 }
 
+/// The compact document an agent reads instead of `/api/status`. See
+/// `snapshot::AgentState` for what is in it and why.
+async fn agent_state(
+    State(app): State<AppState>,
+    State(snapshots): State<Arc<Tracker>>,
+) -> Result<Response, ApiError> {
+    let status = app.mixer.status().await?;
+    let doc = snapshot::agent_state(&status, snapshots.latest().as_ref());
+    Ok(([(header::CACHE_CONTROL, "no-store")], Json(doc)).into_response())
+}
+
+#[derive(Debug, Deserialize)]
+struct SnapshotQuery {
+    /// Downscale to this many pixels across, keeping the aspect. Never
+    /// enlarges. Omit for the cell's own size.
+    #[serde(default)]
+    width: Option<u32>,
+}
+
+/// `sheet.jpg`, `program.jpg` or `{source_id}.jpg`: the newest mosaic frame,
+/// or one cell cut out of it. Cutting means a decode and an encode, which is
+/// a few milliseconds of CPU and goes on a blocking thread.
+///
+/// Errors are plain text with a status an agent can branch on: 404 for a
+/// name that is not on the mosaic or a mosaic that is switched off, 503 while
+/// the first frame is still on its way.
+async fn snapshot_image(
+    State(snapshots): State<Arc<Tracker>>,
+    Path(name): Path<String>,
+    Query(q): Query<SnapshotQuery>,
+) -> Response {
+    let plain = |code: StatusCode, msg: String| {
+        (code, [(header::CACHE_CONTROL, "no-store")], msg).into_response()
+    };
+
+    let Some(pick) = snapshot::parse_pick(&name) else {
+        return plain(
+            StatusCode::NOT_FOUND,
+            "no such snapshot; use sheet.jpg, program.jpg or {source_id}.jpg".into(),
+        );
+    };
+    if !snapshots.enabled() {
+        return plain(
+            StatusCode::NOT_FOUND,
+            "multiview is disabled, so there is no mosaic to snapshot".into(),
+        );
+    }
+    let Some(latest) = snapshots.latest() else {
+        return plain(StatusCode::SERVICE_UNAVAILABLE, "no mosaic frame has arrived yet".into());
+    };
+
+    // The whole sheet at its own size is the frame as it came off the
+    // encoder, no work at all.
+    if pick == Pick::Sheet && q.width.is_none() {
+        return jpeg_response(latest.jpeg.to_vec());
+    }
+    let cell = match &pick {
+        Pick::Sheet => None,
+        Pick::Program => match snapshot::find_cell(&latest.cells, &pick) {
+            Some(c) => Some(c.clone()),
+            None => return plain(StatusCode::NOT_FOUND, "the programme is not on the mosaic".into()),
+        },
+        Pick::Source(id) => match snapshot::find_cell(&latest.cells, &pick) {
+            Some(c) => Some(c.clone()),
+            None => return plain(StatusCode::NOT_FOUND, format!("no source {id} on the mosaic")),
+        },
+    };
+
+    let bytes = latest.jpeg.clone();
+    let encoded = tokio::task::spawn_blocking(move || {
+        let mosaic = snapshot::decode_jpeg(&bytes)?;
+        let img = match &cell {
+            Some(c) => snapshot::crop_cell(&mosaic, c),
+            None => mosaic,
+        };
+        snapshot::encode_jpeg(&snapshot::fit_width(img, q.width))
+    })
+    .await;
+    match encoded {
+        Ok(Ok(jpeg)) => jpeg_response(jpeg),
+        Ok(Err(e)) => {
+            warn!(error = %e, "snapshot re-encode failed");
+            plain(StatusCode::INTERNAL_SERVER_ERROR, "the mosaic frame could not be decoded".into())
+        }
+        Err(e) => {
+            warn!(error = %e, "snapshot task failed");
+            plain(StatusCode::INTERNAL_SERVER_ERROR, "snapshot task failed".into())
+        }
+    }
+}
+
+fn jpeg_response(bytes: Vec<u8>) -> Response {
+    (
+        StatusCode::OK,
+        [(header::CONTENT_TYPE, "image/jpeg"), (header::CACHE_CONTROL, "no-store")],
+        bytes,
+    )
+        .into_response()
+}
+
 async fn ws_upgrade(ws: WebSocketUpgrade, State(app): State<AppState>) -> Response {
     ws.on_upgrade(move |socket| serve_ws(socket, app))
 }
@@ -394,7 +525,8 @@ async fn serve_ws(socket: WebSocket, app: AppState) {
 pub async fn serve(bind: &str, state: AppState) -> Result<()> {
     let listener = tokio::net::TcpListener::bind(bind).await?;
     info!(%bind, "control server listening");
-    axum::serve(listener, router(state)).await?;
+    let snapshots = Tracker::start(state.frames.clone(), state.mixer.clone());
+    axum::serve(listener, router(state, snapshots)).await?;
     Ok(())
 }
 
