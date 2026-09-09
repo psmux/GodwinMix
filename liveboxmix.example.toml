@@ -70,6 +70,15 @@ dir = "media"
 
 [control]
 bind = "0.0.0.0:8080"
+# Bearer token for the API and the WebSocket. Leave it unset and the control
+# port is open to whoever can reach it, exactly as before; that is fine on a
+# LAN behind a firewall and wrong on anything a customer's server talks to.
+# With a token set, every /api/* request needs `Authorization: Bearer <token>`
+# (a GET, and so the WebSocket, may send `?token=<token>` instead), and a
+# missing or wrong one is a 401. The UI asks for it once and remembers it in
+# the browser. The LIVEBOXMIX_TOKEN environment variable overrides this line,
+# for deployments that keep secrets out of config files.
+# token = "change-me"
 
 [hardware]
 # auto, nvidia, va, videotoolbox, mediafoundation, d3d11, software.

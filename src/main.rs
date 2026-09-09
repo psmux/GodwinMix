@@ -62,6 +62,9 @@ enum Command {
         /// Address of the mixer's control server.
         #[arg(long, default_value = "http://127.0.0.1:8080", env = "LIVEBOXMIX_URL")]
         url: String,
+        /// Bearer token, when the mixer has one configured.
+        #[arg(long, env = "LIVEBOXMIX_TOKEN", hide_env_values = true)]
+        token: Option<String>,
         #[command(subcommand)]
         cmd: ctl::Ctl,
     },
@@ -79,8 +82,8 @@ async fn main() -> Result<()> {
 
     // The control subcommand talks to an already-running mixer and needs none
     // of the setup below.
-    if let Some(Command::Ctl { url, cmd }) = args.command {
-        return ctl::run(&url, cmd).await;
+    if let Some(Command::Ctl { url, token, cmd }) = args.command {
+        return ctl::run(&url, token.as_deref(), cmd).await;
     }
 
     if args.example_config {
@@ -106,6 +109,11 @@ async fn main() -> Result<()> {
         )
     })?;
     let bind = args.bind.unwrap_or_else(|| cfg.control.bind.clone());
+    let token = cfg.token().map(Arc::from);
+    match &token {
+        Some(_) => info!("control API requires a bearer token"),
+        None => info!("control API is open: no token configured"),
+    }
     let cfg_media = cfg.media.clone();
 
     let (mut mix, handle, cmd_rx, mut bus_rx) = mixer::Mixer::build(cfg)?;
@@ -132,7 +140,8 @@ async fn main() -> Result<()> {
 
     let library = Arc::new(media::MediaLibrary::new(cfg_media));
     let quit = Arc::new(tokio::sync::Notify::new());
-    let state = control::AppState { mixer: handle.clone(), frames, library, quit: quit.clone() };
+    let state =
+        control::AppState { mixer: handle.clone(), frames, library, quit: quit.clone(), token };
     let server = tokio::spawn(async move {
         if let Err(e) = control::serve(&bind, state).await {
             error!(?e, "control server stopped");
