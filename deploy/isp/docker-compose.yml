@@ -71,6 +71,7 @@ services:
     environment:
       QUIZ_URL: http://btq:5001
       MIXER_URL: http://lbx:8080
+      MIXER_TOKEN: "${MIXER_TOKEN}"
     volumes:
       - ./director/director.py:/director.py:ro
     command: ["python3", "-u", "/director.py"]

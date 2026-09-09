@@ -11,6 +11,7 @@ import json, os, sys, time, urllib.request, urllib.error
 
 QUIZ = os.environ.get("QUIZ_URL", "http://btq:5001")
 MIXER = os.environ.get("MIXER_URL", "http://lbx:8080")
+MIXER_TOKEN = os.environ.get("MIXER_TOKEN", "")
 CHAMP = os.environ.get("CHAMPIONSHIP_ID", "")
 PERIOD = float(os.environ.get("PERIOD_SECS", "4"))
 
@@ -19,20 +20,27 @@ def log(msg):
     print(time.strftime("%H:%M:%S"), msg, flush=True)
 
 
+def headers():
+    """The mixer's bearer token, when it has one. The quiz gets no header."""
+    return {"Authorization": f"Bearer {MIXER_TOKEN}"} if MIXER_TOKEN else {}
+
+
 def get(url):
-    with urllib.request.urlopen(url, timeout=10) as r:
+    req = urllib.request.Request(url, headers=headers() if url.startswith(MIXER) else {})
+    with urllib.request.urlopen(req, timeout=10) as r:
         return json.load(r)
 
 
 def post(url, body):
-    req = urllib.request.Request(url, data=json.dumps(body).encode(), method="POST",
-                                 headers={"content-type": "application/json"})
+    hdrs = {"content-type": "application/json"}
+    hdrs.update(headers())
+    req = urllib.request.Request(url, data=json.dumps(body).encode(), method="POST", headers=hdrs)
     with urllib.request.urlopen(req, timeout=10) as r:
         return r.status
 
 
 def delete(url):
-    req = urllib.request.Request(url, method="DELETE")
+    req = urllib.request.Request(url, method="DELETE", headers=headers())
     try:
         with urllib.request.urlopen(req, timeout=10) as r:
             return r.status

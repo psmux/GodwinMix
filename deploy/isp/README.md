@@ -31,12 +31,13 @@ only; its source stays in this repository.
 | mediamtx | RTMP in | inside the stack |
 | hls | ffmpeg writing plain HLS of the programme | inside the stack |
 | player | nginx: the player page and the HLS files | **https://stream.spinber.com/watch** (HLS at `/hls/program.m3u8`, for VLC or OBS) |
-| lbx | LiveboxMix, `:8080` mixer, `:8081` wpesrc mixer, loopback only | `ssh -L 8080:localhost:8080 isp`, then http://localhost:8080 |
+| lbx | LiveboxMix, `:8080` mixer (bearer token: `[control] token` in `lbx/config/liveboxmix.toml`, also `MIXER_TOKEN` in `.env` for the director), `:8081` wpesrc mixer | https://mixer.spinber.com with the token, or `ssh -L 8080:localhost:8080 isp` |
 | www | nginx with the demo pages | http://www/demo.html from inside the stack |
 
-The mixer's UI has no login, so it is deliberately not on a public hostname.
-Reach it through the SSH port forward above, or put it behind Cloudflare Access
-before giving it a hostname.
+The mixer's API and UI are behind a bearer token (see docs/agents.md); the UI
+asks for it once. An agent anywhere drives it with `liveboxmix mcp --url
+https://mixer.spinber.com --token ...` or plain HTTP with the Authorization
+header.
 
 ## Updating the mixer
 

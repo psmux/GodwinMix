@@ -38,6 +38,9 @@ dir = "/var/lib/liveboxmix/media"
 
 [control]
 bind = "0.0.0.0:8080"
+# Every API call and the WebSocket need Authorization: Bearer <token>; the
+# UI asks for it once. Agents driving this mixer from outside use the same.
+token = "CHANGE-ME"   # the real one lives only on the server
 
 [hardware]
 decode = "auto"
