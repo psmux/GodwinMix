@@ -14,6 +14,7 @@ mod control;
 mod ctl;
 mod gstutil;
 mod input;
+mod mcp;
 mod media;
 mod mixer;
 mod multiview;
@@ -65,22 +66,40 @@ enum Command {
         #[command(subcommand)]
         cmd: ctl::Ctl,
     },
+    /// Expose a running mixer to AI agents as Model Context Protocol tools.
+    ///
+    /// Speaks MCP over stdio: JSON-RPC requests one per line on stdin,
+    /// replies on stdout. An MCP client such as Claude Code starts this as
+    /// a child process; nothing but the protocol goes to stdout.
+    Mcp {
+        /// Address of the mixer's control server.
+        #[arg(long, default_value = "http://127.0.0.1:8080", env = "LIVEBOXMIX_URL")]
+        url: String,
+        /// Bearer token for a mixer whose API requires one.
+        #[arg(long, env = "LIVEBOXMIX_TOKEN")]
+        token: Option<String>,
+    },
 }
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    tracing_subscriber::fmt()
-        .with_env_filter(
-            EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info")),
-        )
-        .init();
-
     let args = Args::parse();
 
-    // The control subcommand talks to an already-running mixer and needs none
+    let filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info"));
+    // The MCP client reads stdout as protocol, so a log line there would
+    // break the connection. Everything else keeps the usual stdout logging.
+    if matches!(args.command, Some(Command::Mcp { .. })) {
+        tracing_subscriber::fmt().with_env_filter(filter).with_writer(std::io::stderr).init();
+    } else {
+        tracing_subscriber::fmt().with_env_filter(filter).init();
+    }
+
+    // The client subcommands talk to an already-running mixer and need none
     // of the setup below.
-    if let Some(Command::Ctl { url, cmd }) = args.command {
-        return ctl::run(&url, cmd).await;
+    match args.command {
+        Some(Command::Ctl { url, cmd }) => return ctl::run(&url, cmd).await,
+        Some(Command::Mcp { url, token }) => return mcp::run(&url, token).await,
+        None => {}
     }
 
     if args.example_config {
