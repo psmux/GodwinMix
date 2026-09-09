@@ -108,3 +108,9 @@ response carries `Cache-Control: no-transform`: without it Cloudflare's Rocket
 Loader rewrote the UI's inline script and the page painted once and went blank,
 and the edge cached the page for half an hour. The WebSocket that carries the
 state and the mosaic is proxied with its upgrade headers.
+
+Signing a browser into the mixer: open `https://mixer.spinber.com/login?token=<token>`
+once. It stores the token where the UI looks and opens the UI. Typing into the
+UI's own prompt also works, but a wrong token typed there is discarded and the
+page then retries its socket without one until it is reloaded, which reads as
+"Disconnected from the mixer. Retrying…".
