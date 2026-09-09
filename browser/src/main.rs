@@ -476,8 +476,8 @@ wrap_app! {
                 Some(&CefString::from("no-user-gesture-required")),
             );
             // Say who we are. A page can tell a broadcast capture from a
-            // viewer by the user agent and start with sound (the BTQ watch
-            // page does), instead of waiting for a click nobody will make.
+            // viewer by the user agent and start with sound (a page that plays a
+            // stream can), instead of waiting for a click nobody will make.
             cl.append_switch_with_value(
                 Some(&CefString::from("user-agent-product")),
                 Some(&CefString::from(
