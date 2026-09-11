@@ -671,6 +671,12 @@ pub fn probe_page_media(id: &SourceId, spec: &ExecSpec, timeout: Duration) -> Op
 /// the media queue in `Layers::build`.
 const MEDIA_LEAD_SECS: f64 = 4.0;
 
+/// How long the loop waits for the sound of a round to finish once the picture
+/// has, before starting the decoder again anyway. Both have a queue of
+/// `MEDIA_LEAD_SECS`, so in practice this is milliseconds; the ceiling only
+/// stops a stream that never ends from stopping the loop for good.
+const MEDIA_END_WAIT: Duration = Duration::from_secs(2);
+
 /// How long a clip may take to fetch before it is streamed instead.
 const MEDIA_FETCH_TIMEOUT: Duration = Duration::from_secs(60);
 
@@ -796,6 +802,15 @@ struct MediaBranch {
     caps: gst::Element,
     q: gst::Element,
     scale: gst::Element,
+    /// The sound's own lead, the same length as the picture's queue above.
+    /// Without it the decoder could only push sound as fast as the live mix
+    /// took it, so the sound ran `MEDIA_LEAD_SECS` behind the picture inside
+    /// the decoder: at the end of a round the picture had reached the end of
+    /// the clip while the sound still had four seconds to push, and starting
+    /// the decoder again threw those four seconds away. Every loop opened with
+    /// that much silence. With a queue of its own the sound runs ahead exactly
+    /// as the picture does and is already decoded when the round changes.
+    aq: gst::Element,
     aconv: gst::Element,
     ares: gst::Element,
     /// Muted when the page played this video silently, so the mix matches
@@ -844,6 +859,7 @@ impl MediaBranch {
             // per video, held only while the source exists.
             q: gstutil::queue_time(&format!("{id}-media{n}-q"), MEDIA_LEAD_SECS, false)?,
             scale: make("videoscale", &format!("{id}-media{n}-scale"))?,
+            aq: gstutil::queue_time(&format!("{id}-media{n}-aq"), MEDIA_LEAD_SECS, false)?,
             aconv: make("audioconvert", &format!("{id}-media{n}-aconv"))?,
             ares: make("audioresample", &format!("{id}-media{n}-ares"))?,
             avol,
@@ -851,9 +867,10 @@ impl MediaBranch {
         })
     }
 
-    fn elements(&self) -> [&gst::Element; 8] {
+    fn elements(&self) -> [&gst::Element; 9] {
         [
-            &self.src, &self.conv, &self.caps, &self.q, &self.scale, &self.aconv, &self.ares, &self.avol,
+            &self.src, &self.conv, &self.caps, &self.q, &self.scale, &self.aq, &self.aconv,
+            &self.ares, &self.avol,
         ]
     }
 }
@@ -992,7 +1009,7 @@ impl Layers {
         for (z, b) in self.media.iter().enumerate() {
             gst::Element::link_many([&b.conv, &b.caps, &b.q, &b.scale])
                 .context("linking a decoded video branch")?;
-            gst::Element::link_many([&b.aconv, &b.ares, &b.avol, &self.amix])
+            gst::Element::link_many([&b.aq, &b.aconv, &b.ares, &b.avol, &self.amix])
                 .context("linking a video's sound into the mix")?;
             let (x, y, w, h) = b.item.placement(canvas);
             // A pixel of bleed on every side, within the canvas. The page keys
@@ -1142,6 +1159,17 @@ enum Stream {
     Audio,
 }
 
+/// A media stream's place in `Placement::streams` and `Placement::ended`. The
+/// page is none of them: it never ends while the source lives and it is not
+/// part of the media's loop.
+fn stream_bit(stream: Stream) -> u32 {
+    match stream {
+        Stream::Page => 0,
+        Stream::Video => 1,
+        Stream::Audio => 2,
+    }
+}
+
 /// Where each layer sits on the composite's timeline.
 ///
 /// Every layer stamps its frames from its own zero, and none of them starts
@@ -1175,6 +1203,13 @@ struct Placement {
     prev_end: Mutex<gst::ClockTime>,
     video_rounds: AtomicU32,
     audio_rounds: AtomicU32,
+    /// Which of the media's streams this placement watches, and which of them
+    /// have reached the end of the round, as `stream_bit`. The decoder is
+    /// started again when the picture ends, and the sound of the same round
+    /// ends a moment later; pulling the decoder down the instant the picture
+    /// is done cut whatever sound had not been pushed yet.
+    streams: AtomicU32,
+    ended: AtomicU32,
     /// A restart of the media decoder in flight. Picture and sound reach their
     /// end within a frame of each other and one restart is wanted, not two.
     restarting: AtomicBool,
@@ -1195,6 +1230,8 @@ impl Placement {
             prev_end: Mutex::new(gst::ClockTime::ZERO),
             video_rounds: AtomicU32::new(0),
             audio_rounds: AtomicU32::new(0),
+            streams: AtomicU32::new(0),
+            ended: AtomicU32::new(0),
             restarting: AtomicBool::new(false),
             started: Mutex::new(Instant::now()),
         })
@@ -1227,6 +1264,7 @@ impl Placement {
         *self.prev_end.lock() = gst::ClockTime::ZERO;
         self.video_rounds.store(0, Ordering::SeqCst);
         self.audio_rounds.store(0, Ordering::SeqCst);
+        self.ended.store(0, Ordering::SeqCst);
         self.restarting.store(false, Ordering::SeqCst);
         *self.started.lock() = Instant::now();
     }
@@ -1240,6 +1278,7 @@ impl Placement {
         // page's frames and the media's sound were each placed and then
         // dropped as old, every one. A source pad resends its segment with the
         // new offset before its next buffer, whenever the offset changes.
+        self.streams.fetch_or(stream_bit(stream), Ordering::SeqCst);
         let (me, id, target) = (self.clone(), id.clone(), probe_on.clone());
         // This pad's segment, kept to turn buffer times into running time,
         // with the offset the pad had already folded into it. A pad applies
@@ -1357,6 +1396,7 @@ impl Placement {
                                 }
                                 return gst::PadProbeReturn::Ok;
                             };
+                            me.ended.fetch_or(stream_bit(stream), Ordering::SeqCst);
                             if stream == Stream::Video
                                 && !me.restarting.swap(true, Ordering::SeqCst)
                             {
@@ -1366,11 +1406,28 @@ impl Placement {
                                 // against the thread it is asking to stop.
                                 std::thread::spawn(move || {
                                     let started = Instant::now();
+                                    // The picture and the sound each have a
+                                    // queue of the same length, so they reach
+                                    // the end of the round within a moment of
+                                    // each other; wait for the sound before
+                                    // pulling the decoder down, or the last of
+                                    // it never gets pushed. Bounded, so a
+                                    // stream that never ends cannot stop the
+                                    // loop for good.
+                                    let want = me.streams.load(Ordering::SeqCst);
+                                    while me.ended.load(Ordering::SeqCst) != want
+                                        && started.elapsed() < MEDIA_END_WAIT
+                                    {
+                                        std::thread::sleep(Duration::from_millis(10));
+                                    }
+                                    me.ended.store(0, Ordering::SeqCst);
+                                    let waited = started.elapsed();
                                     let down = el.set_state(gst::State::Null);
                                     if down.is_ok() && el.sync_state_with_parent().is_ok() {
                                         info!(
                                             source = %id,
                                             took_ms = started.elapsed().as_millis() as u64,
+                                            waited_for_sound_ms = waited.as_millis() as u64,
                                             "started the page's media again from its local copy"
                                         );
                                     } else {
@@ -1862,7 +1919,7 @@ impl InputPipeline {
                     &b.src,
                     &id,
                     Some(b.conv.clone()),
-                    Some(b.aconv.clone()),
+                    Some(b.aq.clone()),
                     &has_video,
                     &has_audio,
                 );
