@@ -524,21 +524,23 @@ const PAGE_DRIFT_NS: u64 = 150_000_000;
 const MEDIA_LEAD_NS: u64 = 300_000_000;
 
 /// How far behind the clock the next round of a media may be placed and still
-/// be composed.
+/// be joined to the round before it.
 ///
-/// A round joins the one before it exactly where that one ended, and that
-/// moment has usually just gone by: the new round cannot start until the
-/// queues holding the old one have drained, so its first buffer turns up a few
-/// tens of milliseconds after the picture ran out. Added to `now` instead, the
-/// lead above is a gap on air, and the sound, whose queue is the last to
-/// drain, opened every loop with three quarters of a second of silence.
+/// A round joins where the one before it ended, and that moment has usually
+/// just gone by: the new round cannot start until the queues holding the old
+/// one have drained. The picture gets through within a few milliseconds of its
+/// join; the sound, whose branch is the last of the two to let a new segment
+/// past, measured half a second behind it on the rig.
 ///
-/// Placing it where the round before ended costs nothing because the layer
-/// aggregators run `LAYER_LATENCY_NS` behind the clock: a buffer that far back
-/// is still ahead of the position they are composing. Half that latency, so
-/// the join keeps a margin; a round later than this has genuinely lost time
-/// and takes the lead instead.
-const MEDIA_JOIN_SLACK_NS: u64 = 250_000_000;
+/// Placing it at the join anyway is right, because the layer aggregators
+/// compose `LAYER_LATENCY_NS` behind the clock and trim exactly the part of a
+/// round that is behind them. A round half a second late loses the few
+/// milliseconds that are genuinely past and plays the rest, where placing it
+/// at `now` instead was half a second of silence and placing it at `now` plus
+/// the lead was three quarters of a second. The ceiling is only there so that
+/// a round that has lost seconds, rather than milliseconds, is not pushed
+/// through an aggregator that will throw all of it away.
+const MEDIA_JOIN_SLACK_NS: u64 = 2_000_000_000;
 
 /// Upstream latency the layered compositor claims, the same figure as the
 /// mixer's own compositor. It is how late a page frame may be before it is
