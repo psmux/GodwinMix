@@ -90,6 +90,22 @@ pub struct RuntimeConfigs {
     pub outputs: Vec<OutputConfig>,
 }
 
+/// What `Command::SetAudio` answers with.
+///
+/// Three answers rather than an `Option`, because "there is no such source"
+/// and "that source has nothing to balance" send the caller to different
+/// places: one is a wrong id, the other is a page whose audio Chromium
+/// already mixed. An `Ack` cannot carry this, since it only says yes or no
+/// and the levels have to come back with the yes.
+#[derive(Debug, Clone, PartialEq)]
+pub enum AudioOutcome {
+    /// Applied, with the gains as they now stand.
+    Set(SourceAudio),
+    NoSuchSource,
+    /// The source is there but its audio arrives already mixed.
+    NotSuperimposed,
+}
+
 pub enum Command {
     /// Put a source on program. `None` cuts to the slate.
     Take {
@@ -121,6 +137,15 @@ pub enum Command {
     AddOutput(Box<OutputConfig>, Option<Ack>),
     RemoveOutput(OutputId, Option<Ack>),
     RestartSource(SourceId),
+    /// Balance a superimposed source's page sound against the videos drawn
+    /// under it. Both parts are optional and only what is named moves, so the
+    /// UI can send one fader without knowing where the others sit.
+    SetAudio {
+        source: SourceId,
+        page: Option<f64>,
+        media: Vec<Option<f64>>,
+        reply: oneshot::Sender<AudioOutcome>,
+    },
     Status(oneshot::Sender<MixerStatus>),
     /// The configured sources and outputs with their URLs intact. `Status`
     /// masks those, so anything that must match on a URL asks here.
@@ -154,6 +179,21 @@ impl MixerHandle {
         let (tx, rx) = oneshot::channel();
         self.send(Command::Status(tx))?;
         rx.await.map_err(|_| anyhow::anyhow!("mixer dropped the status request"))
+    }
+
+    /// Set part of a source's balance and get back where it ended up. Like
+    /// `status`, this waits on a value rather than on an `Ack`: the answer is
+    /// the levels, and "not superimposed" is not a failure the caller should
+    /// see as a generic 400.
+    pub async fn set_audio(
+        &self,
+        source: SourceId,
+        page: Option<f64>,
+        media: Vec<Option<f64>>,
+    ) -> Result<AudioOutcome> {
+        let (tx, rx) = oneshot::channel();
+        self.send(Command::SetAudio { source, page, media, reply: tx })?;
+        rx.await.map_err(|_| anyhow::anyhow!("mixer dropped the audio request"))
     }
 
     pub async fn configs(&self) -> Result<RuntimeConfigs> {
@@ -1320,6 +1360,9 @@ impl Mixer {
                     }
                 }
             }
+            Command::SetAudio { source, page, media, reply } => {
+                let _ = reply.send(self.set_audio(&source, page, &media));
+            }
             Command::ReconnectOutput(id, ack) => {
                 let r = if self.outputs.iter().any(|o| o.id() == &id) {
                     self.reconnect_output(&id);
@@ -1568,6 +1611,39 @@ impl Mixer {
 
     fn broadcast_status(&self) {
         let _ = self.events.send(Event::Status(Box::new(self.status())));
+    }
+
+    /// Move part of a superimposed source's balance.
+    ///
+    /// Runs on the mixer thread like every other command, which is what keeps
+    /// it away from the streaming threads: setting a `volume` property is
+    /// cheap but it is still a pipeline touch, and the control plane has no
+    /// business doing those from a request handler.
+    fn set_audio(&mut self, id: &SourceId, page: Option<f64>, media: &[Option<f64>]) -> AudioOutcome {
+        let Some(slot) = self.sources.iter().find(|s| &s.input.id == id) else {
+            return AudioOutcome::NoSuchSource;
+        };
+        let Some(levels) = slot.input.levels() else {
+            return AudioOutcome::NotSuperimposed;
+        };
+        if media.len() > levels.media_count() {
+            // Not refused: a page can drop a video between the UI drawing its
+            // faders and the operator moving one, and losing the gains that
+            // did land would be worse than ignoring the ones that cannot.
+            warn!(
+                source = %id,
+                asked = media.len(),
+                have = levels.media_count(),
+                "more media gains than this source has videos, the extra ones do nothing"
+            );
+        }
+        let now = levels.apply(page, media);
+        info!(source = %id, page = now.page, media = ?now.media, "audio balance changed");
+        // Every connected UI shares one set of faders, so a change made in one
+        // browser has to reach the others. The levels ride along in the
+        // source rows of an ordinary status snapshot.
+        self.broadcast_status();
+        AudioOutcome::Set(now)
     }
 
     pub fn status(&self) -> MixerStatus {

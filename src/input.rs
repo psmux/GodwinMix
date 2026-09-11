@@ -2122,17 +2122,23 @@ impl AudioLevels {
     /// Only the channels named move. The UI sends one fader at a time, so a
     /// request carrying a page gain and no media list must leave the videos
     /// where they are rather than resetting them to unity. Media gains are
-    /// positional, and a list shorter than the number of videos leaves the
-    /// rest alone for the same reason. A list longer than the number of
+    /// positional; a null entry, or a list shorter than the number of videos,
+    /// leaves those channels alone for the same reason. A list longer than the number of
     /// videos is not an error: the page may have dropped a video since the UI
     /// last drew itself, and the reported levels say how many there really
     /// are.
-    pub fn apply(&self, page: Option<f64>, media: &[f64]) -> SourceAudio {
+    pub fn apply(&self, page: Option<f64>, media: &[Option<f64>]) -> SourceAudio {
         if let Some(gain) = page {
             self.set_page(gain);
         }
+        // Positional and sparse: a null holds that channel where it is. The UI
+        // moves one fader at a time and has no business restating the others,
+        // and a short list cannot name the second video without also naming
+        // the first.
         for (index, gain) in media.iter().enumerate() {
-            self.set_media(index, *gain);
+            if let Some(gain) = gain {
+                self.set_media(index, *gain);
+            }
         }
         self.report()
     }
@@ -2865,6 +2871,79 @@ mod tests {
 
         input.mark_failed();
         assert_eq!(input.observed_state(), SourceState::Failed);
+        input.stop();
+    }
+
+    /// The real elements, not a stand in. Reading a gain back off a `volume`
+    /// element is the whole point of `report`, so a test that modelled the
+    /// gains in Rust would prove nothing about what the pipeline is doing.
+    fn test_levels(videos: usize) -> AudioLevels {
+        init();
+        AudioLevels {
+            page: make("volume", "test-page-vol").unwrap(),
+            media: (0..videos)
+                .map(|n| make("volume", &format!("test-media{n}-vol")).unwrap())
+                .collect(),
+        }
+    }
+
+    #[test]
+    fn gains_are_clamped_to_what_a_volume_element_accepts() {
+        let levels = test_levels(2);
+        // A fader dragged past the end of its track still moves the sound.
+        levels.set_page(-3.0);
+        assert_eq!(levels.page_gain(), 0.0);
+        levels.set_page(99.0);
+        assert_eq!(levels.page_gain(), 10.0);
+        assert!(levels.set_media(1, -1.0));
+        assert_eq!(levels.media_gains()[1], 0.0);
+        // An index with no video behind it says so rather than passing.
+        assert!(!levels.set_media(9, 0.5));
+        assert_eq!(levels.media_count(), 2);
+    }
+
+    /// The UI sends one fader at a time. A page gain arriving on its own used
+    /// to be the moment every video would snap back to unity if `apply` wrote
+    /// a whole balance instead of the part it was given.
+    #[test]
+    fn a_partial_balance_leaves_the_other_channels_alone() {
+        let levels = test_levels(2);
+        let all = levels.apply(Some(0.5), &[Some(0.25), Some(0.75)]);
+        assert_eq!(all, SourceAudio { page: 0.5, media: vec![0.25, 0.75] });
+
+        let page_only = levels.apply(Some(0.125), &[]);
+        assert_eq!(page_only, SourceAudio { page: 0.125, media: vec![0.25, 0.75] });
+
+        // A list shorter than the number of videos stops where it stops.
+        let first_only = levels.apply(None, &[Some(1.0)]);
+        assert_eq!(first_only, SourceAudio { page: 0.125, media: vec![1.0, 0.75] });
+
+        // A null holds that channel. This is how the UI moves the second
+        // video without restating the first, which a short list cannot do.
+        let second_only = levels.apply(None, &[None, Some(0.25)]);
+        assert_eq!(second_only, SourceAudio { page: 0.125, media: vec![1.0, 0.25] });
+
+        // A list longer than the number of videos is not an error, and the
+        // report says how many there really are.
+        let too_many = levels.apply(None, &[Some(0.5), Some(0.5), Some(0.5), Some(0.5)]);
+        assert_eq!(too_many, SourceAudio { page: 0.125, media: vec![0.5, 0.5] });
+
+        // An empty request reads the balance without moving anything.
+        assert_eq!(levels.apply(None, &[]), too_many);
+    }
+
+    /// A whole page source has no levels at all: Chromium mixed its sounds
+    /// together long before the mixer saw them, and pretending otherwise
+    /// would give the operator faders that move nothing.
+    #[test]
+    fn a_plain_source_reports_no_levels() {
+        init();
+        let canvas = CanvasCaps::new(&Canvas::default());
+        let backends = Backends::probe(Accel::Auto, Accel::Auto).unwrap();
+        let input =
+            InputPipeline::build(&test_source(), &canvas, &backends, 15, Instant::now()).unwrap();
+        assert!(!input.superimposed());
+        assert!(input.levels().is_none());
         input.stop();
     }
 }

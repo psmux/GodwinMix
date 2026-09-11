@@ -445,6 +445,7 @@ mod tests {
             video_idle_ms: Some(30),
             audio_idle_ms: None,
             superimposed: false,
+            audio: None,
         };
         MixerStatus {
             program: Some("cam1".into()),
