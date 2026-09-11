@@ -523,6 +523,23 @@ const PAGE_DRIFT_NS: u64 = 150_000_000;
 /// takes the same margin so the two stay together.
 const MEDIA_LEAD_NS: u64 = 300_000_000;
 
+/// How far behind the clock the next round of a media may be placed and still
+/// be composed.
+///
+/// A round joins the one before it exactly where that one ended, and that
+/// moment has usually just gone by: the new round cannot start until the
+/// queues holding the old one have drained, so its first buffer turns up a few
+/// tens of milliseconds after the picture ran out. Added to `now` instead, the
+/// lead above is a gap on air, and the sound, whose queue is the last to
+/// drain, opened every loop with three quarters of a second of silence.
+///
+/// Placing it where the round before ended costs nothing because the layer
+/// aggregators run `LAYER_LATENCY_NS` behind the clock: a buffer that far back
+/// is still ahead of the position they are composing. Half that latency, so
+/// the join keeps a margin; a round later than this has genuinely lost time
+/// and takes the lead instead.
+const MEDIA_JOIN_SLACK_NS: u64 = 250_000_000;
+
 /// Upstream latency the layered compositor claims, the same figure as the
 /// mixer's own compositor. It is how late a page frame may be before it is
 /// dropped, and how long the media's next round may take to arrive before the
@@ -1126,13 +1143,21 @@ impl Layers {
     }
 }
 
-/// Where a layer's segment goes: `now` with the stream's bias, or `after` (the
-/// end of the round before) when that is later. See `PAGE_LAG_NS` and
-/// `MEDIA_LEAD_NS`.
+/// Where a layer's segment goes: the end of the round before when there is
+/// one and it is still within reach, otherwise `now` with the stream's bias.
+/// See `PAGE_LAG_NS`, `MEDIA_LEAD_NS` and `MEDIA_JOIN_SLACK_NS`.
 fn biased(stream: Stream, now: gst::ClockTime, after: gst::ClockTime) -> gst::ClockTime {
     match stream {
         Stream::Page => now,
-        Stream::Video | Stream::Audio => (now + gst::ClockTime::from_nseconds(MEDIA_LEAD_NS)).max(after),
+        Stream::Video | Stream::Audio => {
+            let lead = now + gst::ClockTime::from_nseconds(MEDIA_LEAD_NS);
+            let reach = after + gst::ClockTime::from_nseconds(MEDIA_JOIN_SLACK_NS);
+            if after.is_zero() || reach < now {
+                lead
+            } else {
+                after
+            }
+        }
     }
 }
 
@@ -1361,7 +1386,11 @@ impl Placement {
                                 info!(
                                     source = %id,
                                     at_ms = place.mseconds(),
-                                    gap_ms = now.saturating_sub(after).mseconds(),
+                                    // What the viewer sees: how far past the
+                                    // end of the round before this one starts,
+                                    // not how late its first buffer was.
+                                    gap_ms = place.saturating_sub(after).mseconds(),
+                                    late_ms = now.saturating_sub(after).mseconds(),
                                     "placed the next round of the page's media"
                                 );
                             }
