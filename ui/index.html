@@ -119,6 +119,16 @@
     font-size: 14px; line-height: 1; padding: 0 3px;
   }
   .srcrow .del:hover { color: var(--live); background: transparent; }
+  /* Faders for a superimposed source's own decode: page sound plus one strip
+     per video the mixer is mixing in underneath. */
+  .audio { margin: -2px 0 8px; padding-left: 2px; display: flex; flex-direction: column; gap: 3px; }
+  .afader { display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--dim); }
+  .afader .al { width: 50px; flex: none; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .afader input[type=range] { flex: 1; min-width: 0; accent-color: var(--ok); }
+  .afader .av { width: 32px; flex: none; text-align: right; font-variant-numeric: tabular-nums; }
+  /* Unity is the value an operator returns to, so it gets its own color rather
+     than making them read the number every time. */
+  .afader .av.unity { color: var(--ok); font-weight: 600; }
   #adcustom { margin-top: 8px; }
   #adcustom summary { font-size: 11px; color: var(--dim); cursor: pointer; }
   #adcustom input { margin-top: 6px; }
@@ -239,6 +249,9 @@
 
 <div id="alerts"></div>
 <div id="offline">Disconnected from the mixer. Retrying…</div>
+<!-- Gives range inputs a tick mark at unity in browsers that draw datalist
+     ticks (Chromium does), on top of the numeric readout every browser gets. -->
+<datalist id="unity-tick"><option value="1"></datalist>
 
 <script data-cfasync="false">
 "use strict";
@@ -593,7 +606,65 @@ function shownUri(uri) {
   return u;
 }
 
+// --- audio faders for a superimposed source ---------------------------------
+// Present only on a source the mixer decodes itself (see the `audio` field in
+// the status payload). audioActive holds the keys currently under the
+// operator's pointer, so a status refresh mid-drag skips the whole sources
+// panel instead of tearing out the slider they are holding.
+const audioLocal = new Map();   // key -> last value the operator set
+const audioActive = new Set();  // keys currently overriding the server's value
+const audioTimers = new Map();  // key -> pending debounce timer
+
+function audioKey(sourceId, channel) { return `${sourceId} ${channel}`; }
+
+function audioFadersHtml(s) {
+  const a = s.audio;
+  if (!a) return "";
+  const rows = [afaderHtml(s.id, "page", "Page", a.page)];
+  (a.media || []).forEach((v, i) => rows.push(afaderHtml(s.id, "media:" + i, "Video " + (i + 1), v)));
+  return `<div class="audio">${rows.join("")}</div>`;
+}
+
+function afaderHtml(sourceId, channel, label, serverValue) {
+  const key = audioKey(sourceId, channel);
+  const v = audioActive.has(key) ? audioLocal.get(key) : (typeof serverValue === "number" ? serverValue : 1);
+  const unity = Math.abs(v - 1) < 0.001;
+  return `
+    <div class="afader" data-source="${escapeHtml(sourceId)}" data-channel="${escapeHtml(channel)}">
+      <span class="al">${escapeHtml(label)}</span>
+      <input type="range" min="0" max="2" step="0.05" value="${v}" list="unity-tick">
+      <span class="av${unity ? " unity" : ""}">${v.toFixed(2)}</span>
+    </div>`;
+}
+
+// A sparse media array (null for the channels that did not move) keeps the
+// request to just the one fader the operator touched, the same "null means
+// leave it alone" convention the add-source form already uses for kind and
+// superimpose.
+function mediaSparse(sourceId, index, value) {
+  const s = status?.sources?.find((s) => s.id === sourceId);
+  const len = Math.max((s?.audio?.media || []).length, index + 1);
+  const arr = new Array(len).fill(null);
+  arr[index] = value;
+  return arr;
+}
+
+async function postAudio(sourceId, channel, key) {
+  audioTimers.delete(key);
+  const v = audioLocal.get(key);
+  const body = channel === "page"
+    ? { page: v }
+    : { media: mediaSparse(sourceId, Number(channel.slice(6)), v) };
+  await post(`/api/sources/${encodeURIComponent(sourceId)}/audio`, body);
+}
+
 function renderSources() {
+  // A fader mid-drag holds the browser's pointer capture; replacing its DOM
+  // node out from under the pointer would end the drag with no way to resume
+  // it without letting go and grabbing again. Skip the rebuild until the
+  // operator lets go, then the next status resyncs everything at once.
+  if (audioActive.size) return;
+
   const host = $("sources");
   host.innerHTML = status.sources.map((s, i) => `
     <div class="srcrow" data-id="${escapeHtml(s.id)}" title="${escapeHtml(shownUri(s.uri))}">
@@ -604,7 +675,7 @@ function renderSources() {
         : `<span class="kind">${KIND_LABEL[kindOf(s.uri)] || kindOf(s.uri)}</span>`}
       <span class="st ${s.state}">${s.state}${s.has_audio ? "" : " · mute"}</span>
       <button class="del" title="Remove this source">&times;</button>
-    </div>`).join("") || `<div class="kv">no sources</div>`;
+    </div>${audioFadersHtml(s)}`).join("") || `<div class="kv">no sources</div>`;
 
   [...host.querySelectorAll(".srcrow")].forEach((row) => {
     const id = row.dataset.id;
@@ -613,6 +684,30 @@ function renderSources() {
       if (!confirm(`Remove source "${id}"?`)) return;
       const r = await api(`/api/sources/${encodeURIComponent(id)}`, { method: "DELETE" });
       if (!r.ok) alert_("error", await r.text());
+    };
+  });
+
+  [...host.querySelectorAll(".afader")].forEach((el) => {
+    const sourceId = el.dataset.source;
+    const channel = el.dataset.channel;
+    const key = audioKey(sourceId, channel);
+    const input = el.querySelector("input");
+    const out = el.querySelector(".av");
+    input.oninput = () => {
+      const v = Number(input.value);
+      audioActive.add(key);
+      audioLocal.set(key, v);
+      out.textContent = v.toFixed(2);
+      out.classList.toggle("unity", Math.abs(v - 1) < 0.001);
+      clearTimeout(audioTimers.get(key));
+      audioTimers.set(key, setTimeout(() => postAudio(sourceId, channel, key), 150));
+    };
+    // "change" fires once when the drag or key press settles, well ahead of
+    // the debounce firing on its own; send the final value right away and
+    // only then let status renders take this fader back over.
+    input.onchange = () => {
+      clearTimeout(audioTimers.get(key));
+      postAudio(sourceId, channel, key).then(() => audioActive.delete(key));
     };
   });
 }

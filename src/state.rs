@@ -56,6 +56,27 @@ pub struct SourceStatus {
     /// page turned out to have no address worth handing over.
     #[serde(default)]
     pub superimposed: bool,
+    /// Where this source's sounds sit against each other. `None` for anything
+    /// but a superimposed source, because everything else arrives already
+    /// mixed and there is nothing to balance. Absent rather than null in the
+    /// JSON, so a snapshot written by an older build still parses.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub audio: Option<SourceAudio>,
+}
+
+/// The gains a superimposed source is currently running with.
+///
+/// 1.0 is unity, 0.0 is silent, and the ceiling is 10.0. Reported rather than
+/// remembered: these are read back off the volume elements, so what the UI
+/// shows is what the pipeline is doing, including any clamping.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct SourceAudio {
+    /// The page's own sound, which is the commentary and whatever the page
+    /// plays itself.
+    pub page: f64,
+    /// One per video the mixer decodes underneath, in the order the page
+    /// handed them over.
+    pub media: Vec<f64>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -288,6 +309,7 @@ mod tests {
                 video_idle_ms: Some(12),
                 audio_idle_ms: Some(9),
                 superimposed: true,
+                audio: Some(SourceAudio { page: 0.8, media: vec![1.0, 0.0] }),
             }],
             outputs: vec![],
             multiview: MultiviewStatus {
@@ -328,6 +350,10 @@ mod tests {
         // directly and `undefined` would read as "not superimposed" by luck
         // rather than by contract.
         assert_eq!(v["sources"][0]["superimposed"], true);
+        // The balance travels with the source row, so the UI can draw the
+        // faders from the same snapshot it draws the badges from.
+        assert_eq!(v["sources"][0]["audio"]["page"], 0.8);
+        assert_eq!(v["sources"][0]["audio"]["media"][1], 0.0);
 
         let v: serde_json::Value = serde_json::to_value(Event::Took {
             source: None,
@@ -374,6 +400,44 @@ mod tests {
         });
         let s: SourceStatus = serde_json::from_value(older).unwrap();
         assert!(!s.superimposed);
+        // Same again for the balance: a row from before it existed reports no
+        // levels, which is exactly what a camera reports today.
+        assert_eq!(s.audio, None);
+    }
+
+    /// A source with nothing to balance leaves the key out altogether rather
+    /// than writing a null. The UI shows the faders when the key is there, so
+    /// a camera that reported `"audio": null` would be indistinguishable from
+    /// a superimposed source whose levels had not been read yet.
+    #[test]
+    fn only_a_superimposed_source_carries_a_balance() {
+        let camera = SourceStatus {
+            id: "cam1".into(),
+            name: "Camera 1".into(),
+            uri: "rtmp://host/live/cam1".into(),
+            state: SourceState::Live,
+            has_video: true,
+            has_audio: true,
+            cell: Some(2),
+            video_idle_ms: Some(20),
+            audio_idle_ms: Some(20),
+            superimposed: false,
+            audio: None,
+        };
+        let v = serde_json::to_value(&camera).unwrap();
+        assert!(v.get("audio").is_none(), "a camera must not carry a balance");
+
+        let page = SourceStatus {
+            audio: Some(SourceAudio { page: 0.25, media: vec![1.0] }),
+            superimposed: true,
+            ..camera
+        };
+        let v = serde_json::to_value(&page).unwrap();
+        assert_eq!(v["audio"]["page"], 0.25);
+        assert_eq!(v["audio"]["media"].as_array().unwrap().len(), 1);
+        // Round trip, because the CLI and the MCP server parse this back.
+        let back: SourceStatus = serde_json::from_value(v).unwrap();
+        assert_eq!(back.audio, Some(SourceAudio { page: 0.25, media: vec![1.0] }));
     }
 
     #[test]
