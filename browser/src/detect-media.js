@@ -126,6 +126,21 @@
     el.removeAttribute("src");
     el.removeAttribute("poster");
     el.load();
+    // The page may fight this. A broadcast-aware page force-unmutes for
+    // ?broadcast=1 and resumes on every pause, and then its own copy of the
+    // video plays underneath the copy the mixer decodes, a few milliseconds
+    // apart. That is a comb filter: measured 2026-09-12 as 0.59 correlation
+    // against the source, where a single copy gives 0.95, and it sounds
+    // hollow and blares on bass. The mixer owns this element now. Pin it
+    // silent and make play() a no-op, whatever the page does afterwards.
+    try {
+      Object.defineProperty(el, "muted", { get: () => true, set: () => {}, configurable: true });
+      Object.defineProperty(el, "volume", { get: () => 0, set: () => {}, configurable: true });
+      el.play = () => Promise.resolve();
+    } catch (e) {
+      // A page that froze its element beats the pin; the mute above still
+      // holds unless the page flips it back, which the report will show.
+    }
     el.style.setProperty("background", KEY, "important");
     el.style.setProperty("visibility", "visible", "important");
   };
