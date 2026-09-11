@@ -210,6 +210,9 @@ pub struct InputPipeline {
     /// Whether the page's media ended up being decoded outside the browser.
     /// Settled when the pipeline is built and constant for its lifetime.
     superimposed: bool,
+    /// Present only for a superimposed source, which is the only kind whose
+    /// sounds arrive separately enough to be balanced. See `AudioLevels`.
+    levels: Option<AudioLevels>,
     /// Where a layered source's layers sit in time, one per layer. Reset on
     /// restart.
     placement: Vec<Arc<Placement>>,
@@ -856,6 +859,15 @@ impl MediaBranch {
 }
 
 impl Layers {
+    /// The level elements, for the control API. Cloning a gst Element clones
+    /// the handle, not the element, so these stay the ones in the pipeline.
+    fn levels(&self) -> AudioLevels {
+        AudioLevels {
+            page: self.page_vol.clone(),
+            media: self.media.iter().map(|b| b.avol.clone()).collect(),
+        }
+    }
+
     fn build(id: &SourceId, report: &MediaReport) -> Result<Self> {
         let media = report
             .media
@@ -1868,6 +1880,7 @@ impl InputPipeline {
             has_video,
             has_audio,
             superimposed: layers.is_some(),
+            levels: layers.as_ref().map(|l| l.levels()),
             placement,
             media_cache: overlay
                 .as_ref()
@@ -2044,6 +2057,11 @@ impl InputPipeline {
         self.superimposed
     }
 
+    /// The page and media levels, when this source has them.
+    pub fn levels(&self) -> Option<&AudioLevels> {
+        self.levels.as_ref()
+    }
+
     pub fn observed_state(&self) -> SourceState {
         if self.failed.load(Ordering::Relaxed) {
             SourceState::Failed
@@ -2054,6 +2072,49 @@ impl InputPipeline {
         } else {
             SourceState::Connecting
         }
+    }
+}
+
+/// The levels a superimposed source exposes.
+///
+/// A page drawn over video has two sounds: the page's own, which is the
+/// commentary and anything the quiz plays, and one per video the mixer decodes
+/// underneath. They arrive on separate branches, so they can be balanced
+/// against each other. A whole page source has neither, because Chromium has
+/// already mixed everything into one stream by the time the mixer sees it.
+#[derive(Clone)]
+pub struct AudioLevels {
+    page: gst::Element,
+    media: Vec<gst::Element>,
+}
+
+impl AudioLevels {
+    /// Gain for the page's own sound. 1.0 leaves it alone, 0.0 silences it.
+    pub fn set_page(&self, gain: f64) {
+        self.page.set_property("volume", gain.clamp(0.0, 10.0));
+    }
+
+    /// Gain for one of the videos the mixer is decoding underneath.
+    pub fn set_media(&self, index: usize, gain: f64) -> bool {
+        match self.media.get(index) {
+            Some(v) => {
+                v.set_property("volume", gain.clamp(0.0, 10.0));
+                true
+            }
+            None => false,
+        }
+    }
+
+    pub fn page_gain(&self) -> f64 {
+        self.page.property::<f64>("volume")
+    }
+
+    pub fn media_gains(&self) -> Vec<f64> {
+        self.media.iter().map(|v| v.property::<f64>("volume")).collect()
+    }
+
+    pub fn media_count(&self) -> usize {
+        self.media.len()
     }
 }
 
