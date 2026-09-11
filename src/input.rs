@@ -1382,9 +1382,10 @@ impl Placement {
                                     at_ms = place.mseconds(),
                                     "layer placed on the composite's timeline"
                                 );
-                            } else if stream == Stream::Video {
+                            } else {
                                 info!(
                                     source = %id,
+                                    layer = ?stream,
                                     at_ms = place.mseconds(),
                                     // What the viewer sees: how far past the
                                     // end of the round before this one starts,
@@ -1528,7 +1529,16 @@ impl Placement {
                             // the buffer after this one.
                             let placed = *placed_at.lock();
                             let after = *placed_after.lock();
-                            let place = biased(stream, now, after);
+                            // A round that has one before it keeps the join the
+                            // segment chose. The sound's first buffer can be
+                            // half a second behind its own segment while the
+                            // decoder starts, and biasing it to now all over
+                            // again opened exactly the gap the join is there to
+                            // close: the picture carried on and the sound came
+                            // back three quarters of a second later. Only a
+                            // first round, which has nothing to join, is placed
+                            // by its first buffer.
+                            let place = if after.is_zero() { biased(stream, now, after) } else { placed };
                             place_offset(&target, &own_change, place.saturating_sub(rt));
                             if now > placed + gst::ClockTime::from_mseconds(100) || rt > gst::ClockTime::from_mseconds(20) {
                                 info!(
