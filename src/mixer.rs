@@ -1596,6 +1596,9 @@ impl Mixer {
                 video_idle_ms: s.input.health.video_idle_ms(),
                 audio_idle_ms: s.input.health.audio_idle_ms(),
                 superimposed: s.input.superimposed(),
+                // Only a superimposed source has levels, so this is `None`
+                // for everything else and the UI draws no faders for it.
+                audio: s.input.levels().map(|l| l.report()),
             })
             .collect();
 

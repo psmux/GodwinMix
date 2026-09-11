@@ -16,7 +16,7 @@ use crate::caps::CanvasCaps;
 use crate::config::{BrowserConfig, SourceConfig, Superimpose};
 use crate::gstutil::{self, make};
 use crate::probe::Backends;
-use crate::state::{SourceHealth, SourceId, SourceState};
+use crate::state::{SourceAudio, SourceHealth, SourceId, SourceState};
 use anyhow::{Context, Result};
 use gstreamer as gst;
 use gstreamer::prelude::*;
@@ -2115,6 +2115,32 @@ impl AudioLevels {
 
     pub fn media_count(&self) -> usize {
         self.media.len()
+    }
+
+    /// Apply a partial balance request and say where every channel ended up.
+    ///
+    /// Only the channels named move. The UI sends one fader at a time, so a
+    /// request carrying a page gain and no media list must leave the videos
+    /// where they are rather than resetting them to unity. Media gains are
+    /// positional, and a list shorter than the number of videos leaves the
+    /// rest alone for the same reason. A list longer than the number of
+    /// videos is not an error: the page may have dropped a video since the UI
+    /// last drew itself, and the reported levels say how many there really
+    /// are.
+    pub fn apply(&self, page: Option<f64>, media: &[f64]) -> SourceAudio {
+        if let Some(gain) = page {
+            self.set_page(gain);
+        }
+        for (index, gain) in media.iter().enumerate() {
+            self.set_media(index, *gain);
+        }
+        self.report()
+    }
+
+    /// Where the channels sit now, read back off the elements rather than
+    /// remembered, so a clamped request reports the gain that took effect.
+    pub fn report(&self) -> SourceAudio {
+        SourceAudio { page: self.page_gain(), media: self.media_gains() }
     }
 }
 

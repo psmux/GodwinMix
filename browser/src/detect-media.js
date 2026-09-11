@@ -46,11 +46,21 @@
 
   const describe = (el, index) => {
     const r = el.getBoundingClientRect();
-    const src = el.currentSrc || el.src || "";
+    // A page that feeds its player through Media Source Extensions (hls.js and
+    // anything else that builds its own buffers) can say what it is really
+    // playing, with data-lbx-src on the element. Without that the element's
+    // own address is a blob: that exists nowhere outside this renderer, the
+    // mixer cannot open it, and the whole page has to be rendered instead.
+    // A page that declares its address gets its video handed over like any
+    // other, which is what lets its sound be balanced separately.
+    const declared = (el.dataset && el.dataset.lbxSrc) || "";
+    const src = declared || el.currentSrc || el.src || "";
     // Media Source Extensions and the File API both hand the element a blob:
     // URL that only exists inside this renderer. Encrypted Media Extensions
     // means the frames are decrypted in the browser and never leave it.
-    const mse = src.startsWith("blob:");
+    // A declared address is by definition fetchable, so it is not MSE for
+    // this purpose even when the element itself is being fed that way.
+    const mse = !declared && src.startsWith("blob:");
     const drm = !!el.mediaKeys;
     if (!pageMuted.has(el)) pageMuted.set(el, el.muted);
     return {
