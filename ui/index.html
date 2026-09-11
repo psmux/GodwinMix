@@ -163,10 +163,10 @@
 
 <header>
   <h1>LiveboxMix</h1>
-  <span class="pill">program <b id="pgm">—</b></span>
-  <span class="pill">uptime <b id="uptime">—</b></span>
+  <span class="pill">program <b id="pgm">…</b></span>
+  <span class="pill">uptime <b id="uptime">…</b></span>
   <div class="spacer"></div>
-  <span class="pill" id="backend">—</span>
+  <span class="pill" id="backend">…</span>
   <span class="pill" id="adpill" hidden>AD ON AIR</span>
   <span id="desk" hidden>
     <button class="ghost" id="closewin" title="Close this window. The mixer and the stream keep running.">Close window</button>
@@ -538,7 +538,7 @@ function renderCells() {
       const slot = order.indexOf(c.source);
       if (status.program === c.source) div.classList.add("live");
       div.onclick = () => take(c.source);
-      div.title = src ? `${src.name} — ${src.uri}` : c.source;
+      div.title = src ? `${src.name}: ${src.uri}` : c.source;
       label.innerHTML =
         (slot >= 0 && slot < 9 ? `<span class="key">${slot + 1}</span>` : "") +
         `<span class="name">${escapeHtml(src ? src.name : c.source)}</span>` +
