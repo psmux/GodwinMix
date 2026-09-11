@@ -205,6 +205,15 @@ impl MixerHandle {
     pub fn subscribe(&self) -> broadcast::Receiver<Event> {
         self.events.subscribe()
     }
+
+    /// Push an event to every connected UI without going through the command
+    /// queue. For things that happen outside the mixer thread and need nothing
+    /// from it, a media upload or a conversion's progress. The mixer's own
+    /// state is untouched, so queueing this behind a take would only make a
+    /// background job wait.
+    pub fn emit(&self, event: Event) {
+        let _ = self.events.send(event);
+    }
 }
 
 struct SourceSlot {

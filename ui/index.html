@@ -85,7 +85,7 @@
     border-radius: 6px; background: #0f1216;
   }
   .clip {
-    display: flex; align-items: baseline; gap: 8px; padding: 5px 8px;
+    display: flex; align-items: baseline; flex-wrap: wrap; gap: 8px; padding: 5px 8px;
     cursor: pointer; border-bottom: 1px solid rgba(255,255,255,.04); font-size: 12px;
   }
   .clip:last-child { border-bottom: 0; }
@@ -94,6 +94,16 @@
   .clip .cn { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .clip .cd { color: var(--dim); font-variant-numeric: tabular-nums; }
   .clip .warn { color: var(--warn); }
+  /* Green means the file is ready to cut to: web safe as it is, or a converted
+     copy exists. Mirrors the mute/warn chips above, just a different colour. */
+  .clip .ok { color: var(--ok); }
+  /* The actions block takes a full width line of its own under the row, so the
+     buttons and the progress bar never crowd the name. */
+  .clip .acts { flex-basis: 100%; display: flex; align-items: center; gap: 6px; margin-top: 4px; }
+  .clip .acts button { padding: 2px 8px; font-size: 11px; }
+  .clip .acts .cvt { color: var(--dim); flex: none; }
+  .clip .acts .prog { flex: 1; height: 4px; background: #0a0c0f; border-radius: 2px; overflow: hidden; }
+  .clip .acts .prog i { display: block; height: 100%; background: var(--ok); transition: width .1s linear; }
   .clips .empty { padding: 10px; color: var(--dim); font-size: 12px; line-height: 1.4; }
   button.ghost { background: transparent; }
   button.warn { border-color: var(--warn); color: var(--warn) }
@@ -188,10 +198,13 @@
       <div id="meters"></div>
     </section>
     <section>
-      <h2>Ad break</h2>
+      <h2>Media</h2>
       <div id="medialist" class="clips"></div>
+      <input id="mediafile" type="file" accept="video/*,.mkv,.ts,.flv" hidden>
+      <div class="hint" id="uphint" hidden></div>
       <div class="adrow">
         <button id="adrefresh" class="ghost" title="Rescan the library">Rescan</button>
+        <button id="mediaupload" class="ghost" title="Upload a video file into the library">Upload…</button>
         <label class="cue">in <input id="adcue" type="number" min="0" max="600" step="1" value="0"> s</label>
       </div>
       <div class="adrow">
@@ -230,6 +243,7 @@
           <button data-kind="web" class="on" title="Render a website, with its audio, as a source">Website</button>
           <button data-kind="stream" title="RTMP, HLS, DASH, RTSP, SRT">Camera or stream</button>
           <button data-kind="exec" title="A command line whose output is the source">Command</button>
+          <button data-kind="file" title="A video file already on the mixer machine">File</button>
         </div>
         <input id="nsuri" placeholder="Paste the page address, e.g. https://www.youtube.com/watch?v=…" spellcheck="false">
         <input id="nsname" placeholder="name (optional, the site's name by default)" spellcheck="false">
@@ -359,6 +373,9 @@ function onEvent(ev) {
     case "ad_break_changed":
       if (status) { status.ad = ev.ad; renderAd(); }
       break;
+    // Conversion progress arrives per percent, so the whole list is refetched
+    // on a leash rather than on every tick. See loadMediaSoon.
+    case "media_changed": loadMediaSoon(); break;
     case "audio_level": drawMeters(ev.peak_db); break;
     case "alert": alert_(ev.severity, ev.message); break;
   }
@@ -406,6 +423,14 @@ async function loadMedia() {
   } catch (e) { alert_("error", String(e)); }
 }
 
+// Coalesce a burst of media_changed events (one per percent of a conversion)
+// into at most one refetch every 500ms.
+let mediaReloadTimer = null;
+function loadMediaSoon() {
+  if (mediaReloadTimer) return;
+  mediaReloadTimer = setTimeout(() => { mediaReloadTimer = null; loadMedia(); }, 500);
+}
+
 function fmtDur(ms) {
   if (ms == null) return "";
   const t = Math.round(ms / 1000);
@@ -423,18 +448,111 @@ function renderMedia() {
     }</div>`;
     return;
   }
-  host.innerHTML = media.items.map((it, i) => `
-    <div class="clip${it.path === selectedClip ? " sel" : ""}" data-i="${i}" title="${escapeHtml(it.path)}">
+  host.innerHTML = media.items.map((it, i) => {
+    // Every new field is optional. An older server sends none of them, and the
+    // row must fall back to just the name, the mute chip and the duration.
+    const conv = it.conversion || null;
+    const running = !!(conv && conv.state === "running");
+    const failed = !!(conv && conv.state === "failed");
+    const failMsg = failed && conv.error ? conv.error : "";
+    // Ready to cut to: web safe as delivered, or a converted copy exists.
+    const ready = it.web_safe === true || !!it.converted_path;
+    // Offer Convert only when we actually know it is not web safe and there is
+    // no converted copy yet. Unknown (older server) means no button.
+    const needsConvert = it.web_safe === false && !it.converted_path;
+    // The path holds the error too, so hovering the whole row explains a fail.
+    const rowTitle = failMsg ? `${it.path}\n${failMsg}` : it.path;
+
+    let acts;
+    if (running) {
+      const pct = Math.round((conv.progress || 0) * 100);
+      acts = `<div class="acts">
+        <span class="cvt">converting ${pct}%</span>
+        <span class="prog"><i style="width:${pct}%"></i></span>
+      </div>`;
+    } else {
+      const cvtBtn = needsConvert
+        ? `<button class="cvt-btn" title="${escapeHtml((it.reasons || []).join("; "))}">Convert</button>`
+        : "";
+      const failLabel = failMsg ? `<span class="warn" title="${escapeHtml(failMsg)}">convert failed</span>` : "";
+      acts = `<div class="acts">
+        <button class="add-btn">Add as source</button>
+        ${cvtBtn}${failLabel}
+      </div>`;
+    }
+
+    return `
+    <div class="clip${it.path === selectedClip ? " sel" : ""}" data-i="${i}" title="${escapeHtml(rowTitle)}">
       <span class="cn">${escapeHtml(it.name)}</span>
+      ${ready ? `<span class="ok" title="Web friendly, ready to cut to">web</span>` : ""}
       ${it.has_audio ? "" : `<span class="warn" title="No audio track">mute</span>`}
       <span class="cd">${fmtDur(it.duration_ms)}</span>
-    </div>`).join("");
+      ${acts}
+    </div>`;
+  }).join("");
   [...host.querySelectorAll(".clip")].forEach((el) => {
     const it = media.items[Number(el.dataset.i)];
     el.onclick = () => { selectedClip = it.path; $("aduri").value = it.path; renderMedia(); renderAd(); };
     el.ondblclick = () => { selectedClip = it.path; rollAd(); };
+    // stopPropagation so a click on a button does not also select the clip for
+    // the ad roll, the way the row's own onclick would.
+    const add = el.querySelector(".add-btn");
+    if (add) add.onclick = (e) => { e.stopPropagation(); addMediaSource(it); };
+    const cvt = el.querySelector(".cvt-btn");
+    if (cvt) cvt.onclick = (e) => { e.stopPropagation(); cvt.disabled = true; convertMedia(it.name); };
   });
 }
+
+// Add a media file to the mixer as a source. The converted copy wins when there
+// is one, because that is the file the browser and the encoder can both read.
+async function addMediaSource(it) {
+  const uri = it.converted_path || it.path;
+  const ok = await post("/api/sources", { uri, name: it.name, kind: null, superimpose: null });
+  if (ok) alert_("info", it.name + " added. Take it with its number key.");
+}
+
+// Kick off a background conversion. Progress comes back as media_changed events,
+// which refetch the list and redraw the row's progress bar.
+async function convertMedia(name) {
+  await post(`/api/media/${encodeURIComponent(name)}/convert`);
+}
+
+// fetch cannot report upload progress, so this one call uses XMLHttpRequest and
+// carries the bearer token itself. The body is the raw file bytes.
+function uploadMedia(file) {
+  const hint = $("uphint");
+  hint.hidden = false;
+  hint.textContent = `Uploading ${file.name}… 0%`;
+  const xhr = new XMLHttpRequest();
+  xhr.open("POST", `/api/media/upload?name=${encodeURIComponent(file.name)}`);
+  xhr.setRequestHeader("Content-Type", "application/octet-stream");
+  if (token) xhr.setRequestHeader("Authorization", `Bearer ${token}`);
+  xhr.upload.onprogress = (e) => {
+    if (e.lengthComputable) {
+      hint.textContent = `Uploading ${file.name}… ${Math.round((e.loaded / e.total) * 100)}%`;
+    }
+  };
+  xhr.onload = () => {
+    if (xhr.status >= 200 && xhr.status < 300) {
+      hint.textContent = `Uploaded ${file.name}.`;
+      setTimeout(() => { hint.hidden = true; }, 3000);
+      loadMedia();
+    } else {
+      hint.hidden = true;
+      alert_("error", xhr.responseText || `Upload failed (${xhr.status}).`);
+    }
+  };
+  xhr.onerror = () => { hint.hidden = true; alert_("error", "Upload failed."); };
+  xhr.send(file);
+}
+
+$("mediaupload").onclick = () => $("mediafile").click();
+$("mediafile").onchange = () => {
+  const f = $("mediafile").files[0];
+  if (f) uploadMedia(f);
+  // Clear it so picking the same file again still fires change.
+  $("mediafile").value = "";
+};
 
 $("adrefresh").onclick = loadMedia;
 
@@ -726,6 +844,10 @@ const KIND_UI = {
     placeholder: "ffmpeg -re -i … -f matroska -",
     hint: "Runs on the mixer machine; its output is the source. Needs security.allow_exec_sources.",
   },
+  file: {
+    placeholder: "/var/lib/liveboxmix/media/clip.mp4",
+    hint: "A video file already on the mixer machine. The library above adds these for you.",
+  },
 };
 let nsKind = "web";
 
@@ -764,6 +886,7 @@ function guessKind(u) {
     const path = l.split(/[?#]/)[0];
     return /\.(m3u8|mpd|mp4|mkv|flv|ts|webm|mov)$/.test(path) ? "stream" : "web";
   }
+  if (l.startsWith("/") || l.startsWith("file://")) return "file";
   return null;
 }
 $("nsuri").oninput = () => {
