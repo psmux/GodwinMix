@@ -772,6 +772,11 @@ struct Layers {
     /// the taken-over videos are muted, mixed in with theirs.
     page_aconv: gst::Element,
     page_ares: gst::Element,
+    /// Level for the page's own sound, so commentary and the quiz's effects
+    /// can be balanced against a video the mixer is playing underneath. The
+    /// media branches have had their own `volume` all along; this is the other
+    /// half of that, and the two together are what makes the balance settable.
+    page_vol: gst::Element,
     amix: gst::Element,
     comp: gst::Element,
     comp_caps: gst::Element,
@@ -865,6 +870,7 @@ impl Layers {
             over_conv: make("videoconvert", &format!("{id}-over-conv"))?,
             page_aconv: make("audioconvert", &format!("{id}-page-aconv"))?,
             page_ares: make("audioresample", &format!("{id}-page-ares"))?,
+            page_vol: make("volume", &format!("{id}-page-vol"))?,
             // Live like the compositor below, for the same reason: a sound
             // that stops must not stop the rest.
             amix: gstutil::make_live_aggregator("audiomixer", &format!("{id}-sup-amix"))?,
@@ -901,6 +907,7 @@ impl Layers {
             &self.over_conv,
             &self.page_aconv,
             &self.page_ares,
+            &self.page_vol,
             &self.amix,
             &self.comp,
             &self.comp_caps,
@@ -1012,7 +1019,7 @@ impl Layers {
         // video the mixer draws itself used to be. See `KEY_TOLERANCE` in the
         // sidecar's mux.rs for why that happens there and not here.
         gst::Element::link_many([&self.over_q, &self.over_conv]).context("linking the page branch")?;
-        gst::Element::link_many([&self.page_aconv, &self.page_ares, &self.amix])
+        gst::Element::link_many([&self.page_aconv, &self.page_ares, &self.page_vol, &self.amix])
             .context("linking the page's sound into the mix")?;
         let over_pad = self
             .comp
