@@ -169,6 +169,11 @@ pub enum Event {
     AudioLevel { peak_db: Vec<f64> },
     /// Something went wrong that the operator should see.
     Alert { severity: Severity, message: String },
+    /// A file in the media library changed: uploaded, deleted, or its
+    /// conversion moved on. The UI refetches `/api/media` rather than being
+    /// sent the whole item, because the listing is the one place a converted
+    /// copy gets folded onto its original.
+    MediaChanged { name: String, conversion: Option<crate::convert::ConversionState> },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]

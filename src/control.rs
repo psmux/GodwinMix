@@ -21,7 +21,8 @@ use crate::snapshot::{self, Pick, Tracker};
 use crate::state::{Event, MixerStatus, SourceState};
 use anyhow::Result;
 use axum::extract::ws::{Message, WebSocket, WebSocketUpgrade};
-use axum::extract::{FromRef, Path, Query, Request, State};
+use axum::body::Body;
+use axum::extract::{DefaultBodyLimit, FromRef, Path, Query, Request, State};
 use axum::http::{header, HeaderMap, Method, StatusCode, Uri};
 use axum::middleware::{self, Next};
 use axum::response::{Html, IntoResponse, Response};
@@ -45,6 +46,8 @@ pub struct AppState {
     pub frames: Option<Arc<broadcast::Sender<Arc<[u8]>>>>,
     /// Ad clips available on this machine.
     pub library: Arc<MediaLibrary>,
+    /// Runs file transcodes and remembers their progress.
+    pub converter: Arc<crate::convert::Converter>,
     /// Rung by `POST /api/shutdown`. `main` waits on it alongside Ctrl-C and
     /// takes the whole process down the same way for either.
     pub quit: Arc<tokio::sync::Notify>,
@@ -77,6 +80,7 @@ impl FromRef<Ctx> for Arc<Tracker> {
 }
 
 pub fn router(app: AppState, snapshots: Arc<Tracker>) -> Router {
+    let max_upload = app.library.cfg().max_upload_bytes;
     let state = Ctx { app, snapshots };
     // Everything that reads or drives the mixer sits behind the token. The
     // page at `/` does not: it is the same for everyone, contains nothing
@@ -89,6 +93,12 @@ pub fn router(app: AppState, snapshots: Arc<Tracker>) -> Router {
         .route("/api/golive", post(golive))
         .route("/api/shutdown", post(shutdown))
         .route("/api/media", get(list_media))
+        .route(
+            "/api/media/upload",
+            post(upload_media).layer(DefaultBodyLimit::max(max_upload)),
+        )
+        .route("/api/media/{name}/convert", post(convert_media))
+        .route("/api/media/{name}", delete(delete_media))
         .route("/api/adbreak", post(start_ad_break))
         .route("/api/adbreak/end", post(end_ad_break))
         .route("/api/sources", post(add_source))
@@ -224,10 +234,103 @@ async fn take(
 /// Scanning opens and demuxes files, so it runs off the async workers.
 async fn list_media(State(app): State<AppState>) -> Result<Json<MediaListing>, ApiError> {
     let library = app.library.clone();
-    let listing = tokio::task::spawn_blocking(move || library.list())
+    let converter = app.converter.clone();
+    let listing = tokio::task::spawn_blocking(move || library.list_with(Some(&converter)))
         .await
         .map_err(|e| anyhow::anyhow!("media scan failed: {e}"))?;
     Ok(Json(listing))
+}
+
+#[derive(Debug, Deserialize)]
+struct UploadQuery {
+    name: String,
+}
+
+/// Stream an uploaded file to disk. Never buffered: a large clip must cost a
+/// chunk of memory, not its whole size, and the process has a live programme
+/// in it. Written under a dotted `.part` name and renamed on success so a half
+/// uploaded file never appears in the listing and never gets taken to air.
+async fn upload_media(
+    State(app): State<AppState>,
+    Query(q): Query<UploadQuery>,
+    body: Body,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    use tokio::io::AsyncWriteExt;
+    if !app.library.cfg().allow_upload {
+        return Err(anyhow::anyhow!("uploads are disabled on this server").into());
+    }
+    let name = crate::media::safe_upload_name(&q.name)?;
+    let dir = app.library.dir().to_path_buf();
+    let part = dir.join(format!(".{name}.part"));
+    let final_path = dir.join(&name);
+
+    let mut file = tokio::fs::File::create(&part)
+        .await
+        .map_err(|e| anyhow::anyhow!("creating {}: {e}", part.display()))?;
+    let mut stream = body.into_data_stream();
+    let mut written: u64 = 0;
+    while let Some(chunk) = stream.next().await {
+        let chunk = match chunk {
+            Ok(c) => c,
+            Err(e) => {
+                drop(file);
+                let _ = tokio::fs::remove_file(&part).await;
+                return Err(anyhow::anyhow!("upload interrupted: {e}").into());
+            }
+        };
+        written += chunk.len() as u64;
+        if let Err(e) = file.write_all(&chunk).await {
+            drop(file);
+            let _ = tokio::fs::remove_file(&part).await;
+            return Err(anyhow::anyhow!("writing upload: {e}").into());
+        }
+    }
+    file.flush().await.ok();
+    file.sync_all().await.ok();
+    drop(file);
+    tokio::fs::rename(&part, &final_path)
+        .await
+        .map_err(|e| anyhow::anyhow!("finishing upload: {e}"))?;
+
+    info!(%name, bytes = written, "media uploaded");
+    app.mixer.emit(crate::state::Event::MediaChanged { name: name.clone(), conversion: None });
+    Ok(Json(json!({
+        "name": name,
+        "path": final_path.display().to_string(),
+        "size_bytes": written,
+    })))
+}
+
+/// Start a background transcode of a library file to a web safe copy.
+async fn convert_media(
+    State(app): State<AppState>,
+    Path(name): Path<String>,
+) -> Result<Json<crate::convert::ConversionState>, ApiError> {
+    let input = app.library.resolve(&name)?;
+    let state = app.converter.start(name, input)?;
+    Ok(Json(state))
+}
+
+/// Delete a library file and its converted copy. Refused while the file is a
+/// live source, the one way this could take the show off air.
+async fn delete_media(
+    State(app): State<AppState>,
+    Path(name): Path<String>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    let path = app.library.resolve(&name)?;
+    let target = crate::input::to_uri(&path.display().to_string());
+    let configs = app.mixer.configs().await?;
+    if let Some(s) = configs.sources.iter().find(|s| crate::input::to_uri(&s.uri) == target) {
+        return Err(anyhow::anyhow!("{name} is the source \"{}\". Remove the source first.", s.id).into());
+    }
+    let mut removed = Vec::new();
+    for p in [path.clone(), crate::convert::converted_sibling(&path)] {
+        if p.exists() && std::fs::remove_file(&p).is_ok() {
+            removed.push(p.display().to_string());
+        }
+    }
+    app.mixer.emit(crate::state::Event::MediaChanged { name, conversion: None });
+    Ok(Json(json!({ "removed": removed })))
 }
 
 #[derive(Debug, Deserialize)]

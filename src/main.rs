@@ -10,6 +10,7 @@
 
 mod caps;
 mod config;
+mod convert;
 mod control;
 mod ctl;
 mod gstutil;
@@ -159,9 +160,20 @@ async fn main() -> Result<()> {
     let mixer_thread = mixer::spawn(mix, cmd_rx, handle.clone());
 
     let library = Arc::new(media::MediaLibrary::new(cfg_media));
+    let converter = Arc::new(convert::Converter::new(
+        handle.clone(),
+        library.cfg().convert_threads,
+        library.cfg().probe_timeout_secs,
+    ));
     let quit = Arc::new(tokio::sync::Notify::new());
-    let state =
-        control::AppState { mixer: handle.clone(), frames, library, quit: quit.clone(), token };
+    let state = control::AppState {
+        mixer: handle.clone(),
+        frames,
+        library,
+        converter,
+        quit: quit.clone(),
+        token,
+    };
     let server = tokio::spawn(async move {
         if let Err(e) = control::serve(&bind, state).await {
             error!(?e, "control server stopped");

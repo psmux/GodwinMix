@@ -12,7 +12,7 @@ gstreamer-audio = "0.24"
 gstreamer-app = "0.24"
 glib = "0.21"
 
-tokio = { version = "1", features = ["rt-multi-thread", "macros", "sync", "signal", "time", "io-std", "io-util"] }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "sync", "signal", "time", "io-std", "io-util", "fs"] }
 axum = { version = "0.8", features = ["ws"] }
 tower-http = { version = "0.6", features = ["fs", "cors", "trace"] }
 

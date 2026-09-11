@@ -72,6 +72,13 @@ const VIDEO_ENCODERS: &[EncoderChoice] = &[
 const AUDIO_DECODERS: &[&str] = &["avdec_aac", "faad"];
 const AUDIO_ENCODERS: &[&str] = &["fdkaacenc", "avenc_aac", "voaacenc"];
 
+/// The best AAC encoder installed, or None. Split out of `Backends::probe` so
+/// the file converter and the programme encoder cannot drift onto different
+/// lists.
+pub fn best_audio_encoder() -> Option<&'static str> {
+    AUDIO_ENCODERS.iter().copied().find(|f| exists(f))
+}
+
 pub fn exists(factory: &str) -> bool {
     gst::ElementFactory::find(factory).is_some()
 }
@@ -86,10 +93,7 @@ impl Backends {
             .copied()
             .find(|f| exists(f))
             .ok_or_else(|| anyhow::anyhow!("no AAC decoder available (tried {AUDIO_DECODERS:?})"))?;
-        let audio_encode = AUDIO_ENCODERS
-            .iter()
-            .copied()
-            .find(|f| exists(f))
+        let audio_encode = best_audio_encoder()
             .ok_or_else(|| anyhow::anyhow!("no AAC encoder available (tried {AUDIO_ENCODERS:?})"))?;
 
         let b = Self { video_decode, video_encode, audio_decode, audio_encode };

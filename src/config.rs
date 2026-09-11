@@ -280,6 +280,20 @@ pub struct MediaConfig {
     /// Seconds to spend inspecting one file for its duration.
     #[serde(default = "default_media_probe")]
     pub probe_timeout_secs: u64,
+    /// Whether the control port may write files into the library. On by
+    /// default: an upload is bounded by the extension list and lands as one
+    /// flat name in a directory whose whole purpose is to hold clips nobody
+    /// vetted, a far narrower grant than running an exec source.
+    #[serde(default = "default_allow_upload")]
+    pub allow_upload: bool,
+    /// Largest upload accepted, in bytes. The body streams to disk, so this is
+    /// about the container's disk, not its memory.
+    #[serde(default = "default_max_upload")]
+    pub max_upload_bytes: usize,
+    /// x264 threads for a conversion, capped so a transcode cannot take every
+    /// core from the live programme encoder.
+    #[serde(default = "default_convert_threads")]
+    pub convert_threads: u32,
 }
 
 fn default_media_dir() -> String {
@@ -294,6 +308,15 @@ fn default_media_files() -> usize {
 fn default_media_probe() -> u64 {
     3
 }
+fn default_allow_upload() -> bool {
+    true
+}
+fn default_max_upload() -> usize {
+    2 << 30
+}
+fn default_convert_threads() -> u32 {
+    2
+}
 
 impl Default for MediaConfig {
     fn default() -> Self {
@@ -302,6 +325,9 @@ impl Default for MediaConfig {
             max_depth: default_media_depth(),
             max_files: default_media_files(),
             probe_timeout_secs: default_media_probe(),
+            allow_upload: default_allow_upload(),
+            max_upload_bytes: default_max_upload(),
+            convert_threads: default_convert_threads(),
         }
     }
 }
