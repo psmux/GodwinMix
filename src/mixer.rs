@@ -491,6 +491,14 @@ impl Mixer {
 
         let aenc_q = gstutil::queue_thread("aenc-q")?;
         let aconv = make("audioconvert", "aenc-conv")?;
+        // The mixer is a live aggregator whose inputs are stamped by another
+        // process against its own wall clock, so what reaches the encoder has
+        // tiny gaps and overlaps wherever the two clocks disagree. Measured on
+        // air: the encoded timeline stepped backwards by 320 samples about
+        // once a second, and every step is a click in a browser, a blare on a
+        // bass hit. audiorate fills and trims to a perfectly contiguous stream,
+        // so the encoder never sees a discontinuity and never resyncs.
+        let arate = make("audiorate", "aenc-rate")?;
         let aenc = make(backends.audio_encode, "aenc")?;
         crate::probe::configure_audio_encoder(&aenc, cfg.program.audio_bitrate_kbps);
         let aparse = make("aacparse", "aparse")?;
@@ -524,7 +532,7 @@ impl Mixer {
             .add_many([
                 &vmix, &vmix_caps, &vraw_tee, &venc_q, &venc_conv, &venc, &vparse, &venc_tee,
                 &pgm_v_q, &pgm_v_rate, &pgm_v_scale, &pgm_v_caps, &pgm_video_proxy,
-                &amix, &amix_caps, &level, &araw_tee, &aenc_q, &aconv, &aenc, &aparse, &aenc_tee,
+                &amix, &amix_caps, &level, &araw_tee, &aenc_q, &aconv, &arate, &aenc, &aparse, &aenc_tee,
                 &slate, &slate_caps, &silence, &silence_caps,
             ])
             .context("adding program elements")?;
@@ -539,7 +547,7 @@ impl Mixer {
 
         gst::Element::link_many([&amix, &amix_caps, &level, &araw_tee])
             .context("linking audio mixer")?;
-        gst::Element::link_many([&araw_tee, &aenc_q, &aconv, &aenc, &aparse, &aenc_tee])
+        gst::Element::link_many([&araw_tee, &aenc_q, &aconv, &arate, &aenc, &aparse, &aenc_tee])
             .context("linking audio encoder")?;
 
         gst::Element::link(&slate, &slate_caps).context("linking slate")?;
