@@ -1150,12 +1150,18 @@ fn biased(stream: Stream, now: gst::ClockTime, after: gst::ClockTime) -> gst::Cl
     match stream {
         Stream::Page => now,
         Stream::Video | Stream::Audio => {
-            let lead = now + gst::ClockTime::from_nseconds(MEDIA_LEAD_NS);
-            let reach = after + gst::ClockTime::from_nseconds(MEDIA_JOIN_SLACK_NS);
-            if after.is_zero() || reach < now {
-                lead
-            } else {
+            if after.is_zero() {
+                // A first round: nothing is flowing yet and the decoder is
+                // still starting, so it is given the lead.
+                now + gst::ClockTime::from_nseconds(MEDIA_LEAD_NS)
+            } else if after + gst::ClockTime::from_nseconds(MEDIA_JOIN_SLACK_NS) >= now {
                 after
+            } else {
+                // Later than the join can reach. Its data is already flowing,
+                // held back only by the queue that still holds the round
+                // before, so now is where this round really is; the lead on
+                // top of that would be silence for nothing.
+                now
             }
         }
     }
