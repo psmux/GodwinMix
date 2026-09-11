@@ -16,7 +16,7 @@
 
 use crate::config::{OutputConfig, SourceConfig};
 use crate::media::{MediaLibrary, MediaListing};
-use crate::mixer::{Command, MixerHandle};
+use crate::mixer::{AudioOutcome, Command, MixerHandle};
 use crate::snapshot::{self, Pick, Tracker};
 use crate::state::{Event, MixerStatus, SourceState};
 use anyhow::Result;
@@ -93,6 +93,7 @@ pub fn router(app: AppState, snapshots: Arc<Tracker>) -> Router {
         .route("/api/adbreak/end", post(end_ad_break))
         .route("/api/sources", post(add_source))
         .route("/api/sources/{id}", delete(remove_source))
+        .route("/api/sources/{id}/audio", post(set_source_audio))
         .route("/api/outputs", get(list_outputs).post(add_output))
         .route("/api/outputs/{id}", delete(remove_output))
         .route("/api/outputs/{id}/reconnect", post(reconnect_output))
@@ -571,6 +572,84 @@ async fn remove_source(
     Ok(StatusCode::OK)
 }
 
+/// What a fader sends. Both parts are optional, because the UI moves one
+/// channel at a time and has no reason to restate the others.
+#[derive(Debug, Deserialize)]
+struct AudioRequest {
+    /// Gain on the page's own sound. Omit to leave it where it is.
+    #[serde(default)]
+    page: Option<f64>,
+    /// Gain per video underneath, by position. A null entry, or a list
+    /// shorter than the number of videos, leaves those alone: sending
+    /// `[null, 0.0]` silences the second video and touches nothing else.
+    #[serde(default)]
+    media: Vec<Option<f64>>,
+}
+
+/// The loudest a channel can be asked for, matching the ceiling the volume
+/// elements apply. Kept here as well so the request is pinned before it
+/// reaches the pipeline and the answer cannot disagree with what was sent.
+const MAX_GAIN: f64 = 10.0;
+
+/// Pin one gain to the range a volume element accepts.
+///
+/// Out of range is clamped rather than refused: a fader dragged past the end
+/// of its track should still move the sound, and an operator mid-broadcast
+/// has better things to do than read a validation error. A value that is not
+/// a number at all is refused instead, because `f64::clamp` hands NaN back
+/// unchanged and a volume element set to NaN goes silent for good with
+/// nothing in the log to say why.
+fn checked_gain(gain: f64) -> Result<f64> {
+    if gain.is_nan() {
+        anyhow::bail!("a gain has to be a number");
+    }
+    Ok(gain.clamp(0.0, MAX_GAIN))
+}
+
+/// Balance a superimposed source's page sound against the videos under it.
+///
+/// 404 and 409 rather than one failure, because they mean different things to
+/// whoever is calling: a wrong id, against a source that exists but has its
+/// audio pre-mixed by Chromium and so has nothing to balance. Answering the
+/// second with a quiet 200 would leave a caller moving a fader that was never
+/// connected to anything.
+async fn set_source_audio(
+    State(app): State<AppState>,
+    Path(id): Path<String>,
+    Json(req): Json<AudioRequest>,
+) -> Result<Response, ApiError> {
+    let page = req.page.map(checked_gain).transpose()?;
+    // A null holds that channel, so it passes through validation untouched.
+    let media = req
+        .media
+        .into_iter()
+        .map(|gain| gain.map(checked_gain).transpose())
+        .collect::<Result<Vec<_>>>()?;
+    let outcome = app.mixer.set_audio(id.clone(), page, media).await?;
+    Ok(audio_response(&id, outcome))
+}
+
+fn audio_response(id: &str, outcome: AudioOutcome) -> Response {
+    match outcome {
+        AudioOutcome::Set(levels) => (StatusCode::OK, Json(levels)).into_response(),
+        AudioOutcome::NoSuchSource => (
+            StatusCode::NOT_FOUND,
+            Json(json!({ "error": format!("no such source {id}") })),
+        )
+            .into_response(),
+        AudioOutcome::NotSuperimposed => (
+            StatusCode::CONFLICT,
+            Json(json!({
+                "error": format!(
+                    "source {id} is not superimposed, so its sounds arrive already mixed \
+                     and there is nothing to balance"
+                )
+            })),
+        )
+            .into_response(),
+    }
+}
+
 async fn reconnect_output(
     State(app): State<AppState>,
     Path(id): Path<String>,
@@ -908,6 +987,85 @@ mod tests {
         // A header wins over a query when both are present, wrong or not.
         let bad_header = headers_with(Some("Bearer nope"));
         assert_eq!(token_check(Some("s3cret"), &Method::GET, &bad_header, &right), Err("wrong token"));
+    }
+
+    /// A slider that overshoots still moves the sound, so out of range is
+    /// clamped. NaN is the one value refused: it cannot arrive from JSON, but
+    /// `f64::clamp` would hand it straight through to a volume element that
+    /// then goes silent with nothing in the log to explain it.
+    #[test]
+    fn gains_are_clamped_before_they_reach_the_pipeline() {
+        assert_eq!(checked_gain(0.5).unwrap(), 0.5);
+        assert_eq!(checked_gain(-2.0).unwrap(), 0.0);
+        assert_eq!(checked_gain(1e6).unwrap(), MAX_GAIN);
+        assert_eq!(checked_gain(f64::INFINITY).unwrap(), MAX_GAIN);
+        assert_eq!(checked_gain(f64::NEG_INFINITY).unwrap(), 0.0);
+        assert!(checked_gain(f64::NAN).is_err());
+    }
+
+    /// Both fields optional, and a missing `media` is an empty list rather
+    /// than a list of zeroes: the difference is whether sending one fader
+    /// silences every video underneath it.
+    #[test]
+    fn a_partial_audio_body_names_only_what_it_moves() {
+        let parse = |v: serde_json::Value| serde_json::from_value::<AudioRequest>(v).unwrap();
+        let page_only = parse(serde_json::json!({ "page": 0.8 }));
+        assert_eq!(page_only.page, Some(0.8));
+        assert!(page_only.media.is_empty());
+
+        let media_only = parse(serde_json::json!({ "media": [1.0, 0.0] }));
+        assert_eq!(media_only.page, None);
+        assert_eq!(media_only.media, vec![Some(1.0), Some(0.0)]);
+
+        // An empty body is a read of the current levels, not a reset.
+        let nothing = parse(serde_json::json!({}));
+        assert_eq!(nothing.page, None);
+        assert!(nothing.media.is_empty());
+
+        let both = parse(serde_json::json!({ "page": 0.8, "media": [1.0, 0.0] }));
+        assert_eq!(both.page, Some(0.8));
+        assert_eq!(both.media, vec![Some(1.0), Some(0.0)]);
+
+        // What the UI actually sends when the second video's fader moves. A
+        // short list could not say this: `[0.5]` would move the first video.
+        let second_only = parse(serde_json::json!({ "media": [null, 0.5] }));
+        assert_eq!(second_only.page, None);
+        assert_eq!(second_only.media, vec![None, Some(0.5)]);
+    }
+
+    async fn body_json(r: Response) -> serde_json::Value {
+        let bytes = axum::body::to_bytes(r.into_body(), usize::MAX).await.unwrap();
+        serde_json::from_slice(&bytes).unwrap()
+    }
+
+    /// Three answers, three statuses. The 409 is the one that earns its keep:
+    /// a whole page source exists and takes the request happily, but its
+    /// sounds were mixed by Chromium and there is nothing behind the faders.
+    /// A quiet 200 there would have the caller dragging a dead control.
+    #[tokio::test]
+    async fn balancing_says_which_kind_of_no_it_is() {
+        let ok = audio_response(
+            "page",
+            AudioOutcome::Set(crate::state::SourceAudio { page: 0.8, media: vec![1.0, 0.0] }),
+        );
+        assert_eq!(ok.status(), StatusCode::OK);
+        let v = body_json(ok).await;
+        assert_eq!(v["page"], 0.8);
+        assert_eq!(v["media"][1], 0.0);
+
+        let missing = audio_response("cam9", AudioOutcome::NoSuchSource);
+        assert_eq!(missing.status(), StatusCode::NOT_FOUND);
+        let v = body_json(missing).await;
+        assert!(
+            v["error"].as_str().unwrap().contains("cam9"),
+            "the message has to name the id that was asked for: {v}"
+        );
+
+        let flat = audio_response("cam1", AudioOutcome::NotSuperimposed);
+        assert_eq!(flat.status(), StatusCode::CONFLICT);
+        let v = body_json(flat).await;
+        let msg = v["error"].as_str().unwrap();
+        assert!(msg.contains("cam1") && msg.contains("superimposed"), "unclear message: {msg}");
     }
 
     #[test]
