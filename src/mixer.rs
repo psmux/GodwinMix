@@ -491,13 +491,14 @@ impl Mixer {
 
         let aenc_q = gstutil::queue_thread("aenc-q")?;
         let aconv = make("audioconvert", "aenc-conv")?;
-        // The mixer is a live aggregator whose inputs are stamped by another
-        // process against its own wall clock, so what reaches the encoder has
-        // tiny gaps and overlaps wherever the two clocks disagree. Measured on
-        // air: the encoded timeline stepped backwards by 320 samples about
-        // once a second, and every step is a click in a browser, a blare on a
-        // bass hit. audiorate fills and trims to a perfectly contiguous stream,
-        // so the encoder never sees a discontinuity and never resyncs.
+        // Defensive. The mixer is a live aggregator whose inputs are stamped
+        // by another process against its own wall clock, so a contiguous
+        // stream into the encoder is worth guaranteeing rather than assuming.
+        // Added while chasing an on-air fault that turned out to live in the
+        // RTMP server downstream, which re-serves AAC with its timeline
+        // stepped backwards; this output, captured straight into ffmpeg,
+        // measured clean without it. Kept because it costs nothing and closes
+        // a gap that would otherwise be real the day an input drifts.
         let arate = make("audiorate", "aenc-rate")?;
         let aenc = make(backends.audio_encode, "aenc")?;
         crate::probe::configure_audio_encoder(&aenc, cfg.program.audio_bitrate_kbps);
