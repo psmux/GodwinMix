@@ -53,8 +53,8 @@ const TICK: Duration = Duration::from_millis(500);
 const POSITION_TICK: Duration = Duration::from_millis(250);
 /// Consecutive ticks with a near-full output queue before forcing a reconnect.
 const OVERFLOW_TICKS: u32 = 6;
-/// A source that has been stalled this long gets its pipeline rebuilt.
-const RESTART_AFTER_STALL: Duration = Duration::from_secs(10);
+// How long a source may be stalled before its pipeline is rebuilt, and what
+// happens when rebuilding it does not help, are `[stall]` in the config.
 /// How long to wait for a brand new source to deliver anything before trying
 /// the other RTMP client implementation. Long enough to cover a slow handshake,
 /// short enough that an operator is not left staring at "connecting".
@@ -579,7 +579,45 @@ pub struct Mixer {
     /// Superimposed sources being built again from scratch after a failure,
     /// with whether each was on programme when it failed, to put it back.
     rebuilding: std::collections::HashMap<SourceId, bool>,
+    /// Consecutive rebuilds of a source that did not bring it back to life,
+    /// and the moment before which the next one must not start. Cleared the
+    /// moment the source delivers a frame, so a source that recovers is back
+    /// on the fast path immediately.
+    rebuild_failures: HashMap<SourceId, u32>,
+    rebuild_not_before: HashMap<SourceId, Instant>,
+    /// The branch of a source that is being rebuilt, kept in the programme
+    /// pipeline so its last frame stays on air. See `retire_branch`.
+    retired: Vec<RetiredBranch>,
 }
+
+/// What is left of a source whose pipeline has been stopped for a rebuild:
+/// the programme-side branch, still linked to the compositor, still holding
+/// the last frame that came through it.
+///
+/// A rebuild used to take the whole branch out at once, and `detach_source`
+/// takes the programme to None when it removes the source that is on it, so
+/// every one of the 1174 rebuilds on 2026-09-12 cut the output to black for
+/// the ten or so seconds the browser took to come back. The compositor keeps
+/// drawing a pad's last buffer for as long as the pad is there, so leaving the
+/// pad in place is a freeze frame that costs nothing: no element to add, no
+/// picture to copy, no code path that only runs during a fault.
+struct RetiredBranch {
+    id: SourceId,
+    vpad: gst::Pad,
+    apad: gst::Pad,
+    branch: Vec<gst::Element>,
+    /// Dropped whether or not the rebuild ever finishes. A source that never
+    /// comes back must not leave its elements in the programme pipeline.
+    until: Instant,
+}
+
+/// How long a frozen frame may stay on air.
+///
+/// A rebuild that works takes about ten seconds, nearly all of it the
+/// browser starting. Twice that is enough margin for a slow box and short
+/// enough that an operator looking at a still picture is not left wondering
+/// for a minute whether the mixer has died.
+const FREEZE_HOLD: Duration = Duration::from_secs(20);
 
 impl Mixer {
     #[allow(clippy::type_complexity)]
@@ -803,6 +841,9 @@ impl Mixer {
             runtime_store: None,
             pending: Vec::new(),
             rebuilding: std::collections::HashMap::new(),
+            rebuild_failures: HashMap::new(),
+            rebuild_not_before: HashMap::new(),
+            retired: Vec::new(),
         };
         Ok((mixer, handle, rx, bus_rx))
     }
@@ -1129,19 +1170,114 @@ impl Mixer {
         cfg.gain = slot.gain();
         cfg.muted = slot.muted();
         let was_program = self.program_source.as_ref() == Some(id);
-        // Removed the way the API removes a source: its pipeline stopped first,
-        // then its branch taken out of the programme. That order matters. The
-        // branch's proxy source shares a stream lock with the thread that
-        // pushes this source's frames into the programme; stop the branch
-        // while that thread is still pushing and the two wait on each other.
-        if let Err(e) = self.remove_source(id) {
+        // Counted before the attempt, not after it, because nothing on this
+        // thread finds out whether a rebuild worked: the tick clears this the
+        // moment the source delivers a frame, and if it never does, the count
+        // stands and the backoff in `arm_source_restart` reads it.
+        *self.rebuild_failures.entry(id.clone()).or_insert(0) += 1;
+        // The source that is on air keeps its last frame on air. Everything
+        // else is removed the way the API removes a source: its pipeline
+        // stopped first, then its branch taken out of the programme. That order
+        // matters. The branch's proxy source shares a stream lock with the
+        // thread that pushes this source's frames into the programme; stop the
+        // branch while that thread is still pushing and the two wait on each
+        // other.
+        let held = was_program && self.cfg.stall.hold_last_frame;
+        let removed = if held { self.retire_branch(id) } else { self.remove_source(id) };
+        if let Err(e) = removed {
             warn!(source = %id, ?e, "could not remove the failed source before building it again");
         }
-        info!(source = %id, was_program, "building the superimposed source again from scratch");
+        info!(source = %id, was_program, held, "building the superimposed source again from scratch");
         self.rebuilding.insert(id.clone(), was_program);
         if let Err(e) = self.begin_add_source(cfg, None) {
             error!(source = %id, ?e, "could not begin building the source again");
             self.rebuilding.remove(id);
+        }
+    }
+
+    /// Stop a source but leave its programme branch where it is, so the
+    /// compositor keeps drawing the last frame that came through it.
+    ///
+    /// Everything `detach_source` does except the two things that take the
+    /// picture away: releasing the compositor pad and pulling the elements out
+    /// of the programme pipeline. Those happen in `release_retired`, once the
+    /// source that replaces it is on air.
+    fn retire_branch(&mut self, id: &SourceId) -> Result<()> {
+        // Anything already held for this id goes now. Two frozen frames of the
+        // same source would be two branches in the pipeline and only the newer
+        // one is worth looking at.
+        self.release_retired(Some(id));
+        let Some(pos) = self.sources.iter().position(|s| &s.input.id == id) else {
+            anyhow::bail!("no such source {id}");
+        };
+        let slot = self.sources.remove(pos);
+        if let Some(mv) = &mut self.multiview {
+            mv.remove_tile(id).ok();
+        }
+        slot.input.stop();
+        // Under the programme layer and over the slate, so whatever is taken
+        // next draws straight over it, and silent: the pipeline behind it has
+        // stopped and there is nothing left to hear.
+        slot.vpad.set_property("zorder", 1u32);
+        slot.vpad.set_property("alpha", 1.0f64);
+        slot.apad.set_property("volume", 0.0f64);
+        // A meter keeps the name of the source it was built for, and the
+        // replacement builds one with the same name. Silenced here so that the
+        // two cannot both be read as the new source's level.
+        for el in &slot.branch {
+            if el.name() == slot.meter.as_str() {
+                crate::probe::set_bool(el, "post-messages", false);
+            }
+        }
+        info!(source = %id, "source stopped, its last frame held on the programme");
+        self.retired.push(RetiredBranch {
+            id: id.clone(),
+            vpad: slot.vpad,
+            apad: slot.apad,
+            branch: slot.branch,
+            until: Instant::now() + FREEZE_HOLD,
+        });
+        self.broadcast_status();
+        Ok(())
+    }
+
+    /// Let go of held branches: the one for `id`, and any whose hold has run
+    /// out. A frozen frame that nothing is coming back to is worse than black,
+    /// because it looks like a working picture.
+    fn release_retired(&mut self, id: Option<&SourceId>) {
+        let now = Instant::now();
+        let mut expired = Vec::new();
+        let mut i = 0;
+        while i < self.retired.len() {
+            let r = &self.retired[i];
+            if id == Some(&r.id) || r.until <= now {
+                let stale = id != Some(&r.id);
+                expired.push((self.retired.remove(i), stale));
+            } else {
+                i += 1;
+            }
+        }
+        for (r, stale) in expired {
+            for el in &r.branch {
+                let _ = el.set_state(gst::State::Null);
+                let _ = self.program.remove(el);
+            }
+            self.vmix.release_request_pad(&r.vpad);
+            self.amix.release_request_pad(&r.apad);
+            debug!(source = %r.id, stale, "released the held branch of a rebuilt source");
+            // Held as long as it was worth holding and the source never came
+            // back. Black is at least honest about that.
+            if stale
+                && self.program_source.as_ref() == Some(&r.id)
+                && !self.sources.iter().any(|s| s.input.id == r.id)
+            {
+                warn!(source = %r.id, "the held frame has run out and the source has not come back");
+                let _ = self.events.send(Event::Alert {
+                    severity: Severity::Error,
+                    message: format!("{} did not come back; the programme is on the slate", r.id),
+                });
+                let _ = self.take(None, None);
+            }
         }
     }
 
@@ -1157,16 +1293,25 @@ impl Mixer {
                         warn!(source = %cfg.id, ?e, "rebuilt source could not be put back on programme");
                     }
                 }
+                // After the take, never before it. The held frame is what is on
+                // air until the replacement's own pad is drawn, and releasing it
+                // first is the black frame this whole arrangement exists to
+                // avoid.
+                self.release_retired(Some(&cfg.id));
             }
             Err(e) => {
-                // Try again in a while, and keep trying: a browser that will
-                // not start now may start later, and the source was wanted.
-                warn!(source = %cfg.id, ?e, "building the source again failed; trying once more in 10 seconds");
+                // Try again, and keep trying: a browser that will not start now
+                // may start later, and the source was wanted. The delay grows
+                // with the failures, which is what stops this being the twelve
+                // second loop that ran for two hours on 2026-09-12.
+                let failures = *self.rebuild_failures.get(&cfg.id).unwrap_or(&0);
+                let delay = self.cfg.stall.rebuild_delay(failures).unwrap_or(Duration::from_secs(10));
+                warn!(source = %cfg.id, ?e, failures, ?delay, "building the source again failed; trying again later");
                 self.rebuilding.insert(cfg.id.clone(), was_program);
                 let handle = self.handle.clone();
                 let again = Box::new(cfg.clone());
                 self.rt.spawn(async move {
-                    tokio::time::sleep(Duration::from_secs(10)).await;
+                    tokio::time::sleep(delay).await;
                     let _ = handle.send(Command::AddSource(again, None));
                 });
             }
@@ -1179,6 +1324,9 @@ impl Mixer {
         let Some(pos) = self.sources.iter().position(|s| &s.input.id == id) else {
             anyhow::bail!("no such source {id}");
         };
+        // A held frame of this same source goes with it. Somebody removing a
+        // source wants it gone, not a still of it left on the compositor.
+        self.release_retired(Some(id));
         if self.program_source.as_ref() == Some(id) {
             self.take(None, None)?;
         }
@@ -1758,8 +1906,15 @@ impl Mixer {
         self.apply_visibility(true);
 
 
+        // Held frames that have run out of time. Before the liveness sweep, so
+        // a source that has come back releases its own held frame there rather
+        // than here.
+        self.release_retired(None);
+
         let mut restart = Vec::new();
         let fallback_ticks = (CLIENT_FALLBACK_AFTER.as_millis() / TICK.as_millis()) as u32;
+        let stall_ticks = ((self.cfg.stall.restart_after_secs * 1000).max(TICK.as_millis() as u64)
+            / TICK.as_millis() as u64) as u32;
         for slot in &mut self.sources {
             // Whether this source can be scrubbed is asked here rather than
             // where it is reported. Nothing answers a SEEKING query until the
@@ -1772,8 +1927,12 @@ impl Mixer {
             match slot.input.observed_state() {
                 SourceState::Stalled => {
                     slot.stalled_ticks += 1;
-                    let ticks = (RESTART_AFTER_STALL.as_millis() / TICK.as_millis()) as u32;
-                    if slot.stalled_ticks == ticks {
+                    // Asked on every tick past the mark rather than only on the
+                    // tick that reaches it. `arm_source_restart` is the one gate
+                    // (a source may have only one restart armed, and a rebuild
+                    // may be waiting out its backoff), and a single shot here
+                    // meant a refusal there was never asked again.
+                    if slot.stalled_ticks >= stall_ticks {
                         restart.push(slot.input.id.clone());
                     }
                 }
@@ -1806,13 +1965,17 @@ impl Mixer {
             }
         }
         for id in restart {
-            warn!(source = %id, "source stalled for too long, rebuilding its pipeline");
             self.arm_source_restart(id);
         }
 
         for slot in &self.sources {
             if matches!(slot.input.observed_state(), SourceState::Live) {
                 self.source_attempts.insert(slot.input.id.clone(), 0);
+                // A source that is delivering has been rebuilt successfully,
+                // however many attempts it took, so the backoff starts again
+                // from nothing the next time it goes wrong.
+                self.rebuild_failures.remove(&slot.input.id);
+                self.rebuild_not_before.remove(&slot.input.id);
             }
         }
 
@@ -1878,9 +2041,42 @@ impl Mixer {
         let Some(slot) = self.sources.iter().find(|s| s.input.id == id) else {
             return;
         };
+        // A superimposed source is not restarted in place, it is built again
+        // from nothing (see `rebuild_source`), which costs a browser launch, a
+        // profile directory and about ten seconds of the operator's attention.
+        // Doing that every twelve seconds for two hours is what happened on
+        // 2026-09-11 and 2026-09-12, so it gets a policy of its own.
+        if slot.input.superimposed() {
+            let now = Instant::now();
+            if self.rebuild_not_before.get(&id).is_some_and(|t| *t > now) {
+                return;
+            }
+            let failures = *self.rebuild_failures.get(&id).unwrap_or(&0);
+            if let Some(wait) = self.cfg.stall.rebuild_delay(failures) {
+                self.rebuild_not_before.insert(id.clone(), now + wait);
+                warn!(source = %id, failures, ?wait, "source has failed to rebuild; waiting before the next attempt");
+                let _ = self.events.send(Event::Alert {
+                    severity: Severity::Error,
+                    message: format!(
+                        "{id} has failed {failures} rebuilds in a row; the next is in {} s",
+                        wait.as_secs()
+                    ),
+                });
+                // Scheduled rather than dropped, so the retry happens even
+                // once the source stops being reported as stalled.
+                let handle = self.handle.clone();
+                let again = id.clone();
+                self.rt.spawn(async move {
+                    tokio::time::sleep(wait).await;
+                    let _ = handle.send(Command::RestartSource(again));
+                });
+                return;
+            }
+        }
         if !slot.input.try_arm_restart() {
             return;
         }
+        warn!(source = %id, "source stalled for too long, rebuilding its pipeline");
         let attempt = self.source_attempts.entry(id.clone()).or_insert(0);
         let delay = Duration::from_millis(
             (500.0 * 1.8f64.powi((*attempt).min(8) as i32)).min(10_000.0) as u64,
@@ -2397,6 +2593,7 @@ mod tests {
             media: Default::default(),
             security: Default::default(),
             browser: Default::default(),
+            stall: Default::default(),
             sources: vec![],
             outputs: vec![],
         })
