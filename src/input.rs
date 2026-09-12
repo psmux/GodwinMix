@@ -2977,6 +2977,66 @@ mod tests {
         input.stop();
     }
 
+    /// Descriptors open in this process right now. `/dev/fd` on a Mac and
+    /// `/proc/self/fd` on Linux both list exactly them.
+    #[cfg(unix)]
+    fn open_fds() -> usize {
+        let dir = if std::path::Path::new("/proc/self/fd").exists() {
+            "/proc/self/fd"
+        } else {
+            "/dev/fd"
+        };
+        std::fs::read_dir(dir).map(|d| d.count()).unwrap_or(0)
+    }
+
+    /// A source that comes and goes must leave nothing open.
+    ///
+    /// It left two descriptors a build on air: the read end of the child's
+    /// stdout, which was given to fdsrc with into_raw_fd and never closed
+    /// again, and the read end of its stderr, held by a reader thread that
+    /// never saw an end of file. Counted here over twenty builds, after five
+    /// to let the plugin registry and the decoder load whatever they load
+    /// once.
+    #[test]
+    #[cfg(unix)]
+    fn a_source_that_comes_and_goes_leaves_no_descriptors_behind() {
+        init();
+        let canvas = CanvasCaps::new(&Canvas::default());
+        let backends = Backends::probe(Accel::Auto, Accel::Auto).unwrap();
+        let browser = BrowserConfig::default();
+        let mut cfg = test_source();
+        // An exec source, because it is the kind with a process, a pipe and a
+        // reader thread behind it, which is where all of this went wrong.
+        cfg.uri = "exec:sh -c 'exec cat /dev/zero'".into();
+
+        let mut baseline = 0usize;
+        for i in 0..20 {
+            let input = InputPipeline::build_kind(
+                &cfg,
+                &canvas,
+                &backends,
+                8,
+                Instant::now(),
+                SourceKind::Exec,
+                true,
+                &browser,
+                None,
+            )
+            .unwrap();
+            input.stop();
+            drop(input);
+            if i == 4 {
+                baseline = open_fds();
+            }
+        }
+        let after = open_fds();
+        assert!(
+            after <= baseline + 2,
+            "fifteen builds added {} descriptors ({baseline} to {after})",
+            after.saturating_sub(baseline)
+        );
+    }
+
     #[test]
     fn uris_are_routed_to_the_right_kind() {
         use SourceKind::*;
