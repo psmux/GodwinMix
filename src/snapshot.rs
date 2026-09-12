@@ -448,6 +448,9 @@ mod tests {
             audio: None,
             gain: 1.0,
             muted: false,
+            seekable: false,
+            position_ms: None,
+            duration_ms: None,
         };
         MixerStatus {
             program: Some("cam1".into()),
