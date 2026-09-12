@@ -114,21 +114,47 @@
     border-radius: 10px; box-shadow: 0 0 0 1px var(--line), 0 18px 50px rgba(0,0,0,.55);
   }
   #cells { position: absolute; inset: 0; }
+  /* Nothing in this bar may wrap. It is one line under the wall, and a button
+     that folds onto two lines at 1280 pushes the pictures up the screen. */
   #stagebar {
     flex: none; display: flex; align-items: center; gap: 12px;
-    font-size: 11px; color: var(--faint); padding: 0 2px;
+    font-size: 11px; color: var(--faint); padding: 0 2px; white-space: nowrap;
   }
+  #stagebar > * { flex: none; }
+  #stagebar .spacer { flex: 1; }
   #stagebar .keys { display: flex; align-items: center; gap: 6px; }
+  #stagebar .wide { display: flex; align-items: center; gap: 6px; }
+  /* Under a 1440 window the bar is full: the keyboard hint is the part an
+     operator has already read, so it is the part that goes. */
+  @media (max-width: 1439px) { #stagebar .wide { display: none; } }
   #stagebar .sep { width: 1px; height: 12px; background: var(--line); margin: 0 4px; }
+  /* The controls that fold the strips away. They belong under the wall with the
+     keyboard hints because they are about the wall as a whole, and because
+     nothing in here should sit on top of a picture. */
+  #stagebar .strips { display: flex; align-items: center; gap: 5px; }
+  #stagebar .tg {
+    font-size: 10.5px; line-height: 1.5; padding: 1px 9px; border-radius: 999px;
+    background: transparent; border-color: var(--line-soft); color: var(--faint);
+  }
+  #stagebar .tg:hover { background: var(--raise); border-color: var(--line); color: var(--text); }
+  /* Pressed means the control is on the cells, which is the state an operator
+     is checking when they look down here. */
+  #stagebar .tg[aria-pressed="true"] { background: var(--raise); border-color: var(--line); color: var(--text); }
 
   /* --- one multiview cell and its channel strip --------------------------- */
   /* Cells are positioned as percentages of the mosaic so the overlay tracks the
      image at any display size, and the server stays the single source of truth
      for the layout. Each cell is its own container so a nine up grid on a
-     laptop can drop the parts of the strip that no longer fit. */
+     laptop can drop the parts of the strip that no longer fit.
+
+     Four rows, and the order of them is the whole layout. Row 1 is the tally
+     bar, row 2 is the picture with the vertical controls down its right hand
+     edge, row 3 is the name, row 4 is the horizontal lane. Row 4 has no height
+     at all on a source the mixer cannot seek, so a camera's cell ends at its
+     name the way it always did. */
   .cell {
     position: absolute; cursor: pointer; container: cell / size;
-    display: grid; grid-template-columns: 1fr auto; grid-template-rows: auto 1fr auto;
+    display: grid; grid-template-columns: 1fr auto; grid-template-rows: auto 1fr auto auto;
     border-radius: 5px; overflow: hidden;
     box-shadow: inset 0 0 0 2px transparent;
     transition: box-shadow .12s;
@@ -208,20 +234,28 @@
   .cell.muted .cbot { box-shadow: inset 3px 0 0 var(--warn); }
   /* The signal is still there, it just stops here, so the track that carries it
      to program is the thing that looks broken. */
-  .cell.muted .fader::-webkit-slider-runnable-track {
-    background: repeating-linear-gradient(90deg, #6b5a2c 0 5px, #2b323d 5px 10px);
+  .cell.muted .vfader::-webkit-slider-runnable-track {
+    background: repeating-linear-gradient(0deg, #6b5a2c 0 5px, #2b323d 5px 10px);
   }
-  .cell.muted .fader::-moz-range-track {
-    background: repeating-linear-gradient(90deg, #6b5a2c 0 5px, #2b323d 5px 10px);
+  .cell.muted .vfader::-moz-range-track {
+    background: repeating-linear-gradient(0deg, #6b5a2c 0 5px, #2b323d 5px 10px);
   }
-  .cstrip { display: none; align-items: center; gap: 6px; min-width: 0; }
-  .gv { font-size: 10.5px; color: var(--dim); width: 40px; text-align: right; flex: none; }
+  /* The gain number sits at the foot of the column, over the bottom of the
+     scale. Its own dark chip keeps it from reading as another scale label. */
+  .gv {
+    font-size: 9.5px; line-height: 1.5; color: var(--dim); text-align: center; flex: none;
+    background: rgba(10,13,17,.78); border-radius: 3px; padding: 0 3px;
+  }
   .gv.unity { color: var(--ok); }
   .gv.muted { color: var(--warn); font-weight: 700; }
 
+  /* Mute sits in the tally bar, not with the fader. The bar is the one part of
+     a cell that is drawn at every size, and it is the one part that neither
+     collapse toggle can take away, so the button an operator may need in a
+     hurry is always in the same place and always there. */
   .mute {
-    flex: none; width: 22px; height: 20px; padding: 0; border-radius: 4px;
-    font: 700 10px/1 ui-sans-serif, sans-serif; letter-spacing: .04em;
+    flex: none; width: 21px; height: 17px; padding: 0; border-radius: 4px;
+    font: 700 9.5px/1 ui-sans-serif, sans-serif; letter-spacing: .04em;
     background: rgba(10,13,17,.75); border: 1px solid var(--line); color: var(--dim);
   }
   .mute:hover { background: rgba(30,36,44,.9); color: var(--text); }
@@ -256,11 +290,93 @@
   .fader:focus-visible::-webkit-slider-thumb { box-shadow: 0 0 0 2px var(--accent); }
   .fader:disabled { opacity: .35; cursor: default; }
 
-  /* --- the meter rail ----------------------------------------------------- */
-  .rail {
-    grid-area: 2 / 2 / 3 / 3; display: flex; align-items: stretch; gap: 3px;
-    padding: 2px 5px 2px 0; pointer-events: none;
+  /* --- the channel fader, standing up beside its meter --------------------- */
+  /* A vertical range input in the spelling browsers settled on: the writing mode
+     turns the control and direction: rtl puts zero at the bottom, where the zero
+     of a fader belongs. The old -webkit-appearance: slider-vertical draws the
+     same thing and loses the arrow keys in current Chrome, which is the one
+     thing a level control cannot afford to lose.
+
+     These rules come after the horizontal ones on purpose. Both selectors carry
+     one class, so source order is what decides which height and which track
+     wins on the cells. */
+  .vfader {
+    writing-mode: vertical-lr; direction: rtl;
+    flex: none; width: 17px; height: auto; align-self: stretch; min-height: 0;
+    cursor: ns-resize; pointer-events: auto;
   }
+  .vfader::-webkit-slider-runnable-track {
+    width: 5px; height: 100%; border-radius: 3px;
+    background:
+      linear-gradient(rgba(255,255,255,.55), rgba(255,255,255,.55)) 0 25% / 100% 1px no-repeat,
+      linear-gradient(to top, #2b323d, #444d5b);
+    box-shadow: inset 0 0 0 1px rgba(0,0,0,.5);
+  }
+  .vfader::-webkit-slider-thumb {
+    -webkit-appearance: none; width: 15px; height: 10px; margin: 0 0 0 -5px;
+    border-radius: 2px; background: linear-gradient(90deg, #f2f5fa, #b9c2d0);
+    border: 1px solid #05070a; box-shadow: 0 1px 4px rgba(0,0,0,.7);
+  }
+  .vfader::-moz-range-track {
+    width: 5px; height: 100%; border-radius: 3px;
+    background: linear-gradient(to top, #2b323d, #444d5b);
+  }
+  .vfader::-moz-range-thumb {
+    width: 14px; height: 9px; border-radius: 2px; border: 1px solid #05070a;
+    background: linear-gradient(90deg, #f2f5fa, #b9c2d0);
+  }
+
+  /* --- the horizontal lane: a scrubber for files -------------------------- */
+  /* The reason the fader stood up. A scrubber is read left to right, every
+     player anyone has ever used puts it along the bottom, and an operator
+     reaching to fast forward a clip should not have to think about where this
+     mixer decided to put it. Only a source the mixer says it can seek has one,
+     so the lane is built per cell rather than hidden per cell. */
+  .lane {
+    grid-area: 4 / 1 / 5 / 3; display: flex; align-items: center; gap: 7px;
+    padding: 1px 7px 5px; background: rgba(0,0,0,.82); min-width: 0;
+  }
+  .scrub {
+    -webkit-appearance: none; appearance: none; flex: 1; min-width: 0;
+    height: 14px; background: transparent; margin: 0; cursor: pointer;
+  }
+  /* The played part of the track is lighter than the rest. --p is written by the
+     paint loop, and a custom property set on the input inherits into the track
+     pseudo element, which is the only way to colour part of a range's track. */
+  .scrub::-webkit-slider-runnable-track {
+    height: 4px; border-radius: 2px;
+    background: linear-gradient(90deg, #8b93a2 0 var(--p, 0%), #2b323d var(--p, 0%));
+    box-shadow: inset 0 0 0 1px rgba(0,0,0,.5);
+  }
+  .scrub::-webkit-slider-thumb {
+    -webkit-appearance: none; width: 10px; height: 10px; margin-top: -3px;
+    border-radius: 50%; background: #e8ebf0;
+    border: 1px solid #05070a; box-shadow: 0 1px 4px rgba(0,0,0,.7);
+  }
+  .scrub::-moz-range-track { height: 4px; border-radius: 2px; background: #2b323d; }
+  .scrub::-moz-range-progress { height: 4px; border-radius: 2px; background: #8b93a2; }
+  .scrub::-moz-range-thumb {
+    width: 9px; height: 9px; border-radius: 50%; border: 1px solid #05070a; background: #e8ebf0;
+  }
+  .scrub:focus-visible { outline: none; }
+  .scrub:focus-visible::-webkit-slider-thumb { box-shadow: 0 0 0 2px var(--accent); }
+  /* A seekable file the mixer has not given a length for cannot be put at a
+     point, so the handle greys out rather than pretending to mean something. */
+  .scrub:disabled { opacity: .4; cursor: default; }
+  .lane .pos { font-size: 10px; color: var(--dim); flex: none; text-shadow: 0 1px 2px #000; }
+
+  /* --- the vertical block: meter, fader, gain number ---------------------- */
+  /* One column on the right of the picture holding everything that is read
+     bottom to top. pointer-events is off on the block so a click on the bars
+     still takes the source, and back on for the fader, which is the only thing
+     in here anyone drags. */
+  .vblk {
+    grid-area: 2 / 2 / 3 / 3; display: flex; flex-direction: column;
+    align-items: center; gap: 2px; padding: 2px 5px 2px 0;
+    pointer-events: none; min-height: 0;
+  }
+  .vctl { display: flex; align-items: stretch; gap: 4px; flex: 1; min-height: 0; }
+  .rail { display: flex; align-items: stretch; gap: 3px; }
   .scale { display: none; position: relative; width: 22px; flex: none; }
   .scale span {
     position: absolute; right: 0; transform: translateY(50%);
@@ -303,27 +419,39 @@
     align-self: center; text-shadow: 0 1px 2px #000;
   }
 
-  /* Small cells keep the picture and the tally and give up the rest. The order
-     things come back in: the strip, then the numbers, then the scale labels. */
-  .cell .cname, .cell .ctop .pk { display: none; }
+  /* Small cells keep the picture, the tally and the meter, and give up the rest.
+     The order things come back in: the fader and the lane, then the numbers,
+     then the scale labels. Measured on a 1280 window, a nine up wall keeps the
+     lot, a twelve up loses the dB labels beside the bars, and a twenty four up
+     is down to a picture with a meter on it. That last one is the right answer:
+     a tile that size is there to be watched, and an operator who wants to ride a
+     level or scrub a clip has a four up or a six up wall to do it on.
+
+     The fader and the lane are kept out by display: none rather than by not
+     being built, so the same cell gains them the moment the window or the grid
+     gives it the room, with no rebuild and nothing lost mid gesture. */
+  .cell .cname, .cell .ctop .pk, .cell .vfader, .cell .gv, .cell .lane { display: none; }
   @container cell (min-width: 150px) and (min-height: 92px) {
     .cell .cname { display: block; }
     .mtr { width: 5px; }
   }
   @container cell (min-width: 190px) and (min-height: 112px) {
-    .cell .cstrip { display: flex; }
+    .cell .vfader { display: block; }
+    .cell .gv { display: block; }
+    .cell .lane { display: flex; }
     .cell .ctop .pk { display: block; }
   }
   @container cell (min-width: 260px) and (min-height: 150px) {
     .scale { display: block; }
     .mtr { width: 6px; }
-    .rail { padding-right: 7px; }
+    .vblk { padding-right: 7px; }
   }
   @container cell (min-width: 340px) and (min-height: 190px) {
     .scale { width: 26px; }
     .scale span { font-size: 9px; }
     .mtr { width: 8px; }
     .cname { font-size: 13px; }
+    .gv { font-size: 10.5px; }
   }
   /* A four cell grid on a big monitor gives tiles the size of a small preview
      monitor, and a strip drawn for a laptop looks lost on one. */
@@ -331,19 +459,35 @@
     .scale { width: 32px; }
     .scale span { font-size: 10.5px; }
     .mtr { width: 11px; }
-    .rail { padding: 4px 9px 4px 0; }
+    .vblk { padding: 4px 9px 4px 0; gap: 4px; }
+    .vctl { gap: 7px; }
     .cname { font-size: 15px; }
     .ctop { padding: 8px 9px 14px; }
     .cbot { padding: 14px 9px 8px; }
-    .cstrip { gap: 9px; }
     .key { font-size: 13px; padding: 1px 7px; min-width: 22px; }
     .st, .ctop .pk { font-size: 11.5px; }
-    .gv { font-size: 12px; width: 46px; }
-    .mute { width: 26px; height: 24px; font-size: 11px; }
-    .fader { height: 24px; }
-    .fader::-webkit-slider-runnable-track { height: 6px; }
-    .fader::-webkit-slider-thumb { width: 13px; height: 22px; margin-top: -8px; }
+    .gv { font-size: 12px; }
+    .mute { width: 26px; height: 22px; font-size: 11px; }
+    .vfader { width: 24px; }
+    .vfader::-webkit-slider-runnable-track { width: 6px; }
+    .vfader::-webkit-slider-thumb { width: 22px; height: 12px; margin-left: -8px; }
+    .lane { padding: 2px 10px 8px; gap: 10px; }
+    .lane .pos { font-size: 12px; }
+    .scrub { height: 18px; }
+    .scrub::-webkit-slider-runnable-track { height: 5px; }
+    .scrub::-webkit-slider-thumb { width: 14px; height: 14px; margin-top: -4.5px; }
   }
+
+  /* --- collapsing the controls -------------------------------------------- */
+  /* Collapsing has to give the picture back, so every one of these takes the
+     row or the column with it rather than leaving an empty band where the
+     control was. The meter's numbers in the tally bar stay either way: an
+     operator who folds the bars away to see a shot still wants to know the
+     camera has sound, and one line of text costs no picture at all. */
+  body.nometer .cell .rail { display: none; }
+  body.nofader .cell .vfader, body.nofader .cell .gv { display: none; }
+  body.nometer.nofader .cell .vblk { display: none; }
+  body.nolane .cell .lane { display: none; }
 
   /* --- sidebar ------------------------------------------------------------ */
   aside {
@@ -538,10 +682,15 @@
         <kbd>1</kbd><kbd>…</kbd><kbd>9</kbd> take a source
         <span class="sep"></span>
         <kbd>0</kbd><kbd>Esc</kbd> cut to black
-        <span class="sep"></span>
-        double click a fader for unity
+        <span class="wide"><span class="sep"></span>double click a fader for unity</span>
       </div>
       <div class="spacer"></div>
+      <div class="strips">
+        <button class="tg" id="tgmeter" aria-pressed="true" title="Show or hide the level meter on every cell.">Meters</button>
+        <button class="tg" id="tgfader" aria-pressed="true" title="Show or hide the level fader on every cell.">Faders</button>
+        <button class="tg" id="tgvert" title="Collapse all the vertical controls: the meter and the fader together, on every cell.">Hide vertical</button>
+        <button class="tg" id="tghorz" title="Collapse all the horizontal controls: the scrubber along the bottom of every file that can be seeked.">Hide horizontal</button>
+      </div>
       <div id="gridinfo" class="num"></div>
     </div>
   </div>
@@ -728,6 +877,9 @@ function onEvent(ev) {
     // events a second, so nothing here touches the DOM: the numbers go into a
     // store and the rAF loop below paints whatever is current when it runs.
     case "source_audio_level": takeLevel("src:" + ev.source, ev.peak_db); break;
+    // Four a second per seekable file, and the same arrangement as the levels
+    // for the same reason: into the store here, onto the handle in the rAF loop.
+    case "source_position": takePosition(ev.source, ev.position_ms, ev.duration_ms); break;
     case "alert": alert_(ev.severity, ev.message); break;
   }
 }
@@ -808,6 +960,16 @@ const FALL_DB_PER_S = 60;
 const HOLD_MS = 1100;
 const HOLD_FALL_DB_PER_S = 20;
 
+// One loop paints everything that arrives faster than a person can read it:
+// ninety level events a second across nine sources, plus four positions a second
+// per file. rAF is suspended outright in a hidden tab, which is the behaviour we
+// want and the reason none of this is on a timer.
+function paintFrame(ts) {
+  paintMeters(ts);
+  paintPositions(ts);
+  requestAnimationFrame(paintFrame);
+}
+
 let lastPaint = 0;
 function paintMeters(ts) {
   const dt = lastPaint ? Math.min(0.1, (ts - lastPaint) / 1000) : 0;
@@ -849,11 +1011,143 @@ function paintMeters(ts) {
       if (txt !== view.lastPk) { view.lastPk = txt; view.readout.textContent = txt; }
     }
   }
-  requestAnimationFrame(paintMeters);
 }
-requestAnimationFrame(paintMeters);
 
 meterViews.set("header", makeMeterView("program", $("meters"), "h", $("pgmpk")));
+
+// --- the scrubber -----------------------------------------------------------
+// Where each seekable file is, held the same way the levels are: written on
+// receipt, painted once a frame. A file nothing on screen is showing is dropped
+// rather than kept, or the map ends up holding every clip the mixer ever rolled.
+const positions = new Map();    // source id -> { pos, dur, t }
+const scrubActive = new Set();  // sources whose handle is under a pointer
+const scrubHold = new Map();    // source id -> { ms, until } while a seek lands
+
+function scrubWatched(source) {
+  for (const view of cellViews.values()) if (view.source === source && view.scrub) return true;
+  return false;
+}
+
+function setPosition(source, pos, dur) {
+  if (!scrubWatched(source)) { positions.delete(source); return; }
+  const prev = positions.get(source);
+  positions.set(source, {
+    pos: typeof pos === "number" && isFinite(pos) ? Math.max(0, pos) : (prev ? prev.pos : 0),
+    dur: typeof dur === "number" && dur > 0 ? dur : (prev ? prev.dur : 0),
+    t: performance.now(),
+  });
+}
+
+// A position from the mixer's own clock. While a seek is in flight the handle
+// stays where the operator dropped it, and this is what ends that: once the
+// mixer reports a position near the one they asked for, the file is where they
+// put it and the mixer can drive the handle again.
+function takePosition(source, pos, dur) {
+  setPosition(source, pos, dur);
+  const hold = scrubHold.get(source);
+  if (hold && typeof pos === "number" && Math.abs(pos - hold.ms) < 1000) scrubHold.delete(source);
+}
+
+// A mixer without the seek endpoint refuses every one of these. Say it once.
+let seekPostWarned = false;
+async function postSeek(sourceId, ms) {
+  try {
+    const r = await api(`/api/sources/${encodeURIComponent(sourceId)}/seek`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ position_ms: ms }),
+    });
+    if (!r.ok) {
+      // The file did not move, so stop pretending it did and let the mixer's
+      // own position take the handle back on the next event.
+      scrubHold.delete(sourceId);
+      if (!seekPostWarned) {
+        seekPostWarned = true;
+        alert_("warning", `The mixer would not seek that source: ${serverError(await r.text(), r.status, "refused")}`);
+      }
+      return;
+    }
+    const answer = await r.json().catch(() => null);
+    if (answer && typeof answer.position_ms === "number") {
+      setPosition(sourceId, answer.position_ms, answer.duration_ms);
+      // The answer is the mixer agreeing, not the pipeline having got there, so
+      // the hold is renewed against the answered position rather than dropped.
+      scrubHold.set(sourceId, { ms: answer.position_ms, until: performance.now() + 1500 });
+    }
+  } catch {}
+}
+
+// One seek when the gesture settles. Sending on every tick of a drag would have
+// the mixer chasing a handle that has already moved on, and a file that reseeks
+// twenty times in a second shows it. A drag fires change once, on release, but
+// an arrow key held down fires it again on every repeat, which is worse than the
+// drag would have been, so the send is on a short leash either way. The handle
+// itself moves at once: only the request waits.
+const seekTimers = new Map();
+function bindScrub(input, sourceId) {
+  input.oninput = () => { scrubActive.add(sourceId); };
+  input.onchange = () => {
+    const ms = Math.max(0, Math.round(Number(input.value)));
+    scrubActive.delete(sourceId);
+    scrubHold.set(sourceId, { ms, until: performance.now() + 3000 });
+    clearTimeout(seekTimers.get(sourceId));
+    seekTimers.set(sourceId, setTimeout(() => {
+      seekTimers.delete(sourceId);
+      postSeek(sourceId, Math.max(0, Math.round(Number(input.value))));
+    }, 120));
+    flushDeferred();
+  };
+  // Same reason as the fader: the second press of a double click would jump the
+  // file to wherever the pointer happened to be.
+  input.onmousedown = (e) => { if (e.detail > 1) e.preventDefault(); };
+}
+
+// The handle is painted from the store, never from the event, and never at all
+// while a pointer is on it. The position is drawn exactly as the mixer reported
+// it with nothing interpolated between events: a quarter second step is fine to
+// watch, and a handle that creeps forward on its own would crawl on a paused
+// file and snap back four times a second.
+function paintPositions(ts) {
+  for (const view of cellViews.values()) {
+    if (!view.scrub) continue;
+    const p = positions.get(view.source);
+    const dur = p ? p.dur : 0;
+    const usable = dur > 0;
+    if (view.scrubUsable !== usable) {
+      view.scrubUsable = usable;
+      view.scrub.disabled = !usable;
+    }
+    if (usable && view.scrubMax !== dur) {
+      view.scrubMax = dur;
+      view.scrub.max = String(dur);
+    }
+    const hold = scrubHold.get(view.source);
+    if (hold && hold.until < ts) scrubHold.delete(view.source);
+    const dragging = scrubActive.has(view.source);
+    let ms;
+    if (dragging) ms = Number(view.scrub.value);
+    else if (scrubHold.has(view.source)) ms = scrubHold.get(view.source).ms;
+    else ms = p ? p.pos : 0;
+    // Without a length there is no point on the track that means anything, so
+    // the handle parks at the start rather than being clamped to an invented
+    // maximum and sitting at the end as though the file had finished. The time
+    // is still real and still shown.
+    const handle = usable ? Math.min(dur, Math.max(0, ms)) : 0;
+    if (!dragging && view.scrubAt !== handle) {
+      view.scrubAt = handle;
+      view.scrub.value = String(handle);
+    }
+    const pct = usable ? Math.round((handle / dur) * 1000) / 10 : 0;
+    if (view.scrubPct !== pct) {
+      view.scrubPct = pct;
+      view.scrub.style.setProperty("--p", pct + "%");
+    }
+    const txt = usable ? `${fmtDur(handle)} / ${fmtDur(dur)}` : fmtDur(ms);
+    if (view.posTxt !== txt) { view.posTxt = txt; view.pos.textContent = txt; }
+  }
+}
+
+requestAnimationFrame(paintFrame);
 
 // --- actions ---------------------------------------------------------------
 async function take(source) {
@@ -905,10 +1199,16 @@ function loadMediaSoon() {
   mediaReloadTimer = setTimeout(() => { mediaReloadTimer = null; loadMedia(); }, 500);
 }
 
+// Clock time for a clip, used in the library and on the scrubbers. A recording
+// past the hour read as "94:12", which nobody converts in their head while a
+// programme is running, so anything that long gets an hours field.
 function fmtDur(ms) {
   if (ms == null) return "";
   const t = Math.round(ms / 1000);
-  return `${Math.floor(t / 60)}:${String(t % 60).padStart(2, "0")}`;
+  const mm = Math.floor(t / 60) % 60;
+  const ss = String(t % 60).padStart(2, "0");
+  if (t < 3600) return `${mm}:${ss}`;
+  return `${Math.floor(t / 3600)}:${String(mm).padStart(2, "0")}:${ss}`;
 }
 
 function renderMedia() {
@@ -1309,12 +1609,61 @@ function bindFader(input, sourceId, channel, onLocal) {
 }
 
 // Whatever was deferred while a pointer was down happens the moment it comes
-// back up, so the panels are never more than one gesture out of date.
-function releaseFader() {
-  audioActive.clear();
+// back up, so the panels are never more than one gesture out of date. A scrubber
+// counts as a pointer down for this: rebuilding the cell under a dragged handle
+// ends the gesture just as thoroughly as it does under a fader.
+function gestureBusy() { return audioActive.size > 0 || scrubActive.size > 0; }
+function flushDeferred() {
+  if (gestureBusy()) return;
   if (deferredRender) { deferredRender = false; render(); }
 }
+function releaseFader() {
+  audioActive.clear();
+  flushDeferred();
+}
 let deferredRender = false;
+
+// --- folding the controls away ----------------------------------------------
+// Every control on a cell is drawn over a picture, and on a nine up wall that is
+// nine pictures with a corner of each one covered. An operator checking framing,
+// or showing the wall to someone else, wants them gone for a minute without
+// losing the page they know. So the meter and the fader fold away one at a time,
+// and the two group buttons fold a whole axis at once.
+//
+// Nothing is rebuilt to do it. The cells keep their nodes and CSS takes the row
+// or the column out of the grid, which means a toggle cannot land in the middle
+// of a gesture and cannot throw away a meter's ballistics. A private window
+// throws on localStorage, so the state is read and written inside try/catch and
+// an interface that cannot remember simply starts with everything showing.
+const STRIPS = { meter: true, fader: true, lane: true };
+try {
+  const saved = JSON.parse(localStorage.getItem("lbx.strips") || "null");
+  if (saved && typeof saved === "object") {
+    for (const k of Object.keys(STRIPS)) if (typeof saved[k] === "boolean") STRIPS[k] = saved[k];
+  }
+} catch {}
+
+function applyStrips() {
+  document.body.classList.toggle("nometer", !STRIPS.meter);
+  document.body.classList.toggle("nofader", !STRIPS.fader);
+  document.body.classList.toggle("nolane", !STRIPS.lane);
+  $("tgmeter").setAttribute("aria-pressed", String(STRIPS.meter));
+  $("tgfader").setAttribute("aria-pressed", String(STRIPS.fader));
+  // The group buttons say what pressing them will do, because a button whose
+  // label never changes leaves an operator guessing which way it goes.
+  $("tgvert").textContent = STRIPS.meter || STRIPS.fader ? "Hide vertical" : "Show vertical";
+  $("tghorz").textContent = STRIPS.lane ? "Hide horizontal" : "Show horizontal";
+  try { localStorage.setItem("lbx.strips", JSON.stringify(STRIPS)); } catch {}
+}
+$("tgmeter").onclick = () => { STRIPS.meter = !STRIPS.meter; applyStrips(); };
+$("tgfader").onclick = () => { STRIPS.fader = !STRIPS.fader; applyStrips(); };
+$("tgvert").onclick = () => {
+  const show = !(STRIPS.meter || STRIPS.fader);
+  STRIPS.meter = show; STRIPS.fader = show;
+  applyStrips();
+};
+$("tghorz").onclick = () => { STRIPS.lane = !STRIPS.lane; applyStrips(); };
+applyStrips();
 
 // --- multiview cells and their channel strips -------------------------------
 // The cells are rebuilt only when the layout itself changes. Everything that
@@ -1324,10 +1673,13 @@ let deferredRender = false;
 const cellViews = new Map();
 let cellSig = "";
 
+// Whether a source is seekable decides whether its cell has a lane at all, so it
+// belongs in here. Where the file has got to does not: a position arrives four
+// times a second and would rebuild the whole wall that often.
 function cellSignature(mv) {
   return JSON.stringify([
     mv.cells.map((c) => [c.index, c.source, c.x, c.y, c.w, c.h]),
-    status.sources.map((s) => [s.id, s.name, s.has_audio !== false]),
+    status.sources.map((s) => [s.id, s.name, s.has_audio !== false, s.seekable === true]),
   ]);
 }
 
@@ -1340,7 +1692,7 @@ function renderCells() {
   }
   const sig = cellSignature(mv);
   if (sig !== cellSig) {
-    if (audioActive.size) { deferredRender = true; }
+    if (gestureBusy()) { deferredRender = true; }
     else { buildCells(mv); cellSig = sig; }
   }
   syncCells();
@@ -1378,6 +1730,12 @@ function buildCells(mv) {
     st.className = "st";
     top.append(key, pk, st);
 
+    // The vertical block: scale, bars, fader, gain number, read bottom to top
+    // and sitting in one column down the right hand edge of the picture.
+    const vblk = document.createElement("div");
+    vblk.className = "vblk";
+    const vctl = document.createElement("div");
+    vctl.className = "vctl";
     const rail = document.createElement("div");
     rail.className = "rail";
     const scale = document.createElement("div");
@@ -1398,6 +1756,8 @@ function buildCells(mv) {
     ref.style.bottom = `${dbToPos(REF_DB) * 100}%`;
     wrap.append(bars, ref);
     rail.append(scale, wrap);
+    vctl.appendChild(rail);
+    vblk.appendChild(vctl);
 
     const bot = document.createElement("div");
     bot.className = "cbot";
@@ -1410,9 +1770,7 @@ function buildCells(mv) {
     mutetag.className = "mutetag";
     mutetag.textContent = "muted";
     nameline.append(name, mutetag);
-    const strip = document.createElement("div");
-    strip.className = "cstrip";
-    bot.append(nameline, strip);
+    bot.appendChild(nameline);
 
     const view = { el: div, meterKey, source: c.source, isProgram, st, name };
 
@@ -1421,14 +1779,16 @@ function buildCells(mv) {
       mute.className = "mute";
       mute.textContent = "M";
       mute.title = "Stop this source reaching program. Its meter keeps running, so you can still see whether it has sound.";
+      top.appendChild(mute);
       const fader = document.createElement("input");
-      fader.className = "fader";
+      fader.className = "fader vfader";
       fader.type = "range";
       fader.min = "0"; fader.max = "1"; fader.step = "0.005";
       fader.title = "Level for this source. Double click for unity.";
+      vctl.appendChild(fader);
       const gv = document.createElement("span");
       gv.className = "gv num";
-      strip.append(mute, fader, gv);
+      vblk.appendChild(gv);
 
       const hasAudio = !src || src.has_audio !== false;
       if (!hasAudio) {
@@ -1450,11 +1810,10 @@ function buildCells(mv) {
         applyMute(view, next);
         sendAudio(c.source, "muted", k);
       };
-      // The picture takes the source; the strip does not. An operator dragging
-      // a fader to zero has not asked to put that camera on program.
-      strip.onclick = (e) => e.stopPropagation();
-      strip.ondblclick = (e) => e.stopPropagation();
-      rail.onclick = (e) => e.stopPropagation();
+      // The picture takes the source; the controls on it do not. An operator
+      // dragging a fader to zero has not asked to put that camera on program.
+      vblk.onclick = (e) => e.stopPropagation();
+      vblk.ondblclick = (e) => e.stopPropagation();
 
       div.onclick = () => take(c.source);
       div.title = src ? `${src.name}: ${shownUri(src.uri)}` : c.source;
@@ -1467,7 +1826,34 @@ function buildCells(mv) {
       meterViews.set("cell:" + c.index, makeMeterView(meterKey, bars, "v", pk));
     }
 
-    div.append(top, rail, bot);
+    div.append(top, vblk, bot);
+
+    // A lane only exists where there is something to scrub. A camera, a stream
+    // or a website has no position to show, and a cell with an empty bar across
+    // the bottom of it reads as a cell with something wrong with it, so those
+    // cells end at their name instead.
+    if (!isProgram && src && src.seekable === true) {
+      const lane = document.createElement("div");
+      lane.className = "lane";
+      const scrub = document.createElement("input");
+      scrub.className = "scrub";
+      scrub.type = "range";
+      // The handle is in milliseconds against the file's own length, so an arrow
+      // key is a quarter of a second and Page Up is a tenth of the clip. A
+      // normalised 0 to 1 slider would have made both of those meaningless.
+      scrub.min = "0"; scrub.max = "1000"; scrub.step = "250"; scrub.value = "0";
+      scrub.disabled = true;
+      scrub.title = "Where this file is playing. Drag to move it.";
+      const pos = document.createElement("span");
+      pos.className = "pos num";
+      lane.append(scrub, pos);
+      lane.onclick = (e) => e.stopPropagation();
+      lane.ondblclick = (e) => e.stopPropagation();
+      bindScrub(scrub, c.source);
+      Object.assign(view, { scrub, pos });
+      div.appendChild(lane);
+    }
+
     host.appendChild(div);
     cellViews.set(c.index, view);
   }
@@ -1483,6 +1869,15 @@ function dropMeters(keep) {
   }
   for (const k of [...audioLevels.keys()]) {
     if (k !== "program" && ![...meterViews.values()].some((v) => v.key === k)) audioLevels.delete(k);
+  }
+  // Same for the scrubbers: a file that lost its cell, or turned out not to be
+  // seekable after all, leaves a position behind that nothing will ever read.
+  for (const id of [...positions.keys()]) if (!scrubWatched(id)) positions.delete(id);
+  for (const id of [...scrubHold.keys()]) if (!scrubWatched(id)) scrubHold.delete(id);
+  // A seek still on its leash for a source that has just gone would land as a
+  // 404 and put a warning on screen for something nobody did.
+  for (const [id, t] of [...seekTimers]) {
+    if (!scrubWatched(id)) { clearTimeout(t); seekTimers.delete(id); }
   }
 }
 
@@ -1528,6 +1923,16 @@ function syncCells() {
     view.el.classList.toggle("live", status.program === view.source);
     view.st.className = "st " + (src ? src.state : "");
     view.st.textContent = src ? src.state : "gone";
+
+    // The snapshot carries a position too, which is what fills a scrubber in on
+    // a fresh page before the first event arrives. It is up to two seconds old
+    // by the time it gets here, so it only speaks when the events are not.
+    if (view.scrub && src) {
+      const have = positions.get(view.source);
+      if (!have || performance.now() - have.t > 1500) {
+        setPosition(view.source, src.position_ms, src.duration_ms);
+      }
+    }
     if (!view.fader) continue;
 
     const gkey = audioKey(view.source, "gain");
