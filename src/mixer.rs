@@ -110,11 +110,36 @@ pub struct RuntimeConfigs {
 /// and the levels have to come back with the yes.
 #[derive(Debug, Clone, PartialEq)]
 pub enum AudioOutcome {
-    /// Applied, with the gains as they now stand.
-    Set(SourceAudio),
+    /// Applied, with the fader, the mute and any balance as they now stand.
+    Set(SourceAudioState),
     NoSuchSource,
-    /// The source is there but its audio arrives already mixed.
+    /// The request asked for a balance and this source's audio arrives already
+    /// mixed. Only the balance earns this: the fader and the mute work on every
+    /// source, so a request naming one of those is never refused here.
     NotSuperimposed,
+}
+
+/// Does this request ask for something only a superimposed source can give?
+///
+/// The fader and the mute are elements this mixer owns, one pair per source,
+/// so they work on a camera and a file as readily as on a page. The page and
+/// media balance is different: those gains live on branches that exist only
+/// inside a layered source's own pipeline. Keeping the two apart is what lets
+/// an operator pull a camera down without being told the camera is not a
+/// website.
+fn needs_superimposed(page: Option<f64>, media: &[Option<f64>]) -> bool {
+    page.is_some() || media.iter().any(|m| m.is_some())
+}
+
+/// The name a source's meter is built with, and the only handle on which level
+/// messages get attributed back to a source.
+///
+/// Kept as a function so the name is written once. Ids may contain hyphens, so
+/// nothing may take this apart again by splitting on one: `pgm-alevel-cam-1`
+/// read that way names `cam`, which is a different source that may well exist.
+/// Attribution compares whole names instead.
+fn meter_name(id: &str) -> String {
+    format!("pgm-alevel-{id}")
 }
 
 pub enum Command {
@@ -148,11 +173,15 @@ pub enum Command {
     AddOutput(Box<OutputConfig>, Option<Ack>),
     RemoveOutput(OutputId, Option<Ack>),
     RestartSource(SourceId),
-    /// Balance a superimposed source's page sound against the videos drawn
-    /// under it. Both parts are optional and only what is named moves, so the
-    /// UI can send one fader without knowing where the others sit.
+    /// Move a source's audio controls: the operator's own fader and mute, which
+    /// every source has, and for a superimposed one the balance between its page
+    /// sound and the videos drawn under it. Every part is optional and only what
+    /// is named moves, so the UI can send one fader without knowing where the
+    /// others sit.
     SetAudio {
         source: SourceId,
+        gain: Option<f64>,
+        muted: Option<bool>,
         page: Option<f64>,
         media: Vec<Option<f64>>,
         reply: oneshot::Sender<AudioOutcome>,
@@ -192,18 +221,20 @@ impl MixerHandle {
         rx.await.map_err(|_| anyhow::anyhow!("mixer dropped the status request"))
     }
 
-    /// Set part of a source's balance and get back where it ended up. Like
+    /// Move part of a source's audio and get back where it ended up. Like
     /// `status`, this waits on a value rather than on an `Ack`: the answer is
     /// the levels, and "not superimposed" is not a failure the caller should
     /// see as a generic 400.
     pub async fn set_audio(
         &self,
         source: SourceId,
+        gain: Option<f64>,
+        muted: Option<bool>,
         page: Option<f64>,
         media: Vec<Option<f64>>,
     ) -> Result<AudioOutcome> {
         let (tx, rx) = oneshot::channel();
-        self.send(Command::SetAudio { source, page, media, reply: tx })?;
+        self.send(Command::SetAudio { source, gain, muted, page, media, reply: tx })?;
         rx.await.map_err(|_| anyhow::anyhow!("mixer dropped the audio request"))
     }
 
@@ -233,6 +264,19 @@ struct SourceSlot {
     vpad: gst::Pad,
     apad: gst::Pad,
     branch: Vec<gst::Element>,
+    /// The operator's fader, `pgm-again-{id}`. Also in `branch`, which is what
+    /// adds it to the pipeline and takes it out again; this is a second handle
+    /// on the same element so the control path does not have to index into a
+    /// list to find it.
+    again: gst::Element,
+    /// The operator's mute, `pgm-amute-{id}`. Muted through its `mute` property
+    /// rather than by zeroing its volume, so the two controls never overwrite
+    /// each other's value.
+    amute: gst::Element,
+    /// The name of this source's `level` element. Level messages carry only the
+    /// name of the element that posted them, so this is how one is attributed
+    /// back to this source.
+    meter: String,
     /// Ticks spent stalled, used to decide when to rebuild the pipeline.
     stalled_ticks: u32,
     /// Ticks since this source was started while it has produced nothing.
@@ -244,6 +288,51 @@ struct SourceSlot {
     /// silences its bus. A watcher outliving its pipeline keeps reporting a
     /// dead source's errors forever.
     _watch: gstutil::BusWatch,
+}
+
+/// The loudest a fader can be set to. Matches the ceiling the control plane
+/// clamps to, so a request that arrives from somewhere else cannot push a
+/// volume element past what the API would have allowed.
+const MAX_SOURCE_GAIN: f64 = 10.0;
+
+impl SourceSlot {
+    /// Where the fader is now, read off the element. A NaN would have silenced
+    /// the element for good, which is why the setter refuses one.
+    fn gain(&self) -> f64 {
+        self.again.property::<f64>("volume")
+    }
+
+    fn set_gain(&self, gain: f64) {
+        if gain.is_nan() {
+            // A volume element set to NaN goes silent permanently and logs
+            // nothing. The control plane already refuses this; belt and braces
+            // for any other caller.
+            warn!(source = %self.input.id, "ignoring a fader value that is not a number");
+            return;
+        }
+        self.again.set_property("volume", gain.clamp(0.0, MAX_SOURCE_GAIN));
+    }
+
+    fn muted(&self) -> bool {
+        self.amute.property::<bool>("mute")
+    }
+
+    fn set_muted(&self, muted: bool) {
+        self.amute.set_property("mute", muted);
+    }
+
+    /// The fader and the mute as they stand, plus the balance if this source has
+    /// one. Read off the elements, so a clamped request reports the value that
+    /// took effect rather than the one that was asked for.
+    fn audio_state(&self) -> SourceAudioState {
+        let balance = self.input.levels().map(|l| l.report());
+        SourceAudioState {
+            gain: self.gain(),
+            muted: self.muted(),
+            page: balance.as_ref().map(|b| b.page),
+            media: balance.map(|b| b.media),
+        }
+    }
 }
 
 /// Shifts a source's timeline onto the programme's.
@@ -767,10 +856,42 @@ impl Mixer {
         asrc.set_property("proxysink", &input.audio_proxy);
         let aq = gstutil::queue_thread(&format!("pgm-aq-{id}"))?;
 
-        let branch = vec![vsrc, vq, asrc, aq];
+        // The operator's desk for this source: a fader, a meter, and a mute, in
+        // that order, and the order is the whole point.
+        //
+        // The fader is ahead of the meter so that pulling it down visibly pulls
+        // the meter down with it. A meter that ignored the fader sitting next to
+        // it would read as broken, and an operator would stop trusting either.
+        //
+        // The mute is behind the meter so that a muted source still shows its
+        // signal. That is what lets someone confirm a camera has sound on it
+        // before cutting to it, which is the whole reason the meter is there.
+        //
+        // The audiomixer sink pad's own `volume` is left out of this. Takes and
+        // transitions fade that pad (see `ramp_volumes`), and two things writing
+        // one property fight: whichever wrote last wins, so an operator's fader
+        // would be undone by the next take, or the take's fade would be undone
+        // mid-ramp by a fader.
+        //
+        // No `audioconvert` ahead of the fader. The input pipeline ends its audio
+        // branch at a capsfilter on the canvas format, so what arrives through
+        // the proxy is already raw audio the way the audiomixer wants it, and
+        // both `volume` and `level` take that as it is.
+        let again = make("volume", &format!("pgm-again-{id}"))?;
+        again.set_property("volume", cfg.gain.clamp(0.0, MAX_SOURCE_GAIN));
+        let alevel = make("level", &meter_name(id))?;
+        crate::probe::set_bool(&alevel, "post-messages", true);
+        crate::probe::set_int(&alevel, "interval", 100_000_000);
+        let amute = make("volume", &format!("pgm-amute-{id}"))?;
+        amute.set_property("mute", cfg.muted);
+
+        // Appended rather than inserted, so the indices the rest of this
+        // function uses for the video and audio queues still mean what they did.
+        let branch = vec![vsrc, vq, asrc, aq, again.clone(), alevel, amute.clone()];
         self.program.add_many(&branch).context("adding source branch")?;
         gst::Element::link_many([&branch[0], &branch[1]]).context("linking source video")?;
-        gst::Element::link_many([&branch[2], &branch[3]]).context("linking source audio")?;
+        gst::Element::link_many([&branch[2], &branch[3], &branch[4], &branch[5], &branch[6]])
+            .context("linking source audio")?;
 
         let vpad = self.vmix.request_pad_simple("sink_%u").context("compositor refused a pad")?;
         vpad.set_property("zorder", 1u32);
@@ -786,7 +907,8 @@ impl Mixer {
 
         let apad = self.amix.request_pad_simple("sink_%u").context("mixer refused a pad")?;
         apad.set_property("volume", 0.0f64);
-        branch[3].static_pad("src").unwrap().link(&apad).context("linking audio into mixer")?;
+        // The mute is the last thing before the mixer, so it is what links in.
+        branch[6].static_pad("src").unwrap().link(&apad).context("linking audio into mixer")?;
 
         // Map this source's timeline onto the programme's. Installed before
         // the branch is set running: the segment event travels as soon as data
@@ -858,6 +980,9 @@ impl Mixer {
             vpad,
             apad,
             branch,
+            again,
+            amute,
+            meter: meter_name(&cfg.id),
             stalled_ticks: 0,
             silent_ticks: 0,
             aligner,
@@ -904,7 +1029,13 @@ impl Mixer {
     /// for any dead source.
     fn rebuild_source(&mut self, id: &SourceId) {
         let Some(slot) = self.sources.iter().find(|s| &s.input.id == id) else { return };
-        let cfg = slot.input.config.clone();
+        let mut cfg = slot.input.config.clone();
+        // Carry the desk across. The config this source was built with holds the
+        // fader it started at, and a source that comes back an hour later at
+        // that value rather than at the one the operator set would jump in level
+        // on air, for no reason the operator could see.
+        cfg.gain = slot.gain();
+        cfg.muted = slot.muted();
         let was_program = self.program_source.as_ref() == Some(id);
         // Removed the way the API removes a source: its pipeline stopped first,
         // then its branch taken out of the programme. That order matters. The
@@ -1024,7 +1155,16 @@ impl Mixer {
             .sources
             .iter()
             .filter(|s| s.input.id != AD_ID)
-            .map(|s| s.input.config.clone())
+            .map(|s| {
+                let mut cfg = s.input.config.clone();
+                // Taken off the elements rather than from the config the source
+                // was built with. The config is the value it started at; these
+                // are where the operator left the desk, and that is what has to
+                // come back after a restart.
+                cfg.gain = s.gain();
+                cfg.muted = s.muted();
+                cfg
+            })
             .collect();
         for p in &self.pending {
             if !sources.iter().any(|c| c.id == p.id) {
@@ -1226,6 +1366,12 @@ impl Mixer {
             stall_timeout_secs: f64::MAX, // An ad ends with EOS, never a stall.
             rtmp_client: Default::default(),
             superimpose: Default::default(), // An ad is a file, never a page.
+            // An ad goes out at the level the file was made at. There is no
+            // operator fader for it: it is not in the source list, so nothing
+            // draws one, and a break that went out silent because the last
+            // source's fader happened to be down would be worse than useless.
+            gain: crate::state::unity_gain(),
+            muted: false,
         };
         if let Err(e) = self.add_source_kind(&cfg, SourceKind::File, false, None) {
             let _ = self.events.send(Event::Alert {
@@ -1389,8 +1535,8 @@ impl Mixer {
                     }
                 }
             }
-            Command::SetAudio { source, page, media, reply } => {
-                let _ = reply.send(self.set_audio(&source, page, &media));
+            Command::SetAudio { source, gain, muted, page, media, reply } => {
+                let _ = reply.send(self.set_audio(&source, gain, muted, page, &media));
             }
             Command::ReconnectOutput(id, ack) => {
                 let r = if self.outputs.iter().any(|o| o.id() == &id) {
@@ -1470,8 +1616,23 @@ impl Mixer {
             BusEvent::Warning { pipeline, src, message } => {
                 debug!(%pipeline, %src, %message, "bus warning");
             }
-            BusEvent::Level { peak_db } => {
-                let _ = self.events.send(Event::AudioLevel { peak_db });
+            BusEvent::Level { src, peak_db } => {
+                // Every meter in the programme posts on this one bus, so the
+                // element's name is what says whose peaks these are. Matched
+                // whole: a source id may contain a hyphen, so splitting the name
+                // would attribute `pgm-alevel-cam-1` to a source called `cam`.
+                if src == "pgm-level" {
+                    let _ = self.events.send(Event::AudioLevel { peak_db });
+                } else if let Some(slot) = self.sources.iter().find(|s| s.meter == src) {
+                    let _ = self.events.send(Event::SourceAudioLevel {
+                        source: slot.input.id.clone(),
+                        peak_db,
+                    });
+                }
+                // Anything else is a meter nothing is listening for, or one
+                // belonging to a source that has just been removed. Dropped
+                // silently: these arrive ten times a second and a log line per
+                // message would bury everything else.
             }
             BusEvent::Eos { pipeline } => {
                 if pipeline == format!("input-{AD_ID}") {
@@ -1642,32 +1803,68 @@ impl Mixer {
         let _ = self.events.send(Event::Status(Box::new(self.status())));
     }
 
-    /// Move part of a superimposed source's balance.
+    /// Move a source's fader, its mute, or a superimposed source's balance.
     ///
     /// Runs on the mixer thread like every other command, which is what keeps
     /// it away from the streaming threads: setting a `volume` property is
     /// cheap but it is still a pipeline touch, and the control plane has no
     /// business doing those from a request handler.
-    fn set_audio(&mut self, id: &SourceId, page: Option<f64>, media: &[Option<f64>]) -> AudioOutcome {
+    fn set_audio(
+        &mut self,
+        id: &SourceId,
+        gain: Option<f64>,
+        muted: Option<bool>,
+        page: Option<f64>,
+        media: &[Option<f64>],
+    ) -> AudioOutcome {
         let Some(slot) = self.sources.iter().find(|s| &s.input.id == id) else {
             return AudioOutcome::NoSuchSource;
         };
-        let Some(levels) = slot.input.levels() else {
+        let levels = slot.input.levels();
+        // Refused before anything moves. A request carrying both a fader and a
+        // balance either lands whole or lands not at all, so a caller reading
+        // the 409 does not have to wonder which half of it took.
+        if levels.is_none() && needs_superimposed(page, media) {
             return AudioOutcome::NotSuperimposed;
-        };
-        if media.len() > levels.media_count() {
-            // Not refused: a page can drop a video between the UI drawing its
-            // faders and the operator moving one, and losing the gains that
-            // did land would be worse than ignoring the ones that cannot.
-            warn!(
-                source = %id,
-                asked = media.len(),
-                have = levels.media_count(),
-                "more media gains than this source has videos, the extra ones do nothing"
-            );
         }
-        let now = levels.apply(page, media);
-        info!(source = %id, page = now.page, media = ?now.media, "audio balance changed");
+
+        if let Some(gain) = gain {
+            slot.set_gain(gain);
+        }
+        if let Some(muted) = muted {
+            slot.set_muted(muted);
+        }
+        if let Some(levels) = levels {
+            if media.len() > levels.media_count() {
+                // Not refused: a page can drop a video between the UI drawing
+                // its faders and the operator moving one, and losing the gains
+                // that did land would be worse than ignoring the ones that
+                // cannot.
+                warn!(
+                    source = %id,
+                    asked = media.len(),
+                    have = levels.media_count(),
+                    "more media gains than this source has videos, the extra ones do nothing"
+                );
+            }
+            levels.apply(page, media);
+        }
+
+        let now = slot.audio_state();
+        info!(
+            source = %id, gain = now.gain, muted = now.muted,
+            page = ?now.page, media = ?now.media,
+            "source audio changed"
+        );
+        // The desk has to come back where the operator left it, and the fader
+        // and the mute are read off the elements when the source list is
+        // written, so saving the list now is all it takes. Only when one of
+        // those two was actually named: the balance is not saved anywhere, and
+        // an empty body is a read rather than a change, so rewriting the file
+        // for either would be a disk write per poll.
+        if gain.is_some() || muted.is_some() {
+            self.persist_runtime();
+        }
         // Every connected UI shares one set of faders, so a change made in one
         // browser has to reach the others. The levels ride along in the
         // source rows of an ordinary status snapshot.
@@ -1704,6 +1901,11 @@ impl Mixer {
                 // Only a superimposed source has levels, so this is `None`
                 // for everything else and the UI draws no faders for it.
                 audio: s.input.levels().map(|l| l.report()),
+                // These two come off the elements, not off the config, so the
+                // snapshot says what the pipeline is doing even after a gain
+                // was clamped on its way in.
+                gain: s.gain(),
+                muted: s.muted(),
             })
             .collect();
 
@@ -1856,6 +2058,51 @@ mod tests {
             tokio::time::timeout(Duration::from_secs(2), rx.recv()).await
         });
         assert_eq!(got.unwrap(), Some(7), "scheduled work never ran");
+    }
+
+    /// A level message carries only the name of the element that posted it, and
+    /// ids may contain hyphens, so the name has to be matched whole. Splitting
+    /// `pgm-alevel-cam-1` on its hyphens names `cam`, and `cam` is a source that
+    /// may well exist, so the peaks from one camera would be drawn on another's
+    /// meter with nothing anywhere to say it had happened.
+    #[test]
+    fn a_meter_is_attributed_by_whole_name_not_by_splitting_it() {
+        let ids = ["cam", "cam-1", "cam-1-backup", "feed-a-b-c"];
+        for id in ids {
+            let posted = meter_name(id);
+            let matched: Vec<&str> =
+                ids.iter().copied().filter(|candidate| meter_name(candidate) == posted).collect();
+            assert_eq!(matched, vec![id], "{posted} was attributed to {matched:?}");
+        }
+
+        // The mistake this guards against, spelled out.
+        let posted = meter_name("cam-1-backup");
+        let naive = posted.strip_prefix("pgm-alevel-").unwrap().split('-').next().unwrap();
+        assert_eq!(naive, "cam", "the naive read really does go wrong");
+        assert_ne!(naive, "cam-1-backup");
+
+        // And the programme's own meter can never be read as a source's, which
+        // is what keeps the program bar and the per-source bars apart.
+        assert!(ids.iter().all(|id| meter_name(id) != "pgm-level"));
+    }
+
+    /// The fader and the mute are elements this mixer owns, one pair per source,
+    /// so they work on a camera and a file. Only a balance needs a superimposed
+    /// source. Getting this wrong answers 409 to an operator pulling a camera
+    /// down, which is the one thing the fader exists for.
+    #[test]
+    fn a_fader_or_a_mute_does_not_need_a_superimposed_source() {
+        // A fader alone, a mute alone, and an empty read all go through.
+        assert!(!needs_superimposed(None, &[]));
+        // A balance does not.
+        assert!(needs_superimposed(Some(0.5), &[]));
+        assert!(needs_superimposed(None, &[Some(0.5)]));
+        assert!(needs_superimposed(Some(0.5), &[Some(0.5)]));
+        // A media list of nothing but nulls names no channel, so it asks for
+        // nothing a camera cannot give. The UI sends these: `[null, 0.5]` is how
+        // it names the second video without moving the first.
+        assert!(!needs_superimposed(None, &[None, None]));
+        assert!(needs_superimposed(None, &[None, Some(0.5)]));
     }
 
     #[test]

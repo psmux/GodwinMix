@@ -675,10 +675,18 @@ async fn remove_source(
     Ok(StatusCode::OK)
 }
 
-/// What a fader sends. Both parts are optional, because the UI moves one
-/// channel at a time and has no reason to restate the others.
+/// What a fader sends. Every part is optional, because the UI moves one
+/// control at a time and has no reason to restate the others.
 #[derive(Debug, Deserialize)]
 struct AudioRequest {
+    /// The operator's fader for the whole source, 0.0 to 10.0. Works on any
+    /// source. Omit to leave it where it is.
+    #[serde(default)]
+    gain: Option<f64>,
+    /// Mute the whole source. Works on any source, and is held apart from the
+    /// fader so unmuting comes back to the level that was set.
+    #[serde(default)]
+    muted: Option<bool>,
     /// Gain on the page's own sound. Omit to leave it where it is.
     #[serde(default)]
     page: Option<f64>,
@@ -709,18 +717,22 @@ fn checked_gain(gain: f64) -> Result<f64> {
     Ok(gain.clamp(0.0, MAX_GAIN))
 }
 
-/// Balance a superimposed source's page sound against the videos under it.
+/// Move a source's audio: the operator's fader and mute, and for a superimposed
+/// source the balance between its page sound and the videos under it.
 ///
 /// 404 and 409 rather than one failure, because they mean different things to
 /// whoever is calling: a wrong id, against a source that exists but has its
 /// audio pre-mixed by Chromium and so has nothing to balance. Answering the
 /// second with a quiet 200 would leave a caller moving a fader that was never
-/// connected to anything.
+/// connected to anything. Only `page` and `media` can earn the 409 though. The
+/// fader and the mute are elements the program pipeline owns for every source,
+/// so a request naming just those works on a camera as well as on a page.
 async fn set_source_audio(
     State(app): State<AppState>,
     Path(id): Path<String>,
     Json(req): Json<AudioRequest>,
 ) -> Result<Response, ApiError> {
+    let gain = req.gain.map(checked_gain).transpose()?;
     let page = req.page.map(checked_gain).transpose()?;
     // A null holds that channel, so it passes through validation untouched.
     let media = req
@@ -728,13 +740,13 @@ async fn set_source_audio(
         .into_iter()
         .map(|gain| gain.map(checked_gain).transpose())
         .collect::<Result<Vec<_>>>()?;
-    let outcome = app.mixer.set_audio(id.clone(), page, media).await?;
+    let outcome = app.mixer.set_audio(id.clone(), gain, req.muted, page, media).await?;
     Ok(audio_response(&id, outcome))
 }
 
 fn audio_response(id: &str, outcome: AudioOutcome) -> Response {
     match outcome {
-        AudioOutcome::Set(levels) => (StatusCode::OK, Json(levels)).into_response(),
+        AudioOutcome::Set(state) => (StatusCode::OK, Json(state)).into_response(),
         AudioOutcome::NoSuchSource => (
             StatusCode::NOT_FOUND,
             Json(json!({ "error": format!("no such source {id}") })),
@@ -745,7 +757,7 @@ fn audio_response(id: &str, outcome: AudioOutcome) -> Response {
             Json(json!({
                 "error": format!(
                     "source {id} is not superimposed, so its sounds arrive already mixed \
-                     and there is nothing to balance"
+                     and there is nothing to balance; its gain and mute still work"
                 )
             })),
         )
@@ -1106,7 +1118,7 @@ mod tests {
         assert!(checked_gain(f64::NAN).is_err());
     }
 
-    /// Both fields optional, and a missing `media` is an empty list rather
+    /// Every field optional, and a missing `media` is an empty list rather
     /// than a list of zeroes: the difference is whether sending one fader
     /// silences every video underneath it.
     #[test]
@@ -1115,6 +1127,25 @@ mod tests {
         let page_only = parse(serde_json::json!({ "page": 0.8 }));
         assert_eq!(page_only.page, Some(0.8));
         assert!(page_only.media.is_empty());
+        assert_eq!(page_only.gain, None);
+        assert_eq!(page_only.muted, None);
+
+        // What a source's own fader sends, and what the mute button sends.
+        // Neither names a balance, which is what keeps them off the 409 path.
+        let fader = parse(serde_json::json!({ "gain": 0.4 }));
+        assert_eq!(fader.gain, Some(0.4));
+        assert_eq!(fader.muted, None);
+        assert_eq!(fader.page, None);
+        assert!(fader.media.is_empty());
+
+        let mute = parse(serde_json::json!({ "muted": true }));
+        assert_eq!(mute.muted, Some(true));
+        assert_eq!(mute.gain, None);
+
+        // Unmuting is an explicit false, not an omission. Omitting it has to
+        // leave the mute alone, or every fader move would unmute the source.
+        let unmute = parse(serde_json::json!({ "muted": false }));
+        assert_eq!(unmute.muted, Some(false));
 
         let media_only = parse(serde_json::json!({ "media": [1.0, 0.0] }));
         assert_eq!(media_only.page, None);
@@ -1124,6 +1155,8 @@ mod tests {
         let nothing = parse(serde_json::json!({}));
         assert_eq!(nothing.page, None);
         assert!(nothing.media.is_empty());
+        assert_eq!(nothing.gain, None);
+        assert_eq!(nothing.muted, None);
 
         let both = parse(serde_json::json!({ "page": 0.8, "media": [1.0, 0.0] }));
         assert_eq!(both.page, Some(0.8));
@@ -1143,18 +1176,44 @@ mod tests {
 
     /// Three answers, three statuses. The 409 is the one that earns its keep:
     /// a whole page source exists and takes the request happily, but its
-    /// sounds were mixed by Chromium and there is nothing behind the faders.
-    /// A quiet 200 there would have the caller dragging a dead control.
+    /// sounds were mixed by Chromium and there is nothing behind the balance
+    /// faders. A quiet 200 there would have the caller dragging a dead control.
     #[tokio::test]
     async fn balancing_says_which_kind_of_no_it_is() {
         let ok = audio_response(
             "page",
-            AudioOutcome::Set(crate::state::SourceAudio { page: 0.8, media: vec![1.0, 0.0] }),
+            AudioOutcome::Set(crate::state::SourceAudioState {
+                gain: 1.0,
+                muted: false,
+                page: Some(0.8),
+                media: Some(vec![1.0, 0.0]),
+            }),
         );
         assert_eq!(ok.status(), StatusCode::OK);
         let v = body_json(ok).await;
+        assert_eq!(v["gain"], 1.0);
+        assert_eq!(v["muted"], false);
         assert_eq!(v["page"], 0.8);
         assert_eq!(v["media"][1], 0.0);
+
+        // A camera answers with the fader and the mute and nothing else. The UI
+        // draws balance faders when `page` is there, so writing a null would
+        // have it drawing controls with nothing behind them.
+        let camera = audio_response(
+            "cam1",
+            AudioOutcome::Set(crate::state::SourceAudioState {
+                gain: 0.4,
+                muted: true,
+                page: None,
+                media: None,
+            }),
+        );
+        assert_eq!(camera.status(), StatusCode::OK);
+        let v = body_json(camera).await;
+        assert_eq!(v["gain"], 0.4);
+        assert_eq!(v["muted"], true);
+        assert!(v.get("page").is_none(), "a camera answer must carry no balance");
+        assert!(v.get("media").is_none(), "a camera answer must carry no balance");
 
         let missing = audio_response("cam9", AudioOutcome::NoSuchSource);
         assert_eq!(missing.status(), StatusCode::NOT_FOUND);

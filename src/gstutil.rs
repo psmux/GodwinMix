@@ -213,8 +213,11 @@ pub enum BusEvent {
     Error { pipeline: String, src: String, message: String, debug: Option<String> },
     Warning { pipeline: String, src: String, message: String },
     Eos { pipeline: String },
-    /// Peak level per channel in dBFS, from a `level` element.
-    Level { peak_db: Vec<f64> },
+    /// Peak level per channel in dBFS, from a `level` element. `src` is that
+    /// element's name, which is the only thing in the message that says which
+    /// meter it came from: the program's own and one per source all post on the
+    /// same bus, and without the name they are indistinguishable.
+    Level { src: String, peak_db: Vec<f64> },
 }
 
 /// A running bus watcher. Dropping it stops the thread and guarantees no
@@ -292,7 +295,19 @@ pub fn watch_bus(
                     .structure()
                     .filter(|s| s.name() == "level")
                     .and_then(parse_level)
-                    .map(|peak_db| BusEvent::Level { peak_db }),
+                    .map(|peak_db| BusEvent::Level {
+                        // The element's own name, not its path. A path carries
+                        // the pipeline in front of it, and the names these are
+                        // matched against are the ones the elements were built
+                        // with. A message with no source object at all cannot
+                        // be attributed to anything, and "unknown" matches no
+                        // meter, so it is dropped downstream rather than here.
+                        src: e
+                            .src()
+                            .map(|s| s.name().to_string())
+                            .unwrap_or_else(|| "unknown".into()),
+                        peak_db,
+                    }),
                 _ => None,
             };
             if let Some(ev) = event {

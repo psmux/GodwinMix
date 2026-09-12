@@ -374,6 +374,16 @@ pub struct SourceConfig {
     /// and superimpose the page on it. See `Superimpose`.
     #[serde(default)]
     pub superimpose: Superimpose,
+    /// Where the operator's fader for this source sits, 0.0 silent through 1.0
+    /// unity to a ceiling of 10.0. Saved with the source so a restart brings
+    /// the desk back where it was left rather than resetting every fader to
+    /// unity mid-broadcast.
+    #[serde(default = "crate::state::unity_gain")]
+    pub gain: f64,
+    /// Muted by the operator. Saved separately from the fader so that unmuting
+    /// after a restart returns the source to the level it had.
+    #[serde(default)]
+    pub muted: bool,
 }
 
 fn default_stall_timeout() -> f64 {
