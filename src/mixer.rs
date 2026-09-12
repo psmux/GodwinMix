@@ -60,7 +60,18 @@ pub const AD_ID: &str = "__ad__";
 const AD_PREROLL: Duration = Duration::from_millis(1200);
 /// Upstream latency the mixers assume from the start, so that attaching a
 /// source later does not force a pipeline-wide latency recalculation.
-const MIN_UPSTREAM_LATENCY_NS: i64 = 500_000_000;
+///
+/// Twice the figure a layered source composes behind the clock
+/// (`LAYER_LATENCY_NS` in input.rs), and that is not incidental. With the two
+/// equal, a superimposed source's blocks reached this mixer with no margin at
+/// all, and an audiomixer whose input is even slightly behind its output
+/// position trims the head of every block it makes: measured on air on
+/// 2026-09-11, a slice of 1 to 6 ms missing from every 10 ms block of a
+/// superimposed source's sound, at a fixed phase, for minutes at a time (0.53
+/// waveform correlation against the source; 0.985 for a whole page). The
+/// extra half second is delay a viewer never notices on HLS and margin that
+/// the aggregators need.
+const MIN_UPSTREAM_LATENCY_NS: i64 = 1_000_000_000;
 /// Lead-in between rolling an ad and cutting to it.
 ///
 /// The ad's first frame has to be *due* slightly in the future, not right now.
