@@ -16,7 +16,7 @@
 
 use crate::config::{OutputConfig, SourceConfig};
 use crate::media::{MediaLibrary, MediaListing};
-use crate::mixer::{AudioOutcome, Command, MixerHandle};
+use crate::mixer::{AudioOutcome, Command, MixerHandle, SeekOutcome};
 use crate::snapshot::{self, Pick, Tracker};
 use crate::state::{Event, MixerStatus, SourceState};
 use anyhow::Result;
@@ -104,6 +104,7 @@ pub fn router(app: AppState, snapshots: Arc<Tracker>) -> Router {
         .route("/api/sources", post(add_source))
         .route("/api/sources/{id}", delete(remove_source))
         .route("/api/sources/{id}/audio", post(set_source_audio))
+        .route("/api/sources/{id}/seek", post(seek_source))
         .route("/api/outputs", get(list_outputs).post(add_output))
         .route("/api/outputs/{id}", delete(remove_output))
         .route("/api/outputs/{id}/reconnect", post(reconnect_output))
@@ -765,6 +766,77 @@ fn audio_response(id: &str, outcome: AudioOutcome) -> Response {
     }
 }
 
+/// Where to move a source to, in milliseconds from its start.
+#[derive(Debug, Deserialize)]
+struct SeekRequest {
+    /// Signed and fractional on purpose, so that anything a scrubber can
+    /// plausibly send is clamped rather than refused. See `checked_position`.
+    position_ms: f64,
+}
+
+/// Pin a requested position to something a pipeline can be asked for.
+///
+/// Out of range is clamped rather than refused, the same bargain `checked_gain`
+/// makes: a scrubber dragged past either end of its track should land at that
+/// end, and an operator mid-broadcast should not be reading a validation error.
+/// The far end is clamped by the mixer instead, which is the only thing that
+/// knows the duration. A value that is not a number at all is refused, because
+/// there is no sensible position to take it as.
+fn checked_position(position_ms: f64) -> Result<u64> {
+    if position_ms.is_nan() {
+        anyhow::bail!("a position has to be a number");
+    }
+    // `as` on a float saturates in Rust, so a silly number becomes the ceiling
+    // rather than wrapping to somewhere near the start.
+    Ok(position_ms.max(0.0).round() as u64)
+}
+
+/// Move a seekable source to a position and answer with where it landed.
+///
+/// 404, 409 and 200 mean three different things to whoever is calling. A wrong
+/// id is a bug in the caller. A live feed is a source that exists and is working
+/// perfectly and simply has no position to move to, which is worth saying rather
+/// than answering 200 and leaving a scrubber to drift back on the next status
+/// snapshot. And the 200 carries the position read back off the pipeline, which
+/// is not quite the one that was asked for, because a seek snaps to a key unit.
+async fn seek_source(
+    State(app): State<AppState>,
+    Path(id): Path<String>,
+    Json(req): Json<SeekRequest>,
+) -> Result<Response, ApiError> {
+    let position_ms = checked_position(req.position_ms)?;
+    let outcome = app.mixer.seek(id.clone(), position_ms).await?;
+    Ok(seek_response(&id, outcome))
+}
+
+fn seek_response(id: &str, outcome: SeekOutcome) -> Response {
+    match outcome {
+        SeekOutcome::Moved(at) => (StatusCode::OK, Json(at)).into_response(),
+        SeekOutcome::NoSuchSource => (
+            StatusCode::NOT_FOUND,
+            Json(json!({ "error": format!("no such source {id}") })),
+        )
+            .into_response(),
+        SeekOutcome::NotSeekable => (
+            StatusCode::CONFLICT,
+            Json(json!({
+                "error": format!(
+                    "source {id} cannot be scrubbed: a live feed has no position to move \
+                     to, it is wherever it is now"
+                )
+            })),
+        )
+            .into_response(),
+        // A pipeline that took the request and refused it is an ordinary failure,
+        // so it answers 400 like every other one, carrying the reason in the same
+        // `error` field as the two above. The UI shows it verbatim.
+        SeekOutcome::Failed(message) => {
+            warn!(source = %id, %message, "seek refused");
+            (StatusCode::BAD_REQUEST, Json(json!({ "error": message }))).into_response()
+        }
+    }
+}
+
 async fn reconnect_output(
     State(app): State<AppState>,
     Path(id): Path<String>,
@@ -1228,6 +1300,91 @@ mod tests {
         let v = body_json(flat).await;
         let msg = v["error"].as_str().unwrap();
         assert!(msg.contains("cam1") && msg.contains("superimposed"), "unclear message: {msg}");
+    }
+
+    /// The scrubber's three answers. The 409 is the one worth having: a camera
+    /// exists, works, and has no position to move to, and a quiet 200 there
+    /// would leave the UI drawing a scrubber that snaps back on the next poll.
+    #[tokio::test]
+    async fn seeking_says_which_kind_of_no_it_is() {
+        let ok = seek_response(
+            "clip1",
+            SeekOutcome::Moved(crate::state::SourcePositionState {
+                position_ms: 42_000,
+                duration_ms: Some(154_000),
+            }),
+        );
+        assert_eq!(ok.status(), StatusCode::OK);
+        let v = body_json(ok).await;
+        assert_eq!(v["position_ms"], 42_000);
+        assert_eq!(v["duration_ms"], 154_000);
+
+        // A clip whose duration the demuxer has not worked out yet still says
+        // where it landed, and leaves the duration out rather than writing a zero
+        // that the UI would draw a full length track from.
+        let early = seek_response(
+            "clip1",
+            SeekOutcome::Moved(crate::state::SourcePositionState {
+                position_ms: 1_000,
+                duration_ms: None,
+            }),
+        );
+        let v = body_json(early).await;
+        assert_eq!(v["position_ms"], 1_000);
+        assert!(v.get("duration_ms").is_none());
+
+        let missing = seek_response("cam9", SeekOutcome::NoSuchSource);
+        assert_eq!(missing.status(), StatusCode::NOT_FOUND);
+        let v = body_json(missing).await;
+        assert!(
+            v["error"].as_str().unwrap().contains("cam9"),
+            "the message has to name the id that was asked for: {v}"
+        );
+
+        let live = seek_response("cam1", SeekOutcome::NotSeekable);
+        assert_eq!(live.status(), StatusCode::CONFLICT);
+        let v = body_json(live).await;
+        let msg = v["error"].as_str().unwrap();
+        assert!(msg.contains("cam1") && msg.contains("live feed"), "unclear message: {msg}");
+
+        // A pipeline that took the request and refused it is an ordinary failure
+        // and comes back as one, with the reason intact.
+        let refused =
+            seek_response("clip1", SeekOutcome::Failed("demuxer refused the seek".into()));
+        assert_eq!(refused.status(), StatusCode::BAD_REQUEST);
+        let v = body_json(refused).await;
+        assert!(v["error"].as_str().unwrap().contains("demuxer refused"), "{v}");
+    }
+
+    /// A scrubber dragged off either end of its track should land at that end.
+    /// The near end is clamped here; the far one is clamped by the mixer, which
+    /// is the only thing that knows how long the clip is.
+    #[test]
+    fn a_position_off_the_end_of_the_track_is_clamped_not_refused() {
+        assert_eq!(checked_position(0.0).unwrap(), 0);
+        assert_eq!(checked_position(42_000.0).unwrap(), 42_000);
+        // Dragged past the left hand end, which a scrubber does on a quick flick.
+        assert_eq!(checked_position(-5_000.0).unwrap(), 0);
+        // Fractions come of dividing a pixel position by a track width.
+        assert_eq!(checked_position(41_999.6).unwrap(), 42_000);
+        // Saturating rather than wrapping: a silly number must not land near the
+        // start of the clip, which is what `as` on a float used to do.
+        assert_eq!(checked_position(1e300).unwrap(), u64::MAX);
+        // Not a number is the one thing refused, because there is no position to
+        // read it as.
+        assert!(checked_position(f64::NAN).is_err());
+    }
+
+    #[test]
+    fn the_seek_request_needs_a_position() {
+        let parse = |v: serde_json::Value| serde_json::from_value::<SeekRequest>(v);
+        assert_eq!(parse(serde_json::json!({ "position_ms": 42000 })).unwrap().position_ms, 42_000.0);
+        // An integer and a float both arrive as the same thing, so the UI can
+        // send whatever its slider gives it.
+        assert_eq!(parse(serde_json::json!({ "position_ms": 42000.5 })).unwrap().position_ms, 42_000.5);
+        // An empty body is not a read here. There is nothing to read: the
+        // position is in the status snapshot and in the position event already.
+        assert!(parse(serde_json::json!({})).is_err());
     }
 
     #[test]

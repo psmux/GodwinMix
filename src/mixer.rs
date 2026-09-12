@@ -46,6 +46,11 @@ use tracing::{debug, error, info, warn};
 
 /// How often the supervisor checks source liveness and output queue depth.
 const TICK: Duration = Duration::from_millis(500);
+/// How often a seekable source's position is published. Four times a second,
+/// which is what it takes for a scrubber to look like it is following the
+/// picture; the status snapshot every two seconds is far too coarse to drag
+/// against. Nothing is sent for a source that cannot be scrubbed.
+const POSITION_TICK: Duration = Duration::from_millis(250);
 /// Consecutive ticks with a near-full output queue before forcing a reconnect.
 const OVERFLOW_TICKS: u32 = 6;
 /// A source that has been stalled this long gets its pipeline rebuilt.
@@ -119,6 +124,26 @@ pub enum AudioOutcome {
     NotSuperimposed,
 }
 
+/// What `Command::Seek` answers with.
+///
+/// Shaped like `AudioOutcome` and for the same reason: "there is no such source"
+/// and "this source has no position to move to" send the caller somewhere
+/// different, and a scrubber that got a quiet 200 from a camera would sit there
+/// showing a position nothing is playing.
+#[derive(Debug, Clone, PartialEq)]
+pub enum SeekOutcome {
+    /// Landed, at the position and duration read back off the pipeline.
+    Moved(SourcePositionState),
+    NoSuchSource,
+    /// A live feed, or a source whose place on the programme's timeline comes
+    /// from something other than the aligner. The ad break is the second kind:
+    /// it is a file, and it is still not ours to move. See `SourceSlot::seekable`.
+    NotSeekable,
+    /// The pipeline took the request and refused it. Rare, and worth saying out
+    /// loud rather than reporting a position the source never moved to.
+    Failed(String),
+}
+
 /// Does this request ask for something only a superimposed source can give?
 ///
 /// The fader and the mute are elements this mixer owns, one pair per source,
@@ -186,12 +211,23 @@ pub enum Command {
         media: Vec<Option<f64>>,
         reply: oneshot::Sender<AudioOutcome>,
     },
+    /// Move a seekable source to a position, in milliseconds from its start.
+    Seek {
+        source: SourceId,
+        position_ms: u64,
+        reply: oneshot::Sender<SeekOutcome>,
+    },
     Status(oneshot::Sender<MixerStatus>),
     /// The configured sources and outputs with their URLs intact. `Status`
     /// masks those, so anything that must match on a URL asks here.
     Configs(oneshot::Sender<RuntimeConfigs>),
     Bus(BusEvent),
     Tick,
+    /// Report where each seekable source has got to. Separate from `Tick`
+    /// because it runs four times a second and `Tick` runs twice, and the
+    /// supervisor's work has no business being done twice as often to suit a
+    /// scrubber.
+    PositionTick,
     Shutdown,
 }
 
@@ -236,6 +272,15 @@ impl MixerHandle {
         let (tx, rx) = oneshot::channel();
         self.send(Command::SetAudio { source, gain, muted, page, media, reply: tx })?;
         rx.await.map_err(|_| anyhow::anyhow!("mixer dropped the audio request"))
+    }
+
+    /// Move a source and get back where it actually landed. Waits on a value
+    /// like `set_audio` does: the answer is a position, and "this is a camera"
+    /// is not a failure the caller should see as a generic 400.
+    pub async fn seek(&self, source: SourceId, position_ms: u64) -> Result<SeekOutcome> {
+        let (tx, rx) = oneshot::channel();
+        self.send(Command::Seek { source, position_ms, reply: tx })?;
+        rx.await.map_err(|_| anyhow::anyhow!("mixer dropped the seek request"))
     }
 
     pub async fn configs(&self) -> Result<RuntimeConfigs> {
@@ -321,6 +366,32 @@ impl SourceSlot {
         self.amute.set_property("mute", muted);
     }
 
+    /// Can an operator scrub this source?
+    ///
+    /// Two conditions, and both are necessary. The pipeline has to say it can be
+    /// seeked, which is asked of GStreamer rather than guessed from the URI. And
+    /// this mixer has to be the thing that places the source on the programme's
+    /// timeline, which is what the aligner does. Without an aligner a seek would
+    /// restart the source's segment with nothing to work out where the result
+    /// belongs, so the ad, whose offset comes from its cue, reports itself as not
+    /// seekable and is refused. A superimposed page has no aligner either, and is
+    /// not seekable in the first place.
+    fn seekable(&self) -> bool {
+        self.aligner.is_some() && self.input.seekable()
+    }
+
+    /// Where this source has got to, for a source that can say. `None` covers
+    /// both a live feed and a file whose pipeline has not started yet.
+    fn position(&self) -> Option<SourcePositionState> {
+        if !self.seekable() {
+            return None;
+        }
+        Some(SourcePositionState {
+            position_ms: self.input.position_ms()?,
+            duration_ms: self.input.duration_ms(),
+        })
+    }
+
     /// The fader and the mute as they stand, plus the balance if this source has
     /// one. Read off the elements, so a clamped request reports the value that
     /// took effect rather than the one that was asked for.
@@ -348,9 +419,14 @@ impl SourceSlot {
 /// applied to both mixer pads, so video and audio keep their relative timing
 /// and the source stays in lip sync.
 pub struct TimelineAligner {
+    id: String,
     /// Shared by both branches so they get an identical shift.
-    offset: Arc<Mutex<Option<i64>>>,
-    applied: Arc<AtomicBool>,
+    offset: Mutex<Option<i64>>,
+    applied: AtomicBool,
+    /// The pads the shift is applied to, held so that `place_at` is the one
+    /// place that writes an offset and can be exercised without a pipeline.
+    vpad: gst::Pad,
+    apad: gst::Pad,
 }
 
 impl TimelineAligner {
@@ -363,18 +439,19 @@ impl TimelineAligner {
         id: &str,
     ) -> Result<Arc<Self>> {
         let this = Arc::new(Self {
-            offset: Arc::new(Mutex::new(None)),
-            applied: Arc::new(AtomicBool::new(false)),
+            id: id.to_string(),
+            offset: Mutex::new(None),
+            applied: AtomicBool::new(false),
+            vpad: vpad.clone(),
+            apad: apad.clone(),
         });
         let clock = program.clock();
         let base = program.base_time();
 
         for (tag, queue) in [("video", video_queue), ("audio", audio_queue)] {
             let pad = queue.static_pad("src").context("queue has no src pad")?;
-            let (vpad, apad) = (vpad.clone(), apad.clone());
-            let (clock, id, tag) = (clock.clone(), id.to_string(), tag.to_string());
-            let shared = this.offset.clone();
-            let applied = this.applied.clone();
+            let (clock, tag) = (clock.clone(), tag.to_string());
+            let aligner = this.clone();
 
             pad.add_probe(gst::PadProbeType::EVENT_DOWNSTREAM, move |_p, info| {
                 let Some(gst::PadProbeData::Event(e)) = &info.data else {
@@ -393,38 +470,53 @@ impl TimelineAligner {
                 else {
                     return gst::PadProbeReturn::Ok;
                 };
-                // One offset for both pads, taken from whichever segment
-                // arrives first, so video and audio keep their relative timing.
-                // Hold the guard once. Re-locking inside the match arm would
-                // deadlock the streaming thread: the scrutinee's guard lives
-                // for the whole match, and the mutex is not reentrant.
-                let offset = {
-                    let mut guard = shared.lock();
-                    match *guard {
-                        Some(v) => v,
-                        None => {
-                            let v = now.nseconds() as i64;
-                            *guard = Some(v);
-                            info!(
-                                source = %id, first_on = %tag,
-                                offset_ms = v / 1_000_000,
-                                "aligned source timeline onto the programme"
-                            );
-                            v
-                        }
-                    }
-                };
-                vpad.set_offset(offset);
-                apad.set_offset(offset);
-                applied.store(true, Ordering::Relaxed);
+                aligner.place_at(now.nseconds() as i64, &tag);
                 gst::PadProbeReturn::Ok
             });
         }
         Ok(this)
     }
 
-    /// Recompute on the next buffer. A restarted source begins its running time
-    /// again from zero, so the previous offset no longer holds.
+    /// Put this source at `now`, the programme's running time when a segment
+    /// arrived on one of its branches, and answer with the offset in force.
+    ///
+    /// The first segment after a reset decides the offset and every later one
+    /// reuses it, so video and audio get an identical shift and the source stays
+    /// in lip sync.
+    fn place_at(&self, now: i64, first_on: &str) -> i64 {
+        // Hold the guard once. Re-locking inside the match arm would deadlock
+        // the streaming thread: the scrutinee's guard lives for the whole match,
+        // and the mutex is not reentrant.
+        let offset = {
+            let mut guard = self.offset.lock();
+            match *guard {
+                Some(v) => v,
+                None => {
+                    *guard = Some(now);
+                    info!(
+                        source = %self.id, first_on,
+                        offset_ms = now / 1_000_000,
+                        "aligned source timeline onto the programme"
+                    );
+                    now
+                }
+            }
+        };
+        self.vpad.set_offset(offset);
+        self.apad.set_offset(offset);
+        self.applied.store(true, Ordering::Relaxed);
+        offset
+    }
+
+    /// The offset in force, or `None` while the next segment is to decide it.
+    #[cfg_attr(not(test), allow(dead_code))]
+    pub fn offset(&self) -> Option<i64> {
+        *self.offset.lock()
+    }
+
+    /// Recompute on the next segment. A restarted source begins its running time
+    /// again from zero, so the previous offset no longer holds. A flushing seek
+    /// does the same thing for the same reason: see `Mixer::seek`.
     pub fn reset(&self) {
         *self.offset.lock() = None;
         self.applied.store(false, Ordering::Relaxed);
@@ -1538,6 +1630,9 @@ impl Mixer {
             Command::SetAudio { source, gain, muted, page, media, reply } => {
                 let _ = reply.send(self.set_audio(&source, gain, muted, page, &media));
             }
+            Command::Seek { source, position_ms, reply } => {
+                let _ = reply.send(self.seek(&source, position_ms));
+            }
             Command::ReconnectOutput(id, ack) => {
                 let r = if self.outputs.iter().any(|o| o.id() == &id) {
                     self.reconnect_output(&id);
@@ -1566,6 +1661,7 @@ impl Mixer {
             }
             Command::Bus(ev) => self.on_bus(ev),
             Command::Tick => self.tick(),
+            Command::PositionTick => self.position_tick(),
             Command::Shutdown => return Ok(false),
         }
         Ok(true)
@@ -1665,6 +1761,14 @@ impl Mixer {
         let mut restart = Vec::new();
         let fallback_ticks = (CLIENT_FALLBACK_AFTER.as_millis() / TICK.as_millis()) as u32;
         for slot in &mut self.sources {
+            // Whether this source can be scrubbed is asked here rather than
+            // where it is reported. Nothing answers a SEEKING query until the
+            // chain from the source element to the proxies is built, which for a
+            // file took between 50 ms and a second on this machine, so the
+            // question has to be asked again until it is answered. Once answered
+            // it is kept, and this costs nothing thereafter.
+            slot.input.refresh_seekable();
+
             match slot.input.observed_state() {
                 SourceState::Stalled => {
                     slot.stalled_ticks += 1;
@@ -1872,6 +1976,89 @@ impl Mixer {
         AudioOutcome::Set(now)
     }
 
+    /// Move a source to a position and answer with where it landed.
+    ///
+    /// # Why the aligner is reset first
+    ///
+    /// `TimelineAligner` places a source on the programme's timeline by taking
+    /// the programme's running time when the source's first segment arrives and
+    /// holding that offset for the life of the source. A flushing seek restarts
+    /// the segment, so the offset taken from the old one no longer describes
+    /// anything: measured on this machine against a thirty second clip, a source
+    /// seeked four seconds after it was added came back four seconds behind the
+    /// programme, which the mixers consume as fast as it arrives. The clip
+    /// fast-forwarded through those four seconds and landed four seconds past the
+    /// mark the operator asked for, and the audiomixer threw away every sample it
+    /// was handed on the way there, because samples whose running time is in the
+    /// past are exactly what it discards. Video looked fine throughout, which is
+    /// what makes this worth a paragraph. The longer the source has been up the
+    /// worse it gets: a clip added ten minutes ago would race ten minutes of
+    /// media through the decoder, or simply run off the end of the file.
+    ///
+    /// Resetting makes the segment the seek produces establish a fresh offset the
+    /// same way the first one did, which puts the source back at the programme's
+    /// current running time with its sound. It has to happen before the seek, not
+    /// after: the seek flushes, the new segment follows immediately, and on the
+    /// measured run it reached the aligner's probe a millisecond after
+    /// `seek_simple` returned. Reset it afterwards and the probe has already
+    /// reused the stale offset with no further segment coming to correct it.
+    ///
+    /// Seeking a source that is live on program is safe. The flush travels across
+    /// the proxy into this pipeline, which is what empties the queues holding the
+    /// old position, and it stops at the compositor and the audiomixer: the slate
+    /// and silence pads are never flushed, so neither aggregator forwards the
+    /// flush downstream and the encoder, the muxer and the RTMP connection never
+    /// see it. Verified by watching both mixers' source pads across a seek. What
+    /// the viewer gets is a few hundred milliseconds of the previous frame and no
+    /// sound, the same gap the picture has, and then the new position.
+    fn seek(&mut self, id: &SourceId, position_ms: u64) -> SeekOutcome {
+        let Some(slot) = self.sources.iter().find(|s| &s.input.id == id) else {
+            return SeekOutcome::NoSuchSource;
+        };
+        if !slot.seekable() {
+            return SeekOutcome::NotSeekable;
+        }
+        if let Some(aligner) = &slot.aligner {
+            aligner.reset();
+        }
+        let landed = match slot.input.seek_ms(position_ms) {
+            Ok(landed) => landed,
+            Err(e) => {
+                warn!(source = %id, asked_ms = position_ms, ?e, "seek refused");
+                return SeekOutcome::Failed(format!("{e:#}"));
+            }
+        };
+        let now = SourcePositionState { position_ms: landed, duration_ms: slot.input.duration_ms() };
+        info!(
+            source = %id, asked_ms = position_ms, landed_ms = landed,
+            duration_ms = ?now.duration_ms, "source moved"
+        );
+        // No `persist_runtime` here. A position is not a setting: a restart that
+        // resumed a clip half way through would be a surprise nothing in the UI
+        // asked for.
+        //
+        // The snapshot goes out so that every other browser's scrubber jumps with
+        // this one rather than waiting for its own poll.
+        self.broadcast_status();
+        SeekOutcome::Moved(now)
+    }
+
+    /// Tell every connected UI where each seekable source has got to.
+    ///
+    /// Only the seekable ones. A camera has no position to report, and on a nine
+    /// camera rig an event per source per tick would be most of what the
+    /// WebSocket carried.
+    fn position_tick(&self) {
+        for slot in &self.sources {
+            let Some(at) = slot.position() else { continue };
+            let _ = self.events.send(Event::SourcePosition {
+                source: slot.input.id.clone(),
+                position_ms: at.position_ms,
+                duration_ms: at.duration_ms,
+            });
+        }
+    }
+
     pub fn status(&self) -> MixerStatus {
         let multiview = self.multiview.as_ref().map(|mv| mv.status());
         let cells: HashMap<&str, u32> = multiview
@@ -1887,25 +2074,36 @@ impl Mixer {
         let sources = self
             .sources
             .iter()
-            .map(|s| SourceStatus {
-                id: s.input.id.clone(),
-                name: s.input.config.display_name().to_string(),
-                uri: safe_uri_label(&s.input.config.uri),
-                state: s.input.observed_state(),
-                has_video: s.input.has_video(),
-                has_audio: s.input.has_audio(),
-                cell: cells.get(s.input.id.as_str()).copied(),
-                video_idle_ms: s.input.health.video_idle_ms(),
-                audio_idle_ms: s.input.health.audio_idle_ms(),
-                superimposed: s.input.superimposed(),
-                // Only a superimposed source has levels, so this is `None`
-                // for everything else and the UI draws no faders for it.
-                audio: s.input.levels().map(|l| l.report()),
-                // These two come off the elements, not off the config, so the
-                // snapshot says what the pipeline is doing even after a gain
-                // was clamped on its way in.
-                gain: s.gain(),
-                muted: s.muted(),
+            .map(|s| {
+                // Asked once and used twice: each of these is a query on the
+                // source's own pipeline, and the snapshot is polled.
+                let at = s.position();
+                SourceStatus {
+                    id: s.input.id.clone(),
+                    name: s.input.config.display_name().to_string(),
+                    uri: safe_uri_label(&s.input.config.uri),
+                    state: s.input.observed_state(),
+                    has_video: s.input.has_video(),
+                    has_audio: s.input.has_audio(),
+                    cell: cells.get(s.input.id.as_str()).copied(),
+                    video_idle_ms: s.input.health.video_idle_ms(),
+                    audio_idle_ms: s.input.health.audio_idle_ms(),
+                    superimposed: s.input.superimposed(),
+                    // Only a superimposed source has levels, so this is `None`
+                    // for everything else and the UI draws no faders for it.
+                    audio: s.input.levels().map(|l| l.report()),
+                    // These two come off the elements, not off the config, so the
+                    // snapshot says what the pipeline is doing even after a gain
+                    // was clamped on its way in.
+                    gain: s.gain(),
+                    muted: s.muted(),
+                    // Asked of the pipeline, not worked out from the URI, and
+                    // `None` for both numbers on anything that cannot be
+                    // scrubbed.
+                    seekable: s.seekable(),
+                    position_ms: at.as_ref().map(|at| at.position_ms),
+                    duration_ms: at.and_then(|at| at.duration_ms),
+                }
             })
             .collect();
 
@@ -2012,6 +2210,20 @@ pub fn spawn(
         }
     });
 
+    // A second timer rather than more work on the first. The supervisor's tick
+    // restarts stalled sources and watches output queues, and none of that wants
+    // doing twice as often just because a scrubber needs 4 Hz to look smooth.
+    let positions = handle.clone();
+    tokio::spawn(async move {
+        let mut interval = tokio::time::interval(POSITION_TICK);
+        loop {
+            interval.tick().await;
+            if positions.send(Command::PositionTick).is_err() {
+                return;
+            }
+        }
+    });
+
     std::thread::Builder::new()
         .name("mixer".into())
         .spawn(move || {
@@ -2103,6 +2315,74 @@ mod tests {
         // it names the second video without moving the first.
         assert!(!needs_superimposed(None, &[None, None]));
         assert!(needs_superimposed(None, &[None, Some(0.5)]));
+    }
+
+    /// A seek has to make the aligner work its offset out again.
+    ///
+    /// The offset is taken from the programme's running time when a segment
+    /// arrives and then held, which is right for a source that plays straight
+    /// through. A flushing seek restarts the segment, so the held offset places
+    /// the source where it was when it was added rather than where the programme
+    /// is now. Reuse it and the source comes back behind the programme by however
+    /// long it has been up, the mixers consume that media as fast as it arrives,
+    /// and the audiomixer discards every sample of it because samples in the past
+    /// are exactly what it drops. The picture looks fine the whole time.
+    ///
+    /// So this proves the thing that matters: after `reset`, the next segment
+    /// computes a fresh offset, and both pads get it.
+    #[test]
+    fn a_seek_makes_the_aligner_work_the_offset_out_again() {
+        let _ = gst::init();
+        let vpad = gst::Pad::builder(gst::PadDirection::Sink).name("vsink").build();
+        let apad = gst::Pad::builder(gst::PadDirection::Sink).name("asink").build();
+        let aligner = TimelineAligner {
+            id: "clip1".into(),
+            offset: Mutex::new(None),
+            applied: AtomicBool::new(false),
+            vpad: vpad.clone(),
+            apad: apad.clone(),
+        };
+        assert_eq!(aligner.offset(), None, "nothing is placed before a segment arrives");
+
+        // The source is added a minute into the programme. Its first segment
+        // decides the offset.
+        let minute = 60_000_000_000i64;
+        let first = aligner.place_at(minute, "audio");
+        assert_eq!(first, minute);
+        assert_eq!(aligner.offset(), Some(minute));
+        // Both pads, from whichever branch arrived first, which is what keeps
+        // the source in lip sync.
+        assert_eq!(vpad.offset(), minute);
+        assert_eq!(apad.offset(), minute);
+
+        // The other branch's segment arrives a few milliseconds later and must
+        // reuse the offset rather than take its own.
+        assert_eq!(aligner.place_at(minute + 8_000_000, "video"), first);
+        assert_eq!(vpad.offset(), first);
+
+        // Now the seek, fifteen seconds further into the programme. Without a
+        // reset the stale offset is reused, and that is the bug: the source would
+        // be placed a minute in while the programme is at 1:15.
+        let after_seek = minute + 15_000_000_000;
+        assert_eq!(
+            aligner.place_at(after_seek, "audio"),
+            first,
+            "with no reset the old offset is reused, which is what breaks the sound"
+        );
+
+        // With the reset it works the offset out again from where the programme
+        // actually is.
+        aligner.reset();
+        assert_eq!(aligner.offset(), None);
+        let second = aligner.place_at(after_seek, "audio");
+        assert_eq!(second, after_seek);
+        assert_ne!(second, first, "the offset has to be recomputed, not reused");
+        assert_eq!(vpad.offset(), second);
+        assert_eq!(apad.offset(), second);
+        // And the branch that follows shares the new one, so the seek does not
+        // cost lip sync either.
+        assert_eq!(aligner.place_at(after_seek + 12_000_000, "video"), second);
+        assert_eq!(apad.offset(), second);
     }
 
     #[test]

@@ -220,6 +220,11 @@ pub struct InputPipeline {
     media_cache: Vec<std::path::PathBuf>,
     /// Set when the pipeline posts an error; the supervisor restarts it.
     failed: Arc<AtomicBool>,
+    /// Whether this pipeline can be scrubbed, once it has said. `None` until
+    /// then, because nothing upstream answers a SEEKING query before the chain
+    /// from the source to the proxies is built, and a query nobody answered is
+    /// not the same as a no.
+    seekable: Mutex<Option<bool>>,
     /// The RTMP client element, swappable once if the configured one turns out
     /// not to talk to this server. See `RtmpClient`.
     source: Mutex<gst::Element>,
@@ -1991,6 +1996,7 @@ impl InputPipeline {
                 .map(|r| r.media.iter().filter_map(|m| m.cache.clone()).collect())
                 .unwrap_or_default(),
             failed: Arc::new(AtomicBool::new(false)),
+            seekable: Mutex::new(None),
             source: Mutex::new(src),
             src_queue,
             fallback_used: AtomicBool::new(false),
@@ -2164,6 +2170,87 @@ impl InputPipeline {
     /// The page and media levels, when this source has them.
     pub fn levels(&self) -> Option<&AudioLevels> {
         self.levels.as_ref()
+    }
+
+    /// Whether this source can be scrubbed, as the pipeline last answered.
+    ///
+    /// False while nothing has answered yet, which is the honest reading: a
+    /// scrubber on a source that turns out to be a live feed is worse than a
+    /// scrubber that appears a moment late.
+    pub fn seekable(&self) -> bool {
+        self.seekable.lock().unwrap_or(false)
+    }
+
+    /// Ask the pipeline whether it can be scrubbed, unless it has already said.
+    ///
+    /// Asked rather than worked out from the URI, because the URI does not know.
+    /// A clip fetched over HTTP from a server that refuses range requests cannot
+    /// be seeked back to the start even though its address ends in `.mp4`, and a
+    /// Python test server is exactly such a one: `cache_media` exists because of
+    /// it. The query is the only thing that tells the two apart.
+    ///
+    /// The answer is kept once given. It cannot change while the pipeline plays
+    /// the same URI, and the supervisor calls this twice a second for every
+    /// source. An unanswered query is not a no: until the chain from the source
+    /// element to the proxies is built there is nothing upstream to ask, so that
+    /// case leaves the answer open and this gets asked again on the next tick.
+    pub fn refresh_seekable(&self) -> bool {
+        let mut known = self.seekable.lock();
+        if let Some(answer) = *known {
+            return answer;
+        }
+        let mut query = gst::query::Seeking::new(gst::Format::Time);
+        if !self.pipeline.query(&mut query) {
+            return false;
+        }
+        let (answer, _, _) = query.result();
+        *known = Some(answer);
+        debug!(source = %self.id, seekable = answer, "the pipeline says whether it can be scrubbed");
+        answer
+    }
+
+    /// How far through this source is, in milliseconds. `None` while nothing
+    /// upstream can say, which covers a pipeline that has not started yet.
+    pub fn position_ms(&self) -> Option<u64> {
+        self.pipeline.query_position::<gst::ClockTime>().map(|t| t.mseconds())
+    }
+
+    /// How long this source runs, in milliseconds. `None` on a live feed, which
+    /// has no end, and on a file whose demuxer has not worked it out yet.
+    pub fn duration_ms(&self) -> Option<u64> {
+        self.pipeline.query_duration::<gst::ClockTime>().map(|t| t.mseconds())
+    }
+
+    /// Move this source to `position_ms` and answer with where it landed.
+    ///
+    /// Flushing, so that what an operator asked for arrives now rather than
+    /// after the queues have played out the second or so they already hold.
+    /// Accurate rather than fast, because someone dragging a scrubber is looking
+    /// for a particular moment, and landing several seconds earlier on the
+    /// previous keyframe reads as the control being broken.
+    ///
+    /// A position past the end is clamped to the duration rather than refused,
+    /// for the reason `checked_gain` gives: an operator mid-broadcast has better
+    /// things to do than read a validation error, and dragging a scrubber to the
+    /// right hand end plainly means the end.
+    ///
+    /// The caller must reset this source's `TimelineAligner` first. A flushing
+    /// seek restarts the segment, which makes the offset computed from the
+    /// previous one wrong, and nothing here can see the aligner.
+    pub fn seek_ms(&self, position_ms: u64) -> Result<u64> {
+        // With no duration to clamp against, the ceiling is the largest time
+        // GStreamer can express: `ClockTime::from_mseconds` panics past it, and
+        // a request carrying a silly number must not take the mixer down.
+        let wanted = position_ms.min(self.duration_ms().unwrap_or(gst::ClockTime::MAX.mseconds()));
+        self.pipeline
+            .seek_simple(
+                gst::SeekFlags::FLUSH | gst::SeekFlags::ACCURATE | gst::SeekFlags::KEY_UNIT,
+                gst::ClockTime::from_mseconds(wanted),
+            )
+            .with_context(|| format!("seeking {} to {wanted}ms", self.id))?;
+        // Read back rather than reported: the seek snaps to a key unit, so where
+        // it landed and what was asked for are rarely the same millisecond.
+        Ok(self.position_ms().unwrap_or(wanted))
     }
 
     pub fn observed_state(&self) -> SourceState {

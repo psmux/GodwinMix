@@ -71,6 +71,18 @@ pub struct SourceStatus {
     /// the source to where it was rather than to unity.
     #[serde(default)]
     pub muted: bool,
+    /// True when this source can be scrubbed. A file can be. A camera, an RTMP
+    /// feed or a page cannot, and asking one to is a mistake worth refusing
+    /// rather than quietly doing nothing.
+    #[serde(default)]
+    pub seekable: bool,
+    /// Where this source has got to, and how long it runs, in milliseconds.
+    /// `None` on anything not seekable, and on a seekable source whose duration
+    /// the demuxer has not worked out yet.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub position_ms: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub duration_ms: Option<u64>,
 }
 
 /// A fader that has never been moved sits at unity. Spelled out as a serde
@@ -112,6 +124,21 @@ pub struct SourceAudioState {
     pub page: Option<f64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub media: Option<Vec<f64>>,
+}
+
+/// Where a seekable source has got to, which is what the seek endpoint answers
+/// with.
+///
+/// Both numbers are read back off the pipeline after the seek has landed, not
+/// taken from the request. A seek snaps to a key unit, so the frame an operator
+/// asked for and the frame they got are rarely the same millisecond, and a
+/// scrubber drawn from the request would sit a little away from the picture.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SourcePositionState {
+    pub position_ms: u64,
+    /// Absent while the demuxer has not worked the duration out yet.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub duration_ms: Option<u64>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -206,6 +233,10 @@ pub enum Event {
     /// operator's fader and before the mute. The mosaic carries no audio, so
     /// this is what puts a meter beside each picture.
     SourceAudioLevel { source: SourceId, peak_db: Vec<f64> },
+    /// How far through a seekable source has got. Sent a few times a second for
+    /// those sources only, because a camera has no position to report and a
+    /// scrubber updated twice a minute is worse than no scrubber.
+    SourcePosition { source: SourceId, position_ms: u64, duration_ms: Option<u64> },
     /// Something went wrong that the operator should see.
     Alert { severity: Severity, message: String },
     /// A file in the media library changed: uploaded, deleted, or its
@@ -356,6 +387,9 @@ mod tests {
                 audio: Some(SourceAudio { page: 0.8, media: vec![1.0, 0.0] }),
                 gain: 0.5,
                 muted: true,
+                seekable: false,
+                position_ms: None,
+                duration_ms: None,
             }],
             outputs: vec![],
             multiview: MultiviewStatus {
@@ -433,6 +467,33 @@ mod tests {
         assert_eq!(v["peak_db"][0], -12.0);
         assert_eq!(v["peak_db"][1], -11.4);
 
+        // The scrubber's own event. Four a second for a file, never for a
+        // camera, so the UI can drag against it. The duration is written even
+        // when it is null: the UI reads the key to decide whether it can draw a
+        // track at all, and a missing key and a null one have to mean the same
+        // thing there.
+        let v: serde_json::Value = serde_json::to_value(Event::SourcePosition {
+            source: "clip1".into(),
+            position_ms: 12345,
+            duration_ms: Some(154_000),
+        })
+        .unwrap();
+        assert_eq!(v["type"], "source_position");
+        assert_eq!(v["source"], "clip1");
+        assert_eq!(v["position_ms"], 12345);
+        assert_eq!(v["duration_ms"], 154_000);
+
+        let v: serde_json::Value = serde_json::to_value(Event::SourcePosition {
+            source: "clip1".into(),
+            position_ms: 0,
+            duration_ms: None,
+        })
+        .unwrap();
+        assert!(
+            v["duration_ms"].is_null(),
+            "a clip whose duration is not known yet reports a null, not a zero: {v}"
+        );
+
         let v: serde_json::Value = serde_json::to_value(Event::OutputStateChanged {
             output: "primary".into(),
             state: OutputState::Reconnecting,
@@ -472,6 +533,75 @@ mod tests {
         // would bring a saved desk back with every source silent.
         assert_eq!(s.gain, 1.0);
         assert!(!s.muted);
+        // Same for the scrubber. A row from before it existed describes a source
+        // nothing could scrub, which is the truthful answer for a camera.
+        assert!(!s.seekable);
+        assert_eq!(s.position_ms, None);
+        assert_eq!(s.duration_ms, None);
+    }
+
+    /// A camera carries no position at all, and a clip carries both numbers.
+    /// The UI draws a scrubber when `seekable` is true, so a camera that
+    /// reported a position would be given a control that can only fail.
+    #[test]
+    fn only_a_seekable_source_carries_a_position() {
+        let camera = SourceStatus {
+            id: "cam1".into(),
+            name: "Camera 1".into(),
+            uri: "rtmp://host/live/cam1".into(),
+            state: SourceState::Live,
+            has_video: true,
+            has_audio: true,
+            cell: Some(2),
+            video_idle_ms: Some(20),
+            audio_idle_ms: Some(20),
+            superimposed: false,
+            audio: None,
+            gain: 1.0,
+            muted: false,
+            seekable: false,
+            position_ms: None,
+            duration_ms: None,
+        };
+        let v = serde_json::to_value(&camera).unwrap();
+        // Written even when false: the UI branches on it, and `undefined`
+        // reading as "no scrubber" by luck is not a contract.
+        assert_eq!(v["seekable"], false);
+        assert!(v.get("position_ms").is_none(), "a camera has no position");
+        assert!(v.get("duration_ms").is_none(), "a camera has no duration");
+
+        let clip = SourceStatus {
+            seekable: true,
+            position_ms: Some(12_345),
+            duration_ms: Some(154_000),
+            ..camera
+        };
+        let v = serde_json::to_value(&clip).unwrap();
+        assert_eq!(v["seekable"], true);
+        assert_eq!(v["position_ms"], 12_345);
+        assert_eq!(v["duration_ms"], 154_000);
+        // A clip whose duration the demuxer has not worked out yet still
+        // reports where it has got to.
+        let early = SourceStatus { duration_ms: None, ..clip };
+        let v = serde_json::to_value(&early).unwrap();
+        assert_eq!(v["position_ms"], 12_345);
+        assert!(v.get("duration_ms").is_none());
+    }
+
+    /// The seek endpoint's answer, which is also what rides in the event.
+    #[test]
+    fn the_seek_answer_leaves_an_unknown_duration_out() {
+        let landed = SourcePositionState { position_ms: 42_000, duration_ms: Some(154_000) };
+        let v = serde_json::to_value(&landed).unwrap();
+        assert_eq!(v["position_ms"], 42_000);
+        assert_eq!(v["duration_ms"], 154_000);
+        let back: SourcePositionState = serde_json::from_value(v).unwrap();
+        assert_eq!(back, landed);
+
+        let unknown = SourcePositionState { position_ms: 0, duration_ms: None };
+        let v = serde_json::to_value(&unknown).unwrap();
+        assert_eq!(v["position_ms"], 0);
+        assert!(v.get("duration_ms").is_none());
     }
 
     /// The endpoint's answer. The fader and the mute are always there, and the
@@ -519,6 +649,9 @@ mod tests {
             audio: None,
             gain: 1.0,
             muted: false,
+            seekable: false,
+            position_ms: None,
+            duration_ms: None,
         };
         let v = serde_json::to_value(&camera).unwrap();
         assert!(v.get("audio").is_none(), "a camera must not carry a balance");
