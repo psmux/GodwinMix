@@ -238,6 +238,66 @@ impl Drop for BusWatch {
     }
 }
 
+/// Device handles that every pipeline in this process shares rather than each
+/// making one of its own.
+///
+/// An element that needs one asks for it on the bus and, hearing nothing back,
+/// makes its own. On this Mac the VideoToolbox decoder made a fresh
+/// `GstGLDisplay` for every input pipeline and none of them were ever freed:
+/// over 34 add and remove cycles of a superimposed web source there were 31
+/// `gldisplay-event` threads still running and four descriptors a cycle that
+/// never came back, which is the shape of the descriptor leak seen on air.
+/// Answering with the first display created is what GStreamer's own
+/// documentation tells an application hosting several pipelines to do.
+///
+/// Only the GL display, which is documented as shareable and is the one
+/// measured here. Anything else a pipeline asks for is left to it.
+const SHARED_CONTEXT_TYPES: &[&str] = &["gst.gl.GLDisplay", "gst.gl.app_context"];
+
+fn shared_contexts() -> &'static Mutex<std::collections::HashMap<String, gst::Context>> {
+    static CONTEXTS: std::sync::OnceLock<Mutex<std::collections::HashMap<String, gst::Context>>> =
+        std::sync::OnceLock::new();
+    CONTEXTS.get_or_init(|| Mutex::new(std::collections::HashMap::new()))
+}
+
+/// Answer a pipeline's requests for a shared device handle, and remember the
+/// ones it makes for itself.
+///
+/// A synchronous handler, because it has to be. A `need-context` message is
+/// posted from the element's own thread and answered before that call returns;
+/// by the time an asynchronous watcher popped it off the queue the element
+/// would have given up waiting and made its own. Everything is passed on to
+/// the queue afterwards, so the ordinary watcher below sees what it always saw.
+fn share_device_contexts(bus: &gst::Bus) {
+    bus.set_sync_handler(|_bus, msg| {
+        match msg.view() {
+            gst::MessageView::NeedContext(need) => {
+                let wanted = need.context_type();
+                if SHARED_CONTEXT_TYPES.contains(&wanted) {
+                    let held = shared_contexts().lock().ok().and_then(|c| c.get(wanted).cloned());
+                    if let (Some(ctx), Some(el)) = (
+                        held,
+                        msg.src().and_then(|s| s.downcast_ref::<gst::Element>()),
+                    ) {
+                        el.set_context(&ctx);
+                    }
+                }
+            }
+            gst::MessageView::HaveContext(have) => {
+                let ctx = have.context();
+                let kind = ctx.context_type().to_string();
+                if SHARED_CONTEXT_TYPES.contains(&kind.as_str()) {
+                    if let Ok(mut held) = shared_contexts().lock() {
+                        held.entry(kind).or_insert(ctx);
+                    }
+                }
+            }
+            _ => {}
+        }
+        gst::BusSyncReply::Pass
+    });
+}
+
 /// Watch a pipeline bus on a dedicated thread and forward the interesting
 /// messages, until the returned `BusWatch` is dropped.
 ///
@@ -252,6 +312,7 @@ pub fn watch_bus(
 ) -> Result<BusWatch> {
     let label = label.into();
     let bus = pipeline.bus().context("pipeline has no bus")?;
+    share_device_contexts(&bus);
     let stop = Arc::new(AtomicBool::new(false));
     let flag = stop.clone();
     std::thread::Builder::new()
