@@ -160,9 +160,30 @@
     background: linear-gradient(transparent, rgba(0,0,0,.82) 55%);
     display: flex; flex-direction: column; gap: 4px; min-width: 0;
   }
+  .nameline { display: flex; align-items: center; gap: 6px; min-width: 0; }
   .cname {
     font-size: 12px; font-weight: 600; line-height: 1.2; text-shadow: 0 1px 3px #000;
     overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  /* Mute is marked on everything around the meter and never on the meter, which
+     stays at full brightness: the level is how an operator checks a camera has
+     sound on it before cutting to it, and a muted channel is exactly when they
+     need to check. Signal present and signal reaching program are two separate
+     facts and the strip shows them separately. */
+  .mutetag {
+    display: none; flex: none; font: 700 9px/1.6 ui-sans-serif, sans-serif;
+    letter-spacing: .09em; text-transform: uppercase; color: #1a1203;
+    background: var(--warn); border-radius: 3px; padding: 0 5px;
+  }
+  .cell.muted .mutetag { display: block; }
+  .cell.muted .cbot { box-shadow: inset 3px 0 0 var(--warn); }
+  /* The signal is still there, it just stops here, so the track that carries it
+     to program is the thing that looks broken. */
+  .cell.muted .fader::-webkit-slider-runnable-track {
+    background: repeating-linear-gradient(90deg, #6b5a2c 0 5px, #2b323d 5px 10px);
+  }
+  .cell.muted .fader::-moz-range-track {
+    background: repeating-linear-gradient(90deg, #6b5a2c 0 5px, #2b323d 5px 10px);
   }
   .cstrip { display: none; align-items: center; gap: 6px; min-width: 0; }
   .gv { font-size: 10.5px; color: var(--dim); width: 40px; text-align: right; flex: none; }
@@ -211,7 +232,6 @@
     grid-area: 2 / 2 / 3 / 3; display: flex; align-items: stretch; gap: 3px;
     padding: 2px 5px 2px 0; pointer-events: none;
   }
-  .rail.muted { opacity: .38; }
   .scale { display: none; position: relative; width: 22px; flex: none; }
   .scale span {
     position: absolute; right: 0; transform: translateY(50%);
@@ -389,6 +409,7 @@
   }
   /* Green, because it means the mixer got the cheap path it asked for. */
   .srcrow .sup { color: var(--ok); border-color: rgba(52,208,127,.5); }
+  .srcrow .mutechip { color: #1a1203; background: var(--warn); border-color: var(--warn); font-weight: 700; }
   .srcrow .del {
     border: 0; background: transparent; color: var(--faint); cursor: pointer;
     font-size: 15px; line-height: 1; padding: 0 2px; flex: none;
@@ -1176,6 +1197,9 @@ function bindFader(input, sourceId, channel, onLocal) {
     audioHold(key, audioLocal.get(key));
     sendAudio(sourceId, channel, key).then(releaseFader);
   };
+  // The second press of a double click would otherwise jump the level to
+  // wherever the pointer is, one more time, before the reset lands on unity.
+  input.onmousedown = (e) => { if (e.detail > 1) e.preventDefault(); };
   // A fader with no way home is a fader an operator stops trusting.
   input.ondblclick = (e) => {
     e.preventDefault();
@@ -1281,20 +1305,26 @@ function buildCells(mv) {
 
     const bot = document.createElement("div");
     bot.className = "cbot";
+    const nameline = document.createElement("div");
+    nameline.className = "nameline";
     const name = document.createElement("div");
     name.className = "cname";
     name.textContent = isProgram ? "Program return" : (src ? src.name : c.source);
+    const mutetag = document.createElement("span");
+    mutetag.className = "mutetag";
+    mutetag.textContent = "muted";
+    nameline.append(name, mutetag);
     const strip = document.createElement("div");
     strip.className = "cstrip";
-    bot.append(name, strip);
+    bot.append(nameline, strip);
 
-    const view = { meterKey, source: c.source, isProgram, st, name, rail, top };
+    const view = { el: div, meterKey, source: c.source, isProgram, st, name };
 
     if (!isProgram) {
       const mute = document.createElement("button");
       mute.className = "mute";
       mute.textContent = "M";
-      mute.title = "Mute this source on program";
+      mute.title = "Stop this source reaching program. Its meter keeps running, so you can still see whether it has sound.";
       const fader = document.createElement("input");
       fader.className = "fader";
       fader.type = "range";
@@ -1364,15 +1394,22 @@ function currentSource(id) { return status?.sources?.find((s) => s.id === id); }
 
 function setGainLabel(view, gain, muted) {
   if (!view.gv) return;
-  view.gv.textContent = muted ? "mute" : gainLabel(gain);
+  // The number stays the fader's, muted or not. The fader is ahead of the meter
+  // in the mixer, so an operator trimming a muted channel before they open it
+  // needs to see the level they are setting and the meter answering it.
+  view.gv.textContent = gainLabel(gain);
   view.gv.classList.toggle("unity", !muted && Math.abs(gain - 1) < 0.005);
   view.gv.classList.toggle("muted", !!muted);
 }
 
+// Everything here marks the strip around the meter. The meter itself is left
+// alone on purpose: the mixer meters each source after its fader and before its
+// mute, so a muted camera goes on showing whether it has sound, which is the
+// question an operator is asking right before they cut to it.
 function applyMute(view, muted) {
   view.mutedShown = muted;
   view.mute.classList.toggle("on", muted);
-  view.rail.classList.toggle("muted", muted);
+  view.el.classList.toggle("muted", muted);
   const g = view.fader ? faderToGain(Number(view.fader.value)) : 1;
   setGainLabel(view, g, muted);
 }
@@ -1389,8 +1426,7 @@ function syncCells() {
       continue;
     }
     const src = currentSource(view.source);
-    const cellEl = view.top.parentElement;
-    cellEl.classList.toggle("live", status.program === view.source);
+    view.el.classList.toggle("live", status.program === view.source);
     view.st.className = "st " + (src ? src.state : "");
     view.st.textContent = src ? src.state : "gone";
     if (!view.fader) continue;
@@ -1505,7 +1541,8 @@ function renderSources() {
       ${s.superimposed
         ? `<span class="kind sup" title="Website. The mixer is decoding this page's video itself and drawing the page over it, so Chromium is not rendering the video. That is where the CPU saving is.">direct</span>`
         : `<span class="kind">${KIND_LABEL[kindOf(s.uri)] || kindOf(s.uri)}</span>`}
-      <span class="st ${s.state}">${s.state}${s.has_audio ? "" : " · mute"}</span>
+      ${s.muted ? `<span class="kind mutechip" title="Muted. It still meters on its cell.">muted</span>` : ""}
+      <span class="st ${s.state}">${s.state}${s.has_audio ? "" : " · no audio"}</span>
       <button class="del" title="Remove this source">&times;</button>
     </div>${audioFadersHtml(s)}`).join("") || `<div class="kv">no sources</div>`;
 
