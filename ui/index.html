@@ -135,8 +135,31 @@
   }
   .cell:hover { box-shadow: inset 0 0 0 2px rgba(255,255,255,.5); }
   .cell.live { box-shadow: inset 0 0 0 3px var(--live), 0 0 20px rgba(255,42,54,.35); }
-  .cell.pgm { cursor: default; box-shadow: inset 0 0 0 1px rgba(255,255,255,.22); }
-  .cell.pgm:hover { box-shadow: inset 0 0 0 1px rgba(255,255,255,.35); }
+  /* The program return is the one cell on the wall that is not a camera: it is
+     the picture the audience is actually receiving. A one pixel outline left it
+     looking like the quietest thing on screen, when it is the first thing an
+     operator should be able to find, and people seeing the mixer for the first
+     time could not tell which box was the output at all.
+
+     So the two states are told apart by fill rather than by reading a label. A
+     source that is feeding program gets a red outline. Program itself gets a
+     filled red banner across the top, which no source ever has. Outline means
+     this one is going out, filled means this is where it goes. */
+  .cell.pgm { cursor: default; box-shadow: inset 0 0 0 3px var(--live), 0 0 26px rgba(255,42,54,.38); }
+  .cell.pgm:hover { box-shadow: inset 0 0 0 3px var(--live), 0 0 26px rgba(255,42,54,.38); }
+  .cell.pgm .ctop { background: var(--live); padding: 6px 8px; align-items: center; }
+  /* The banner is the label, so the chip that numbers a source turns into plain
+     letterspaced text on it. A chip on a bar of the same colour reads as a hole. */
+  .cell.pgm .key {
+    background: transparent; color: #fff; box-shadow: none; padding: 0;
+    font: 800 10px/1.55 ui-sans-serif, sans-serif; letter-spacing: .14em; min-width: 0;
+  }
+  .cell.pgm .ctop .pk { color: rgba(255,255,255,.86); }
+  /* Green on red is unreadable, and on this bar the state is already implied by
+     the colour, so it just needs to stay legible. */
+  .cell.pgm .ctop .st, .cell.pgm .ctop .st.live { color: #fff; text-shadow: none; }
+  .cell.pgm .cbot { background: linear-gradient(transparent, rgba(0,0,0,.9) 55%); }
+  .cell.pgm .cname { color: #fff; }
 
   .ctop {
     grid-area: 1 / 1 / 2 / 3; display: flex; align-items: center; gap: 6px;
@@ -148,7 +171,6 @@
     border-radius: 3px; padding: 0 5px; min-width: 18px; text-align: center; flex: none;
   }
   .cell.live .key { background: var(--live); color: #fff; }
-  .cell.pgm .key { background: transparent; color: var(--dim); box-shadow: inset 0 0 0 1px var(--line); }
   .ctop .pk { margin-left: auto; font-size: 10px; color: rgba(255,255,255,.62); }
   .st { font-size: 10px; color: var(--dim); text-transform: uppercase; letter-spacing: .06em; font-weight: 600; }
   .st.live { color: var(--ok); } .st.connecting, .st.stalled, .st.reconnecting { color: var(--warn); }
@@ -456,6 +478,21 @@
     position: fixed; inset: 0; background: rgba(9,11,14,.92); display: none; z-index: 30;
     align-items: center; justify-content: center; font-size: 15px; color: var(--warn);
   }
+  /* Shown only while files are over the window. Nothing in it is clickable, so
+     it must not eat the drop event it exists to advertise. */
+  #dropzone {
+    position: fixed; inset: 0; z-index: 40; pointer-events: none;
+    display: flex; align-items: center; justify-content: center;
+    background: rgba(9,11,14,.82);
+  }
+  #dropzone[hidden] { display: none; }
+  #dropzone > div {
+    display: flex; flex-direction: column; gap: 6px; text-align: center;
+    border: 2px dashed var(--accent); border-radius: 10px; padding: 28px 44px;
+    background: var(--panel);
+  }
+  #dropzone b { font-size: 15px; }
+  #dropzone span { font-size: 12px; color: var(--dim); }
 
   @media (prefers-reduced-motion: reduce) {
     * { transition: none !important; animation: none !important; }
@@ -505,11 +542,11 @@
     <section class="card">
       <h2>Media <span class="n" id="medianum"></span></h2>
       <div id="medialist" class="clips"></div>
-      <input id="mediafile" type="file" accept="video/*,.mkv,.ts,.flv" hidden>
+      <input id="mediafile" type="file" accept="video/*,.mkv,.ts,.flv" multiple hidden>
       <div class="hint" id="uphint" hidden></div>
       <div class="adrow">
         <button id="adrefresh" class="ghost" title="Rescan the library">Rescan</button>
-        <button id="mediaupload" class="ghost" title="Upload a video file into the library">Upload…</button>
+        <button id="mediaupload" class="ghost" title="Send video files from this computer to the mixer. You can also drag them onto the window.">Upload…</button>
         <label class="cue">in <input id="adcue" type="number" min="0" max="600" step="1" value="0"> s</label>
       </div>
       <div class="adrow">
@@ -567,6 +604,7 @@
 </main>
 
 <div id="alerts"></div>
+<div id="dropzone" hidden><div><b>Drop video files to upload</b><span>They go into the mixer's library, ready to add as a source.</span></div></div>
 <div id="offline">Disconnected from the mixer. Retrying…</div>
 
 <script data-cfasync="false">
@@ -818,7 +856,7 @@ async function take(source) {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ source }),
     });
-    if (!r.ok) alert_("error", await r.text());
+    if (!r.ok) alert_("error", serverError(await r.text(), r.status, "The mixer refused that"));
   } catch (e) { alert_("error", String(e)); }
 }
 
@@ -835,7 +873,7 @@ async function post(path, body) {
       headers: { "Content-Type": "application/json" },
       body: body === undefined ? undefined : JSON.stringify(body),
     });
-    if (!r.ok) alert_("error", await r.text());
+    if (!r.ok) alert_("error", serverError(await r.text(), r.status, "The mixer refused that"));
     return r.ok;
   } catch (e) { alert_("error", String(e)); return false; }
 }
@@ -846,7 +884,7 @@ let selectedClip = null;
 async function loadMedia() {
   try {
     const r = await api("/api/media");
-    if (!r.ok) { alert_("error", await r.text()); return; }
+    if (!r.ok) { alert_("error", serverError(await r.text(), r.status, "Could not read the media library")); return; }
     media = await r.json();
     renderMedia();
   } catch (e) { alert_("error", String(e)); }
@@ -874,7 +912,7 @@ function renderMedia() {
     host.innerHTML = `<div class="empty">${
       media.error
         ? `Cannot read <b>${escapeHtml(media.dir)}</b>: ${escapeHtml(media.error)}`
-        : `No clips in <b>${escapeHtml(media.dir)}</b>. Drop video files there and press Rescan.`
+        : `No clips yet. Drag video files onto this window, or press Upload, and they appear here ready to put on air.`
     }</div>`;
     return;
   }
@@ -938,7 +976,7 @@ function renderMedia() {
 async function addMediaSource(it) {
   const uri = it.converted_path || it.path;
   const ok = await post("/api/sources", { uri, name: it.name, kind: null, superimpose: null });
-  if (ok) alert_("info", it.name + " added. Take it with its number key.");
+  if (ok) alert_("info", it.name + " is ready. Click its picture in the preview to put it on air.");
 }
 
 // Kick off a background conversion. Progress comes back as media_changed events,
@@ -948,41 +986,92 @@ async function convertMedia(name) {
 }
 
 // fetch cannot report upload progress, so this one call uses XMLHttpRequest and
-// carries the bearer token itself. The body is the raw file bytes.
-function uploadMedia(file) {
+// carries the bearer token itself. The body is the raw file bytes. It resolves
+// rather than rejects on a failed upload, because a batch of dropped files
+// should carry on past one bad file rather than abandoning the rest.
+function uploadMedia(file, position) {
+  return new Promise((resolve) => {
+    const hint = $("uphint");
+    const label = position ? `${position} ` : "";
+    hint.hidden = false;
+    hint.textContent = `${label}Uploading ${file.name}… 0%`;
+    const xhr = new XMLHttpRequest();
+    xhr.open("POST", `/api/media/upload?name=${encodeURIComponent(file.name)}`);
+    xhr.setRequestHeader("Content-Type", "application/octet-stream");
+    if (token) xhr.setRequestHeader("Authorization", `Bearer ${token}`);
+    xhr.upload.onprogress = (e) => {
+      if (e.lengthComputable) {
+        hint.textContent = `${label}Uploading ${file.name}… ${Math.round((e.loaded / e.total) * 100)}%`;
+      }
+    };
+    xhr.onload = () => {
+      if (xhr.status >= 200 && xhr.status < 300) {
+        hint.textContent = `Uploaded ${file.name}.`;
+        loadMedia();
+      } else {
+        alert_("error", serverError(xhr.responseText, xhr.status, `Could not upload ${file.name}`));
+      }
+      resolve();
+    };
+    xhr.onerror = () => { alert_("error", `Could not upload ${file.name}.`); resolve(); };
+    xhr.send(file);
+  });
+}
+
+// One at a time. The mixer is encoding a live programme on the same machine,
+// and saturating its disk and its network with parallel uploads is not worth
+// the few seconds it would save.
+let uploading = false;
+async function uploadFiles(files) {
+  const list = [...files];
+  if (!list.length || uploading) return;
+  uploading = true;
+  for (let i = 0; i < list.length; i++) {
+    await uploadMedia(list[i], list.length > 1 ? `(${i + 1} of ${list.length})` : "");
+  }
+  uploading = false;
   const hint = $("uphint");
-  hint.hidden = false;
-  hint.textContent = `Uploading ${file.name}… 0%`;
-  const xhr = new XMLHttpRequest();
-  xhr.open("POST", `/api/media/upload?name=${encodeURIComponent(file.name)}`);
-  xhr.setRequestHeader("Content-Type", "application/octet-stream");
-  if (token) xhr.setRequestHeader("Authorization", `Bearer ${token}`);
-  xhr.upload.onprogress = (e) => {
-    if (e.lengthComputable) {
-      hint.textContent = `Uploading ${file.name}… ${Math.round((e.loaded / e.total) * 100)}%`;
-    }
-  };
-  xhr.onload = () => {
-    if (xhr.status >= 200 && xhr.status < 300) {
-      hint.textContent = `Uploaded ${file.name}.`;
-      setTimeout(() => { hint.hidden = true; }, 3000);
-      loadMedia();
-    } else {
-      hint.hidden = true;
-      alert_("error", xhr.responseText || `Upload failed (${xhr.status}).`);
-    }
-  };
-  xhr.onerror = () => { hint.hidden = true; alert_("error", "Upload failed."); };
-  xhr.send(file);
+  setTimeout(() => { if (!uploading) hint.hidden = true; }, 3000);
 }
 
 $("mediaupload").onclick = () => $("mediafile").click();
 $("mediafile").onchange = () => {
-  const f = $("mediafile").files[0];
-  if (f) uploadMedia(f);
+  uploadFiles($("mediafile").files);
   // Clear it so picking the same file again still fires change.
   $("mediafile").value = "";
 };
+
+// Dropping files on the window uploads them. Nobody should have to know where
+// the media directory lives on the server, and the file picker is one more
+// thing to find for someone who already has the clip in a folder in front of
+// them. dragover has to be cancelled or the browser navigates to the file and
+// the operator loses the page mid-programme.
+const drop = $("dropzone");
+let dragDepth = 0;
+function draggingFiles(e) {
+  return [...(e.dataTransfer?.types || [])].includes("Files");
+}
+window.addEventListener("dragenter", (e) => {
+  if (!draggingFiles(e)) return;
+  e.preventDefault();
+  dragDepth++;
+  drop.hidden = false;
+});
+window.addEventListener("dragover", (e) => { if (draggingFiles(e)) e.preventDefault(); });
+// Counted rather than cleared on the first leave, because dragging across a
+// child element fires leave on the one being left before enter on the next.
+window.addEventListener("dragleave", (e) => {
+  if (!draggingFiles(e)) return;
+  dragDepth = Math.max(0, dragDepth - 1);
+  if (dragDepth === 0) drop.hidden = true;
+});
+window.addEventListener("drop", (e) => {
+  if (!draggingFiles(e)) return;
+  e.preventDefault();
+  dragDepth = 0;
+  drop.hidden = true;
+  uploadFiles(e.dataTransfer.files);
+});
 
 $("adrefresh").onclick = loadMedia;
 
@@ -1147,7 +1236,7 @@ async function postAudio(sourceId, body) {
     });
     if (!r.ok && !audioPostWarned) {
       audioPostWarned = true;
-      alert_("warning", `The mixer would not take that fader: ${await r.text()}`);
+      alert_("warning", `The mixer would not take that fader: ${serverError(await r.text(), r.status, "refused")}`);
     }
     return r.ok;
   } catch { return false; }
@@ -1275,7 +1364,7 @@ function buildCells(mv) {
     top.className = "ctop";
     const key = document.createElement("span");
     key.className = "key";
-    key.textContent = isProgram ? "PGM" : (slot >= 0 && slot < 9 ? String(slot + 1) : "·");
+    key.textContent = isProgram ? "PROGRAM OUT" : (slot >= 0 && slot < 9 ? String(slot + 1) : "·");
     const pk = document.createElement("span");
     pk.className = "pk num";
     const st = document.createElement("span");
@@ -1309,7 +1398,7 @@ function buildCells(mv) {
     nameline.className = "nameline";
     const name = document.createElement("div");
     name.className = "cname";
-    name.textContent = isProgram ? "Program return" : (src ? src.name : c.source);
+    name.textContent = isProgram ? "What your audience is seeing" : (src ? src.name : c.source);
     const mutetag = document.createElement("span");
     mutetag.className = "mutetag";
     mutetag.textContent = "muted";
@@ -1364,7 +1453,7 @@ function buildCells(mv) {
       div.title = src ? `${src.name}: ${shownUri(src.uri)}` : c.source;
     } else {
       div.classList.add("pgm");
-      div.title = "What is going out right now.";
+      div.title = "The mixed picture going to your outputs. This is what your audience is seeing right now.";
     }
 
     if (view.hasAudio !== false) {
@@ -1420,9 +1509,12 @@ function syncCells() {
       const on = status.program != null;
       view.st.className = "st " + (on ? "live" : "");
       view.st.textContent = on ? "on air" : "black";
+      // Plain words rather than "Program · black". Someone who has not run a
+      // gallery before should be able to read this box and know both that it is
+      // the output and what is currently in it.
       view.name.textContent = on
-        ? `Program · ${currentSource(status.program)?.name ?? status.program}`
-        : "Program · black";
+        ? `Audience sees ${currentSource(status.program)?.name ?? status.program}`
+        : "Audience sees black";
       continue;
     }
     const src = currentSource(view.source);
@@ -1472,7 +1564,7 @@ function renderOutputs() {
     rm.onclick = async () => {
       if (!confirm(`Stop sending to "${o.id}"?`)) return;
       const r = await api(`/api/outputs/${encodeURIComponent(o.id)}`, { method: "DELETE" });
-      if (!r.ok) alert_("error", await r.text());
+      if (!r.ok) alert_("error", serverError(await r.text(), r.status, "The mixer refused that"));
     };
     row.append(rc, rm);
     el.appendChild(row);
@@ -1552,7 +1644,7 @@ function renderSources() {
       e.stopPropagation();
       if (!confirm(`Remove source "${id}"?`)) return;
       const r = await api(`/api/sources/${encodeURIComponent(id)}`, { method: "DELETE" });
-      if (!r.ok) alert_("error", await r.text());
+      if (!r.ok) alert_("error", serverError(await r.text(), r.status, "The mixer refused that"));
     };
   });
 
@@ -1657,6 +1749,24 @@ $("noadd").onclick = async () => {
   const ok = await post("/api/outputs", { id, uri, policy: $("nopolicy").value });
   if (ok) { $("noid").value = ""; $("nouri").value = ""; }
 };
+
+// What a failing request should say to an operator.
+//
+// The mixer answers with a short plain message or a JSON error, but nothing
+// guarantees the mixer is what answered: a proxy, a gateway or a captive portal
+// in front of it replies with a whole HTML error page, and dumping that into a
+// toast fills the screen with markup during a programme. Anything that arrives
+// looking like a document is thrown away in favour of the status code, which is
+// the only part of it that meant anything.
+function serverError(text, status, fallback) {
+  const t = (text || "").trim();
+  if (!t || /^\s*</.test(t)) return `${fallback} (${status})`;
+  try {
+    const j = JSON.parse(t);
+    if (j && typeof j.error === "string") return j.error;
+  } catch {}
+  return t.length > 300 ? `${t.slice(0, 300)}…` : t;
+}
 
 function alert_(severity, message) {
   const el = document.createElement("div");
