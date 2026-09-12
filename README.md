@@ -266,6 +266,26 @@ container it inherits every orphan on the box, which was 19,138 zombies after
 two hours; it reaps them itself now, so the container is correct with or
 without an init.
 
+When a source is judged stalled, again just before it is rebuilt, and once when
+its first picture arrives, the mixer writes down where that source's last
+buffers sat on the programme's timeline: their running time, the programme's
+own, the difference, and the fill of the programme-side queues `pgm-vq-<id>`
+and `pgm-aq-<id>`. A probe on each proxy sink keeps the last running time in an
+atomic, so nothing is logged per buffer. `video_behind_ms` is the number to
+read: positive means the buffer was behind the programme, which is ordinary,
+and negative means it was in the programme's future, which is the fault, since
+a compositor holds what it is not ready to consume, the pad queue then fills and
+the push into it never returns. Measured here on a Mac, a healthy build and a
+blocked one side by side:
+
+```
+why="first picture"    video_behind_ms=70     vq_buffers=0   vq_time_ms=0
+why="about to rebuild" video_behind_ms=-2427  vq_buffers=30  vq_time_ms=1000  aq_buffers=100
+```
+
+A source that has merely stopped producing looks different again: behind by
+seconds and with nothing queued at all, which is what a suspended browser gives.
+
 Measured on a Mac over 30 add and remove cycles of a superimposed web page:
 open descriptors, pipes, regular files, cached clips and profile directories
 all flat, with memory steady. Two caveats found while measuring, both macOS

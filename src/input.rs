@@ -22,7 +22,7 @@ use gstreamer as gst;
 use gstreamer::prelude::*;
 use parking_lot::Mutex;
 use serde::Deserialize;
-use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tracing::{debug, info, warn};
@@ -199,6 +199,10 @@ pub struct InputPipeline {
     pub config: SourceConfig,
     pub pipeline: gst::Pipeline,
     pub health: Arc<SourceHealth>,
+    /// Where this source's last picture and last sound sat on the timeline as
+    /// they left for the programme. See `LastBuffer`.
+    pub last_video: Arc<LastBuffer>,
+    pub last_audio: Arc<LastBuffer>,
     /// Proxy sinks the program and multiview pipelines attach to. They are
     /// created up front, before any media has arrived, so that the mixer can
     /// allocate its pads without waiting for a camera to connect.
@@ -1898,6 +1902,14 @@ impl InputPipeline {
             let h = health.clone();
             move || h.mark_audio()
         })?;
+        // On the same pads, and for the same reason they are the right pads:
+        // this is the last place a buffer can be seen before it crosses to the
+        // programme, so it is where its timing means what the programme's
+        // compositor will make of it.
+        let last_video = Arc::new(LastBuffer::default());
+        let last_audio = Arc::new(LastBuffer::default());
+        install_timeline_probe(&video_proxy, "sink", &last_video)?;
+        install_timeline_probe(&audio_proxy, "sink", &last_audio)?;
 
         // --- dynamic demuxer pads ----------------------------------------
         let has_video = Arc::new(AtomicBool::new(false));
@@ -1978,6 +1990,8 @@ impl InputPipeline {
             config: cfg.clone(),
             pipeline,
             health,
+            last_video,
+            last_audio,
             video_proxy,
             thumb_proxy,
             audio_proxy,
@@ -2895,6 +2909,83 @@ fn make_rtmp_source(element: &str, id: &str, uri: &str) -> Result<gst::Element> 
     crate::probe::set_bool(&src, "no-eof-is-error", true);
     crate::probe::set_bool(&src, "do-timestamp", true);
     Ok(src)
+}
+
+/// Where the last buffer to leave a source's normalising chain sat on the
+/// programme's timeline.
+///
+/// Instrumentation for the stall of 2026-09-11 and 2026-09-12, where a
+/// superimposed source came up with every layer placed normally and then never
+/// delivered a picture, while its sound flowed. Both aggregators in that source
+/// are force-live and emit black and silence on schedule with every layer dead,
+/// so a source producing nothing means its output was blocked downstream, not
+/// starved, and the only thing downstream that can block it is the programme
+/// compositor holding buffers it is not ready to consume. That happens when
+/// they are timed ahead of where the programme has got to, which is a number
+/// nobody was writing down.
+///
+/// Two relaxed atomic stores per buffer and nothing else. The numbers are read
+/// only when a source is judged stalled and once when its first picture
+/// arrives; see `Mixer::timeline_of`.
+#[derive(Debug, Default)]
+pub struct LastBuffer {
+    /// Running time of the last buffer through the probe, in nanoseconds.
+    running_ns: AtomicU64,
+    seen: AtomicU64,
+}
+
+impl LastBuffer {
+    fn mark(&self, running: gst::ClockTime) {
+        self.running_ns.store(running.nseconds(), Ordering::Relaxed);
+        self.seen.fetch_add(1, Ordering::Relaxed);
+    }
+
+    /// Running time of the last buffer, or `None` if none has passed yet.
+    pub fn running(&self) -> Option<gst::ClockTime> {
+        (self.seen.load(Ordering::Relaxed) > 0)
+            .then(|| gst::ClockTime::from_nseconds(self.running_ns.load(Ordering::Relaxed)))
+    }
+
+    pub fn seen(&self) -> u64 {
+        self.seen.load(Ordering::Relaxed)
+    }
+}
+
+/// Record where each buffer through this pad sits on the pipeline's timeline.
+///
+/// The segment is what turns a buffer's timestamp into a running time, and it
+/// arrives as an event, so both are watched on the one probe. The segment is
+/// cached under a lock that is taken once per buffer and is never contended:
+/// one thread pushes this pad.
+fn install_timeline_probe(element: &gst::Element, pad: &str, seen: &Arc<LastBuffer>) -> Result<()> {
+    let pad = element
+        .static_pad(pad)
+        .with_context(|| format!("{} has no {pad} pad", element.name()))?;
+    let segment: Mutex<Option<gst::FormattedSegment<gst::ClockTime>>> = Mutex::new(None);
+    let seen = seen.clone();
+    pad.add_probe(
+        gst::PadProbeType::BUFFER | gst::PadProbeType::EVENT_DOWNSTREAM,
+        move |_pad, info| {
+            match &info.data {
+                Some(gst::PadProbeData::Event(e)) => {
+                    if let gst::EventView::Segment(sg) = e.view() {
+                        *segment.lock() = sg.segment().downcast_ref::<gst::ClockTime>().cloned();
+                    }
+                }
+                Some(gst::PadProbeData::Buffer(b)) => {
+                    if let (Some(pts), Some(sg)) = (b.pts(), segment.lock().as_ref()) {
+                        if let Some(rt) = sg.to_running_time(pts) {
+                            seen.mark(rt);
+                        }
+                    }
+                }
+                _ => {}
+            }
+            gst::PadProbeReturn::Ok
+        },
+    )
+    .context("installing timeline probe")?;
+    Ok(())
 }
 
 fn install_buffer_probe<F>(element: &gst::Element, pad: &str, f: F) -> Result<()>
