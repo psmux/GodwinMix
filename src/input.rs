@@ -1090,13 +1090,24 @@ impl Layers {
         // The page draws at a tenth of the canvas rate and the compositor
         // would happily pick that as its output rate. Pin it, so the videos
         // underneath keep every frame they have.
-        self.comp_caps.set_property(
-            "caps",
-            &gst::Caps::builder("video/x-raw")
-                .field("format", "AYUV")
-                .field("framerate", canvas.fps)
-                .build(),
-        );
+        //
+        // The size is pinned as well, and that is newer. Every pad on this
+        // compositor is placed inside the canvas and the page's pad covers it
+        // exactly, so the composite was always canvas-sized; saying so leaves
+        // the compositor nothing to work out. It is also the caps the query
+        // below answers with, and an answer has to be one thing.
+        let composed = gst::Caps::builder("video/x-raw")
+            .field("format", "AYUV")
+            .field("width", canvas.width)
+            .field("height", canvas.height)
+            .field("framerate", canvas.fps)
+            .build();
+        self.comp_caps.set_property("caps", &composed);
+        // And the compositor is told that answer directly, so that working out
+        // its output caps cannot reach the programme pipeline. See
+        // `answer_caps_here`: this is where a source stopped delivering video
+        // while its sound went on.
+        gstutil::answer_caps_here(&self.comp, &composed)?;
 
         let mut media_pads = Vec::with_capacity(self.media.len());
         for (z, b) in self.media.iter().enumerate() {
