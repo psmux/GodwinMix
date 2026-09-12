@@ -613,11 +613,15 @@ struct RetiredBranch {
 
 /// How long a frozen frame may stay on air.
 ///
-/// A rebuild that works takes about ten seconds, nearly all of it the
-/// browser starting. Twice that is enough margin for a slow box and short
-/// enough that an operator looking at a still picture is not left wondering
-/// for a minute whether the mixer has died.
-const FREEZE_HOLD: Duration = Duration::from_secs(20);
+/// A rebuild of a superimposed source is a page probe (up to
+/// `MEDIA_PROBE_TIMEOUT`), a clip fetch and a browser start, and measured on
+/// this machine against a local page that came to 22 seconds. Twenty was not
+/// enough: the hold ran out two seconds before the source came back and the
+/// programme went to the slate for exactly those two seconds, which is the
+/// fault this exists to prevent. Forty-five covers the measured rebuild twice
+/// over and is still short enough that an operator looking at a still picture
+/// is not left wondering for a minute whether the mixer has died.
+const FREEZE_HOLD: Duration = Duration::from_secs(45);
 
 impl Mixer {
     #[allow(clippy::type_complexity)]
