@@ -597,10 +597,7 @@ pub fn probe_page_media(id: &SourceId, spec: &ExecSpec, timeout: Duration) -> Op
     };
     let Some(err) = child.stderr.take() else {
         warn!(source = %id, "probe child has no stderr; rendering the page whole");
-        stop_child(child.id(), &spec.env);
-        #[cfg(not(unix))]
-        let _ = child.kill();
-        let _ = child.wait();
+        bury_child(child, spec.env.clone());
         return None;
     };
 
@@ -651,11 +648,13 @@ pub fn probe_page_media(id: &SourceId, spec: &ExecSpec, timeout: Duration) -> Op
         }
     }
 
-    stop_child(child.id(), &spec.env);
-    #[cfg(not(unix))]
-    let _ = child.kill();
-    let _ = child.wait();
+    // The reader's thread and descriptor go first, so that the sidecar sees
+    // the far end of its stderr close and stops for that reason too; then the
+    // process itself, killed and waited for on a thread of its own so the
+    // probe returns at once. The clip fetch below is what the caller is
+    // waiting for and it does not need a dead browser.
     reader.stop();
+    bury_child(child, spec.env.clone());
     // Fetch each clip once, and keep only what can actually be played. A video
     // whose address turns out to be dead (a 404 was the case that found this)
     // is left to the browser rather than built into a layer that fails and
@@ -2168,26 +2167,11 @@ impl InputPipeline {
         }
     }
 
+    /// Let go of the exec child, which is what kills it. See `ExecChild`.
     fn kill_exec_child(&self) {
-        let Some(mut held) = self.exec_child.lock().take() else { return };
-        let env = self.exec.as_ref().map(|s| s.env.clone()).unwrap_or_default();
-        stop_child(held.child.id(), &env);
-        // Where there is no process group to signal, end the process itself.
-        // Chromium's own helper processes watch their parent and follow it.
-        #[cfg(not(unix))]
-        let _ = held.child.kill();
-        let _ = held.child.wait();
-        // Then everything of ours that the child's death does not close by
-        // itself: the thread reading its stderr, which a surviving grandchild
-        // holding the write end would otherwise keep alive for good, and the
-        // descriptor the source element was reading, which `fdsrc` never
-        // closes because it did not open it. Two descriptors a build, measured
-        // over thirty add and remove cycles on this machine before and after.
-        if let Some(r) = held.stderr.as_mut() {
-            r.stop();
+        if self.exec_child.lock().take().is_some() {
+            debug!(source = %self.id, "stopping exec child process");
         }
-        held.stdout.take();
-        debug!(source = %self.id, "stopped exec child process");
     }
 
     pub fn mark_failed(&self) {
@@ -2266,7 +2250,12 @@ impl InputPipeline {
             match spawn_exec(&self.id, spec) {
                 Ok((out, child, stderr)) => {
                     let stdout = attach_exec_stdout(&self.id, &self.source.lock(), out);
-                    *self.exec_child.lock() = Some(ExecChild { child, stdout, stderr });
+                    *self.exec_child.lock() = Some(ExecChild {
+                        child: Some(child),
+                        env: spec.env.clone(),
+                        stdout,
+                        stderr,
+                    });
                 }
                 Err(e) => {
                     warn!(source = %self.id, ?e, "could not restart exec source");
@@ -2556,54 +2545,165 @@ fn browser_profile_dir(
     base.join(format!("lbx-browser-{pid}"))
 }
 
-/// Stop a child, everything it started, and the profile directory it was too
-/// dead to remove itself.
-fn stop_child(pid: u32, env: &std::collections::BTreeMap<String, String>) {
-    stop_process_group(pid);
-    remove_browser_profile(env, pid);
-}
+/// How long a child is given to stop on its own before it is killed.
+///
+/// The sidecar handles SIGTERM: it posts a quit to CEF's UI thread, the
+/// message loop returns, the mux is finished, CEF is shut down and only then
+/// does it remove its own profile directory (`browser/src/main.rs`). All of
+/// that is seconds on a loaded box with nine helper processes to bring down.
+/// The old wait was one second and it was measured against the wrong thing:
+/// it polled `killpg(pgid, 0)`, which answers "is any member of this group
+/// still alive", and a Chromium helper is a member, so the answer was always
+/// yes and the SIGKILL always fired. The sidecar never reached its own
+/// cleanup, and on air on 2026-09-12 that was one profile directory left
+/// behind per browser started: a hundred of them in twenty-five minutes where
+/// six sources were running. The wait is now on the direct child, which is
+/// what says the sidecar finished, and it is long enough to let it.
+///
+/// It costs nothing on air because it does not happen on the mixer's thread.
+/// See `bury_child`.
+const CHILD_EXIT_GRACE: Duration = Duration::from_secs(8);
 
 /// Take the profile directory of a sidecar that is already dead.
+///
+/// Retried, because "already dead" is not quite true the instant a SIGKILL is
+/// sent: a helper that is still writing into the directory turns the removal
+/// into a race that fails with ENOTEMPTY. A few tries over a second is enough
+/// for the kernel to have finished with them.
 fn remove_browser_profile(env: &std::collections::BTreeMap<String, String>, pid: u32) {
     let dir = browser_profile_dir(env, pid);
-    match std::fs::remove_dir_all(&dir) {
-        Ok(()) => debug!(path = %dir.display(), "removed the sidecar's profile directory"),
-        // Not a browser source, or the sidecar got there first. Either is fine;
-        // anything else is worth knowing about, because it is disk that will
-        // not come back on its own.
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
-        Err(e) => warn!(path = %dir.display(), ?e, "could not remove the sidecar's profile directory"),
+    let mut last = None;
+    for i in 0..10 {
+        match std::fs::remove_dir_all(&dir) {
+            Ok(()) => {
+                debug!(path = %dir.display(), tries = i + 1, "removed the sidecar's profile directory");
+                return;
+            }
+            // Not a browser source, or the sidecar got there first. Either is
+            // fine; anything else is worth knowing about, because it is disk
+            // that will not come back on its own.
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => return,
+            Err(e) => last = Some(e),
+        }
+        std::thread::sleep(Duration::from_millis(100));
     }
+    warn!(path = %dir.display(), ?last, "could not remove the sidecar's profile directory");
 }
 
-/// Stop a child and everything it started.
+/// Every process started under `pid`, however deep, while the tree is still
+/// standing.
 ///
-/// `Child::kill` sends SIGKILL to one process, which a shell script cannot trap
-/// and which leaves its own children running. A capture script that starts a
-/// browser and an X server would leak both on every restart. Signalling the
-/// process group gives the script a chance to tidy up, then takes the whole
-/// tree down whether it did or not.
-#[cfg(unix)]
-fn stop_process_group(pid: u32) {
-    let pgid = pid as i32;
-    unsafe {
-        // Politely first, so traps run and children are cleaned up.
-        libc::killpg(pgid, libc::SIGTERM);
-    }
-    // Give the group a moment to go quietly before insisting.
-    for _ in 0..20 {
-        std::thread::sleep(std::time::Duration::from_millis(50));
-        if unsafe { libc::killpg(pgid, 0) } != 0 {
-            return; // Group is gone.
+/// Chromium's helpers are in the process group the mixer gave their parent, so
+/// `killpg` reaches them; one that calls `setsid` is not, and after its parent
+/// dies nothing connects it to this source any more. So they are written down
+/// first, from the kernel's own view of the tree, and killed by pid afterwards
+/// if they are still there. Linux only: `/proc/<pid>/task/<tid>/children` is
+/// where this lives and there is no equivalent on macOS, where the sidecar is
+/// a development convenience and the leak was never seen.
+#[cfg(target_os = "linux")]
+fn descendants(pid: u32) -> Vec<u32> {
+    fn children_of(pid: u32, out: &mut Vec<u32>) {
+        let Ok(tasks) = std::fs::read_dir(format!("/proc/{pid}/task")) else { return };
+        for task in tasks.flatten() {
+            let Ok(text) = std::fs::read_to_string(task.path().join("children")) else { continue };
+            for kid in text.split_ascii_whitespace().filter_map(|t| t.parse::<u32>().ok()) {
+                if out.contains(&kid) {
+                    continue;
+                }
+                out.push(kid);
+                children_of(kid, out);
+            }
         }
     }
-    unsafe {
-        libc::killpg(pgid, libc::SIGKILL);
+    let mut out = Vec::new();
+    children_of(pid, &mut out);
+    out
+}
+
+#[cfg(not(target_os = "linux"))]
+fn descendants(_pid: u32) -> Vec<u32> {
+    Vec::new()
+}
+
+/// Kill a child, everything it started, and the profile directory it was too
+/// dead to remove itself, on a thread of its own.
+///
+/// On a thread of its own because the caller is usually the mixer's own
+/// thread, the one that answers every command, and the wait above is seconds.
+/// It used to be done in line and the shorter wait it had was still long
+/// enough to be felt on a rebuild.
+///
+/// `child` is moved in and waited on here, which is what keeps it from
+/// becoming a zombie. Nothing else in this process waits for it.
+fn bury_child(child: std::process::Child, env: std::collections::BTreeMap<String, String>) {
+    let pid = child.id();
+    // Handed over rather than moved, so that a machine too short of threads to
+    // take it still gets the child killed, here, instead of leaking it.
+    let work = Arc::new(Mutex::new(Some((child, env))));
+    let mine = work.clone();
+    let spawned = std::thread::Builder::new()
+        .name(format!("undertaker-{pid}"))
+        .spawn(move || {
+            if let Some((child, env)) = mine.lock().take() {
+                take_down(child, env);
+            }
+        });
+    if spawned.is_err() {
+        if let Some((child, env)) = work.lock().take() {
+            take_down(child, env);
+        }
     }
 }
 
-#[cfg(not(unix))]
-fn stop_process_group(_pid: u32) {}
+/// Signal, wait, insist, reap, and sweep up. See `bury_child`.
+fn take_down(mut child: std::process::Child, env: std::collections::BTreeMap<String, String>) {
+    let pid = child.id();
+    let started = Instant::now();
+    // Written down before anything is signalled: after the parent dies a
+    // process that called `setsid` cannot be traced back to it.
+    let strays = descendants(pid);
+    #[cfg(unix)]
+    unsafe {
+        // Politely first, so the sidecar runs its own shutdown and a capture
+        // script's traps fire.
+        libc::killpg(pid as i32, libc::SIGTERM);
+    }
+    #[cfg(not(unix))]
+    let _ = child.kill();
+    let mut clean = false;
+    while started.elapsed() < CHILD_EXIT_GRACE {
+        match child.try_wait() {
+            // Err is a status somebody else collected; either way there is
+            // nothing left of this process to wait for.
+            Ok(Some(_)) | Err(_) => {
+                clean = true;
+                break;
+            }
+            Ok(None) => std::thread::sleep(Duration::from_millis(50)),
+        }
+    }
+    #[cfg(unix)]
+    unsafe {
+        // Whether it went quietly or not. The direct child is a zombie by now
+        // at the earliest, so its pid is still reserved and the process group
+        // it named still means this tree.
+        libc::killpg(pid as i32, libc::SIGKILL);
+        for stray in &strays {
+            libc::kill(*stray as i32, libc::SIGKILL);
+        }
+    }
+    if !clean {
+        let _ = child.wait();
+    }
+    remove_browser_profile(&env, pid);
+    debug!(
+        pid,
+        clean,
+        strays = strays.len(),
+        took_ms = started.elapsed().as_millis() as u64,
+        "stopped a child process and cleaned up after it"
+    );
+}
 
 /// A thread reading a child's stderr, and the means to end it.
 ///
@@ -2811,11 +2911,48 @@ fn exec_process(spec: &ExecSpec, stdout: std::process::Stdio) -> Result<std::pro
 /// its complaints. Before this they were three separate lifetimes and two of
 /// them outlived the process.
 struct ExecChild {
-    child: std::process::Child,
+    /// None only between `drop` taking it and the struct going away.
+    child: Option<std::process::Child>,
+    /// The environment the child was started with, kept because it is what
+    /// says where the sidecar put its profile directory. See
+    /// `browser_profile_dir`.
+    env: std::collections::BTreeMap<String, String>,
     /// The read end of the child's stdout, held for as long as the element
     /// reads it. See `ExecStdout`.
     stdout: ExecStdoutHeld,
     stderr: Option<StderrReader>,
+}
+
+/// Letting go of one of these kills the process behind it.
+///
+/// It used to be the caller's job, through `InputPipeline::stop`, and every
+/// path that dropped an `InputPipeline` without calling it leaked the whole
+/// child: a zombie the mixer never waited on, its profile directory, the read
+/// end of its stdout and the thread reading its stderr. There are about thirty
+/// fallible steps in `build_kind` after the child is started and a dozen more
+/// in `Mixer::add_source_with` before the source is stored, and any one of them
+/// returning an error took that path. On air on 2026-09-12 the zombies and the
+/// profile directories both grew at four a minute, which is one of each per
+/// browser started, and that is the shape of a child nobody owns.
+///
+/// Now the child is owned by this struct and the struct is owned by the
+/// pipeline, so the process cannot outlive it whatever goes wrong.
+impl Drop for ExecChild {
+    fn drop(&mut self) {
+        // Our own ends of its pipes first, here, on this thread: the reader
+        // thread joined and the descriptor `fdsrc` was reading closed. `fdsrc`
+        // never closes a descriptor it did not open, so that one is ours to
+        // let go of, and a grandchild holding the write end of stderr would
+        // otherwise keep the reader thread alive for good. Two descriptors a
+        // build, measured over thirty add and remove cycles on this machine.
+        if let Some(r) = self.stderr.as_mut() {
+            r.stop();
+        }
+        self.stdout.take();
+        if let Some(child) = self.child.take() {
+            bury_child(child, std::mem::take(&mut self.env));
+        }
+    }
 }
 
 /// Whatever has to be kept alive to keep the source element reading. On unix
@@ -2969,9 +3106,11 @@ fn attach_exec_stdout(id: &str, src: &gst::Element, out: ExecStdout) -> ExecStdo
 
 fn make_exec_source(id: &str, spec: &ExecSpec) -> Result<(gst::Element, ExecChild)> {
     let (out, child, stderr) = spawn_exec(id, spec)?;
+    // Owned from here on, so that a failure below takes the process with it.
+    let mut held = ExecChild { child: Some(child), env: spec.env.clone(), stdout: None, stderr };
     let src = new_exec_source(id)?;
-    let stdout = attach_exec_stdout(id, &src, out);
-    Ok((src, ExecChild { child, stdout, stderr }))
+    held.stdout = attach_exec_stdout(id, &src, out);
+    Ok((src, held))
 }
 
 /// Build a headless browser rendering a page as a live source.
@@ -3566,7 +3705,11 @@ mod tests {
             "stopping took {:?}",
             began.elapsed()
         );
-        stop_process_group(child.id());
+        // The background `sleep` is in the child's process group, which is
+        // what takes it down.
+        unsafe {
+            libc::killpg(child.id() as i32, libc::SIGKILL);
+        }
     }
 
     #[test]
