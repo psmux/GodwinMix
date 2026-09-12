@@ -61,6 +61,29 @@ allow_exec_sources = false
 # Raise it for a page with real animation and expect to pay for it.
 # overlay_fps = 10
 
+# What the supervisor does with a source that has stopped delivering. The
+# defaults are here; none of it has to be written out.
+[stall]
+# Seconds a source may deliver nothing before its pipeline is rebuilt.
+# restart_after_secs = 10
+#
+# A superimposed source is not restarted in place, it is built again from
+# nothing: a page probe, a clip fetch and a browser start, about ten seconds of
+# it. Doing that on a loop is what happened on air on 2026-09-11 and
+# 2026-09-12, 485 rebuilds one night and 1174 the next. The first few attempts
+# still go at full speed, because some failures really do heal on a retry;
+# after that the delay doubles to the ceiling and an alert goes to the UI on
+# every wait. The count is cleared the moment the source delivers a frame.
+# rebuild_attempts = 3
+# rebuild_backoff_secs = 30
+# rebuild_backoff_max_secs = 300
+#
+# Keep the last frame of a source being rebuilt on programme instead of cutting
+# to the slate for as long as the rebuild takes. Its branch is left in the
+# programme pipeline with its compositor pad still drawing, which costs nothing
+# and is released as soon as the replacement is on air.
+# hold_last_frame = true
+
 [media]
 dir = "media"
 # Only `dir` is required; the rest have defaults.

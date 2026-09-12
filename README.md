@@ -220,6 +220,63 @@ beside the config file. Once that file exists it is the authoritative list:
 merging it with the config's own `[[sources]]` would mean a source deleted in the
 UI reappearing at the next restart. Delete the file to go back to the config.
 
+### When a source stops delivering
+
+The supervisor watches every source's own output. A source that has produced
+nothing for `stall_timeout_secs` reads as stalled; one that stays stalled for
+`stall.restart_after_secs` (10 by default) has its pipeline restarted, and a
+superimposed source, which cannot be restarted in place, is built again from
+nothing: page probe, clip fetch, browser start, about ten seconds.
+
+Two things about that, both learned on air on 2026-09-11 and 2026-09-12, when a
+superimposed source started coming up dead and was rebuilt 485 times one night
+and 1174 the next.
+
+**The programme keeps its picture.** A rebuild removes the source, and removing
+the source that is on programme used to take the programme to None, so the
+output sat on the slate for as long as the rebuild took. The branch is now left
+in the programme pipeline with its compositor pad still at alpha 1, under the
+programme layer and over the slate: a compositor keeps drawing a pad's last
+buffer for as long as the pad is there, so that is a freeze frame with no
+element added and no picture copied. Measured on a Mac with the mosaic's
+programme cell: before the kill the picture read mean luma 39 and changed every
+frame; through the whole rebuild it read exactly 22.35, byte for byte the same
+JPEG each time; when the hold ran out it dropped to 16, which is video black.
+The hold is released as soon as the replacement is taken, or after 45 seconds,
+after which the programme does go to the slate and an alert says so.
+
+**The loop ends.** Rebuilding is free for the first `stall.rebuild_attempts`
+consecutive failures (3) and then waits `stall.rebuild_backoff_secs` (30),
+doubling to `stall.rebuild_backoff_max_secs` (300), with an alert on the UI for
+each wait. Two hours of that is under 40 attempts rather than 600. The count is
+cleared the moment the source delivers a frame, so a source that recovers is
+back on the fast path at once, and it is cleared when the source is removed,
+because the ids are reused: a director alternating `event-a` and `event-b` one
+per match must not have one match's failures charged to the next.
+
+Every rebuild used to leak. The browser sidecar names its private profile
+directory after its own pid and removes it when its message loop ends, which a
+killed sidecar never reaches: 1084 directories and 18 GB of a container's /tmp.
+The mixer removes it now, wherever it kills a sidecar. Two descriptors a build
+went the same way: the read end of the child's stdout, handed to `fdsrc` with
+`into_raw_fd` and never closed again, and the read end of its stderr, held by a
+reader thread that never saw an end of file because Chromium's helper processes
+inherit the write end and outlive the kill. And when the mixer is PID 1 in its
+container it inherits every orphan on the box, which was 19,138 zombies after
+two hours; it reaps them itself now, so the container is correct with or
+without an init.
+
+Measured on a Mac over 30 add and remove cycles of a superimposed web page:
+open descriptors, pipes, regular files, cached clips and profile directories
+all flat, with memory steady. Two caveats found while measuring, both macOS
+only. VideoToolbox's decoder leaks a pipe pair per instance, which shows as two
+descriptors a build for any source it decodes, a plain mp4 file included, and
+goes away with `hardware.decode = "software"`. And every input pipeline used to
+make its own `GstGLDisplay` and never free it, 31 `gldisplay-event` threads
+after 34 cycles; the bus watch now answers `need-context` with the first
+display any pipeline made, which is what GStreamer says an application hosting
+several pipelines should do.
+
 ### Anything as a source
 
 `exec:` makes a source out of a command line. The process writes a container to
