@@ -324,6 +324,9 @@ struct SourceSlot {
     meter: String,
     /// Ticks spent stalled, used to decide when to rebuild the pipeline.
     stalled_ticks: u32,
+    /// Whether the first picture out of this source has been written down
+    /// (see `Mixer::log_timeline`). Once per source, never again.
+    first_reported: bool,
     /// Ticks since this source was started while it has produced nothing.
     silent_ticks: u32,
     /// Maps this source's running time onto the programme's. `None` for an ad,
@@ -609,6 +612,26 @@ struct RetiredBranch {
     /// Dropped whether or not the rebuild ever finishes. A source that never
     /// comes back must not leave its elements in the programme pipeline.
     until: Instant,
+}
+
+/// The numbers `Mixer::timeline_of` gathers. Plain data so that gathering them
+/// and writing them out are separate, and so the gathering can be read.
+#[derive(Debug, Clone, Copy)]
+struct SourceTimeline {
+    program_running_ms: u64,
+    video_running_ms: Option<u64>,
+    audio_running_ms: Option<u64>,
+    /// Programme running time minus the buffer's. Positive is behind the
+    /// programme, which is ordinary; negative is ahead of it, which is the
+    /// fault this was written to catch.
+    video_behind_ms: Option<i64>,
+    audio_behind_ms: Option<i64>,
+    video_buffers: u64,
+    audio_buffers: u64,
+    vq_buffers: u32,
+    vq_time_ms: u64,
+    aq_buffers: u32,
+    aq_time_ms: u64,
 }
 
 /// How long a frozen frame may stay on air.
@@ -1121,6 +1144,7 @@ impl Mixer {
             amute,
             meter: meter_name(&cfg.id),
             stalled_ticks: 0,
+            first_reported: false,
             silent_ticks: 0,
             aligner,
             _watch: watch,
@@ -1174,6 +1198,7 @@ impl Mixer {
         cfg.gain = slot.gain();
         cfg.muted = slot.muted();
         let was_program = self.program_source.as_ref() == Some(id);
+        self.log_timeline(id, "about to rebuild", true);
         // The source that is on air keeps its last frame on air. Everything
         // else is removed the way the API removes a source: its pipeline
         // stopped first, then its branch taken out of the programme. That order
@@ -1322,6 +1347,94 @@ impl Mixer {
                     let _ = handle.send(Command::AddSource(again, None));
                 });
             }
+        }
+    }
+
+    /// Where a source's last picture and last sound had got to, against the
+    /// programme's own clock and the queues that carry them across.
+    ///
+    /// The one set of numbers that would have named the stall of 2026-09-11 and
+    /// 2026-09-12, where a superimposed source came up with every layer placed
+    /// normally and then never delivered a picture while its sound flowed. Its
+    /// two aggregators are force-live and emit black and silence on schedule
+    /// with every layer dead, so a source producing nothing was not starved: it
+    /// was blocked downstream, and the only thing downstream that can block it
+    /// is this pipeline's compositor holding buffers it is not ready to consume.
+    /// A compositor holds what is timed ahead of where it has got to, its pad
+    /// queue then fills, and the push into it never returns.
+    ///
+    /// So `behind_ms` is the number to read. Positive means the buffer was
+    /// behind the programme, which is ordinary and is what a healthy source
+    /// shows. Negative means it was in the programme's future, which is the
+    /// fault, and `vq_buffers` climbing with it is the block itself.
+    fn timeline_of(&self, slot: &SourceSlot) -> SourceTimeline {
+        let now = self.running_time().unwrap_or(gst::ClockTime::ZERO);
+        let behind = |at: Option<gst::ClockTime>| {
+            at.map(|at| now.nseconds() as i64 / 1_000_000 - at.nseconds() as i64 / 1_000_000)
+        };
+        let video = slot.input.last_video.running();
+        let audio = slot.input.last_audio.running();
+        // The programme-side queues for this source: `pgm-vq-<id>` and
+        // `pgm-aq-<id>`, which are the branch's second and fourth elements.
+        let level = |q: Option<&gst::Element>| {
+            q.map(|q| (q.property::<u32>("current-level-buffers"), q.property::<u64>("current-level-time") / 1_000_000))
+                .unwrap_or((0, 0))
+        };
+        let (vq_buffers, vq_time_ms) = level(slot.branch.get(1));
+        let (aq_buffers, aq_time_ms) = level(slot.branch.get(3));
+        SourceTimeline {
+            program_running_ms: now.mseconds(),
+            video_running_ms: video.map(|t| t.mseconds()),
+            audio_running_ms: audio.map(|t| t.mseconds()),
+            video_behind_ms: behind(video),
+            audio_behind_ms: behind(audio),
+            video_buffers: slot.input.last_video.seen(),
+            audio_buffers: slot.input.last_audio.seen(),
+            vq_buffers,
+            vq_time_ms,
+            aq_buffers,
+            aq_time_ms,
+        }
+    }
+
+    /// Write one of those out. Called when a source is judged stalled, again
+    /// just before it is rebuilt, and once when its first picture arrives, so
+    /// a build that worked and a build that did not can be read side by side.
+    fn log_timeline(&self, id: &SourceId, why: &'static str, stalled: bool) {
+        let Some(slot) = self.sources.iter().find(|s| &s.input.id == id) else { return };
+        let t = self.timeline_of(slot);
+        if stalled {
+            warn!(
+                source = %id, why,
+                program_running_ms = t.program_running_ms,
+                video_running_ms = ?t.video_running_ms,
+                video_behind_ms = ?t.video_behind_ms,
+                audio_running_ms = ?t.audio_running_ms,
+                audio_behind_ms = ?t.audio_behind_ms,
+                video_buffers = t.video_buffers,
+                audio_buffers = t.audio_buffers,
+                vq_buffers = t.vq_buffers,
+                vq_time_ms = t.vq_time_ms,
+                aq_buffers = t.aq_buffers,
+                aq_time_ms = t.aq_time_ms,
+                "where this source's last buffers sat on the programme's timeline"
+            );
+        } else {
+            info!(
+                source = %id, why,
+                program_running_ms = t.program_running_ms,
+                video_running_ms = ?t.video_running_ms,
+                video_behind_ms = ?t.video_behind_ms,
+                audio_running_ms = ?t.audio_running_ms,
+                audio_behind_ms = ?t.audio_behind_ms,
+                video_buffers = t.video_buffers,
+                audio_buffers = t.audio_buffers,
+                vq_buffers = t.vq_buffers,
+                vq_time_ms = t.vq_time_ms,
+                aq_buffers = t.aq_buffers,
+                aq_time_ms = t.aq_time_ms,
+                "where this source's first buffers sat on the programme's timeline"
+            );
         }
     }
 
@@ -1859,7 +1972,7 @@ impl Mixer {
                         });
                         // Fade it off program immediately if it was live.
                         self.apply_visibility(true);
-                        self.arm_source_restart(id);
+                        self.arm_source_restart(id, "the pipeline posted an error");
                     }
                     return;
                 }
@@ -1909,7 +2022,11 @@ impl Mixer {
                 }
                 warn!(%pipeline, "end of stream");
                 if let Some(id) = pipeline.strip_prefix("input-") {
-                    self.arm_source_restart(id.to_string());
+                    // A source that ends is also worth a timeline line: the
+                    // question is the same one, where its last buffers sat.
+                    let id = id.to_string();
+                    self.log_timeline(&id, "end of stream", true);
+                    self.arm_source_restart(id, "it reached the end of its stream");
                 }
             }
         }
@@ -1927,6 +2044,11 @@ impl Mixer {
         self.release_retired(None);
 
         let mut restart = Vec::new();
+        // Sources whose first picture has just arrived, and sources that have
+        // just been judged stalled. Collected here and written out below,
+        // because the report reads the whole slot and this loop holds it.
+        let mut first_picture = Vec::new();
+        let mut judged_stalled = Vec::new();
         let fallback_ticks = (CLIENT_FALLBACK_AFTER.as_millis() / TICK.as_millis()) as u32;
         let stall_ticks = ((self.cfg.stall.restart_after_secs * 1000).max(TICK.as_millis() as u64)
             / TICK.as_millis() as u64) as u32;
@@ -1939,9 +2061,17 @@ impl Mixer {
             // it is kept, and this costs nothing thereafter.
             slot.input.refresh_seekable();
 
+            if !slot.first_reported && slot.input.last_video.seen() > 0 {
+                slot.first_reported = true;
+                first_picture.push(slot.input.id.clone());
+            }
+
             match slot.input.observed_state() {
                 SourceState::Stalled => {
                     slot.stalled_ticks += 1;
+                    if slot.stalled_ticks == 1 {
+                        judged_stalled.push(slot.input.id.clone());
+                    }
                     // Asked on every tick past the mark rather than only on the
                     // tick that reaches it. `arm_source_restart` is the one gate
                     // (a source may have only one restart armed, and a rebuild
@@ -1979,8 +2109,14 @@ impl Mixer {
                 slot.silent_ticks = 0;
             }
         }
+        for id in first_picture {
+            self.log_timeline(&id, "first picture", false);
+        }
+        for id in judged_stalled {
+            self.log_timeline(&id, "judged stalled", true);
+        }
         for id in restart {
-            self.arm_source_restart(id);
+            self.arm_source_restart(id, "it has delivered nothing for too long");
         }
 
         for slot in &self.sources {
@@ -2052,7 +2188,7 @@ impl Mixer {
     /// A server that has gone away will keep refusing us, so retrying every two
     /// seconds forever is just noise. The delay grows to ten seconds and stays
     /// there until the source comes back.
-    fn arm_source_restart(&mut self, id: SourceId) {
+    fn arm_source_restart(&mut self, id: SourceId, why: &'static str) {
         let Some(slot) = self.sources.iter().find(|s| s.input.id == id) else {
             return;
         };
@@ -2091,7 +2227,12 @@ impl Mixer {
         if !slot.input.try_arm_restart() {
             return;
         }
-        warn!(source = %id, "source stalled for too long, rebuilding its pipeline");
+        // `why` rather than a fixed message: this is reached from the stall
+        // sweep, from a pipeline error and from an end of stream, and a line
+        // that said "stalled" for all three sent the reader looking at the
+        // wrong thing on 2026-09-12, when a killed browser arrived here as an
+        // end of stream.
+        warn!(source = %id, why, "restarting the source's pipeline");
         let attempt = self.source_attempts.entry(id.clone()).or_insert(0);
         let delay = Duration::from_millis(
             (500.0 * 1.8f64.powi((*attempt).min(8) as i32)).min(10_000.0) as u64,
