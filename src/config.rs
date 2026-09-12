@@ -28,6 +28,8 @@ pub struct Config {
     #[serde(default)]
     pub browser: BrowserConfig,
     #[serde(default)]
+    pub stall: StallConfig,
+    #[serde(default)]
     pub sources: Vec<SourceConfig>,
     #[serde(default)]
     pub outputs: Vec<OutputConfig>,
@@ -261,6 +263,88 @@ impl Default for BrowserConfig {
 /// for a page with real animation in it, and expect to pay for that.
 fn default_overlay_fps() -> u32 {
     10
+}
+
+/// What the supervisor does with a source that has stopped delivering.
+///
+/// The defaults come from two nights on air, 2026-09-11 and 2026-09-12, when a
+/// superimposed source started coming up dead and the mixer rebuilt it every
+/// twelve seconds for two hours: 485 rebuilds the first night, 1174 the second,
+/// each one cutting the programme to black for the ten or so seconds the
+/// browser took to start. Neither number is a repair strategy, it is a loop,
+/// and the operator had nothing in the UI to tell him it was running.
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct StallConfig {
+    /// Seconds a source may deliver nothing before its pipeline is rebuilt.
+    #[serde(default = "default_restart_after_stall_secs")]
+    pub restart_after_secs: u64,
+    /// Consecutive rebuilds that did not bring the source back before the
+    /// mixer stops trying at full speed. Three is enough to cover the things
+    /// that really do heal on a retry (a browser that lost a race with its
+    /// profile directory, a page served a 502) and short enough that a fault
+    /// which is not going to heal is recognised inside a minute.
+    #[serde(default = "default_rebuild_attempts")]
+    pub rebuild_attempts: u32,
+    /// The delay after that many failures, doubled on each further one.
+    #[serde(default = "default_rebuild_backoff_secs")]
+    pub rebuild_backoff_secs: u64,
+    /// Ceiling for that delay. Five minutes: long enough that a broken source
+    /// costs almost nothing, short enough that a fix applied at the far end
+    /// is picked up without anyone restarting the mixer.
+    #[serde(default = "default_rebuild_backoff_max_secs")]
+    pub rebuild_backoff_max_secs: u64,
+    /// Hold the last frame of a source being rebuilt on programme, instead of
+    /// cutting to the slate for as long as the rebuild takes.
+    #[serde(default = "default_true")]
+    pub hold_last_frame: bool,
+}
+
+fn default_restart_after_stall_secs() -> u64 {
+    10
+}
+fn default_rebuild_attempts() -> u32 {
+    3
+}
+fn default_rebuild_backoff_secs() -> u64 {
+    30
+}
+fn default_rebuild_backoff_max_secs() -> u64 {
+    300
+}
+fn default_true() -> bool {
+    true
+}
+
+impl Default for StallConfig {
+    fn default() -> Self {
+        Self {
+            restart_after_secs: default_restart_after_stall_secs(),
+            rebuild_attempts: default_rebuild_attempts(),
+            rebuild_backoff_secs: default_rebuild_backoff_secs(),
+            rebuild_backoff_max_secs: default_rebuild_backoff_max_secs(),
+            hold_last_frame: default_true(),
+        }
+    }
+}
+
+impl StallConfig {
+    /// How long to wait before rebuilding a source that has already failed
+    /// `failures` times in a row, or `None` to rebuild at once.
+    ///
+    /// Pure, so the shape of the curve can be checked without a pipeline.
+    pub fn rebuild_delay(&self, failures: u32) -> Option<std::time::Duration> {
+        let over = failures.checked_sub(self.rebuild_attempts)?;
+        if self.rebuild_backoff_secs == 0 {
+            return None;
+        }
+        // Doubling, in seconds, saturating rather than wrapping: a source left
+        // broken overnight reaches the ceiling and stays there.
+        let secs = self
+            .rebuild_backoff_secs
+            .saturating_mul(1u64.checked_shl(over.min(32)).unwrap_or(u64::MAX))
+            .min(self.rebuild_backoff_max_secs.max(self.rebuild_backoff_secs));
+        Some(std::time::Duration::from_secs(secs))
+    }
 }
 
 /// Where the ad library lives on the machine running the mixer.
@@ -631,6 +715,58 @@ sidecar = \"/opt/b\"\n").unwrap();
         assert_eq!(set.browser.overlay_fps, 25);
     }
 
+    /// The loop this replaces rebuilt a dead source every twelve seconds for
+    /// two hours. The first few attempts still go at full speed, because some
+    /// failures really are transient; after that the delay doubles and stops
+    /// at the ceiling.
+    #[test]
+    fn rebuilds_run_free_then_back_off_and_settle() {
+        let s = StallConfig::default();
+        assert_eq!(s.rebuild_delay(0), None);
+        assert_eq!(s.rebuild_delay(2), None);
+        assert_eq!(s.rebuild_delay(3), Some(std::time::Duration::from_secs(30)));
+        assert_eq!(s.rebuild_delay(4), Some(std::time::Duration::from_secs(60)));
+        assert_eq!(s.rebuild_delay(5), Some(std::time::Duration::from_secs(120)));
+        assert_eq!(s.rebuild_delay(6), Some(std::time::Duration::from_secs(240)));
+        // Capped, and it stays capped however long it has been broken.
+        assert_eq!(s.rebuild_delay(7), Some(std::time::Duration::from_secs(300)));
+        assert_eq!(s.rebuild_delay(600), Some(std::time::Duration::from_secs(300)));
+    }
+
+    /// Two hours of rebuilding every twelve seconds is 600 attempts. Under
+    /// this policy the same two hours is a couple of dozen, which is the
+    /// difference between a leak that fills a disk and one nobody notices.
+    #[test]
+    fn an_hours_backoff_is_a_handful_of_attempts() {
+        let s = StallConfig::default();
+        let mut elapsed = std::time::Duration::ZERO;
+        let mut attempts = 0u32;
+        while elapsed < std::time::Duration::from_secs(2 * 3600) {
+            elapsed += s.rebuild_delay(attempts).unwrap_or_default();
+            attempts += 1;
+        }
+        assert!(attempts < 40, "two hours took {attempts} rebuilds");
+    }
+
+    /// Zero turns the backoff off, for an operator who wants the old
+    /// behaviour back rather than a mixer that has decided to give up.
+    #[test]
+    fn a_zero_backoff_never_waits() {
+        let s = StallConfig { rebuild_backoff_secs: 0, ..Default::default() };
+        assert_eq!(s.rebuild_delay(50), None);
+    }
+
+    #[test]
+    fn a_partial_stall_section_is_accepted() {
+        let cfg: Config = toml::from_str("[stall]\nrebuild_attempts = 1\n").unwrap();
+        assert_eq!(cfg.stall.rebuild_attempts, 1);
+        assert_eq!(cfg.stall.rebuild_backoff_secs, default_rebuild_backoff_secs());
+        assert!(cfg.stall.hold_last_frame);
+        let missing: Config = toml::from_str("").unwrap();
+        assert_eq!(missing.stall.restart_after_secs, default_restart_after_stall_secs());
+        assert!(missing.stall.hold_last_frame);
+    }
+
     #[test]
     fn odd_canvas_is_rejected() {
         let mut cfg = Config {
@@ -642,6 +778,7 @@ sidecar = \"/opt/b\"\n").unwrap();
             media: Default::default(),
             security: Default::default(),
             browser: Default::default(),
+            stall: Default::default(),
             sources: vec![],
             outputs: vec![],
         };
