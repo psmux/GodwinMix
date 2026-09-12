@@ -632,6 +632,10 @@ struct SourceTimeline {
     vq_time_ms: u64,
     aq_buffers: u32,
     aq_time_ms: u64,
+    /// A layered source only: what each side of its compositor has done. See
+    /// `LayerCounts`. Zeroes for every other kind of source, which has no
+    /// compositor of its own.
+    layers: Option<[u64; 5]>,
 }
 
 /// How long a frozen frame may stay on air.
@@ -1394,6 +1398,7 @@ impl Mixer {
             vq_time_ms,
             aq_buffers,
             aq_time_ms,
+            layers: slot.input.layer_counts().map(|c| c.read()),
         }
     }
 
@@ -1417,6 +1422,11 @@ impl Mixer {
                 vq_time_ms = t.vq_time_ms,
                 aq_buffers = t.aq_buffers,
                 aq_time_ms = t.aq_time_ms,
+                page_in = ?t.layers.map(|l| l[0]),
+                media_in = ?t.layers.map(|l| l[1]),
+                comp_out = ?t.layers.map(|l| l[2]),
+                rate_out = ?t.layers.map(|l| l[3]),
+                mix_out = ?t.layers.map(|l| l[4]),
                 "where this source's last buffers sat on the programme's timeline"
             );
         } else {
@@ -1433,6 +1443,11 @@ impl Mixer {
                 vq_time_ms = t.vq_time_ms,
                 aq_buffers = t.aq_buffers,
                 aq_time_ms = t.aq_time_ms,
+                page_in = ?t.layers.map(|l| l[0]),
+                media_in = ?t.layers.map(|l| l[1]),
+                comp_out = ?t.layers.map(|l| l[2]),
+                rate_out = ?t.layers.map(|l| l[3]),
+                mix_out = ?t.layers.map(|l| l[4]),
                 "where this source's first buffers sat on the programme's timeline"
             );
         }
