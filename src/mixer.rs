@@ -1174,11 +1174,6 @@ impl Mixer {
         cfg.gain = slot.gain();
         cfg.muted = slot.muted();
         let was_program = self.program_source.as_ref() == Some(id);
-        // Counted before the attempt, not after it, because nothing on this
-        // thread finds out whether a rebuild worked: the tick clears this the
-        // moment the source delivers a frame, and if it never does, the count
-        // stands and the backoff in `arm_source_restart` reads it.
-        *self.rebuild_failures.entry(id.clone()).or_insert(0) += 1;
         // The source that is on air keeps its last frame on air. Everything
         // else is removed the way the API removes a source: its pipeline
         // stopped first, then its branch taken out of the programme. That order
@@ -1191,7 +1186,15 @@ impl Mixer {
         if let Err(e) = removed {
             warn!(source = %id, ?e, "could not remove the failed source before building it again");
         }
-        info!(source = %id, was_program, held, "building the superimposed source again from scratch");
+        // Counted after the removal, which clears everything held under this
+        // id, and before the attempt, because nothing on this thread finds out
+        // whether a rebuild worked: the tick clears this the moment the source
+        // delivers a frame, and if it never does the count stands and the
+        // backoff in `arm_source_restart` reads it.
+        let failures = self.rebuild_failures.entry(id.clone()).or_insert(0);
+        *failures += 1;
+        let failures = *failures;
+        info!(source = %id, was_program, held, failures, "building the superimposed source again from scratch");
         self.rebuilding.insert(id.clone(), was_program);
         if let Err(e) = self.begin_add_source(cfg, None) {
             error!(source = %id, ?e, "could not begin building the source again");
@@ -1344,6 +1347,14 @@ impl Mixer {
         }
         self.vmix.release_request_pad(&slot.vpad);
         self.amix.release_request_pad(&slot.apad);
+        // Everything this module keeps under the source's id goes with it. The
+        // ids are reused: a director alternates two of them, one per match, so
+        // a restart delay or a rebuild count left behind from the last source
+        // called event-a would be charged to the next one, which is a
+        // different page in a different state.
+        self.source_attempts.remove(id);
+        self.rebuild_failures.remove(id);
+        self.rebuild_not_before.remove(id);
         info!(source = %id, "source removed");
         if id != AD_ID {
             self.persist_runtime();
