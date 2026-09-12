@@ -132,6 +132,56 @@ pub fn force_keyframe(pad: &gst::Pad) {
     }
 }
 
+/// Answer latency queries at this proxy source instead of letting them cross
+/// into the pipeline behind it.
+///
+/// A latency query travels upstream from the mixers, and
+/// `gst_pad_query_latency_default` (gstpad.c) fails the whole query if any one
+/// sink pad that has a peer cannot answer. Every source branch of the
+/// programme's compositor and audio mixer leads, through `proxysrc`, into a
+/// separate input pipeline, and that pipeline is regularly in no state to
+/// answer: while it is being built, while it is being torn down, and for the
+/// whole of `FREEZE_HOLD` when a rebuilt source's branch is kept in the
+/// programme with its last frame while its pipeline is stopped.
+///
+/// One such branch fails the query for the whole programme, and the damage is
+/// not the failure itself but what the aggregator does with it. In
+/// `gst_aggregator_query_latency_unlocked` (gstaggregator.c) the
+/// `min-upstream-latency` this mixer sets deliberately, so that a source
+/// attaching later cannot force a pipeline-wide latency recalculation, is
+/// folded in only after the query has succeeded; when it fails that line is
+/// never reached, `has_peer_latency` stays false, and
+/// `gst_aggregator_get_latency_unlocked` hands a force-live aggregator a
+/// latency of zero. The mixers then run with no slack at all where they were
+/// configured for `MIN_UPSTREAM_LATENCY_NS`, and they re-ask on every pass of
+/// the aggregate loop for ever: on air on 2026-09-12 that was 950,278
+/// "Latency query failed" warnings from the compositor and 691,333 from the
+/// audio mixer in a few hours, which is one per output frame each.
+///
+/// Two pipelines that are each given the same clock and base time do not have
+/// a latency to negotiate across the join, so this answers zero and lets the
+/// aggregator raise it to the figure it was configured with. `pad` must be the
+/// proxy source's **src** pad, which is where an upstream query passes.
+pub fn answer_latency_here(element: &gst::Element) -> Result<()> {
+    let pad = element
+        .static_pad("src")
+        .with_context(|| format!("{} has no src pad", element.name()))?;
+    pad.add_probe(gst::PadProbeType::QUERY_UPSTREAM, |_pad, info| {
+        let Some(query) = info.query_mut() else {
+            return gst::PadProbeReturn::Ok;
+        };
+        let gst::QueryViewMut::Latency(latency) = query.view_mut() else {
+            return gst::PadProbeReturn::Ok;
+        };
+        // Live, because the programme is; no minimum, because the join adds
+        // none; no maximum, because nothing here imposes one.
+        latency.set(true, gst::ClockTime::ZERO, gst::ClockTime::NONE);
+        gst::PadProbeReturn::Handled
+    })
+    .context("installing the latency answer on a proxy source")?;
+    Ok(())
+}
+
 /// Rewrites the CAPS event passing through `pad` so that every colorimetry
 /// field is known.
 ///

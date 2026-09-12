@@ -1019,6 +1019,10 @@ impl Mixer {
         let asrc = make("proxysrc", &format!("pgm-asrc-{id}"))?;
         asrc.set_property("proxysink", &input.audio_proxy);
         let aq = gstutil::queue_thread(&format!("pgm-aq-{id}"))?;
+        // The programme's latency must not depend on the state of a source's
+        // own pipeline. See `answer_latency_here`.
+        gstutil::answer_latency_here(&vsrc)?;
+        gstutil::answer_latency_here(&asrc)?;
 
         // The operator's desk for this source: a fader, a meter, and a mute, in
         // that order, and the order is the whole point.
