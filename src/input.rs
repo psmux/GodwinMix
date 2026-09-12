@@ -19,6 +19,7 @@ use crate::probe::Backends;
 use crate::state::{SourceAudio, SourceHealth, SourceId, SourceState};
 use anyhow::{Context, Result};
 use gstreamer as gst;
+use gstreamer::glib;
 use gstreamer::prelude::*;
 use parking_lot::Mutex;
 use serde::Deserialize;
@@ -217,6 +218,9 @@ pub struct InputPipeline {
     /// Present only for a superimposed source, which is the only kind whose
     /// sounds arrive separately enough to be balanced. See `AudioLevels`.
     levels: Option<AudioLevels>,
+    /// What each side of a layered source's compositor has done. Only a
+    /// layered source has one. See `LayerCounts`.
+    counts: Option<Arc<LayerCounts>>,
     /// Where a layered source's layers sit in time, one per layer. Reset on
     /// restart.
     placement: Vec<Arc<Placement>>,
@@ -814,6 +818,72 @@ struct Layers {
     comp_caps: gst::Element,
     flat_conv: gst::Element,
     flat_caps: gst::Element,
+    counts: Arc<LayerCounts>,
+}
+
+/// What each side of a layered source's compositor has done, counted where it
+/// happens.
+///
+/// Instrumentation for the stall of 2026-09-11 and 2026-09-12. What the
+/// mixer could see from its own side was that a superimposed source delivered
+/// four to seven frames and then no more while its sound went on flowing, and
+/// that both of the programme's queues for it were empty, so nothing
+/// downstream was holding it. That leaves four places it can have stopped and
+/// no way to tell them apart from outside: the page's browser, the videos the
+/// mixer decodes, the compositor that blends them, or the videorate behind it.
+/// One counter on each pad says which, and costs one relaxed add per buffer.
+#[derive(Debug, Default)]
+pub struct LayerCounts {
+    /// Frames arriving at the compositor from the page's browser.
+    pub page_in: AtomicU64,
+    /// Frames arriving at the compositor from the videos the mixer decodes,
+    /// all layers together.
+    pub media_in: AtomicU64,
+    /// Frames the compositor produced. A force-live aggregator keeps
+    /// producing with every input dead, so this standing still while the two
+    /// above climb is the compositor's own fault and nobody else's.
+    pub comp_out: AtomicU64,
+    /// And what came out of the videorate that follows it. Less than
+    /// `comp_out` means the frames existed and were dropped for their
+    /// timestamps, which is a different fault with the same symptom.
+    pub rate_out: AtomicU64,
+    /// Buffers the layered audio mixer produced. The sibling that kept
+    /// running through the stall, kept here so the two can be read together.
+    pub mix_out: AtomicU64,
+}
+
+/// Count every buffer leaving `element` into one of the fields above.
+///
+/// The closure holds the counters and nothing else; the pad it sits on is
+/// reached through the probe's own argument. See `Placement::watch` for why
+/// that matters.
+fn count_buffers(
+    element: &gst::Element,
+    counts: &Arc<LayerCounts>,
+    field: fn(&LayerCounts) -> &AtomicU64,
+) -> Result<()> {
+    let pad = element
+        .static_pad("src")
+        .with_context(|| format!("{} has no src pad to count", element.name()))?;
+    let counts = counts.clone();
+    pad.add_probe(gst::PadProbeType::BUFFER, move |_pad, _info| {
+        field(&counts).fetch_add(1, Ordering::Relaxed);
+        gst::PadProbeReturn::Ok
+    })
+    .context("installing a layer counter")?;
+    Ok(())
+}
+
+impl LayerCounts {
+    pub fn read(&self) -> [u64; 5] {
+        [
+            self.page_in.load(Ordering::Relaxed),
+            self.media_in.load(Ordering::Relaxed),
+            self.comp_out.load(Ordering::Relaxed),
+            self.rate_out.load(Ordering::Relaxed),
+            self.mix_out.load(Ordering::Relaxed),
+        ]
+    }
 }
 
 /// One video the mixer draws itself: its decoder, the picture path into the
@@ -949,6 +1019,7 @@ impl Layers {
                 &format!("{id}-sup-flat-caps"),
                 &gst::Caps::builder("video/x-raw").field("format", "I420").build(),
             )?,
+            counts: Arc::new(LayerCounts::default()),
         })
     }
 
@@ -1096,6 +1167,15 @@ impl Layers {
         gst::Element::link_many([&self.comp, &self.comp_caps, &self.flat_conv, &self.flat_caps, vrate])
             .context("linking the composed layers into the normaliser")?;
         self.amix.link(audio_entry).context("linking the mix into the audio chain")?;
+
+        // One counter on each side of the compositor. See `LayerCounts`.
+        for b in &self.media {
+            count_buffers(&b.scale, &self.counts, |c| &c.media_in)?;
+        }
+        count_buffers(&self.over_conv, &self.counts, |c| &c.page_in)?;
+        count_buffers(&self.comp, &self.counts, |c| &c.comp_out)?;
+        count_buffers(vrate, &self.counts, |c| &c.rate_out)?;
+        count_buffers(&self.amix, &self.counts, |c| &c.mix_out)?;
         Ok((media_pads, over_pad))
     }
 
@@ -1124,11 +1204,11 @@ impl Layers {
             let placement = Placement::new();
             // Only a clip held locally is looped. A stream is played from its
             // address and left to end; see `cache_media`.
-            let again = b.item.cache.is_some().then(|| b.src.clone());
+            let loops = b.item.cache.is_some();
             // The decoder's pads only exist once it has connected, so they are
             // watched as they appear. The same caps test `route_pads` makes.
             let (me, id) = (placement.clone(), id.clone());
-            b.src.connect_pad_added(move |_el, pad| {
+            b.src.connect_pad_added(move |el, pad| {
                 // By name as well as by caps: a decoder can announce a pad
                 // before its caps are known, and one classified by caps alone
                 // was skipped here, never placed, and every frame of it late.
@@ -1137,10 +1217,18 @@ impl Layers {
                     .current_caps()
                     .and_then(|c| c.structure(0).map(|s| s.name().to_string()))
                     .unwrap_or_default();
+                // Weak, and taken from the callback's own argument rather than
+                // from a clone captured here. A strong clone of this decoder,
+                // held in a closure this decoder owns, is a reference cycle
+                // that GObject does not collect: measured with the leaks
+                // tracer over ten build and remove cycles, one GstURIDecodeBin
+                // and about fifteen of its pads stayed alive per cycle, for
+                // ever. See `Placement::watch` for the other half of it.
+                let again = loops.then(|| el.downgrade());
                 if name.starts_with("video") || media.starts_with("video/") {
                     me.watch(&id, Stream::Video, pad, again.clone());
                 } else if name.starts_with("audio") || media.starts_with("audio/") {
-                    me.watch(&id, Stream::Audio, pad, again.clone());
+                    me.watch(&id, Stream::Audio, pad, again);
                 }
             });
             all.push(placement);
@@ -1306,9 +1394,24 @@ impl Placement {
         *self.started.lock() = Instant::now();
     }
 
-    /// Watch the segments and buffers passing `probe_on` and keep `target`,
-    /// downstream of it, placed.
-    fn watch(self: &Arc<Self>, id: &SourceId, stream: Stream, probe_on: &gst::Pad, again: Option<gst::Element>) {
+    /// Watch the segments and buffers passing `probe_on` and keep that same
+    /// pad placed.
+    ///
+    /// Nothing in the probe below holds a strong reference to a GStreamer
+    /// object, and that is deliberate. The probe belongs to the pad, so a
+    /// captured clone of the pad, or of the element that owns it, is a cycle
+    /// with no collector: the earlier version captured both, and the leaks
+    /// tracer counted one GstURIDecodeBin, two GstDecodePads and about
+    /// thirteen ghost and proxy pads still alive per build after ten build and
+    /// remove cycles. The pad comes from the probe's own argument and the
+    /// decoder from a weak reference.
+    fn watch(
+        self: &Arc<Self>,
+        id: &SourceId,
+        stream: Stream,
+        probe_on: &gst::Pad,
+        again: Option<glib::WeakRef<gst::Element>>,
+    ) {
         // The offset goes on this very pad, a source pad. Set on a sink pad
         // downstream, an offset takes effect only if the segment has not got
         // there yet, and where nothing sits between the two it always had: the
@@ -1316,7 +1419,7 @@ impl Placement {
         // dropped as old, every one. A source pad resends its segment with the
         // new offset before its next buffer, whenever the offset changes.
         self.streams.fetch_or(stream_bit(stream), Ordering::SeqCst);
-        let (me, id, target) = (self.clone(), id.clone(), probe_on.clone());
+        let (me, id) = (self.clone(), id.clone());
         // This pad's segment, kept to turn buffer times into running time,
         // with the offset the pad had already folded into it. A pad applies
         // its offset to a segment before any probe sees it (gstpad.c,
@@ -1345,11 +1448,11 @@ impl Placement {
         let frames = std::sync::atomic::AtomicU64::new(0);
         probe_on.add_probe(
             gst::PadProbeType::EVENT_DOWNSTREAM | gst::PadProbeType::BUFFER,
-            move |_p, info| {
+            move |on, info| {
                 match &info.data {
                     Some(gst::PadProbeData::Event(e)) => {
                         if let gst::EventView::Segment(sg) = e.view() {
-                            let folded = gst::ClockTime::from_nseconds(target.offset().max(0) as u64);
+                            let folded = gst::ClockTime::from_nseconds(on.offset().max(0) as u64);
                             *segment.lock() = sg
                                 .segment()
                                 .downcast_ref::<gst::ClockTime>()
@@ -1359,7 +1462,7 @@ impl Placement {
                                 // The resend our own offset change caused.
                                 return gst::PadProbeReturn::Ok;
                             }
-                            let now = me.now(&target);
+                            let now = me.now(on);
                             let after = match stream {
                                 Stream::Page => gst::ClockTime::ZERO,
                                 Stream::Video => {
@@ -1383,7 +1486,7 @@ impl Placement {
                                 }
                             };
                             let place = biased(stream, now, after);
-                            place_offset(&target, &own_change, place);
+                            place_offset(on, &own_change, place);
                             *placed_at.lock() = place;
                             *placed_after.lock() = after;
                             pending.store(true, Ordering::SeqCst);
@@ -1413,7 +1516,11 @@ impl Placement {
                             // end of stream is kept from the compositor, which
                             // would otherwise mark the layer finished and
                             // ignore everything after. A stream is left to end.
-                            let Some(el) = again.as_ref() else {
+                            // Upgraded per end of stream rather than held: see
+                            // the comment on `watch`. A decoder that has been
+                            // taken down with its source gives None here, and
+                            // then there is nothing to start again anyway.
+                            let Some(el) = again.as_ref().and_then(|w| w.upgrade()) else {
                                 if stream == Stream::Page {
                                     // The browser drawing the page has gone: it
                                     // crashed, or its container was stopped. Left
@@ -1425,7 +1532,7 @@ impl Placement {
                                     // reports. Posted as an error on the bus, it
                                     // is the supervisor's ordinary restart: a
                                     // fresh browser, the same source.
-                                    if let Some(parent) = _p.parent_element() {
+                                    if let Some(parent) = on.parent_element() {
                                         warn!(source = %id, "the page's browser stopped; restarting the source");
                                         let msg = gst::message::Error::builder(
                                             gst::StreamError::Failed,
@@ -1498,7 +1605,7 @@ impl Placement {
                             .to_running_time(pts)
                             .unwrap_or(gst::ClockTime::ZERO)
                             .saturating_sub(*folded);
-                        let now = me.now(&target);
+                        let now = me.now(on);
                         if stream == Stream::Page {
                             // The page is chrome, and the right time to show a
                             // frame of it is the moment it arrives. So every
@@ -1509,14 +1616,14 @@ impl Placement {
                             // compositor skipping 132 of 134 frames as late.
                             pending.store(false, Ordering::SeqCst);
                             let want = now.saturating_sub(rt);
-                            let have = gst::ClockTime::from_nseconds(target.offset().max(0) as u64);
+                            let have = gst::ClockTime::from_nseconds(on.offset().max(0) as u64);
                             let drift = want.max(have) - want.min(have);
                             // Only when the frame would otherwise land outside a
                             // small window around now. Every change of offset
                             // resends the segment, and a page that stamped each
                             // frame sent the compositor two events per frame.
                             if drift > gst::ClockTime::from_nseconds(PAGE_DRIFT_NS) {
-                                place_offset(&target, &own_change, want);
+                                place_offset(on, &own_change, want);
                             }
                             let n = frames.fetch_add(1, Ordering::SeqCst);
                             if n == 0 || n % 50 == 0 {
@@ -1524,7 +1631,7 @@ impl Placement {
                                     source = %id,
                                     frame = n,
                                     own_ms = rt.mseconds(),
-                                    at_ms = (rt + gst::ClockTime::from_nseconds(target.offset().max(0) as u64)).mseconds(),
+                                    at_ms = (rt + gst::ClockTime::from_nseconds(on.offset().max(0) as u64)).mseconds(),
                                     now_ms = now.mseconds(),
                                     restamped = drift > gst::ClockTime::from_nseconds(PAGE_DRIFT_NS),
                                     "page frame through the placement probe"
@@ -1551,7 +1658,7 @@ impl Placement {
                             // first round, which has nothing to join, is placed
                             // by its first buffer.
                             let place = if after.is_zero() { biased(stream, now, after) } else { placed };
-                            place_offset(&target, &own_change, place.saturating_sub(rt));
+                            place_offset(on, &own_change, place.saturating_sub(rt));
                             if now > placed + gst::ClockTime::from_mseconds(100) || rt > gst::ClockTime::from_mseconds(20) {
                                 info!(
                                     source = %id,
@@ -1564,11 +1671,11 @@ impl Placement {
                             }
                         }
                         if stream == Stream::Video {
-                            // Running time at `target`, where the offset is
+                            // Running time at this pad, where the offset is
                             // applied, not here.
                             let dur = b.duration().unwrap_or(gst::ClockTime::ZERO);
                             let at = rt + dur
-                                + gst::ClockTime::from_nseconds(target.offset().max(0) as u64);
+                                + gst::ClockTime::from_nseconds(on.offset().max(0) as u64);
                             let mut end = me.end.lock();
                             if at > *end {
                                 *end = at;
@@ -1998,6 +2105,7 @@ impl InputPipeline {
             has_video,
             has_audio,
             superimposed: layers.is_some(),
+            counts: layers.as_ref().map(|l| l.counts.clone()),
             levels: layers.as_ref().map(|l| l.levels()),
             placement,
             media_cache: overlay
@@ -2185,6 +2293,12 @@ impl InputPipeline {
     /// rather than in the browser. Decided once when the pipeline is built.
     pub fn superimposed(&self) -> bool {
         self.superimposed
+    }
+
+    /// What each side of this source's layered compositor has done, for a
+    /// layered source. See `LayerCounts`.
+    pub fn layer_counts(&self) -> Option<&Arc<LayerCounts>> {
+        self.counts.as_ref()
     }
 
     /// The page and media levels, when this source has them.
