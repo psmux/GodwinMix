@@ -3179,6 +3179,33 @@ mod tests {
         assert!(probe_page_media(&"s".to_string(), &quiet, Duration::from_secs(1)).is_none());
     }
 
+    /// The probe runs a sidecar per source build and reads its report off a
+    /// pipe. It must give the pipe back: this is the other half of the two
+    /// descriptors a build leaked on air.
+    #[test]
+    #[cfg(unix)]
+    fn probing_a_page_leaves_no_descriptors_behind() {
+        let spec = ExecSpec::from_uri(
+            "exec:sh -c 'echo \"[browser] media {\\\"src\\\":\\\"http://h/v.m3u8\\\",\\\"usable\\\":true}\" >&2; \
+             while :; do sleep 0.1; done'",
+            true,
+        )
+        .unwrap();
+        let mut baseline = 0usize;
+        for i in 0..12 {
+            assert!(probe_page_media(&"s".to_string(), &spec, Duration::from_secs(5)).is_some());
+            if i == 2 {
+                baseline = open_fds();
+            }
+        }
+        let after = open_fds();
+        assert!(
+            after <= baseline + 2,
+            "nine probes added {} descriptors ({baseline} to {after})",
+            after.saturating_sub(baseline)
+        );
+    }
+
     #[test]
     fn exec_commands_are_recognised_and_unwrapped() {
         assert_eq!(exec_command("exec:ffmpeg -i x -f mpegts -"), Some("ffmpeg -i x -f mpegts -"));
