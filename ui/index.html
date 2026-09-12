@@ -234,10 +234,10 @@
   .cell.muted .cbot { box-shadow: inset 3px 0 0 var(--warn); }
   /* The signal is still there, it just stops here, so the track that carries it
      to program is the thing that looks broken. */
-  .cell.muted .vfader::-webkit-slider-runnable-track {
+  .cell.muted .fader::-webkit-slider-runnable-track {
     background: repeating-linear-gradient(0deg, #6b5a2c 0 5px, #2b323d 5px 10px);
   }
-  .cell.muted .vfader::-moz-range-track {
+  .cell.muted .fader::-moz-range-track {
     background: repeating-linear-gradient(0deg, #6b5a2c 0 5px, #2b323d 5px 10px);
   }
   /* The gain number sits at the foot of the column, over the bottom of the
@@ -263,68 +263,59 @@
   .mute:disabled { opacity: .35; cursor: default; }
 
   /* --- the fader ---------------------------------------------------------- */
+  /* Every fader on this page is vertical and lives on a cell, in the spelling
+     browsers settled on: the writing mode turns the control and direction: rtl
+     puts zero at the bottom, where the zero of a fader belongs. The old
+     -webkit-appearance: slider-vertical draws the same thing and loses the arrow
+     keys in current Chrome, which is the one thing a level control cannot
+     afford to lose. */
   .fader {
-    -webkit-appearance: none; appearance: none; flex: 1; min-width: 0;
-    height: 18px; background: transparent; margin: 0; cursor: ew-resize;
+    -webkit-appearance: none; appearance: none;
+    writing-mode: vertical-lr; direction: rtl;
+    flex: 1; width: 17px; height: auto; min-height: 0;
+    background: transparent; margin: 0; cursor: ns-resize; pointer-events: auto;
   }
   .fader::-webkit-slider-runnable-track {
-    height: 5px; border-radius: 3px;
-    background:
-      linear-gradient(90deg, rgba(255,255,255,.55) 0 1px, transparent 1px) 75% 0 / 100% 100% no-repeat,
-      linear-gradient(90deg, #2b323d, #444d5b);
-    box-shadow: inset 0 0 0 1px rgba(0,0,0,.5);
-  }
-  .fader::-webkit-slider-thumb {
-    -webkit-appearance: none; width: 11px; height: 17px; margin-top: -6px;
-    border-radius: 2px; background: linear-gradient(180deg, #f2f5fa, #b9c2d0);
-    border: 1px solid #05070a; box-shadow: 0 1px 4px rgba(0,0,0,.7);
-  }
-  .fader::-moz-range-track {
-    height: 5px; border-radius: 3px; background: linear-gradient(90deg, #2b323d, #444d5b);
-  }
-  .fader::-moz-range-thumb {
-    width: 10px; height: 16px; border-radius: 2px; border: 1px solid #05070a;
-    background: linear-gradient(180deg, #f2f5fa, #b9c2d0);
-  }
-  .fader:focus-visible { outline: none; }
-  .fader:focus-visible::-webkit-slider-thumb { box-shadow: 0 0 0 2px var(--accent); }
-  .fader:disabled { opacity: .35; cursor: default; }
-
-  /* --- the channel fader, standing up beside its meter --------------------- */
-  /* A vertical range input in the spelling browsers settled on: the writing mode
-     turns the control and direction: rtl puts zero at the bottom, where the zero
-     of a fader belongs. The old -webkit-appearance: slider-vertical draws the
-     same thing and loses the arrow keys in current Chrome, which is the one
-     thing a level control cannot afford to lose.
-
-     These rules come after the horizontal ones on purpose. Both selectors carry
-     one class, so source order is what decides which height and which track
-     wins on the cells. */
-  .vfader {
-    writing-mode: vertical-lr; direction: rtl;
-    flex: none; width: 17px; height: auto; align-self: stretch; min-height: 0;
-    cursor: ns-resize; pointer-events: auto;
-  }
-  .vfader::-webkit-slider-runnable-track {
     width: 5px; height: 100%; border-radius: 3px;
     background:
       linear-gradient(rgba(255,255,255,.55), rgba(255,255,255,.55)) 0 25% / 100% 1px no-repeat,
       linear-gradient(to top, #2b323d, #444d5b);
     box-shadow: inset 0 0 0 1px rgba(0,0,0,.5);
   }
-  .vfader::-webkit-slider-thumb {
+  .fader::-webkit-slider-thumb {
     -webkit-appearance: none; width: 15px; height: 10px; margin: 0 0 0 -5px;
     border-radius: 2px; background: linear-gradient(90deg, #f2f5fa, #b9c2d0);
     border: 1px solid #05070a; box-shadow: 0 1px 4px rgba(0,0,0,.7);
   }
-  .vfader::-moz-range-track {
+  .fader::-moz-range-track {
     width: 5px; height: 100%; border-radius: 3px;
     background: linear-gradient(to top, #2b323d, #444d5b);
   }
-  .vfader::-moz-range-thumb {
+  .fader::-moz-range-thumb {
     width: 14px; height: 9px; border-radius: 2px; border: 1px solid #05070a;
     background: linear-gradient(90deg, #f2f5fa, #b9c2d0);
   }
+  /* The balance inside a decoded page: its own sound, and one fader per video
+     the mixer is decoding underneath it. Narrower and plainer than the channel
+     fader on purpose, because the channel fader is the one that governs the
+     whole source and should stay the one your eye lands on. Their unity mark
+     sits at the middle of the travel, where 1.00 is on a 0 to 2 scale. */
+  .fader.aux { width: 11px; }
+  .fader.aux::-webkit-slider-runnable-track {
+    width: 3px;
+    background:
+      linear-gradient(rgba(255,255,255,.5), rgba(255,255,255,.5)) 0 50% / 100% 1px no-repeat,
+      linear-gradient(to top, #2b323d, #3f4754);
+  }
+  .fader.aux::-webkit-slider-thumb {
+    width: 11px; height: 8px; margin: 0 0 0 -4px;
+    background: linear-gradient(90deg, #dfe5ee, #a7b0be);
+  }
+  .fader.aux::-moz-range-track { width: 3px; }
+  .fader.aux::-moz-range-thumb { width: 10px; height: 7px; }
+  .fader:focus-visible { outline: none; }
+  .fader:focus-visible::-webkit-slider-thumb { box-shadow: 0 0 0 2px var(--accent); }
+  .fader:disabled { opacity: .35; cursor: default; }
 
   /* --- the horizontal lane: a scrubber for files -------------------------- */
   /* The reason the fader stood up. A scrubber is read left to right, every
@@ -365,17 +356,28 @@
   .scrub:disabled { opacity: .4; cursor: default; }
   .lane .pos { font-size: 10px; color: var(--dim); flex: none; text-shadow: 0 1px 2px #000; }
 
-  /* --- the vertical block: meter, fader, gain number ---------------------- */
-  /* One column on the right of the picture holding everything that is read
-     bottom to top. pointer-events is off on the block so a click on the bars
-     still takes the source, and back on for the fader, which is the only thing
-     in here anyone drags. */
+  /* --- the vertical block: meter, then the faders -------------------------- */
+  /* The right hand edge of the picture, read bottom to top. The meter comes
+     first, then the fader for the source as a whole, then one narrow fader per
+     sound inside it. That order does not change, so the fader that governs the
+     whole source is in the same place on every cell whether the source happens
+     to be a page with videos under it or a camera with nothing.
+
+     pointer-events is off on the block so a click on the bars still takes the
+     source, and back on for the faders, which are the only things in here that
+     anyone drags. */
   .vblk {
-    grid-area: 2 / 2 / 3 / 3; display: flex; flex-direction: column;
-    align-items: center; gap: 2px; padding: 2px 5px 2px 0;
-    pointer-events: none; min-height: 0;
+    grid-area: 2 / 2 / 3 / 3; display: flex; align-items: stretch; gap: 4px;
+    padding: 2px 5px 2px 0; pointer-events: none; min-height: 0;
   }
-  .vctl { display: flex; align-items: stretch; gap: 4px; flex: 1; min-height: 0; }
+  /* One fader with whatever names it: the gain number under the channel fader,
+     a single character under each of the ones inside it. */
+  .vch { display: flex; flex-direction: column; align-items: center; gap: 2px; min-height: 0; }
+  .chl {
+    display: none; flex: none; font: 700 8px/1.5 ui-sans-serif, sans-serif;
+    letter-spacing: .02em; color: rgba(255,255,255,.72);
+    background: rgba(10,13,17,.78); border-radius: 3px; padding: 0 3px;
+  }
   .rail { display: flex; align-items: stretch; gap: 3px; }
   .scale { display: none; position: relative; width: 22px; flex: none; }
   .scale span {
@@ -420,31 +422,37 @@
   }
 
   /* Small cells keep the picture, the tally and the meter, and give up the rest.
-     The order things come back in: the fader and the lane, then the numbers,
-     then the scale labels. Measured on a 1280 window, a nine up wall keeps the
-     lot, a twelve up loses the dB labels beside the bars, and a twenty four up
-     is down to a picture with a meter on it. That last one is the right answer:
+     The order things come back in: the channel fader and the lane, then the dB
+     labels and the faders for the sounds inside a page, then the marks that name
+     those. Measured on a 1280 window, a nine up wall keeps everything but the
+     marks, a twelve up is down to the channel fader and the lane, and a twenty
+     four up to a picture with a meter on it. That last one is the right answer:
      a tile that size is there to be watched, and an operator who wants to ride a
      level or scrub a clip has a four up or a six up wall to do it on.
 
-     The fader and the lane are kept out by display: none rather than by not
-     being built, so the same cell gains them the moment the window or the grid
-     gives it the room, with no rebuild and nothing lost mid gesture. */
-  .cell .cname, .cell .ctop .pk, .cell .vfader, .cell .gv, .cell .lane { display: none; }
+     All of it is kept out by display: none rather than by not being built, so
+     the same cell gains it the moment the window or the grid gives it the room,
+     with no rebuild and nothing lost mid gesture. */
+  .cell .cname, .cell .ctop .pk, .cell .vch, .cell .lane { display: none; }
   @container cell (min-width: 150px) and (min-height: 92px) {
     .cell .cname { display: block; }
     .mtr { width: 5px; }
   }
   @container cell (min-width: 190px) and (min-height: 112px) {
-    .cell .vfader { display: block; }
-    .cell .gv { display: block; }
+    .cell .vch { display: flex; }
     .cell .lane { display: flex; }
     .cell .ctop .pk { display: block; }
+    /* The faders inside a page wait for a wider tile than the channel fader
+       does. On a twelve up wall the level for the whole source is the one an
+       operator reaches for, and four faders on a tile that size would cover
+       more picture than they are worth. */
+    .cell .vch.aux { display: none; }
   }
   @container cell (min-width: 260px) and (min-height: 150px) {
     .scale { display: block; }
     .mtr { width: 6px; }
     .vblk { padding-right: 7px; }
+    .cell .vch.aux { display: flex; }
   }
   @container cell (min-width: 340px) and (min-height: 190px) {
     .scale { width: 26px; }
@@ -452,6 +460,7 @@
     .mtr { width: 8px; }
     .cname { font-size: 13px; }
     .gv { font-size: 10.5px; }
+    .cell .chl { display: block; }
   }
   /* A four cell grid on a big monitor gives tiles the size of a small preview
      monitor, and a strip drawn for a laptop looks lost on one. */
@@ -459,8 +468,7 @@
     .scale { width: 32px; }
     .scale span { font-size: 10.5px; }
     .mtr { width: 11px; }
-    .vblk { padding: 4px 9px 4px 0; gap: 4px; }
-    .vctl { gap: 7px; }
+    .vblk { padding: 4px 9px 4px 0; gap: 7px; }
     .cname { font-size: 15px; }
     .ctop { padding: 8px 9px 14px; }
     .cbot { padding: 14px 9px 8px; }
@@ -468,9 +476,13 @@
     .st, .ctop .pk { font-size: 11.5px; }
     .gv { font-size: 12px; }
     .mute { width: 26px; height: 22px; font-size: 11px; }
-    .vfader { width: 24px; }
-    .vfader::-webkit-slider-runnable-track { width: 6px; }
-    .vfader::-webkit-slider-thumb { width: 22px; height: 12px; margin-left: -8px; }
+    .fader { width: 24px; }
+    .fader::-webkit-slider-runnable-track { width: 6px; }
+    .fader::-webkit-slider-thumb { width: 22px; height: 12px; margin-left: -8px; }
+    .fader.aux { width: 15px; }
+    .fader.aux::-webkit-slider-runnable-track { width: 4px; }
+    .fader.aux::-webkit-slider-thumb { width: 15px; height: 10px; margin-left: -5.5px; }
+    .chl { font-size: 10px; }
     .lane { padding: 2px 10px 8px; gap: 10px; }
     .lane .pos { font-size: 12px; }
     .scrub { height: 18px; }
@@ -485,7 +497,10 @@
      operator who folds the bars away to see a shot still wants to know the
      camera has sound, and one line of text costs no picture at all. */
   body.nometer .cell .rail { display: none; }
-  body.nofader .cell .vfader, body.nofader .cell .gv { display: none; }
+  /* Both spellings of the same thing, so this goes on beating the container
+     query that brings the faders inside a page back, whichever order the two
+     blocks end up in. */
+  body.nofader .cell .vch, body.nofader .cell .vch.aux { display: none; }
   body.nometer.nofader .cell .vblk { display: none; }
   body.nolane .cell .lane { display: none; }
 
@@ -588,20 +603,6 @@
     font-size: 15px; line-height: 1; padding: 0 2px; flex: none;
   }
   .srcrow .del:hover { color: var(--bad); background: transparent; }
-  /* Faders for a superimposed source's own decode: page sound plus one strip
-     per video the mixer is mixing in underneath. The channel fader for the
-     source as a whole lives on its multiview cell; this is the balance between
-     the sounds inside it. */
-  .audio { margin: -3px 0 7px; padding: 5px 8px 6px; display: flex; flex-direction: column; gap: 4px;
-           border-left: 2px solid var(--line); margin-left: 9px; }
-  .afader { display: flex; align-items: center; gap: 7px; font-size: 11px; color: var(--dim); }
-  .afader .al { width: 46px; flex: none; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .afader .fader { height: 16px; }
-  .afader .av { width: 30px; flex: none; text-align: right; font-variant-numeric: tabular-nums; font-family: var(--num); }
-  /* Unity is the value an operator returns to, so it gets its own colour rather
-     than making them read the number every time. */
-  .afader .av.unity { color: var(--ok); font-weight: 600; }
-
   .adrow { display: flex; gap: 6px; margin-top: 7px; align-items: center; }
   .adrow button { flex: 1; }
   .cue { font-size: 11px; color: var(--dim); display: flex; align-items: center; gap: 5px; }
@@ -1561,6 +1562,27 @@ function mediaSparse(sourceId, index, value) {
   return arr;
 }
 
+// The sounds inside one source, in the order they are drawn down the column:
+// the page itself, then each video the mixer is decoding underneath it. Any
+// source without an audio object has none of these, which is every camera,
+// every stream and every page the mixer is not decoding for.
+function auxChannels(src) {
+  const a = src && src.audio;
+  if (!a) return [];
+  const out = [{ channel: "page", mark: "P", name: "Page sound" }];
+  (a.media || []).forEach((_, i) => out.push({
+    channel: "media:" + i, mark: String(i + 1), name: "Video " + (i + 1),
+  }));
+  return out;
+}
+
+function auxValue(src, channel) {
+  const a = src && src.audio;
+  if (!a) return undefined;
+  if (channel === "page") return a.page;
+  return (a.media || [])[Number(channel.slice(6))];
+}
+
 function audioBody(channel, sourceId, v) {
   if (channel === "gain") return { gain: v };
   if (channel === "muted") return { muted: v };
@@ -1673,13 +1695,16 @@ applyStrips();
 const cellViews = new Map();
 let cellSig = "";
 
-// Whether a source is seekable decides whether its cell has a lane at all, so it
-// belongs in here. Where the file has got to does not: a position arrives four
-// times a second and would rebuild the whole wall that often.
+// Whether a source is seekable decides whether its cell has a lane at all, and
+// how many sounds are inside it decides how many faders its column has, so both
+// belong in here: a page that drops a video has to lose that fader. Where the
+// file has got to does not: a position arrives four times a second and would
+// rebuild the whole wall that often.
 function cellSignature(mv) {
   return JSON.stringify([
     mv.cells.map((c) => [c.index, c.source, c.x, c.y, c.w, c.h]),
-    status.sources.map((s) => [s.id, s.name, s.has_audio !== false, s.seekable === true]),
+    status.sources.map((s) =>
+      [s.id, s.name, s.has_audio !== false, s.seekable === true, auxChannels(s).length]),
   ]);
 }
 
@@ -1730,12 +1755,10 @@ function buildCells(mv) {
     st.className = "st";
     top.append(key, pk, st);
 
-    // The vertical block: scale, bars, fader, gain number, read bottom to top
-    // and sitting in one column down the right hand edge of the picture.
+    // The vertical block down the right hand edge of the picture: the meter,
+    // then the channel fader, then whatever is inside the source.
     const vblk = document.createElement("div");
     vblk.className = "vblk";
-    const vctl = document.createElement("div");
-    vctl.className = "vctl";
     const rail = document.createElement("div");
     rail.className = "rail";
     const scale = document.createElement("div");
@@ -1756,8 +1779,7 @@ function buildCells(mv) {
     ref.style.bottom = `${dbToPos(REF_DB) * 100}%`;
     wrap.append(bars, ref);
     rail.append(scale, wrap);
-    vctl.appendChild(rail);
-    vblk.appendChild(vctl);
+    vblk.appendChild(rail);
 
     const bot = document.createElement("div");
     bot.className = "cbot";
@@ -1781,14 +1803,16 @@ function buildCells(mv) {
       mute.title = "Stop this source reaching program. Its meter keeps running, so you can still see whether it has sound.";
       top.appendChild(mute);
       const fader = document.createElement("input");
-      fader.className = "fader vfader";
+      fader.className = "fader";
       fader.type = "range";
       fader.min = "0"; fader.max = "1"; fader.step = "0.005";
       fader.title = "Level for this source. Double click for unity.";
-      vctl.appendChild(fader);
       const gv = document.createElement("span");
       gv.className = "gv num";
-      vblk.appendChild(gv);
+      const gch = document.createElement("div");
+      gch.className = "vch";
+      gch.append(fader, gv);
+      vblk.appendChild(gch);
 
       const hasAudio = !src || src.has_audio !== false;
       if (!hasAudio) {
@@ -1799,9 +1823,40 @@ function buildCells(mv) {
         na.textContent = "no audio";
         rail.replaceChildren(na);
       }
-      Object.assign(view, { mute, fader, gv, hasAudio });
+      Object.assign(view, { mute, fader, gv, hasAudio, aux: [] });
 
       bindFader(fader, c.source, "gain", (g) => setGainLabel(view, g, view.mutedShown));
+
+      // A page the mixer is decoding for has more than one sound in it: the page
+      // itself, and each video the mixer is mixing in underneath. These used to
+      // sit in the source list in the sidebar, which is exactly the arrangement
+      // the rest of this redesign moved away from: a control for a sound belongs
+      // beside the picture that sound is coming out of. So they stand here, in
+      // the same column, after the fader for the source as a whole.
+      //
+      // There is no room for "Page" and "Video 1" beside a nine up wall, so each
+      // one is marked with a single character and carries its full name and its
+      // current value in the tooltip. The marks are the first thing a small cell
+      // drops, ahead of the faders themselves: a fader you can reach and read by
+      // position is worth more than a letter you cannot read at all.
+      for (const ch of auxChannels(src)) {
+        const col = document.createElement("div");
+        col.className = "vch aux";
+        const af = document.createElement("input");
+        af.className = "fader aux";
+        af.type = "range";
+        af.min = "0"; af.max = "2"; af.step = "0.05";
+        // A source the mixer reports no audio on has nothing to balance, so
+        // these grey out with the channel fader rather than sitting there live.
+        af.disabled = !hasAudio;
+        const mark = document.createElement("span");
+        mark.className = "chl";
+        mark.textContent = ch.mark;
+        col.append(af, mark);
+        vblk.appendChild(col);
+        bindFader(af, c.source, ch.channel);
+        view.aux.push({ input: af, channel: ch.channel, name: ch.name, key: audioKey(c.source, ch.channel), title: "" });
+      }
       mute.onclick = (e) => {
         e.stopPropagation();
         const k = audioKey(c.source, "muted");
@@ -1947,6 +2002,19 @@ function syncCells() {
       setGainLabel(view, gain, muted);
     }
     applyMute(view, muted);
+
+    // The faders inside the source, on the same terms as the one above: the
+    // server only gets a say when the operator is not holding that one. The
+    // tooltip carries the name and the number, which is where they go now that
+    // the column has no room to print either.
+    for (const ch of view.aux || []) {
+      if (audioActive.has(ch.key)) continue;
+      const server = auxValue(src, ch.channel);
+      const v = audioShown(ch.key, typeof server === "number" ? server : undefined, 1);
+      if (Math.abs(Number(ch.input.value) - v) > 0.002) ch.input.value = String(v);
+      const title = `${ch.name}, ${v.toFixed(2)}. Double click for unity.`;
+      if (ch.title !== title) { ch.title = title; ch.input.title = title; }
+    }
   }
 }
 
@@ -2008,47 +2076,24 @@ function shownUri(uri) {
 }
 
 // --- the source list --------------------------------------------------------
-// Level and mute live on the cell now. What is left here is the inventory, plus
-// the inner balance of a superimposed source, which has no cell of its own to
-// hang off: the page's own sound against each video the mixer decodes under it.
-function audioFadersHtml(s) {
-  const a = s.audio;
-  if (!a) return "";
-  const rows = [afaderHtml(s.id, "page", "Page", a.page)];
-  (a.media || []).forEach((v, i) => rows.push(afaderHtml(s.id, "media:" + i, "Video " + (i + 1), v)));
-  return `<div class="audio">${rows.join("")}</div>`;
-}
-
-function afaderHtml(sourceId, channel, label, serverValue) {
-  const key = audioKey(sourceId, channel);
-  const v = audioShown(key, typeof serverValue === "number" ? serverValue : undefined, 1);
-  const unity = Math.abs(v - 1) < 0.005;
-  return `
-    <div class="afader" data-source="${escapeHtml(sourceId)}" data-channel="${escapeHtml(channel)}">
-      <span class="al">${escapeHtml(label)}</span>
-      <input class="fader" type="range" min="0" max="2" step="0.05" value="${v}">
-      <span class="av${unity ? " unity" : ""}">${v.toFixed(2)}</span>
-    </div>`;
-}
-
+// Every audio control lives on the cell now, the page's own sound and each of
+// its videos along with the level and the mute. What is left here is the
+// inventory: what exists, what it is, and what state it is in. Nothing in this
+// list is a live control any more, so a rebuild here cannot interrupt a gesture
+// and it no longer waits for one.
 function renderSources() {
-  // Same hazard as the cells: a slider mid-drag holds pointer capture, and
-  // replacing its node ends the gesture. Defer the rebuild until the operator
-  // lets go, then one render resyncs everything at once.
-  if (audioActive.size) { deferredRender = true; return; }
-
   const host = $("sources");
   host.innerHTML = status.sources.map((s, i) => `
     <div class="srcrow${status.program === s.id ? " live" : ""}" data-id="${escapeHtml(s.id)}" title="${escapeHtml(shownUri(s.uri))}">
       ${i < 9 ? `<span class="key">${i + 1}</span>` : ""}
       <span class="nm"><b>${escapeHtml(s.name)}</b></span>
       ${s.superimposed
-        ? `<span class="kind sup" title="Website. The mixer is decoding this page's video itself and drawing the page over it, so Chromium is not rendering the video. That is where the CPU saving is.">direct</span>`
+        ? `<span class="kind sup" title="Website. The mixer is decoding this page's video itself and drawing the page over it, so Chromium is not rendering the video. That is where the CPU saving is. The balance between the page and its videos is on this source's cell.">direct</span>`
         : `<span class="kind">${KIND_LABEL[kindOf(s.uri)] || kindOf(s.uri)}</span>`}
       ${s.muted ? `<span class="kind mutechip" title="Muted. It still meters on its cell.">muted</span>` : ""}
       <span class="st ${s.state}">${s.state}${s.has_audio ? "" : " · no audio"}</span>
       <button class="del" title="Remove this source">&times;</button>
-    </div>${audioFadersHtml(s)}`).join("") || `<div class="kv">no sources</div>`;
+    </div>`).join("") || `<div class="kv">no sources</div>`;
 
   [...host.querySelectorAll(".srcrow")].forEach((row) => {
     const id = row.dataset.id;
@@ -2058,17 +2103,6 @@ function renderSources() {
       const r = await api(`/api/sources/${encodeURIComponent(id)}`, { method: "DELETE" });
       if (!r.ok) alert_("error", serverError(await r.text(), r.status, "The mixer refused that"));
     };
-  });
-
-  [...host.querySelectorAll(".afader")].forEach((el) => {
-    const sourceId = el.dataset.source;
-    const channel = el.dataset.channel;
-    const input = el.querySelector("input");
-    const out = el.querySelector(".av");
-    bindFader(input, sourceId, channel, (v) => {
-      out.textContent = v.toFixed(2);
-      out.classList.toggle("unity", Math.abs(v - 1) < 0.005);
-    });
   });
 }
 
