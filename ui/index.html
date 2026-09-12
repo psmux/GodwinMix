@@ -4,201 +4,466 @@
 <title>LiveboxMix</title>
 <style>
   :root {
-    --bg: #0e1013; --panel: #171a1f; --line: #262b33;
-    --text: #e6e9ee; --dim: #8b93a1;
-    --live: #e5484d; --ok: #3dd68c; --warn: #f5a524;
+    --bg: #090b0e; --panel: #12151a; --panel2: #171b21; --raise: #1f242c;
+    --line: #262c35; --line-soft: #1b2028;
+    --text: #e8ebf0; --dim: #8b93a2; --faint: #5b6373;
+    /* Saturated red is spent only on what is going out: the tally, the on air
+       cell border, the ad pill, the top of a meter. Faults use --bad, which is
+       duller on purpose, so a failed source never reads as a live one. */
+    --live: #ff2a36; --bad: #d9584c;
+    --ok: #34d07f; --warn: #eea62a; --accent: #5590ff;
+    --num: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, monospace;
+    --radius: 8px;
   }
   * { box-sizing: border-box; }
+  html, body { height: 100%; }
   body {
     margin: 0; background: var(--bg); color: var(--text);
-    font: 14px/1.45 ui-sans-serif, -apple-system, "Segoe UI", Roboto, sans-serif;
-    height: 100vh; display: flex; flex-direction: column;
+    font: 13px/1.45 ui-sans-serif, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+    display: flex; flex-direction: column; overflow: hidden;
+    -webkit-font-smoothing: antialiased;
   }
-  header {
-    display: flex; align-items: center; gap: 16px;
-    padding: 10px 16px; border-bottom: 1px solid var(--line); background: var(--panel);
-  }
-  header h1 { font-size: 15px; margin: 0; font-weight: 600; letter-spacing: .2px; }
-  .spacer { flex: 1; }
-  .pill {
-    font-size: 12px; color: var(--dim); border: 1px solid var(--line);
-    padding: 3px 9px; border-radius: 999px; white-space: nowrap;
-  }
-  .pill b { color: var(--text); font-weight: 500; }
+  .num { font-variant-numeric: tabular-nums; font-family: var(--num); }
 
+  /* --- header ------------------------------------------------------------- */
+  header {
+    display: flex; align-items: center; gap: 14px; flex: none;
+    padding: 0 14px; height: 54px;
+    background: linear-gradient(180deg, #171b22, #12151a);
+    border-bottom: 1px solid var(--line);
+  }
+  .brand {
+    display: flex; align-items: center; gap: 8px; font-size: 13px;
+    font-weight: 700; letter-spacing: .14em; text-transform: uppercase;
+    color: var(--text); white-space: nowrap; padding-right: 4px;
+  }
+  .brand i { width: 7px; height: 7px; border-radius: 50%; background: var(--faint); display: block; }
+  body.onair .brand i { background: var(--live); box-shadow: 0 0 9px var(--live); }
+
+  /* The tally is the one thing an operator glances at from across the room, so
+     it gets the largest type on the page and the only saturated red. */
+  #tally {
+    display: flex; align-items: center; gap: 10px; min-width: 0;
+    border: 1px solid var(--line); border-radius: var(--radius);
+    background: var(--panel2); padding: 5px 12px 5px 10px; height: 38px;
+  }
+  #tally .tl {
+    font-size: 9.5px; font-weight: 700; letter-spacing: .12em; color: var(--faint);
+    text-transform: uppercase; line-height: 1.1; text-align: right; white-space: nowrap;
+  }
+  #tally .tn {
+    font-size: 17px; font-weight: 650; letter-spacing: .01em; line-height: 1.1;
+    max-width: 30ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  #tally.on { background: var(--live); border-color: #ff5a62; box-shadow: 0 0 22px rgba(255,42,54,.32); }
+  #tally.on .tl, #tally.on .tn { color: #fff; }
+  #tally.on .tl { opacity: .85; }
+
+  /* --- program meter in the header ---------------------------------------- */
+  #pgmmeter {
+    display: flex; align-items: center; gap: 8px;
+    border: 1px solid var(--line); border-radius: var(--radius);
+    background: var(--panel2); padding: 0 10px; height: 38px; flex: none;
+  }
+  #pgmmeter .cap { font-size: 9.5px; letter-spacing: .12em; text-transform: uppercase; color: var(--faint); font-weight: 700; }
+  .hbars { display: flex; flex-direction: column; gap: 3px; width: 132px; }
+  /* The id carries these past the vertical meter rules further down, which are
+     written for the cells and would otherwise win on source order. */
+  #pgmmeter .mtr { width: 100%; height: 7px; border-radius: 2px; background: #05070a; }
+  #pgmmeter .fill {
+    background: linear-gradient(90deg, #14814a 0%, #2cb96f 35%, #3fdc88 68%, var(--warn) 78%, var(--live) 88%);
+    clip-path: inset(0 100% 0 0);
+  }
+  #pgmmeter .hold {
+    top: 0; left: 0; height: 100%; width: 100%; border-top: 0;
+    border-right: 2px solid rgba(255,255,255,.9); transform: translateX(-100%);
+  }
+  #pgmmeter .pk { font-size: 11px; color: var(--dim); width: 42px; text-align: right; }
+
+  .spacer { flex: 1; min-width: 0; }
+  .stat { display: flex; flex-direction: column; gap: 1px; line-height: 1.15; white-space: nowrap; }
+  .stat .k { font-size: 9.5px; letter-spacing: .1em; text-transform: uppercase; color: var(--faint); font-weight: 700; }
+  .stat b { font-weight: 550; font-size: 12px; color: var(--text); }
+  .pill {
+    font-size: 11px; color: var(--dim); border: 1px solid var(--line);
+    padding: 4px 10px; border-radius: 999px; white-space: nowrap;
+  }
+  #adpill {
+    border-color: #ff5a62; color: #fff; background: var(--live);
+    font-weight: 700; letter-spacing: .08em; font-size: 10.5px;
+  }
+  #cut {
+    height: 38px; padding: 0 16px; font-size: 13px; font-weight: 600;
+    border-color: #4a2a2e; background: #24171a; color: #ffb7ba;
+  }
+  #cut:hover { background: #32191d; border-color: var(--bad); color: #fff; }
+  #cut kbd { margin-left: 8px; }
+  kbd {
+    font: 600 10px/1.5 var(--num); background: #0a0d11; color: var(--dim);
+    border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 4px;
+    padding: 0 5px; display: inline-block; min-width: 18px; text-align: center;
+  }
+
+  /* --- stage -------------------------------------------------------------- */
   main { flex: 1; display: flex; min-height: 0; }
-  #stage {
-    flex: 1; position: relative; display: flex;
-    align-items: center; justify-content: center; padding: 16px; min-width: 0;
+  #stage { flex: 1; display: flex; flex-direction: column; min-width: 0; padding: 14px; gap: 10px; }
+  #viewport { flex: 1; min-height: 0; display: flex; align-items: center; justify-content: center; }
+  #wrap { position: relative; line-height: 0; max-width: 100%; max-height: 100%; }
+  #mosaic {
+    max-width: 100%; max-height: 100%; display: block; background: #000;
+    border-radius: 10px; box-shadow: 0 0 0 1px var(--line), 0 18px 50px rgba(0,0,0,.55);
   }
-  #wrap { position: relative; line-height: 0; }
-  #mosaic { max-width: 100%; max-height: 100%; display: block; background: #000; border-radius: 6px; }
   #cells { position: absolute; inset: 0; }
-  .cell {
-    position: absolute; cursor: pointer; border: 2px solid transparent;
-    border-radius: 4px; transition: border-color .12s, background .12s;
+  #stagebar {
+    flex: none; display: flex; align-items: center; gap: 12px;
+    font-size: 11px; color: var(--faint); padding: 0 2px;
   }
-  .cell:hover { border-color: rgba(255,255,255,.45); background: rgba(255,255,255,.06); }
-  .cell.live { border-color: var(--live); }
-  .cell.program-return { cursor: default; border-color: rgba(255,255,255,.18); }
-  .cell.program-return:hover { background: none; }
-  .label {
-    position: absolute; left: 0; bottom: 0; right: 0;
-    font-size: 11px; line-height: 1.3; padding: 3px 6px;
-    background: linear-gradient(transparent, rgba(0,0,0,.85));
-    display: flex; align-items: baseline; gap: 6px;
+  #stagebar .keys { display: flex; align-items: center; gap: 6px; }
+  #stagebar .sep { width: 1px; height: 12px; background: var(--line); margin: 0 4px; }
+
+  /* --- one multiview cell and its channel strip --------------------------- */
+  /* Cells are positioned as percentages of the mosaic so the overlay tracks the
+     image at any display size, and the server stays the single source of truth
+     for the layout. Each cell is its own container so a nine up grid on a
+     laptop can drop the parts of the strip that no longer fit. */
+  .cell {
+    position: absolute; cursor: pointer; container: cell / size;
+    display: grid; grid-template-columns: 1fr auto; grid-template-rows: auto 1fr auto;
+    border-radius: 5px; overflow: hidden;
+    box-shadow: inset 0 0 0 2px transparent;
+    transition: box-shadow .12s;
+  }
+  .cell:hover { box-shadow: inset 0 0 0 2px rgba(255,255,255,.5); }
+  .cell.live { box-shadow: inset 0 0 0 3px var(--live), 0 0 20px rgba(255,42,54,.35); }
+  .cell.pgm { cursor: default; box-shadow: inset 0 0 0 1px rgba(255,255,255,.22); }
+  .cell.pgm:hover { box-shadow: inset 0 0 0 1px rgba(255,255,255,.35); }
+
+  .ctop {
+    grid-area: 1 / 1 / 2 / 3; display: flex; align-items: center; gap: 6px;
+    padding: 5px 6px 10px; line-height: 1;
+    background: linear-gradient(rgba(0,0,0,.72), transparent);
   }
   .key {
-    font-size: 10px; color: #000; background: var(--dim);
-    border-radius: 3px; padding: 0 4px; font-weight: 700;
+    font: 700 11px/1.55 var(--num); color: #0a0d11; background: #c6cdd9;
+    border-radius: 3px; padding: 0 5px; min-width: 18px; text-align: center; flex: none;
   }
   .cell.live .key { background: var(--live); color: #fff; }
-  .name { font-weight: 600; }
-  .st { color: var(--dim); margin-left: auto; }
-  .st.live { color: var(--ok); } .st.stalled { color: var(--warn); } .st.failed { color: var(--live); }
+  .cell.pgm .key { background: transparent; color: var(--dim); box-shadow: inset 0 0 0 1px var(--line); }
+  .ctop .pk { margin-left: auto; font-size: 10px; color: rgba(255,255,255,.62); }
+  .st { font-size: 10px; color: var(--dim); text-transform: uppercase; letter-spacing: .06em; font-weight: 600; }
+  .st.live { color: var(--ok); } .st.connecting, .st.stalled, .st.reconnecting { color: var(--warn); }
+  .st.failed { color: var(--bad); }
+  .ctop .st { text-shadow: 0 1px 3px #000; }
 
+  .cbot {
+    grid-area: 3 / 1 / 4 / 3; padding: 12px 6px 5px;
+    background: linear-gradient(transparent, rgba(0,0,0,.82) 55%);
+    display: flex; flex-direction: column; gap: 4px; min-width: 0;
+  }
+  .cname {
+    font-size: 12px; font-weight: 600; line-height: 1.2; text-shadow: 0 1px 3px #000;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .cstrip { display: none; align-items: center; gap: 6px; min-width: 0; }
+  .gv { font-size: 10.5px; color: var(--dim); width: 40px; text-align: right; flex: none; }
+  .gv.unity { color: var(--ok); }
+  .gv.muted { color: var(--warn); font-weight: 700; }
+
+  .mute {
+    flex: none; width: 22px; height: 20px; padding: 0; border-radius: 4px;
+    font: 700 10px/1 ui-sans-serif, sans-serif; letter-spacing: .04em;
+    background: rgba(10,13,17,.75); border: 1px solid var(--line); color: var(--dim);
+  }
+  .mute:hover { background: rgba(30,36,44,.9); color: var(--text); }
+  .mute.on { background: var(--warn); border-color: #ffc45e; color: #1a1203; }
+  .mute:disabled { opacity: .35; cursor: default; }
+
+  /* --- the fader ---------------------------------------------------------- */
+  .fader {
+    -webkit-appearance: none; appearance: none; flex: 1; min-width: 0;
+    height: 18px; background: transparent; margin: 0; cursor: ew-resize;
+  }
+  .fader::-webkit-slider-runnable-track {
+    height: 5px; border-radius: 3px;
+    background:
+      linear-gradient(90deg, rgba(255,255,255,.55) 0 1px, transparent 1px) 75% 0 / 100% 100% no-repeat,
+      linear-gradient(90deg, #2b323d, #444d5b);
+    box-shadow: inset 0 0 0 1px rgba(0,0,0,.5);
+  }
+  .fader::-webkit-slider-thumb {
+    -webkit-appearance: none; width: 11px; height: 17px; margin-top: -6px;
+    border-radius: 2px; background: linear-gradient(180deg, #f2f5fa, #b9c2d0);
+    border: 1px solid #05070a; box-shadow: 0 1px 4px rgba(0,0,0,.7);
+  }
+  .fader::-moz-range-track {
+    height: 5px; border-radius: 3px; background: linear-gradient(90deg, #2b323d, #444d5b);
+  }
+  .fader::-moz-range-thumb {
+    width: 10px; height: 16px; border-radius: 2px; border: 1px solid #05070a;
+    background: linear-gradient(180deg, #f2f5fa, #b9c2d0);
+  }
+  .fader:focus-visible { outline: none; }
+  .fader:focus-visible::-webkit-slider-thumb { box-shadow: 0 0 0 2px var(--accent); }
+  .fader:disabled { opacity: .35; cursor: default; }
+
+  /* --- the meter rail ----------------------------------------------------- */
+  .rail {
+    grid-area: 2 / 2 / 3 / 3; display: flex; align-items: stretch; gap: 3px;
+    padding: 2px 5px 2px 0; pointer-events: none;
+  }
+  .rail.muted { opacity: .38; }
+  .scale { display: none; position: relative; width: 22px; flex: none; }
+  .scale span {
+    position: absolute; right: 0; transform: translateY(50%);
+    font: 500 8px/1 var(--num); color: rgba(255,255,255,.5);
+    text-shadow: 0 1px 2px #000; padding-right: 5px; white-space: nowrap;
+  }
+  .scale span::after {
+    content: ""; position: absolute; right: 0; top: 50%; width: 4px;
+    border-top: 1px solid rgba(255,255,255,.35);
+  }
+  .scale span.ref { color: rgba(255,255,255,.85); }
+  .scale span.ref::after { width: 4px; border-top-color: rgba(255,255,255,.8); }
+  .bars { display: flex; gap: 2px; align-items: stretch; }
+  .mtr {
+    position: relative; width: 4px; border-radius: 2px; overflow: hidden;
+    background: rgba(0,0,0,.72); box-shadow: inset 0 0 0 1px rgba(255,255,255,.07);
+  }
+  /* The colour stops sit where the dB scale puts them: green to about -8 dBFS,
+     amber through the last few, red from -3 dBFS up, which is the same place
+     the numbers turn into a problem. */
+  .mtr .fill {
+    position: absolute; inset: 0; display: block; clip-path: inset(100% 0 0 0);
+    background: linear-gradient(to top, #14814a 0%, #2cb96f 35%, #3fdc88 68%, var(--warn) 78%, var(--live) 88%);
+  }
+  .mtr .hold {
+    position: absolute; left: 0; right: 0; top: 0; height: 100%;
+    border-top: 2px solid rgba(255,255,255,.9); transform: translateY(100%);
+  }
+  /* A reference line at -18 dBFS, which is where a well set channel sits. Drawn
+     over the bars rather than beside them so the eye can compare without
+     tracking sideways to the scale. */
+  .bars .ref {
+    position: absolute; left: -3px; right: -3px; height: 0;
+    border-top: 1px dashed rgba(255,255,255,.45); pointer-events: none;
+  }
+  .barswrap { position: relative; display: flex; }
+  .noaud {
+    writing-mode: vertical-rl; font: 600 8px/1 ui-sans-serif, sans-serif;
+    letter-spacing: .1em; color: var(--faint); text-transform: uppercase;
+    align-self: center; text-shadow: 0 1px 2px #000;
+  }
+
+  /* Small cells keep the picture and the tally and give up the rest. The order
+     things come back in: the strip, then the numbers, then the scale labels. */
+  .cell .cname, .cell .ctop .pk { display: none; }
+  @container cell (min-width: 150px) and (min-height: 92px) {
+    .cell .cname { display: block; }
+    .mtr { width: 5px; }
+  }
+  @container cell (min-width: 190px) and (min-height: 112px) {
+    .cell .cstrip { display: flex; }
+    .cell .ctop .pk { display: block; }
+  }
+  @container cell (min-width: 260px) and (min-height: 150px) {
+    .scale { display: block; }
+    .mtr { width: 6px; }
+    .rail { padding-right: 7px; }
+  }
+  @container cell (min-width: 340px) and (min-height: 190px) {
+    .scale { width: 26px; }
+    .scale span { font-size: 9px; }
+    .mtr { width: 8px; }
+    .cname { font-size: 13px; }
+  }
+
+  /* --- sidebar ------------------------------------------------------------ */
   aside {
-    width: 280px; border-left: 1px solid var(--line); background: var(--panel);
-    padding: 14px; overflow-y: auto; display: flex; flex-direction: column; gap: 18px;
+    width: 316px; flex: none; border-left: 1px solid var(--line); background: var(--panel);
+    padding: 12px; overflow-y: auto; overflow-x: hidden;
+    display: flex; flex-direction: column; gap: 12px;
+    scrollbar-width: thin; scrollbar-color: #2f3641 transparent;
   }
-  h2 { font-size: 11px; text-transform: uppercase; letter-spacing: .08em;
-       color: var(--dim); margin: 0 0 8px; font-weight: 600; }
-  .out { border: 1px solid var(--line); border-radius: 6px; padding: 8px 10px; margin-bottom: 8px; }
-  .out .row { display: flex; align-items: baseline; gap: 8px; }
-  .out .id { font-weight: 600; }
+  @media (min-width: 1800px) { aside { width: 360px; } }
+  aside::-webkit-scrollbar { width: 9px; }
+  aside::-webkit-scrollbar-thumb { background: #2b323c; border-radius: 5px; border: 2px solid var(--panel); }
+  .card { background: var(--panel2); border: 1px solid var(--line-soft); border-radius: 10px; padding: 11px 11px 12px; }
+  h2 {
+    font-size: 10px; text-transform: uppercase; letter-spacing: .11em;
+    color: var(--faint); margin: 0 0 9px; font-weight: 700;
+    display: flex; align-items: baseline; gap: 7px;
+  }
+  h2 .n { color: var(--dim); font-weight: 600; letter-spacing: 0; font-size: 10px; }
+
+  .out { border: 1px solid var(--line); border-radius: 7px; padding: 8px 9px; margin-bottom: 7px; background: #101318; }
+  .out:last-of-type { margin-bottom: 0; }
+  .out .row { display: flex; align-items: center; gap: 7px; }
+  .out .id { font-weight: 600; font-size: 12px; }
   .out .meta { font-size: 11px; color: var(--dim); margin-top: 3px; word-break: break-all; }
-  .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--dim); flex: none; }
-  .dot.live { background: var(--ok); } .dot.reconnecting { background: var(--warn); }
-  .dot.failed { background: var(--live); } .dot.connecting { background: var(--warn); }
+  .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--faint); flex: none; }
+  .dot.live { background: var(--ok); box-shadow: 0 0 7px rgba(52,208,127,.6); }
+  .dot.reconnecting, .dot.connecting { background: var(--warn); }
+  .dot.failed { background: var(--bad); }
+  .out .st { margin-left: auto; }
+
   button {
-    background: #222731; color: var(--text); border: 1px solid var(--line);
-    border-radius: 5px; padding: 4px 9px; font-size: 12px; cursor: pointer;
+    background: var(--raise); color: var(--text); border: 1px solid var(--line);
+    border-radius: 6px; padding: 5px 10px; font-size: 12px; font-family: inherit;
+    cursor: pointer; transition: background .1s, border-color .1s, color .1s;
   }
-  button:hover { background: #2b313c; }
-  .meter { height: 6px; background: #0a0c0f; border-radius: 3px; overflow: hidden; margin-bottom: 4px; }
-  .meter i { display: block; height: 100%; width: 0%; background: var(--ok); transition: width .08s linear; }
-  .meter i.hot { background: var(--live); }
+  button:hover { background: #29303a; border-color: #39414e; }
+  button:disabled { opacity: .4; cursor: default; }
+  button:disabled:hover { background: var(--raise); border-color: var(--line); }
+  button.ghost { background: transparent; }
+  button.ghost:hover { background: var(--raise); }
+  button.warn { border-color: #4a3a1e; color: var(--warn); }
+  button.warn:hover { border-color: var(--warn); background: #2a2012; }
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
   .kv { display: flex; justify-content: space-between; font-size: 12px; color: var(--dim); }
-  .kv b { color: var(--text); font-weight: 500; }
-  .clips {
-    max-height: 190px; overflow-y: auto; border: 1px solid var(--line);
-    border-radius: 6px; background: #0f1216;
-  }
+  .clips { max-height: 210px; overflow-y: auto; border: 1px solid var(--line); border-radius: 7px; background: #0d1015; }
   .clip {
-    display: flex; align-items: baseline; flex-wrap: wrap; gap: 8px; padding: 5px 8px;
-    cursor: pointer; border-bottom: 1px solid rgba(255,255,255,.04); font-size: 12px;
+    display: flex; align-items: baseline; flex-wrap: wrap; gap: 7px; padding: 6px 8px;
+    cursor: pointer; border-bottom: 1px solid rgba(255,255,255,.045); font-size: 12px;
   }
   .clip:last-child { border-bottom: 0; }
   .clip:hover { background: rgba(255,255,255,.05); }
-  .clip.sel { background: rgba(229,72,77,.18); box-shadow: inset 2px 0 0 var(--live); }
+  /* Selection is blue, not red. Red on this page means something is going out. */
+  .clip.sel { background: rgba(85,144,255,.16); box-shadow: inset 2px 0 0 var(--accent); }
   .clip .cn { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .clip .cd { color: var(--dim); font-variant-numeric: tabular-nums; }
-  .clip .warn { color: var(--warn); }
+  .clip .cd { color: var(--dim); font-variant-numeric: tabular-nums; font-size: 11px; }
+  .clip .warn { color: var(--warn); font-size: 10px; }
   /* Green means the file is ready to cut to: web safe as it is, or a converted
      copy exists. Mirrors the mute/warn chips above, just a different colour. */
-  .clip .ok { color: var(--ok); }
+  .clip .ok { color: var(--ok); font-size: 10px; }
   /* The actions block takes a full width line of its own under the row, so the
      buttons and the progress bar never crowd the name. */
-  .clip .acts { flex-basis: 100%; display: flex; align-items: center; gap: 6px; margin-top: 4px; }
+  .clip .acts { flex-basis: 100%; display: flex; align-items: center; gap: 6px; margin-top: 5px; }
   .clip .acts button { padding: 2px 8px; font-size: 11px; }
-  .clip .acts .cvt { color: var(--dim); flex: none; }
-  .clip .acts .prog { flex: 1; height: 4px; background: #0a0c0f; border-radius: 2px; overflow: hidden; }
+  .clip .acts .cvt { color: var(--dim); flex: none; font-size: 11px; }
+  .clip .acts .prog { flex: 1; height: 4px; background: #05070a; border-radius: 2px; overflow: hidden; }
   .clip .acts .prog i { display: block; height: 100%; background: var(--ok); transition: width .1s linear; }
-  .clips .empty { padding: 10px; color: var(--dim); font-size: 12px; line-height: 1.4; }
-  button.ghost { background: transparent; }
-  button.warn { border-color: var(--warn); color: var(--warn) }
-  #addout, #addsrc { margin-top: 10px; }
-  #addout summary { font-size: 11px; color: var(--dim); cursor: pointer; }
-  #addout input, #addout select { margin-top: 6px; }
-  select {
-    background: #0f1216; color: var(--text); border: 1px solid var(--line);
-    border-radius: 5px; padding: 4px 6px; font-size: 12px; font-family: inherit;
+  .clips .empty { padding: 10px; color: var(--dim); font-size: 12px; line-height: 1.45; }
+
+  details { margin-top: 10px; border-top: 1px solid var(--line-soft); padding-top: 9px; }
+  summary { font-size: 11px; color: var(--dim); cursor: pointer; list-style: none; display: flex; align-items: center; gap: 5px; }
+  summary::-webkit-details-marker { display: none; }
+  summary::before { content: "+"; font: 600 12px/1 var(--num); color: var(--faint); }
+  details[open] summary::before { content: "\2212"; }
+  summary:hover { color: var(--text); }
+  select, input[type=text], input[type=number], #aduri, #noid, #nouri, #nsuri, #nsname {
+    background: #0b0e12; color: var(--text); border: 1px solid var(--line);
+    border-radius: 6px; padding: 6px 8px; font-size: 12px; font-family: inherit;
   }
-  #addsrc summary { font-size: 11px; color: var(--dim); cursor: pointer; }
-  #addsrc input { margin-top: 6px; }
-  .srcrow { display: flex; align-items: baseline; gap: 8px; margin-bottom: 5px; }
-  .srcrow .nm { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  input::placeholder { color: #4e5665; }
+  #aduri, #noid, #nouri, #nsuri, #nsname { width: 100%; margin-top: 7px; }
+  .srcrow {
+    display: flex; align-items: center; gap: 7px; padding: 5px 7px;
+    border-radius: 6px; background: #101318; border: 1px solid var(--line-soft);
+    margin-bottom: 5px;
+  }
+  .srcrow.live { border-color: rgba(255,42,54,.55); background: rgba(255,42,54,.07); }
+  .srcrow .nm { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; }
   .srcrow .kind {
-    font-size: 10px; color: var(--dim); border: 1px solid var(--line);
-    border-radius: 3px; padding: 0 4px; text-transform: uppercase;
+    font-size: 9px; color: var(--dim); border: 1px solid var(--line);
+    border-radius: 3px; padding: 1px 4px; text-transform: uppercase; letter-spacing: .05em; flex: none;
   }
   /* Green, because it means the mixer got the cheap path it asked for. */
-  .srcrow .sup { color: var(--ok); border-color: var(--ok); }
+  .srcrow .sup { color: var(--ok); border-color: rgba(52,208,127,.5); }
   .srcrow .del {
-    border: 0; background: transparent; color: var(--dim); cursor: pointer;
-    font-size: 14px; line-height: 1; padding: 0 3px;
+    border: 0; background: transparent; color: var(--faint); cursor: pointer;
+    font-size: 15px; line-height: 1; padding: 0 2px; flex: none;
   }
-  .srcrow .del:hover { color: var(--live); background: transparent; }
+  .srcrow .del:hover { color: var(--bad); background: transparent; }
   /* Faders for a superimposed source's own decode: page sound plus one strip
-     per video the mixer is mixing in underneath. */
-  .audio { margin: -2px 0 8px; padding-left: 2px; display: flex; flex-direction: column; gap: 3px; }
-  .afader { display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--dim); }
-  .afader .al { width: 50px; flex: none; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .afader input[type=range] { flex: 1; min-width: 0; accent-color: var(--ok); }
-  .afader .av { width: 32px; flex: none; text-align: right; font-variant-numeric: tabular-nums; }
-  /* Unity is the value an operator returns to, so it gets its own color rather
+     per video the mixer is mixing in underneath. The channel fader for the
+     source as a whole lives on its multiview cell; this is the balance between
+     the sounds inside it. */
+  .audio { margin: -3px 0 7px; padding: 5px 8px 6px; display: flex; flex-direction: column; gap: 4px;
+           border-left: 2px solid var(--line); margin-left: 9px; }
+  .afader { display: flex; align-items: center; gap: 7px; font-size: 11px; color: var(--dim); }
+  .afader .al { width: 46px; flex: none; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .afader .fader { height: 16px; }
+  .afader .av { width: 30px; flex: none; text-align: right; font-variant-numeric: tabular-nums; font-family: var(--num); }
+  /* Unity is the value an operator returns to, so it gets its own colour rather
      than making them read the number every time. */
   .afader .av.unity { color: var(--ok); font-weight: 600; }
-  #adcustom { margin-top: 8px; }
-  #adcustom summary { font-size: 11px; color: var(--dim); cursor: pointer; }
-  #adcustom input { margin-top: 6px; }
-  input[type=text], #aduri {
-    width: 100%; background: #0f1216; color: var(--text); border: 1px solid var(--line);
-    border-radius: 5px; padding: 5px 7px; font-size: 12px; font-family: inherit;
-  }
-  .adrow { display: flex; gap: 6px; margin-top: 6px; align-items: center; }
-  .cue { font-size: 12px; color: var(--dim); display: flex; align-items: center; gap: 5px; }
-  .cue input { width: 62px; }
+
+  .adrow { display: flex; gap: 6px; margin-top: 7px; align-items: center; }
+  .adrow button { flex: 1; }
+  .cue { font-size: 11px; color: var(--dim); display: flex; align-items: center; gap: 5px; }
+  .cue input { width: 58px; }
   /* display: flex above beats the browser's own rule for [hidden], so a .cue
      that is hidden would otherwise still be laid out. */
   .cue[hidden] { display: none; }
-  .adrow button { flex: 1; }
-  .hint { font-size: 11px; color: var(--dim); margin-top: 6px; line-height: 1.35; }
-  .seg { display: flex; gap: 0; margin-top: 8px; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }
-  .seg button { flex: 1; border: 0; border-radius: 0; background: transparent; color: var(--dim); padding: 6px 4px; }
+  #adplay { border-color: #2a4a34; color: #9df0c2; background: #132118; }
+  #adplay:hover:not(:disabled) { background: #17301f; border-color: var(--ok); color: #fff; }
+  .hint { font-size: 11px; color: var(--dim); margin-top: 7px; line-height: 1.4; }
+  .seg { display: flex; margin-top: 8px; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }
+  .seg button { flex: 1; border: 0; border-radius: 0; background: transparent; color: var(--dim); padding: 6px 4px; font-size: 11px; }
   .seg button + button { border-left: 1px solid var(--line); }
-  .seg button.on { background: #2b313c; color: var(--text); font-weight: 600; }
-  #adpill { border-color: var(--live); color: #fff; background: var(--live); font-weight: 600; }
-  #alerts { position: fixed; right: 14px; bottom: 14px; display: flex; flex-direction: column; gap: 6px; }
+  .seg button.on { background: var(--raise); color: var(--text); font-weight: 600; }
+
+  #alerts { position: fixed; right: 16px; bottom: 16px; display: flex; flex-direction: column; gap: 7px; z-index: 20; }
   .alert {
-    background: var(--panel); border: 1px solid var(--line); border-left: 3px solid var(--warn);
-    border-radius: 5px; padding: 7px 11px; font-size: 12px; max-width: 380px;
+    background: var(--panel2); border: 1px solid var(--line); border-left: 3px solid var(--warn);
+    border-radius: 7px; padding: 8px 12px; font-size: 12px; max-width: 380px;
+    box-shadow: 0 10px 30px rgba(0,0,0,.5);
   }
-  .alert.error { border-left-color: var(--live); }
+  .alert.error { border-left-color: var(--bad); }
+  .alert.info { border-left-color: var(--accent); }
   #offline {
-    position: fixed; inset: 0; background: rgba(14,16,19,.9); display: none;
+    position: fixed; inset: 0; background: rgba(9,11,14,.92); display: none; z-index: 30;
     align-items: center; justify-content: center; font-size: 15px; color: var(--warn);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    * { transition: none !important; animation: none !important; }
   }
 </style>
 
 <header>
-  <h1>LiveboxMix</h1>
-  <span class="pill">program <b id="pgm">…</b></span>
-  <span class="pill">uptime <b id="uptime">…</b></span>
+  <div class="brand"><i></i>LiveboxMix</div>
+  <div id="tally"><span class="tl">on<br>program</span><span class="tn" id="pgm">…</span></div>
+  <div id="pgmmeter" title="Program bus, peak dBFS. This is what the outputs are carrying.">
+    <span class="cap">pgm<br>audio</span>
+    <div class="hbars" id="meters"></div>
+    <span class="pk num" id="pgmpk"></span>
+  </div>
   <div class="spacer"></div>
-  <span class="pill" id="backend">…</span>
+  <div class="stat"><span class="k">uptime</span><b id="uptime" class="num">…</b></div>
+  <div class="stat"><span class="k">encoder</span><b id="backend">…</b></div>
   <span class="pill" id="adpill" hidden>AD ON AIR</span>
   <span id="desk" hidden>
     <button class="ghost" id="closewin" title="Close this window. The mixer and the stream keep running.">Close window</button>
     <button class="ghost warn" id="stopall" title="Stop the mixer, the stream and this window.">Stop everything</button>
   </span>
-  <button id="cut">Cut to black</button>
+  <button id="cut">Cut to black <kbd>0</kbd></button>
 </header>
 
 <main>
   <div id="stage">
-    <div id="wrap">
-      <img id="mosaic" alt="Multiview">
-      <div id="cells"></div>
+    <div id="viewport">
+      <div id="wrap">
+        <img id="mosaic" alt="Multiview">
+        <div id="cells"></div>
+      </div>
+    </div>
+    <div id="stagebar">
+      <div class="keys">
+        <kbd>1</kbd><kbd>…</kbd><kbd>9</kbd> take a source
+        <span class="sep"></span>
+        <kbd>0</kbd><kbd>Esc</kbd> cut to black
+        <span class="sep"></span>
+        double click a fader for unity
+      </div>
+      <div class="spacer"></div>
+      <div id="gridinfo" class="num"></div>
     </div>
   </div>
   <aside>
-    <section>
-      <h2>Program audio</h2>
-      <div id="meters"></div>
-    </section>
-    <section>
-      <h2>Media</h2>
+    <section class="card">
+      <h2>Media <span class="n" id="medianum"></span></h2>
       <div id="medialist" class="clips"></div>
       <input id="mediafile" type="file" accept="video/*,.mkv,.ts,.flv" hidden>
       <div class="hint" id="uphint" hidden></div>
@@ -217,14 +482,14 @@
         <input id="aduri" placeholder="/path/on/the/server/ad.mp4" spellcheck="false">
       </details>
     </section>
-    <section>
-      <h2>Outputs</h2>
+    <section class="card">
+      <h2>Outputs <span class="n" id="outnum"></span></h2>
       <div id="outputs"></div>
       <details id="addout">
         <summary>Add a destination</summary>
         <input id="noid" placeholder="id (e.g. youtube)" spellcheck="false">
         <input id="nouri" placeholder="rtmp://a.rtmp.youtube.com/live2/KEY" spellcheck="false">
-        <label class="cue" style="margin-top:6px">
+        <label class="cue" style="margin-top:7px">
           policy
           <select id="nopolicy">
             <option value="own">own server (reconnect fast)</option>
@@ -234,20 +499,20 @@
         <div class="adrow"><button id="noadd">Add destination</button></div>
       </details>
     </section>
-    <section>
-      <h2>Sources</h2>
+    <section class="card">
+      <h2>Sources <span class="n" id="srcnum"></span></h2>
       <div id="sources"></div>
       <details id="addsrc">
         <summary>Add a source</summary>
         <div class="seg" id="nskind">
           <button data-kind="web" class="on" title="Render a website, with its audio, as a source">Website</button>
-          <button data-kind="stream" title="RTMP, HLS, DASH, RTSP, SRT">Camera or stream</button>
+          <button data-kind="stream" title="RTMP, HLS, DASH, RTSP, SRT">Camera</button>
           <button data-kind="exec" title="A command line whose output is the source">Command</button>
           <button data-kind="file" title="A video file already on the mixer machine">File</button>
         </div>
         <input id="nsuri" placeholder="Paste the page address, e.g. https://www.youtube.com/watch?v=…" spellcheck="false">
         <input id="nsname" placeholder="name (optional, the site's name by default)" spellcheck="false">
-        <label class="cue" id="nssuperrow" style="margin-top:6px">
+        <label class="cue" id="nssuperrow" style="margin-top:7px">
           page video
           <select id="nssuper">
             <option value="off">browser renders it</option>
@@ -263,9 +528,6 @@
 
 <div id="alerts"></div>
 <div id="offline">Disconnected from the mixer. Retrying…</div>
-<!-- Gives range inputs a tick mark at unity in browsers that draw datalist
-     ticks (Chromium does), on top of the numeric readout every browser gets. -->
-<datalist id="unity-tick"><option value="1"></datalist>
 
 <script data-cfasync="false">
 "use strict";
@@ -376,10 +638,131 @@ function onEvent(ev) {
     // Conversion progress arrives per percent, so the whole list is refetched
     // on a leash rather than on every tick. See loadMediaSoon.
     case "media_changed": loadMediaSoon(); break;
-    case "audio_level": drawMeters(ev.peak_db); break;
+    case "audio_level": takeLevel("program", ev.peak_db); break;
+    // One of these per source, ten times a second. Nine sources is ninety
+    // events a second, so nothing here touches the DOM: the numbers go into a
+    // store and the rAF loop below paints whatever is current when it runs.
+    case "source_audio_level": takeLevel("src:" + ev.source, ev.peak_db); break;
     case "alert": alert_(ev.severity, ev.message); break;
   }
 }
+
+// --- meters ----------------------------------------------------------------
+// A peak meter that draws its level linearly in dB wastes most of its length on
+// silence. These stops give the working range, -20 dBFS to 0 dBFS, about two
+// thirds of the travel, and squeeze -60 dBFS to -40 dBFS into the last tenth
+// where nobody is reading precise numbers anyway.
+const METER_STOPS = [[-60, 0], [-40, .12], [-20, .35], [-10, .60], [-6, .74], [-3, .86], [0, 1]];
+const METER_FLOOR = -60;
+const SCALE_TICKS = [0, -6, -12, -18, -24, -36, -60];
+const REF_DB = -18;
+
+function dbToPos(db) {
+  if (!(db > METER_FLOOR)) return 0;
+  if (db >= 0) return 1;
+  for (let i = 1; i < METER_STOPS.length; i++) {
+    const [d1, p1] = METER_STOPS[i];
+    if (db <= d1) {
+      const [d0, p0] = METER_STOPS[i - 1];
+      return p0 + ((db - d0) / (d1 - d0)) * (p1 - p0);
+    }
+  }
+  return 1;
+}
+
+// Level key -> { peaks, t }. Written by the socket, read by the paint loop.
+const audioLevels = new Map();
+// View id -> view. Two meters can watch the same level key (the program bus is
+// on the header and on the program return cell at the same time), so a view is
+// identified by where it is drawn, not by what it is drawing.
+const meterViews = new Map();
+
+function takeLevel(key, peaks) {
+  if (!Array.isArray(peaks)) return;
+  audioLevels.set(key, { peaks, t: performance.now() });
+  // Channel counts do not change mid-broadcast in practice, but a source that
+  // reopens as mono after being stereo would otherwise paint into bars that
+  // are no longer there. Structure is rebuilt here, never in the paint loop.
+  for (const view of meterViews.values()) {
+    if (view.key === key && view.bars.length !== peaks.length) buildBars(view, peaks.length);
+  }
+}
+
+function makeMeterView(key, host, orient, readout) {
+  const view = { key, host, orient, readout, bars: [], lastPk: null };
+  buildBars(view, 2);
+  return view;
+}
+
+function buildBars(view, n) {
+  view.host.innerHTML = "";
+  view.bars = [];
+  for (let i = 0; i < n; i++) {
+    const mtr = document.createElement("div");
+    mtr.className = "mtr";
+    const fill = document.createElement("i");
+    fill.className = "fill";
+    const hold = document.createElement("b");
+    hold.className = "hold";
+    mtr.append(fill, hold);
+    view.host.appendChild(mtr);
+    view.bars.push({ fill, hold, cur: -120, pk: -120, pkAt: 0, lastP: -1, lastQ: -1 });
+  }
+}
+
+// Real meters fall at a fixed rate rather than following the samples down, or
+// every gap between words reads as silence. The peak line sits still for a
+// moment so a transient is readable, then slides.
+const FALL_DB_PER_S = 60;
+const HOLD_MS = 1100;
+const HOLD_FALL_DB_PER_S = 20;
+
+let lastPaint = 0;
+function paintMeters(ts) {
+  const dt = lastPaint ? Math.min(0.1, (ts - lastPaint) / 1000) : 0;
+  lastPaint = ts;
+  for (const view of meterViews.values()) {
+    const lv = audioLevels.get(view.key);
+    // A source that stopped sending levels (removed, or its audio went away)
+    // must drain rather than freeze with a bar still lit.
+    const stale = !lv || ts - lv.t > 1200;
+    let top = -120;
+    for (let i = 0; i < view.bars.length; i++) {
+      const bar = view.bars[i];
+      const raw = stale ? -120 : lv.peaks[i];
+      const target = typeof raw === "number" && isFinite(raw) ? raw : -120;
+      bar.cur = target >= bar.cur ? target : Math.max(target, bar.cur - FALL_DB_PER_S * dt);
+      if (bar.cur >= bar.pk) { bar.pk = bar.cur; bar.pkAt = ts; }
+      else if (ts - bar.pkAt > HOLD_MS) bar.pk = Math.max(bar.cur, bar.pk - HOLD_FALL_DB_PER_S * dt);
+      if (bar.pk > top) top = bar.pk;
+
+      const p = dbToPos(bar.cur);
+      if (Math.abs(p - bar.lastP) > 0.0015) {
+        bar.lastP = p;
+        bar.fill.style.clipPath = view.orient === "h"
+          ? `inset(0 ${((1 - p) * 100).toFixed(2)}% 0 0)`
+          : `inset(${((1 - p) * 100).toFixed(2)}% 0 0 0)`;
+      }
+      const q = dbToPos(bar.pk);
+      if (Math.abs(q - bar.lastQ) > 0.0015) {
+        bar.lastQ = q;
+        // A percentage translate is measured against the bar's own box, which
+        // is the full track, so this moves the line without a layout pass.
+        bar.hold.style.transform = view.orient === "h"
+          ? `translateX(${(-(1 - q) * 100).toFixed(2)}%)`
+          : `translateY(${((1 - q) * 100).toFixed(2)}%)`;
+      }
+    }
+    if (view.readout) {
+      const txt = top <= METER_FLOOR ? "" : top.toFixed(1);
+      if (txt !== view.lastPk) { view.lastPk = txt; view.readout.textContent = txt; }
+    }
+  }
+  requestAnimationFrame(paintMeters);
+}
+requestAnimationFrame(paintMeters);
+
+meterViews.set("header", makeMeterView("program", $("meters"), "h", $("pgmpk")));
 
 // --- actions ---------------------------------------------------------------
 async function take(source) {
@@ -440,6 +823,7 @@ function fmtDur(ms) {
 function renderMedia() {
   const host = $("medialist");
   if (!media) { host.innerHTML = `<div class="empty">Loading…</div>`; return; }
+  $("medianum").textContent = media.items && media.items.length ? media.items.length : "";
   if (!media.items.length) {
     host.innerHTML = `<div class="empty">${
       media.error
@@ -600,11 +984,22 @@ document.addEventListener("keydown", (e) => {
 // --- rendering -------------------------------------------------------------
 function render() {
   if (!status) return;
-  $("pgm").textContent = status.program ?? "black";
+  const live = status.program != null;
+  // The name, because that is what the operator wrote on the camera. The id is
+  // the mixer's handle for it and means nothing to anyone at the desk.
+  $("pgm").textContent = live ? (currentSource(status.program)?.name ?? status.program) : "black";
+  $("tally").classList.toggle("on", live);
+  document.body.classList.toggle("onair", live);
   $("uptime").textContent = fmtDuration(status.uptime_secs);
   const b = status.backend;
   $("backend").textContent =
     `${b.video_encoder} · ${b.hardware_accelerated ? "hardware" : "software"}`;
+  const mv = status.multiview;
+  $("gridinfo").textContent = mv && mv.enabled
+    ? `${mv.cols} × ${mv.rows} multiview · ${mv.fps} fps`
+    : "multiview off";
+  $("srcnum").textContent = status.sources.length || "";
+  $("outnum").textContent = status.outputs.length || "";
 
   renderCells();
   renderOutputs();
@@ -627,16 +1022,183 @@ function renderAd() {
     : "Pick a clip. Double-click rolls it straight away; set a cue to place it exactly.";
 }
 
-// Cells are positioned as percentages of the mosaic so the overlay tracks the
-// image at any display size, and the server stays the single source of truth
-// for the layout.
+// --- the operator's fader ---------------------------------------------------
+// The slider is a straight line in decibels, because that is what an operator
+// hears and what the printing on a real desk says. Unity sits at three quarters
+// of the travel so the top quarter still has somewhere to go: +20 dB, which is
+// the 10.0 gain ceiling the mixer accepts.
+const FADER_UNITY = 0.75;
+const FADER_BOTTOM_DB = -60;
+const FADER_TOP_DB = 20;
+
+function faderToGain(p) {
+  if (p <= 0.004) return 0;
+  const db = p <= FADER_UNITY
+    ? FADER_BOTTOM_DB + (p / FADER_UNITY) * -FADER_BOTTOM_DB
+    : ((p - FADER_UNITY) / (1 - FADER_UNITY)) * FADER_TOP_DB;
+  return Math.min(10, Math.pow(10, db / 20));
+}
+
+function gainToFader(g) {
+  if (!(g > 0)) return 0;
+  const db = 20 * Math.log10(Math.min(10, g));
+  if (db >= 0) return FADER_UNITY + (db / FADER_TOP_DB) * (1 - FADER_UNITY);
+  return Math.max(0, ((db - FADER_BOTTOM_DB) / -FADER_BOTTOM_DB) * FADER_UNITY);
+}
+
+function gainLabel(g) {
+  if (!(g > 0)) return "off";
+  const db = 20 * Math.log10(g);
+  if (db <= FADER_BOTTOM_DB + 0.5) return "off";
+  return (db > 0.05 ? "+" : "") + db.toFixed(1);
+}
+
+// --- audio state held against the server ------------------------------------
+// audioActive holds the keys currently under the operator's pointer. A status
+// refresh mid-drag must not write the server's value back into the slider they
+// are holding, and it must not replace the node either: the browser has pointer
+// capture on it, and a replacement ends the drag with no way to resume without
+// letting go and grabbing again.
+const audioLocal = new Map();   // key -> last value the operator set
+const audioActive = new Set();  // keys currently overriding the server's value
+const audioTimers = new Map();  // key -> pending debounce timer
+const audioSettle = new Map();  // key -> ignore the server until this time
+
+function audioKey(sourceId, channel) { return `${sourceId} ${channel}`; }
+
+// The value to show: what the operator is holding, then what they set a moment
+// ago and the mixer has not echoed back yet, then the server's own number.
+function audioShown(key, serverValue, fallback) {
+  if (audioActive.has(key)) return audioLocal.get(key);
+  if ((audioSettle.get(key) || 0) > performance.now()) return audioLocal.get(key);
+  return serverValue === undefined || serverValue === null ? fallback : serverValue;
+}
+
+function audioHold(key, value) {
+  audioLocal.set(key, value);
+  // Long enough to cover the debounce plus a round trip, short enough that a
+  // change made anywhere else shows up quickly.
+  audioSettle.set(key, performance.now() + 900);
+}
+
+// A mixer without the gain endpoint answers every one of these, and a dragged
+// fader sends one per debounce tick, so the first refusal is worth saying once
+// and the rest are worth swallowing.
+let audioPostWarned = false;
+async function postAudio(sourceId, body) {
+  try {
+    const r = await api(`/api/sources/${encodeURIComponent(sourceId)}/audio`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    if (!r.ok && !audioPostWarned) {
+      audioPostWarned = true;
+      alert_("warning", `The mixer would not take that fader: ${await r.text()}`);
+    }
+    return r.ok;
+  } catch { return false; }
+}
+
+// A sparse media array (null for the channels that did not move) keeps the
+// request to just the one fader the operator touched, the same "null means
+// leave it alone" convention the add-source form already uses for kind and
+// superimpose.
+function mediaSparse(sourceId, index, value) {
+  const s = status?.sources?.find((s) => s.id === sourceId);
+  const len = Math.max((s?.audio?.media || []).length, index + 1);
+  const arr = new Array(len).fill(null);
+  arr[index] = value;
+  return arr;
+}
+
+function audioBody(channel, sourceId, v) {
+  if (channel === "gain") return { gain: v };
+  if (channel === "muted") return { muted: v };
+  if (channel === "page") return { page: v };
+  return { media: mediaSparse(sourceId, Number(channel.slice(6)), v) };
+}
+
+function sendAudio(sourceId, channel, key) {
+  audioTimers.delete(key);
+  return postAudio(sourceId, audioBody(channel, sourceId, audioLocal.get(key)));
+}
+
+// Wire one slider to one channel. Everything that touches a fader goes through
+// here so the drag guard is in one place rather than repeated per call site.
+function bindFader(input, sourceId, channel, onLocal) {
+  const key = audioKey(sourceId, channel);
+  input.oninput = () => {
+    const v = Number(input.value);
+    audioActive.add(key);
+    audioHold(key, channel === "gain" ? faderToGain(v) : v);
+    if (onLocal) onLocal(audioLocal.get(key));
+    clearTimeout(audioTimers.get(key));
+    audioTimers.set(key, setTimeout(() => sendAudio(sourceId, channel, key), 140));
+  };
+  // "change" fires once when the drag or key press settles, well ahead of the
+  // debounce firing on its own; send the final value right away and only then
+  // let status renders take this fader back over.
+  input.onchange = () => {
+    clearTimeout(audioTimers.get(key));
+    audioHold(key, audioLocal.get(key));
+    sendAudio(sourceId, channel, key).then(releaseFader);
+  };
+  // A fader with no way home is a fader an operator stops trusting.
+  input.ondblclick = (e) => {
+    e.preventDefault();
+    input.value = channel === "gain" ? FADER_UNITY : 1;
+    audioHold(key, 1);
+    if (onLocal) onLocal(1);
+    clearTimeout(audioTimers.get(key));
+    sendAudio(sourceId, channel, key);
+  };
+  return key;
+}
+
+// Whatever was deferred while a pointer was down happens the moment it comes
+// back up, so the panels are never more than one gesture out of date.
+function releaseFader() {
+  audioActive.clear();
+  if (deferredRender) { deferredRender = false; render(); }
+}
+let deferredRender = false;
+
+// --- multiview cells and their channel strips -------------------------------
+// The cells are rebuilt only when the layout itself changes. Everything that
+// moves often (tally, state, gain, mute, meters) is written into nodes that
+// already exist, because rebuilding this overlay two or three times a second
+// would throw away the meter ballistics and any fader under a pointer.
+const cellViews = new Map();
+let cellSig = "";
+
+function cellSignature(mv) {
+  return JSON.stringify(mv.cells.map((c) => [c.index, c.source, c.x, c.y, c.w, c.h]))
+    + "|" + status.sources.map((s) => `${s.id}${s.name}${s.has_audio ? 1 : 0}`).join("");
+}
+
 function renderCells() {
   const mv = status.multiview;
   const host = $("cells");
-  host.innerHTML = "";
-  if (!mv || !mv.enabled || !mv.width) return;
+  if (!mv || !mv.enabled || !mv.width) {
+    if (cellSig !== "") { host.innerHTML = ""; cellViews.clear(); cellSig = ""; dropMeters(new Set()); }
+    return;
+  }
+  const sig = cellSignature(mv);
+  if (sig !== cellSig) {
+    if (audioActive.size) { deferredRender = true; }
+    else { buildCells(mv); cellSig = sig; }
+  }
+  syncCells();
+}
 
+function buildCells(mv) {
+  const host = $("cells");
+  host.innerHTML = "";
+  cellViews.clear();
   const order = status.sources.map((s) => s.id);
+  const keep = new Set();
+
   for (const c of mv.cells) {
     const div = document.createElement("div");
     div.className = "cell";
@@ -645,25 +1207,172 @@ function renderCells() {
     div.style.width = `${(c.w / mv.width) * 100}%`;
     div.style.height = `${(c.h / mv.height) * 100}%`;
 
-    const label = document.createElement("div");
-    label.className = "label";
+    const src = c.source === null ? null : status.sources.find((s) => s.id === c.source);
+    const isProgram = c.source === null;
+    const slot = isProgram ? -1 : order.indexOf(c.source);
+    const meterKey = isProgram ? "program" : "src:" + c.source;
+    keep.add("cell:" + c.index);
 
-    if (c.source === null) {
-      div.classList.add("program-return");
-      label.innerHTML = `<span class="name">PROGRAM</span>`;
-    } else {
-      const src = status.sources.find((s) => s.id === c.source);
-      const slot = order.indexOf(c.source);
-      if (status.program === c.source) div.classList.add("live");
-      div.onclick = () => take(c.source);
-      div.title = src ? `${src.name}: ${src.uri}` : c.source;
-      label.innerHTML =
-        (slot >= 0 && slot < 9 ? `<span class="key">${slot + 1}</span>` : "") +
-        `<span class="name">${escapeHtml(src ? src.name : c.source)}</span>` +
-        `<span class="st ${src ? src.state : ""}">${src ? src.state : "?"}</span>`;
+    const top = document.createElement("div");
+    top.className = "ctop";
+    const key = document.createElement("span");
+    key.className = "key";
+    key.textContent = isProgram ? "PGM" : (slot >= 0 && slot < 9 ? String(slot + 1) : "·");
+    const pk = document.createElement("span");
+    pk.className = "pk num";
+    const st = document.createElement("span");
+    st.className = "st";
+    top.append(key, pk, st);
+
+    const rail = document.createElement("div");
+    rail.className = "rail";
+    const scale = document.createElement("div");
+    scale.className = "scale";
+    for (const db of SCALE_TICKS) {
+      const t = document.createElement("span");
+      t.style.bottom = `${dbToPos(db) * 100}%`;
+      t.textContent = db === 0 ? "0" : String(db);
+      if (db === REF_DB) t.className = "ref";
+      scale.appendChild(t);
     }
-    div.appendChild(label);
+    const wrap = document.createElement("div");
+    wrap.className = "barswrap";
+    const bars = document.createElement("div");
+    bars.className = "bars";
+    const ref = document.createElement("span");
+    ref.className = "ref";
+    ref.style.bottom = `${dbToPos(REF_DB) * 100}%`;
+    wrap.append(bars, ref);
+    rail.append(scale, wrap);
+
+    const bot = document.createElement("div");
+    bot.className = "cbot";
+    const name = document.createElement("div");
+    name.className = "cname";
+    name.textContent = isProgram ? "Program return" : (src ? src.name : c.source);
+    const strip = document.createElement("div");
+    strip.className = "cstrip";
+    bot.append(name, strip);
+
+    const view = { meterKey, source: c.source, isProgram, st, name, rail, top };
+
+    if (!isProgram) {
+      const mute = document.createElement("button");
+      mute.className = "mute";
+      mute.textContent = "M";
+      mute.title = "Mute this source on program";
+      const fader = document.createElement("input");
+      fader.className = "fader";
+      fader.type = "range";
+      fader.min = "0"; fader.max = "1"; fader.step = "0.005";
+      fader.title = "Level for this source. Double click for unity.";
+      const gv = document.createElement("span");
+      gv.className = "gv num";
+      strip.append(mute, fader, gv);
+
+      const hasAudio = !src || src.has_audio !== false;
+      if (!hasAudio) {
+        fader.disabled = true;
+        mute.disabled = true;
+        const na = document.createElement("span");
+        na.className = "noaud";
+        na.textContent = "no audio";
+        rail.replaceChildren(na);
+      }
+      Object.assign(view, { mute, fader, gv, hasAudio });
+
+      bindFader(fader, c.source, "gain", (g) => setGainLabel(view, g, view.mutedShown));
+      mute.onclick = (e) => {
+        e.stopPropagation();
+        const k = audioKey(c.source, "muted");
+        const next = !audioShown(k, currentSource(c.source)?.muted, false);
+        audioHold(k, next);
+        applyMute(view, next);
+        sendAudio(c.source, "muted", k);
+      };
+      // The picture takes the source; the strip does not. An operator dragging
+      // a fader to zero has not asked to put that camera on program.
+      strip.onclick = (e) => e.stopPropagation();
+      strip.ondblclick = (e) => e.stopPropagation();
+      rail.onclick = (e) => e.stopPropagation();
+
+      div.onclick = () => take(c.source);
+      div.title = src ? `${src.name}: ${shownUri(src.uri)}` : c.source;
+    } else {
+      div.classList.add("pgm");
+      div.title = "What is going out right now.";
+    }
+
+    if (view.hasAudio !== false) {
+      meterViews.set("cell:" + c.index, makeMeterView(meterKey, bars, "v", pk));
+    }
+
+    div.append(top, rail, bot);
     host.appendChild(div);
+    cellViews.set(c.index, view);
+  }
+  dropMeters(keep);
+}
+
+// Views that belonged to cells which no longer exist would keep painting into
+// detached nodes forever, and the level store would grow with every source ever
+// added. The header meter is not a cell and survives.
+function dropMeters(keep) {
+  for (const id of [...meterViews.keys()]) {
+    if (id.startsWith("cell:") && !keep.has(id)) meterViews.delete(id);
+  }
+  for (const k of [...audioLevels.keys()]) {
+    if (k !== "program" && ![...meterViews.values()].some((v) => v.key === k)) audioLevels.delete(k);
+  }
+}
+
+function currentSource(id) { return status?.sources?.find((s) => s.id === id); }
+
+function setGainLabel(view, gain, muted) {
+  if (!view.gv) return;
+  view.gv.textContent = muted ? "mute" : gainLabel(gain);
+  view.gv.classList.toggle("unity", !muted && Math.abs(gain - 1) < 0.005);
+  view.gv.classList.toggle("muted", !!muted);
+}
+
+function applyMute(view, muted) {
+  view.mutedShown = muted;
+  view.mute.classList.toggle("on", muted);
+  view.rail.classList.toggle("muted", muted);
+  const g = view.fader ? faderToGain(Number(view.fader.value)) : 1;
+  setGainLabel(view, g, muted);
+}
+
+function syncCells() {
+  for (const view of cellViews.values()) {
+    if (view.isProgram) {
+      const on = status.program != null;
+      view.st.className = "st " + (on ? "live" : "");
+      view.st.textContent = on ? "on air" : "black";
+      view.name.textContent = on
+        ? `Program · ${currentSource(status.program)?.name ?? status.program}`
+        : "Program · black";
+      continue;
+    }
+    const src = currentSource(view.source);
+    const cellEl = view.top.parentElement;
+    cellEl.classList.toggle("live", status.program === view.source);
+    view.st.className = "st " + (src ? src.state : "");
+    view.st.textContent = src ? src.state : "gone";
+    if (!view.fader) continue;
+
+    const gkey = audioKey(view.source, "gain");
+    const mkey = audioKey(view.source, "muted");
+    const muted = !!audioShown(mkey, src ? src.muted : undefined, false);
+    // Writing value into a slider the operator is holding would fight them for
+    // the handle, so audioShown decides whether the server gets a say at all.
+    if (!audioActive.has(gkey)) {
+      const gain = audioShown(gkey, src ? src.gain : undefined, 1);
+      const p = gainToFader(gain);
+      if (Math.abs(Number(view.fader.value) - p) > 0.002) view.fader.value = String(p);
+      setGainLabel(view, gain, muted);
+    }
+    applyMute(view, muted);
   }
 }
 
@@ -724,17 +1433,10 @@ function shownUri(uri) {
   return u;
 }
 
-// --- audio faders for a superimposed source ---------------------------------
-// Present only on a source the mixer decodes itself (see the `audio` field in
-// the status payload). audioActive holds the keys currently under the
-// operator's pointer, so a status refresh mid-drag skips the whole sources
-// panel instead of tearing out the slider they are holding.
-const audioLocal = new Map();   // key -> last value the operator set
-const audioActive = new Set();  // keys currently overriding the server's value
-const audioTimers = new Map();  // key -> pending debounce timer
-
-function audioKey(sourceId, channel) { return `${sourceId} ${channel}`; }
-
+// --- the source list --------------------------------------------------------
+// Level and mute live on the cell now. What is left here is the inventory, plus
+// the inner balance of a superimposed source, which has no cell of its own to
+// hang off: the page's own sound against each video the mixer decodes under it.
 function audioFadersHtml(s) {
   const a = s.audio;
   if (!a) return "";
@@ -745,47 +1447,25 @@ function audioFadersHtml(s) {
 
 function afaderHtml(sourceId, channel, label, serverValue) {
   const key = audioKey(sourceId, channel);
-  const v = audioActive.has(key) ? audioLocal.get(key) : (typeof serverValue === "number" ? serverValue : 1);
-  const unity = Math.abs(v - 1) < 0.001;
+  const v = audioShown(key, typeof serverValue === "number" ? serverValue : undefined, 1);
+  const unity = Math.abs(v - 1) < 0.005;
   return `
     <div class="afader" data-source="${escapeHtml(sourceId)}" data-channel="${escapeHtml(channel)}">
       <span class="al">${escapeHtml(label)}</span>
-      <input type="range" min="0" max="2" step="0.05" value="${v}" list="unity-tick">
+      <input class="fader" type="range" min="0" max="2" step="0.05" value="${v}">
       <span class="av${unity ? " unity" : ""}">${v.toFixed(2)}</span>
     </div>`;
 }
 
-// A sparse media array (null for the channels that did not move) keeps the
-// request to just the one fader the operator touched, the same "null means
-// leave it alone" convention the add-source form already uses for kind and
-// superimpose.
-function mediaSparse(sourceId, index, value) {
-  const s = status?.sources?.find((s) => s.id === sourceId);
-  const len = Math.max((s?.audio?.media || []).length, index + 1);
-  const arr = new Array(len).fill(null);
-  arr[index] = value;
-  return arr;
-}
-
-async function postAudio(sourceId, channel, key) {
-  audioTimers.delete(key);
-  const v = audioLocal.get(key);
-  const body = channel === "page"
-    ? { page: v }
-    : { media: mediaSparse(sourceId, Number(channel.slice(6)), v) };
-  await post(`/api/sources/${encodeURIComponent(sourceId)}/audio`, body);
-}
-
 function renderSources() {
-  // A fader mid-drag holds the browser's pointer capture; replacing its DOM
-  // node out from under the pointer would end the drag with no way to resume
-  // it without letting go and grabbing again. Skip the rebuild until the
-  // operator lets go, then the next status resyncs everything at once.
-  if (audioActive.size) return;
+  // Same hazard as the cells: a slider mid-drag holds pointer capture, and
+  // replacing its node ends the gesture. Defer the rebuild until the operator
+  // lets go, then one render resyncs everything at once.
+  if (audioActive.size) { deferredRender = true; return; }
 
   const host = $("sources");
   host.innerHTML = status.sources.map((s, i) => `
-    <div class="srcrow" data-id="${escapeHtml(s.id)}" title="${escapeHtml(shownUri(s.uri))}">
+    <div class="srcrow${status.program === s.id ? " live" : ""}" data-id="${escapeHtml(s.id)}" title="${escapeHtml(shownUri(s.uri))}">
       ${i < 9 ? `<span class="key">${i + 1}</span>` : ""}
       <span class="nm"><b>${escapeHtml(s.name)}</b></span>
       ${s.superimposed
@@ -808,25 +1488,12 @@ function renderSources() {
   [...host.querySelectorAll(".afader")].forEach((el) => {
     const sourceId = el.dataset.source;
     const channel = el.dataset.channel;
-    const key = audioKey(sourceId, channel);
     const input = el.querySelector("input");
     const out = el.querySelector(".av");
-    input.oninput = () => {
-      const v = Number(input.value);
-      audioActive.add(key);
-      audioLocal.set(key, v);
+    bindFader(input, sourceId, channel, (v) => {
       out.textContent = v.toFixed(2);
-      out.classList.toggle("unity", Math.abs(v - 1) < 0.001);
-      clearTimeout(audioTimers.get(key));
-      audioTimers.set(key, setTimeout(() => postAudio(sourceId, channel, key), 150));
-    };
-    // "change" fires once when the drag or key press settles, well ahead of
-    // the debounce firing on its own; send the final value right away and
-    // only then let status renders take this fader back over.
-    input.onchange = () => {
-      clearTimeout(audioTimers.get(key));
-      postAudio(sourceId, channel, key).then(() => audioActive.delete(key));
-    };
+      out.classList.toggle("unity", Math.abs(v - 1) < 0.005);
+    });
   });
 }
 
@@ -919,20 +1586,6 @@ $("noadd").onclick = async () => {
   const ok = await post("/api/outputs", { id, uri, policy: $("nopolicy").value });
   if (ok) { $("noid").value = ""; $("nouri").value = ""; }
 };
-
-
-function drawMeters(peaks) {
-  const host = $("meters");
-  if (host.children.length !== peaks.length) {
-    host.innerHTML = peaks.map(() => `<div class="meter"><i></i></div>`).join("");
-  }
-  peaks.forEach((db, i) => {
-    // -60 dBFS to 0 dBFS across the width.
-    const pct = Math.max(0, Math.min(100, ((db + 60) / 60) * 100));
-    const bar = host.children[i]?.firstElementChild;
-    if (bar) { bar.style.width = `${pct}%`; bar.classList.toggle("hot", db > -3); }
-  });
-}
 
 function alert_(severity, message) {
   const el = document.createElement("div");
