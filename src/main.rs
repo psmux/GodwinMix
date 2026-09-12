@@ -112,6 +112,11 @@ async fn main() -> Result<()> {
         return Ok(());
     }
 
+    // Before anything is started: the mixer is PID 1 in its container and
+    // inherits every orphan on the box, and a sidecar's grandchildren are
+    // orphaned the moment their parent is killed. See `reap_orphans_if_init`.
+    input::reap_orphans_if_init();
+
     gstreamer::init().context("initialising GStreamer")?;
 
     if args.probe {
