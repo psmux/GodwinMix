@@ -243,7 +243,7 @@
   /* A reference line at -18 dBFS, which is where a well set channel sits. Drawn
      over the bars rather than beside them so the eye can compare without
      tracking sideways to the scale. */
-  .bars .ref {
+  .barswrap > .ref {
     position: absolute; left: -3px; right: -3px; height: 0;
     border-top: 1px dashed rgba(255,255,255,.45); pointer-events: none;
   }
@@ -275,6 +275,25 @@
     .scale span { font-size: 9px; }
     .mtr { width: 8px; }
     .cname { font-size: 13px; }
+  }
+  /* A four cell grid on a big monitor gives tiles the size of a small preview
+     monitor, and a strip drawn for a laptop looks lost on one. */
+  @container cell (min-width: 520px) and (min-height: 290px) {
+    .scale { width: 32px; }
+    .scale span { font-size: 10.5px; }
+    .mtr { width: 11px; }
+    .rail { padding: 4px 9px 4px 0; }
+    .cname { font-size: 15px; }
+    .ctop { padding: 8px 9px 14px; }
+    .cbot { padding: 14px 9px 8px; }
+    .cstrip { gap: 9px; }
+    .key { font-size: 13px; padding: 1px 7px; min-width: 22px; }
+    .st, .ctop .pk { font-size: 11.5px; }
+    .gv { font-size: 12px; width: 46px; }
+    .mute { width: 26px; height: 24px; font-size: 11px; }
+    .fader { height: 24px; }
+    .fader::-webkit-slider-runnable-track { height: 6px; }
+    .fader::-webkit-slider-thumb { width: 13px; height: 22px; margin-top: -8px; }
   }
 
   /* --- sidebar ------------------------------------------------------------ */
@@ -679,13 +698,19 @@ const meterViews = new Map();
 
 function takeLevel(key, peaks) {
   if (!Array.isArray(peaks)) return;
-  audioLevels.set(key, { peaks, t: performance.now() });
-  // Channel counts do not change mid-broadcast in practice, but a source that
-  // reopens as mono after being stereo would otherwise paint into bars that
-  // are no longer there. Structure is rebuilt here, never in the paint loop.
+  let watched = false;
   for (const view of meterViews.values()) {
-    if (view.key === key && view.bars.length !== peaks.length) buildBars(view, peaks.length);
+    if (view.key !== key) continue;
+    watched = true;
+    // Channel counts do not change mid-broadcast in practice, but a source that
+    // reopens as mono after being stereo would otherwise paint into bars that
+    // are no longer there. Structure is rebuilt here, never in the paint loop.
+    if (view.bars.length !== peaks.length) buildBars(view, peaks.length);
   }
+  // Levels for something with no cell on screen have nowhere to go. Keeping
+  // them would leave one entry per source the mixer ever had behind.
+  if (!watched) { audioLevels.delete(key); return; }
+  audioLevels.set(key, { peaks, t: performance.now() });
 }
 
 function makeMeterView(key, host, orient, readout) {
@@ -971,7 +996,14 @@ loadMedia();
 // Number keys take the camera in that slot. Any operator switching cameras
 // will reach for these before they reach for the mouse.
 document.addEventListener("keydown", (e) => {
-  if (e.target.tagName === "INPUT" || e.metaKey || e.ctrlKey || e.altKey) return;
+  // Anything that takes typed characters swallows the key, or a cue time of 30
+  // would cut to camera 3. A fader is not one of those: an operator who has
+  // just set a level still expects the number keys to work, and leaving focus
+  // on the slider they touched would quietly disarm the whole keyboard.
+  const t = e.target;
+  const typing = t.tagName === "TEXTAREA" || t.tagName === "SELECT" || t.isContentEditable
+    || (t.tagName === "INPUT" && t.type !== "range");
+  if (typing || e.metaKey || e.ctrlKey || e.altKey) return;
   if (e.key >= "1" && e.key <= "9") {
     const i = Number(e.key) - 1;
     const s = status?.sources?.[i];
@@ -1173,8 +1205,10 @@ const cellViews = new Map();
 let cellSig = "";
 
 function cellSignature(mv) {
-  return JSON.stringify(mv.cells.map((c) => [c.index, c.source, c.x, c.y, c.w, c.h]))
-    + "|" + status.sources.map((s) => `${s.id}${s.name}${s.has_audio ? 1 : 0}`).join("");
+  return JSON.stringify([
+    mv.cells.map((c) => [c.index, c.source, c.x, c.y, c.w, c.h]),
+    status.sources.map((s) => [s.id, s.name, s.has_audio !== false]),
+  ]);
 }
 
 function renderCells() {
