@@ -446,6 +446,8 @@ mod tests {
             audio_idle_ms: None,
             superimposed: false,
             audio: None,
+            gain: 1.0,
+            muted: false,
         };
         MixerStatus {
             program: Some("cam1".into()),

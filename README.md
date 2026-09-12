@@ -174,6 +174,7 @@ does not exist on one of them is a logged warning rather than a crash.
 | `POST /api/take` | `{"source": "cam1"}`, or `{"source": null}` for black |
 | `POST /api/sources` | add a source at runtime: `{"id","uri","name","kind","superimpose"}` |
 | `DELETE /api/sources/{id}` | remove one |
+| `POST /api/sources/{id}/audio` | `{"gain","muted"}` on any source; `{"page","media"}` only on a superimposed one, 409 otherwise. Every field optional, and only what is named moves. Answers with every value read back off the elements |
 | `POST /api/adbreak` | `{"uri": "/path/to/ad.mp4"}`, optional `at_running_time_ms` and `return_to` |
 | `POST /api/adbreak/end` | cut the ad short and return early |
 | `GET /api/outputs` | destinations and their state |

@@ -2627,6 +2627,8 @@ mod tests {
             stall_timeout_secs: 2.0,
             rtmp_client: RtmpClient::Auto,
             superimpose: Superimpose::Off,
+            gain: 1.0,
+            muted: false,
         }
     }
 

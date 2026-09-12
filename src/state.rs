@@ -62,6 +62,22 @@ pub struct SourceStatus {
     /// JSON, so a snapshot written by an older build still parses.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub audio: Option<SourceAudio>,
+    /// The operator's fader for this source, 0.0 silent through 1.0 unity to a
+    /// ceiling of 10.0. Read back off the volume element rather than remembered,
+    /// so what the UI shows is what the pipeline is doing.
+    #[serde(default = "unity_gain")]
+    pub gain: f64,
+    /// Muted by the operator. Held apart from the fader so that unmuting returns
+    /// the source to where it was rather than to unity.
+    #[serde(default)]
+    pub muted: bool,
+}
+
+/// A fader that has never been moved sits at unity. Spelled out as a serde
+/// default so a snapshot written before the fader existed parses as a desk with
+/// every fader up, which is where those sources actually were.
+pub fn unity_gain() -> f64 {
+    1.0
 }
 
 /// The gains a superimposed source is currently running with.
@@ -77,6 +93,25 @@ pub struct SourceAudio {
     /// One per video the mixer decodes underneath, in the order the page
     /// handed them over.
     pub media: Vec<f64>,
+}
+
+/// What a source's audio controls read back as, which is what the audio
+/// endpoint answers with.
+///
+/// Wider than `SourceAudio` because the fader and the mute apply to every
+/// source, while the page and media balance belongs only to a superimposed one.
+/// Every number here is read off the elements after the request landed, so a
+/// request whose gain was clamped answers with the gain that took effect.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct SourceAudioState {
+    pub gain: f64,
+    pub muted: bool,
+    /// Absent on anything but a superimposed source, which is the only kind
+    /// with separate sounds to balance.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub page: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub media: Option<Vec<f64>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -167,6 +202,10 @@ pub enum Event {
     /// carries no audio, so this is how an operator confirms that what is
     /// going out actually has sound on it.
     AudioLevel { peak_db: Vec<f64> },
+    /// Peak level per channel for one source, in dBFS, measured after the
+    /// operator's fader and before the mute. The mosaic carries no audio, so
+    /// this is what puts a meter beside each picture.
+    SourceAudioLevel { source: SourceId, peak_db: Vec<f64> },
     /// Something went wrong that the operator should see.
     Alert { severity: Severity, message: String },
     /// A file in the media library changed: uploaded, deleted, or its
@@ -315,6 +354,8 @@ mod tests {
                 audio_idle_ms: Some(9),
                 superimposed: true,
                 audio: Some(SourceAudio { page: 0.8, media: vec![1.0, 0.0] }),
+                gain: 0.5,
+                muted: true,
             }],
             outputs: vec![],
             multiview: MultiviewStatus {
@@ -359,6 +400,11 @@ mod tests {
         // faders from the same snapshot it draws the badges from.
         assert_eq!(v["sources"][0]["audio"]["page"], 0.8);
         assert_eq!(v["sources"][0]["audio"]["media"][1], 0.0);
+        // The fader and the mute ride along too, and on every source rather
+        // than only a superimposed one. Always written, never skipped: the UI
+        // draws a fader for every row and needs a number to draw it at.
+        assert_eq!(v["sources"][0]["gain"], 0.5);
+        assert_eq!(v["sources"][0]["muted"], true);
 
         let v: serde_json::Value = serde_json::to_value(Event::Took {
             source: None,
@@ -373,6 +419,19 @@ mod tests {
             serde_json::to_value(Event::AudioLevel { peak_db: vec![-6.0, -7.5] }).unwrap();
         assert_eq!(v["type"], "audio_level");
         assert_eq!(v["peak_db"][1], -7.5);
+
+        // The per-source meter, which the UI matches to a mosaic tile by id.
+        // A different `type` from the program meter on purpose: one drives the
+        // program bar, the other drives a bar per picture.
+        let v: serde_json::Value = serde_json::to_value(Event::SourceAudioLevel {
+            source: "cam1".into(),
+            peak_db: vec![-12.0, -11.4],
+        })
+        .unwrap();
+        assert_eq!(v["type"], "source_audio_level");
+        assert_eq!(v["source"], "cam1");
+        assert_eq!(v["peak_db"][0], -12.0);
+        assert_eq!(v["peak_db"][1], -11.4);
 
         let v: serde_json::Value = serde_json::to_value(Event::OutputStateChanged {
             output: "primary".into(),
@@ -408,6 +467,36 @@ mod tests {
         // Same again for the balance: a row from before it existed reports no
         // levels, which is exactly what a camera reports today.
         assert_eq!(s.audio, None);
+        // The fader defaults to unity and the mute to off, which is where those
+        // sources were before either control existed. A gain defaulting to 0.0
+        // would bring a saved desk back with every source silent.
+        assert_eq!(s.gain, 1.0);
+        assert!(!s.muted);
+    }
+
+    /// The endpoint's answer. The fader and the mute are always there, and the
+    /// balance only on a source that has one: a camera reporting `"page": null`
+    /// would have the UI drawing balance faders that control nothing.
+    #[test]
+    fn the_audio_answer_carries_a_balance_only_when_there_is_one() {
+        let camera = SourceAudioState { gain: 0.75, muted: true, page: None, media: None };
+        let v = serde_json::to_value(&camera).unwrap();
+        assert_eq!(v["gain"], 0.75);
+        assert_eq!(v["muted"], true);
+        assert!(v.get("page").is_none(), "a camera must not carry a page gain");
+        assert!(v.get("media").is_none(), "a camera must not carry media gains");
+
+        let page = SourceAudioState {
+            gain: 1.0,
+            muted: false,
+            page: Some(0.8),
+            media: Some(vec![1.0, 0.0]),
+        };
+        let v = serde_json::to_value(&page).unwrap();
+        assert_eq!(v["page"], 0.8);
+        assert_eq!(v["media"][1], 0.0);
+        let back: SourceAudioState = serde_json::from_value(v).unwrap();
+        assert_eq!(back, page);
     }
 
     /// A source with nothing to balance leaves the key out altogether rather
@@ -428,9 +517,14 @@ mod tests {
             audio_idle_ms: Some(20),
             superimposed: false,
             audio: None,
+            gain: 1.0,
+            muted: false,
         };
         let v = serde_json::to_value(&camera).unwrap();
         assert!(v.get("audio").is_none(), "a camera must not carry a balance");
+        // It does carry a fader though. Every source has one of those.
+        assert_eq!(v["gain"], 1.0);
+        assert_eq!(v["muted"], false);
 
         let page = SourceStatus {
             audio: Some(SourceAudio { page: 0.25, media: vec![1.0] }),
