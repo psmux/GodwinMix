@@ -145,9 +145,16 @@
      source that is feeding program gets a red outline. Program itself gets a
      filled red banner across the top, which no source ever has. Outline means
      this one is going out, filled means this is where it goes. */
-  .cell.pgm { cursor: default; box-shadow: inset 0 0 0 3px var(--live), 0 0 26px rgba(255,42,54,.38); }
-  .cell.pgm:hover { box-shadow: inset 0 0 0 3px var(--live), 0 0 26px rgba(255,42,54,.38); }
-  .cell.pgm .ctop { background: var(--live); padding: 6px 8px; align-items: center; }
+  .cell.pgm { cursor: default; box-shadow: inset 0 0 0 1px rgba(255,42,54,.42); }
+  .cell.pgm:hover { box-shadow: inset 0 0 0 1px rgba(255,42,54,.42); }
+  /* A slim bar in a muted red rather than a heavy frame. A thick saturated
+     border around the one cell an operator looks at for hours pulls the eye
+     constantly and makes the picture inside it harder to judge. The label is
+     what identifies the output, so the colour only has to support it. */
+  .cell.pgm .ctop {
+    background: linear-gradient(rgba(122,18,24,.96), rgba(122,18,24,.86));
+    padding: 5px 8px; align-items: center;
+  }
   /* The banner is the label, so the chip that numbers a source turns into plain
      letterspaced text on it. A chip on a bar of the same colour reads as a hole. */
   .cell.pgm .key {
