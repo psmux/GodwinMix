@@ -1105,9 +1105,9 @@ impl Layers {
         self.comp_caps.set_property("caps", &composed);
         // And the compositor is told that answer directly, so that working out
         // its output caps cannot reach the programme pipeline. See
-        // `answer_caps_here`: this is where a source stopped delivering video
-        // while its sound went on.
-        gstutil::answer_caps_here(&self.comp, &composed)?;
+        // `answer_negotiation_here`: this is where a source stopped delivering
+        // video while its sound went on.
+        gstutil::answer_negotiation_here(&self.comp, &composed)?;
 
         let mut media_pads = Vec::with_capacity(self.media.len());
         for (z, b) in self.media.iter().enumerate() {
@@ -2681,31 +2681,56 @@ fn take_down(mut child: std::process::Child, env: std::collections::BTreeMap<Str
     }
     #[cfg(not(unix))]
     let _ = child.kill();
+
+    // Wait for the direct child to exit, and on unix wait for it without
+    // collecting it. `WNOWAIT` leaves the process a zombie, which keeps its
+    // pid allocated, and its pid is the process group id of everything it
+    // started. Reaping it first and then signalling that group is a signal
+    // sent to whatever the kernel handed the number to next. Collected below,
+    // once there is nothing left to signal.
     let mut clean = false;
+    #[cfg(unix)]
+    let mut signal_group = true;
     while started.elapsed() < CHILD_EXIT_GRACE {
-        match child.try_wait() {
-            // Err is a status somebody else collected; either way there is
-            // nothing left of this process to wait for.
-            Ok(Some(_)) | Err(_) => {
+        #[cfg(unix)]
+        {
+            let mut status = 0i32;
+            let seen = unsafe {
+                libc::waitpid(pid as i32, &mut status, libc::WNOHANG | libc::WNOWAIT)
+            };
+            if seen > 0 {
                 clean = true;
                 break;
             }
-            Ok(None) => std::thread::sleep(Duration::from_millis(50)),
+            if seen < 0 {
+                // Somebody else collected it, so the pid is already free and
+                // the group it named means nothing now.
+                clean = true;
+                signal_group = false;
+                break;
+            }
         }
+        #[cfg(not(unix))]
+        if matches!(child.try_wait(), Ok(Some(_)) | Err(_)) {
+            clean = true;
+            break;
+        }
+        std::thread::sleep(Duration::from_millis(50));
     }
     #[cfg(unix)]
-    unsafe {
-        // Whether it went quietly or not. The direct child is a zombie by now
-        // at the earliest, so its pid is still reserved and the process group
-        // it named still means this tree.
-        libc::killpg(pid as i32, libc::SIGKILL);
-        for stray in &strays {
-            libc::kill(*stray as i32, libc::SIGKILL);
+    if signal_group {
+        unsafe {
+            // Whether it went quietly or not. Either it is still running or it
+            // is a zombie nobody has collected, and in both cases the pid, and
+            // so the group, is still this tree's.
+            libc::killpg(pid as i32, libc::SIGKILL);
+            for stray in &strays {
+                libc::kill(*stray as i32, libc::SIGKILL);
+            }
         }
     }
-    if !clean {
-        let _ = child.wait();
-    }
+    // And now collect it, so it is not a zombie for the life of the mixer.
+    let _ = child.wait();
     remove_browser_profile(&env, pid);
     debug!(
         pid,
@@ -3721,6 +3746,47 @@ mod tests {
         unsafe {
             libc::killpg(child.id() as i32, libc::SIGKILL);
         }
+    }
+
+    /// Every path that dropped an `InputPipeline` without calling `stop` used
+    /// to leak the whole child: a process nobody waited on, and its profile
+    /// directory. There are about thirty fallible steps in `build_kind` after
+    /// the child is started and a dozen more in `Mixer::add_source_with`, and
+    /// an error in any of them took that path. Dropping it has to be enough.
+    #[test]
+    #[cfg(unix)]
+    fn an_abandoned_exec_child_takes_its_process_and_its_profile_with_it() {
+        let _ = gst::init();
+        let tmp = std::env::temp_dir().join(format!("lbx-drop-{}", std::process::id()));
+        std::fs::create_dir_all(&tmp).unwrap();
+        let mut env = std::collections::BTreeMap::new();
+        env.insert("TMPDIR".to_string(), tmp.to_string_lossy().to_string());
+        let spec = ExecSpec { argv: shell_words::split("sh -c 'sleep 120'").unwrap(), env };
+
+        let (_src, child) = make_exec_source("drop-test", &spec).unwrap();
+        let pid = child.child.as_ref().expect("a freshly built child holds its process").id();
+        // The directory the sidecar of this pid would have made for itself.
+        let profile = browser_profile_dir(&spec.env, pid);
+        std::fs::create_dir_all(&profile).unwrap();
+        std::fs::write(profile.join("filler"), b"x").unwrap();
+
+        drop(child);
+
+        // The kill and the cleanup happen on a thread of their own, so that
+        // removing a source does not block the mixer. Wait for them.
+        let began = Instant::now();
+        while began.elapsed() < CHILD_EXIT_GRACE + Duration::from_secs(5) {
+            let alive = unsafe { libc::kill(pid as i32, 0) } == 0;
+            if !alive && !profile.exists() {
+                let _ = std::fs::remove_dir_all(&tmp);
+                return;
+            }
+            std::thread::sleep(Duration::from_millis(50));
+        }
+        let alive = unsafe { libc::kill(pid as i32, 0) } == 0;
+        let left = profile.exists();
+        let _ = std::fs::remove_dir_all(&tmp);
+        panic!("after dropping the child: process alive {alive}, profile left {left}");
     }
 
     #[test]

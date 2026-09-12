@@ -1206,6 +1206,14 @@ impl Mixer {
         cfg.gain = slot.gain();
         cfg.muted = slot.muted();
         let was_program = self.program_source.as_ref() == Some(id);
+        // A frozen frame is only worth freezing if there is one. A source that
+        // stalled before its first picture ever arrived has nothing on its
+        // compositor pad, so holding its branch on air holds nothing: the pad
+        // draws no pixels, the slate under it shows through, and the programme
+        // is black for the whole of the rebuild and for every rebuild after
+        // that. That is the case this counts, and `handed_over` below is what
+        // is done about it.
+        let has_picture = slot.input.last_video.seen() > 0;
         self.log_timeline(id, "about to rebuild", true);
         // The source that is on air keeps its last frame on air. Everything
         // else is removed the way the API removes a source: its pipeline
@@ -1214,11 +1222,21 @@ impl Mixer {
         // thread that pushes this source's frames into the programme; stop the
         // branch while that thread is still pushing and the two wait on each
         // other.
-        let held = was_program && self.cfg.stall.hold_last_frame;
+        let held = was_program && self.cfg.stall.hold_last_frame && has_picture;
         let removed = if held { self.retire_branch(id) } else { self.remove_source(id) };
         if let Err(e) = removed {
             warn!(source = %id, ?e, "could not remove the failed source before building it again");
         }
+        // Nothing of this source's own to look at, so anything else that is
+        // delivering is better than black. After the removal, because until
+        // then this source still holds the programme. The rebuilt source comes
+        // back on programme when it works (see `finish_rebuild`), so this is a
+        // loan and not a decision the operator has to undo.
+        let handed_over = if was_program && !has_picture {
+            self.hand_programme_to_another_source(id)
+        } else {
+            None
+        };
         // Counted after the removal, which clears everything held under this
         // id, and before the attempt, because nothing on this thread finds out
         // whether a rebuild worked: the tick clears this the moment the source
@@ -1227,11 +1245,58 @@ impl Mixer {
         let failures = self.rebuild_failures.entry(id.clone()).or_insert(0);
         *failures += 1;
         let failures = *failures;
-        info!(source = %id, was_program, held, failures, "building the superimposed source again from scratch");
+        info!(
+            source = %id,
+            was_program,
+            held,
+            has_picture,
+            handed_over = ?handed_over,
+            failures,
+            "building the superimposed source again from scratch"
+        );
         self.rebuilding.insert(id.clone(), was_program);
         if let Err(e) = self.begin_add_source(cfg, None) {
             error!(source = %id, ?e, "could not begin building the source again");
             self.rebuilding.remove(id);
+        }
+    }
+
+    /// Put some other live source on programme, for a source that has none of
+    /// its own picture to leave behind.
+    ///
+    /// Returns which one, or None when there is nothing else delivering and
+    /// the slate is the only honest answer. Ordered by the desk, so the choice
+    /// is the operator's own ordering and not an accident of when a source was
+    /// added; and it must have delivered a picture, because taking a second
+    /// source with nothing on its pad would leave the programme exactly as
+    /// black as it was.
+    fn hand_programme_to_another_source(&mut self, avoid: &SourceId) -> Option<SourceId> {
+        let next = self
+            .sources
+            .iter()
+            .find(|s| {
+                &s.input.id != avoid
+                    && s.input.last_video.seen() > 0
+                    && matches!(s.input.observed_state(), SourceState::Live)
+            })
+            .map(|s| s.input.id.clone())?;
+        match self.take(Some(next.clone()), None) {
+            Ok(()) => {
+                warn!(
+                    source = %avoid,
+                    now_on_programme = %next,
+                    "the source being rebuilt never delivered a picture; the programme is on another source meanwhile"
+                );
+                let _ = self.events.send(Event::Alert {
+                    severity: Severity::Warning,
+                    message: format!("{avoid} has no picture to hold; {next} is on programme meanwhile"),
+                });
+                Some(next)
+            }
+            Err(e) => {
+                warn!(source = %next, ?e, "could not hand the programme to another source");
+                None
+            }
         }
     }
 

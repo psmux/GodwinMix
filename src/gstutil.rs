@@ -182,8 +182,8 @@ pub fn answer_latency_here(element: &gst::Element) -> Result<()> {
     Ok(())
 }
 
-/// Answer a CAPS query at this element's src pad instead of letting it travel
-/// downstream, and answer it with `caps`.
+/// Answer this element's downstream negotiation queries at its own src pad
+/// instead of letting them travel, and answer the caps one with `caps`.
 ///
 /// For an aggregator inside a source pipeline this is the difference between
 /// negotiating in microseconds and stopping dead. `gst_aggregator_default_negotiate`
@@ -214,7 +214,7 @@ pub fn answer_latency_here(element: &gst::Element) -> Result<()> {
 /// already. Answering it here makes the source's video independent of what the
 /// programme is doing, which is the property the whole two-pipeline design
 /// exists to give and the one place it was not being had.
-pub fn answer_caps_here(element: &gst::Element, caps: &gst::Caps) -> Result<()> {
+pub fn answer_negotiation_here(element: &gst::Element, caps: &gst::Caps) -> Result<()> {
     let pad = element
         .static_pad("src")
         .with_context(|| format!("{} has no src pad", element.name()))?;
@@ -223,20 +223,39 @@ pub fn answer_caps_here(element: &gst::Element, caps: &gst::Caps) -> Result<()> 
         let Some(query) = info.query_mut() else {
             return gst::PadProbeReturn::Ok;
         };
-        let gst::QueryViewMut::Caps(q) = query.view_mut() else {
-            return gst::PadProbeReturn::Ok;
-        };
-        // Honour the filter the asker sent, as a real peer would: the
-        // aggregator passes its own template caps and expects an answer
-        // inside them.
-        let result = match q.filter() {
-            Some(filter) => filter.intersect_with_mode(&answer, gst::CapsIntersectMode::First),
-            None => answer.clone(),
-        };
-        q.set_result(&result);
-        gst::PadProbeReturn::Handled
+        match query.view_mut() {
+            gst::QueryViewMut::Caps(q) => {
+                // Honour the filter the asker sent, as a real peer would: the
+                // aggregator passes its own template caps and expects an
+                // answer inside them.
+                let result = match q.filter() {
+                    Some(filter) => {
+                        filter.intersect_with_mode(&answer, gst::CapsIntersectMode::First)
+                    }
+                    None => answer.clone(),
+                };
+                q.set_result(&result);
+                gst::PadProbeReturn::Handled
+            }
+            // Every successful caps negotiation is followed by
+            // `gst_aggregator_do_allocation`, which sends an allocation query
+            // down the same road and so across the same proxy. Answered here
+            // with nothing on offer, which is what the aggregator already
+            // copes with: the query failing outright is "not a problem, just
+            // debug a little" in its own words, and this is the same outcome
+            // without the wait. Nothing downstream of these aggregators offers
+            // a pool worth having anyway; the next element is a plain
+            // videoconvert in system memory.
+            //
+            // Measured: with the caps query answered here but this one still
+            // crossing, every superimposed source on the rig was judged
+            // stalled two to three seconds after its first picture, every
+            // round, and recovered.
+            gst::QueryViewMut::Allocation(_) => gst::PadProbeReturn::Handled,
+            _ => gst::PadProbeReturn::Ok,
+        }
     })
-    .context("installing the caps answer on an aggregator")?;
+    .context("installing the negotiation answer on an aggregator")?;
     Ok(())
 }
 
@@ -512,6 +531,80 @@ mod tests {
 
     fn init() {
         let _ = gst::init();
+    }
+
+    /// A proxy source whose other pipeline is not there cannot answer a
+    /// latency query, and one unanswerable source pad fails the query for the
+    /// whole programme (`gst_pad_query_latency_default`). That is the state
+    /// every source is in while it is being built, torn down, or held with its
+    /// last frame on air. The answer has to come from this side.
+    #[test]
+    fn a_latency_query_is_answered_without_the_other_pipeline() {
+        init();
+        let pipeline = gst::Pipeline::with_name("latency-answer");
+        let proxy = make("proxysrc", "la-proxy").unwrap();
+        let sink = make("fakesink", "la-sink").unwrap();
+        pipeline.add_many([&proxy, &sink]).unwrap();
+        proxy.link(&sink).unwrap();
+        let src = proxy.static_pad("src").unwrap();
+
+        // As it stands, with nothing on the other side of the proxy.
+        let mut query = gst::query::Latency::new();
+        let before = src.query(&mut query);
+
+        answer_latency_here(&proxy).unwrap();
+        let mut query = gst::query::Latency::new();
+        assert!(src.query(&mut query), "the answer should stand in for the other pipeline");
+        let (live, min, max) = query.result();
+        assert!(live, "the programme is live");
+        assert_eq!(min, gst::ClockTime::ZERO, "the join itself adds nothing");
+        assert!(max.is_none(), "and imposes no ceiling");
+        // Not asserted the other way round: an unconfigured proxysrc answering
+        // at all is a detail of that element, and the point of this is that it
+        // no longer matters either way.
+        let _ = before;
+    }
+
+    /// The caps answer has to actually short-circuit the query, or the fix is
+    /// a comment. Downstream here says I420 and the answer says AYUV: if the
+    /// query still travelled, the answer would be I420.
+    #[test]
+    fn an_answered_negotiation_query_never_reaches_downstream() {
+        init();
+        let pipeline = gst::Pipeline::with_name("caps-answer");
+        let comp = make_live_aggregator("compositor", "ca-comp").unwrap();
+        let downstream = capsfilter(
+            "ca-filter",
+            &gst::Caps::builder("video/x-raw").field("format", "I420").build(),
+        )
+        .unwrap();
+        let sink = make("fakesink", "ca-sink").unwrap();
+        pipeline.add_many([&comp, &downstream, &sink]).unwrap();
+        gst::Element::link_many([&comp, &downstream, &sink]).unwrap();
+
+        let answer = gst::Caps::builder("video/x-raw")
+            .field("format", "AYUV")
+            .field("width", 1280i32)
+            .field("height", 720i32)
+            .build();
+        answer_negotiation_here(&comp, &answer).unwrap();
+
+        let src = comp.static_pad("src").unwrap();
+        let got = src.peer_query_caps(None);
+        assert_eq!(got, answer, "the query should have been answered here");
+
+        // And a filter is honoured, the way a real peer would honour it: the
+        // aggregator sends its whole template and expects an answer inside it.
+        let filter = gst::Caps::builder("video/x-raw").field("width", 1280i32).build();
+        let got = src.peer_query_caps(Some(&filter));
+        assert!(got.is_subset(&filter), "answer {got} is outside the filter {filter}");
+        assert!(!got.is_empty(), "the filter and the answer do intersect");
+
+        // And the allocation query that follows every negotiation is answered
+        // here too, with nothing on offer.
+        let mut alloc = gst::query::Allocation::new(Some(&answer), true);
+        assert!(src.peer_query(&mut alloc), "the allocation query should be answered here");
+        assert_eq!(alloc.allocation_pools().count(), 0, "nothing was offered, and that is the answer");
     }
 
     #[test]
