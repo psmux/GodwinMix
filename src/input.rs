@@ -240,7 +240,7 @@ pub struct InputPipeline {
     /// The child process behind an `exec:` source. Killed when the source is
     /// stopped or restarted, so a rebuilt pipeline never leaves an orphan
     /// writing into a pipe nobody reads.
-    exec_child: Mutex<Option<std::process::Child>>,
+    exec_child: Mutex<Option<ExecChild>>,
     /// How to start (and restart) the process behind an exec source.
     exec: Option<ExecSpec>,
     #[allow(dead_code)]
@@ -589,7 +589,7 @@ pub fn probe_page_media(id: &SourceId, spec: &ExecSpec, timeout: Duration) -> Op
     };
     let Some(err) = child.stderr.take() else {
         warn!(source = %id, "probe child has no stderr; rendering the page whole");
-        stop_process_group(child.id());
+        stop_child(child.id(), &spec.env);
         #[cfg(not(unix))]
         let _ = child.kill();
         let _ = child.wait();
@@ -597,22 +597,16 @@ pub fn probe_page_media(id: &SourceId, spec: &ExecSpec, timeout: Duration) -> Op
     };
 
     // The read happens on its own thread because a pipe read cannot be given a
-    // deadline. The thread ends when the pipe closes, which the kill below
-    // guarantees, or when this function returns and drops the receiver.
+    // deadline. `StderrReader` is what makes that thread and its descriptor go
+    // away for certain: the kill below closes the pipe only if nothing the
+    // sidecar started is still holding the write end, and on air on
+    // 2026-09-12 plenty were.
     let (tx, rx) = std::sync::mpsc::channel();
-    std::thread::Builder::new()
-        .name(format!("media-probe-{id}"))
-        .spawn(move || {
-            use std::io::BufRead;
-            for line in std::io::BufReader::new(err).lines().map_while(Result::ok) {
-                if let Some(report) = media_report(&line) {
-                    if tx.send(report).is_err() {
-                        return;
-                    }
-                }
-            }
-        })
-        .ok();
+    let mut reader = StderrReader::spawn(format!("media-probe-{id}"), err, move |line| {
+        if let Some(report) = media_report(line) {
+            let _ = tx.send(report);
+        }
+    });
 
     let started = Instant::now();
     let deadline = started + timeout;
@@ -649,10 +643,11 @@ pub fn probe_page_media(id: &SourceId, spec: &ExecSpec, timeout: Duration) -> Op
         }
     }
 
-    stop_process_group(child.id());
+    stop_child(child.id(), &spec.env);
     #[cfg(not(unix))]
     let _ = child.kill();
     let _ = child.wait();
+    reader.stop();
     // Fetch each clip once, and keep only what can actually be played. A video
     // whose address turns out to be dead (a 404 was the case that found this)
     // is left to the browser rather than built into a layer that fails and
@@ -1642,7 +1637,7 @@ impl InputPipeline {
         overlay: Option<MediaReport>,
     ) -> Result<Self> {
         let id = cfg.id.clone();
-        let mut exec_child: Option<std::process::Child> = None;
+        let mut exec_child: Option<ExecChild> = None;
         // A page is rendered by the sidecar when there is one, and the sidecar
         // is just another process writing a container to stdout. From here on
         // such a source is an exec source in every respect.
@@ -2052,13 +2047,24 @@ impl InputPipeline {
     }
 
     fn kill_exec_child(&self) {
-        let Some(mut child) = self.exec_child.lock().take() else { return };
-        stop_process_group(child.id());
+        let Some(mut held) = self.exec_child.lock().take() else { return };
+        let env = self.exec.as_ref().map(|s| s.env.clone()).unwrap_or_default();
+        stop_child(held.child.id(), &env);
         // Where there is no process group to signal, end the process itself.
         // Chromium's own helper processes watch their parent and follow it.
         #[cfg(not(unix))]
-        let _ = child.kill();
-        let _ = child.wait();
+        let _ = held.child.kill();
+        let _ = held.child.wait();
+        // Then everything of ours that the child's death does not close by
+        // itself: the thread reading its stderr, which a surviving grandchild
+        // holding the write end would otherwise keep alive for good, and the
+        // descriptor the source element was reading, which `fdsrc` never
+        // closes because it did not open it. Two descriptors a build, measured
+        // over thirty add and remove cycles on this machine before and after.
+        if let Some(r) = held.stderr.as_mut() {
+            r.stop();
+        }
+        held.stdout.take();
         debug!(source = %self.id, "stopped exec child process");
     }
 
@@ -2136,9 +2142,9 @@ impl InputPipeline {
         if let Some(spec) = &self.exec {
             self.kill_exec_child();
             match spawn_exec(&self.id, spec) {
-                Ok((out, child)) => {
-                    attach_exec_stdout(&self.id, &self.source.lock(), out);
-                    *self.exec_child.lock() = Some(child);
+                Ok((out, child, stderr)) => {
+                    let stdout = attach_exec_stdout(&self.id, &self.source.lock(), out);
+                    *self.exec_child.lock() = Some(ExecChild { child, stdout, stderr });
                 }
                 Err(e) => {
                     warn!(source = %self.id, ?e, "could not restart exec source");
@@ -2397,6 +2403,51 @@ fn route_pads(
     });
 }
 
+/// The private profile directory a sidecar of this pid would have made.
+///
+/// The sidecar picks it from its own pid (`browser/src/main.rs`, `opts`) and
+/// removes it when its message loop ends. `stop_process_group` never lets it
+/// get that far: SIGTERM is not handled inside CEF's loop and SIGKILL cannot
+/// be, so every run left its profile behind. On air on 2026-09-12 that was
+/// 1084 directories and 18 GB of a container's disk. Removing it here is the
+/// only place that knows both the pid and that the process is now dead.
+///
+/// `TMPDIR` from the spec's environment where there is one, because the child
+/// resolved its own temp directory with the environment we gave it; otherwise
+/// ours. An operator who passes `--cache-dir` in `browser.args` puts the
+/// profile somewhere this cannot predict, and then this is a no-op and the
+/// sidecar's own cleanup is all there is.
+fn browser_profile_dir(
+    env: &std::collections::BTreeMap<String, String>,
+    pid: u32,
+) -> std::path::PathBuf {
+    let base = env
+        .get("TMPDIR")
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(std::env::temp_dir);
+    base.join(format!("lbx-browser-{pid}"))
+}
+
+/// Stop a child, everything it started, and the profile directory it was too
+/// dead to remove itself.
+fn stop_child(pid: u32, env: &std::collections::BTreeMap<String, String>) {
+    stop_process_group(pid);
+    remove_browser_profile(env, pid);
+}
+
+/// Take the profile directory of a sidecar that is already dead.
+fn remove_browser_profile(env: &std::collections::BTreeMap<String, String>, pid: u32) {
+    let dir = browser_profile_dir(env, pid);
+    match std::fs::remove_dir_all(&dir) {
+        Ok(()) => debug!(path = %dir.display(), "removed the sidecar's profile directory"),
+        // Not a browser source, or the sidecar got there first. Either is fine;
+        // anything else is worth knowing about, because it is disk that will
+        // not come back on its own.
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+        Err(e) => warn!(path = %dir.display(), ?e, "could not remove the sidecar's profile directory"),
+    }
+}
+
 /// Stop a child and everything it started.
 ///
 /// `Child::kill` sends SIGKILL to one process, which a shell script cannot trap
@@ -2425,6 +2476,174 @@ fn stop_process_group(pid: u32) {
 
 #[cfg(not(unix))]
 fn stop_process_group(_pid: u32) {}
+
+/// A thread reading a child's stderr, and the means to end it.
+///
+/// A pipe read cannot be given a deadline, and the write end of a child's
+/// stderr is not only the child's: Chromium's helper processes inherit it, and
+/// on air on 2026-09-12 enough of them outlived the kill that the reader
+/// threads never saw an end of file. Each survivor cost a thread and the read
+/// end of a pipe, which is half of the two descriptors a rebuild leaked. So the
+/// read is non-blocking with a poll in front of it, the thread checks a flag,
+/// and `stop` joins it: when that returns, the descriptor is closed, whether or
+/// not anything is still holding the other end.
+struct StderrReader {
+    stop: Arc<AtomicBool>,
+    join: Option<std::thread::JoinHandle<()>>,
+}
+
+impl StderrReader {
+    /// Read `err` line by line, handing each to `on_line`, until the pipe ends
+    /// or `stop` is called.
+    fn spawn(
+        name: String,
+        err: std::process::ChildStderr,
+        mut on_line: impl FnMut(&str) + Send + 'static,
+    ) -> Self {
+        let stop = Arc::new(AtomicBool::new(false));
+        let flag = stop.clone();
+        let join = std::thread::Builder::new()
+            .name(name)
+            .spawn(move || drain_stderr(err, &flag, &mut on_line))
+            .ok();
+        Self { stop, join }
+    }
+
+    /// End the thread and close the pipe. Blocks for up to one poll interval.
+    fn stop(&mut self) {
+        self.stop.store(true, Ordering::SeqCst);
+        if let Some(j) = self.join.take() {
+            let _ = j.join();
+        }
+    }
+}
+
+impl Drop for StderrReader {
+    fn drop(&mut self) {
+        self.stop();
+    }
+}
+
+/// How long the reader parks between looks at the stop flag. Long enough that
+/// an idle child costs nothing measurable, short enough that stopping a source
+/// is not something an operator notices.
+const STDERR_POLL_MS: i32 = 200;
+
+#[cfg(unix)]
+fn drain_stderr(
+    mut err: std::process::ChildStderr,
+    stop: &AtomicBool,
+    on_line: &mut impl FnMut(&str),
+) {
+    use std::io::Read;
+    use std::os::fd::AsRawFd;
+    let fd = err.as_raw_fd();
+    // Non-blocking, so a read never parks this thread past the flag above.
+    unsafe {
+        let flags = libc::fcntl(fd, libc::F_GETFL);
+        if flags >= 0 {
+            libc::fcntl(fd, libc::F_SETFL, flags | libc::O_NONBLOCK);
+        }
+    }
+    let mut pending: Vec<u8> = Vec::new();
+    let mut buf = [0u8; 8192];
+    while !stop.load(Ordering::SeqCst) {
+        let mut pfd = libc::pollfd { fd, events: libc::POLLIN, revents: 0 };
+        let ready = unsafe { libc::poll(&mut pfd, 1, STDERR_POLL_MS) };
+        if ready < 0 {
+            let e = std::io::Error::last_os_error();
+            if e.kind() == std::io::ErrorKind::Interrupted {
+                continue;
+            }
+            break;
+        }
+        if ready == 0 {
+            continue;
+        }
+        match err.read(&mut buf) {
+            Ok(0) => break, // Every writer has let go.
+            Ok(n) => {
+                pending.extend_from_slice(&buf[..n]);
+                while let Some(nl) = pending.iter().position(|b| *b == b'\n') {
+                    let line: Vec<u8> = pending.drain(..=nl).collect();
+                    on_line(String::from_utf8_lossy(&line[..nl]).trim_end().as_ref());
+                }
+                // A child writing megabytes without a newline must not grow
+                // this without bound. Nothing either caller reads is near it.
+                if pending.len() > 1 << 20 {
+                    pending.clear();
+                }
+            }
+            Err(e)
+                if matches!(
+                    e.kind(),
+                    std::io::ErrorKind::WouldBlock | std::io::ErrorKind::Interrupted
+                ) => {}
+            Err(_) => break,
+        }
+    }
+    if !pending.is_empty() {
+        on_line(String::from_utf8_lossy(&pending).trim_end().as_ref());
+    }
+    // `err` drops here, and with it the read end of the pipe.
+}
+
+#[cfg(not(unix))]
+fn drain_stderr(
+    err: std::process::ChildStderr,
+    _stop: &AtomicBool,
+    on_line: &mut impl FnMut(&str),
+) {
+    use std::io::BufRead;
+    for line in std::io::BufReader::new(err).lines().map_while(Result::ok) {
+        on_line(&line);
+    }
+}
+
+/// Reap orphans when this process is the container's init.
+///
+/// The mixer runs as PID 1 in its container, and PID 1 inherits every orphan
+/// on the box. The sidecar's own grandchildren are orphaned the moment
+/// `stop_process_group` takes their parent, and nothing was reaping them: on
+/// air on 2026-09-12 there were 19,138 zombies after two hours, each one a
+/// process table entry that the kernel will not release until somebody waits
+/// on it. `init: true` in the compose file fixes it from outside; this fixes
+/// it whether or not anybody remembered to.
+///
+/// A tick rather than a SIGCHLD handler on purpose. Almost nothing is legal
+/// inside a signal handler, and the cost of asking once a second is one
+/// syscall that returns immediately when there is nothing to collect.
+#[cfg(unix)]
+pub fn reap_orphans_if_init() {
+    if unsafe { libc::getpid() } != 1 {
+        return;
+    }
+    info!("running as pid 1: reaping orphaned processes");
+    std::thread::Builder::new()
+        .name("reaper".into())
+        .spawn(|| loop {
+            // `Child::wait` at the call sites may lose the race for a status
+            // this collects first. Both of them ignore what it returns, which
+            // is the only reason a blanket reaper is safe here.
+            let mut reaped = 0u32;
+            loop {
+                let mut status = 0i32;
+                let pid = unsafe { libc::waitpid(-1, &mut status, libc::WNOHANG) };
+                if pid <= 0 {
+                    break;
+                }
+                reaped += 1;
+            }
+            if reaped > 0 {
+                debug!(reaped, "reaped orphaned processes");
+            }
+            std::thread::sleep(Duration::from_secs(1));
+        })
+        .ok();
+}
+
+#[cfg(not(unix))]
+pub fn reap_orphans_if_init() {}
 
 /// Start a command in its own process group, with its stderr on a pipe.
 ///
@@ -2459,9 +2678,35 @@ fn exec_process(spec: &ExecSpec, stdout: std::process::Stdio) -> Result<std::pro
 /// GStreamer element could read (the pipe is a HANDLE, and the C runtime's
 /// descriptor table is per DLL), so there a thread of ours reads the pipe and
 /// pushes into an `appsrc`. Same bytes, same downstream.
+/// What the mixer holds on to for a running exec child. All three go together:
+/// the process, the descriptor its picture comes down, and the thread reading
+/// its complaints. Before this they were three separate lifetimes and two of
+/// them outlived the process.
+struct ExecChild {
+    child: std::process::Child,
+    /// The read end of the child's stdout, held for as long as the element
+    /// reads it. See `ExecStdout`.
+    stdout: ExecStdoutHeld,
+    stderr: Option<StderrReader>,
+}
+
+/// Whatever has to be kept alive to keep the source element reading. On unix
+/// that is the descriptor itself; on Windows a reader thread owns the pipe and
+/// there is nothing left over to hold.
+#[cfg(unix)]
+type ExecStdoutHeld = Option<std::os::fd::OwnedFd>;
+#[cfg(not(unix))]
+type ExecStdoutHeld = Option<std::convert::Infallible>;
+
+/// The descriptor stays owned. `into_raw_fd` gave it away, and `fdsrc` never
+/// closes a descriptor it did not open itself (it only closes its own, from
+/// the `fd://` URI handler), so every exec child ever started left the read
+/// end of its stdout pipe open in this process: one of the two descriptors a
+/// rebuild leaked on air on 2026-09-12. Held here instead, so that killing the
+/// child closes it.
 enum ExecStdout {
     #[cfg(unix)]
-    Fd(i32),
+    Fd(std::os::fd::OwnedFd),
     #[cfg(not(unix))]
     Pipe(std::process::ChildStdout),
 }
@@ -2473,35 +2718,24 @@ enum ExecStdout {
 /// `decodebin`, which picks up the raised ranks of whatever hardware decoder
 /// this machine has, so an exec source is accelerated on a GPU box and falls
 /// back to software on one without, exactly like every other source.
-fn spawn_exec(id: &str, spec: &ExecSpec) -> Result<(ExecStdout, std::process::Child)> {
+fn spawn_exec(id: &str, spec: &ExecSpec) -> Result<(ExecStdout, std::process::Child, Option<StderrReader>)> {
     let mut child = exec_process(spec, std::process::Stdio::piped())?;
 
-    if let Some(err) = child.stderr.take() {
-        let id = id.to_string();
-        std::thread::Builder::new()
-            .name(format!("exec-stderr-{id}"))
-            .spawn(move || {
-                use std::io::BufRead;
-                for line in std::io::BufReader::new(err).lines().map_while(Result::ok) {
-                    debug!(source = %id, "{line}");
-                }
-            })
-            .ok();
-    }
+    let stderr = child.stderr.take().map(|err| {
+        let name = id.to_string();
+        StderrReader::spawn(format!("exec-stderr-{id}"), err, move |line| {
+            debug!(source = %name, "{line}");
+        })
+    });
 
     let stdout = child.stdout.take().context("child produced no stdout")?;
     #[cfg(unix)]
-    let out = {
-        // Hand the descriptor to GStreamer. `into_raw_fd` gives up Rust's
-        // ownership so the pipe is not closed when this goes out of scope.
-        use std::os::fd::IntoRawFd;
-        ExecStdout::Fd(stdout.into_raw_fd())
-    };
+    let out = ExecStdout::Fd(std::os::fd::OwnedFd::from(stdout));
     #[cfg(not(unix))]
     let out = ExecStdout::Pipe(stdout);
     let program = spec.argv.first().map(String::as_str).unwrap_or_default();
     info!(source = %id, %program, "started exec source");
-    Ok((out, child))
+    Ok((out, child, stderr))
 }
 
 /// Reads of the exec pipe, in frame-sized bites rather than the 4 KB default.
@@ -2545,14 +2779,18 @@ fn new_exec_source(id: &str) -> Result<gst::Element> {
 /// Called when the source is built and again on every restart, when the old
 /// child is gone and a new one has been started: the element stays, the pipe
 /// behind it changes.
+/// Returns the descriptor to be held for as long as the element reads it. See
+/// `ExecStdout`.
 #[cfg(unix)]
-fn attach_exec_stdout(_id: &str, src: &gst::Element, out: ExecStdout) {
+fn attach_exec_stdout(_id: &str, src: &gst::Element, out: ExecStdout) -> ExecStdoutHeld {
+    use std::os::fd::AsRawFd;
     let ExecStdout::Fd(fd) = out;
-    src.set_property("fd", fd);
+    src.set_property("fd", fd.as_raw_fd());
+    Some(fd)
 }
 
 #[cfg(not(unix))]
-fn attach_exec_stdout(id: &str, src: &gst::Element, out: ExecStdout) {
+fn attach_exec_stdout(id: &str, src: &gst::Element, out: ExecStdout) -> ExecStdoutHeld {
     use std::collections::HashMap;
     use std::io::Read;
     // One reader per element at a time. A restart starts a new child and a
@@ -2601,11 +2839,11 @@ fn attach_exec_stdout(id: &str, src: &gst::Element, out: ExecStdout) {
         .ok();
 }
 
-fn make_exec_source(id: &str, spec: &ExecSpec) -> Result<(gst::Element, std::process::Child)> {
-    let (out, child) = spawn_exec(id, spec)?;
+fn make_exec_source(id: &str, spec: &ExecSpec) -> Result<(gst::Element, ExecChild)> {
+    let (out, child, stderr) = spawn_exec(id, spec)?;
     let src = new_exec_source(id)?;
-    attach_exec_stdout(id, &src, out);
-    Ok((src, child))
+    let stdout = attach_exec_stdout(id, &src, out);
+    Ok((src, ExecChild { child, stdout, stderr }))
 }
 
 /// Build a headless browser rendering a page as a live source.
@@ -2979,16 +3217,77 @@ mod tests {
         assert!(ExecSpec::from_uri("exec:", true).is_err());
     }
 
+    /// The sidecar names its profile from its own pid and removes it when its
+    /// message loop ends, which a killed sidecar never reaches. 1084 of them
+    /// were left in a container's /tmp on 2026-09-12, 18 GB of it.
+    #[test]
+    fn a_killed_sidecars_profile_directory_is_taken_with_it() {
+        let tmp = std::env::temp_dir().join(format!("lbx-profile-test-{}", std::process::id()));
+        std::fs::create_dir_all(&tmp).unwrap();
+        let env: std::collections::BTreeMap<String, String> =
+            [("TMPDIR".to_string(), tmp.to_string_lossy().to_string())].into_iter().collect();
+
+        let dir = browser_profile_dir(&env, 4242);
+        assert_eq!(dir, tmp.join("lbx-browser-4242"));
+        // A profile is a tree, not a file, and CEF leaves it locked open until
+        // the process goes; nothing here may assume it is empty.
+        std::fs::create_dir_all(dir.join("Default/Cache")).unwrap();
+        std::fs::write(dir.join("Default/Cache/data_0"), vec![0u8; 4096]).unwrap();
+        remove_browser_profile(&env, 4242);
+        assert!(!dir.exists(), "the profile directory should be gone");
+
+        // And doing it again, or for a source that never had one, is quiet.
+        remove_browser_profile(&env, 4242);
+        remove_browser_profile(&env, 9999);
+        let _ = std::fs::remove_dir_all(&tmp);
+    }
+
+    /// The write end of a child's stderr belongs to every process that
+    /// inherited it, so killing the child it was opened for does not
+    /// necessarily close it. Before the poll went in, a reader thread in that
+    /// position never returned: a thread and a descriptor gone for the life of
+    /// the mixer, every rebuild.
+    #[test]
+    #[cfg(unix)]
+    fn the_stderr_reader_ends_even_when_a_grandchild_holds_the_pipe() {
+        // `sh` exits at once and leaves a background process holding stderr.
+        let spec = ExecSpec::from_uri(
+            "exec:sh -c 'sleep 30 >/dev/null 2>&1 & echo hello 1>&2; exit 0'",
+            true,
+        )
+        .unwrap();
+        let mut child = exec_process(&spec, std::process::Stdio::null()).unwrap();
+        let err = child.stderr.take().unwrap();
+        let (tx, rx) = std::sync::mpsc::channel();
+        let mut reader = StderrReader::spawn("test-stderr".into(), err, move |line| {
+            let _ = tx.send(line.to_string());
+        });
+        assert_eq!(rx.recv_timeout(Duration::from_secs(5)).unwrap(), "hello");
+        let _ = child.wait();
+
+        // The background `sleep` still holds the write end, so there is no end
+        // of file to wait for. Stopping must return anyway, and quickly.
+        let began = Instant::now();
+        reader.stop();
+        assert!(
+            began.elapsed() < Duration::from_secs(2),
+            "stopping took {:?}",
+            began.elapsed()
+        );
+        stop_process_group(child.id());
+    }
+
     #[test]
     #[cfg(unix)] // `sh`, and a descriptor to read back; Windows hands a pipe to a reader thread instead
     fn an_enabled_exec_source_starts_its_process() {
         let spec = ExecSpec::from_uri("exec:sh -c 'printf hello; sleep 5'", true).unwrap();
-        let (ExecStdout::Fd(fd), mut child) = spawn_exec("s", &spec).unwrap();
-        assert!(fd > 2, "should hand back a real pipe descriptor, got {fd}");
-        // The descriptor is GStreamer's now; read it back to prove it is live.
+        let (ExecStdout::Fd(fd), mut child, _err) = spawn_exec("s", &spec).unwrap();
+        use std::os::fd::AsRawFd;
+        assert!(fd.as_raw_fd() > 2, "should hand back a real pipe descriptor");
+        // The element reads this descriptor but does not own it; read it back
+        // here to prove it is live, without taking it away.
         use std::io::Read;
-        use std::os::fd::FromRawFd;
-        let mut f = unsafe { std::fs::File::from_raw_fd(fd) };
+        let mut f = std::fs::File::from(fd);
         let mut buf = [0u8; 5];
         f.read_exact(&mut buf).unwrap();
         assert_eq!(&buf, b"hello");
