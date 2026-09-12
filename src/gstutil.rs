@@ -182,6 +182,64 @@ pub fn answer_latency_here(element: &gst::Element) -> Result<()> {
     Ok(())
 }
 
+/// Answer a CAPS query at this element's src pad instead of letting it travel
+/// downstream, and answer it with `caps`.
+///
+/// For an aggregator inside a source pipeline this is the difference between
+/// negotiating in microseconds and stopping dead. `gst_aggregator_default_negotiate`
+/// begins with `gst_pad_peer_query_caps (srcpad, template_caps)`, and the
+/// template caps of a compositor's src pad are every raw video format there
+/// is. From a layered source's compositor that query travels the whole
+/// normalising chain, through two converters and a scaler that each expand it
+/// again, and then across `proxysink` into the programme pipeline, where it
+/// ends on a sink pad of the programme's own compositor. So the source's video
+/// negotiation waits on the programme's compositor, which is the one element
+/// on the rig that is regularly busy for a long time: adding a pad for a new
+/// source, releasing one for a source that has gone.
+///
+/// Caught in the act on 2026-09-12 on a rig running eight sources with a
+/// superimposed page added and removed every round. A source was judged
+/// stalled having delivered four frames; its counters said twelve page frames
+/// and eighteen decoded video frames had reached its compositor and four had
+/// come out, while its audio mixer had produced 224 buffers over the same
+/// window. A three second sample of every thread in the process showed exactly
+/// one thread inside `gst_aggregator_default_negotiate`, and it was that
+/// source's compositor, for 792 of 1803 samples. The five healthy layered
+/// compositors were not in it at all. A compositor renegotiates twice in the
+/// life of a source, once for each layer, so this was not a loop: it was one
+/// caps query that did not come back.
+///
+/// The chain downstream of these aggregators ends at a capsfilter pinned to
+/// the canvas, so there is nothing to negotiate that is not known here
+/// already. Answering it here makes the source's video independent of what the
+/// programme is doing, which is the property the whole two-pipeline design
+/// exists to give and the one place it was not being had.
+pub fn answer_caps_here(element: &gst::Element, caps: &gst::Caps) -> Result<()> {
+    let pad = element
+        .static_pad("src")
+        .with_context(|| format!("{} has no src pad", element.name()))?;
+    let answer = caps.clone();
+    pad.add_probe(gst::PadProbeType::QUERY_DOWNSTREAM, move |_pad, info| {
+        let Some(query) = info.query_mut() else {
+            return gst::PadProbeReturn::Ok;
+        };
+        let gst::QueryViewMut::Caps(q) = query.view_mut() else {
+            return gst::PadProbeReturn::Ok;
+        };
+        // Honour the filter the asker sent, as a real peer would: the
+        // aggregator passes its own template caps and expects an answer
+        // inside them.
+        let result = match q.filter() {
+            Some(filter) => filter.intersect_with_mode(&answer, gst::CapsIntersectMode::First),
+            None => answer.clone(),
+        };
+        q.set_result(&result);
+        gst::PadProbeReturn::Handled
+    })
+    .context("installing the caps answer on an aggregator")?;
+    Ok(())
+}
+
 /// Rewrites the CAPS event passing through `pad` so that every colorimetry
 /// field is known.
 ///
