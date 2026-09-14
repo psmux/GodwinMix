@@ -755,6 +755,10 @@ pub fn launch_for(
         let have: Vec<&str> = plugin.manifest.provides.iter().map(|p| p.id.as_str()).collect();
         format!("`{name}` has no provide called `{id}`. It provides: {}.", have.join(", "))
     })?;
+    // Media at the `wasm` placement, before anything is built. One check here
+    // covers `source.add`, `output.add` and `filter.add`, because all three
+    // reach a process through this function.
+    super::wasm::check_media(type_id, &decl.kind, &plugin.manifest)?;
     anyhow::ensure!(
         plugin.manifest.plugin.placements.iter().any(|p| p == "sidecar"),
         "the plugin `{name}` does not declare the `sidecar` placement. It declares: {}.",

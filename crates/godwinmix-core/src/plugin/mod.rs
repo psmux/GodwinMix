@@ -20,6 +20,7 @@ pub mod filters;
 pub mod harness;
 pub mod host;
 pub mod supervisor;
+pub mod wasm;
 pub mod loader;
 pub mod kinds;
 pub mod output;
