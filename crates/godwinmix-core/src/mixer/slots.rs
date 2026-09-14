@@ -1136,6 +1136,17 @@ impl SlotPool {
             .collect()
     }
 
+    /// The sources whose pads a transition is driving on this property right
+    /// now. What a test reads to prove a curve reached the pad rather than
+    /// being dropped on the way.
+    pub fn driven_by_a_transition(&self, property: &str) -> Vec<SourceId> {
+        self.slots
+            .iter()
+            .filter(|s| driven(&s.pad, property))
+            .map(|s| s.source().cloned().unwrap_or_default())
+            .collect()
+    }
+
     /// The compositor itself, for a probe that has to read its output.
     pub fn compositor(&self) -> &gst::Element {
         &self.vmix

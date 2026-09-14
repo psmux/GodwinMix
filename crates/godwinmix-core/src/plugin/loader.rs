@@ -113,6 +113,10 @@ struct Registry {
     /// Manifest` a source gets. Only sources reach `interned`, because only
     /// sources have a factory the URI resolver can call.
     manifests: BTreeMap<String, &'static Manifest>,
+    /// The same for outputs, which have a registry of their own: a plugin's
+    /// `output` provide has to sit in the same table a built in one does or
+    /// `output.add` cannot reach it.
+    outputs: BTreeMap<String, &'static crate::plugin::output::OutputProvide>,
     /// Per instance numbers, refreshed once a second by the sampler.
     stats: BTreeMap<String, InstanceStats>,
     /// The pid behind each instance, so the sampler can read a set at a time.
@@ -347,6 +351,8 @@ fn intern_all() {
         registry().read().plugins.values().filter(|p| p.live()).cloned().collect();
     let mut made: BTreeMap<String, &'static Provide> = BTreeMap::new();
     let mut manifests: BTreeMap<String, &'static Manifest> = BTreeMap::new();
+    let mut outputs: BTreeMap<String, &'static crate::plugin::output::OutputProvide> =
+        BTreeMap::new();
     {
         let reg = registry().read();
         for plugin in &plugins {
@@ -365,6 +371,20 @@ fn intern_all() {
                 let manifest: &'static Manifest =
                     Box::leak(Box::new(manifest_of(plugin, decl)));
                 manifests.insert(id.clone(), manifest);
+                if decl.kind == "output" {
+                    outputs.insert(
+                        id.clone(),
+                        match reg.outputs.get(&id) {
+                            Some(existing) if existing.manifest.rank == manifest.rank => *existing,
+                            _ => Box::leak(Box::new(crate::plugin::output::OutputProvide {
+                                manifest: *manifest,
+                                claims: output_claims_by_scheme,
+                                make: make_sidecar_output,
+                            })),
+                        },
+                    );
+                    continue;
+                }
                 if decl.kind != "source" {
                     // Only sources reach the URI resolver. Everything else is
                     // looked up by `type` through its own registry or run as a
@@ -385,6 +405,65 @@ fn intern_all() {
     let mut reg = registry().write();
     reg.interned = made;
     reg.manifests = manifests;
+    reg.outputs = outputs;
+}
+
+/// The output provide a `type` names, if a loaded plugin has one.
+///
+/// Consulted by `output::by_type` after the built in registry, so a plugin can
+/// never shadow an output that ships with the core.
+pub fn output_provide(type_id: &str) -> Option<&'static crate::plugin::output::OutputProvide> {
+    let reg = registry().read();
+    if let Some(p) = reg.outputs.get(type_id) {
+        return Some(*p);
+    }
+    reg.outputs
+        .iter()
+        .find(|(id, _)| id.split('/').next() == Some(type_id))
+        .map(|(_, p)| *p)
+}
+
+/// Every loaded output provide, for the list an error prints.
+pub fn output_provides() -> Vec<&'static crate::plugin::output::OutputProvide> {
+    registry().read().outputs.values().copied().collect()
+}
+
+/// The loaded output a bare URI resolves to, by scheme and rank.
+pub fn output_for_uri(uri: &str) -> Option<&'static crate::plugin::output::OutputProvide> {
+    let lower = uri.trim().to_lowercase();
+    registry()
+        .read()
+        .outputs
+        .values()
+        .filter(|p| p.manifest.uri_schemes.iter().any(|s| lower.starts_with(*s)))
+        .max_by_key(|p| p.manifest.rank)
+        .copied()
+}
+
+/// A loaded output claims a bare URI by the schemes it declared.
+fn output_claims_by_scheme(uri: &str) -> Option<u16> {
+    output_for_uri(uri).map(|p| p.manifest.rank)
+}
+
+/// Spawn a sidecar for an output a plugin provides.
+///
+/// The canvas is the default one, as `output::open` has always used: an output
+/// consumes the encoded programme and the canvas it is told about is
+/// informational. A sidecar that needs the real one reads it from the
+/// handshake the core sends when the instance starts.
+fn make_sidecar_output(
+    cfg: &crate::config::OutputConfig,
+) -> anyhow::Result<Box<dyn crate::plugin::output::Output>> {
+    let type_id = match cfg.type_id.as_deref().filter(|t| !t.trim().is_empty()) {
+        Some(t) => t.trim().to_string(),
+        None => output_for_uri(&cfg.uri)
+            .map(|p| p.manifest.provide_id())
+            .with_context(|| {
+                format!("nothing installed sends to `{}`; write `type` to say what it is", cfg.uri)
+            })?,
+    };
+    let canvas = crate::caps::CanvasCaps::new(&crate::config::Canvas::default());
+    super::host::make_output(&type_id, cfg, &canvas)
 }
 
 /// The interned manifest of any provide, whatever kind it is.
