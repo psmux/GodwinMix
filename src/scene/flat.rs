@@ -57,6 +57,11 @@ pub struct Record {
 /// What kind of record this is, and everything that belongs to it alone.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(tag = "kind", rename_all = "lowercase")]
+#[allow(clippy::large_enum_variant)]
+// An item's props are much bigger than a scene's name, and boxing them would
+// buy an allocation per record on the hot path of every patch for a few bytes
+// in the rare scene record. The records are read and written far more often
+// than they are moved.
 pub enum Props {
     Scene {
         name: String,

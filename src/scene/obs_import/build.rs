@@ -295,6 +295,11 @@ impl<'a> Importer<'a> {
         if let Some(size) = self.options.source_sizes.get(&source.name) {
             return Some(*size);
         }
+        if source.id == "group" {
+            // A group has no size of its own: its children carry the geometry
+            // and its own transform is spent flattening them.
+            return Some((self.canvas.width as f64, self.canvas.height as f64));
+        }
         if source.id == "scene" {
             let custom = source.settings.get("custom_size").and_then(Value::as_bool) == Some(true);
             let (cx, cy) = (
@@ -455,9 +460,7 @@ impl<'a> Importer<'a> {
                     plugin: plugin.clone(),
                 },
                 (_, Mapped::Graphic { graphic, note, .. }) => Outcome::Skipped {
-                    reason: format!(
-                        "GodwinMix has no text source; text is a graphic here, and no graphic plugin is installed yet"
-                    ),
+                    reason: "GodwinMix has no text source; text is a graphic here, and no graphic plugin is installed yet".to_string(),
                     placeholder: Some(format!("{note} ({graphic})")),
                 },
                 (_, Mapped::Skip { reason }) => {

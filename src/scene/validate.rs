@@ -89,11 +89,17 @@ pub fn scene(scene: &Scene, canvas: &Canvas) -> Vec<Finding> {
         // whole safe area is one, so only items inside the canvas and smaller
         // than the safe box can breach it.
         if p.rect.inside(&canvas_rect) && !p.rect.inside(&title) && !title.inside(&p.rect) {
-            let (code, severity, box_name) = if p.rect.inside(&action) {
+            let (code, mut severity, box_name) = if p.rect.inside(&action) {
                 ("scene.title_safe", Severity::Info, "title safe")
             } else {
                 ("scene.action_safe", Severity::Warning, "action safe")
             };
+            // A camera pinned into a corner is a design, not a mistake. It is
+            // text and graphics that get cut off and cannot be read, so only
+            // they are worth a warning; everything else is a note.
+            if !matches!(p.item.content, super::document::Content::Graphic { .. }) {
+                severity = Severity::Info;
+            }
             let (x, y, w, h) = p.rect.rounded();
             out.push(Finding {
                 severity,
@@ -296,17 +302,28 @@ mod tests {
         // Inside the canvas, outside title safe, inside action safe.
         let canvas = Canvas::default();
         let title = Rect::of(&canvas).inset_fraction(TITLE_SAFE);
-        let mut near = item_at(title.x - 20.0, 500.0, 100.0, 40.0);
-        near.name = Some("ticker".into());
-        let found = scene(&scene_of(vec![near]), &canvas);
+        let ticker = |x: f64| {
+            let mut item = item_at(x, 500.0, 100.0, 40.0);
+            item.content = Content::Graphic {
+                graphic: "text/graphic".into(),
+                params: json!({ "text": "Ada" }),
+            };
+            item.name = Some("ticker".into());
+            item
+        };
+        let found = scene(&scene_of(vec![ticker(title.x - 20.0)]), &canvas);
         assert_eq!(found[0].code, "scene.title_safe");
         assert_eq!(found[0].severity, Severity::Info);
 
-        let mut edge = item_at(4.0, 500.0, 100.0, 40.0);
-        edge.name = Some("ticker".into());
-        let found = scene(&scene_of(vec![edge]), &canvas);
+        let found = scene(&scene_of(vec![ticker(4.0)]), &canvas);
         assert_eq!(found[0].code, "scene.action_safe");
         assert_eq!(found[0].severity, Severity::Warning);
+
+        // The same rectangle holding a camera is a note, not a warning: a
+        // camera pinned to the edge is a design decision.
+        let found = scene(&scene_of(vec![item_at(4.0, 500.0, 100.0, 40.0)]), &canvas);
+        assert_eq!(found[0].code, "scene.action_safe");
+        assert_eq!(found[0].severity, Severity::Info);
     }
 
     #[test]

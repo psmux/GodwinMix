@@ -225,18 +225,22 @@ mod tests {
 
     #[test]
     fn an_item_with_no_anchor_hangs_off_its_top_left_corner() {
-        let mut t = Transform::default();
-        t.position = Vec2::new(1400.0, 40.0);
-        t.frame = Some(Frame::new(480.0, 270.0));
+        let t = Transform {
+            position: Vec2::new(1400.0, 40.0),
+            frame: Some(Frame::new(480.0, 270.0)),
+            ..Transform::default()
+        };
         assert_eq!(item_rect(&t, &canvas()), Rect::new(1400.0, 40.0, 480.0, 270.0));
     }
 
     #[test]
     fn a_centre_anchor_puts_the_middle_of_the_item_at_the_position() {
-        let mut t = Transform::default();
-        t.position = Vec2::new(960.0, 540.0);
-        t.anchor = Vec2::new(0.5, 0.5);
-        t.frame = Some(Frame::new(480.0, 270.0));
+        let t = Transform {
+            position: Vec2::new(960.0, 540.0),
+            anchor: Vec2::new(0.5, 0.5),
+            frame: Some(Frame::new(480.0, 270.0)),
+            ..Transform::default()
+        };
         assert_eq!(item_rect(&t, &canvas()), Rect::new(720.0, 405.0, 480.0, 270.0));
     }
 

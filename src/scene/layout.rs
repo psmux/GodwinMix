@@ -123,7 +123,7 @@ fn resolve_values(layout: &Collection, given: &Values) -> Result<Values> {
     let properties = layout.params.get("properties").and_then(Value::as_object);
     let known: Vec<&String> = properties.map(|p| p.keys().collect()).unwrap_or_default();
     for key in given.keys() {
-        if !known.iter().any(|k| *k == key) {
+        if !known.contains(&key) {
             let names: Vec<&str> = known.iter().map(|k| k.as_str()).collect();
             bail!(
                 "the layout {:?} has no parameter called {key:?}. It takes: {}",
