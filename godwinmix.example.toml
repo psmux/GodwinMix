@@ -196,3 +196,56 @@ queue_secs = 5.0
 # initial_delay_ms = 1000
 # max_delay_ms = 30000
 # multiplier = 2.0
+
+# --- naming a kind outright ------------------------------------------------
+# Every source and output above is written as a bare URI, and that still works:
+# the address is matched against every kind this build has and the highest
+# ranked one that claims it wins. `type` says which one to use instead, which is
+# what you want when the address is ambiguous, when two plugins claim the same
+# scheme, or when the kind has no address at all.
+#
+# `godwinmix --test-core` prints the kinds this build has.
+#
+# [[sources]]
+# id = "bars"
+# type = "test/source"
+# params = { uri = "test://smpte" }
+#
+# [[outputs]]
+# id = "contribution"
+# type = "srt/output"
+# params = { uri = "srt://receiver.example.com:9000?mode=caller", latency_ms = 200 }
+
+# --- filters ---------------------------------------------------------------
+# A filter is dropped between two points that already carry the canvas format,
+# so it can go on one source or on the whole programme without knowing what is
+# upstream of it. Filters can also be added and removed while live; these are
+# the ones in place at startup.
+#
+# On one source. `side = "input"` puts it before the proxy boundary, where the
+# multiview thumbnail sees it too; `side = "programme"` puts it on that source's
+# programme branch only.
+#
+# [[filters]]
+# id = "key"
+# type = "chroma/filter"
+# attach = { source = "cam2", side = "programme" }
+# params = { method = "green", angle = 20.0, noise = 2.0 }
+#
+# On the programme, before the tee every consumer reads, so the encoder and the
+# multiview both see it.
+#
+# [[filters]]
+# id = "pgm-key"
+# type = "chroma/filter"
+# attach = { programme = true }
+# params = { method = "blue" }
+
+# --- plugin settings -------------------------------------------------------
+# A table per plugin name. The core never reads inside one: `[plugins.ndi]` is
+# handed to the plugin called `ndi` and nothing else sees it. Sections this
+# build does not recognise are kept rather than dropped, so a config written for
+# a build with more plugins than this one still loads.
+#
+# [plugins.ndi]
+# discovery_interval_secs = 5

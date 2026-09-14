@@ -1084,6 +1084,16 @@ sidecar = \"/opt/b\"\n").unwrap();
         assert!(missing.stall.hold_last_frame);
     }
 
+    /// The example config is what a new operator starts from and what
+    /// `--example-config` prints. It has to parse and validate, or the first
+    /// thing anyone does with this program fails.
+    #[test]
+    fn the_example_config_parses_and_validates() {
+        let cfg: Config = toml::from_str(include_str!("../godwinmix.example.toml"))
+            .expect("the example config parses");
+        cfg.validate().expect("the example config validates");
+    }
+
     #[test]
     fn a_plugins_table_and_an_unknown_section_both_survive_the_load() {
         let cfg: Config = toml::from_str(
