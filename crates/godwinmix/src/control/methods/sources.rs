@@ -1,13 +1,13 @@
 //! Sources: list, get, add, remove, the faders and the scrubber.
 
 use super::{body, handler};
-use crate::api::error::RpcError;
-use crate::api::method::{schema_of, MethodDef, Registry, Tier};
-use crate::api::requests::*;
-use crate::api::scope::Scope;
-use crate::api::types::*;
+use godwinmix_protocol::error::RpcError;
+use godwinmix_protocol::method::{schema_of, MethodDef, Registry, Tier};
+use godwinmix_protocol::requests::*;
+use godwinmix_protocol::scope::Scope;
+use godwinmix_protocol::types::*;
 use crate::control::call::Call;
-use crate::mixer::{AudioOutcome, Command, SeekOutcome};
+use godwinmix_core::mixer::{AudioOutcome, Command, SeekOutcome};
 use serde_json::Value;
 
 pub fn register(reg: &mut Registry<Call>) {

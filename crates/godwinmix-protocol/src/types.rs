@@ -405,10 +405,9 @@ pub fn safe_uri_label(uri: &str) -> String {
     }
 }
 
-/// Where a media file's conversion to a web safe copy has got to.
-///
-/// Carried on `event/media.changed`, so it is part of the wire contract even
-/// though the conversion itself is the engine's business.
+// Where a media file's conversion to a web safe copy has got to. Carried on
+// `event/media.changed`, so it is part of the wire contract even though the
+// conversion itself is the engine's business.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum ConversionPhase {

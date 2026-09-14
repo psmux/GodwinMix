@@ -107,13 +107,13 @@ pub async fn run(cmd: ObserveCmd) -> Result<()> {
         ObserveCmd::Logs { config, follow, instance, level, since, trace, lines } => {
             let filter = Filter {
                 instance,
-                level: level.as_deref().and_then(super::logs::LevelCode::parse),
+                level: level.as_deref().and_then(godwinmix_core::observe::logs::LevelCode::parse),
                 since: since.map(normalise_since),
                 trace,
             };
-            logs(&super::runtime_dir(&config), follow, filter, lines).await
+            logs(&godwinmix_core::observe::runtime_dir(&config), follow, filter, lines).await
         }
-        ObserveCmd::Trace { id, config } => trace(&super::runtime_dir(&config), &id),
+        ObserveCmd::Trace { id, config } => trace(&godwinmix_core::observe::runtime_dir(&config), &id),
         ObserveCmd::Dot { name, url, token } => dot(&name, url, token).await,
         ObserveCmd::SupportBundle { config, out, url, token } => {
             support_bundle(config, out, url, token).await
@@ -123,13 +123,13 @@ pub async fn run(cmd: ObserveCmd) -> Result<()> {
 
 fn doctor(config: &Path, json: bool) -> Result<()> {
     gstreamer::init().context("initialising GStreamer")?;
-    let checks = super::doctor::run(config);
+    let checks = godwinmix_core::observe::doctor::run(config);
     if json {
         println!("{}", serde_json::to_string_pretty(&checks)?);
     } else {
-        print!("{}", super::doctor::format(&checks));
+        print!("{}", godwinmix_core::observe::doctor::format(&checks));
     }
-    let code = super::doctor::exit_code(&checks);
+    let code = godwinmix_core::observe::doctor::exit_code(&checks);
     if code != 0 {
         std::process::exit(code);
     }
@@ -140,7 +140,7 @@ fn doctor(config: &Path, json: bool) -> Result<()> {
 #[derive(Default)]
 struct Filter {
     instance: Option<String>,
-    level: Option<super::logs::LevelCode>,
+    level: Option<godwinmix_core::observe::logs::LevelCode>,
     since: Option<String>,
     trace: Option<String>,
 }
@@ -154,7 +154,7 @@ impl Filter {
             }
         }
         if let Some(want) = self.level {
-            let Some(level) = v["level"].as_str().and_then(super::logs::LevelCode::parse) else {
+            let Some(level) = v["level"].as_str().and_then(godwinmix_core::observe::logs::LevelCode::parse) else {
                 return false;
             };
             if level > want {
@@ -181,13 +181,13 @@ fn normalise_since(input: String) -> String {
     if input.contains('-') || input.contains('T') {
         return input;
     }
-    let today = super::logs::rfc3339(&std::time::SystemTime::now());
+    let today = godwinmix_core::observe::logs::rfc3339(&std::time::SystemTime::now());
     let date = today.split('T').next().unwrap_or_default();
     format!("{date}T{input}")
 }
 
 async fn logs(dir: &Path, follow: bool, filter: Filter, lines: usize) -> Result<()> {
-    let files = super::logs::log_files(dir);
+    let files = godwinmix_core::observe::logs::log_files(dir);
     anyhow::ensure!(
         !files.is_empty(),
         "no log files under {}. Either the mixer has not run yet, or its runtime \
@@ -197,7 +197,7 @@ async fn logs(dir: &Path, follow: bool, filter: Filter, lines: usize) -> Result<
 
     // The core file is the complete timeline, so history comes from it alone.
     // Following watches every file, because a plugin file can appear later.
-    let core = super::logs::core_log_path(dir);
+    let core = godwinmix_core::observe::logs::core_log_path(dir);
     let history = std::fs::read_to_string(&core).unwrap_or_default();
     let kept: Vec<&str> = history.lines().filter(|l| filter.keeps(l)).collect();
     let start = kept.len().saturating_sub(lines);
@@ -301,7 +301,7 @@ fn human_session_record(v: &serde_json::Value) -> String {
 /// because an instance tagged line is written to both and a reader following
 /// one command does not want to see each line twice.
 fn trace(dir: &Path, id: &str) -> Result<()> {
-    let files = super::logs::log_files(dir);
+    let files = godwinmix_core::observe::logs::log_files(dir);
     anyhow::ensure!(!files.is_empty(), "no log files under {}", dir.display());
     let mut lines: Vec<(String, String)> = Vec::new();
     let mut seen = std::collections::HashSet::new();
@@ -323,7 +323,7 @@ fn trace(dir: &Path, id: &str) -> Result<()> {
     }
     // The session log carries the command that started the trace, which is the
     // line a reader wants first.
-    if let Ok(text) = std::fs::read_to_string(super::session::path_in(dir)) {
+    if let Ok(text) = std::fs::read_to_string(godwinmix_core::observe::session::path_in(dir)) {
         for line in text.lines().filter(|l| l.contains(id)) {
             let Ok(v) = serde_json::from_str::<serde_json::Value>(line) else { continue };
             if v["trace_id"].as_str() == Some(id) && seen.insert(line.to_string()) {
@@ -350,9 +350,9 @@ fn trace(dir: &Path, id: &str) -> Result<()> {
 
 async fn dot(name: &str, url: Option<String>, token: Option<String>) -> Result<()> {
     let url = url
-        .or_else(|| crate::config::env_var("URL"))
+        .or_else(|| godwinmix_core::config::env_var("URL"))
         .unwrap_or_else(|| DEFAULT_URL.to_string());
-    let token = token.or_else(|| crate::config::env_var("TOKEN"));
+    let token = token.or_else(|| godwinmix_core::config::env_var("TOKEN"));
     let client = reqwest::Client::new();
     let mut req = client
         .get(format!("{}/api/v1/pipeline/dot", url.trim_end_matches('/')))
@@ -376,15 +376,15 @@ async fn support_bundle(
     url: Option<String>,
     token: Option<String>,
 ) -> Result<()> {
-    let runtime_dir = super::runtime_dir(&config);
+    let runtime_dir = godwinmix_core::observe::runtime_dir(&config);
     // Read the session log from the file, since this process is not the one
     // that wrote it.
-    super::session::session().open(super::session::path_in(&runtime_dir)).ok();
+    godwinmix_core::observe::session::session().open(godwinmix_core::observe::session::path_in(&runtime_dir)).ok();
     let options = super::bundle::BundleOptions {
         config_path: config,
         runtime_dir,
-        url: url.or_else(|| crate::config::env_var("URL")),
-        token: token.or_else(|| crate::config::env_var("TOKEN")),
+        url: url.or_else(|| godwinmix_core::config::env_var("URL")),
+        token: token.or_else(|| godwinmix_core::config::env_var("TOKEN")),
         out: out.unwrap_or_else(|| PathBuf::from(super::bundle::default_name())),
     };
     let (path, included) = super::bundle::build(&options).await?;
@@ -428,7 +428,7 @@ mod tests {
     #[test]
     fn the_level_filter_keeps_that_level_and_above() {
         let filter =
-            Filter { level: Some(super::super::logs::LevelCode::WARN), ..Default::default() };
+            Filter { level: Some(godwinmix_core::observe::logs::LevelCode::WARN), ..Default::default() };
         assert!(filter.keeps(&line("2026-09-14T20:10:00.000Z", "error", None, None)));
         assert!(filter.keeps(&line("2026-09-14T20:10:00.000Z", "warn", None, None)));
         assert!(!filter.keeps(&line("2026-09-14T20:10:00.000Z", "info", None, None)));
@@ -444,7 +444,7 @@ mod tests {
         assert!(filter.keeps(&line("2026-09-14T20:10:00.000Z", "info", None, None)));
         assert!(!filter.keeps(&line("2026-09-14T20:09:59.000Z", "info", None, None)));
 
-        let today = super::super::logs::rfc3339(&std::time::SystemTime::now());
+        let today = godwinmix_core::observe::logs::rfc3339(&std::time::SystemTime::now());
         let date = today.split('T').next().unwrap();
         assert_eq!(normalise_since("20:10".into()), format!("{date}T20:10"));
     }

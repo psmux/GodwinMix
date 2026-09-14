@@ -8,7 +8,7 @@
 //! to stderr.
 //!
 //! There is no list of tools in this file. Every tool is a method in
-//! `crate::api` that carries an MCP binding, its input schema is that method's
+//! `godwinmix_protocol` that carries an MCP binding, its input schema is that method's
 //! params schema, and its annotations are read off the same flags the server
 //! enforces. Adding a method adds a tool; nothing here has to be edited.
 //!
@@ -17,9 +17,9 @@
 //! behind `search_tools`. The hot list is a pure function of the profile, so
 //! adding a source or a plugin never invalidates a client's prompt cache.
 
-use crate::api::mcp_tools;
-use crate::api::method::{rest_transform, Registry};
-use crate::api::scope::Profile;
+use godwinmix_protocol::mcp_tools;
+use godwinmix_protocol::method::{rest_transform, Registry};
+use godwinmix_protocol::scope::Profile;
 use crate::control::call::Call;
 use anyhow::{Context, Result};
 use base64::Engine;

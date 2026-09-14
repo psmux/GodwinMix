@@ -1,13 +1,13 @@
 //! Destinations: list, get, add, remove, reconnect.
 
 use super::{body, handler};
-use crate::api::error::RpcError;
-use crate::api::method::{schema_of, MethodDef, Registry, Tier};
-use crate::api::requests::*;
-use crate::api::scope::Scope;
-use crate::api::types::*;
+use godwinmix_protocol::error::RpcError;
+use godwinmix_protocol::method::{schema_of, MethodDef, Registry, Tier};
+use godwinmix_protocol::requests::*;
+use godwinmix_protocol::scope::Scope;
+use godwinmix_protocol::types::*;
 use crate::control::call::Call;
-use crate::mixer::Command;
+use godwinmix_core::mixer::Command;
 use serde_json::Value;
 
 pub fn register(reg: &mut Registry<Call>) {
@@ -127,7 +127,7 @@ async fn find(call: &Call, id: &str) -> Result<OutputStatus, RpcError> {
 
 async fn add(call: Call, params: Value) -> Result<Value, RpcError> {
     let req: AddOutputRequest = call.params(&params)?;
-    let cfg: crate::config::OutputConfig = serde_json::from_value(req.to_config_json())
+    let cfg: godwinmix_core::config::OutputConfig = serde_json::from_value(req.to_config_json())
         .map_err(|e| RpcError::invalid_params(format!("that is not a usable output: {e}")))?;
     let id = cfg.id.clone();
     call.app

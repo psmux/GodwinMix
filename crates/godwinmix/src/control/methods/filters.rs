@@ -6,11 +6,11 @@
 //! names the next step.
 
 use super::{body, handler};
-use crate::api::error::{ErrorCode, RpcError};
-use crate::api::method::{schema_of, MethodDef, Registry, Tier};
-use crate::api::scope::Scope;
+use godwinmix_protocol::error::{ErrorCode, RpcError};
+use godwinmix_protocol::method::{schema_of, MethodDef, Registry, Tier};
+use godwinmix_protocol::scope::Scope;
 use crate::control::call::Call;
-use crate::mixer::FilterOutcome;
+use godwinmix_core::mixer::FilterOutcome;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
@@ -142,8 +142,8 @@ pub struct FilterRemoved {
 ///
 /// A JSON null has no TOML spelling. Rather than inventing one, the key is
 /// dropped, which is what "I am not setting this" means to a filter.
-fn to_params(map: &Map<String, Value>) -> crate::config::Params {
-    let mut out = crate::config::Params::new();
+fn to_params(map: &Map<String, Value>) -> godwinmix_core::config::Params {
+    let mut out = godwinmix_core::config::Params::new();
     for (k, v) in map {
         match toml::Value::try_from(v) {
             Ok(value) => {
@@ -157,7 +157,7 @@ fn to_params(map: &Map<String, Value>) -> crate::config::Params {
     out
 }
 
-fn record(status: crate::mixer::FilterStatus) -> FilterRecord {
+fn record(status: godwinmix_core::mixer::FilterStatus) -> FilterRecord {
     FilterRecord {
         id: status.id,
         type_id: status.type_id,
@@ -186,8 +186,8 @@ async fn add(call: Call, params: Value) -> Result<Value, RpcError> {
         ));
     }
     let side = match req.side.as_str() {
-        "input" => crate::config::FilterAttachSide::Input,
-        "programme" => crate::config::FilterAttachSide::Programme,
+        "input" => godwinmix_core::config::FilterAttachSide::Input,
+        "programme" => godwinmix_core::config::FilterAttachSide::Programme,
         other => {
             return Err(RpcError::invalid_params(format!(
                 "`side` is \"input\" or \"programme\", not \"{other}\". \"input\" also \
@@ -195,10 +195,10 @@ async fn add(call: Call, params: Value) -> Result<Value, RpcError> {
             )))
         }
     };
-    let cfg = crate::config::FilterConfig {
+    let cfg = godwinmix_core::config::FilterConfig {
         id: req.id.clone(),
         type_id: req.type_id.clone(),
-        attach: crate::config::FilterAttach {
+        attach: godwinmix_core::config::FilterAttach {
             source: req.source.clone(),
             side,
             programme: req.programme,

@@ -8,14 +8,14 @@
 //! The order matters and is the same on `/rpc` and on `/api/v1`, because they
 //! are the same call arriving by different doors.
 
-use crate::api::error::{ErrorCode, RpcError};
-use crate::api::idempotency::Lookup;
-use crate::api::method::Registry;
-use crate::api::rpc::CallEnvelope;
-use crate::api::scope::{ConfirmPolicy, Token};
-use crate::api::MutationMeta;
+use godwinmix_protocol::error::{ErrorCode, RpcError};
+use godwinmix_protocol::idempotency::Lookup;
+use godwinmix_protocol::method::Registry;
+use godwinmix_protocol::rpc::CallEnvelope;
+use godwinmix_protocol::scope::{ConfirmPolicy, Token};
+use godwinmix_protocol::MutationMeta;
 use crate::control::AppState;
-use crate::snapshot::Tracker;
+use godwinmix_core::snapshot::Tracker;
 use serde::de::DeserializeOwned;
 use serde_json::{json, Value};
 use std::sync::Arc;
@@ -220,8 +220,8 @@ fn stamp(body: &mut Value, idempotent: bool) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::api::method::MethodDef;
-    use crate::api::scope::Scope;
+    use godwinmix_protocol::method::MethodDef;
+    use godwinmix_protocol::scope::Scope;
 
     fn registry() -> Registry<Call> {
         let mut r: Registry<Call> = Registry::new();

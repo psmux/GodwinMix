@@ -6,8 +6,8 @@
 //! written out by hand because they carry bytes rather than JSON: the upload,
 //! whose body is the file, and the snapshot, whose answer is a JPEG.
 
-use crate::api::error::{ErrorCode, RpcError};
-use crate::api::method::Registry;
+use godwinmix_protocol::error::{ErrorCode, RpcError};
+use godwinmix_protocol::method::Registry;
 use crate::control::call::dispatch;
 use crate::control::{trace_id_of, trace_of, Ctx};
 use axum::body::Body;
@@ -77,7 +77,7 @@ pub fn routes<C>(registry: &Registry<C>) -> Vec<Route> {
 /// a legacy path and apply that method's scope. Two doors onto one set of
 /// methods must not mean two sets of permissions.
 pub fn legacy_routes() -> Vec<Route> {
-    let mut routes: Vec<Route> = crate::api::protocol::LEGACY_ROUTES
+    let mut routes: Vec<Route> = godwinmix_protocol::protocol::LEGACY_ROUTES
         .iter()
         .map(|(http, path, method)| Route {
             http,
@@ -239,7 +239,7 @@ async fn generic(State(ctx): State<Ctx>, request: Request) -> Response {
     };
     // Inside the task local, so every log line this call produces carries the
     // same id the caller is holding. See `src/observe/trace.rs`.
-    match crate::observe::with_trace_id(
+    match godwinmix_core::observe::with_trace_id(
         id,
         dispatch(
             &ctx.registry,
@@ -334,7 +334,7 @@ async fn snapshot(
         Ok(t) => t,
         Err(f) => return unauthorised(f.message(), &trace_id),
     };
-    let ask = crate::snapshot::Ask {
+    let ask = godwinmix_core::snapshot::Ask {
         width: q.get("width").and_then(|w| w.parse::<u32>().ok()),
         force: q.get("force").is_some_and(|v| v != "false"),
         allow_large: q.get("allow_large").is_some_and(|v| v != "false"),
@@ -366,7 +366,7 @@ async fn upload(
         Ok(t) => t,
         Err(f) => return unauthorised(f.message(), &trace_id),
     };
-    if !token.has(crate::api::scope::Scope::Operate) {
+    if !token.has(godwinmix_protocol::scope::Scope::Operate) {
         return error_response(
             &RpcError::scope("media.upload", "operate", &token.scope_names()),
             &trace_id,

@@ -1451,7 +1451,7 @@
     }
   },
   "info": {
-    "description": "Generated from the method table in src/api/. api_level 1, compatible from 1. The same methods are reachable over JSON-RPC on the /rpc WebSocket; see protocol.md. The paths here come from the noun.verb transform rule, so `source.list` is `GET /api/v1/sources` and `source.audio.set` is `POST /api/v1/sources/{id}/audio`.\n\nFour keys are accepted in the body of every call: `trace_id`, `idempotency_key` on anything mutating, `dry_run` on anything destructive, and `confirm` where the token's policy requires it.",
+    "description": "Generated from the method table in crates/godwinmix-protocol/. api_level 1, compatible from 1. The same methods are reachable over JSON-RPC on the /rpc WebSocket; see protocol.md. The paths here come from the noun.verb transform rule, so `source.list` is `GET /api/v1/sources` and `source.audio.set` is `POST /api/v1/sources/{id}/audio`.\n\nFour keys are accepted in the body of every call: `trace_id`, `idempotency_key` on anything mutating, `dry_run` on anything destructive, and `confirm` where the token's policy requires it.",
     "license": {
       "name": "Apache-2.0"
     },

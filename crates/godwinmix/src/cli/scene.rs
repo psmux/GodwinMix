@@ -11,10 +11,10 @@ use std::path::{Path, PathBuf};
 use anyhow::{bail, Context, Result};
 use clap::{Subcommand, ValueEnum};
 
-use super::document::{Canvas, Collection};
-use super::flat::FlatDocument;
-use super::obs_import::{self, Outcome};
-use super::{layout, schema, validate};
+use godwinmix_core::scene::document::{Canvas, Collection};
+use godwinmix_core::scene::flat::FlatDocument;
+use godwinmix_core::scene::obs_import::{self, Outcome};
+use godwinmix_core::scene::{layout, schema, validate};
 
 /// How a report comes out.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]

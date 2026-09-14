@@ -1,7 +1,7 @@
 //! `godwinmix ctl`: drive a running mixer from the command line.
 //!
 //! A thin client over `/api/v1` rather than a second control path. Every
-//! command builds one of the request types from `crate::api` and reads the
+//! command builds one of the request types from `godwinmix_protocol` and reads the
 //! answer back into an api type, so nothing here assembles a body by hand and
 //! the CLI cannot drift from the protocol the UI and an agent use.
 //!
@@ -9,13 +9,13 @@
 //! a method name into its route, which is the same function the server builds
 //! its router from.
 
-use crate::api::method::rest_transform;
-use crate::api::types::{MixerStatus, OutputStatus, SourceStatus};
-use crate::api::{
+use godwinmix_protocol::method::rest_transform;
+use godwinmix_protocol::types::{MixerStatus, OutputStatus, SourceStatus};
+use godwinmix_protocol::{
     AddOutputRequest, AddSourceRequest, AdBreakRequest, CoreInfo, GoLiveRequest, GoLiveResult,
     ProgramState, TakeRecord, TakeRequest,
 };
-use crate::media::MediaListing;
+use godwinmix_core::media::MediaListing;
 use anyhow::{bail, Context, Result};
 use clap::Subcommand;
 use reqwest::header::{HeaderMap, HeaderValue, AUTHORIZATION};
