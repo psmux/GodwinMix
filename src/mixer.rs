@@ -1127,14 +1127,9 @@ impl Mixer {
         // Filters this source was configured with on its input side, put on
         // before it starts, so the first frame out of it is already keyed. The
         // programme side ones need the branch registered first and go on below.
-        let configured: Vec<_> = self
-            .cfg
-            .filters
-            .iter()
-            .filter(|f| f.attach.source.as_deref() == Some(cfg.id.as_str()))
-            .cloned()
-            .collect();
-        for f in configured.iter().filter(|f| f.attach.side == crate::config::FilterAttachSide::Input) {
+        let configured = self.configured_filters(&cfg.id);
+        for f in configured.iter().filter(|f| f.attach.side == crate::config::FilterAttachSide::Input)
+        {
             if let Err(e) = input.attach_filter(f, &self.canvas, false) {
                 warn!(source = %cfg.id, filter = %f.id, ?e, "could not attach a configured filter");
             }
@@ -1156,22 +1151,7 @@ impl Mixer {
             self.bus_tx.clone(),
         )
         .context("watching input bus")?;
-        // Put every source pipeline on the program's clock and base time.
-        //
-        // Separate pipelines otherwise each pick their own, so running times
-        // are not comparable across the proxy boundary. Live RTMP inputs get
-        // away with it because their timing comes from arrival, but a file's
-        // timestamps start at zero, and a compositor judging them against a
-        // programme that has been up for minutes sees them as ancient history.
-        if let Some(clock) = self.program.clock() {
-            input.pipeline.use_clock(Some(&clock));
-            // start-time NONE stops the pipeline resetting base time when it
-            // changes state, which would undo the line below.
-            input.pipeline.set_start_time(gst::ClockTime::NONE);
-            if let Some(base) = self.program.base_time() {
-                input.pipeline.set_base_time(base);
-            }
-        }
+        self.adopt_clock(&input.pipeline);
 
         // Register the slot before starting, so that a failure to start can be
         // cleaned up by the ordinary removal path rather than leaking pads and
@@ -1406,6 +1386,34 @@ impl Mixer {
             }
         }
         all
+    }
+
+    /// Put a source pipeline on the programme's clock and base time.
+    ///
+    /// Separate pipelines otherwise each pick their own, so running times are
+    /// not comparable across the proxy boundary. Live RTMP inputs get away with
+    /// it because their timing comes from arrival, but a file's timestamps
+    /// start at zero, and a compositor judging them against a programme that
+    /// has been up for minutes sees them as ancient history.
+    fn adopt_clock(&self, pipeline: &gst::Pipeline) {
+        let Some(clock) = self.program.clock() else { return };
+        pipeline.use_clock(Some(&clock));
+        // start-time NONE stops the pipeline resetting base time when it
+        // changes state, which would undo the line below.
+        pipeline.set_start_time(gst::ClockTime::NONE);
+        if let Some(base) = self.program.base_time() {
+            pipeline.set_base_time(base);
+        }
+    }
+
+    /// The configured filters that name one source.
+    fn configured_filters(&self, id: &SourceId) -> Vec<crate::config::FilterConfig> {
+        self.cfg
+            .filters
+            .iter()
+            .filter(|f| f.attach.source.as_deref() == Some(id.as_str()))
+            .cloned()
+            .collect()
     }
 
     pub fn remove_source(&mut self, id: &SourceId) -> Result<()> {

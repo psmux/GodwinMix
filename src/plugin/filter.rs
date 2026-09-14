@@ -310,3 +310,128 @@ pub fn make(type_id: &str) -> Result<Box<dyn Filter>> {
 pub fn available() -> Vec<String> {
     vec![super::filters::chroma::MANIFEST.provide_id()]
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::config::Params;
+    use std::sync::atomic::{AtomicU64, Ordering};
+    use std::sync::Arc;
+
+    fn init() {
+        let _ = gst::init();
+    }
+
+    /// The largest gap between consecutive buffers, in nanoseconds, measured
+    /// from their presentation times.
+    ///
+    /// The same question the README's verification table asks of the programme
+    /// with ffmpeg: the inter frame interval. A frame that never arrived shows
+    /// as an interval of two frames, so a maximum of one frame's duration means
+    /// nothing was lost.
+    #[derive(Default)]
+    struct Intervals {
+        last: AtomicU64,
+        largest: AtomicU64,
+        seen: AtomicU64,
+    }
+
+    impl Intervals {
+        fn watch(self: &Arc<Self>, pad: &gst::Pad) {
+            let me = self.clone();
+            pad.add_probe(gst::PadProbeType::BUFFER, move |_p, info| {
+                if let Some(gst::PadProbeData::Buffer(b)) = &info.data {
+                    if let Some(pts) = b.pts() {
+                        let last = me.last.swap(pts.nseconds(), Ordering::Relaxed);
+                        if last > 0 {
+                            let gap = pts.nseconds().saturating_sub(last);
+                            me.largest.fetch_max(gap, Ordering::Relaxed);
+                        }
+                        me.seen.fetch_add(1, Ordering::Relaxed);
+                    }
+                }
+                gst::PadProbeReturn::Ok
+            });
+        }
+    }
+
+    /// A stand in for the programme's insertion point: a live source, the
+    /// canvas capsfilter, and the tee every consumer reads. Exactly the two
+    /// elements `vmix-caps` and `vraw-tee` are in the real thing.
+    fn programme_stand_in() -> (gst::Pipeline, gst::Element, gst::Element, Arc<Intervals>) {
+        let canvas = crate::plugin::harness::test_canvas();
+        let pipeline = gst::Pipeline::with_name("filter-gap-test");
+        let src = crate::gstutil::make("videotestsrc", "vmix-stand-in").unwrap();
+        src.set_property("is-live", true);
+        let caps = crate::gstutil::capsfilter("vmix-caps", &canvas.video()).unwrap();
+        let tee = crate::gstutil::make("tee", "vraw-tee").unwrap();
+        tee.set_property("allow-not-linked", true);
+        let queue = crate::gstutil::queue_thread("out-q").unwrap();
+        let sink = crate::gstutil::make("fakesink", "out").unwrap();
+        sink.set_property("sync", false);
+        pipeline.add_many([&src, &caps, &tee, &queue, &sink]).unwrap();
+        gst::Element::link_many([&src, &caps, &tee, &queue, &sink]).unwrap();
+
+        let intervals = Arc::new(Intervals::default());
+        intervals.watch(&sink.static_pad("sink").unwrap());
+        (pipeline, caps, tee, intervals)
+    }
+
+    #[test]
+    fn inserting_and_removing_a_chroma_key_live_costs_no_more_than_one_frame() {
+        init();
+        let canvas = crate::plugin::harness::test_canvas();
+        let frame = canvas.frame_duration().nseconds();
+        let (pipeline, caps, tee, intervals) = programme_stand_in();
+        pipeline.set_state(gst::State::Playing).unwrap();
+        // Let it settle so the measurement is of the insert, not of start up.
+        std::thread::sleep(std::time::Duration::from_millis(500));
+        let before = intervals.seen.load(Ordering::Relaxed);
+        assert!(before > 5, "the stand in produced nothing to measure");
+
+        let mut params = Params::new();
+        params.insert("method".into(), toml::Value::String("green".into()));
+        let slot = insert(
+            Insertion::between(&pipeline, &caps, &tee),
+            FilterSpec {
+                id: "key".into(),
+                type_id: "chroma/filter".into(),
+                side: FilterSide::Programme,
+                params,
+            },
+            make("chroma/filter").unwrap(),
+            &canvas,
+            true,
+        )
+        .expect("a chroma key goes in live");
+
+        std::thread::sleep(std::time::Duration::from_millis(500));
+        let during = intervals.seen.load(Ordering::Relaxed);
+        assert!(during > before, "frames stopped arriving once the key was in");
+
+        slot.remove().expect("and comes out again");
+        std::thread::sleep(std::time::Duration::from_millis(500));
+        let after = intervals.seen.load(Ordering::Relaxed);
+        assert!(after > during, "frames stopped arriving once the key came out");
+
+        let largest = intervals.largest.load(Ordering::Relaxed);
+        let _ = pipeline.set_state(gst::State::Null);
+        // One frame, with a frame of slack for the boundary. A lost frame would
+        // read as two frame durations here, which is what the README's
+        // measurement of adding and removing an output calls a gap.
+        assert!(
+            largest <= frame * 2,
+            "largest gap was {largest} ns, more than two frames ({} ns)",
+            frame * 2
+        );
+    }
+
+    #[test]
+    fn a_filter_that_does_not_exist_names_the_ones_that_do() {
+        let err = match make("blur/filter") {
+            Ok(f) => panic!("this build has no blur, but {} claimed it", f.manifest().provide_id()),
+            Err(e) => e,
+        };
+        assert!(format!("{err}").contains("chroma/filter"), "{err}");
+    }
+}
