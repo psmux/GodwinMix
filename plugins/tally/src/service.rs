@@ -114,8 +114,14 @@ pub async fn run(wiring: Wiring, mut settings: watch::Receiver<Settings>) {
                 continue;
             }
         };
-        // Nothing runs unless asked: this is the asking for event/tally.
-        if let Err(error) = client.subscribe(&["tally", "source.state"], json!({"tally": true})).await {
+        // Nothing runs unless asked: `ext.tally` is the asking for the derived
+        // tally document, and `program.*` has to be in the pattern list too.
+        // The core pushes `event/tally` on the back of `event/program.took`,
+        // and a client that did not subscribe to that one never reaches the
+        // line that sends the tally. Subscribing to both is what a tally
+        // client wants anyway.
+        let events = ["tally", "program.*", "source.state"];
+        if let Err(error) = client.subscribe(&events, json!({"tally": true})).await {
             wiring.log.warn(&format!("the core refused core.subscribe: {error}"));
         }
         let reason = serve(&wiring, &client, &current, &mut settings).await;
