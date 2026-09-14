@@ -28,6 +28,7 @@ Start here if you have never run it.
 * [Add a theme](how-to/add-a-theme.md) (planned)
 * [Write a preset](how-to/write-a-preset.md) (planned)
 * [Upgrade from LiveboxMix](how-to/upgrade-from-liveboxmix.md)
+* [Run the smoke test](how-to/smoke-test.md)
 
 ## Reference
 
