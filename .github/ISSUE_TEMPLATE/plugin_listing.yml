@@ -1,0 +1,98 @@
+name: Plugin listing request
+description: Ask for a plugin of yours to be listed
+labels: ["plugin-listing"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        **The plugin index does not exist yet.** The loader, the manifest and
+        the conformance harness are being built, and a directory that lists
+        nothing is a trap this project is deliberately not falling into.
+
+        Open this issue anyway if you have built something against the exec
+        source protocol or the browser sidecar contract, or if you intend to
+        build against the plugin protocol when it lands. The list of people
+        waiting is what decides how soon the index is worth having, and the
+        first listings will be things somebody was actually running.
+
+        First response is targeted at under 48 hours.
+
+  - type: input
+    id: name
+    attributes:
+      label: Name
+      placeholder: gmx-scoreboard
+    validations:
+      required: true
+
+  - type: input
+    id: repo
+    attributes:
+      label: Where it lives
+      placeholder: https://github.com/you/gmx-scoreboard
+    validations:
+      required: true
+
+  - type: dropdown
+    id: kind
+    attributes:
+      label: What kind of plugin
+      options:
+        - source
+        - output
+        - filter
+        - service
+        - device
+        - surface (a whole UI)
+        - panel (a piece of UI)
+        - something the list does not have
+    validations:
+      required: true
+
+  - type: input
+    id: language
+    attributes:
+      label: Language
+      placeholder: Python 3.11, standard library only
+    validations:
+      required: true
+
+  - type: textarea
+    id: what
+    attributes:
+      label: What it does
+      description: Two or three sentences. What it is for, and who would use it.
+    validations:
+      required: true
+
+  - type: textarea
+    id: against
+    attributes:
+      label: What it is built against
+      description: >
+        The exec source protocol, the browser sidecar contract, the plugin
+        protocol when it lands, or something else. If you had to read the
+        source to work something out, say which part: that is the useful half
+        of this issue.
+    validations:
+      required: true
+
+  - type: textarea
+    id: cost
+    attributes:
+      label: What it costs to run
+      description: >
+        CPU and memory on the machine you ran it on, and which machine that
+        was. Rough numbers are fine. `gmx plugin test` will print these
+        automatically once it exists.
+      placeholder: "About 4 percent of one core and 60 MB on an N100."
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before you post
+      options:
+        - label: The repository is public and has a licence
+          required: false
+        - label: The README says what to change to make it do something else
+          required: false
