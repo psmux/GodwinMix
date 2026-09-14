@@ -318,7 +318,12 @@ fn the_source_list_comes_out_as_config_with_a_type_and_params() {
 
 #[test]
 fn the_imported_document_round_trips_and_validates() {
-    let imported = import_full(&Options::default());
+    let mut imported = import_full(&Options::default());
+    // An import builds a tree directly rather than going through the scene
+    // server, so nothing has given it order keys yet. The flat projection
+    // works them out and reading it back stores them, so the comparison is
+    // made against a document that has them.
+    imported.document.renumber_order();
     let text = imported.document.to_json();
     let back = Collection::from_json(&text).expect("the written document reads back");
     assert_eq!(back, imported.document);

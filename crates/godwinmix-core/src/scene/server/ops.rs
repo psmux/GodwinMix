@@ -330,9 +330,13 @@ pub fn reorder(
     after: Option<Id>,
 ) -> Result<()> {
     let scene = &mut doc.scenes[index];
-    let Some(item) = take_item(&mut scene.items, id) else {
+    let Some(mut item) = take_item(&mut scene.items, id) else {
         bail!("there is no item {id} in the scene {:?}", scene.name);
     };
+    // The key it had put it where it was. Dropping it lets `renumber_order`
+    // give it one between its new neighbours, so a drag writes one record on
+    // the wire and every other item's key is untouched.
+    item.order = None;
     let at = match (before, after) {
         (Some(b), _) => scene.items.iter().position(|i| i.id == b).unwrap_or(0),
         (None, Some(a)) => {
