@@ -287,6 +287,10 @@ jobs:
         with:
           python-version: "3.12"
       - run: python3 clients/gen/generate.py --check
+      # The designer kits exist three times and one file says what they answer.
+      # If this fails, run `node dev/kit-fixtures.mjs` and the two suites below
+      # will name the cases that moved.
+      - run: node dev/kit-fixtures.mjs --check
       - run: cd clients/typescript && npm test
       - run: cd clients/python && python3 -m unittest -q
       - run: bash examples/test-zero-dep.sh
