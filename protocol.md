@@ -36,12 +36,22 @@ Keys accepted on every method, handled before a method runs.
 | `adbreak.end` | `POST /api/v1/adbreak/end` | operate |  | 1 | Cut a running ad short, or disarm one that is scheduled. |
 | `adbreak.start` | `POST /api/v1/adbreak/start` | operate |  | 1 | Interrupt the programme with a clip, then rejoin live when it ends. |
 | `agent.state` | `GET /api/v1/agent/state` | read |  | 1 | The compact document written for agents: the programme, each source's state and a motion score saying how much its picture is changing. |
-| `codec.list` | `GET /api/v1/codecs` | read |  | 1 | The codecs and elements this machine can use. The catalogue proper is not built yet; this reports the backends actually selected. |
+| `codec.list` | `GET /api/v1/codecs` | read |  | 1 | Every codec and element in the catalogue, which of them this machine actually has, and what it would pick. |
 | `core.api` | `GET /api/v1/core/api` | read |  | 1 | Every method, event and type as JSON Schema. The same document as protocol.json and `godwinmix --api-info`. |
+| `core.doctor` | `GET /api/v1/core/doctor` | read |  | 1 | The environment checks: GStreamer, the elements, the config, the disk and the ports. The same list `gmx doctor` prints. |
 | `core.info` | `GET /api/v1/core/info` | read |  | 1 | What this core is, what it can do, and where its edges are. |
+| `core.session_log` | `GET /api/v1/core/session_log` | admin |  | 1 | The append only record of everything that happened, back as far as you ask. |
 | `core.shutdown` | `POST /api/v1/core/shutdown` | admin | yes | 1 | Stop the mixer, and with it the programme. Nothing else takes the show off air, so this is deliberately its own call. |
+| `core.startup_report` | `GET /api/v1/core/startup_report` | read |  | 1 | How long each stage of the start took, and what was over the 250 ms mark. |
 | `core.status` | `GET /api/v1/core/status` | read |  | 1 | The full state: programme, every source, every output, the multiview grid, the encoder backend and any ad break. |
 | `core.subscribe` | (none) | read |  | 1 | Subscribe to the event stream. WebSocket only: the core answers event/snapshot then deltas, ending every batch with event/flush. |
+| `filter.add` | `POST /api/v1/filters` | operate |  | 1 | Hang a filter on one source or on the programme, live. |
+| `filter.list` | `GET /api/v1/filters` | read |  | 1 | Every filter in place, with what it is and where it sits. |
+| `filter.remove` | `DELETE /api/v1/filters/{id}` | operate | yes | 1 | Take a filter out of the pipeline. |
+| `filter.set` | `POST /api/v1/filters/{id}/set` | operate |  | 1 | Change a filter's settings in place. A filter that cannot take the change while running says so rather than being restarted behind your back. |
+| `log.gst` | `POST /api/v1/log/gst` | admin |  | 1 | Raise GStreamer's own debug categories for a while, then let them fall back on their own. |
+| `log.levels` | `GET /api/v1/log/levels` | read |  | 1 | Every log level override in force, and the GStreamer categories still raised. |
+| `log.set` | `POST /api/v1/log/set` | admin |  | 1 | Change one instance's or one module's log level while the mixer runs. |
 | `media.convert` | `POST /api/v1/media/{id}/convert` | operate |  | 1 | Transcode a library file to a web safe copy, in the background. |
 | `media.list` | `GET /api/v1/media` | read |  | 1 | The clips in the library, with durations and whether each has audio. |
 | `media.remove` | `DELETE /api/v1/media/{id}` | operate | yes | 1 | Delete a library file and its converted copy. Refused while it is a live source. |
@@ -51,6 +61,11 @@ Keys accepted on every method, handled before a method runs.
 | `output.list` | `GET /api/v1/outputs` | read |  | 1 | Every destination, with its state, reconnect count and how much is buffered. |
 | `output.reconnect` | `POST /api/v1/outputs/{id}/reconnect` | operate |  | 1 | Drop and re-establish one destination's connection now, without waiting for its reconnect policy. |
 | `output.remove` | `DELETE /api/v1/outputs/{id}` | operate | yes | 1 | Stop sending to a destination and forget it. Other outputs are unaffected. |
+| `pipeline.clock` | `GET /api/v1/pipeline/clock` | read |  | 1 | The clock every pipeline is running against, and how far each one has got. |
+| `pipeline.dot` | `GET /api/v1/pipeline/dot` | read |  | 1 | One pipeline as a graphviz graph: every element, every pad and the caps negotiated between them. |
+| `pipeline.latency` | `GET /api/v1/pipeline/latency` | read |  | 1 | How much delay one pipeline is carrying, and which stage put it there. |
+| `pipeline.list` | `GET /api/v1/pipeline/list` | read |  | 1 | Every pipeline running right now, by the name the other pipeline methods accept. |
+| `pipeline.queues` | `GET /api/v1/pipeline/queues` | read |  | 1 | Every queue in one pipeline with how full it is, fullest first. A queue that stays full is where the trouble is. |
 | `program.get` | `GET /api/v1/program` | read |  | 1 | What is on air, the programme running time, and what revert would go back to. |
 | `program.golive` | `POST /api/v1/program/golive` | operate |  | 1 | One call to put a web page on air: add the page, add the destination, and take the page as soon as it renders. |
 | `program.history` | `GET /api/v1/program/history` | read |  | 1 | The last hundred takes, newest first, with the token that asked for each. |
@@ -123,7 +138,7 @@ MCP tool `agent_state` in the `minimal` profile: readOnlyHint true, destructiveH
 
 #### `codec.list`
 
-The codecs and elements this machine can use. The catalogue proper is not built yet; this reports the backends actually selected.
+Every codec and element in the catalogue, which of them this machine actually has, and what it would pick.
 
 MCP tool `list_codecs` in the `search` profile: readOnlyHint true, destructiveHint false, idempotentHint true.
 
@@ -157,6 +172,25 @@ Every method, event and type as JSON Schema. The same document as protocol.json 
 }
 ```
 
+#### `core.doctor`
+
+The environment checks: GStreamer, the elements, the config, the disk and the ports. The same list `gmx doctor` prints.
+
+MCP tool `doctor` in the `search` profile: readOnlyHint true, destructiveHint false, idempotentHint true.
+
+```json
+{
+  "params": {
+    "additionalProperties": false,
+    "properties": {},
+    "type": "object"
+  },
+  "result": {
+    "type": "object"
+  }
+}
+```
+
 #### `core.info`
 
 What this core is, what it can do, and where its edges are.
@@ -176,9 +210,41 @@ MCP tool `core_info` in the `search` profile: readOnlyHint true, destructiveHint
 }
 ```
 
+#### `core.session_log`
+
+The append only record of everything that happened, back as far as you ask.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/SessionLogRequest"
+  },
+  "result": {
+    "type": "object"
+  }
+}
+```
+
 #### `core.shutdown`
 
 Stop the mixer, and with it the programme. Nothing else takes the show off air, so this is deliberately its own call.
+
+```json
+{
+  "params": {
+    "additionalProperties": false,
+    "properties": {},
+    "type": "object"
+  },
+  "result": {
+    "type": "object"
+  }
+}
+```
+
+#### `core.startup_report`
+
+How long each stage of the start took, and what was over the 250 ms mark.
 
 ```json
 {
@@ -223,6 +289,117 @@ Subscribe to the event stream. WebSocket only: the core answers event/snapshot t
   },
   "result": {
     "$ref": "#/$defs/SubscribeResult"
+  }
+}
+```
+
+#### `filter.add`
+
+Hang a filter on one source or on the programme, live.
+
+MCP tool `add_filter` in the `search` profile: readOnlyHint false, destructiveHint false, idempotentHint true.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/AddFilterRequest"
+  },
+  "result": {
+    "$ref": "#/$defs/FilterRecord"
+  }
+}
+```
+
+#### `filter.list`
+
+Every filter in place, with what it is and where it sits.
+
+```json
+{
+  "params": {
+    "additionalProperties": false,
+    "properties": {},
+    "type": "object"
+  },
+  "result": {
+    "$ref": "#/$defs/FilterListing"
+  }
+}
+```
+
+#### `filter.remove`
+
+Take a filter out of the pipeline.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/FilterIdRequest"
+  },
+  "result": {
+    "$ref": "#/$defs/FilterRemoved"
+  }
+}
+```
+
+#### `filter.set`
+
+Change a filter's settings in place. A filter that cannot take the change while running says so rather than being restarted behind your back.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/SetFilterRequest"
+  },
+  "result": {
+    "$ref": "#/$defs/FilterRecord"
+  }
+}
+```
+
+#### `log.gst`
+
+Raise GStreamer's own debug categories for a while, then let them fall back on their own.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/LogGstRequest"
+  },
+  "result": {
+    "$ref": "#/$defs/LogGstResult"
+  }
+}
+```
+
+#### `log.levels`
+
+Every log level override in force, and the GStreamer categories still raised.
+
+```json
+{
+  "params": {
+    "additionalProperties": false,
+    "properties": {},
+    "type": "object"
+  },
+  "result": {
+    "type": "object"
+  }
+}
+```
+
+#### `log.set`
+
+Change one instance's or one module's log level while the mixer runs.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/LogSetRequest"
+  },
+  "result": {
+    "type": "object"
   }
 }
 ```
@@ -378,6 +555,87 @@ MCP tool `remove_output` in the `search` profile: readOnlyHint false, destructiv
 {
   "params": {
     "$ref": "#/$defs/IdRequest"
+  },
+  "result": {
+    "type": "object"
+  }
+}
+```
+
+#### `pipeline.clock`
+
+The clock every pipeline is running against, and how far each one has got.
+
+```json
+{
+  "params": {
+    "additionalProperties": false,
+    "properties": {},
+    "type": "object"
+  },
+  "result": {
+    "type": "object"
+  }
+}
+```
+
+#### `pipeline.dot`
+
+One pipeline as a graphviz graph: every element, every pad and the caps negotiated between them.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/PipelineRequest"
+  },
+  "result": {
+    "$ref": "#/$defs/PipelineDot"
+  }
+}
+```
+
+#### `pipeline.latency`
+
+How much delay one pipeline is carrying, and which stage put it there.
+
+MCP tool `pipeline_latency` in the `search` profile: readOnlyHint true, destructiveHint false, idempotentHint true.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/PipelineRequest"
+  },
+  "result": {
+    "type": "object"
+  }
+}
+```
+
+#### `pipeline.list`
+
+Every pipeline running right now, by the name the other pipeline methods accept.
+
+```json
+{
+  "params": {
+    "additionalProperties": false,
+    "properties": {},
+    "type": "object"
+  },
+  "result": {
+    "type": "object"
+  }
+}
+```
+
+#### `pipeline.queues`
+
+Every queue in one pipeline with how full it is, fullest first. A queue that stays full is where the trouble is.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/PipelineRequest"
   },
   "result": {
     "type": "object"

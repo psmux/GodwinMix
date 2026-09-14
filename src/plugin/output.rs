@@ -84,6 +84,11 @@ pub fn available() -> Vec<String> {
     registry().iter().map(|p| p.manifest.provide_id()).collect()
 }
 
+/// Every output kind this build carries, with what it is and what it claims.
+pub fn described() -> Vec<super::KindInfo> {
+    registry().iter().map(|p| p.manifest.describe()).collect()
+}
+
 /// The output implementation a config entry names, whether it wrote a `type`
 /// or only a URI.
 pub fn resolve_config(cfg: &OutputConfig) -> Result<&'static OutputProvide> {

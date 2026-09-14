@@ -196,13 +196,22 @@ fn the_table_matches_the_scopes_in_the_protocol_document() {
     assert_eq!(scope("source.add"), Scope::Operate);
     assert_eq!(scope("source.remove"), Scope::Operate);
     assert_eq!(scope("core.shutdown"), Scope::Admin);
+    assert_eq!(scope("filter.add"), Scope::Operate);
+    assert_eq!(scope("filter.list"), Scope::Read);
+    // The observability methods. Reading what a pipeline is doing is a read;
+    // moving a log level or reading the session log is not.
+    assert_eq!(scope("pipeline.dot"), Scope::Read);
+    assert_eq!(scope("core.doctor"), Scope::Read);
+    assert_eq!(scope("log.set"), Scope::Admin);
+    assert_eq!(scope("core.session_log"), Scope::Admin);
 
     let destructive: Vec<&str> =
         reg.iter().filter(|m| m.destructive).map(|m| m.name).collect();
     assert_eq!(
         destructive,
-        vec!["core.shutdown", "media.remove", "output.remove", "source.remove"],
-        "the destructive set is the one 03 section 6 marks"
+        vec!["core.shutdown", "filter.remove", "media.remove", "output.remove", "source.remove"],
+        "the destructive set is the one 03 section 6 marks, plus filter.remove: taking a \
+         filter out changes the picture and cannot be undone by repeating it"
     );
 }
 

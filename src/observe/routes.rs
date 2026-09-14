@@ -44,7 +44,33 @@ pub struct ObserveState {
     pub config_path: PathBuf,
 }
 
+/// Every route this module answers on, in the form the method table spells
+/// them. `observe::methods` declares the same list and a test compares the
+/// two, so a route cannot exist without a method or answer at a different
+/// address from the one `protocol.json` publishes.
+pub fn served_paths() -> Vec<&'static str> {
+    vec![
+        "POST /api/v1/log/set",
+        "POST /api/v1/log/gst",
+        "GET /api/v1/log/levels",
+        "GET /api/v1/pipeline/dot",
+        "GET /api/v1/pipeline/latency",
+        "GET /api/v1/pipeline/queues",
+        "GET /api/v1/pipeline/clock",
+        "GET /api/v1/pipeline/list",
+        "GET /api/v1/core/startup_report",
+        "GET /api/v1/core/doctor",
+        "GET /api/v1/core/session_log",
+    ]
+}
+
 /// Every observability route, ready to merge into the control plane's router.
+///
+/// These are the REST forms of the methods in `observe::methods`, and they
+/// are served here rather than by the generated router because two of the
+/// answers are not JSON: a dot graph is graphviz text a caller pipes into
+/// `dot`, and the session log is ndjson. A specific path beats the generated
+/// `/api/v1/{*rest}`, so each of these is answered once.
 pub fn router(state: ObserveState) -> Router {
     let metrics_open = state.metrics_open;
     let guarded = Router::new()

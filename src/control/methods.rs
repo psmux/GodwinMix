@@ -18,6 +18,7 @@ use serde_json::{json, Value};
 use std::future::Future;
 use std::sync::Arc;
 
+mod filters;
 mod media;
 mod outputs;
 mod program;
@@ -50,6 +51,8 @@ pub fn registry() -> Registry<Call> {
     sources::register(&mut reg);
     outputs::register(&mut reg);
     media::register(&mut reg);
+    filters::register(&mut reg);
+    crate::observe::register(&mut reg);
     // Other modules add their own here. One line each, and they land on
     // /rpc, /api/v1, protocol.json and the tool list together. See
     // src/api/README.md.
@@ -178,29 +181,32 @@ fn register_introspection(reg: &mut Registry<Call>) {
         MethodDef::new(
             "codec.list",
             Scope::Read,
-            "The codecs and elements this machine can use. The catalogue proper is not \
-             built yet; this reports the backends actually selected.",
+            "Every codec and element in the catalogue, which of them this machine \
+             actually has, and what it would pick.",
             handler(|call: Call, _| async move {
-                // TODO(codecs agent): answer from `crate::catalogue::list()`
-                // when it exists. The route, the scope and the shape are
-                // settled here so that filling it in is one function body and
-                // no client has to change.
-                let status = call.app.mixer.status().await.map_err(|e| call.mixer_error(e))?;
-                Ok(json!({
-                    "catalogue": Value::Null,
-                    "note": "the codec catalogue is not built in this release; these are the \
-                             backends this core selected at startup",
-                    "selected": status.backend,
-                }))
+                // The whole answer is the catalogue's own listing: which
+                // entries exist, which elements are present on this box, what
+                // was selected and why. `gmx codec list` prints the same data.
+                let mut value = body(crate::catalogue::list())?;
+                // What the programme is encoding with right now, which is not
+                // always what a fresh selection would choose: an operator who
+                // edited codecs.toml since startup needs to see both.
+                if let Ok(status) = call.app.mixer.status().await {
+                    if let Some(map) = value.as_object_mut() {
+                        map.insert("running".into(), body(status.backend)?);
+                    }
+                }
+                Ok(value)
             }),
         )
         .result(any_object)
         .tool(
             "list_codecs",
             Tier::Search,
-            "Which video and audio encoder and decoder this machine picked, and whether \
-             they are hardware accelerated. Use it when a source or an output is slow and \
-             you want to know whether the box is encoding in software.",
+            "Every codec in the catalogue with the GStreamer elements behind it, whether \
+             this machine has them, and which one was picked for the programme. Use it \
+             when a source or an output is slow and you want to know whether the box is \
+             encoding in software.",
         ),
     );
 
