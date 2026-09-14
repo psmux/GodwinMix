@@ -87,17 +87,48 @@ mod tests {
         run(&argv, &hook, body).await
     }
 
+    /// A script on disk rather than a `sh -c` one liner: the thing being
+    /// tested is what arrives on stdin, and three layers of shell quoting in
+    /// a Rust string literal tests the quoting instead.
+    fn script(name: &str, body: &str) -> std::path::PathBuf {
+        let dir = std::env::temp_dir().join(format!("gmx-{name}-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).expect("a temp directory");
+        let path = dir.join("hook.sh");
+        std::fs::write(&path, body).expect("writing the hook script");
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755)).unwrap();
+        }
+        path
+    }
+
     #[tokio::test]
     #[cfg_attr(windows, ignore = "the test scripts are sh")]
     async fn the_event_arrives_on_stdin_and_a_json_refusal_stops_the_take() {
+        let path = script(
+            "hook-stdin",
+            "#!/bin/sh\nread line\ncase \"$line\" in\n  *cam3*) echo '{\"allow\": false, \"reason\": \"no audio on cam3\"}' ;;\n  *) echo '{\"allow\": true}' ;;\nesac\n",
+        );
         let decision = decide(
-            "sh -c 'read line; case \"$line\" in *cam3*) echo \\'{\"allow\": false, \"reason\": \"no audio on cam3\"}\\' ;; *) echo \\'{\"allow\": true}\\' ;; esac'",
+            &format!("sh {}", path.display()),
             "take.before",
             serde_json::json!({ "hook": "take.before", "payload": { "source": "cam3" } }),
         )
         .await
         .expect("ran");
         assert_eq!(decision, Decision::Refuse { reason: "no audio on cam3".into() });
+
+        // The same script, a source it does not object to.
+        let allowed = decide(
+            &format!("sh {}", path.display()),
+            "take.before",
+            serde_json::json!({ "hook": "take.before", "payload": { "source": "cam1" } }),
+        )
+        .await
+        .expect("ran");
+        assert_eq!(allowed, Decision::Allow);
+        let _ = std::fs::remove_dir_all(path.parent().unwrap());
     }
 
     #[tokio::test]
