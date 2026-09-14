@@ -60,10 +60,7 @@ pub fn runtime_dir(config_path: &Path) -> PathBuf {
             return PathBuf::from(dir);
         }
     }
-    config_path
-        .parent()
-        .unwrap_or(Path::new("."))
-        .join(".godwinmix")
+    config_path.parent().unwrap_or(Path::new(".")).join(".godwinmix")
 }
 
 /// What `start` needs to know.
@@ -79,7 +76,10 @@ pub struct Options {
 ///
 /// One call from `run`, after the mixer is built and before the control server
 /// starts. Returns the directory it settled on, for the log line that says so.
-pub fn start(handle: &crate::mixer::MixerHandle, options: &Options) -> std::io::Result<PathBuf> {
+pub fn start(
+    handle: &crate::mixer::MixerHandle,
+    options: &Options,
+) -> std::io::Result<PathBuf> {
     let dir = runtime_dir(&options.config_path);
     std::fs::create_dir_all(&dir)?;
     logs::attach_files(&dir)?;
@@ -134,10 +134,7 @@ pub struct InstanceGuard {
 impl InstanceGuard {
     fn new(kind: &'static str, instance: &str) -> Self {
         let span = tracing::info_span!("instance", instance = instance, kind = kind);
-        Self {
-            _entered: span.entered(),
-            _timer: introspect::plugin_stage(kind, instance),
-        }
+        Self { _entered: span.entered(), _timer: introspect::plugin_stage(kind, instance) }
     }
 }
 
@@ -180,10 +177,7 @@ mod tests {
         let dir = runtime_dir(Path::new("/etc/godwinmix/godwinmix.toml"));
         assert_eq!(dir, Path::new("/etc/godwinmix/.godwinmix"));
         // A bare file name still answers a usable relative path.
-        assert_eq!(
-            runtime_dir(Path::new("godwinmix.toml")),
-            Path::new(".godwinmix")
-        );
+        assert_eq!(runtime_dir(Path::new("godwinmix.toml")), Path::new(".godwinmix"));
     }
 
     #[test]

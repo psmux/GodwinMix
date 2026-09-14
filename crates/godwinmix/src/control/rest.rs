@@ -6,6 +6,8 @@
 //! written out by hand because they carry bytes rather than JSON: the upload,
 //! whose body is the file, and the snapshot, whose answer is a JPEG.
 
+use godwinmix_protocol::error::{ErrorCode, RpcError};
+use godwinmix_protocol::method::Registry;
 use crate::control::call::dispatch;
 use crate::control::{trace_id_of, trace_of, Ctx};
 use axum::body::Body;
@@ -14,8 +16,6 @@ use axum::http::{header, HeaderMap, Method, StatusCode, Uri};
 use axum::response::{IntoResponse, Response};
 use axum::routing::{any, get, post};
 use axum::{Json, Router};
-use godwinmix_protocol::error::{ErrorCode, RpcError};
-use godwinmix_protocol::method::Registry;
 use serde_json::{json, Map, Value};
 use std::collections::HashMap;
 
@@ -60,20 +60,12 @@ pub fn routes<C>(registry: &Registry<C>) -> Vec<Route> {
             m.rest.as_ref().map(|r| Route {
                 http: r.http,
                 method: m.name,
-                segments: r
-                    .path
-                    .split('/')
-                    .filter(|s| !s.is_empty())
-                    .map(segment)
-                    .collect(),
+                segments: r.path.split('/').filter(|s| !s.is_empty()).map(segment).collect(),
             })
         })
         .collect();
     routes.sort_by(|a, b| {
-        b.segments
-            .len()
-            .cmp(&a.segments.len())
-            .then_with(|| a.method.cmp(b.method))
+        b.segments.len().cmp(&a.segments.len()).then_with(|| a.method.cmp(b.method))
     });
     routes
 }
@@ -90,18 +82,11 @@ pub fn legacy_routes() -> Vec<Route> {
         .map(|(http, path, method)| Route {
             http,
             method,
-            segments: path
-                .split('/')
-                .filter(|s| !s.is_empty())
-                .map(segment)
-                .collect(),
+            segments: path.split('/').filter(|s| !s.is_empty()).map(segment).collect(),
         })
         .collect();
     routes.sort_by(|a, b| {
-        b.segments
-            .len()
-            .cmp(&a.segments.len())
-            .then_with(|| a.method.cmp(b.method))
+        b.segments.len().cmp(&a.segments.len()).then_with(|| a.method.cmp(b.method))
     });
     routes
 }
@@ -122,9 +107,7 @@ pub fn resolve<'a>(
     let parts: Vec<&str> = path.split('/').filter(|s| !s.is_empty()).collect();
     let mut path_matched = Vec::new();
     for route in routes {
-        let Some(captures) = captures(route, &parts) else {
-            continue;
-        };
+        let Some(captures) = captures(route, &parts) else { continue };
         path_matched.push(route);
         if route.http == http.as_str() {
             return Ok((route, captures));
@@ -247,17 +230,10 @@ async fn generic(State(ctx): State<Ctx>, request: Request) -> Response {
         Err(e) => return error_response(&e, &trace_id),
     };
     let params = params_from(body, parts.uri.query().unwrap_or_default(), captures);
-    let id = trace_id_of(
-        &parts.headers,
-        params.get("trace_id").and_then(Value::as_str),
-    );
+    let id = trace_id_of(&parts.headers, params.get("trace_id").and_then(Value::as_str));
     let trace_id = id.to_string();
 
-    let token = match ctx
-        .app
-        .tokens
-        .authenticate(bearer(&parts.headers).as_deref())
-    {
+    let token = match ctx.app.tokens.authenticate(bearer(&parts.headers).as_deref()) {
         Ok(t) => t,
         Err(f) => return unauthorised(f.message(), &trace_id),
     };
@@ -281,11 +257,7 @@ async fn generic(State(ctx): State<Ctx>, request: Request) -> Response {
             if let Some(map) = value.as_object_mut() {
                 map.insert("trace_id".into(), Value::String(trace_id.clone()));
             }
-            (
-                StatusCode::OK,
-                [(header::HeaderName::from_static("x-trace-id"), trace_id)],
-                Json(value),
-            )
+            (StatusCode::OK, [(header::HeaderName::from_static("x-trace-id"), trace_id)], Json(value))
                 .into_response()
         }
         Err(e) => error_response(&e, &trace_id),
@@ -299,18 +271,16 @@ async fn read_json(body: Body) -> Result<Value, RpcError> {
     if bytes.is_empty() {
         return Ok(Value::Null);
     }
-    serde_json::from_slice(&bytes)
-        .map_err(|e| RpcError::new(ErrorCode::ParseError, format!("the body is not JSON: {e}")))
+    serde_json::from_slice(&bytes).map_err(|e| {
+        RpcError::new(ErrorCode::ParseError, format!("the body is not JSON: {e}"))
+    })
 }
 
 pub fn error_response(e: &RpcError, trace_id: &str) -> Response {
     let status = StatusCode::from_u16(e.http_status()).unwrap_or(StatusCode::BAD_REQUEST);
     (
         status,
-        [(
-            header::HeaderName::from_static("x-trace-id"),
-            trace_id.to_string(),
-        )],
+        [(header::HeaderName::from_static("x-trace-id"), trace_id.to_string())],
         Json(e.body(trace_id)),
     )
         .into_response()
@@ -325,10 +295,7 @@ fn unauthorised(reason: &str, trace_id: &str) -> Response {
         StatusCode::UNAUTHORIZED,
         [
             (header::WWW_AUTHENTICATE, "Bearer".to_string()),
-            (
-                header::HeaderName::from_static("x-trace-id"),
-                trace_id.to_string(),
-            ),
+            (header::HeaderName::from_static("x-trace-id"), trace_id.to_string()),
         ],
         Json(e.body(trace_id)),
     )
@@ -350,11 +317,7 @@ pub fn bearer(headers: &HeaderMap) -> Option<String> {
 /// more logs than it should.
 pub fn query_token(uri: &Uri) -> Option<String> {
     let Query(pairs) = Query::<Vec<(String, String)>>::try_from_uri(uri).ok()?;
-    pairs
-        .into_iter()
-        .find(|(k, _)| k == "token")
-        .map(|(_, v)| v)
-        .filter(|v| !v.is_empty())
+    pairs.into_iter().find(|(k, _)| k == "token").map(|(_, v)| v).filter(|v| !v.is_empty())
 }
 
 /// `GET /api/v1/snapshot/{name}`: the JPEG itself, because an `<img>` tag
@@ -421,10 +384,7 @@ async fn upload(
     match crate::control::store_upload(&ctx.app, name, body).await {
         Ok(value) => (
             StatusCode::OK,
-            [(
-                header::HeaderName::from_static("x-trace-id"),
-                trace_id.clone(),
-            )],
+            [(header::HeaderName::from_static("x-trace-id"), trace_id.clone())],
             Json(json!({
                 "name": value["name"],
                 "path": value["path"],
@@ -451,8 +411,9 @@ mod tests {
     #[test]
     fn a_path_resolves_to_the_method_that_generated_it() {
         let routes = routes_for_test();
-        let at =
-            |http: Method, path: &str| resolve(&routes, &http, path).map(|(r, c)| (r.method, c));
+        let at = |http: Method, path: &str| {
+            resolve(&routes, &http, path).map(|(r, c)| (r.method, c))
+        };
         assert_eq!(at(Method::GET, "/api/v1/sources").unwrap().0, "source.list");
         assert_eq!(at(Method::POST, "/api/v1/sources").unwrap().0, "source.add");
         let (method, captures) = at(Method::DELETE, "/api/v1/sources/cam1").unwrap();
@@ -461,20 +422,11 @@ mod tests {
         let (method, captures) = at(Method::POST, "/api/v1/sources/cam1/audio").unwrap();
         assert_eq!(method, "source.audio.set");
         assert_eq!(captures["id"], "cam1");
-        assert_eq!(
-            at(Method::POST, "/api/v1/program/take").unwrap().0,
-            "program.take"
-        );
+        assert_eq!(at(Method::POST, "/api/v1/program/take").unwrap().0, "program.take");
         assert_eq!(at(Method::GET, "/api/v1/program").unwrap().0, "program.get");
         assert_eq!(at(Method::GET, "/api/v1/core/info").unwrap().0, "core.info");
-        assert_eq!(
-            at(Method::GET, "/api/v1/agent/state").unwrap().0,
-            "agent.state"
-        );
-        assert_eq!(
-            at(Method::GET, "/api/v1/core/status").unwrap().0,
-            "core.status"
-        );
+        assert_eq!(at(Method::GET, "/api/v1/agent/state").unwrap().0, "agent.state");
+        assert_eq!(at(Method::GET, "/api/v1/core/status").unwrap().0, "core.status");
     }
 
     /// The wrong verb on a real path says which verbs it does answer, rather
@@ -484,11 +436,7 @@ mod tests {
     fn the_wrong_verb_says_which_verbs_the_path_answers() {
         let routes = routes_for_test();
         let e = resolve(&routes, &Method::PUT, "/api/v1/sources").unwrap_err();
-        assert!(
-            e.message.contains("GET") && e.message.contains("POST"),
-            "{}",
-            e.message
-        );
+        assert!(e.message.contains("GET") && e.message.contains("POST"), "{}", e.message);
         let e = resolve(&routes, &Method::GET, "/api/v1/nonsense").unwrap_err();
         assert!(e.message.contains("core/api"), "{}", e.message);
     }
@@ -499,17 +447,13 @@ mod tests {
     fn the_most_specific_route_wins() {
         let routes = routes_for_test();
         let lengths: Vec<usize> = routes.iter().map(|r| r.segments.len()).collect();
-        assert!(
-            lengths.windows(2).all(|w| w[0] >= w[1]),
-            "routes are not longest first"
-        );
+        assert!(lengths.windows(2).all(|w| w[0] >= w[1]), "routes are not longest first");
     }
 
     #[test]
     fn the_path_beats_the_query_and_the_query_beats_the_body() {
-        let captures: Map<String, Value> = [("id".to_string(), Value::String("cam1".into()))]
-            .into_iter()
-            .collect();
+        let captures: Map<String, Value> =
+            [("id".to_string(), Value::String("cam1".into()))].into_iter().collect();
         let params = params_from(json!({ "id": "cam9", "gain": 0.5 }), "id=cam5", captures);
         assert_eq!(params["id"], "cam1", "the path is the most specific");
         assert_eq!(params["gain"], 0.5);

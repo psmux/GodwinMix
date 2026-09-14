@@ -106,12 +106,7 @@ pub struct MethodDef<C> {
 impl<C> MethodDef<C> {
     /// A read only method. The REST binding comes from the transform rule, so
     /// no call site chooses a path.
-    pub fn new(
-        name: &'static str,
-        scope: Scope,
-        summary: &'static str,
-        handler: Handler<C>,
-    ) -> Self {
+    pub fn new(name: &'static str, scope: Scope, summary: &'static str, handler: Handler<C>) -> Self {
         Self {
             name,
             since: "1",
@@ -157,21 +152,14 @@ impl<C> MethodDef<C> {
     }
 
     pub fn tool(mut self, tool: &'static str, tier: Tier, description: &'static str) -> Self {
-        self.mcp = Some(McpBinding {
-            tool,
-            tier,
-            description,
-        });
+        self.mcp = Some(McpBinding { tool, tier, description });
         self
     }
 
     /// Override the generated REST path. Used only where a route predates the
     /// transform rule and has to keep its shape.
     pub fn rest_at(mut self, http: &'static str, path: &str) -> Self {
-        self.rest = Some(Rest {
-            http,
-            path: path.to_string(),
-        });
+        self.rest = Some(Rest { http, path: path.to_string() });
         self
     }
 
@@ -190,9 +178,7 @@ pub struct Registry<C> {
 
 impl<C> Default for Registry<C> {
     fn default() -> Self {
-        Self {
-            methods: BTreeMap::new(),
-        }
+        Self { methods: BTreeMap::new() }
     }
 }
 
@@ -231,19 +217,10 @@ impl<C> Registry<C> {
     /// next step rather than just saying no.
     pub fn nearest(&self, name: &str) -> Vec<&'static str> {
         let noun = name.split('.').next().unwrap_or(name);
-        let mut near: Vec<&'static str> = self
-            .methods
-            .keys()
-            .copied()
-            .filter(|m| m.starts_with(noun))
-            .collect();
+        let mut near: Vec<&'static str> =
+            self.methods.keys().copied().filter(|m| m.starts_with(noun)).collect();
         if near.is_empty() {
-            near = self
-                .methods
-                .keys()
-                .copied()
-                .filter(|m| m.contains(noun))
-                .collect();
+            near = self.methods.keys().copied().filter(|m| m.contains(noun)).collect();
         }
         near.truncate(8);
         near
@@ -252,9 +229,8 @@ impl<C> Registry<C> {
 
 /// Collection nouns: `source.list` is `GET /api/v1/sources`. Everything else
 /// is a singleton, where `program.take` is `POST /api/v1/program/take`.
-const COLLECTIONS: &[&str] = &[
-    "source", "output", "filter", "media", "plugin", "node", "scene", "codec",
-];
+const COLLECTIONS: &[&str] =
+    &["source", "output", "filter", "media", "plugin", "node", "scene", "codec"];
 
 /// The plural a collection noun takes in a path.
 fn plural(noun: &str) -> String {
@@ -280,30 +256,14 @@ pub fn rest_transform(method: &str) -> Option<Rest> {
     if COLLECTIONS.contains(&noun) {
         let base = format!("/api/v1/{}", plural(noun));
         return Some(match (verb, middle.is_empty()) {
-            ("list", true) => Rest {
-                http: "GET",
-                path: base,
-            },
-            ("add", true) => Rest {
-                http: "POST",
-                path: base,
-            },
-            ("get", true) => Rest {
-                http: "GET",
-                path: format!("{base}/{{id}}"),
-            },
-            ("remove", true) => Rest {
-                http: "DELETE",
-                path: format!("{base}/{{id}}"),
-            },
-            (verb, true) => Rest {
-                http: "POST",
-                path: format!("{base}/{{id}}/{verb}"),
-            },
-            (_, false) => Rest {
-                http: "POST",
-                path: format!("{base}/{{id}}/{}", middle.join("/")),
-            },
+            ("list", true) => Rest { http: "GET", path: base },
+            ("add", true) => Rest { http: "POST", path: base },
+            ("get", true) => Rest { http: "GET", path: format!("{base}/{{id}}") },
+            ("remove", true) => Rest { http: "DELETE", path: format!("{base}/{{id}}") },
+            (verb, true) => Rest { http: "POST", path: format!("{base}/{{id}}/{verb}") },
+            (_, false) => {
+                Rest { http: "POST", path: format!("{base}/{{id}}/{}", middle.join("/")) }
+            }
         });
     }
     // A singleton. `program.get` is the programme itself, not a sub path.
@@ -362,10 +322,7 @@ mod tests {
         assert_eq!(at("source.remove"), "DELETE /api/v1/sources/{id}");
         assert_eq!(at("source.audio.set"), "POST /api/v1/sources/{id}/audio");
         assert_eq!(at("source.seek"), "POST /api/v1/sources/{id}/seek");
-        assert_eq!(
-            at("output.reconnect"),
-            "POST /api/v1/outputs/{id}/reconnect"
-        );
+        assert_eq!(at("output.reconnect"), "POST /api/v1/outputs/{id}/reconnect");
         assert_eq!(at("program.take"), "POST /api/v1/program/take");
         assert_eq!(at("program.get"), "GET /api/v1/program");
         assert_eq!(at("program.history"), "GET /api/v1/program/history");
@@ -395,27 +352,14 @@ mod tests {
     fn a_registry_replaces_a_method_rather_than_holding_two() {
         let handler: Handler<()> = Arc::new(|_, _| Box::pin(async { Ok(json!({})) }));
         let mut r: Registry<()> = Registry::new();
-        r.register(MethodDef::new(
-            "source.list",
-            Scope::Read,
-            "first",
-            handler.clone(),
-        ));
-        r.register(MethodDef::new(
-            "source.list",
-            Scope::Read,
-            "second",
-            handler.clone(),
-        ));
+        r.register(MethodDef::new("source.list", Scope::Read, "first", handler.clone()));
+        r.register(MethodDef::new("source.list", Scope::Read, "second", handler.clone()));
         assert_eq!(r.len(), 1);
         assert_eq!(r.get("source.list").unwrap().summary, "second");
 
         // A misspelling is answered with the methods on the same noun.
         r.register(MethodDef::new("source.add", Scope::Operate, "add", handler));
         let near = r.nearest("source.destroy");
-        assert!(
-            near.contains(&"source.add") && near.contains(&"source.list"),
-            "{near:?}"
-        );
+        assert!(near.contains(&"source.add") && near.contains(&"source.list"), "{near:?}");
     }
 }

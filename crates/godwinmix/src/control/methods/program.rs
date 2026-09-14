@@ -1,12 +1,12 @@
 //! What is on air: take, revert, history, and the one call go live.
 
 use super::{body, handler};
-use crate::control::call::Call;
-use godwinmix_core::mixer::Command;
 use godwinmix_protocol::error::{ErrorCode, RpcError};
 use godwinmix_protocol::method::{schema_of, MethodDef, Registry, Tier};
 use godwinmix_protocol::requests::*;
 use godwinmix_protocol::scope::Scope;
+use crate::control::call::Call;
+use godwinmix_core::mixer::Command;
 use serde_json::Value;
 
 pub fn register(reg: &mut Registry<Call>) {
@@ -106,18 +106,9 @@ pub fn register(reg: &mut Registry<Call>) {
 
 /// The programme, as every method that changes it answers with.
 async fn state(call: &Call) -> Result<ProgramState, RpcError> {
-    let status = call
-        .app
-        .mixer
-        .status()
-        .await
-        .map_err(|e| call.mixer_error(anyhow::anyhow!(e)))?;
+    let status = call.app.mixer.status().await.map_err(|e| call.mixer_error(anyhow::anyhow!(e)))?;
     Ok(ProgramState {
-        previous: call
-            .app
-            .history
-            .previous(status.program.as_deref())
-            .flatten(),
+        previous: call.app.history.previous(status.program.as_deref()).flatten(),
         program: status.program,
         running_time_ms: status.running_time_ms,
         ad: status.ad,
@@ -137,12 +128,7 @@ async fn take(call: Call, params: Value) -> Result<Value, RpcError> {
 }
 
 async fn revert(call: Call, _params: Value) -> Result<Value, RpcError> {
-    let now = call
-        .app
-        .mixer
-        .status()
-        .await
-        .map_err(|e| call.mixer_error(e))?;
+    let now = call.app.mixer.status().await.map_err(|e| call.mixer_error(e))?;
     let Some(previous) = call.app.history.previous(now.program.as_deref()) else {
         return Err(RpcError::new(
             ErrorCode::NotInState,
@@ -167,11 +153,7 @@ async fn cut(
     call.app.history.expect(&call.token.id);
     call.app
         .mixer
-        .request(|ack| Command::Take {
-            source,
-            at_running_time_ms,
-            ack: Some(ack),
-        })
+        .request(|ack| Command::Take { source, at_running_time_ms, ack: Some(ack) })
         .await
         .map_err(|e| call.mixer_error(e))?;
     body(state(call).await?)

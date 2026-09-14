@@ -97,10 +97,7 @@ fn the_simple_collection_reports_what_each_source_became() {
 fn the_full_collection_lands_every_item_where_obs_had_it() {
     let imported = import_full(&Options::default());
     let canvas = Canvas::default();
-    let main = imported
-        .document
-        .scene_by_name("Main")
-        .expect("a scene called Main");
+    let main = imported.document.scene_by_name("Main").expect("a scene called Main");
     assert_eq!(
         placements(main, &canvas),
         vec![
@@ -124,11 +121,7 @@ fn the_full_collection_lands_every_item_where_obs_had_it() {
         ]
     );
     // The hidden item is still in the document, it is just not placed.
-    let hidden = main
-        .items
-        .iter()
-        .find(|i| i.name.as_deref() == Some("Ad break"))
-        .unwrap();
+    let hidden = main.items.iter().find(|i| i.name.as_deref() == Some("Ad break")).unwrap();
     assert!(!hidden.visible);
     assert_eq!(hidden.transform.frame, Some(Frame::new(640.0, 360.0)));
     assert_eq!(hidden.transform.fit, Fit::Cover);
@@ -144,42 +137,18 @@ fn the_seven_obs_bounds_types_each_arrive_as_a_frame_and_a_fit() {
     for scene in &imported.document.scenes {
         for item in scene.walk() {
             let name = item.name.clone().unwrap_or_default();
-            seen.insert(
-                format!("{} / {name}", scene.name),
-                (item.transform.fit, item.transform.frame),
-            );
+            seen.insert(format!("{} / {name}", scene.name), (item.transform.fit, item.transform.frame));
         }
     }
     // One item per bounds type, in the order of the OBS enum.
-    assert_eq!(
-        seen["Main / Backdrop"],
-        (Fit::Stretch, Some(Frame::new(1920.0, 1080.0)))
-    ); // NONE, size known
-    assert_eq!(
-        seen["Main / CAM 1 (Studio)"],
-        (Fit::Stretch, Some(Frame::new(960.0, 540.0)))
-    ); // STRETCH
-    assert_eq!(
-        seen["Main / Lower third scene"],
-        (Fit::Contain, Some(Frame::new(900.0, 140.0)))
-    ); // SCALE_INNER
-    assert_eq!(
-        seen["Main / Ad break"],
-        (Fit::Cover, Some(Frame::new(640.0, 360.0)))
-    ); // SCALE_OUTER
-    assert_eq!(
-        seen["Main / Stream"],
-        (Fit::FitWidth, Some(Frame::new(400.0, 225.0)))
-    ); // SCALE_TO_WIDTH
-    assert_eq!(
-        seen["Main / CAM 2"],
-        (Fit::FitHeight, Some(Frame::new(480.0, 270.0)))
-    ); // SCALE_TO_HEIGHT
-    assert_eq!(
-        seen["Main / Scoreboard"],
-        (Fit::Max, Some(Frame::new(480.0, 120.0)))
-    ); // MAX_ONLY
-       // A source whose size nothing declares keeps its scale factors instead.
+    assert_eq!(seen["Main / Backdrop"], (Fit::Stretch, Some(Frame::new(1920.0, 1080.0)))); // NONE, size known
+    assert_eq!(seen["Main / CAM 1 (Studio)"], (Fit::Stretch, Some(Frame::new(960.0, 540.0)))); // STRETCH
+    assert_eq!(seen["Main / Lower third scene"], (Fit::Contain, Some(Frame::new(900.0, 140.0)))); // SCALE_INNER
+    assert_eq!(seen["Main / Ad break"], (Fit::Cover, Some(Frame::new(640.0, 360.0)))); // SCALE_OUTER
+    assert_eq!(seen["Main / Stream"], (Fit::FitWidth, Some(Frame::new(400.0, 225.0)))); // SCALE_TO_WIDTH
+    assert_eq!(seen["Main / CAM 2"], (Fit::FitHeight, Some(Frame::new(480.0, 270.0)))); // SCALE_TO_HEIGHT
+    assert_eq!(seen["Main / Scoreboard"], (Fit::Max, Some(Frame::new(480.0, 120.0)))); // MAX_ONLY
+    // A source whose size nothing declares keeps its scale factors instead.
     assert_eq!(seen["Main / Lower third"], (Fit::None, None));
 }
 
@@ -187,16 +156,9 @@ fn the_seven_obs_bounds_types_each_arrive_as_a_frame_and_a_fit() {
 fn a_group_becomes_an_item_with_children_whose_transforms_are_already_flat() {
     let imported = import_full(&Options::default());
     let main = imported.document.scene_by_name("Main").unwrap();
-    let group = main
-        .items
-        .iter()
-        .find(|i| i.name.as_deref() == Some("Corner"))
-        .unwrap();
+    let group = main.items.iter().find(|i| i.name.as_deref() == Some("Corner")).unwrap();
     let Content::Children { children } = &group.content else {
-        panic!(
-            "the group did not come across as children: {:?}",
-            group.content
-        );
+        panic!("the group did not come across as children: {:?}", group.content);
     };
     assert_eq!(children.len(), 2);
     // The group's own transform is spent: the children carry the numbers, so
@@ -212,15 +174,8 @@ fn a_group_becomes_an_item_with_children_whose_transforms_are_already_flat() {
 fn a_nested_scene_becomes_a_reference_to_that_scene() {
     let imported = import_full(&Options::default());
     let main = imported.document.scene_by_name("Main").unwrap();
-    let nested = imported
-        .document
-        .scene_by_name("Lower third scene")
-        .unwrap();
-    let item = main
-        .items
-        .iter()
-        .find(|i| i.name.as_deref() == Some("Lower third scene"))
-        .unwrap();
+    let nested = imported.document.scene_by_name("Lower third scene").unwrap();
+    let item = main.items.iter().find(|i| i.name.as_deref() == Some("Lower third scene")).unwrap();
     match &item.content {
         Content::Ref { scene, overrides } => {
             assert_eq!(*scene, nested.id);
@@ -237,24 +192,12 @@ fn pixel_crops_become_fractions_of_the_source() {
     // report says so.
     let imported = import_full(&Options::default());
     let main = imported.document.scene_by_name("Main").unwrap();
-    let cam = main
-        .items
-        .iter()
-        .find(|i| i.name.as_deref() == Some("CAM 1 (Studio)"))
-        .unwrap();
-    assert!(
-        (cam.crop.left - 160.0 / 1920.0).abs() < 1e-9,
-        "{:?}",
-        cam.crop
-    );
+    let cam = main.items.iter().find(|i| i.name.as_deref() == Some("CAM 1 (Studio)")).unwrap();
+    assert!((cam.crop.left - 160.0 / 1920.0).abs() < 1e-9, "{:?}", cam.crop);
     assert!((cam.crop.right - 160.0 / 1920.0).abs() < 1e-9);
     assert_eq!(cam.crop.top, 0.0);
     assert!(
-        imported
-            .report
-            .notes
-            .iter()
-            .any(|n| n.contains("--source-size")),
+        imported.report.notes.iter().any(|n| n.contains("--source-size")),
         "{:#?}",
         imported.report.notes
     );
@@ -266,11 +209,7 @@ fn pixel_crops_become_fractions_of_the_source() {
     };
     let imported = import_full(&options);
     let main = imported.document.scene_by_name("Main").unwrap();
-    let cam = main
-        .items
-        .iter()
-        .find(|i| i.name.as_deref() == Some("CAM 1 (Studio)"))
-        .unwrap();
+    let cam = main.items.iter().find(|i| i.name.as_deref() == Some("CAM 1 (Studio)")).unwrap();
     assert!((cam.crop.left - 0.125).abs() < 1e-9, "{:?}", cam.crop);
 }
 
@@ -280,25 +219,14 @@ fn a_source_filter_is_copied_onto_every_placement_and_the_report_names_them() {
     let mut carrying = Vec::new();
     for scene in &imported.document.scenes {
         for item in scene.walk() {
-            if item
-                .filters
-                .iter()
-                .any(|f| f.name.as_deref() == Some("Key"))
-            {
-                carrying.push(format!(
-                    "{} / {}",
-                    scene.name,
-                    item.name.clone().unwrap_or_default()
-                ));
+            if item.filters.iter().any(|f| f.name.as_deref() == Some("Key")) {
+                carrying.push(format!("{} / {}", scene.name, item.name.clone().unwrap_or_default()));
             }
         }
     }
     assert_eq!(
         carrying,
-        vec![
-            "Main / CAM 1 (Studio)",
-            "Lower third scene / CAM 1 (Studio)"
-        ],
+        vec!["Main / CAM 1 (Studio)", "Lower third scene / CAM 1 (Studio)"],
         "the camera appears in two scenes, so its key has to be on both items"
     );
 
@@ -311,11 +239,7 @@ fn a_source_filter_is_copied_onto_every_placement_and_the_report_names_them() {
 
     // The filter's own settings came across untouched.
     let main = imported.document.scene_by_name("Main").unwrap();
-    let cam = main
-        .items
-        .iter()
-        .find(|i| i.name.as_deref() == Some("CAM 1 (Studio)"))
-        .unwrap();
+    let cam = main.items.iter().find(|i| i.name.as_deref() == Some("CAM 1 (Studio)")).unwrap();
     assert_eq!(cam.filters[0].kind, "chroma/filter");
     assert_eq!(cam.filters[0].params["similarity"], json!(400));
     assert!(cam.filters[0].enabled);
@@ -325,11 +249,7 @@ fn a_source_filter_is_copied_onto_every_placement_and_the_report_names_them() {
 fn the_report_says_what_happened_to_every_source() {
     let imported = import_full(&Options::default());
     let r = &imported.report;
-    assert_eq!(
-        r.sources.len(),
-        11,
-        "one line per OBS source, scenes and groups included"
-    );
+    assert_eq!(r.sources.len(), 11, "one line per OBS source, scenes and groups included");
     assert!(matches!(
         outcome_of(r, "Scoreboard"),
         Outcome::Imported { r#type, id } if r#type == "browser/source" && id == "scoreboard"
@@ -347,10 +267,7 @@ fn the_report_says_what_happened_to_every_source() {
         Outcome::NeedsPlugin { plugin, .. } if plugin == "camera"
     ));
     match outcome_of(r, "Old plugin") {
-        Outcome::Skipped {
-            reason,
-            placeholder,
-        } => {
+        Outcome::Skipped { reason, placeholder } => {
             assert!(reason.contains("obs_wobbler_source"), "{reason}");
             assert!(placeholder.is_none());
         }
@@ -364,16 +281,9 @@ fn the_report_says_what_happened_to_every_source() {
     }
     // A source nobody could play leaves no item behind.
     let main = imported.document.scene_by_name("Main").unwrap();
-    assert!(!main
-        .items
-        .iter()
-        .any(|i| i.name.as_deref() == Some("Old plugin")));
+    assert!(!main.items.iter().any(|i| i.name.as_deref() == Some("Old plugin")));
     // Counting placements is what tells an operator which source matters.
-    let cam1 = r
-        .sources
-        .iter()
-        .find(|s| s.obs_name == "CAM 1 (Studio)")
-        .unwrap();
+    let cam1 = r.sources.iter().find(|s| s.obs_name == "CAM 1 (Studio)").unwrap();
     assert_eq!(cam1.placements, 2);
 }
 
@@ -393,20 +303,11 @@ fn the_source_list_comes_out_as_config_with_a_type_and_params() {
     };
     let browser = by_id("scoreboard");
     assert_eq!(browser["type"].as_str(), Some("browser/source"));
-    assert_eq!(
-        browser["params"]["url"].as_str(),
-        Some("https://example.com/score")
-    );
-    assert_eq!(
-        browser["uri"].as_str(),
-        Some("web+https://example.com/score")
-    );
+    assert_eq!(browser["params"]["url"].as_str(), Some("https://example.com/score"));
+    assert_eq!(browser["uri"].as_str(), Some("web+https://example.com/score"));
     let stream = by_id("stream");
     assert_eq!(stream["type"].as_str(), Some("rtmp/source"));
-    assert_eq!(
-        stream["uri"].as_str(),
-        Some("rtmp://ingest.example.com/live/guest")
-    );
+    assert_eq!(stream["uri"].as_str(), Some("rtmp://ingest.example.com/live/guest"));
     let camera = by_id("cam-1-studio");
     assert_eq!(camera["type"].as_str(), Some("camera/source"));
     assert_eq!(camera["name"].as_str(), Some("CAM 1 (Studio)"));
@@ -428,31 +329,16 @@ fn the_imported_document_round_trips_and_validates() {
 
 #[test]
 fn importing_onto_a_smaller_canvas_keeps_the_crops_and_says_which_canvas_it_used() {
-    let options = Options {
-        canvas: Some(Canvas::parse("1280x720").unwrap()),
-        ..Options::default()
-    };
+    let options = Options { canvas: Some(Canvas::parse("1280x720").unwrap()), ..Options::default() };
     let imported = import_full(&options);
     assert_eq!(imported.report.canvas.width, 1280);
     // A normalised crop is the same fraction whatever the canvas is; here it is
     // measured against the canvas because nothing says how big the camera is.
     let main = imported.document.scene_by_name("Main").unwrap();
-    let cam = main
-        .items
-        .iter()
-        .find(|i| i.name.as_deref() == Some("CAM 1 (Studio)"))
-        .unwrap();
+    let cam = main.items.iter().find(|i| i.name.as_deref() == Some("CAM 1 (Studio)")).unwrap();
+    assert!((cam.crop.left - 160.0 / 1280.0).abs() < 1e-9, "{:?}", cam.crop);
     assert!(
-        (cam.crop.left - 160.0 / 1280.0).abs() < 1e-9,
-        "{:?}",
-        cam.crop
-    );
-    assert!(
-        !imported
-            .report
-            .notes
-            .iter()
-            .any(|n| n.contains("assumed 1920x1080")),
+        !imported.report.notes.iter().any(|n| n.contains("assumed 1920x1080")),
         "the canvas was given, so it should not be reported as assumed"
     );
 }
@@ -460,12 +346,7 @@ fn importing_onto_a_smaller_canvas_keeps_the_crops_and_says_which_canvas_it_used
 #[test]
 fn scenes_come_out_in_the_order_obs_lists_them() {
     let imported = import_full(&Options::default());
-    let names: Vec<&str> = imported
-        .document
-        .scenes
-        .iter()
-        .map(|s| s.name.as_str())
-        .collect();
+    let names: Vec<&str> = imported.document.scenes.iter().map(|s| s.name.as_str()).collect();
     assert_eq!(names, vec!["Main", "Lower third scene"]);
 }
 
@@ -485,11 +366,7 @@ fn an_item_naming_a_source_that_is_gone_is_reported_rather_than_dropped_in_silen
     );
     let imported = import(&text, &Options::default()).unwrap();
     assert!(
-        imported
-            .report
-            .notes
-            .iter()
-            .any(|n| n.contains("not in this collection")),
+        imported.report.notes.iter().any(|n| n.contains("not in this collection")),
         "{:#?}",
         imported.report.notes
     );
@@ -502,11 +379,7 @@ fn an_item_falls_back_to_the_source_name_when_the_uuid_is_gone() {
     let text = simple().replace("source_uuid", "was_source_uuid");
     let imported = import(&text, &Options::default()).unwrap();
     assert_eq!(imported.document.scenes[0].items.len(), 3);
-    assert!(imported
-        .report
-        .notes
-        .iter()
-        .all(|n| !n.contains("not in this collection")));
+    assert!(imported.report.notes.iter().all(|n| !n.contains("not in this collection")));
 }
 
 #[test]
@@ -517,11 +390,7 @@ fn a_group_that_contains_itself_is_reported_and_not_recursed_into() {
     );
     let imported = import(&text, &Options::default()).expect("it imports rather than looping");
     assert!(
-        imported
-            .report
-            .notes
-            .iter()
-            .any(|n| n.contains("contains itself")),
+        imported.report.notes.iter().any(|n| n.contains("contains itself")),
         "{:#?}",
         imported.report.notes
     );

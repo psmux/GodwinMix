@@ -8,12 +8,12 @@
 //! agent's only manual for the mixer, and the two profiles are budgeted in
 //! bytes by a test in mcp.rs, which fails rather than letting them grow.
 
-use crate::control::call::Call;
 use godwinmix_protocol::error::{ErrorCode, RpcError};
 use godwinmix_protocol::method::{any_object, schema_of, Handler, MethodDef, Registry, Tier};
 use godwinmix_protocol::requests::*;
 use godwinmix_protocol::scope::Scope;
 use godwinmix_protocol::types::*;
+use crate::control::call::Call;
 use serde_json::{json, Value};
 use std::future::Future;
 use std::sync::Arc;
@@ -107,12 +107,7 @@ fn register_core(reg: &mut Registry<Call>) {
             "The full state: programme, every source, every output, the multiview grid, \
              the encoder backend and any ad break.",
             handler(|call: Call, _| async move {
-                let status = call
-                    .app
-                    .mixer
-                    .status()
-                    .await
-                    .map_err(|e| call.mixer_error(e))?;
+                let status = call.app.mixer.status().await.map_err(|e| call.mixer_error(e))?;
                 body(status)
             }),
         )
@@ -162,12 +157,7 @@ fn register_introspection(reg: &mut Registry<Call>) {
             "The compact document written for agents: the programme, each source's state \
              and a motion score saying how much its picture is changing.",
             handler(|call: Call, _| async move {
-                let status = call
-                    .app
-                    .mixer
-                    .status()
-                    .await
-                    .map_err(|e| call.mixer_error(e))?;
+                let status = call.app.mixer.status().await.map_err(|e| call.mixer_error(e))?;
                 body(godwinmix_core::snapshot::agent_state(
                     &status,
                     call.snapshots.latest().as_ref(),

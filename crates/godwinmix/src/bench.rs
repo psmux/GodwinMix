@@ -27,11 +27,11 @@
 //! are printed as "not yet" with their target, so the table has the same shape
 //! on every machine and the gaps are visible rather than absent.
 
-use anyhow::{Context, Result};
-use clap::Args;
 use godwinmix_core::config::{Config, MultiviewConfig, SnapshotConfig, SourceConfig};
 use godwinmix_core::multiview::{MultiviewHandle, MultiviewRequest};
 use godwinmix_core::snapshot::Tracker;
+use anyhow::{Context, Result};
+use clap::Args;
 use gstreamer as gst;
 use gstreamer::prelude::*;
 use serde::Serialize;
@@ -248,10 +248,7 @@ fn rss_bytes() -> Option<u64> {
     // macOS has no /proc and libc carries no current RSS call, so this is the
     // documented fallback: one `ps` per sample, a handful of times per row.
     let pid = std::process::id().to_string();
-    let out = std::process::Command::new("ps")
-        .args(["-o", "rss=", "-p", &pid])
-        .output()
-        .ok()?;
+    let out = std::process::Command::new("ps").args(["-o", "rss=", "-p", &pid]).output().ok()?;
     let kb: u64 = String::from_utf8_lossy(&out.stdout).trim().parse().ok()?;
     Some(kb * 1024)
 }
@@ -308,10 +305,7 @@ async fn steady(warmup: Duration, window: Duration) -> Load {
         peak = peak.max(rss_mb());
     }
     let c1 = cpu_seconds().unwrap_or(0.0);
-    Load {
-        cores: (c1 - c0) / window.as_secs_f64(),
-        rss_mb: peak,
-    }
+    Load { cores: (c1 - c0) / window.as_secs_f64(), rss_mb: peak }
 }
 
 // ---------------------------------------------------------------------------
@@ -334,11 +328,8 @@ fn hostname() -> String {
         // SAFETY: the buffer and its length are handed over together and the
         // result is read only as far as its first NUL.
         if unsafe { libc::gethostname(buf.as_mut_ptr(), buf.len()) } == 0 {
-            let bytes: Vec<u8> = buf
-                .iter()
-                .take_while(|c| **c != 0)
-                .map(|c| *c as u8)
-                .collect();
+            let bytes: Vec<u8> =
+                buf.iter().take_while(|c| **c != 0).map(|c| *c as u8).collect();
             if let Ok(name) = String::from_utf8(bytes) {
                 return name.split('.').next().unwrap_or("host").to_string();
             }
@@ -378,10 +369,7 @@ fn ram_gb() -> f64 {
     if let Ok(info) = std::fs::read_to_string("/proc/meminfo") {
         for line in info.lines() {
             if let Some(rest) = line.strip_prefix("MemTotal:") {
-                if let Some(kb) = rest
-                    .split_whitespace()
-                    .next()
-                    .and_then(|v| v.parse::<u64>().ok())
+                if let Some(kb) = rest.split_whitespace().next().and_then(|v| v.parse::<u64>().ok())
                 {
                     return kb as f64 / 1_048_576.0;
                 }
@@ -393,14 +381,9 @@ fn ram_gb() -> f64 {
 
 fn os_name() -> String {
     let release = shell("uname", &["-r"]).unwrap_or_default();
-    format!(
-        "{} {} {}",
-        std::env::consts::OS,
-        std::env::consts::ARCH,
-        release
-    )
-    .trim()
-    .to_string()
+    format!("{} {} {}", std::env::consts::OS, std::env::consts::ARCH, release)
+        .trim()
+        .to_string()
 }
 
 fn commit() -> String {
@@ -410,12 +393,7 @@ fn commit() -> String {
 /// Today, as `YYYY-MM-DD`, without pulling in a date crate for one line.
 fn today() -> String {
     shell("date", &["+%Y-%m-%d"])
-        .or_else(|| {
-            shell(
-                "powershell",
-                &["-NoProfile", "-Command", "Get-Date -Format yyyy-MM-dd"],
-            )
-        })
+        .or_else(|| shell("powershell", &["-NoProfile", "-Command", "Get-Date -Format yyyy-MM-dd"]))
         .unwrap_or_else(|| "unknown-date".into())
 }
 
@@ -470,9 +448,7 @@ fn run_pipeline_to_end(desc: &str) -> Result<()> {
 /// run; `measure_pipeline_added` is the one to use for a number on its own.
 async fn measure_pipeline(args: &BenchArgs, desc: &str) -> Result<Load> {
     let pipeline = gst::parse::launch(desc).with_context(|| format!("parsing {desc}"))?;
-    pipeline
-        .set_state(gst::State::Playing)
-        .context("starting the pipeline")?;
+    pipeline.set_state(gst::State::Playing).context("starting the pipeline")?;
     let load = steady(args.warmup(), args.window()).await;
     pipeline.set_state(gst::State::Null).ok();
     Ok(load)
@@ -484,10 +460,7 @@ async fn measure_pipeline(args: &BenchArgs, desc: &str) -> Result<Load> {
 async fn measure_pipeline_added(args: &BenchArgs, desc: &str) -> Result<Load> {
     let floor = rss_mb();
     let load = measure_pipeline(args, desc).await?;
-    Ok(load.minus(Load {
-        cores: 0.0,
-        rss_mb: floor,
-    }))
+    Ok(load.minus(Load { cores: 0.0, rss_mb: floor }))
 }
 
 /// The config every mixer row is built from: 720p30, no outputs, no sources.
@@ -557,18 +530,12 @@ async fn mixer_rows(args: &BenchArgs) -> Result<Vec<Row>> {
         .note("Asserted, not sampled: there is no mosaic object to cost anything."),
     );
 
-    let sub = mv.subscribe(MultiviewRequest {
-        fps: 8,
-        width: 1280,
-    });
+    let sub = mv.subscribe(MultiviewRequest { fps: 8, width: 1280 });
     // Counted here rather than read off the handle's metric, because a bench
     // that trusts the number it is meant to be checking proves nothing.
     let counted = Arc::new(std::sync::atomic::AtomicU64::new(0));
     let counting = {
-        let mut sub = mv.subscribe(MultiviewRequest {
-            fps: 8,
-            width: 1280,
-        });
+        let mut sub = mv.subscribe(MultiviewRequest { fps: 8, width: 1280 });
         let counted = counted.clone();
         let since = Instant::now();
         tokio::spawn(async move {
@@ -596,10 +563,7 @@ async fn mixer_rows(args: &BenchArgs) -> Result<Vec<Row>> {
     // The tracker decodes a mosaic frame per tick and scores it. Something has
     // to keep asking, exactly as an agent polling `agent.state` would.
     let tracker = Tracker::new(
-        SnapshotConfig {
-            idle_secs: 2,
-            ..Default::default()
-        },
+        SnapshotConfig { idle_secs: 2, ..Default::default() },
         mv.clone(),
         handle.clone(),
     );
@@ -638,9 +602,7 @@ async fn mixer_rows(args: &BenchArgs) -> Result<Vec<Row>> {
 
     drop(sub);
     let _ = handle.send(godwinmix_core::mixer::Command::Shutdown);
-    tokio::task::spawn_blocking(move || thread.join())
-        .await
-        .ok();
+    tokio::task::spawn_blocking(move || thread.join()).await.ok();
     Ok(rows)
 }
 
@@ -648,8 +610,7 @@ async fn mixer_rows(args: &BenchArgs) -> Result<Vec<Row>> {
 /// side, measured as the difference between a compositor at rest and the same
 /// compositor with the file in it.
 async fn file_source_row(args: &BenchArgs, clip: &Path) -> Result<Row> {
-    let caps =
-        format!("video/x-raw,width={BENCH_WIDTH},height={BENCH_HEIGHT},framerate={BENCH_FPS}/1");
+    let caps = format!("video/x-raw,width={BENCH_WIDTH},height={BENCH_HEIGHT},framerate={BENCH_FPS}/1");
     let base = format!(
         "videotestsrc pattern=black is-live=true ! {caps} ! \
          compositor name=comp background=black ! {caps} ! fakesink sync=true"
@@ -691,8 +652,7 @@ async fn file_source_row(args: &BenchArgs, clip: &Path) -> Result<Row> {
 /// Two live 720p30 sources composited and encoded, once on x264 and once on
 /// whatever the codec probe says this machine has.
 async fn programme_rows(args: &BenchArgs) -> Result<Vec<Row>> {
-    let caps =
-        format!("video/x-raw,width={BENCH_WIDTH},height={BENCH_HEIGHT},framerate={BENCH_FPS}/1");
+    let caps = format!("video/x-raw,width={BENCH_WIDTH},height={BENCH_HEIGHT},framerate={BENCH_FPS}/1");
     let sources = format!(
         "videotestsrc pattern=smpte is-live=true ! {caps} ! comp.sink_0 \
          videotestsrc pattern=ball is-live=true ! {caps} ! comp.sink_1"
@@ -777,10 +737,7 @@ async fn cold_start_row(clip: &Path) -> Result<Row> {
             "cold-start",
             "Cold start, process exec to first encoded programme frame",
             "at most 2.0 s on `pi4`",
-            &format!(
-                "the child said nothing useful: {}",
-                String::from_utf8_lossy(&out.stderr)
-            ),
+            &format!("the child said nothing useful: {}", String::from_utf8_lossy(&out.stderr)),
         ));
     }
     Ok(Row::new(
@@ -802,14 +759,8 @@ async fn cold_start_row(clip: &Path) -> Result<Row> {
 /// watch the encoder's src pad, print and exit.
 pub async fn cold_start_child(args: &BenchArgs) -> Result<()> {
     let started = Instant::now();
-    let clip = args
-        .clip
-        .clone()
-        .context("the cold start child needs --clip")?;
-    let mut cfg = bench_config(MultiviewConfig {
-        enabled: false,
-        ..Default::default()
-    });
+    let clip = args.clip.clone().context("the cold start child needs --clip")?;
+    let mut cfg = bench_config(MultiviewConfig { enabled: false, ..Default::default() });
     // Built the way the API builds one, so the child starts the same pipeline
     // a real boot would.
     let source: SourceConfig = serde_json::from_value(serde_json::json!({
@@ -834,15 +785,10 @@ pub async fn cold_start_child(args: &BenchArgs) -> Result<()> {
     mix.start()?;
     let thread = godwinmix_core::mixer::spawn(mix, cmd_rx, handle.clone());
     let waited = tokio::time::timeout(Duration::from_secs(30), rx).await;
-    println!(
-        "cold-start-ms {:.0}",
-        started.elapsed().as_secs_f64() * 1000.0
-    );
+    println!("cold-start-ms {:.0}", started.elapsed().as_secs_f64() * 1000.0);
     let _ = handle.send(godwinmix_core::mixer::Command::Shutdown);
     let _ = tokio::task::spawn_blocking(move || thread.join()).await;
-    waited
-        .context("no encoded frame within thirty seconds")?
-        .ok();
+    waited.context("no encoded frame within thirty seconds")?.ok();
     Ok(())
 }
 
@@ -917,79 +863,19 @@ enum Metric {
 }
 
 const BUDGETS: &[Budget] = &[
-    Budget {
-        row: "core-idle",
-        machine: None,
-        metric: Metric::RssMb,
-        limit: 60.0,
-    },
-    Budget {
-        row: "core-idle",
-        machine: Some("pi4"),
-        metric: Metric::Cores,
-        limit: 0.01,
-    },
-    Budget {
-        row: "file-source",
-        machine: None,
-        metric: Metric::RssMb,
-        limit: 40.0,
-    },
-    Budget {
-        row: "file-source",
-        machine: Some("pi4"),
-        metric: Metric::Cores,
-        limit: 0.15,
-    },
+    Budget { row: "core-idle", machine: None, metric: Metric::RssMb, limit: 60.0 },
+    Budget { row: "core-idle", machine: Some("pi4"), metric: Metric::Cores, limit: 0.01 },
+    Budget { row: "file-source", machine: None, metric: Metric::RssMb, limit: 40.0 },
+    Budget { row: "file-source", machine: Some("pi4"), metric: Metric::Cores, limit: 0.15 },
     // Not "about zero": zero. There is no pipeline to cost anything.
-    Budget {
-        row: "multiview-idle",
-        machine: None,
-        metric: Metric::Cores,
-        limit: 0.0,
-    },
-    Budget {
-        row: "multiview-subscriber",
-        machine: Some("pi5"),
-        metric: Metric::Cores,
-        limit: 0.10,
-    },
-    Budget {
-        row: "snapshot-tracker",
-        machine: Some("pi5"),
-        metric: Metric::Cores,
-        limit: 0.05,
-    },
-    Budget {
-        row: "two-live-sw",
-        machine: Some("pi5"),
-        metric: Metric::Cores,
-        limit: 2.0,
-    },
-    Budget {
-        row: "two-live-hw",
-        machine: Some("pi4"),
-        metric: Metric::Cores,
-        limit: 1.0,
-    },
-    Budget {
-        row: "two-live-hw",
-        machine: Some("n100"),
-        metric: Metric::Cores,
-        limit: 0.6,
-    },
-    Budget {
-        row: "cold-start",
-        machine: Some("pi4"),
-        metric: Metric::Other,
-        limit: 2.0,
-    },
-    Budget {
-        row: "binary-size",
-        machine: None,
-        metric: Metric::Other,
-        limit: 30.0,
-    },
+    Budget { row: "multiview-idle", machine: None, metric: Metric::Cores, limit: 0.0 },
+    Budget { row: "multiview-subscriber", machine: Some("pi5"), metric: Metric::Cores, limit: 0.10 },
+    Budget { row: "snapshot-tracker", machine: Some("pi5"), metric: Metric::Cores, limit: 0.05 },
+    Budget { row: "two-live-sw", machine: Some("pi5"), metric: Metric::Cores, limit: 2.0 },
+    Budget { row: "two-live-hw", machine: Some("pi4"), metric: Metric::Cores, limit: 1.0 },
+    Budget { row: "two-live-hw", machine: Some("n100"), metric: Metric::Cores, limit: 0.6 },
+    Budget { row: "cold-start", machine: Some("pi4"), metric: Metric::Other, limit: 2.0 },
+    Budget { row: "binary-size", machine: None, metric: Metric::Other, limit: 30.0 },
 ];
 
 fn check_budgets(machine: &str, rows: &mut [Row]) -> Vec<String> {
@@ -998,9 +884,7 @@ fn check_budgets(machine: &str, rows: &mut [Row]) -> Vec<String> {
         if b.machine.is_some_and(|m| m != machine) {
             continue;
         }
-        let Some(row) = rows.iter_mut().find(|r| r.id == b.row) else {
-            continue;
-        };
+        let Some(row) = rows.iter_mut().find(|r| r.id == b.row) else { continue };
         if row.verdict == "not yet" {
             continue;
         }
@@ -1021,10 +905,7 @@ fn check_budgets(machine: &str, rows: &mut [Row]) -> Vec<String> {
         let slack = if b.limit == 0.0 { 0.0 } else { b.limit * 0.02 };
         if got > b.limit + slack {
             row.verdict = format!("over ({got:.3} {unit} against {:.3})", b.limit);
-            over.push(format!(
-                "{}: {got:.3} {unit}, budget {:.3}",
-                row.id, b.limit
-            ));
+            over.push(format!("{}: {got:.3} {unit}, budget {:.3}", row.id, b.limit));
         } else {
             row.verdict = "within budget".into();
         }
@@ -1107,17 +988,16 @@ pub async fn run(args: BenchArgs) -> Result<()> {
     // The mixer rows go first, while the process has allocated as little as
     // possible: resident memory is sticky, so a later row would flatter itself
     // with an arena somebody else grew.
-    if args.wants("core-idle") || args.wants("multiview") || args.wants("snapshot") {
+    if args.wants("core-idle")
+        || args.wants("multiview")
+        || args.wants("snapshot")
+    {
         rows.extend(mixer_rows(&args).await?);
         rows.retain(|r| args.wants(&r.id));
     }
 
     let clip_needed = args.wants("file-source") || args.wants("cold-start");
-    let clip = if clip_needed {
-        Some(test_clip(&args)?)
-    } else {
-        None
-    };
+    let clip = if clip_needed { Some(test_clip(&args)?) } else { None };
 
     if args.wants("file-source") {
         rows.push(file_source_row(&args, clip.as_ref().unwrap()).await?);
@@ -1196,9 +1076,10 @@ mod tests {
 
     #[test]
     fn a_zero_target_has_no_slack_and_a_real_one_does() {
-        let row = |id: &str, cores: f64| {
-            Row::new(id, "", "", String::new()).load(Load { cores, rss_mb: 1.0 })
-        };
+        let row = |id: &str, cores: f64| Row::new(id, "", "", String::new()).load(Load {
+            cores,
+            rss_mb: 1.0,
+        });
         // The mosaic with nobody watching must be exactly nothing.
         let mut rows = vec![row("multiview-idle", 0.0001)];
         assert_eq!(check_budgets("laptop", &mut rows).len(), 1);
@@ -1234,12 +1115,8 @@ mod tests {
             canvas: "1280x720 at 30 fps".into(),
             window_secs: 30,
             debug_build: false,
-            rows: vec![
-                Row::new("core-idle", "Core idle", "60 MB", "gmx bench".into()).load(Load {
-                    cores: 0.02,
-                    rss_mb: 55.5,
-                }),
-            ],
+            rows: vec![Row::new("core-idle", "Core idle", "60 MB", "gmx bench".into())
+                .load(Load { cores: 0.02, rss_mb: 55.5 })],
             over_budget: vec![],
         };
         let md = render_markdown(&report);
@@ -1248,22 +1125,13 @@ mod tests {
         assert!(md.contains("GStreamer 1.28.7"));
         assert!(md.contains("0.020"));
         assert!(md.contains("55.5"));
-        assert!(
-            md.contains("gmx bench"),
-            "the command that produced the row is missing"
-        );
+        assert!(md.contains("gmx bench"), "the command that produced the row is missing");
     }
 
     #[test]
     fn a_delta_never_goes_negative() {
-        let big = Load {
-            cores: 1.0,
-            rss_mb: 100.0,
-        };
-        let small = Load {
-            cores: 0.2,
-            rss_mb: 40.0,
-        };
+        let big = Load { cores: 1.0, rss_mb: 100.0 };
+        let small = Load { cores: 0.2, rss_mb: 40.0 };
         assert_eq!(big.minus(small).cores, 0.8);
         // Noise can make the second reading the smaller one; that is a zero,
         // not a negative cost.

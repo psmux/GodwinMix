@@ -94,12 +94,7 @@ pub struct MediaDecl {
 
 impl Default for MediaDecl {
     fn default() -> Self {
-        Self {
-            video: StreamMode::Raw,
-            audio: StreamMode::Raw,
-            alpha: false,
-            thumb: true,
-        }
+        Self { video: StreamMode::Raw, audio: StreamMode::Raw, alpha: false, thumb: true }
     }
 }
 
@@ -194,11 +189,7 @@ impl CapabilitySet {
     /// The declared strings, in the order 03 section 4 lists them. What
     /// `plugin.describe` and the status extras report.
     pub fn names(self) -> Vec<&'static str> {
-        Capability::ALL
-            .iter()
-            .filter(|c| self.has(**c))
-            .map(|c| c.as_str())
-            .collect()
+        Capability::ALL.iter().filter(|c| self.has(**c)).map(|c| c.as_str()).collect()
     }
 }
 
@@ -317,17 +308,11 @@ pub struct Health {
 
 impl Health {
     pub fn running() -> Self {
-        Self {
-            state: PluginState::Running,
-            detail: None,
-        }
+        Self { state: PluginState::Running, detail: None }
     }
 
     pub fn of(state: PluginState) -> Self {
-        Self {
-            state,
-            detail: None,
-        }
+        Self { state, detail: None }
     }
 }
 
@@ -394,10 +379,7 @@ mod tests {
         assert_eq!(names, vec!["restart-in-place", "health", "seek"]);
         let mut back = CapabilitySet::new();
         for n in names {
-            back.set(
-                Capability::parse(n).expect("a name the set just printed"),
-                true,
-            );
+            back.set(Capability::parse(n).expect("a name the set just printed"), true);
         }
         assert_eq!(back, caps);
     }

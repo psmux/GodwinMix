@@ -141,8 +141,7 @@ impl Downstream {
             Self::Element(e) => e.static_pad("sink").context("no sink pad below a filter")?,
             Self::Pad(p) => p.clone(),
         };
-        src.link(&sink)
-            .with_context(|| format!("linking into {}", self.name()))?;
+        src.link(&sink).with_context(|| format!("linking into {}", self.name()))?;
         Ok(())
     }
 }
@@ -184,11 +183,7 @@ impl FilterSlot {
             .upstream
             .static_pad("src")
             .context("the element above a filter has no src pad")?;
-        let (bin, down, up) = (
-            self.bin.clone(),
-            self.downstream.clone(),
-            self.upstream.clone(),
-        );
+        let (bin, down, up) = (self.bin.clone(), self.downstream.clone(), self.upstream.clone());
         let src_for_relink = src.clone();
         crate::gstutil::with_pad_blocked(&src, BLOCK_TIMEOUT, move || {
             up.unlink(&bin);
@@ -221,11 +216,7 @@ impl<'a> Insertion<'a> {
         upstream: &'a gst::Element,
         downstream: &gst::Element,
     ) -> Self {
-        Self {
-            pipeline,
-            upstream,
-            downstream: Downstream::Element(downstream.clone()),
-        }
+        Self { pipeline, upstream, downstream: Downstream::Element(downstream.clone()) }
     }
 
     /// The two that end at a mixer's request pad.
@@ -234,11 +225,7 @@ impl<'a> Insertion<'a> {
         upstream: &'a gst::Element,
         pad: &gst::Pad,
     ) -> Self {
-        Self {
-            pipeline,
-            upstream,
-            downstream: Downstream::Pad(pad.clone()),
-        }
+        Self { pipeline, upstream, downstream: Downstream::Pad(pad.clone()) }
     }
 }
 
@@ -255,9 +242,7 @@ pub fn insert(
     live: bool,
 ) -> Result<FilterSlot> {
     let bin = filter.build(canvas, &spec.params)?;
-    at.pipeline
-        .add(&bin)
-        .context("adding a filter to the pipeline")?;
+    at.pipeline.add(&bin).context("adding a filter to the pipeline")?;
     if live {
         let src = at
             .upstream
@@ -302,10 +287,7 @@ pub fn insert(
                 }
                 let _ = b.set_state(gst::State::Null);
                 if let Err(relink) = down.link_from(&src_for_link) {
-                    tracing::error!(
-                        ?relink,
-                        "could not relink around a filter that failed to go in"
-                    );
+                    tracing::error!(?relink, "could not relink around a filter that failed to go in");
                 }
                 *report.lock() = Some(e);
             }
@@ -318,15 +300,9 @@ pub fn insert(
         }
     } else {
         at.downstream.unlink_from(&src_at_build(at.upstream)?);
-        at.upstream
-            .link(&bin)
-            .context("linking a filter to what is above it")?;
-        let out = bin
-            .static_pad("src")
-            .context("the filter bin has no src pad")?;
-        at.downstream
-            .link_from(&out)
-            .context("linking a filter to what is below it")?;
+        at.upstream.link(&bin).context("linking a filter to what is above it")?;
+        let out = bin.static_pad("src").context("the filter bin has no src pad")?;
+        at.downstream.link_from(&out).context("linking a filter to what is below it")?;
     }
     tracing::info!(
         filter = %spec.id,
@@ -347,9 +323,7 @@ pub fn insert(
 
 /// The src pad of the element above an insertion point, at build time.
 fn src_at_build(upstream: &gst::Element) -> Result<gst::Pad> {
-    upstream
-        .static_pad("src")
-        .context("the element above a filter has no src pad")
+    upstream.static_pad("src").context("the element above a filter has no src pad")
 }
 
 /// Every filter this build ships, by provide id.
@@ -432,9 +406,7 @@ mod tests {
         let queue = crate::gstutil::queue_thread("out-q").unwrap();
         let sink = crate::gstutil::make("fakesink", "out").unwrap();
         sink.set_property("sync", false);
-        pipeline
-            .add_many([&src, &caps, &tee, &queue, &sink])
-            .unwrap();
+        pipeline.add_many([&src, &caps, &tee, &queue, &sink]).unwrap();
         gst::Element::link_many([&src, &caps, &tee, &queue, &sink]).unwrap();
 
         let intervals = Arc::new(Intervals::default());
@@ -552,10 +524,7 @@ mod tests {
     #[test]
     fn a_filter_that_does_not_exist_names_the_ones_that_do() {
         let err = match make("blur/filter") {
-            Ok(f) => panic!(
-                "this build has no blur, but {} claimed it",
-                f.manifest().provide_id()
-            ),
+            Ok(f) => panic!("this build has no blur, but {} claimed it", f.manifest().provide_id()),
             Err(e) => e,
         };
         assert!(format!("{err}").contains("chroma/filter"), "{err}");

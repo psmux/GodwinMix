@@ -33,158 +33,53 @@ use std::sync::OnceLock;
 /// file left in the tree does not silently become a public URL.
 const ASSETS: &[(&str, &str)] = &[
     ("boot.js", include_str!("../../../ui/boot.js")),
-    (
-        "client/errors.js",
-        include_str!("../../../ui/client/errors.js"),
-    ),
-    (
-        "client/frames.js",
-        include_str!("../../../ui/client/frames.js"),
-    ),
-    (
-        "client/index.js",
-        include_str!("../../../ui/client/index.js"),
-    ),
-    (
-        "client/kinds.js",
-        include_str!("../../../ui/client/kinds.js"),
-    ),
+    ("client/errors.js", include_str!("../../../ui/client/errors.js")),
+    ("client/frames.js", include_str!("../../../ui/client/frames.js")),
+    ("client/index.js", include_str!("../../../ui/client/index.js")),
+    ("client/kinds.js", include_str!("../../../ui/client/kinds.js")),
     ("client/rpc.js", include_str!("../../../ui/client/rpc.js")),
-    (
-        "client/sandbox-client.js",
-        include_str!("../../../ui/client/sandbox-client.js"),
-    ),
-    (
-        "client/schema-form.js",
-        include_str!("../../../ui/client/schema-form.js"),
-    ),
-    (
-        "client/store.js",
-        include_str!("../../../ui/client/store.js"),
-    ),
-    (
-        "client/transport-legacy.js",
-        include_str!("../../../ui/client/transport-legacy.js"),
-    ),
-    (
-        "client/transport-rpc.js",
-        include_str!("../../../ui/client/transport-rpc.js"),
-    ),
+    ("client/sandbox-client.js", include_str!("../../../ui/client/sandbox-client.js")),
+    ("client/schema-form.js", include_str!("../../../ui/client/schema-form.js")),
+    ("client/store.js", include_str!("../../../ui/client/store.js")),
+    ("client/transport-legacy.js", include_str!("../../../ui/client/transport-legacy.js")),
+    ("client/transport-rpc.js", include_str!("../../../ui/client/transport-rpc.js")),
     ("index.html", include_str!("../../../ui/index.html")),
-    (
-        "panels/alerts/panel.js",
-        include_str!("../../../ui/panels/alerts/panel.js"),
-    ),
-    (
-        "panels/header/panel.js",
-        include_str!("../../../ui/panels/header/panel.js"),
-    ),
-    (
-        "panels/media/panel.js",
-        include_str!("../../../ui/panels/media/panel.js"),
-    ),
-    (
-        "panels/multiview/panel.js",
-        include_str!("../../../ui/panels/multiview/panel.js"),
-    ),
-    (
-        "panels/outputs/panel.js",
-        include_str!("../../../ui/panels/outputs/panel.js"),
-    ),
-    (
-        "panels/scenes/panel.js",
-        include_str!("../../../ui/panels/scenes/panel.js"),
-    ),
-    (
-        "panels/sources/local.js",
-        include_str!("../../../ui/panels/sources/local.js"),
-    ),
-    (
-        "panels/sources/panel.js",
-        include_str!("../../../ui/panels/sources/panel.js"),
-    ),
-    (
-        "panels/sources/tile.js",
-        include_str!("../../../ui/panels/sources/tile.js"),
-    ),
-    (
-        "shell/commands.js",
-        include_str!("../../../ui/shell/commands.js"),
-    ),
+    ("panels/alerts/panel.js", include_str!("../../../ui/panels/alerts/panel.js")),
+    ("panels/header/panel.js", include_str!("../../../ui/panels/header/panel.js")),
+    ("panels/media/panel.js", include_str!("../../../ui/panels/media/panel.js")),
+    ("panels/multiview/panel.js", include_str!("../../../ui/panels/multiview/panel.js")),
+    ("panels/outputs/panel.js", include_str!("../../../ui/panels/outputs/panel.js")),
+    ("panels/scenes/panel.js", include_str!("../../../ui/panels/scenes/panel.js")),
+    ("panels/sources/local.js", include_str!("../../../ui/panels/sources/local.js")),
+    ("panels/sources/panel.js", include_str!("../../../ui/panels/sources/panel.js")),
+    ("panels/sources/tile.js", include_str!("../../../ui/panels/sources/tile.js")),
+    ("shell/commands.js", include_str!("../../../ui/shell/commands.js")),
     ("shell/dom.js", include_str!("../../../ui/shell/dom.js")),
     ("shell/fader.js", include_str!("../../../ui/shell/fader.js")),
-    (
-        "shell/firstrun.js",
-        include_str!("../../../ui/shell/firstrun.js"),
-    ),
-    (
-        "shell/keymap.js",
-        include_str!("../../../ui/shell/keymap.js"),
-    ),
-    (
-        "shell/layout.js",
-        include_str!("../../../ui/shell/layout.js"),
-    ),
+    ("shell/firstrun.js", include_str!("../../../ui/shell/firstrun.js")),
+    ("shell/keymap.js", include_str!("../../../ui/shell/keymap.js")),
+    ("shell/layout.js", include_str!("../../../ui/shell/layout.js")),
     ("shell/menu.js", include_str!("../../../ui/shell/menu.js")),
     ("shell/meter.js", include_str!("../../../ui/shell/meter.js")),
     ("shell/modal.js", include_str!("../../../ui/shell/modal.js")),
-    (
-        "shell/palette.js",
-        include_str!("../../../ui/shell/palette.js"),
-    ),
-    (
-        "shell/picker.js",
-        include_str!("../../../ui/shell/picker.js"),
-    ),
-    (
-        "shell/pointer.js",
-        include_str!("../../../ui/shell/pointer.js"),
-    ),
-    (
-        "shell/registry.js",
-        include_str!("../../../ui/shell/registry.js"),
-    ),
-    (
-        "shell/sandbox.js",
-        include_str!("../../../ui/shell/sandbox.js"),
-    ),
-    (
-        "shell/selection.js",
-        include_str!("../../../ui/shell/selection.js"),
-    ),
-    (
-        "shell/settings.js",
-        include_str!("../../../ui/shell/settings.js"),
-    ),
+    ("shell/palette.js", include_str!("../../../ui/shell/palette.js")),
+    ("shell/picker.js", include_str!("../../../ui/shell/picker.js")),
+    ("shell/pointer.js", include_str!("../../../ui/shell/pointer.js")),
+    ("shell/registry.js", include_str!("../../../ui/shell/registry.js")),
+    ("shell/sandbox.js", include_str!("../../../ui/shell/sandbox.js")),
+    ("shell/selection.js", include_str!("../../../ui/shell/selection.js")),
+    ("shell/settings.js", include_str!("../../../ui/shell/settings.js")),
     ("shell/shell.js", include_str!("../../../ui/shell/shell.js")),
     ("shell/theme.js", include_str!("../../../ui/shell/theme.js")),
     ("shell/toast.js", include_str!("../../../ui/shell/toast.js")),
     ("shell/undo.js", include_str!("../../../ui/shell/undo.js")),
-    (
-        "test/index.html",
-        include_str!("../../../ui/test/index.html"),
-    ),
+    ("test/index.html", include_str!("../../../ui/test/index.html")),
     ("test/run.js", include_str!("../../../ui/test/run.js")),
-    (
-        "themes/base.css",
-        include_str!("../../../ui/themes/base.css"),
-    ),
-    (
-        "themes/dark.css",
-        include_str!("../../../ui/themes/dark.css"),
-    ),
-    (
-        "themes/high-contrast.css",
-        include_str!("../../../ui/themes/high-contrast.css"),
-    ),
-    (
-        "themes/light.css",
-        include_str!("../../../ui/themes/light.css"),
-    ),
-    (
-        "themes/system.css",
-        include_str!("../../../ui/themes/system.css"),
-    ),
+    ("themes/base.css", include_str!("../../../ui/themes/base.css")),
+    ("themes/dark.css", include_str!("../../../ui/themes/dark.css")),
+    ("themes/high-contrast.css", include_str!("../../../ui/themes/high-contrast.css")),
+    ("themes/light.css", include_str!("../../../ui/themes/light.css")),
+    ("themes/system.css", include_str!("../../../ui/themes/system.css")),
 ];
 
 /// The page as it was before the split, kept at `/legacy` for one release so an
@@ -213,10 +108,7 @@ pub fn configure(ui_dir: Option<&str>, plugins_dir: Option<&str>) {
 }
 
 fn dirs() -> &'static Dirs {
-    DIRS.get_or_init(|| Dirs {
-        ui: None,
-        plugins: default_plugins_dir(),
-    })
+    DIRS.get_or_init(|| Dirs { ui: None, plugins: default_plugins_dir() })
 }
 
 fn default_plugins_dir() -> PathBuf {
@@ -322,18 +214,9 @@ fn with_headers(kind: &'static str, body: Body, path: &str) -> Response {
         [
             (header::CONTENT_TYPE, HeaderValue::from_static(kind)),
             (header::CACHE_CONTROL, HeaderValue::from_static(cache)),
-            (
-                header::CONTENT_SECURITY_POLICY,
-                HeaderValue::from_static(CSP),
-            ),
-            (
-                header::X_CONTENT_TYPE_OPTIONS,
-                HeaderValue::from_static("nosniff"),
-            ),
-            (
-                header::REFERRER_POLICY,
-                HeaderValue::from_static("no-referrer"),
-            ),
+            (header::CONTENT_SECURITY_POLICY, HeaderValue::from_static(CSP)),
+            (header::X_CONTENT_TYPE_OPTIONS, HeaderValue::from_static("nosniff")),
+            (header::REFERRER_POLICY, HeaderValue::from_static("no-referrer")),
         ],
         body,
     )
@@ -387,15 +270,9 @@ async fn plugin_index() -> Response {
     let body = json!({ "plugins": found, "dir": root.display().to_string() });
     (
         [
-            (
-                header::CONTENT_TYPE,
-                HeaderValue::from_static("application/json"),
-            ),
+            (header::CONTENT_TYPE, HeaderValue::from_static("application/json")),
             (header::CACHE_CONTROL, HeaderValue::from_static("no-store")),
-            (
-                header::CONTENT_SECURITY_POLICY,
-                HeaderValue::from_static(CSP),
-            ),
+            (header::CONTENT_SECURITY_POLICY, HeaderValue::from_static(CSP)),
         ],
         body.to_string(),
     )
@@ -408,11 +285,7 @@ async fn plugin_file(UrlPath((name, path)): UrlPath<(String, String)>) -> Respon
         return (StatusCode::NOT_FOUND, "no such plugin").into_response();
     }
     let Some(relative) = safe_relative(&path) else {
-        return (
-            StatusCode::NOT_FOUND,
-            "that path is not inside the plugin's ui directory",
-        )
-            .into_response();
+        return (StatusCode::NOT_FOUND, "that path is not inside the plugin's ui directory").into_response();
     };
     let file = dirs().plugins.join(&name).join("ui").join(&relative);
     match std::fs::read(&file) {
@@ -493,23 +366,15 @@ mod tests {
         let page: usize = ASSETS
             .iter()
             .filter(|(p, _)| !p.starts_with("test/"))
-            .filter(|(p, _)| {
-                !p.starts_with("themes/") || *p == "themes/base.css" || *p == "themes/dark.css"
-            })
+            .filter(|(p, _)| !p.starts_with("themes/") || *p == "themes/base.css" || *p == "themes/dark.css")
             .map(|(_, body)| body.len())
             .sum();
-        assert!(
-            page < 250 * 1024,
-            "the page loads {page} bytes, over the 250 kB budget"
-        );
+        assert!(page < 250 * 1024, "the page loads {page} bytes, over the 250 kB budget");
 
         // And the plain reading of the same budget: everything served under
         // ui/, the test page and all four themes included, under 250,000 bytes.
         let total: usize = ASSETS.iter().map(|(_, body)| body.len()).sum();
-        assert!(
-            total < 250_000,
-            "everything served under ui/ is {total} bytes"
-        );
+        assert!(total < 250_000, "everything served under ui/ is {total} bytes");
     }
 
     #[test]
@@ -518,10 +383,7 @@ mod tests {
         // A <script> with a src is fine; a <script> with a body is not.
         for chunk in page.split("<script").skip(1) {
             let open = chunk.split('>').next().unwrap_or("");
-            assert!(
-                open.contains("src="),
-                "index.html has an inline script: {open}"
-            );
+            assert!(open.contains("src="), "index.html has an inline script: {open}");
         }
         assert!(!CSP.contains("script-src 'self' 'unsafe-inline'"));
     }
@@ -564,14 +426,8 @@ mod tests {
 
     #[test]
     fn the_legacy_page_is_still_here_for_one_release() {
-        assert!(
-            LEGACY.contains("<!doctype html>"),
-            "the old single page is still served at /legacy"
-        );
-        assert!(
-            LEGACY.len() > 50_000,
-            "the whole page moved, not a stub of it"
-        );
+        assert!(LEGACY.contains("<!doctype html>"), "the old single page is still served at /legacy");
+        assert!(LEGACY.len() > 50_000, "the whole page moved, not a stub of it");
     }
 
     #[test]

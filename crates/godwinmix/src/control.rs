@@ -25,6 +25,18 @@ pub mod methods;
 pub mod rest;
 pub mod ws;
 
+use godwinmix_protocol::error::{ErrorCode, RpcError};
+use godwinmix_protocol::idempotency;
+use godwinmix_protocol::method::Registry;
+use godwinmix_protocol::scope::{Confirmations, Tokens};
+use godwinmix_protocol::types::{CanvasInfo, Limits, MultiviewStatus};
+use godwinmix_protocol::{AddSourceRequest, GoLiveRequest, GoLiveResult, MultiviewLayout};
+use godwinmix_core::config::{Config, OutputConfig, SnapshotConfig, SourceConfig};
+use godwinmix_core::media::{MediaLibrary, MediaListing};
+use godwinmix_core::mixer::{AudioOutcome, Command, MixerHandle, SeekOutcome};
+use godwinmix_core::multiview::MultiviewHandle;
+use godwinmix_core::snapshot::{self, Ask, Pick, Tracker};
+use godwinmix_core::state::{Event, MixerStatus, SourceState};
 use anyhow::Result;
 use axum::body::Body;
 use axum::extract::ws::WebSocketUpgrade;
@@ -35,18 +47,6 @@ use axum::response::{IntoResponse, Response};
 use axum::routing::{delete, get, post};
 use axum::{Json, Router};
 use call::Call;
-use godwinmix_core::config::{Config, OutputConfig, SnapshotConfig, SourceConfig};
-use godwinmix_core::media::{MediaLibrary, MediaListing};
-use godwinmix_core::mixer::{AudioOutcome, Command, MixerHandle, SeekOutcome};
-use godwinmix_core::multiview::MultiviewHandle;
-use godwinmix_core::snapshot::{self, Ask, Pick, Tracker};
-use godwinmix_core::state::{Event, MixerStatus, SourceState};
-use godwinmix_protocol::error::{ErrorCode, RpcError};
-use godwinmix_protocol::idempotency;
-use godwinmix_protocol::method::Registry;
-use godwinmix_protocol::scope::{Confirmations, Tokens};
-use godwinmix_protocol::types::{CanvasInfo, Limits, MultiviewStatus};
-use godwinmix_protocol::{AddSourceRequest, GoLiveRequest, GoLiveResult, MultiviewLayout};
 use history::History;
 use serde::Deserialize;
 use serde_json::{json, Value};
@@ -187,13 +187,7 @@ pub fn router(app: AppState, snapshots: Arc<Tracker>) -> Router {
     let registry = Arc::new(methods::registry());
     let routes = Arc::new(rest::routes(registry.as_ref()));
     let legacy_routes = Arc::new(rest::legacy_routes());
-    let ctx = Ctx {
-        app,
-        snapshots,
-        registry,
-        routes,
-        legacy_routes,
-    };
+    let ctx = Ctx { app, snapshots, registry, routes, legacy_routes };
 
     // The page, its modules, its themes and `/plugins/<name>/ui/` are open:
     // they are the same for everyone, hold nothing secret, and are where a
@@ -309,13 +303,8 @@ fn legacy_refusal(
 /// not get the query form: they come from code that can set the header, and a
 /// token in a POST's URL ends up in more logs than it should.
 pub fn presented_token(method: &Method, headers: &HeaderMap, uri: &Uri) -> Option<String> {
-    rest::bearer(headers).or_else(|| {
-        if method == Method::GET {
-            rest::query_token(uri)
-        } else {
-            None
-        }
-    })
+    rest::bearer(headers)
+        .or_else(|| if method == Method::GET { rest::query_token(uri) } else { None })
 }
 
 /// The trace id in force for one HTTP request.
@@ -325,13 +314,9 @@ pub fn trace_of(headers: &HeaderMap, explicit: Option<&str>) -> String {
 
 /// The same id, typed, for `observe::with_trace_id` so every log line a call
 /// produces carries it without being passed an argument.
-pub fn trace_id_of(
-    headers: &HeaderMap,
-    explicit: Option<&str>,
-) -> godwinmix_core::observe::TraceId {
-    let traceparent = headers
-        .get(godwinmix_protocol::trace::TRACEPARENT)
-        .and_then(|v| v.to_str().ok());
+pub fn trace_id_of(headers: &HeaderMap, explicit: Option<&str>) -> godwinmix_core::observe::TraceId {
+    let traceparent =
+        headers.get(godwinmix_protocol::trace::TRACEPARENT).and_then(|v| v.to_str().ok());
     godwinmix_protocol::trace::incoming(traceparent, explicit)
 }
 
@@ -342,12 +327,7 @@ pub fn trace_id_of(
 /// be printed on a machine with no GStreamer and no configuration.
 pub fn descriptor() -> &'static Value {
     static DOC: OnceLock<Value> = OnceLock::new();
-    DOC.get_or_init(|| {
-        godwinmix_protocol::protocol::descriptor(
-            &methods::registry(),
-            godwinmix_core::plugin::described_kinds(),
-        )
-    })
+    DOC.get_or_init(|| godwinmix_protocol::protocol::descriptor(&methods::registry(), godwinmix_core::plugin::described_kinds()))
 }
 
 /// The OpenAPI 3.1 description of the REST layer, built once.
@@ -443,13 +423,10 @@ pub async fn add_source_now(app: &AppState, req: AddSourceRequest) -> Result<Str
         .map(|s| s.trim().to_ascii_lowercase())
         .filter(|s| !s.is_empty())
         .unwrap_or_else(|| "off".to_string());
-    let base_id = req
-        .id
-        .filter(|i| !i.trim().is_empty())
-        .unwrap_or_else(|| match &name {
-            Some(n) => slug(n),
-            None => derived_id(&uri),
-        });
+    let base_id = req.id.filter(|i| !i.trim().is_empty()).unwrap_or_else(|| match &name {
+        Some(n) => slug(n),
+        None => derived_id(&uri),
+    });
     create_source(app, base_id, uri, name, &superimpose, &req.params).await
 }
 
@@ -475,11 +452,7 @@ async fn create_source(
         fields.insert("superimpose".into(), json!(superimpose));
         let cfg: SourceConfig = serde_json::from_value(Value::Object(fields))
             .map_err(|e| anyhow::anyhow!("bad source: {e}"))?;
-        match app
-            .mixer
-            .request(|ack| Command::AddSource(Box::new(cfg), Some(ack)))
-            .await
-        {
+        match app.mixer.request(|ack| Command::AddSource(Box::new(cfg), Some(ack))).await {
             Ok(()) => return Ok(id),
             Err(e) if e.to_string().contains("already exists") => continue,
             Err(e) => return Err(e),
@@ -494,11 +467,7 @@ async fn create_output(app: &AppState, uri: &str) -> Result<String> {
     for id in id_candidates(&base_id) {
         let cfg: OutputConfig = serde_json::from_value(json!({ "id": id, "uri": uri }))
             .map_err(|e| anyhow::anyhow!("bad output: {e}"))?;
-        match app
-            .mixer
-            .request(|ack| Command::AddOutput(Box::new(cfg), Some(ack)))
-            .await
-        {
+        match app.mixer.request(|ack| Command::AddOutput(Box::new(cfg), Some(ack))).await {
             Ok(()) => return Ok(id),
             Err(e) if e.to_string().contains("already exists") => continue,
             Err(e) => return Err(e),
@@ -533,10 +502,7 @@ pub async fn golive_now(app: &AppState, req: GoLiveRequest) -> Result<GoLiveResu
         Some("off") => "off",
         Some(other) => anyhow::bail!("superimpose must be \"auto\" or \"off\", not {other:?}"),
     };
-    let wanted_id = req
-        .id
-        .map(|i| i.trim().to_string())
-        .filter(|i| !i.is_empty());
+    let wanted_id = req.id.map(|i| i.trim().to_string()).filter(|i| !i.is_empty());
 
     // Reuse before adding. The same page already a source, under the id asked
     // for or under any id when none was, is the same page; adding it again
@@ -556,15 +522,7 @@ pub async fn golive_now(app: &AppState, req: GoLiveRequest) -> Result<GoLiveResu
                 }
             }
             let base_id = wanted_id.unwrap_or_else(|| derived_id(&uri));
-            create_source(
-                app,
-                base_id,
-                uri,
-                None,
-                superimpose,
-                &serde_json::Map::new(),
-            )
-            .await?
+            create_source(app, base_id, uri, None, superimpose, &serde_json::Map::new()).await?
         }
     };
 
@@ -589,11 +547,7 @@ pub async fn golive_now(app: &AppState, req: GoLiveRequest) -> Result<GoLiveResu
         .unwrap_or(SourceState::Connecting);
     take_when_live(app.clone(), source.clone());
     info!(%source, output = output.as_deref().unwrap_or("none"), "golive accepted");
-    Ok(GoLiveResult {
-        source,
-        output,
-        state,
-    })
+    Ok(GoLiveResult { source, output, state })
 }
 
 /// Take the source to programme the moment it is live. Runs on its own
@@ -608,13 +562,8 @@ fn take_when_live(app: AppState, id: String) {
         loop {
             ticks.tick().await;
             // A failed status means the mixer is gone; nothing left to take on.
-            let Ok(status) = app.mixer.status().await else {
-                return;
-            };
-            let live = status
-                .sources
-                .iter()
-                .any(|s| s.id == id && s.state == SourceState::Live);
+            let Ok(status) = app.mixer.status().await else { return };
+            let live = status.sources.iter().any(|s| s.id == id && s.state == SourceState::Live);
             if live {
                 let source = id.clone();
                 app.history.expect("golive");
@@ -654,11 +603,7 @@ fn host_of(uri: &str) -> String {
     let host = host.rsplit('@').next().unwrap_or(host);
     let host = host.split(':').next().unwrap_or(host);
     let host = host.strip_prefix("www.").unwrap_or(host);
-    if host.is_empty() {
-        "source".into()
-    } else {
-        host.to_string()
-    }
+    if host.is_empty() { "source".into() } else { host.to_string() }
 }
 
 /// An id from free text: lowercase, ascii letters and digits, dashes between
@@ -676,11 +621,7 @@ fn slug(text: &str) -> String {
         }
     }
     let out = out.trim_end_matches('-').to_string();
-    if out.is_empty() {
-        "source".into()
-    } else {
-        out
-    }
+    if out.is_empty() { "source".into() } else { out }
 }
 
 /// Stream an uploaded file to disk. Never buffered: a large clip must cost a
@@ -731,10 +672,7 @@ pub async fn store_upload(app: &AppState, name: &str, body: Body) -> Result<Valu
         .map_err(|e| RpcError::internal(format!("finishing upload: {e}")))?;
 
     info!(%name, bytes = written, "media uploaded");
-    app.mixer.emit(Event::MediaChanged {
-        name: name.clone(),
-        conversion: None,
-    });
+    app.mixer.emit(Event::MediaChanged { name: name.clone(), conversion: None });
     Ok(json!({
         "name": name,
         "path": final_path.display().to_string(),
@@ -759,11 +697,7 @@ pub async fn snapshot_bytes(
     let Some(pick) = snapshot::parse_pick(&with_suffix) else {
         return Err(RpcError::not_found("snapshot", name, &[]).with(
             "valid",
-            vec![
-                "sheet".to_string(),
-                "program".to_string(),
-                "<source id>".to_string(),
-            ],
+            vec!["sheet".to_string(), "program".to_string(), "<source id>".to_string()],
         ));
     };
     if let Some(why) = snapshots.disabled_reason() {
@@ -795,11 +729,8 @@ pub async fn snapshot_bytes(
         _ => match snapshot::find_cell(&latest.cells, &pick) {
             Some(c) => Some(c.clone()),
             None => {
-                let on_sheet: Vec<String> = latest
-                    .cells
-                    .iter()
-                    .filter_map(|c| c.source.clone())
-                    .collect();
+                let on_sheet: Vec<String> =
+                    latest.cells.iter().filter_map(|c| c.source.clone()).collect();
                 return Err(RpcError::not_found("cell on the mosaic", name, &on_sheet));
             }
         },
@@ -931,30 +862,18 @@ async fn delete_media(
     let path = app.library.resolve(&name)?;
     let target = godwinmix_core::input::to_uri(&path.display().to_string());
     let configs = app.mixer.configs().await?;
-    if let Some(s) = configs
-        .sources
-        .iter()
-        .find(|s| godwinmix_core::input::to_uri(&s.uri) == target)
-    {
-        return Err(anyhow::anyhow!(
-            "{name} is the source \"{}\". Remove the source first.",
-            s.id
-        )
-        .into());
+    if let Some(s) = configs.sources.iter().find(|s| godwinmix_core::input::to_uri(&s.uri) == target) {
+        return Err(
+            anyhow::anyhow!("{name} is the source \"{}\". Remove the source first.", s.id).into()
+        );
     }
     let mut removed = Vec::new();
-    for p in [
-        path.clone(),
-        godwinmix_core::convert::converted_sibling(&path),
-    ] {
+    for p in [path.clone(), godwinmix_core::convert::converted_sibling(&path)] {
         if p.exists() && std::fs::remove_file(&p).is_ok() {
             removed.push(p.display().to_string());
         }
     }
-    app.mixer.emit(Event::MediaChanged {
-        name,
-        conversion: None,
-    });
+    app.mixer.emit(Event::MediaChanged { name, conversion: None });
     Ok(Json(json!({ "removed": removed })))
 }
 
@@ -994,9 +913,7 @@ async fn shutdown(State(app): State<AppState>) -> StatusCode {
 }
 
 async fn end_ad_break(State(app): State<AppState>) -> Result<StatusCode, ApiError> {
-    app.mixer
-        .request(|ack| Command::EndAdBreak(Some(ack)))
-        .await?;
+    app.mixer.request(|ack| Command::EndAdBreak(Some(ack))).await?;
     Ok(StatusCode::OK)
 }
 
@@ -1020,9 +937,7 @@ async fn remove_source(
     State(app): State<AppState>,
     Path(id): Path<String>,
 ) -> Result<StatusCode, ApiError> {
-    app.mixer
-        .request(|ack| Command::RemoveSource(id, Some(ack)))
-        .await?;
+    app.mixer.request(|ack| Command::RemoveSource(id, Some(ack))).await?;
     Ok(StatusCode::OK)
 }
 
@@ -1042,10 +957,7 @@ async fn set_source_audio(
         .into_iter()
         .map(|gain| gain.map(checked_gain).transpose())
         .collect::<Result<Vec<_>>>()?;
-    let outcome = app
-        .mixer
-        .set_audio(id.clone(), gain, req.muted, page, media)
-        .await?;
+    let outcome = app.mixer.set_audio(id.clone(), gain, req.muted, page, media).await?;
     Ok(audio_response(&id, outcome))
 }
 
@@ -1115,9 +1027,7 @@ async fn reconnect_output(
     State(app): State<AppState>,
     Path(id): Path<String>,
 ) -> Result<StatusCode, ApiError> {
-    app.mixer
-        .request(|ack| Command::ReconnectOutput(id, Some(ack)))
-        .await?;
+    app.mixer.request(|ack| Command::ReconnectOutput(id, Some(ack))).await?;
     Ok(StatusCode::OK)
 }
 
@@ -1131,9 +1041,7 @@ async fn add_output(
     State(app): State<AppState>,
     Json(cfg): Json<OutputConfig>,
 ) -> Result<StatusCode, ApiError> {
-    app.mixer
-        .request(|ack| Command::AddOutput(Box::new(cfg), Some(ack)))
-        .await?;
+    app.mixer.request(|ack| Command::AddOutput(Box::new(cfg), Some(ack))).await?;
     Ok(StatusCode::OK)
 }
 
@@ -1141,9 +1049,7 @@ async fn remove_output(
     State(app): State<AppState>,
     Path(id): Path<String>,
 ) -> Result<StatusCode, ApiError> {
-    app.mixer
-        .request(|ack| Command::RemoveOutput(id, Some(ack)))
-        .await?;
+    app.mixer.request(|ack| Command::RemoveOutput(id, Some(ack))).await?;
     Ok(StatusCode::OK)
 }
 
@@ -1185,11 +1091,7 @@ pub fn client_key(req: &Request) -> String {
     {
         return peer.0.ip().to_string();
     }
-    match req
-        .headers()
-        .get(header::AUTHORIZATION)
-        .and_then(|v| v.to_str().ok())
-    {
+    match req.headers().get(header::AUTHORIZATION).and_then(|v| v.to_str().ok()) {
         Some(token) => format!("token:{token}"),
         None => "anonymous".into(),
     }
@@ -1203,25 +1105,19 @@ async fn snapshot_image(
     Query(q): Query<SnapshotQuery>,
     req: Request,
 ) -> Response {
-    let plain = |code: StatusCode, msg: String| {
-        (code, [(header::CACHE_CONTROL, "no-store")], msg).into_response()
-    };
-    let ask = Ask {
-        width: q.width,
-        force: q.force,
-        allow_large: q.allow_large,
-    };
+    let plain =
+        |code: StatusCode, msg: String| (code, [(header::CACHE_CONTROL, "no-store")], msg).into_response();
+    let ask = Ask { width: q.width, force: q.force, allow_large: q.allow_large };
     match snapshot_bytes(&snapshots, &client_key(&req), &name, &ask).await {
         Ok(jpeg) => (
             StatusCode::OK,
-            [
-                (header::CONTENT_TYPE, "image/jpeg"),
-                (header::CACHE_CONTROL, "no-store"),
-            ],
+            [(header::CONTENT_TYPE, "image/jpeg"), (header::CACHE_CONTROL, "no-store")],
             jpeg,
         )
             .into_response(),
-        Err(e) if e.code == ErrorCode::NotFound.number() => plain(StatusCode::NOT_FOUND, e.message),
+        Err(e) if e.code == ErrorCode::NotFound.number() => {
+            plain(StatusCode::NOT_FOUND, e.message)
+        }
         Err(e) if e.code == ErrorCode::NotInState.number() => {
             plain(StatusCode::SERVICE_UNAVAILABLE, e.message)
         }
@@ -1252,11 +1148,7 @@ pub struct RunningTime {
 
 impl Default for RunningTime {
     fn default() -> Self {
-        Self {
-            base_ms: 0,
-            at: std::time::Instant::now(),
-            layout: 0,
-        }
+        Self { base_ms: 0, at: std::time::Instant::now(), layout: 0 }
     }
 }
 
@@ -1270,8 +1162,7 @@ impl RunningTime {
     }
 
     pub fn now_ms(&self) -> u64 {
-        self.base_ms
-            .saturating_add(self.at.elapsed().as_millis() as u64)
+        self.base_ms.saturating_add(self.at.elapsed().as_millis() as u64)
     }
 
     /// The layout id of the grid the last status described. A frame header
@@ -1288,13 +1179,8 @@ fn spawn_history(app: AppState) {
         loop {
             match events.recv().await {
                 Ok(envelope) => {
-                    if let Event::Took {
-                        source,
-                        at_running_time_ms,
-                    } = envelope.event
-                    {
-                        app.history
-                            .record_event(source, at_running_time_ms, envelope.seq);
+                    if let Event::Took { source, at_running_time_ms } = envelope.event {
+                        app.history.record_event(source, at_running_time_ms, envelope.seq);
                     }
                 }
                 Err(broadcast::error::RecvError::Closed) => return,
@@ -1307,11 +1193,8 @@ fn spawn_history(app: AppState) {
 pub async fn serve(bind: &str, state: AppState) -> Result<()> {
     let listener = tokio::net::TcpListener::bind(bind).await?;
     info!(%bind, "control server listening");
-    let snapshots = Tracker::new(
-        state.snapshot.clone(),
-        state.multiview.clone(),
-        state.mixer.clone(),
-    );
+    let snapshots =
+        Tracker::new(state.snapshot.clone(), state.multiview.clone(), state.mixer.clone());
     spawn_history(state.clone());
     let observe = crate::observe::router(observe_state(&state));
     // Connect info so the snapshot rate limit can tell one client from

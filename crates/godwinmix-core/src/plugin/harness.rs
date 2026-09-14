@@ -32,13 +32,7 @@ use std::time::{Duration, Instant};
 /// The canvas the harness runs on: small enough to be quick on a Pi, large
 /// enough that scaling and conversion are real work.
 pub fn test_canvas() -> CanvasCaps {
-    CanvasCaps::new(&Canvas {
-        width: 1280,
-        height: 720,
-        fps: 30,
-        sample_rate: 48000,
-        channels: 2,
-    })
+    CanvasCaps::new(&Canvas { width: 1280, height: 720, fps: 30, sample_rate: 48000, channels: 2 })
 }
 
 /// How long buffers are counted for.
@@ -59,19 +53,11 @@ pub struct CheckResult {
 
 impl CheckResult {
     fn pass(name: &'static str, detail: impl Into<String>) -> Self {
-        Self {
-            name,
-            passed: true,
-            detail: detail.into(),
-        }
+        Self { name, passed: true, detail: detail.into() }
     }
 
     fn fail(name: &'static str, detail: impl Into<String>) -> Self {
-        Self {
-            name,
-            passed: false,
-            detail: detail.into(),
-        }
+        Self { name, passed: false, detail: detail.into() }
     }
 }
 
@@ -92,12 +78,7 @@ impl Report {
         self.checks
             .iter()
             .map(|c| {
-                format!(
-                    "{} {:<22} {}",
-                    if c.passed { "ok  " } else { "FAIL" },
-                    c.name,
-                    c.detail
-                )
+                format!("{} {:<22} {}", if c.passed { "ok  " } else { "FAIL" }, c.name, c.detail)
             })
             .collect()
     }
@@ -127,9 +108,7 @@ struct Counter {
 
 impl Counter {
     fn install(self: &Arc<Self>, proxy: &gst::Element) -> Result<()> {
-        let pad = proxy
-            .static_pad("sink")
-            .context("a proxy sink with no sink pad")?;
+        let pad = proxy.static_pad("sink").context("a proxy sink with no sink pad")?;
         let me = self.clone();
         let last = std::sync::Mutex::new(None::<gst::ClockTime>);
         pad.add_probe(gst::PadProbeType::BUFFER, move |_pad, info| {
@@ -163,10 +142,7 @@ pub fn check_source(cfg: &SourceConfig, allow_exec: bool) -> Result<Report> {
         .context("probing the backends for the harness")?;
     let browser = BrowserConfig::default();
     let provide = super::source::resolve_config(cfg)?;
-    let mut report = Report {
-        type_id: provide.manifest.provide_id(),
-        checks: Vec::new(),
-    };
+    let mut report = Report { type_id: provide.manifest.provide_id(), checks: Vec::new() };
     let declared = provide.manifest.media;
 
     let request = SourceRequest {
@@ -198,21 +174,9 @@ pub fn check_source(cfg: &SourceConfig, allow_exec: bool) -> Result<Report> {
     audio.install(&ends.audio)?;
 
     report.checks.push(reaches_playing(&ends));
-    report.checks.push(caps_match(
-        &ends,
-        &canvas,
-        declared.video,
-        "video caps",
-        &ends.video,
-    ));
+    report.checks.push(caps_match(&ends, &canvas, declared.video, "video caps", &ends.video));
     if declared.audio.present() {
-        report.checks.push(caps_match(
-            &ends,
-            &canvas,
-            declared.audio,
-            "audio caps",
-            &ends.audio,
-        ));
+        report.checks.push(caps_match(&ends, &canvas, declared.audio, "audio caps", &ends.audio));
     }
     std::thread::sleep(SAMPLE);
     report.checks.push(enough_buffers(
@@ -225,10 +189,7 @@ pub fn check_source(cfg: &SourceConfig, allow_exec: bool) -> Result<Report> {
 
     let _ = ends.pipeline.set_state(gst::State::Null);
     source.stop()?;
-    report.checks.push(CheckResult::pass(
-        "stop",
-        "the pipeline is in NULL and the kind let go",
-    ));
+    report.checks.push(CheckResult::pass("stop", "the pipeline is in NULL and the kind let go"));
     Ok(report)
 }
 
@@ -251,10 +212,7 @@ fn enough_audio(counter: &Counter, mode: StreamMode) -> CheckResult {
     }
     let back = counter.regressions.load(Ordering::Relaxed);
     if back > 0 {
-        return CheckResult::fail(
-            "audio buffers",
-            format!("{back} buffers went backwards in time"),
-        );
+        return CheckResult::fail("audio buffers", format!("{back} buffers went backwards in time"));
     }
     let got = counter.nanos.load(Ordering::Relaxed);
     let want = (SAMPLE.as_nanos() as f64 * EXPECTED_SHARE) as u64;
@@ -306,11 +264,7 @@ fn caps_match(
     if !mode.present() {
         return CheckResult::pass(name, "not declared, not expected");
     }
-    let want = if name.starts_with("video") {
-        canvas.video()
-    } else {
-        canvas.audio()
-    };
+    let want = if name.starts_with("video") { canvas.video() } else { canvas.audio() };
     let Some(pad) = proxy.static_pad("sink") else {
         return CheckResult::fail(name, "the proxy sink has no sink pad");
     };
@@ -354,10 +308,7 @@ fn enough_buffers(
     if seen < floor {
         return CheckResult::fail(
             name,
-            format!(
-                "{seen} buffers in {}s, wanted at least {floor}",
-                SAMPLE.as_secs()
-            ),
+            format!("{seen} buffers in {}s, wanted at least {floor}", SAMPLE.as_secs()),
         );
     }
     CheckResult::pass(name, format!("{seen} buffers, none out of order"))
@@ -405,11 +356,8 @@ mod tests {
         // A file the harness makes itself, so the check needs nothing but
         // GStreamer. Written once and removed at the end, like every other
         // temporary this crate makes.
-        let path = std::env::temp_dir().join(format!(
-            "gmx-harness-{}-{}.mkv",
-            std::process::id(),
-            line!()
-        ));
+        let path = std::env::temp_dir()
+            .join(format!("gmx-harness-{}-{}.mkv", std::process::id(), line!()));
         if let Err(e) = write_clip(&path) {
             println!("skipping: could not write a clip to check against: {e}");
             return;

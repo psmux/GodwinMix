@@ -36,11 +36,7 @@ pub enum Outcome {
     /// It came across whole.
     Imported { r#type: String, id: String },
     /// It came across, and the plugin that plays it is not installed yet.
-    NeedsPlugin {
-        r#type: String,
-        id: String,
-        plugin: String,
-    },
+    NeedsPlugin { r#type: String, id: String, plugin: String },
     /// It did not come across. `placeholder` names what was put in the scene
     /// in its place, when anything was.
     Skipped {
@@ -116,10 +112,8 @@ impl Import {
         struct Wrapper<'a> {
             sources: &'a [ImportedSource],
         }
-        let body = toml::to_string_pretty(&Wrapper {
-            sources: &self.sources,
-        })
-        .context("writing the imported sources as TOML")?;
+        let body = toml::to_string_pretty(&Wrapper { sources: &self.sources })
+            .context("writing the imported sources as TOML")?;
         Ok(format!(
             "# Sources imported from the OBS scene collection {:?}.\n\
              # Each one names the plugin that plays it in `type`; install any that are\n\
@@ -326,23 +320,11 @@ fn blend_of(name: Option<&str>) -> Blend {
 #[derive(Debug, Clone, PartialEq)]
 enum Mapped {
     /// A type the core has today.
-    Core {
-        kind: String,
-        uri: Option<String>,
-        params: Value,
-    },
+    Core { kind: String, uri: Option<String>, params: Value },
     /// A type that arrives with a plugin nobody has installed yet.
-    Plugin {
-        kind: String,
-        plugin: String,
-        params: Value,
-    },
+    Plugin { kind: String, plugin: String, params: Value },
     /// Not a source at all: a graphic item in the scene.
-    Graphic {
-        graphic: String,
-        params: Value,
-        note: String,
-    },
+    Graphic { graphic: String, params: Value, note: String },
     /// Nothing sensible to do with it.
     Skip { reason: String },
 }
@@ -365,24 +347,14 @@ fn map_source(source: &ObsSource) -> Mapped {
             if s.get("looping").and_then(Value::as_bool) == Some(true) {
                 params["loop"] = Value::Bool(true);
             }
-            Mapped::Core {
-                kind,
-                uri: Some(path),
-                params,
-            }
+            Mapped::Core { kind, uri: Some(path), params }
         }
         "image_source" => {
             let path = text("file");
             if path.is_empty() {
-                return Mapped::Skip {
-                    reason: "it names no image file".into(),
-                };
+                return Mapped::Skip { reason: "it names no image file".into() };
             }
-            Mapped::Core {
-                kind: "file/source".into(),
-                uri: Some(path.clone()),
-                params: json!({ "uri": path }),
-            }
+            Mapped::Core { kind: "file/source".into(), uri: Some(path.clone()), params: json!({ "uri": path }) }
         }
         "browser_source" => {
             let url = if text("is_local_file").is_empty() && !text("url").is_empty() {
@@ -393,9 +365,7 @@ fn map_source(source: &ObsSource) -> Mapped {
                 text("url")
             };
             if url.is_empty() {
-                return Mapped::Skip {
-                    reason: "it names no page".into(),
-                };
+                return Mapped::Skip { reason: "it names no page".into() };
             }
             let mut params = json!({ "url": url });
             for key in ["width", "height", "fps"] {
@@ -406,11 +376,7 @@ fn map_source(source: &ObsSource) -> Mapped {
             if !text("css").is_empty() {
                 params["css"] = Value::String(text("css"));
             }
-            Mapped::Core {
-                kind: "browser/source".into(),
-                uri: Some(format!("web+{url}")),
-                params,
-            }
+            Mapped::Core { kind: "browser/source".into(), uri: Some(format!("web+{url}")), params }
         }
         "v4l2_input" | "av_capture_input" | "av_capture_input_v2" | "dshow_input" => {
             let device = ["device", "device_id", "device_name", "video_device_id"]
@@ -424,30 +390,15 @@ fn map_source(source: &ObsSource) -> Mapped {
                 params: json!({ "device": device }),
             }
         }
-        "monitor_capture"
-        | "display_capture"
-        | "window_capture"
-        | "xshm_input"
-        | "xcomposite_input"
-        | "pipewire-screen-capture-source"
-        | "screen_capture" => {
+        "monitor_capture" | "display_capture" | "window_capture" | "xshm_input"
+        | "xcomposite_input" | "pipewire-screen-capture-source" | "screen_capture" => {
             let mut params = json!({});
-            for key in [
-                "monitor",
-                "monitor_id",
-                "window",
-                "capture_window",
-                "display",
-            ] {
+            for key in ["monitor", "monitor_id", "window", "capture_window", "display"] {
                 if !text(key).is_empty() {
                     params[key] = Value::String(text(key));
                 }
             }
-            Mapped::Plugin {
-                kind: "screen/source".into(),
-                plugin: "screen".into(),
-                params,
-            }
+            Mapped::Plugin { kind: "screen/source".into(), plugin: "screen".into(), params }
         }
         "text_gdiplus" | "text_gdiplus_v2" | "text_ft2_source" | "text_ft2_source_v2" => {
             Mapped::Graphic {
@@ -468,9 +419,7 @@ fn map_source(source: &ObsSource) -> Mapped {
                 params: json!({ "pattern": "solid", "color": obs_colour(colour) }),
             }
         }
-        "" => Mapped::Skip {
-            reason: "it has no type".into(),
-        },
+        "" => Mapped::Skip { reason: "it has no type".into() },
         other => Mapped::Skip {
             reason: format!("GodwinMix has no equivalent of the OBS source type {other:?} yet"),
         },
