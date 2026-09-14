@@ -7,11 +7,13 @@
 //! run that is not on a terminal at all, gets the block grid.
 
 use crate::picture::Picture;
+#[cfg(unix)]
 use std::time::Duration;
 
 /// How long to wait for a terminal to answer. A real terminal answers a
 /// primary device attributes request in microseconds; this is only here so
 /// that something which never answers does not hold the mixer's UI up.
+#[cfg(unix)]
 const REPLY_WAIT: Duration = Duration::from_millis(400);
 
 /// The picture mode to use. `force` is `--picture`, which skips the lot.
