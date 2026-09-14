@@ -123,6 +123,10 @@ const DEV_ASSETS: &[(&str, &str)] = &[
     // repository; the browser reads it from here, because the page has no file
     // system. Written by `node dev/kit-fixtures.mjs`.
     ("test/fixtures.json", include_str!("../../../ui/kits/fixtures.json")),
+    // A plugin that ships a data schema and a designer block and no code, as
+    // `plugin.describe` answers for it. The Python suite reads the same file,
+    // so one fixture is the acceptance for both toolkits.
+    ("test/designer-fixture.json", include_str!("../../../tests/fixtures/designer/lower-third.json")),
 ];
 
 /// True when this process was started with `GMX_UI_DEV=1`.

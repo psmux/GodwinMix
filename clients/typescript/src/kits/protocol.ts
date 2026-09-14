@@ -276,8 +276,10 @@ export class SceneMirror {
  * lexically so an item can be moved between two others without renumbering.
  */
 function byOrder(a: SceneRecord, b: SceneRecord): number {
-  const x = a.order === undefined ? "" : String(a.order);
-  const y = b.order === undefined ? "" : String(b.order);
+  // A record with no order sorts first rather than under the string "null",
+  // which is where String(null) would put it.
+  const x = a.order === undefined || a.order === null ? "" : String(a.order);
+  const y = b.order === undefined || b.order === null ? "" : String(b.order);
   return x < y ? -1 : x > y ? 1 : 0;
 }
 
