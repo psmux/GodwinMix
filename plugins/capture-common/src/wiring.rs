@@ -284,11 +284,15 @@ mod tests {
         let base = dir.join("media");
         let stale = video_socket(base.to_str().unwrap());
         std::fs::write(&stale, b"not really a socket").unwrap();
-        let description =
-            Wiring::video_only("videotestsrc").description(Transport::Unixfd).unwrap();
+        let description = Wiring::video_only("videotestsrc")
+            .description(Transport::Unixfd)
+            .unwrap();
         let pipeline = crate::capture::build(&description).unwrap();
         bind(&pipeline, Transport::Unixfd, base.to_str().unwrap()).expect("it binds");
-        assert!(!std::path::Path::new(&stale).exists(), "the stale socket is still there");
+        assert!(
+            !std::path::Path::new(&stale).exists(),
+            "the stale socket is still there"
+        );
         let _ = std::fs::remove_dir_all(&dir);
     }
 

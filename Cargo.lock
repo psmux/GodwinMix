@@ -820,6 +820,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "gmx-file-record"
+version = "0.1.0"
+dependencies = [
+ "godwinmix-capture-common",
+ "godwinmix-sdk",
+ "gstreamer",
+ "serde_json",
+]
+
+[[package]]
 name = "gmx-screen"
 version = "0.1.0"
 dependencies = [
