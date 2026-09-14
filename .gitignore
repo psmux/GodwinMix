@@ -7,9 +7,11 @@ browser/target/
 tauri-app/target/
 
 # A plugin template is a crate, and its lockfile belongs to whoever copies it,
-# not to this repository.
+# not to this repository. The same goes for anything its check builds.
 templates/*/Cargo.lock
 crates/godwinmix-sdk/Cargo.lock
+templates/go/bin/
+templates/*/plugin
 
 # Tauri generated schemas
 tauri-app/gen/schemas/
