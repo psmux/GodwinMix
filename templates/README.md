@@ -32,9 +32,10 @@ breaks `gmx plugin new`, so add it here first.
 | `{{author}}` | the author line for the manifest and the package file | `A Person` |
 | `{{license}}` | an SPDX licence id | `MIT` |
 | `{{year}}` | the current year, for a licence header | `2026` |
+| `{{kind}}` | the provide kind from `--kind`. Used by the wasm template, where it names the provide, its skill directory and its id | `service` |
 | `{{sdk}}` | the Rust template only: the `godwinmix-sdk` dependency, a version once the crate is published and a path to the copy beside the `gmx` binary until then | `{ path = "/usr/lib/gmx/sdk" }` |
 
-Placeholders appear in file contents only, never in file or directory names.
+Placeholders are substituted in file and directory names as well as in contents.
 
 ## Testing the templates
 
