@@ -146,12 +146,21 @@ fn load(spec: Spec) -> Result<(Store<Ctx>, Exports, Handshake)> {
         .context("adding the godwinmix:plugin/host interface to the linker")?;
     let mut store = Store::new(engine, context_of(&spec)?);
     store.limiter(|ctx| &mut ctx.limits);
-    store.set_fuel(spec.grant.fuel_per_call)?;
-    store.set_epoch_deadline(spec.grant.deadline.as_millis().max(1) as u64);
+    // The handshake gets the default allowance rather than the instance's per
+    // call one. It happens once, it builds whatever state the plugin needs for
+    // the rest of its life, and holding it to a budget meant for a hook would
+    // make a tight budget mean "this plugin cannot load" rather than "this
+    // plugin's hooks are cut short".
+    store.set_fuel(spec.grant.fuel_per_call.max(godwinmix_core::plugin::wasm::DEFAULT_FUEL))?;
+    store.set_epoch_deadline(START_EPOCHS);
     let hello = hello_of(&spec);
     let (exports, ready) = instantiate(&mut store, &component, &linker, &spec, hello)?;
     Ok((store, exports, ready))
 }
+
+/// How many epoch ticks the handshake gets. Twenty seconds, the same wall the
+/// caller waits behind; the per call deadline takes over afterwards.
+const START_EPOCHS: u64 = 20_000;
 
 /// The projection bindgen wants for a state type that is its own host.
 type HasSelf = wasmtime::component::HasSelf<Ctx>;
