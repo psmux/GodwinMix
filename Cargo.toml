@@ -1,74 +1,71 @@
-[package]
-name = "godwinmix"
+# The workspace root. There is no package here: every crate lives under
+# `crates/`, and the glob means a new one joins by existing.
+#
+#   godwinmix-protocol  the wire contract, types and schema, no media stack
+#   godwinmix-core      the mixing engine as a library, no server
+#   godwinmix-host      the tier 2 sidecar host (empty for now)
+#   godwinmix           the binaries, the control server, the CLI
+#
+# See docs/explanation/architecture.md for what belongs in each.
+[workspace]
+resolver = "2"
+members = ["crates/*"]
+# Same glob, so `cargo build` at the root builds every crate and `cargo run`
+# still reaches the `godwinmix` binary through its `default-run`.
+default-members = ["crates/*"]
+# Both have their own lockfiles and their own heavy dependency trees, and
+# neither is built by `cargo build` here.
+exclude = ["browser", "tauri-app"]
+
+[workspace.package]
 version = "0.2.0"
 edition = "2021"
 rust-version = "1.82"
-description = "Live RTMP video mixer with hot source switching and uninterrupted output"
-# Two binaries, so `cargo run` has to be told which one it is.
-default-run = "godwinmix"
+license = "Apache-2.0"
+repository = "https://github.com/psmux/godwinmix"
 
-# The program is a library with two binaries over it. `gmx` is the name an
-# operator types; `godwinmix` is the name a package manager and a service unit
-# use. They are the same code, not a copy each.
-[lib]
-name = "godwinmix"
-path = "src/lib.rs"
+# One version per dependency for the whole tree. A crate opts in with
+# `dep = { workspace = true }` and adds only the features it needs.
+[workspace.dependencies]
+godwinmix-protocol = { path = "crates/godwinmix-protocol", version = "0.2.0" }
+godwinmix-core = { path = "crates/godwinmix-core", version = "0.2.0" }
 
-[[bin]]
-name = "godwinmix"
-path = "src/main.rs"
-
-[[bin]]
-name = "gmx"
-path = "src/bin/gmx.rs"
-
-[dependencies]
 gstreamer = "0.24"
 gstreamer-video = "0.24"
 gstreamer-audio = "0.24"
 gstreamer-app = "0.24"
+gstreamer-pbutils = "0.24"
 glib = "0.21"
 
-tokio = { version = "1", features = ["rt-multi-thread", "macros", "sync", "signal", "time", "io-std", "io-util", "fs"] }
-axum = { version = "0.8", features = ["ws"] }
-tower-http = { version = "0.6", features = ["fs", "cors", "trace"] }
+tokio = "1"
+axum = "0.8"
+tower-http = "0.6"
 
-serde = { version = "1", features = ["derive"] }
+serde = "1"
 serde_json = "1"
 toml = "0.9"
+schemars = "1"
 
 anyhow = "1"
-thiserror = "2"
 tracing = "0.1"
-tracing-subscriber = { version = "0.3", features = ["env-filter"] }
-clap = { version = "4", features = ["derive", "env"] }
+tracing-subscriber = "0.3"
+clap = "4"
 parking_lot = "0.12"
-futures-util = { version = "0.3.34", default-features = false, features = ["sink", "std"] }
-gstreamer-pbutils = "0.24"
+futures-util = { version = "0.3.34", default-features = false }
 # rustls rather than the platform's TLS: the same binary reaches an https
 # mixer or media address on Linux, macOS and Windows, and CI needs no OpenSSL
-# headers. Without a TLS feature at all, which is how this stood, every https
-# URL failed at connect: ctl and mcp against a mixer behind Cloudflare, and a
-# page's media on an https CDN.
-reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+# headers.
+reqwest = { version = "0.12", default-features = false }
 shell-words = "1.1.1"
 libc = "0.2.189"
 # Only the JPEG codec: the snapshot endpoints crop cells out of the mosaic
 # frames, which are already JPEG, and hand them back as JPEG.
 image = { version = "0.25", default-features = false, features = ["jpeg"] }
 base64 = "0.22"
-# The scene document is published as JSON Schema draft 2020-12 (schemas/scene.schema.json),
-# generated from the Rust types so the two cannot drift. A test regenerates and compares.
-schemars = "1"
 # Sixteen random bytes for a UUIDv7. The `uuid` crate would be a whole crate to
 # format a 128 bit integer we already have to generate ourselves; getrandom is
 # already in the tree under rustls and costs nothing new to compile.
 getrandom = "0.3"
-
-[dev-dependencies]
-# Paused time, so the multiview linger tests assert on two seconds without
-# waiting two seconds. Test only: the shipped binary does not carry it.
-tokio = { version = "1", features = ["test-util", "macros", "rt-multi-thread"] }
 
 [profile.release]
 opt-level = 3
