@@ -74,16 +74,6 @@ const MIN_MOSAIC_WIDTH: i32 = 160;
 const MAX_MOSAIC_WIDTH: i32 = 1920;
 const MAX_MOSAIC_FPS: i32 = 30;
 
-/// How many mosaic pipelines exist right now, across the whole process.
-///
-/// Tests assert on this to prove that "nothing runs unless asked" is true of
-/// the pipeline and not only of the status document.
-static LIVE_PIPELINES: AtomicUsize = AtomicUsize::new(0);
-
-pub fn live_pipelines() -> usize {
-    LIVE_PIPELINES.load(Ordering::Relaxed)
-}
-
 /// What one client wants out of the mosaic. The pipeline is built at the
 /// highest of each field over every live subscription, so one agent asking for
 /// 2 fps never degrades the operator's 8.
@@ -140,6 +130,11 @@ struct Shared {
     /// Bumped by every subscribe and every drop, so a linger that was armed
     /// before a reconnection knows it has been overtaken.
     generation: AtomicU64,
+    /// Mosaic pipelines alive for this mixer: one while there is a mosaic,
+    /// zero otherwise. Counted on the `Multiview` object rather than taken
+    /// from `built`, so a test can prove that the GStreamer elements really
+    /// have gone and not merely that a flag was cleared.
+    live: AtomicUsize,
     /// The mixer thread has no runtime of its own and a subscription may be
     /// dropped anywhere, so the linger is scheduled through a captured handle.
     rt: tokio::runtime::Handle,
@@ -237,6 +232,7 @@ impl MultiviewHandle {
                 built: AtomicBool::new(false),
                 shape: Mutex::new(None),
                 generation: AtomicU64::new(0),
+                live: AtomicUsize::new(0),
                 rt,
                 demand,
             }),
@@ -275,6 +271,13 @@ impl MultiviewHandle {
     /// Whether a mosaic pipeline exists at this moment.
     pub fn is_built(&self) -> bool {
         self.shared.built.load(Ordering::Acquire)
+    }
+
+    /// Mosaic pipelines alive for this mixer right now: one or zero. What a
+    /// test asks to prove that a disabled or unwanted mosaic is not merely
+    /// flagged off but absent.
+    pub fn live_pipelines(&self) -> usize {
+        self.shared.live.load(Ordering::Relaxed)
     }
 
     pub fn shape(&self) -> Option<MultiviewShape> {
@@ -395,6 +398,8 @@ struct Tile {
 
 pub struct Multiview {
     cfg: MultiviewConfig,
+    /// Held so the live count falls when this is dropped.
+    shared: Arc<Shared>,
     pipeline: gst::Pipeline,
     compositor: gst::Element,
     tiles: Vec<Tile>,
@@ -466,13 +471,14 @@ impl Multiview {
 
         let mut mv = Self {
             cfg,
+            shared: handle.shared.clone(),
             pipeline,
             compositor,
             tiles: Vec::new(),
             grid: Grid::for_tiles(1, shape.width, shape.height),
             watch: None,
         };
-        LIVE_PIPELINES.fetch_add(1, Ordering::Relaxed);
+        mv.shared.live.fetch_add(1, Ordering::Relaxed);
 
         if mv.cfg.include_program {
             mv.add_tile(None, program_video)?;
@@ -618,7 +624,7 @@ impl Multiview {
 impl Drop for Multiview {
     fn drop(&mut self) {
         self.stop();
-        LIVE_PIPELINES.fetch_sub(1, Ordering::Relaxed);
+        self.shared.live.fetch_sub(1, Ordering::Relaxed);
     }
 }
 
@@ -728,11 +734,11 @@ mod tests {
     async fn dropping_the_last_pipeline_leaves_none_alive() {
         init();
         let h = handle();
-        let before = live_pipelines();
+        assert_eq!(h.live_pipelines(), 0);
         let mv = Multiview::build(&h, default_shape(&h), &fake_proxy("pv5")).unwrap();
-        assert_eq!(live_pipelines(), before + 1);
+        assert_eq!(h.live_pipelines(), 1);
         drop(mv);
-        assert_eq!(live_pipelines(), before, "a dropped mosaic must not stay alive");
+        assert_eq!(h.live_pipelines(), 0, "a dropped mosaic must not stay alive");
     }
 
     /// The heart of "nothing runs unless asked": the demand sink sees a build
@@ -838,6 +844,100 @@ mod tests {
         drop(sub);
         tokio::time::sleep(Duration::from_secs(5)).await;
         assert!(seen.lock().is_empty(), "a disabled mosaic must ask for nothing");
+    }
+
+    /// A mixer small enough to start inside a test, with the mosaic settings
+    /// the test is about.
+    fn mixer_cfg(multiview: MultiviewConfig) -> crate::config::Config {
+        // An empty document is every table's default, which is the shortest
+        // way to a valid config that does not have to be rewritten every time
+        // somebody adds a field.
+        let mut cfg: crate::config::Config = toml::from_str("").unwrap();
+        cfg.canvas = crate::config::Canvas {
+            width: 320,
+            height: 180,
+            fps: 15,
+            sample_rate: 48000,
+            channels: 2,
+        };
+        cfg.multiview = multiview;
+        cfg
+    }
+
+    /// The acceptance test for the switch: with `[multiview] enabled = false`
+    /// no mosaic pipeline is alive, however hard a client asks.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn a_mixer_with_multiview_off_never_builds_a_mosaic() {
+        init();
+        let cfg = mixer_cfg(MultiviewConfig { enabled: false, ..Default::default() });
+        let (mut mix, handle, cmd_rx, _bus_rx) = crate::mixer::Mixer::build(cfg).unwrap();
+        mix.start().unwrap();
+        let mv = mix.multiview_handle();
+        let thread = crate::mixer::spawn(mix, cmd_rx, handle.clone());
+
+        let mut sub = mv.subscribe(MultiviewRequest { fps: 8, width: 1280 });
+        assert!(!sub.active());
+        // Long enough that a build would have happened if one were coming.
+        assert!(
+            tokio::time::timeout(Duration::from_millis(600), sub.recv()).await.is_err(),
+            "a disabled mosaic must never produce a frame"
+        );
+        assert_eq!(mv.live_pipelines(), 0, "a mosaic pipeline exists and must not");
+        assert!(!mv.is_built());
+        assert!(!mv.wants_thumbs(), "no source needs a thumbnail end");
+        assert_eq!(handle.status().await.unwrap().multiview.cells.len(), 0);
+
+        drop(sub);
+        let _ = handle.send(crate::mixer::Command::Shutdown);
+        tokio::task::spawn_blocking(move || thread.join()).await.unwrap().unwrap();
+        assert_eq!(mv.live_pipelines(), 0);
+    }
+
+    /// And the other half of it: a subscriber gets a mosaic quickly, and the
+    /// pipeline goes again a linger after it leaves.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn a_subscriber_builds_the_mosaic_and_leaving_takes_it_away() {
+        init();
+        let cfg = mixer_cfg(MultiviewConfig {
+            width: 320,
+            height: 180,
+            linger_secs: 1,
+            ..Default::default()
+        });
+        let (mut mix, handle, cmd_rx, _bus_rx) = crate::mixer::Mixer::build(cfg).unwrap();
+        mix.start().unwrap();
+        let mv = mix.multiview_handle();
+        let thread = crate::mixer::spawn(mix, cmd_rx, handle.clone());
+        assert_eq!(mv.live_pipelines(), 0, "a mosaic before anybody asked for one");
+
+        let mut sub = mv.subscribe(MultiviewRequest::configured());
+        let frame = tokio::time::timeout(Duration::from_secs(2), sub.recv())
+            .await
+            .expect("no mosaic frame within two seconds of subscribing")
+            .expect("the frame channel closed");
+        assert_eq!(&frame[..2], &[0xFF, 0xD8], "that is not a JPEG");
+        assert_eq!(mv.live_pipelines(), 1);
+        assert!(mv.is_built());
+        assert!(mv.wants_thumbs());
+        assert!(mv.fps() > 0.0, "the fps metric never moved");
+
+        drop(sub);
+        assert_eq!(mv.subscribers(), 0);
+        // Still up during the linger.
+        tokio::time::sleep(Duration::from_millis(300)).await;
+        assert_eq!(mv.live_pipelines(), 1, "torn down before the linger elapsed");
+        // And gone after it.
+        for _ in 0..40 {
+            if mv.live_pipelines() == 0 {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(100)).await;
+        }
+        assert_eq!(mv.live_pipelines(), 0, "the mosaic outlived its last subscriber");
+        assert!(!mv.is_built());
+
+        let _ = handle.send(crate::mixer::Command::Shutdown);
+        tokio::task::spawn_blocking(move || thread.join()).await.unwrap().unwrap();
     }
 
     #[tokio::test]
