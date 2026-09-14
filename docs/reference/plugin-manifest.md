@@ -82,8 +82,9 @@ one containing `..`, is refused.
 | `authors` | array of strings | no | Free form |
 | `repository` | string | no | Where the source lives |
 | `platforms` | array of strings | yes | At least one platform triple from the table below |
-| `placements` | array of strings | yes | At least one of `in-process`, `sidecar`, `node` |
+| `placements` | array of strings | yes | At least one of `in-process`, `sidecar`, `node`, `wasm` |
 | `process` | string | no | `per-instance` (the default) or `singleton` |
+| `wasi` | array of strings | no | `filesystem`, `network`, or both. Read only at the `wasm` placement, and only half a grant: see below |
 
 `per-instance` means one process per instance, which is the simpler main loop
 and what the templates use. `singleton` means one process serves every instance,
@@ -102,6 +103,16 @@ set; two is an error, and so is none.
 | `node` | path | `node <entry>` | finds `node >= 20`, runs `npm ci --omit=dev` |
 | `shell` | path | `sh <entry>` on Unix | marks it executable |
 
+And one key that is not a runtime, because it starts no process:
+
+| Key | Type | What the core does | What `gmx plugin add` does |
+|---|---|---|---|
+| `wasm` | path, ending `.wasm` | loads the component into the WebAssembly host in this process | copies it with the rest of the directory |
+
+`wasm` does not count towards the one runtime rule. A plugin may ship a binary
+for `sidecar` and a component for `wasm` in the same manifest, and the operator
+chooses between them with `place`.
+
 The right hand column is what `gmx plugin add` does when it installs the plugin.
 Signature checking is the one part of it that is not built: a plugin installed
 from a local path is trusted because you gave the path, and installing from an
@@ -110,7 +121,9 @@ index with a signature arrives with the index. See
 [the lifecycle](plugin-lifecycle.md).
 
 `[run]` is required when `placements` names `sidecar` or `node`. A plugin that
-only ever runs `in-process` needs none.
+only ever runs `in-process` needs none. `placements` naming `wasm` makes
+`[run] wasm` required, and a plugin whose only placement is `wasm` needs no
+runtime key at all.
 
 Two rules on `bin`: each key must be a known platform triple, and each must also
 appear in `plugin.platforms`, because nothing will ever pick a binary for a
@@ -379,8 +392,30 @@ Anything else is refused, in `plugin.platforms` and in the keys of `run.bin`.
 | `in-process` | compiled into the core, tier 0 or 1 |
 | `sidecar` | a separate process on the same machine, tier 2 |
 | `node` | a process on another machine |
+| `wasm` | a WebAssembly component inside the core, tier W. `service`, `transition` and `panel` logic only |
 
-Naming `sidecar` or `node` makes `[run]` required.
+Naming `sidecar` or `node` makes `[run]` required. Naming `wasm` makes
+`[run] wasm` required.
+
+A plugin that declares `wasm` alongside another placement stays a process until
+an operator writes `place = "wasm"` under `[plugins.<name>]`. A plugin whose
+only placement is `wasm` is loaded as a component without being asked.
+
+Media never crosses a component boundary. A `source`, `output`, `filter` or
+`encoder` asked to run at the `wasm` placement is refused with `-32005`, and
+`data.placements` names the three that do carry media. See
+[why WASM is not on the frame path](../explanation/why-wasm-is-not-on-the-frame-path.md).
+
+### `wasi`, and why it takes two
+
+`wasi = ["filesystem"]` in the manifest is the plugin saying what it needs.
+`[plugins] allow_wasi = ["<name>"]` in the operator's config is the machine
+saying yes. Without both, the component gets a store with no preopens and no
+sockets, and `capabilities.filesystem` in its handshake reads false.
+
+That is deliberate. One half alone would make "it asked for the filesystem" a
+formality rather than information, and the operator is the one who knows
+whether this machine should give it.
 
 ## What the validator checks
 
@@ -399,21 +434,29 @@ reported in one pass. Ordered as the validator walks the file.
 | `plugin.platforms` | the list is empty |
 | `plugin.platforms[i]` | that entry is not a known triple |
 | `plugin.placements` | the list is empty |
-| `plugin.placements[i]` | that entry is not `in-process`, `sidecar` or `node` |
+| `plugin.placements[i]` | that entry is not `in-process`, `sidecar`, `node` or `wasm` |
 | `plugin.process` | it is neither `per-instance` nor `singleton` |
+| `plugin.wasi[i]` | that entry is not `filesystem` or `network` |
+| `plugin.wasi` | it is not empty and `placements` does not name `wasm` |
+| `provides[i].kind` | `wasm` is the only placement and that provide carries media |
 
 ### `[run]`
 
 | Key path | Refused when |
 |---|---|
 | `run` | the table is missing and `placements` names `sidecar` or `node` |
-| `run` | the table is there but empty |
+| `run` | the table is missing and `placements` names `wasm` |
+| `run` | the table is there and names neither a runtime nor `wasm` |
 | `run` | two or more of `bin`, `python`, `node`, `shell` are set |
 | `run.bin.<triple>` | the key is not a known platform triple |
 | `run.bin.<triple>` | the triple is not in `plugin.platforms` |
 | `run.bin.<triple>` | the path is empty, absolute, or contains `..` |
 | `run.python`, `run.node`, `run.shell` | the path is empty, absolute, contains `..`, or does not exist |
 | `run.shell` | `plugin.platforms` names Windows and `[run]` has no `bin` entry |
+| `run.wasm` | `placements` names `wasm` and it is not set |
+| `run.wasm` | it is set and `placements` does not name `wasm` |
+| `run.wasm` | the path does not end in `.wasm` |
+| `run.wasm` | the path is empty, absolute, contains `..`, or does not exist |
 
 ### `[[provides]]`
 
@@ -450,6 +493,7 @@ reported in one pass. Ordered as the validator walks the file.
 | `provides[i].collection` | the kind is `collection` and it is missing, or the file is missing |
 | `provides[i].designer` | the kind is not `source`, `filter` or `graphic` |
 | `provides[i].designer.icon`, `.ui`, `.thumbnail`, `.editor` | the file is missing, absolute or escapes the root |
+| `provides[i].kind` | `wasm` is the only placement and the kind carries media |
 
 ### `[[tools]]`
 
@@ -486,3 +530,5 @@ what a linter with no plugin directory can do.
   is read.
 * [Write a source plugin in Rust](../how-to/write-a-source-plugin.md).
 * [Your first plugin](../tutorials/your-first-plugin.md).
+* [Plugins as WebAssembly components](wasm.md), for `[run] wasm`, `wasi` and
+  what the `wasm` placement grants.

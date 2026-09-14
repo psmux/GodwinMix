@@ -107,6 +107,7 @@ channels = 2
 [control]
 bind = "127.0.0.1:{port}"
 token = "{token}"
+{plugins_dir}
 
 [multiview]
 enabled = false
@@ -135,13 +136,13 @@ class Core:
         initial = self.case.get("initial", {})
         extra = initial.get("config", "")
         wanted = initial.get("plugins", [])
-        if wanted:
-            extra = self.install_plugins(wanted) + extra
+        plugins_dir = self.install_plugins(wanted) if wanted else ""
         config.write_text(
             CONFIG.format(
                 port=self.port,
                 token=self.token,
                 min_hold_ms=initial.get("min_hold_ms", 0),
+                plugins_dir=plugins_dir,
             )
             + extra
         )
@@ -258,7 +259,7 @@ class Core:
                 raise SystemExit(f"there is no plugin at {source}")
             version = read_version(source / "gmx-plugin.toml")
             shutil.copytree(source, target / name / version)
-        return f'[server]\nplugins_dir = "{target}"\n\n'
+        return f'plugins_dir = "{target}"'
 
     def check_plugins(self, names):
         """Every plugin the case asked for is loaded and has no problem."""

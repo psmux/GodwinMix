@@ -489,6 +489,7 @@ impl Supervisor {
                 self.absorb(&instance, kind, notice);
             }
         }
+        self.sample_components();
         self.restart_the_dead();
     }
 
@@ -898,6 +899,7 @@ impl Supervisor {
         };
         let running = wasm::start(spec)
             .with_context(|| format!("starting the component `{instance}`"))?;
+        loader::set_hosted(instance, manifest.plugin, provide, running.memory_bytes());
         loader::set_state(instance, "ready");
         wasm::publish(manifest.plugin, running.clone());
         self.inner.lock().components.insert(
@@ -1011,6 +1013,28 @@ impl Supervisor {
             .collect()
     }
 
+    /// What each component costs, once a pass, for `plugin.list`.
+    ///
+    /// Read out from under the lock like every other component call: asking a
+    /// component its memory is cheap, but nothing in here holds the table over
+    /// a call into one.
+    fn sample_components(&self) {
+        let rows: Vec<(String, String, String, Arc<dyn crate::plugin::wasm::Instance>)> = {
+            let inner = self.inner.lock();
+            inner
+                .components
+                .iter()
+                .map(|(name, c)| {
+                    (name.clone(), c.plugin.clone(), c.provide.clone(), c.instance.clone())
+                })
+                .collect()
+        };
+        for (name, plugin, provide, instance) in rows {
+            loader::set_hosted(&name, &plugin, &provide, instance.memory_bytes());
+            loader::set_state(&name, instance.state().as_str());
+        }
+    }
+
     /// Plugin names with a transition component up.
     fn component_transition_names(&self) -> Vec<String> {
         let inner = self.inner.lock();
@@ -1038,6 +1062,7 @@ impl Supervisor {
         for (name, component) in taken {
             component.instance.shutdown(reason);
             loader::set_state(&name, "stopped");
+            loader::forget(&name);
             debug!(instance = %name, reason, "plugin component stopped");
         }
         if stopped > 0 {

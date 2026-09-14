@@ -206,3 +206,13 @@ to write to the same file need to sort that out between themselves.
 
 Registrations are reversible: `plugin.remove` unwinds everything a plugin
 registered, including its hooks, and stops its hook process.
+
+## A hook in a sandbox
+
+A plugin that only exists to answer hooks can run as a WebAssembly component
+inside the core rather than as a process. The hook reaches the singleton that is
+already running, not a second copy of the plugin, and it is held to the same
+`timeout_ms` plus a fuel allowance of its own. `plugins/min-hold` is the worked
+example: it answers `take.before` with `{allow: false, reason}` inside an eight
+second window. See [plugins as WebAssembly components](wasm.md).
+
