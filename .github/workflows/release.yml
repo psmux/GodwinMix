@@ -7,8 +7,8 @@ name: release
 #   * SHA256SUMS over all of it
 #   * the container image on GHCR
 #
-# The release is created as a draft and published when every asset is attached,
-# so nobody downloads half a release while the Windows job is still running.
+# The release itself is created only after every build job has finished, so
+# nobody downloads half a release while the Windows job is still running.
 
 on:
   push:
@@ -103,6 +103,52 @@ jobs:
           path: |
             *.tar.gz
             *.zip
+
+  # A Raspberry Pi and any arm64 server. Built in an arm64 container under
+  # QEMU rather than cross compiled, because getting the arm64 GStreamer
+  # development packages onto an x86 runner through multiarch is the more
+  # fragile of the two. It takes about twenty minutes and it is the reason a
+  # Pi user can install from a release instead of compiling on the board.
+  core-aarch64:
+    name: core (aarch64-unknown-linux-gnu)
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-qemu-action@v3
+        with:
+          platforms: arm64
+
+      - name: Build
+        run: |
+          docker run --rm --platform linux/arm64 \
+            -v "$PWD:/src" -w /src -e CARGO_TERM_COLOR=always \
+            rust:1-trixie \
+            bash -eux -c '
+              apt-get update
+              apt-get install -y --no-install-recommends \
+                libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev \
+                libgstreamer-plugins-bad1.0-dev pkg-config
+              cargo build --release --locked --bins
+              strip target/release/godwinmix target/release/gmx
+            '
+
+      - name: Package
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          [ "$version" = "$GITHUB_REF_NAME" ] && version="$(git rev-parse --short HEAD)"
+          name="godwinmix-${version}-aarch64-unknown-linux-gnu"
+          mkdir -p "pkg/$name"
+          sudo cp target/release/godwinmix target/release/gmx "pkg/$name/"
+          cp README.md LICENSE godwinmix.example.toml deploy/systemd/godwinmix.service "pkg/$name/"
+          sudo chown -R "$USER" pkg
+          tar czf "$name.tar.gz" -C pkg "$name"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: core-aarch64-unknown-linux-gnu
+          path: "*.tar.gz"
 
   # ---------------------------------------------------------------- desktop --
   desktop:
@@ -208,7 +254,7 @@ jobs:
   # --------------------------------------------------------------- release ---
   publish:
     name: publish the release
-    needs: [core, desktop, image]
+    needs: [core, core-aarch64, desktop, image]
     if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     timeout-minutes: 20
