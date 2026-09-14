@@ -1,0 +1,49 @@
+name: harness
+
+# The conformance harness on every push. A plugin that passes it gets a badge
+# in the index; one that fails cannot be listed above "custom, unreviewed".
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  check:
+    # The offline half: no core, seconds not minutes.
+    #
+    # Ubuntu only. macOS would need GStreamer from Homebrew on every run, which
+    # is several minutes for a template whose picture is one pipeline line, and
+    # Windows cannot run this plugin at all: the core refuses a [run] shell
+    # entry there unless [run] also has a bin entry, which is why the manifest
+    # lists Linux and macOS and stops. Test macOS locally with
+    # `brew install gstreamer && ./check`.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: install gstreamer
+        run: sudo apt-get install -y gstreamer1.0-tools gstreamer1.0-plugins-good
+      - name: check
+        run: ./check
+
+  harness:
+    # The real thing, against a test core.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: install gstreamer
+        run: sudo apt-get install -y gstreamer1.0-tools gstreamer1.0-plugins-good
+      - name: install gmx
+        run: |
+          # Replace with the release asset for the core version you target.
+          # Until gmx ships a release, build it from source:
+          #   cargo install --git https://github.com/psmux/godwinmix gmx
+          echo "gmx is not published yet; this step is a placeholder."
+      - name: gmx plugin test
+        run: |
+          if command -v gmx >/dev/null; then
+            gmx plugin test .
+          else
+            echo "gmx not installed, running the offline checks only"
+            ./check --quick
+          fi
