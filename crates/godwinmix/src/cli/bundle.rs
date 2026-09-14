@@ -11,7 +11,7 @@
 //! module's head.
 
 use anyhow::{Context, Result};
-use godwinmix_core::zip::{crc32, Zip};
+use godwinmix_core::zip::Zip;
 use std::path::PathBuf;
 
 // --- redaction ---------------------------------------------------------------

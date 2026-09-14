@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "What the graphic is doing now",
+  "type": "object",
+  "properties": {
+    "base": { "type": "string", "description": "The host's address on the loopback." },
+    "instance": { "type": "string" },
+    "graphic": { "type": "string" },
+    "values": { "type": "object", "description": "Every field the graphic is showing." },
+    "step": { "type": "integer", "description": "Which step it has reached. 0 is off." },
+    "playing": { "type": "boolean" },
+    "seq": { "type": "integer", "description": "Bumped on every action, so a page knows whether it missed one." },
+    "instances": { "type": "array", "items": { "type": "object" } },
+    "graphics": { "type": "array", "items": { "type": "object" } }
+  }
+}

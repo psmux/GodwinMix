@@ -27,7 +27,6 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{bail, Context, Result};
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
 
 use crate::scene::document::{Asset, Collection, Content, Item, Scene};
 use crate::scene::id::Id;
