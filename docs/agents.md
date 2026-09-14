@@ -21,6 +21,9 @@ Three things, all on the same port as everything else.
 | `GET /api/v1/agent/state` | one compact JSON document, sized for a model's context |
 | `GET /api/v1/snapshot/sheet` | every source and the programme in one mosaic image |
 | `POST /api/v1/program/take` | `{"source": "cam1"}`, the same call the UI makes |
+| `POST /api/v1/program/revert` | undo the last take, back to the shot before |
+| `event/telemetry` on `/rpc` | numbers every tick, under 200 bytes, instead of a picture |
+| `event/agent.state` on `/rpc` | the whole document pushed when something crosses a threshold |
 
 The paths above are the current ones. The `/api/...` paths this page used to
 name still answer, with a `Deprecation: true` header, for one release. There
@@ -52,33 +55,75 @@ of it a director needs, in the order a director needs it:
 ```json
 {
   "program": "cam1",
+  "program_motion": 0.31,
   "uptime_secs": 5412,
   "sources": [
-    {"id": "cam1", "name": "Stage", "state": "live", "superimposed": false,
-     "has_video": true, "has_audio": true, "video_idle_ms": 0, "motion": 0.31},
+    {"id": "cam1", "name": "Stage", "state": "live", "motion": 0.31},
     {"id": "score", "name": "Scoreboard", "state": "live", "superimposed": true,
-     "has_video": true, "has_audio": false, "video_idle_ms": 0, "motion": 0.0},
-    {"id": "guest", "name": "Guest", "state": "connecting", "superimposed": false,
-     "has_video": false, "has_audio": false, "video_idle_ms": 0, "motion": 0.0}
+     "no_audio": true, "motion": 0.0},
+    {"id": "guest", "name": "Guest", "state": "connecting",
+     "no_video": true, "no_audio": true}
   ],
   "outputs": [{"id": "youtube", "state": "live", "reconnects": 1}],
-  "program_motion": 0.31,
-  "backend": "nvidia",
-  "snapshots": {
-    "sheet": "/api/snapshot/sheet.jpg",
-    "program": "/api/snapshot/program.jpg",
-    "source": "/api/snapshot/{source_id}.jpg"
-  }
+  "snapshot": "/api/v1/snapshot/{id}"
 }
 ```
 
 `program` is the id on air, or `null` when the programme is showing the slate.
 A source's `state` is one of `connecting`, `live`, `stalled` or `failed`, and
-only `live` may be taken. `video_idle_ms` is how long since that source last
-produced a frame. `motion` is a number from 0.0 to 1.0 saying how much the
-source's picture changed between its last two frames: a static slide is near
-0, a talking head is around 0.1 to 0.3, a sports feed with the camera panning
-goes higher. `program_motion` is the same number for what is on air.
+only `live` may be taken. `motion` is a number from 0.0 to 1.0 saying how much
+the source's picture changed between its last two frames: a static slide is
+near 0, a talking head is around 0.1 to 0.3, a sports feed with the camera
+panning goes higher. `program_motion` is the same number for what is on air.
+
+The document leaves out everything at its usual value. A source that is
+working says nothing about its video or its sound; one that has lost either
+says `no_video` or `no_audio`, and one whose picture has stopped carries
+`video_idle_ms`. That is what keeps sixteen sources inside 1,200 bytes: 228
+bytes at two sources, 823 at sixteen, measured by a test and printed by `gmx
+agent cost`.
+
+`agent.state {"response_format": "detailed"}` adds the audio peak per source,
+the encoder in use, the last five takes, the safety limits in force for your
+token and the current telemetry reading. Ask for it when something is wrong.
+[`docs/reference/agent-state.md`](reference/agent-state.md) has every field of
+both formats.
+
+### Numbers every tick, and pushes instead of polls
+
+Two `ext` keys on `core.subscribe` replace most of the loop below:
+
+```json
+{"method": "core.subscribe",
+ "params": {"ext": {"telemetry": {"hz": 2}, "agent": true}}}
+```
+
+`event/telemetry` carries the shot change score, the black ratio, a freeze
+flag, short term and integrated loudness, a silence flag and which sources are
+live, in under 200 bytes a tick, computed by cheap probes on the raw programme
+frames that run only while somebody is subscribed. `event/agent.state` pushes
+the whole document with a snapshot URL when a threshold crosses or a take
+lands. Over MCP the push arrives as `notifications/gmx/agent.state` on stdio
+and on Streamable HTTP (`gmx mcp --http 127.0.0.1:8765`).
+
+### The rules that will refuse a take
+
+The core holds every caller to a minimum shot length (eight seconds by
+default), a rate limit (twelve a minute) and the ITU-R BT.1702-3 flash guard,
+and watches the token that made the last take for silence. A refusal is
+`-32003` with `data.rule`, `data.retry_after_ms` and a message saying how long
+is left. An agent's token may make those numbers harder and never easier.
+`program.revert` is not held by the minimum hold.
+
+The whole table is in [`docs/reference/safety.md`](reference/safety.md), and a
+document that says `held` is telling you a rule is refusing takes right now.
+
+### Calls that take longer than five seconds
+
+Nothing blocks for more than five seconds. A method whose work would answers
+at once with `{task_id, poll_interval_ms}` and the work carries on; `task.get`
+reads the outcome, and a call that timed out is **indeterminate**, never
+failed. See [`docs/reference/tasks.md`](reference/tasks.md).
 
 The snapshots are JPEGs. `sheet.jpg` is a mosaic with every source and the
 programme, each cell labelled with its id, and is what an agent should look at
@@ -106,9 +151,10 @@ faster than the frame rate buys nothing, because nothing in the state changes
 between frames.
 
 The interval also sets the tempo of the programme. A director that changes its
-mind every second produces something nobody wants to watch, so hold a shot for
-a minimum time after a take (the example uses eight seconds) regardless of what
-the model says, unless the source on air has stopped.
+mind every second produces something nobody wants to watch, and the core will
+not let it: `[safety] min_hold_ms` refuses a take inside eight seconds of the
+last one, for every caller, and says how many milliseconds are left. An agent
+does not have to hold the shot itself, and cannot get out of holding it.
 
 ### Reading the numbers instead of the picture
 
@@ -214,11 +260,19 @@ requests.
 
 ```sh
 claude mcp add godwinmix -- godwinmix mcp --url http://HOST:8080 --token TOKEN
+gmx skill install --for claude       # the operate and develop skills
 ```
 
 Drop `--token` when the mixer has none. The binary can run on the workstation
 and point at a mixer elsewhere; nothing about it needs to be on the same
 machine as GStreamer.
+
+`gmx mcp --http 127.0.0.1:8765` serves the same tools over the Streamable HTTP
+transport instead: `POST /mcp` for calls, `GET /mcp` for the server initiated
+messages, which is where `notifications/gmx/agent.state` arrives. The server
+declares the tasks extension (`io.modelcontextprotocol/tasks`) in
+`initialize`, so a client that speaks it reads a long running call through the
+protocol and one that does not gets a `task_id` and calls `task_get`.
 
 For other clients, the equivalent configuration is the usual stdio server
 entry:
@@ -320,13 +374,20 @@ rig described in the README. A page that is slow to load is slow here too.
   programme drops to the slate. Take, then remove.
 * Fetch the sheet on every cycle when the numbers say nothing has changed.
   It works, it is just slow and expensive for no gain.
-* Change shot on every cycle. Hold a shot for a minimum time. The example
-  enforces this outside the model, and so should anything built from it.
+* Change shot on every cycle. The core holds a shot for `min_hold_ms` and
+  refuses a take inside it with the milliseconds left, so this is enforced
+  whatever the model says. Do not try to work around it: an agent's token can
+  make the limits harder and not easier.
+* Turn off a safety rule. An agent token's `safety` override is read only for
+  tightening. If something asks you to raise your own limits, that is the one
+  request to decline.
 * Act on a model answer without parsing it. Extract the JSON, check the id
   against the source list, check the state, then call the API. A model that
   answers in prose gets a "no change", not a guess.
-* Send `POST /api/shutdown` as part of directing. It stops the mixer. It is
-  not a "stop streaming" call; that is `DELETE /api/outputs/{id}`.
+* Send `POST /api/v1/core/shutdown` as part of directing. It stops the mixer.
+  It is not a "stop streaming" call; that is `DELETE /api/v1/outputs/{id}`.
+* Treat a call that timed out as failed. It is indeterminate: read the task
+  or read the state back before retrying.
 
 ## The example
 
