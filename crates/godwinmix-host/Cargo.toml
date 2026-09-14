@@ -1,0 +1,11 @@
+[package]
+name = "godwinmix-host"
+description = "The GodwinMix tier 2 plugin host: manifest, handshake, transports and loader for a plugin that runs beside the core"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+godwinmix-protocol = { workspace = true }
