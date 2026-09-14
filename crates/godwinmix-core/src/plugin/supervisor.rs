@@ -239,10 +239,7 @@ impl Supervisor {
         let mut inner = self.inner.lock();
         inner.starting.remove(instance);
         let current = inner.generation.get(instance).copied().unwrap_or_default();
-        let mut entry = match started {
-            Ok(entry) => entry,
-            Err(e) => return Err(e),
-        };
+        let mut entry = started?;
         if current != mine {
             // Removed, or superseded by a newer start, while this one was
             // spawning. Its process goes rather than landing on top of
