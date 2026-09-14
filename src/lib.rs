@@ -62,6 +62,26 @@ struct Args {
     #[arg(long)]
     probe: bool,
 
+    /// Print the whole control protocol as JSON Schema and exit: every
+    /// method, event and type, with `api_level`. This is `protocol.json`, and
+    /// it is what `core.api` answers with. Needs no config and no GStreamer.
+    #[arg(long)]
+    api_info: bool,
+
+    /// With `--api-info`, print the human readable reference instead of the
+    /// JSON. This is `protocol.md`.
+    #[arg(long)]
+    markdown: bool,
+
+    /// Refuse `output.add`, and accept only tokens marked `rehearsal`.
+    ///
+    /// An agent behaves differently when it believes a show is real, and it
+    /// guesses wrong most of the time, so the guess must not matter: the
+    /// credential decides which core it belongs to. A live core refuses a
+    /// rehearsal token outright and this one refuses a live token.
+    #[arg(long)]
+    rehearsal: bool,
+
     #[command(subcommand)]
     command: Option<Command>,
 }
@@ -125,6 +145,19 @@ pub async fn run() -> Result<()> {
         None => {}
     }
 
+    // Before the config is read and before GStreamer is touched: the
+    // protocol is a property of the build, not of this machine, and CI
+    // regenerates it on a box with no media stack installed.
+    if args.api_info {
+        let doc = control::descriptor();
+        if args.markdown {
+            print!("{}", api::protocol::markdown(doc));
+        } else {
+            print!("{}", api::protocol::json_text(doc));
+        }
+        return Ok(());
+    }
+
     if args.example_config {
         print!("{EXAMPLE_CONFIG}");
         return Ok(());
@@ -155,12 +188,18 @@ pub async fn run() -> Result<()> {
         )
     })?;
     let bind = args.bind.unwrap_or_else(|| cfg.control.bind.clone());
-    let token = cfg.token().map(Arc::from);
-    match &token {
-        Some(_) => info!("control API requires a bearer token"),
-        None => info!("control API is open: no token configured"),
+    let tokens = cfg.tokens(args.rehearsal);
+    match tokens.entries().len() {
+        0 => info!("control API is open: no token configured"),
+        n => info!(tokens = n, "control API requires a token"),
+    }
+    if args.rehearsal {
+        info!("rehearsal core: output.add is refused and only rehearsal tokens are accepted");
     }
     let cfg_media = cfg.media.clone();
+    // Kept for the control plane, which reads the canvas, the limits and the
+    // feature list off it once at startup.
+    let cfg_for_control = cfg.clone();
 
     let (mut mix, handle, cmd_rx, mut bus_rx) = mixer::Mixer::build(cfg)?;
     mix.persist_runtime_to(Config::runtime_store_path(&config_path));
@@ -191,14 +230,15 @@ pub async fn run() -> Result<()> {
         library.cfg().probe_timeout_secs,
     ));
     let quit = Arc::new(tokio::sync::Notify::new());
-    let state = control::AppState {
-        mixer: handle.clone(),
+    let state = control::AppState::new(
+        &cfg_for_control,
+        handle.clone(),
         frames,
         library,
         converter,
-        quit: quit.clone(),
-        token,
-    };
+        quit.clone(),
+        args.rehearsal,
+    );
     let server = tokio::spawn(async move {
         if let Err(e) = control::serve(&bind, state).await {
             error!(?e, "control server stopped");

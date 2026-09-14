@@ -273,7 +273,7 @@ pub fn rest_transform(method: &str) -> Option<Rest> {
     };
     // A read is a GET so that a browser address bar and a `<img>` tag reach
     // it; everything else is a POST.
-    let http = if matches!(verb, "get" | "list" | "info" | "api" | "state" | "history") {
+    let http = if matches!(verb, "get" | "list" | "info" | "api" | "state" | "history" | "status" | "describe" | "stats") {
         "GET"
     } else {
         "POST"
@@ -305,6 +305,7 @@ mod tests {
         assert_eq!(at("program.get"), "GET /api/v1/program");
         assert_eq!(at("program.history"), "GET /api/v1/program/history");
         assert_eq!(at("core.info"), "GET /api/v1/core/info");
+        assert_eq!(at("core.status"), "GET /api/v1/core/status");
         assert_eq!(at("agent.state"), "GET /api/v1/agent/state");
         assert_eq!(at("adbreak.start"), "POST /api/v1/adbreak/start");
         // Uncountable nouns keep their spelling.

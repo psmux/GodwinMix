@@ -33,6 +33,45 @@ pub struct Config {
     pub sources: Vec<SourceConfig>,
     #[serde(default)]
     pub outputs: Vec<OutputConfig>,
+    /// Several credentials, each with its own scopes. The single
+    /// `[control] token` still works and still carries everything; this is
+    /// for a show that wants an agent's token to be able to take and not to
+    /// remove. See `api::scope` and `Config::tokens`.
+    #[serde(default)]
+    pub tokens: Vec<TokenConfig>,
+}
+
+/// One row of the `[[tokens]]` table.
+///
+/// ```toml
+/// [[tokens]]
+/// id = "studio-agent"
+/// secret = "..."
+/// scopes = ["read", "operate"]
+/// confirm = "required"     # destructive calls need a confirm round trip
+/// rehearsal = true         # only a core started with --rehearsal accepts it
+/// profile = "minimal"      # which MCP tool surface this token is meant for
+/// ```
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct TokenConfig {
+    /// Legible, and recorded against every take in `program.history`.
+    pub id: String,
+    pub secret: String,
+    #[serde(default = "default_scopes")]
+    pub scopes: Vec<crate::api::scope::Scope>,
+    #[serde(default)]
+    pub confirm: crate::api::scope::ConfirmPolicy,
+    #[serde(default)]
+    pub rehearsal: bool,
+    #[serde(default)]
+    pub profile: crate::api::scope::Profile,
+}
+
+/// A token that names no scopes can read. Anything more has to be asked for,
+/// because the cost of a token that quietly carries `admin` is the whole
+/// point of having the table.
+fn default_scopes() -> Vec<crate::api::scope::Scope> {
+    vec![crate::api::scope::Scope::Read]
 }
 
 /// The fixed raw format that every branch of the graph must produce.
@@ -633,6 +672,29 @@ impl Config {
             .or_else(|| self.control.token.clone().and_then(present))
     }
 
+    /// Every credential in force: the `[[tokens]]` table, plus the single
+    /// bearer token when one is set. A deployment with neither leaves the
+    /// control port open, which is how it has always worked.
+    pub fn tokens(&self, rehearsal_core: bool) -> crate::api::scope::Tokens {
+        let mut entries: Vec<crate::api::scope::Token> = self
+            .tokens
+            .iter()
+            .filter(|t| !t.secret.trim().is_empty())
+            .map(|t| crate::api::scope::Token {
+                id: t.id.clone(),
+                secret: t.secret.trim().to_string(),
+                scopes: t.scopes.clone(),
+                confirm: t.confirm,
+                rehearsal: t.rehearsal,
+                profile: t.profile,
+            })
+            .collect();
+        if let Some(secret) = self.token() {
+            entries.push(crate::api::scope::Token::legacy(&secret));
+        }
+        crate::api::scope::Tokens::new(entries, rehearsal_core)
+    }
+
     pub fn load(path: &Path) -> Result<Self> {
         let raw = std::fs::read_to_string(path)
             .with_context(|| format!("reading config {}", path.display()))?;
@@ -866,6 +928,7 @@ sidecar = \"/opt/b\"\n").unwrap();
             stall: Default::default(),
             sources: vec![],
             outputs: vec![],
+            tokens: vec![],
         };
         assert!(cfg.validate().is_err());
         cfg.canvas.width = 1920;

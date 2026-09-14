@@ -2845,6 +2845,7 @@ mod tests {
             stall: Default::default(),
             sources: vec![],
             outputs: vec![],
+            tokens: vec![],
         })
         .err()
         .expect("must refuse to build without a runtime");

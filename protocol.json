@@ -1,0 +1,2761 @@
+{
+  "$defs": {
+    "AdBreakRequest": {
+      "description": "`adbreak.start`.",
+      "properties": {
+        "at_running_time_ms": {
+          "description": "Programme running time to open the break on. Omit to roll now.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "return_to": {
+          "description": "Source to rejoin afterwards. Omit to return to whatever is on air.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "uri": {
+          "description": "File path or URI of the clip to roll.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "uri"
+      ],
+      "type": "object"
+    },
+    "AdStatus": {
+      "description": "An ad break, either armed for a future cue or currently on air.",
+      "properties": {
+        "on_air": {
+          "description": "False while it is prerolled and waiting for its cue.",
+          "type": "boolean"
+        },
+        "return_to": {
+          "description": "Source to return to when the ad ends. None returns to the slate.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "uri": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "uri",
+        "on_air"
+      ],
+      "type": "object"
+    },
+    "AddOutputRequest": {
+      "additionalProperties": true,
+      "description": "`output.add`. The id and the URL are the whole of it for an RTMP\ndestination; anything else a kind understands rides in `params`.",
+      "properties": {
+        "id": {
+          "description": "Stable id for this destination.",
+          "type": "string"
+        },
+        "policy": {
+          "description": "Reconnect policy: \"own\" retries quickly, for servers you run; \"cdn\"\nbacks off harder, for platforms that penalise hammering.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "uri": {
+          "description": "rtmp:// or rtmps:// URL including the stream key.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "uri"
+      ],
+      "type": "object"
+    },
+    "AddSourceRequest": {
+      "additionalProperties": true,
+      "description": "`source.add`.",
+      "properties": {
+        "id": {
+          "description": "Stable id used by `program.take` and `source.remove`. Lowercase\nletters, digits and dashes. Derived from the name or the host when\nomitted, with a numeric suffix if that is taken.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "kind": {
+          "description": "\"web\" renders the URL as a page in the browser sidecar, the same as\nwriting `web+` in front of it. \"auto\" or omitted works the protocol out\nfrom the URL.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "name": {
+          "description": "Name shown to an operator. Defaults to the host of the URL.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "superimpose": {
+          "description": "Websites only: \"auto\" lets the mixer decode the page's own video\noutside the browser and draw the page over the top, which saves about a\nCPU core. \"off\" is the default.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "uri": {
+          "description": "Stream URL, file path, or with kind \"web\" the address of a page.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "uri"
+      ],
+      "type": "object"
+    },
+    "AudioSetParams": {
+      "description": "`source.audio.set` takes an id as well as the levels: the id comes off the\npath on REST and out of the params on `/rpc`, and both land in one object.",
+      "properties": {
+        "gain": {
+          "description": "The operator's fader for the whole source, 0.0 to 10.0. Omit to leave\nit where it is.",
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "id": {
+          "description": "Source id.",
+          "type": "string"
+        },
+        "media": {
+          "description": "Gain per video underneath, by position. A null entry, or a list shorter\nthan the number of videos, leaves those alone: `[null, 0.0]` silences\nthe second video and touches nothing else.",
+          "items": {
+            "format": "double",
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "type": "array"
+        },
+        "muted": {
+          "description": "Mute the whole source. Held apart from the fader, so unmuting comes\nback to the level that was set.",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "page": {
+          "description": "Gain on a superimposed page's own sound.",
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "type": "object"
+    },
+    "BackendInfo": {
+      "properties": {
+        "audio_decoder": {
+          "type": "string"
+        },
+        "audio_encoder": {
+          "type": "string"
+        },
+        "hardware_accelerated": {
+          "type": "boolean"
+        },
+        "video_decoder": {
+          "type": "string"
+        },
+        "video_encoder": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "video_decoder",
+        "video_encoder",
+        "audio_decoder",
+        "audio_encoder",
+        "hardware_accelerated"
+      ],
+      "type": "object"
+    },
+    "CanvasInfo": {
+      "description": "The canvas every source is scaled onto and every output leaves by.",
+      "properties": {
+        "fps": {
+          "format": "int32",
+          "type": "integer"
+        },
+        "height": {
+          "format": "int32",
+          "type": "integer"
+        },
+        "width": {
+          "format": "int32",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "width",
+        "height",
+        "fps"
+      ],
+      "type": "object"
+    },
+    "CellAssignment": {
+      "properties": {
+        "h": {
+          "format": "int32",
+          "type": "integer"
+        },
+        "index": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "source": {
+          "description": "None means this cell is the program return.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "w": {
+          "format": "int32",
+          "type": "integer"
+        },
+        "x": {
+          "format": "int32",
+          "type": "integer"
+        },
+        "y": {
+          "format": "int32",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "index",
+        "x",
+        "y",
+        "w",
+        "h"
+      ],
+      "type": "object"
+    },
+    "ConversionPhase": {
+      "enum": [
+        "running",
+        "done",
+        "failed"
+      ],
+      "type": "string"
+    },
+    "ConversionState": {
+      "description": "One conversion, in flight or remembered after it finished.",
+      "properties": {
+        "error": {
+          "description": "Set only on `failed`, shown to the operator verbatim: \"no AAC encoder\navailable\" is worth more than \"conversion failed\".",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "output": {
+          "description": "The `.web.mp4` name, on `done`.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "progress": {
+          "description": "0.0 to 1.0, position over duration, both read off the pipeline.",
+          "format": "double",
+          "type": "number"
+        },
+        "state": {
+          "$ref": "#/$defs/ConversionPhase"
+        }
+      },
+      "required": [
+        "state",
+        "progress"
+      ],
+      "type": "object"
+    },
+    "CoreInfo": {
+      "description": "`core.info`: what this core is, what it can do, and where its edges are.",
+      "properties": {
+        "api_compatible": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "api_level": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "canvas": {
+          "$ref": "#/$defs/CanvasInfo"
+        },
+        "core": {
+          "description": "Always \"godwinmix\".",
+          "type": "string"
+        },
+        "features": {
+          "description": "Feature strings a client can branch on: multiview, snapshot, uploads,\nmcp, browser, exec-sources, rehearsal, tokens.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "limits": {
+          "$ref": "#/$defs/Limits"
+        },
+        "rehearsal": {
+          "description": "True when the core was started with `--rehearsal`, which refuses\n`output.add` and accepts rehearsal tokens.",
+          "type": "boolean"
+        },
+        "token": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/TokenInfo"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Present when the request carried a token the core recognises."
+        },
+        "version": {
+          "description": "The build's own version, as in Cargo.toml.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "core",
+        "version",
+        "api_level",
+        "api_compatible",
+        "features",
+        "limits",
+        "canvas",
+        "rehearsal"
+      ],
+      "type": "object"
+    },
+    "Ext": {
+      "additionalProperties": true,
+      "description": "The `ext` table from 03 section 6.\n\nEvery key is off by default. A terminal UI takes meters and tally and\ndeclines multiview; a Stream Deck takes tally only; an agent takes nothing.",
+      "properties": {
+        "meters": {
+          "description": "`event/meters` at 10 per second.",
+          "type": "boolean"
+        },
+        "multiview": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/MultiviewExt"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The mosaic: binary frames and `event/multiview.layout`. `false` or\nomitted builds nothing."
+        },
+        "positions": {
+          "description": "`event/source.position` for seekable sources.",
+          "type": "boolean"
+        },
+        "tally": {
+          "description": "`event/tally`.",
+          "type": "boolean"
+        }
+      },
+      "type": "object"
+    },
+    "Flush": {
+      "description": "`event/flush`: the end of a batch. A client renders here and not before.",
+      "properties": {
+        "seq": {
+          "description": "The sequence number of the last event in the batch.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "seq"
+      ],
+      "type": "object"
+    },
+    "GoLiveRequest": {
+      "description": "`program.golive`: add the page, add the destination, take the page.",
+      "properties": {
+        "id": {
+          "description": "Source id. Derived from the host when omitted.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "rtmp": {
+          "description": "Where to send the programme. Added as an output unless one already\nsends there. Omit to leave the outputs alone.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "superimpose": {
+          "description": "\"auto\" (the default) or \"off\". See `source.add`.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "url": {
+          "description": "The page to put on air. Plain http(s); `web+` is added here.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "url"
+      ],
+      "type": "object"
+    },
+    "GoLiveResult": {
+      "description": "What `program.golive` answers with.",
+      "properties": {
+        "output": {
+          "description": "The output that was created or reused, if one was asked for.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "source": {
+          "description": "The source that was created or reused.",
+          "type": "string"
+        },
+        "state": {
+          "$ref": "#/$defs/SourceState",
+          "description": "Where the source is now. It goes to programme as soon as it is live."
+        }
+      },
+      "required": [
+        "source",
+        "state"
+      ],
+      "type": "object"
+    },
+    "HistoryRequest": {
+      "description": "`program.history`.",
+      "properties": {
+        "limit": {
+          "default": null,
+          "description": "How many takes to return, newest first. At most 100.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        }
+      },
+      "type": "object"
+    },
+    "IdRequest": {
+      "description": "An id on its own: `source.get`, `source.remove`, `output.remove`,\n`output.reconnect`, `media.remove`.",
+      "properties": {
+        "id": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "type": "object"
+    },
+    "Limits": {
+      "description": "The ceilings a client should plan against rather than discover by being\nrefused.",
+      "properties": {
+        "event_queue": {
+          "description": "How many events the bus holds before a slow client is told to resync.",
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "max_call_secs": {
+          "description": "Longest any method blocks before it answers. The tightest client\ndefault in the wild, so nothing here can time out a client that used\nits own.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "max_gain": {
+          "description": "Loudest a fader can be asked for. Out of range is clamped to this\nrather than refused.",
+          "format": "double",
+          "type": "number"
+        },
+        "max_idempotency_key_bytes": {
+          "description": "Longest `idempotency_key` accepted, in bytes.",
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "max_upload_bytes": {
+          "description": "Largest upload the media endpoint accepts, in bytes.",
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "max_upload_bytes",
+        "max_gain",
+        "max_call_secs",
+        "max_idempotency_key_bytes",
+        "event_queue"
+      ],
+      "type": "object"
+    },
+    "MediaItem": {
+      "properties": {
+        "audio_codec": {
+          "default": null,
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "conversion": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ConversionState"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Where a conversion of this file stands, None when none was asked for in\nthis process's lifetime."
+        },
+        "converted_path": {
+          "default": null,
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "duration_ms": {
+          "description": "None when the file could not be inspected; it is still listed, because\nan operator would rather see a clip they cannot read the length of than\nwonder why it is missing.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "faststart": {
+          "default": null,
+          "description": "The converted copy's absolute path when one exists on disk. This is\nwhat \"add as source\" should prefer over `path`.\nWhether the moov atom comes first (a player can start before the whole\nfile arrives). None for a non-ISO container, never a reason to convert\non its own. See `convert::moov_first`.",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "has_audio": {
+          "type": "boolean"
+        },
+        "has_video": {
+          "type": "boolean"
+        },
+        "height": {
+          "default": null,
+          "format": "uint32",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "name": {
+          "description": "Name shown in the UI, relative to the library root.",
+          "type": "string"
+        },
+        "path": {
+          "description": "Absolute path, which is what gets handed back to the ad break API.",
+          "type": "string"
+        },
+        "reasons": {
+          "default": [],
+          "description": "Why it is not, in words an operator can act on. Empty when it is.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "size_bytes": {
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "video_codec": {
+          "default": null,
+          "description": "Short codec name of the first video stream (\"h264\", \"vp9\"), None when\nthere is no video or it could not be inspected.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "web_safe": {
+          "default": false,
+          "description": "True when the file needs no conversion to play in a browser: H.264 plus\nAAC (or no audio) in an MP4. See `convert::web_safety`.",
+          "type": "boolean"
+        },
+        "width": {
+          "default": null,
+          "format": "uint32",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "name",
+        "path",
+        "size_bytes",
+        "has_video",
+        "has_audio"
+      ],
+      "type": "object"
+    },
+    "MediaListing": {
+      "properties": {
+        "dir": {
+          "type": "string"
+        },
+        "error": {
+          "description": "Set when the directory itself could not be read, so the UI can say why\nthe list is empty instead of just showing nothing.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "items": {
+          "items": {
+            "$ref": "#/$defs/MediaItem"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "dir",
+        "items"
+      ],
+      "type": "object"
+    },
+    "Meters": {
+      "description": "`event/meters`: the programme bus and every source, in one message at 10\nper second, rather than one message per meter as the legacy stream sends.",
+      "properties": {
+        "program": {
+          "description": "Peak dBFS per channel on the programme bus.",
+          "items": {
+            "format": "double",
+            "type": "number"
+          },
+          "type": "array"
+        },
+        "sources": {
+          "additionalProperties": true,
+          "description": "Peak dBFS per channel, per source id.",
+          "type": "object"
+        }
+      },
+      "required": [
+        "program",
+        "sources"
+      ],
+      "type": "object"
+    },
+    "MixerStatus": {
+      "properties": {
+        "ad": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/AdStatus"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Present while an ad break is armed or running."
+        },
+        "backend": {
+          "$ref": "#/$defs/BackendInfo"
+        },
+        "multiview": {
+          "$ref": "#/$defs/MultiviewStatus"
+        },
+        "outputs": {
+          "items": {
+            "$ref": "#/$defs/OutputStatus"
+          },
+          "type": "array"
+        },
+        "program": {
+          "description": "Source currently on program, or None while the slate is showing.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "running_time_ms": {
+          "description": "Program pipeline running time. Cues are scheduled against this, not\nagainst wall clock, so a client can place a break on a known frame.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "sources": {
+          "items": {
+            "$ref": "#/$defs/SourceStatus"
+          },
+          "type": "array"
+        },
+        "uptime_secs": {
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "sources",
+        "outputs",
+        "multiview",
+        "uptime_secs",
+        "running_time_ms",
+        "backend"
+      ],
+      "type": "object"
+    },
+    "MultiviewExt": {
+      "anyOf": [
+        {
+          "description": "`\"multiview\": false`.",
+          "type": "boolean"
+        },
+        {
+          "properties": {
+            "fps": {
+              "default": null,
+              "description": "Frames per second, 1 to 30. The core clamps to what the mosaic runs at.",
+              "format": "uint32",
+              "minimum": 0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "width": {
+              "default": null,
+              "description": "Mosaic width in pixels, 320 to 1920.",
+              "format": "uint32",
+              "minimum": 0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            }
+          },
+          "type": "object"
+        }
+      ],
+      "description": "`ext.multiview`. Accepts `false` to mean off, or an object."
+    },
+    "MultiviewLayout": {
+      "description": "`event/multiview.layout`: how to read the binary frames that follow.",
+      "properties": {
+        "cells": {
+          "items": {
+            "$ref": "#/$defs/CellAssignment"
+          },
+          "type": "array"
+        },
+        "height": {
+          "format": "int32",
+          "type": "integer"
+        },
+        "id": {
+          "description": "Stable for as long as the cells are unchanged, and carried in the\nheader of every frame, so a client that falls behind can tell which\nlayout a late frame belongs to.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "width": {
+          "format": "int32",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "id",
+        "width",
+        "height",
+        "cells"
+      ],
+      "type": "object"
+    },
+    "MultiviewStatus": {
+      "properties": {
+        "cells": {
+          "description": "Cell index to source id, in reading order. Cell 0 is the program return\nwhen it is enabled.",
+          "items": {
+            "$ref": "#/$defs/CellAssignment"
+          },
+          "type": "array"
+        },
+        "cols": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "enabled": {
+          "type": "boolean"
+        },
+        "fps": {
+          "description": "Frame rate of the mosaic, so the UI can size its own expectations.",
+          "format": "int32",
+          "type": "integer"
+        },
+        "height": {
+          "format": "int32",
+          "type": "integer"
+        },
+        "rows": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "width": {
+          "format": "int32",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "enabled",
+        "width",
+        "height",
+        "cols",
+        "rows",
+        "cells",
+        "fps"
+      ],
+      "type": "object"
+    },
+    "NameRequest": {
+      "description": "`media.convert` and `media.remove` name a file rather than an id.",
+      "properties": {
+        "name": {
+          "description": "File name as it appears in the media listing. The REST layer puts it\nin the path, where the transform rule calls it `id`, so both spellings\nare read.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "type": "object"
+    },
+    "OutputState": {
+      "enum": [
+        "connecting",
+        "live",
+        "reconnecting",
+        "failed"
+      ],
+      "type": "string"
+    },
+    "OutputStatus": {
+      "additionalProperties": true,
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "queue_secs": {
+          "description": "Seconds of encoded data waiting in the pre-muxer queue. A number that\nclimbs and stays high means the destination cannot keep up.",
+          "format": "double",
+          "type": "number"
+        },
+        "reconnects": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "state": {
+          "$ref": "#/$defs/OutputState"
+        },
+        "uri_host": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "uri_host",
+        "state",
+        "reconnects",
+        "queue_secs"
+      ],
+      "type": "object"
+    },
+    "ProgramState": {
+      "description": "What `program.get` answers with, and what `program.take` returns so that no\nfollow up read is needed.",
+      "properties": {
+        "ad": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/AdStatus"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Present while an ad break is armed or on air."
+        },
+        "previous": {
+          "description": "The previous source, which is what `program.revert` would take back to.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "program": {
+          "description": "Source on air, or null for the slate.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "running_time_ms": {
+          "description": "Programme pipeline running time, in milliseconds.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "running_time_ms"
+      ],
+      "type": "object"
+    },
+    "Resync": {
+      "description": "`event/resync`: the client fell behind and the stream has a hole in it.",
+      "properties": {
+        "dropped": {
+          "description": "How many events were dropped.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "from_seq": {
+          "description": "The last sequence number the client is known to have. Everything after\nit was dropped; re-subscribe for a fresh snapshot.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "from_seq",
+        "dropped"
+      ],
+      "type": "object"
+    },
+    "SeekParams": {
+      "description": "`source.seek`.",
+      "properties": {
+        "id": {
+          "description": "Source id.",
+          "type": "string"
+        },
+        "position_ms": {
+          "description": "Milliseconds from the start of the clip. Off either end is clamped\nrather than refused, so a scrubber flicked past the end lands there.",
+          "format": "double",
+          "type": "number"
+        }
+      },
+      "required": [
+        "id",
+        "position_ms"
+      ],
+      "type": "object"
+    },
+    "Severity": {
+      "oneOf": [
+        {
+          "enum": [
+            "info",
+            "warning",
+            "error"
+          ],
+          "type": "string"
+        },
+        {
+          "const": "critical",
+          "description": "Loud enough to page someone. Nothing raises it yet; it is here so the\nseverity ladder in `protocol.json` is the one 03 section 6 names.",
+          "type": "string"
+        }
+      ]
+    },
+    "Snapshot": {
+      "description": "`event/snapshot`: the full state, and where in the stream it sits.",
+      "properties": {
+        "seq": {
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "state": {
+          "$ref": "#/$defs/MixerStatus"
+        }
+      },
+      "required": [
+        "seq",
+        "state"
+      ],
+      "type": "object"
+    },
+    "SnapshotRequest": {
+      "description": "`snapshot.get` on `/rpc` and through MCP. The REST route serves the same\nbytes raw, because an `<img>` tag cannot read base64 out of JSON.",
+      "properties": {
+        "id": {
+          "description": "\"sheet\", \"program\", or a source id. A `.jpg` on the end is accepted.",
+          "type": "string"
+        },
+        "width": {
+          "description": "Scale down to this many pixels across, keeping the aspect. Never\nenlarges. Omit for the cell's own size.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "type": "object"
+    },
+    "SourceAudio": {
+      "description": "The gains a superimposed source is currently running with.\n\n1.0 is unity, 0.0 is silent, and the ceiling is 10.0. Reported rather than\nremembered: these are read back off the volume elements, so what the UI\nshows is what the pipeline is doing, including any clamping.",
+      "properties": {
+        "media": {
+          "description": "One per video the mixer decodes underneath, in the order the page\nhanded them over.",
+          "items": {
+            "format": "double",
+            "type": "number"
+          },
+          "type": "array"
+        },
+        "page": {
+          "description": "The page's own sound, which is the commentary and whatever the page\nplays itself.",
+          "format": "double",
+          "type": "number"
+        }
+      },
+      "required": [
+        "page",
+        "media"
+      ],
+      "type": "object"
+    },
+    "SourceAudioState": {
+      "description": "What a source's audio controls read back as, which is what the audio\nendpoint answers with.\n\nWider than `SourceAudio` because the fader and the mute apply to every\nsource, while the page and media balance belongs only to a superimposed one.\nEvery number here is read off the elements after the request landed, so a\nrequest whose gain was clamped answers with the gain that took effect.",
+      "properties": {
+        "gain": {
+          "format": "double",
+          "type": "number"
+        },
+        "media": {
+          "items": {
+            "format": "double",
+            "type": "number"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "muted": {
+          "type": "boolean"
+        },
+        "page": {
+          "description": "Absent on anything but a superimposed source, which is the only kind\nwith separate sounds to balance.",
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "gain",
+        "muted"
+      ],
+      "type": "object"
+    },
+    "SourcePositionState": {
+      "description": "Where a seekable source has got to, which is what the seek endpoint answers\nwith.\n\nBoth numbers are read back off the pipeline after the seek has landed, not\ntaken from the request. A seek snaps to a key unit, so the frame an operator\nasked for and the frame they got are rarely the same millisecond, and a\nscrubber drawn from the request would sit a little away from the picture.",
+      "properties": {
+        "duration_ms": {
+          "description": "Absent while the demuxer has not worked the duration out yet.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "position_ms": {
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "position_ms"
+      ],
+      "type": "object"
+    },
+    "SourceState": {
+      "oneOf": [
+        {
+          "const": "connecting",
+          "description": "Pipeline is up but no media has arrived yet.",
+          "type": "string"
+        },
+        {
+          "const": "live",
+          "description": "Buffers arriving within the stall timeout.",
+          "type": "string"
+        },
+        {
+          "const": "stalled",
+          "description": "Was live, then went quiet. Its program pad is held at alpha 0 so the\nslate shows through rather than a frozen frame.",
+          "type": "string"
+        },
+        {
+          "const": "failed",
+          "description": "The input pipeline errored. A retry is scheduled.",
+          "type": "string"
+        }
+      ]
+    },
+    "SourceStatus": {
+      "additionalProperties": true,
+      "properties": {
+        "audio": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SourceAudio"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Where this source's sounds sit against each other. `None` for anything\nbut a superimposed source, because everything else arrives already\nmixed and there is nothing to balance. Absent rather than null in the\nJSON, so a snapshot written by an older build still parses."
+        },
+        "audio_idle_ms": {
+          "description": "Same for audio. `None` here while `has_audio` is true means the source\nadvertised an audio track that never produced a decoded sample.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "cell": {
+          "description": "Index into the multiview grid, or None while the source has no cell.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "duration_ms": {
+          "format": "uint64",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "gain": {
+          "default": 1.0,
+          "description": "The operator's fader for this source, 0.0 silent through 1.0 unity to a\nceiling of 10.0. Read back off the volume element rather than remembered,\nso what the UI shows is what the pipeline is doing.",
+          "format": "double",
+          "type": "number"
+        },
+        "has_audio": {
+          "type": "boolean"
+        },
+        "has_video": {
+          "type": "boolean"
+        },
+        "id": {
+          "type": "string"
+        },
+        "muted": {
+          "default": false,
+          "description": "Muted by the operator. Held apart from the fader so that unmuting returns\nthe source to where it was rather than to unity.",
+          "type": "boolean"
+        },
+        "name": {
+          "type": "string"
+        },
+        "position_ms": {
+          "description": "Where this source has got to, and how long it runs, in milliseconds.\n`None` on anything not seekable, and on a seekable source whose duration\nthe demuxer has not worked out yet.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "seekable": {
+          "default": false,
+          "description": "True when this source can be scrubbed. A file can be. A camera, an RTMP\nfeed or a page cannot, and asking one to is a mistake worth refusing\nrather than quietly doing nothing.",
+          "type": "boolean"
+        },
+        "state": {
+          "$ref": "#/$defs/SourceState"
+        },
+        "superimposed": {
+          "default": false,
+          "description": "True when this website source is running with its media decoded outside\nthe browser and the page drawn over it. False covers both a source that\nnever asked for it and one that asked and could not get it, because the\npage turned out to have no address worth handing over.",
+          "type": "boolean"
+        },
+        "uri": {
+          "type": "string"
+        },
+        "video_idle_ms": {
+          "description": "Milliseconds since the last video buffer, or None if none has arrived.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "uri",
+        "state",
+        "has_video",
+        "has_audio"
+      ],
+      "type": "object"
+    },
+    "SubscribeRequest": {
+      "description": "`core.subscribe`: which events, and which expensive streams.",
+      "properties": {
+        "events": {
+          "default": [],
+          "description": "Event name patterns, matched against the part after `event/`. `*`\nmatches one or more characters: \"program.*\" matches `event/program.took`.\nAn empty list subscribes to everything.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "ext": {
+          "$ref": "#/$defs/Ext",
+          "default": {},
+          "description": "The expensive streams this client wants. Nothing here runs unless a\nclient asks for it."
+        }
+      },
+      "type": "object"
+    },
+    "SubscribeResult": {
+      "description": "What `core.subscribe` answers with, before the snapshot arrives.",
+      "properties": {
+        "events": {
+          "description": "The event patterns now in force.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "ignored_ext": {
+          "description": "`ext` keys this build ignored. Empty on a build that knows them all.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "seq": {
+          "description": "The sequence number the snapshot that follows is current as of.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "seq",
+        "events",
+        "ignored_ext"
+      ],
+      "type": "object"
+    },
+    "TakeRecord": {
+      "description": "One take, as `program.history` reports it.",
+      "properties": {
+        "at_running_time_ms": {
+          "description": "Programme running time the cut landed on.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "by": {
+          "description": "Token id that asked for it, or \"core\" when the mixer did it itself.",
+          "type": "string"
+        },
+        "seq": {
+          "description": "Event sequence number the take was published under.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "source": {
+          "description": "What went on air. Null is the slate.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "at_running_time_ms",
+        "by",
+        "seq"
+      ],
+      "type": "object"
+    },
+    "TakeRequest": {
+      "description": "`program.take`: put a source on programme.",
+      "properties": {
+        "at_running_time_ms": {
+          "description": "Programme running time to land the cut on, in milliseconds. Omit for\nimmediate. Read the current running time from `core.info` or a status\nsnapshot first.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "scene": {
+          "description": "The scene to take, once scenes exist (11). Today a scene name is read\nas a one item scene, which is to say as a source id, and `source` wins\nwhen both are given.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "source": {
+          "description": "Id of the source to put on air. Null or omitted cuts to the slate.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "type": "object"
+    },
+    "Tally": {
+      "description": "`event/tally`.",
+      "properties": {
+        "sources": {
+          "additionalProperties": true,
+          "description": "Source id to \"program\", \"preview\" or \"off\".",
+          "type": "object"
+        }
+      },
+      "required": [
+        "sources"
+      ],
+      "type": "object"
+    },
+    "TokenInfo": {
+      "description": "What the calling token is allowed to do, echoed back so a surface can grey\nout what it cannot reach instead of discovering it at the first refusal.",
+      "properties": {
+        "confirm": {
+          "description": "\"none\" or \"required\": whether destructive calls need a confirm token.",
+          "type": "string"
+        },
+        "id": {
+          "type": "string"
+        },
+        "profile": {
+          "description": "MCP tool profile this token is meant for: \"standard\" or \"minimal\".",
+          "type": "string"
+        },
+        "rehearsal": {
+          "type": "boolean"
+        },
+        "scopes": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "id",
+        "scopes",
+        "confirm",
+        "rehearsal",
+        "profile"
+      ],
+      "type": "object"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "api_compatible": 1,
+  "api_level": 1,
+  "core": "godwinmix",
+  "description": "The GodwinMix control protocol. One set of methods, events and types, whether the peer is a UI on /rpc, curl on /api/v1, the CLI, the MCP server or a plugin on stdio.",
+  "envelope": {
+    "description": "Keys accepted on every method, handled before a method runs.",
+    "properties": {
+      "confirm": {
+        "description": "The confirm_token from a -32020 refusal, valid 30 seconds. Only a token whose policy is confirm = required needs it.",
+        "type": "string"
+      },
+      "dry_run": {
+        "description": "On any destructive method. Answers the diff it would make and would_change, against the live state, and changes nothing.",
+        "type": "boolean"
+      },
+      "idempotency_key": {
+        "description": "On any mutating method. The answer is kept for 24 hours; a replay returns it with replayed: true. The same key with different params is -32602 with data.idempotency = mismatch.",
+        "maxLength": 255,
+        "type": "string"
+      },
+      "trace_id": {
+        "description": "Carried into the answer, the X-Trace-Id header and the log line. Taken from the W3C traceparent header over HTTP, or generated.",
+        "type": "string"
+      }
+    }
+  },
+  "errors": [
+    {
+      "code": -32700,
+      "http_status": 400,
+      "meaning": "the body was not JSON",
+      "retryable": false
+    },
+    {
+      "code": -32600,
+      "http_status": 400,
+      "meaning": "the envelope was not a JSON-RPC request",
+      "retryable": false
+    },
+    {
+      "code": -32601,
+      "http_status": 404,
+      "meaning": "no such method",
+      "retryable": false
+    },
+    {
+      "code": -32602,
+      "http_status": 400,
+      "meaning": "the params were wrong for this method",
+      "retryable": false
+    },
+    {
+      "code": -32603,
+      "http_status": 500,
+      "meaning": "the core failed while handling the call",
+      "retryable": true
+    },
+    {
+      "code": -32001,
+      "http_status": 409,
+      "meaning": "not in a state that allows this",
+      "retryable": true
+    },
+    {
+      "code": -32002,
+      "http_status": 403,
+      "meaning": "refused by the token's scopes",
+      "retryable": false
+    },
+    {
+      "code": -32003,
+      "http_status": 429,
+      "meaning": "refused by a safety rule",
+      "retryable": true
+    },
+    {
+      "code": -32004,
+      "http_status": 404,
+      "meaning": "no such id",
+      "retryable": false
+    },
+    {
+      "code": -32005,
+      "http_status": 400,
+      "meaning": "the plugin did not declare that placement",
+      "retryable": false
+    },
+    {
+      "code": -32010,
+      "http_status": 500,
+      "meaning": "the plugin died during the call",
+      "retryable": true
+    },
+    {
+      "code": -32011,
+      "http_status": 400,
+      "meaning": "a protocol line was over 4 MiB",
+      "retryable": false
+    },
+    {
+      "code": -32012,
+      "http_status": 400,
+      "meaning": "the change needs the instance restarted",
+      "retryable": false
+    },
+    {
+      "code": -32020,
+      "http_status": 428,
+      "meaning": "a confirm token is needed first",
+      "retryable": true
+    }
+  ],
+  "events": [
+    {
+      "ext": null,
+      "legacy": "status",
+      "name": "event/snapshot",
+      "pattern": "snapshot",
+      "payload": {
+        "$ref": "#/$defs/Snapshot"
+      },
+      "since": "1",
+      "summary": "The full state, and the sequence number it is current as of. Sent on subscribe and after any change the deltas cannot describe."
+    },
+    {
+      "ext": null,
+      "legacy": "took",
+      "name": "event/program.took",
+      "pattern": "program.took",
+      "payload": {
+        "properties": {
+          "at_running_time_ms": {
+            "type": "integer"
+          },
+          "duration_ms": {
+            "type": "integer"
+          },
+          "scene": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "source": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "transition": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "since": "1",
+      "summary": "The programme changed. Carries the running time the cut landed on, so a client can see how close a scheduled take was to its mark."
+    },
+    {
+      "ext": null,
+      "legacy": "source_state_changed",
+      "name": "event/source.state",
+      "pattern": "source.state",
+      "payload": {
+        "properties": {
+          "detail": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "source": {
+            "type": "string"
+          },
+          "state": {
+            "$ref": "#/$defs/SourceState"
+          }
+        },
+        "type": "object"
+      },
+      "since": "1",
+      "summary": "A source moved between connecting, live, stalled and failed."
+    },
+    {
+      "ext": "positions",
+      "legacy": "source_position",
+      "name": "event/source.position",
+      "pattern": "source.position",
+      "payload": {
+        "properties": {
+          "duration_ms": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "position_ms": {
+            "type": "integer"
+          },
+          "source": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "since": "1",
+      "summary": "How far through a seekable source has got, a few times a second. Never sent for a camera, which has no position to report."
+    },
+    {
+      "ext": null,
+      "legacy": "output_state_changed",
+      "name": "event/output.state",
+      "pattern": "output.state",
+      "payload": {
+        "properties": {
+          "output": {
+            "type": "string"
+          },
+          "reconnects": {
+            "type": "integer"
+          },
+          "state": {
+            "$ref": "#/$defs/OutputState"
+          }
+        },
+        "type": "object"
+      },
+      "since": "1",
+      "summary": "A destination connected, dropped or is retrying."
+    },
+    {
+      "ext": null,
+      "legacy": "ad_break_changed",
+      "name": "event/adbreak.changed",
+      "pattern": "adbreak.changed",
+      "payload": {
+        "properties": {
+          "ad": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/AdStatus"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object"
+      },
+      "since": "1",
+      "summary": "An ad break was armed, went on air, or ended."
+    },
+    {
+      "ext": null,
+      "legacy": "media_changed",
+      "name": "event/media.changed",
+      "pattern": "media.changed",
+      "payload": {
+        "properties": {
+          "conversion": {},
+          "name": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "since": "1",
+      "summary": "A file in the library was uploaded, deleted, or its conversion moved on."
+    },
+    {
+      "ext": "meters",
+      "legacy": "audio_level, source_audio_level",
+      "name": "event/meters",
+      "pattern": "meters",
+      "payload": {
+        "$ref": "#/$defs/Meters"
+      },
+      "since": "1",
+      "summary": "Peak dBFS for the programme bus and every source, in one message at 10 per second. Replaces the two separate meter events on /ws."
+    },
+    {
+      "ext": "tally",
+      "legacy": null,
+      "name": "event/tally",
+      "pattern": "tally",
+      "payload": {
+        "$ref": "#/$defs/Tally"
+      },
+      "since": "1",
+      "summary": "Which sources are on programme, on preview, or off. Derived by the core so a Stream Deck does not have to."
+    },
+    {
+      "ext": null,
+      "legacy": "alert",
+      "name": "event/alert",
+      "pattern": "alert",
+      "payload": {
+        "properties": {
+          "message": {
+            "type": "string"
+          },
+          "severity": {
+            "$ref": "#/$defs/Severity"
+          }
+        },
+        "type": "object"
+      },
+      "since": "1",
+      "summary": "Something an operator should see. Also written to the log and to the alert webhook."
+    },
+    {
+      "ext": "multiview",
+      "legacy": null,
+      "name": "event/multiview.layout",
+      "pattern": "multiview.layout",
+      "payload": {
+        "$ref": "#/$defs/MultiviewLayout"
+      },
+      "since": "1",
+      "summary": "How to read the binary frames that follow: the cells, and the layout id carried in every frame header."
+    },
+    {
+      "ext": "multiview",
+      "legacy": "raw JPEG binary frame",
+      "name": "event/multiview.frame",
+      "pattern": "multiview.frame",
+      "payload": {
+        "contentEncoding": "binary",
+        "description": "16 byte header then JPEG. Not a JSON message.",
+        "type": "string"
+      },
+      "since": "1",
+      "summary": "A mosaic frame, as a binary WebSocket frame rather than JSON: a 16 byte little endian header (seq u32, layout id u32, programme running time in milliseconds u64) then the JPEG."
+    },
+    {
+      "ext": null,
+      "legacy": null,
+      "name": "event/resync",
+      "pattern": "resync",
+      "payload": {
+        "$ref": "#/$defs/Resync"
+      },
+      "since": "1",
+      "summary": "This client fell behind and events were dropped. Re-subscribe for a fresh snapshot; nothing between from_seq and the new snapshot arrives."
+    },
+    {
+      "ext": null,
+      "legacy": null,
+      "name": "event/flush",
+      "pattern": "flush",
+      "payload": {
+        "$ref": "#/$defs/Flush"
+      },
+      "since": "1",
+      "summary": "The end of a batch. Render here and not before, so a client never paints half an update."
+    }
+  ],
+  "ext": [
+    {
+      "implemented": true,
+      "key": "multiview",
+      "turns_on": "the mosaic pipeline, built on the first subscriber and stopped on the last, plus event/multiview.layout and the binary frames",
+      "value": "{fps: 1..30, width: 320..1920} or false"
+    },
+    {
+      "implemented": true,
+      "key": "meters",
+      "turns_on": "event/meters",
+      "value": "true"
+    },
+    {
+      "implemented": true,
+      "key": "tally",
+      "turns_on": "event/tally",
+      "value": "true"
+    },
+    {
+      "implemented": true,
+      "key": "positions",
+      "turns_on": "event/source.position",
+      "value": "true"
+    },
+    {
+      "implemented": false,
+      "key": "thumb",
+      "turns_on": "per source thumbnails from a node",
+      "value": "{fps}"
+    },
+    {
+      "implemented": false,
+      "key": "preview",
+      "turns_on": "the preview scene",
+      "value": "{fps, width} or \"full\""
+    },
+    {
+      "implemented": false,
+      "key": "telemetry",
+      "turns_on": "event/telemetry",
+      "value": "{hz: 1..10}"
+    },
+    {
+      "implemented": false,
+      "key": "agent",
+      "turns_on": "event/agent.state with a snapshot URL",
+      "value": "true or thresholds"
+    }
+  ],
+  "legacy": [
+    {
+      "method": "GET",
+      "now": "core.status",
+      "path": "/api/status"
+    },
+    {
+      "method": "GET",
+      "now": "agent.state",
+      "path": "/api/agent/state"
+    },
+    {
+      "method": "GET",
+      "now": "snapshot.get",
+      "path": "/api/snapshot/{name}"
+    },
+    {
+      "method": "POST",
+      "now": "program.take",
+      "path": "/api/take"
+    },
+    {
+      "method": "POST",
+      "now": "program.golive",
+      "path": "/api/golive"
+    },
+    {
+      "method": "POST",
+      "now": "core.shutdown",
+      "path": "/api/shutdown"
+    },
+    {
+      "method": "GET",
+      "now": "media.list",
+      "path": "/api/media"
+    },
+    {
+      "method": "POST",
+      "now": "media.upload",
+      "path": "/api/media/upload"
+    },
+    {
+      "method": "POST",
+      "now": "media.convert",
+      "path": "/api/media/{name}/convert"
+    },
+    {
+      "method": "DELETE",
+      "now": "media.remove",
+      "path": "/api/media/{name}"
+    },
+    {
+      "method": "POST",
+      "now": "adbreak.start",
+      "path": "/api/adbreak"
+    },
+    {
+      "method": "POST",
+      "now": "adbreak.end",
+      "path": "/api/adbreak/end"
+    },
+    {
+      "method": "POST",
+      "now": "source.add",
+      "path": "/api/sources"
+    },
+    {
+      "method": "DELETE",
+      "now": "source.remove",
+      "path": "/api/sources/{id}"
+    },
+    {
+      "method": "POST",
+      "now": "source.audio.set",
+      "path": "/api/sources/{id}/audio"
+    },
+    {
+      "method": "POST",
+      "now": "source.seek",
+      "path": "/api/sources/{id}/seek"
+    },
+    {
+      "method": "GET",
+      "now": "output.list",
+      "path": "/api/outputs"
+    },
+    {
+      "method": "POST",
+      "now": "output.add",
+      "path": "/api/outputs"
+    },
+    {
+      "method": "DELETE",
+      "now": "output.remove",
+      "path": "/api/outputs/{id}"
+    },
+    {
+      "method": "POST",
+      "now": "output.reconnect",
+      "path": "/api/outputs/{id}/reconnect"
+    },
+    {
+      "method": "GET",
+      "now": "core.subscribe",
+      "path": "/ws"
+    }
+  ],
+  "methods": [
+    {
+      "destructive": false,
+      "idempotent": true,
+      "mcp": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "profile": "search",
+        "readOnlyHint": false,
+        "tool": "end_ad_break"
+      },
+      "mutating": true,
+      "name": "adbreak.end",
+      "params": {
+        "additionalProperties": false,
+        "properties": {},
+        "type": "object"
+      },
+      "rest": {
+        "method": "POST",
+        "path": "/api/v1/adbreak/end"
+      },
+      "result": {
+        "type": "object"
+      },
+      "scope": "operate",
+      "since": "1",
+      "summary": "Cut a running ad short, or disarm one that is scheduled."
+    },
+    {
+      "destructive": false,
+      "idempotent": true,
+      "mcp": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "profile": "search",
+        "readOnlyHint": false,
+        "tool": "ad_break"
+      },
+      "mutating": true,
+      "name": "adbreak.start",
+      "params": {
+        "$ref": "#/$defs/AdBreakRequest"
+      },
+      "rest": {
+        "method": "POST",
+        "path": "/api/v1/adbreak/start"
+      },
+      "result": {
+        "type": "object"
+      },
+      "scope": "operate",
+      "since": "1",
+      "summary": "Interrupt the programme with a clip, then rejoin live when it ends."
+    },
+    {
+      "destructive": false,
+      "idempotent": true,
+      "mcp": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "profile": "minimal",
+        "readOnlyHint": true,
+        "tool": "agent_state"
+      },
+      "mutating": false,
+      "name": "agent.state",
+      "params": {
+        "additionalProperties": false,
+        "properties": {},
+        "type": "object"
+      },
+      "rest": {
+        "method": "GET",
+        "path": "/api/v1/agent/state"
+      },
+      "result": {
+        "type": "object"
+      },
+      "scope": "read",
+      "since": "1",
+      "summary": "The compact document written for agents: the programme, each source's state and a motion score saying how much its picture is changing."
+    },
+    {
+      "destructive": false,
+      "idempotent": true,
+      "mcp": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "profile": "search",
+        "readOnlyHint": true,
+        "tool": "list_codecs"
+      },
+      "mutating": false,
+      "name": "codec.list",
+      "params": {
+        "additionalProperties": false,
+        "properties": {},
+        "type": "object"
+      },
+      "rest": {
+        "method": "GET",
+        "path": "/api/v1/codec/list"
+      },
+      "result": {
+        "type": "object"
+      },
+      "scope": "read",
+      "since": "1",
+      "summary": "The codecs and elements this machine can use. The catalogue proper is not built yet; this reports the backends actually selected."
+    },
+    {
+      "destructive": false,
+      "idempotent": true,
+      "mutating": false,
+      "name": "core.api",
+      "params": {
+        "additionalProperties": false,
+        "properties": {},
+        "type": "object"
+      },
+      "rest": {
+        "method": "GET",
+        "path": "/api/v1/core/api"
+      },
+      "result": {
+        "type": "object"
+      },
+      "scope": "read",
+      "since": "1",
+      "summary": "Every method, event and type as JSON Schema. The same document as protocol.json and `godwinmix --api-info`."
+    },
+    {
+      "destructive": false,
+      "idempotent": true,
+      "mcp": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "profile": "search",
+        "readOnlyHint": true,
+        "tool": "core_info"
+      },
+      "mutating": false,
+      "name": "core.info",
+      "params": {
+        "additionalProperties": false,
+        "properties": {},
+        "type": "object"
+      },
+      "rest": {
+        "method": "GET",
+        "path": "/api/v1/core/info"
+      },
+      "result": {
+        "$ref": "#/$defs/CoreInfo"
+      },
+      "scope": "read",
+      "since": "1",
+      "summary": "What this core is, what it can do, and where its edges are."
+    },
+    {
+      "destructive": true,
+      "idempotent": true,
+      "mutating": true,
+      "name": "core.shutdown",
+      "params": {
+        "additionalProperties": false,
+        "properties": {},
+        "type": "object"
+      },
+      "rest": {
+        "method": "POST",
+        "path": "/api/v1/core/shutdown"
+      },
+      "result": {
+        "type": "object"
+      },
+      "scope": "admin",
+      "since": "1",
+      "summary": "Stop the mixer, and with it the programme. Nothing else takes the show off air, so this is deliberately its own call."
+    },
+    {
+      "destructive": false,
+      "idempotent": true,
+      "mcp": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "profile": "standard",
+        "readOnlyHint": true,
+        "tool": "status"
+      },
+      "mutating": false,
+      "name": "core.status",
+      "params": {
+        "additionalProperties": false,
+        "properties": {},
+        "type": "object"
+      },
+      "rest": {
+        "method": "GET",
+        "path": "/api/v1/core/status"
+      },
+      "result": {
+        "$ref": "#/$defs/MixerStatus"
+      },
+      "scope": "read",
+      "since": "1",
+      "summary": "The full state: programme, every source, every output, the multiview grid, the encoder backend and any ad break."
+    },
+    {
+      "destructive": false,
+      "idempotent": true,
+      "mutating": false,
+      "name": "core.subscribe",
+      "params": {
+        "$ref": "#/$defs/SubscribeRequest"
+      },
+      "result": {
+        "$ref": "#/$defs/SubscribeResult"
+      },
+      "scope": "read",
+      "since": "1",
+      "summary": "Subscribe to the event stream. WebSocket only: the core answers event/snapshot then deltas, ending every batch with event/flush."
+    },
+    {
+      "destructive": false,
+      "idempotent": true,
+      "mcp": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "profile": "search",
+        "readOnlyHint": false,
+        "tool": "convert_media"
+      },
+      "mutating": true,
+      "name": "media.convert",
+      "params": {
+        "$ref": "#/$defs/NameRequest"
+      },
+      "rest": {
+        "method": "POST",
+        "path": "/api/v1/media/{id}/convert"
+      },
+      "result": {
+        "$ref": "#/$defs/ConversionState"
+      },
+      "scope": "operate",
+      "since": "1",
+      "summary": "Transcode a library file to a web safe copy, in the background."
+    },
+    {
+      "destructive": false,
+      "idempotent": true,
+      "mcp": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "profile": "search",
+        "readOnlyHint": true,
+        "tool": "list_media"
+      },
+      "mutating": false,
+      "name": "media.list",
+      "params": {
+        "additionalProperties": false,
+        "properties": {},
+        "type": "object"
+      },
+      "rest": {
+        "method": "GET",
+        "path": "/api/v1/media"
+      },
+      "result": {
+        "$ref": "#/$defs/MediaListing"
+      },
+      "scope": "read",
+      "since": "1",
+      "summary": "The clips in the library, with durations and whether each has audio."
+    },
+    {
+      "destructive": true,
+      "idempotent": true,
+      "mcp": {
+        "destructiveHint": true,
+        "idempotentHint": true,
+        "profile": "search",
+        "readOnlyHint": false,
+        "tool": "remove_media"
+      },
+      "mutating": true,
+      "name": "media.remove",
+      "params": {
+        "$ref": "#/$defs/NameRequest"
+      },
+      "rest": {
+        "method": "DELETE",
+        "path": "/api/v1/media/{id}"
+      },
+      "result": {
+        "type": "object"
+      },
+      "scope": "operate",
+      "since": "1",
+      "summary": "Delete a library file and its converted copy. Refused while it is a live source."
+    },
+    {
+      "destructive": false,
+      "idempotent": false,
+      "mutating": true,
+      "name": "media.upload",
+      "params": {
+        "additionalProperties": false,
+        "properties": {},
+        "type": "object"
+      },
+      "rest": {
+        "method": "POST",
+        "path": "/api/v1/media/upload"
+      },
+      "result": {
+        "type": "object"
+      },
+      "scope": "operate",
+      "since": "1",
+      "summary": "Stream a file into the library. HTTP only: the body is the file."
+    },
+    {
+      "destructive": false,
+      "idempotent": true,
+      "mcp": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "profile": "standard",
+        "readOnlyHint": false,
+        "tool": "add_output"
+      },
+      "mutating": true,
+      "name": "output.add",
+      "params": {
+        "$ref": "#/$defs/AddOutputRequest"
+      },
+      "rest": {
+        "method": "POST",
+        "path": "/api/v1/outputs"
+      },
+      "result": {
+        "$ref": "#/$defs/OutputStatus"
+      },
+      "scope": "operate",
+      "since": "1",
+      "summary": "Send the programme to another destination. The encoder is shared, so adding one costs nothing on air."
+    },
+    {
+      "destructive": false,
+      "idempotent": true,
+      "mutating": false,
+      "name": "output.get",
+      "params": {
+        "$ref": "#/$defs/IdRequest"
+      },
+      "rest": {
+        "method": "GET",
+        "path": "/api/v1/outputs/{id}"
+      },
+      "result": {
+        "$ref": "#/$defs/OutputStatus"
+      },
+      "scope": "read",
+      "since": "1",
+      "summary": "One destination."
+    },
+    {
+      "destructive": false,
+      "idempotent": true,
+      "mcp": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "profile": "standard",
+        "readOnlyHint": true,
+        "tool": "list_outputs"
+      },
+      "mutating": false,
+      "name": "output.list",
+      "params": {
+        "additionalProperties": false,
+        "properties": {},
+        "type": "object"
+      },
+      "rest": {
+        "method": "GET",
+        "path": "/api/v1/outputs"
+      },
+      "result": {
+        "items": {
+          "$ref": "#/$defs/OutputStatus"
+        },
+        "type": "array"
+      },
+      "scope": "read",
+      "since": "1",
+      "summary": "Every destination, with its state, reconnect count and how much is buffered."
+    },
+    {
+      "destructive": false,
+      "idempotent": true,
+      "mcp": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "profile": "search",
+        "readOnlyHint": false,
+        "tool": "reconnect_output"
+      },
+      "mutating": true,
+      "name": "output.reconnect",
+      "params": {
+        "$ref": "#/$defs/IdRequest"
+      },
+      "rest": {
+        "method": "POST",
+        "path": "/api/v1/outputs/{id}/reconnect"
+      },
+      "result": {
+        "$ref": "#/$defs/OutputStatus"
+      },
+      "scope": "operate",
+      "since": "1",
+      "summary": "Drop and re-establish one destination's connection now, without waiting for its reconnect policy."
+    },
+    {
+      "destructive": true,
+      "idempotent": true,
+      "mcp": {
+        "destructiveHint": true,
+        "idempotentHint": true,
+        "profile": "search",
+        "readOnlyHint": false,
+        "tool": "remove_output"
+      },
+      "mutating": true,
+      "name": "output.remove",
+      "params": {
+        "$ref": "#/$defs/IdRequest"
+      },
+      "rest": {
+        "method": "DELETE",
+        "path": "/api/v1/outputs/{id}"
+      },
+      "result": {
+        "type": "object"
+      },
+      "scope": "operate",
+      "since": "1",
+      "summary": "Stop sending to a destination and forget it. Other outputs are unaffected."
+    },
+    {
+      "destructive": false,
+      "idempotent": true,
+      "mutating": false,
+      "name": "program.get",
+      "params": {
+        "additionalProperties": false,
+        "properties": {},
+        "type": "object"
+      },
+      "rest": {
+        "method": "GET",
+        "path": "/api/v1/program"
+      },
+      "result": {
+        "$ref": "#/$defs/ProgramState"
+      },
+      "scope": "read",
+      "since": "1",
+      "summary": "What is on air, the programme running time, and what revert would go back to."
+    },
+    {
+      "destructive": false,
+      "idempotent": true,
+      "mcp": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "profile": "standard",
+        "readOnlyHint": false,
+        "tool": "go_live"
+      },
+      "mutating": true,
+      "name": "program.golive",
+      "params": {
+        "$ref": "#/$defs/GoLiveRequest"
+      },
+      "rest": {
+        "method": "POST",
+        "path": "/api/v1/program/golive"
+      },
+      "result": {
+        "$ref": "#/$defs/GoLiveResult"
+      },
+      "scope": "operate",
+      "since": "1",
+      "summary": "One call to put a web page on air: add the page, add the destination, and take the page as soon as it renders."
+    },
+    {
+      "destructive": false,
+      "idempotent": true,
+      "mcp": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "profile": "search",
+        "readOnlyHint": true,
+        "tool": "program_history"
+      },
+      "mutating": false,
+      "name": "program.history",
+      "params": {
+        "$ref": "#/$defs/HistoryRequest"
+      },
+      "rest": {
+        "method": "GET",
+        "path": "/api/v1/program/history"
+      },
+      "result": {
+        "items": {
+          "$ref": "#/$defs/TakeRecord"
+        },
+        "type": "array"
+      },
+      "scope": "read",
+      "since": "1",
+      "summary": "The last hundred takes, newest first, with the token that asked for each."
+    },
+    {
+      "destructive": false,
+      "idempotent": true,
+      "mcp": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "profile": "standard",
+        "readOnlyHint": false,
+        "tool": "revert"
+      },
+      "mutating": true,
+      "name": "program.revert",
+      "params": {
+        "additionalProperties": false,
+        "properties": {},
+        "type": "object"
+      },
+      "rest": {
+        "method": "POST",
+        "path": "/api/v1/program/revert"
+      },
+      "result": {
+        "$ref": "#/$defs/ProgramState"
+      },
+      "scope": "operate",
+      "since": "1",
+      "summary": "Take back to the shot before this one."
+    },
+    {
+      "destructive": false,
+      "idempotent": true,
+      "mcp": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "profile": "minimal",
+        "readOnlyHint": false,
+        "tool": "take"
+      },
+      "mutating": true,
+      "name": "program.take",
+      "params": {
+        "$ref": "#/$defs/TakeRequest"
+      },
+      "rest": {
+        "method": "POST",
+        "path": "/api/v1/program/take"
+      },
+      "result": {
+        "$ref": "#/$defs/ProgramState"
+      },
+      "scope": "operate",
+      "since": "1",
+      "summary": "Put a source on programme. The cut is instant and the outgoing stream is not disturbed."
+    },
+    {
+      "destructive": false,
+      "idempotent": true,
+      "mcp": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "profile": "standard",
+        "readOnlyHint": true,
+        "tool": "snapshot"
+      },
+      "mutating": false,
+      "name": "snapshot.get",
+      "params": {
+        "$ref": "#/$defs/SnapshotRequest"
+      },
+      "rest": {
+        "method": "GET",
+        "path": "/api/v1/snapshot/{id}"
+      },
+      "result": {
+        "type": "object"
+      },
+      "scope": "read",
+      "since": "1",
+      "summary": "One JPEG: the whole contact sheet, the programme, or one source cut out of the mosaic."
+    },
+    {
+      "destructive": false,
+      "idempotent": true,
+      "mcp": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "profile": "minimal",
+        "readOnlyHint": false,
+        "tool": "add_source"
+      },
+      "mutating": true,
+      "name": "source.add",
+      "params": {
+        "$ref": "#/$defs/AddSourceRequest"
+      },
+      "rest": {
+        "method": "POST",
+        "path": "/api/v1/sources"
+      },
+      "result": {
+        "$ref": "#/$defs/SourceStatus"
+      },
+      "scope": "operate",
+      "since": "1",
+      "summary": "Add a source while the mixer runs. Answers with the id it got and the whole source record."
+    },
+    {
+      "destructive": false,
+      "idempotent": true,
+      "mcp": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "profile": "search",
+        "readOnlyHint": false,
+        "tool": "set_source_audio"
+      },
+      "mutating": true,
+      "name": "source.audio.set",
+      "params": {
+        "$ref": "#/$defs/AudioSetParams"
+      },
+      "rest": {
+        "method": "POST",
+        "path": "/api/v1/sources/{id}/audio"
+      },
+      "result": {
+        "$ref": "#/$defs/SourceAudioState"
+      },
+      "scope": "operate",
+      "since": "1",
+      "summary": "Move a source's audio: the fader, the mute, and for a superimposed page the balance between its own sound and the videos under it."
+    },
+    {
+      "destructive": false,
+      "idempotent": true,
+      "mutating": false,
+      "name": "source.get",
+      "params": {
+        "$ref": "#/$defs/IdRequest"
+      },
+      "rest": {
+        "method": "GET",
+        "path": "/api/v1/sources/{id}"
+      },
+      "result": {
+        "$ref": "#/$defs/SourceStatus"
+      },
+      "scope": "read",
+      "since": "1",
+      "summary": "One source. Refused with the ids that exist when there is no such source."
+    },
+    {
+      "destructive": false,
+      "idempotent": true,
+      "mcp": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "profile": "minimal",
+        "readOnlyHint": true,
+        "tool": "list_sources"
+      },
+      "mutating": false,
+      "name": "source.list",
+      "params": {
+        "additionalProperties": false,
+        "properties": {},
+        "type": "object"
+      },
+      "rest": {
+        "method": "GET",
+        "path": "/api/v1/sources"
+      },
+      "result": {
+        "items": {
+          "$ref": "#/$defs/SourceStatus"
+        },
+        "type": "array"
+      },
+      "scope": "read",
+      "since": "1",
+      "summary": "Every source, with its state, whether it has video and audio, and its fader."
+    },
+    {
+      "destructive": true,
+      "idempotent": true,
+      "mcp": {
+        "destructiveHint": true,
+        "idempotentHint": true,
+        "profile": "standard",
+        "readOnlyHint": false,
+        "tool": "remove_source"
+      },
+      "mutating": true,
+      "name": "source.remove",
+      "params": {
+        "$ref": "#/$defs/IdRequest"
+      },
+      "rest": {
+        "method": "DELETE",
+        "path": "/api/v1/sources/{id}"
+      },
+      "result": {
+        "type": "object"
+      },
+      "scope": "operate",
+      "since": "1",
+      "summary": "Remove a source. If it is on programme the mixer cuts to the slate first."
+    },
+    {
+      "destructive": false,
+      "idempotent": true,
+      "mcp": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "profile": "search",
+        "readOnlyHint": false,
+        "tool": "seek_source"
+      },
+      "mutating": true,
+      "name": "source.seek",
+      "params": {
+        "$ref": "#/$defs/SeekParams"
+      },
+      "rest": {
+        "method": "POST",
+        "path": "/api/v1/sources/{id}/seek"
+      },
+      "result": {
+        "$ref": "#/$defs/SourcePositionState"
+      },
+      "scope": "operate",
+      "since": "1",
+      "summary": "Move a seekable source to a position. Answers with where it actually landed."
+    }
+  ],
+  "transports": [
+    {
+      "at": "WebSocket /rpc",
+      "framing": "one JSON-RPC message per text frame; mosaic frames are binary",
+      "peer": "UI, service, node"
+    },
+    {
+      "at": "/api/v1",
+      "framing": "the REST transform of the method names, one error shape",
+      "peer": "curl, <img>"
+    },
+    {
+      "at": "/api and /ws",
+      "framing": "deprecated aliases, kept for one release, answered with a Deprecation header",
+      "peer": "legacy UI"
+    },
+    {
+      "at": "stdio",
+      "framing": "godwinmix mcp, a thin adapter over these same methods",
+      "peer": "MCP client"
+    }
+  ],
+  "well_known": [
+    {
+      "method": "GET",
+      "note": "the reference web UI, served from the binary",
+      "path": "/"
+    },
+    {
+      "method": "GET",
+      "note": "the JSON-RPC WebSocket. Everything in `methods` is reachable here.",
+      "path": "/rpc"
+    },
+    {
+      "method": "GET",
+      "note": "an alias for GET /api/v1/core/status, because it is what people type",
+      "path": "/api/v1/status"
+    },
+    {
+      "method": "ANY",
+      "note": "every method's REST route, generated by the transform rule",
+      "path": "/api/v1/{*rest}"
+    }
+  ]
+}

@@ -190,7 +190,10 @@ pub struct IdRequest {
 /// `media.convert` and `media.remove` name a file rather than an id.
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 pub struct NameRequest {
-    /// File name as it appears in the media listing.
+    /// File name as it appears in the media listing. The REST layer puts it
+    /// in the path, where the transform rule calls it `id`, so both spellings
+    /// are read.
+    #[serde(alias = "id")]
     pub name: String,
 }
 
