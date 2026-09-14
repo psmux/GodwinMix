@@ -39,6 +39,14 @@ fn inline(value: Value) -> Value {
 /// `plugin.state`, `hook.blocked`) are deliberately absent: publishing a
 /// schema for something that never arrives teaches a client to wait for it.
 pub fn events() -> Vec<EventDef> {
+    let mut all = state_events();
+    all.extend(stream_events());
+    all
+}
+
+/// The events every subscriber gets: what changed, and the bookkeeping that
+/// lets a client know it has the whole story.
+fn state_events() -> Vec<EventDef> {
     vec![
         EventDef {
             name: "snapshot",
@@ -147,6 +155,13 @@ pub fn events() -> Vec<EventDef> {
                 }))
             },
         },
+    ]
+}
+
+/// The events behind an `ext` key, plus the resync and flush markers that end
+/// every batch.
+fn stream_events() -> Vec<EventDef> {
+    vec![
         EventDef {
             name: "meters",
             since: "1",

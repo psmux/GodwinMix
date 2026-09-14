@@ -17,6 +17,7 @@
 //!   src/api/error.rs      the code table, one error shape
 //!   src/api/method.rs     the method table and the REST transform
 //!   src/api/protocol.rs   protocol.json, protocol.md, core.api
+//!   src/api/openapi.rs    openapi.json for the REST layer
 //!   src/api/rpc.rs        JSON-RPC framing, subscriptions, frame headers
 //!   src/api/scope.rs      tokens, scopes, confirmation, rehearsal
 //!   src/api/idempotency.rs  the 24 hour replay cache
@@ -31,6 +32,7 @@ pub mod error;
 pub mod idempotency;
 pub mod mcp_tools;
 pub mod method;
+pub mod openapi;
 pub mod protocol;
 pub mod requests;
 pub mod rpc;

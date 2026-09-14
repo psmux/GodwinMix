@@ -229,7 +229,8 @@ impl<C> Registry<C> {
 
 /// Collection nouns: `source.list` is `GET /api/v1/sources`. Everything else
 /// is a singleton, where `program.take` is `POST /api/v1/program/take`.
-const COLLECTIONS: &[&str] = &["source", "output", "filter", "media", "plugin", "node", "scene"];
+const COLLECTIONS: &[&str] =
+    &["source", "output", "filter", "media", "plugin", "node", "scene", "codec"];
 
 /// The plural a collection noun takes in a path.
 fn plural(noun: &str) -> String {
@@ -310,6 +311,7 @@ mod tests {
         assert_eq!(at("adbreak.start"), "POST /api/v1/adbreak/start");
         // Uncountable nouns keep their spelling.
         assert_eq!(at("media.list"), "GET /api/v1/media");
+        assert_eq!(at("codec.list"), "GET /api/v1/codecs");
         assert_eq!(at("media.remove"), "DELETE /api/v1/media/{id}");
         // A bare word is not a method and gets no route.
         assert_eq!(rest_transform("ping"), None);

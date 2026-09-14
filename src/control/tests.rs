@@ -14,6 +14,7 @@ use crate::config::Superimpose;
 
 const PROTOCOL_JSON: &str = include_str!("../../protocol.json");
 const PROTOCOL_MD: &str = include_str!("../../protocol.md");
+const OPENAPI_JSON: &str = include_str!("../../openapi.json");
 
 /// The CI drift check. `protocol.json` is committed so that a reader of the
 /// repository, and a client generator, can see the contract without building
@@ -37,6 +38,40 @@ fn protocol_md_is_current() {
         "protocol.md is out of date. Regenerate it with:\n  \
          cargo run --quiet -- --api-info --markdown > protocol.md"
     );
+}
+
+#[test]
+fn openapi_json_is_current() {
+    let generated = crate::api::openapi::json_text(openapi());
+    assert_eq!(
+        generated, OPENAPI_JSON,
+        "openapi.json is out of date. Regenerate it with:\n  \
+         cargo run --quiet -- --api-info --openapi > openapi.json"
+    );
+}
+
+/// Every REST route the table describes has to appear in the OpenAPI
+/// document, or a generated client is missing a call the server answers.
+#[test]
+fn openapi_describes_every_rest_route() {
+    let doc = openapi();
+    let paths = doc["paths"].as_object().unwrap();
+    for m in methods::registry().iter() {
+        let Some(rest) = &m.rest else { continue };
+        let item = paths
+            .get(&rest.path)
+            .unwrap_or_else(|| panic!("{} is not in openapi.json", rest.path));
+        let op = item
+            .get(rest.http.to_lowercase())
+            .unwrap_or_else(|| panic!("{} {} is not in openapi.json", rest.http, rest.path));
+        assert_eq!(op["operationId"], m.name);
+        assert_eq!(op["x-scope"], m.scope.as_str());
+        assert!(op["responses"]["200"].is_object(), "{} has no success response", m.name);
+    }
+    // Nothing in the document points at a $defs path that OpenAPI cannot
+    // resolve.
+    let text = serde_json::to_string(doc).unwrap();
+    assert!(!text.contains("#/$defs/"), "a schemars $ref survived into openapi.json");
 }
 
 /// The acceptance line from the roadmap: `--api-info | jq .api_level` is 1.
@@ -576,6 +611,29 @@ async fn seeking_says_which_kind_of_no_it_is() {
     assert_eq!(refused.status(), StatusCode::BAD_REQUEST);
     let v = body_json(refused).await;
     assert!(v["error"].as_str().unwrap().contains("demuxer refused"), "{v}");
+}
+
+/// `/api/v1/snapshot/{id}` takes an id, and the legacy route takes a file
+/// name. Both have to reach the same picture, or the tool that an agent calls
+/// with `{"id": "program"}` answers "no such snapshot".
+#[test]
+fn a_snapshot_is_named_with_or_without_the_extension() {
+    for spelling in ["sheet", "sheet.jpg"] {
+        assert!(
+            crate::snapshot::parse_pick(&snapshot_name(spelling)).is_some(),
+            "{spelling} has to name the contact sheet"
+        );
+    }
+    assert_eq!(
+        crate::snapshot::parse_pick(&snapshot_name("cam1")),
+        Some(crate::snapshot::Pick::Source("cam1".into()))
+    );
+    assert_eq!(
+        crate::snapshot::parse_pick(&snapshot_name("program.jpg")),
+        Some(crate::snapshot::Pick::Program)
+    );
+    // An empty name is still nothing, rather than becoming ".jpg".
+    assert!(crate::snapshot::parse_pick(&snapshot_name("")).is_none());
 }
 
 /// The mosaic layout id has to be stable for as long as the cells are, and to

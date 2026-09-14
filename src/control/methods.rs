@@ -45,6 +45,7 @@ pub(crate) fn body<T: serde::Serialize>(value: T) -> Result<Value, RpcError> {
 pub fn registry() -> Registry<Call> {
     let mut reg = Registry::new();
     register_core(&mut reg);
+    register_introspection(&mut reg);
     program::register(&mut reg);
     sources::register(&mut reg);
     outputs::register(&mut reg);
@@ -142,7 +143,10 @@ fn register_core(reg: &mut Registry<Call>) {
         .mutating(false)
         .no_rest(),
     );
+}
 
+/// What the core will tell you about itself and the machine it is on.
+fn register_introspection(reg: &mut Registry<Call>) {
     reg.register(
         MethodDef::new(
             "agent.state",

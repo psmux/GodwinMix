@@ -227,8 +227,53 @@ impl Server {
         };
         let verb = Method::from_bytes(rest.http.as_bytes())
             .map_err(|_| format!("{} is not an HTTP method", rest.http))?;
+        let args = Value::Object(args);
+        // Caught here as well as at the server, because a model that forgot an
+        // argument should be told which one rather than being told the mixer
+        // could not be reached, which is what a missing argument looks like
+        // when the mixer happens to be down too.
+        self.check_required(tool, method, &args, &path)?;
         let image = tool == "snapshot";
-        Ok(Plan { verb, path, args: Value::Object(args), image })
+        Ok(Plan { verb, path, args, image })
+    }
+
+    /// Every required property of the tool's own input schema, present and
+    /// not empty. The schema is the one the agent was shown, so this refuses
+    /// exactly what the agent was told to send.
+    fn check_required(
+        &self,
+        tool: &str,
+        method: &str,
+        args: &Value,
+        path: &str,
+    ) -> Result<(), String> {
+        let Some(def) = mcp_tools::all_tools(&self.registry).into_iter().find(|t| t["name"] == tool)
+        else {
+            return Ok(());
+        };
+        let required = def["inputSchema"]["required"].as_array().cloned().unwrap_or_default();
+        let missing: Vec<String> = required
+            .iter()
+            .filter_map(Value::as_str)
+            // An id that has already gone into the path is not missing.
+            .filter(|key| !(*key == "id" && !path.contains("{id}")))
+            .filter(|key| {
+                !args
+                    .get(*key)
+                    .map(|v| !v.is_null() && v.as_str().is_none_or(|s| !s.trim().is_empty()))
+                    .unwrap_or(false)
+            })
+            .map(String::from)
+            .collect();
+        if missing.is_empty() {
+            return Ok(());
+        }
+        Err(format!(
+            "{tool} needs {}. Call it again with {} filled in; the schema is on the tool, \
+             and {method} rejects it for the same reason.",
+            missing.iter().map(|m| format!("`{m}`")).collect::<Vec<_>>().join(" and "),
+            missing.join(" and ")
+        ))
     }
 
     async fn execute(&self, plan: Plan) -> Result<Value, String> {
@@ -486,6 +531,24 @@ mod tests {
         // And an empty query is a mistake worth naming.
         let r = s.call(mcp_tools::SEARCH_TOOL, &json!({})).await;
         assert_eq!(r["isError"], true);
+    }
+
+    /// A model that forgot an argument is told which one, before anything is
+    /// sent, because "could not reach the mixer" is what a missing argument
+    /// would otherwise look like when the mixer is down as well.
+    #[tokio::test]
+    async fn a_missing_required_argument_is_an_error_result() {
+        let r = ask(r#"{"jsonrpc":"2.0","id":9,"method":"tools/call","params":{"name":"add_source","arguments":{"name":"x"}}}"#).await;
+        assert_eq!(r["result"]["isError"], true);
+        let text = r["result"]["content"][0]["text"].as_str().unwrap();
+        assert!(text.contains("uri"), "{text}");
+        assert!(!text.contains("could not reach"), "it never left the process: {text}");
+
+        // An empty string is missing too, not a value.
+        let s = server();
+        assert!(s.plan("add_source", &json!({ "uri": "  " })).is_err());
+        // And an id in the path is not missing from the body.
+        assert!(s.plan("remove_source", &json!({ "id": "cam1" })).is_ok());
     }
 
     #[tokio::test]
