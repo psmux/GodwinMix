@@ -1,0 +1,19 @@
+# The example transition plugin. A workspace member through the `plugins/*`
+# glob in the root Cargo.toml, so `cargo build --workspace` builds it and
+# `gmx plugin add ./plugins/wipe` installs it.
+[package]
+name = "gmx-wipe"
+description = "A wipe: the incoming scene slides in over the outgoing one. The worked example of a transition plugin."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+godwinmix-sdk = { path = "../../crates/godwinmix-sdk" }
+serde_json = { workspace = true }
+
+[[bin]]
+name = "gmx-wipe"
+path = "src/main.rs"
