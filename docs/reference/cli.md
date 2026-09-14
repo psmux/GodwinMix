@@ -30,6 +30,47 @@ model rather than a shell:
 godwinmix mcp --url http://127.0.0.1:8080 --token TOKEN
 ```
 
+`--http <addr>` serves the same tools over the Streamable HTTP transport
+instead of stdio: `POST /mcp` for calls, `GET /mcp` for the server initiated
+messages, which is where `notifications/gmx/agent.state` arrives.
+
+```sh
+gmx mcp --http 127.0.0.1:8765 --url http://127.0.0.1:8080
+```
+
+### `gmx agent cost`
+
+What an agent pays to look at this mixer. Three tables: the size of
+`agent.state` at 2, 6 and 16 sources against its budget, the MCP hot tool list
+per profile against the committed baseline in `bench/agent-cost.json`, and one
+snapshot at 320, 640 and 1280 wide with the tokens a vision model charges for
+it. The tool list needs no mixer; the snapshots need a running one.
+
+```sh
+gmx agent cost
+gmx agent cost --json
+gmx agent cost --write-baseline     # move the CI baseline, on purpose
+```
+
+A test fails the build when the hot list grows by more than five percent
+against that baseline, because a tool list is charged for on every call.
+
+### `gmx skill install`
+
+Drops `godwinmix-operate` and `godwinmix-develop` where an AI coding tool
+reads them.
+
+```sh
+gmx skill install --for claude            # or codex, or gemini
+gmx skill install --for codex --print     # show what it would write
+gmx skill install --for claude --project  # into ./.claude/skills rather than ~
+gmx skill list --for gemini               # the skills and where they would go
+```
+
+`godwinmix-operate` is for running a show: the state document, the take, the
+safety rules that will refuse it, what a look costs. `godwinmix-develop` is
+for building on it: the manifest, the contract and the test loop.
+
 Requests answer with the mixer's own reason for refusing rather than a bare
 status code:
 
