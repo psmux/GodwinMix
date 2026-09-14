@@ -1,0 +1,35 @@
+{
+  "id": "take-then-take-again",
+  "instruction": "Put the floor camera up, then the wide one.",
+  "tags": [
+    "take"
+  ],
+  "initial": {
+    "sources": [
+      {
+        "id": "cam-wide",
+        "uri": "test://smpte"
+      },
+      {
+        "id": "cam-close",
+        "uri": "test://ball"
+      },
+      {
+        "id": "cam-floor",
+        "uri": "test://snow"
+      }
+    ],
+    "program": "cam-close"
+  },
+  "expect_changes": [
+    {
+      "what": "program",
+      "to": "cam-floor"
+    },
+    {
+      "what": "program",
+      "to": "cam-wide"
+    }
+  ],
+  "notes": "Two actions in one sentence, in order."
+}

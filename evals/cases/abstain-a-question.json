@@ -1,0 +1,22 @@
+{
+  "id": "abstain-a-question",
+  "instruction": "Is the wide camera live?",
+  "tags": [
+    "abstain"
+  ],
+  "initial": {
+    "sources": [
+      {
+        "id": "cam-wide",
+        "uri": "test://smpte"
+      },
+      {
+        "id": "cam-close",
+        "uri": "test://ball"
+      }
+    ],
+    "program": "cam-wide"
+  },
+  "expect_changes": [],
+  "notes": "A question about the world is not an instruction to change it. Home Assistant's 94.6 against 18.5 is exactly this line."
+}

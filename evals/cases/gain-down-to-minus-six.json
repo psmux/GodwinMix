@@ -1,0 +1,28 @@
+{
+  "id": "gain-down-to-minus-six",
+  "instruction": "Turn the wide camera's audio down to -6 dB.",
+  "tags": [
+    "parameterised",
+    "audio"
+  ],
+  "initial": {
+    "sources": [
+      {
+        "id": "cam-wide",
+        "uri": "test://smpte"
+      },
+      {
+        "id": "cam-close",
+        "uri": "test://ball"
+      }
+    ]
+  },
+  "expect_changes": [
+    {
+      "what": "gain",
+      "id": "cam-wide",
+      "to": "-6.0 dB"
+    }
+  ],
+  "notes": "The number is the whole point: -3 would be a fail."
+}

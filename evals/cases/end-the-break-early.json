@@ -1,0 +1,37 @@
+{
+  "id": "end-the-break-early",
+  "instruction": "Cut the break short, we are running late.",
+  "tags": [
+    "adbreak"
+  ],
+  "initial": {
+    "sources": [
+      {
+        "id": "cam-wide",
+        "uri": "test://smpte"
+      },
+      {
+        "id": "cam-close",
+        "uri": "test://ball"
+      }
+    ],
+    "program": "cam-wide",
+    "adbreak": true
+  },
+  "expect_changes": [
+    {
+      "what": "program",
+      "to": "cam-wide"
+    },
+    {
+      "what": "adbreak",
+      "to": "ended"
+    },
+    {
+      "what": "source",
+      "id": "__ad__",
+      "to": "removed"
+    }
+  ],
+  "notes": "The break is already on air when the instruction arrives."
+}

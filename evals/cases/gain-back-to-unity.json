@@ -1,0 +1,34 @@
+{
+  "id": "gain-back-to-unity",
+  "instruction": "Put the floor camera's audio back to 0 dB.",
+  "tags": [
+    "parameterised",
+    "audio"
+  ],
+  "initial": {
+    "sources": [
+      {
+        "id": "cam-wide",
+        "uri": "test://smpte"
+      },
+      {
+        "id": "cam-close",
+        "uri": "test://ball"
+      },
+      {
+        "id": "cam-floor",
+        "uri": "test://snow"
+      }
+    ],
+    "config": "",
+    "gain": true
+  },
+  "expect_changes": [
+    {
+      "what": "gain",
+      "id": "cam-floor",
+      "to": "0.0 dB"
+    }
+  ],
+  "notes": "Starts at -12 dB, set by the harness, so 0 dB is a change and not a no-op."
+}

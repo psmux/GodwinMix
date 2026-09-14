@@ -1,0 +1,22 @@
+{
+  "id": "abstain-already-on-air",
+  "instruction": "Put the wide camera on air.",
+  "tags": [
+    "abstain"
+  ],
+  "initial": {
+    "sources": [
+      {
+        "id": "cam-wide",
+        "uri": "test://smpte"
+      },
+      {
+        "id": "cam-close",
+        "uri": "test://ball"
+      }
+    ],
+    "program": "cam-wide"
+  },
+  "expect_changes": [],
+  "notes": "It is already there. A take that changes nothing is still a take in the log and still resets the minimum hold, so the right answer is nothing."
+}

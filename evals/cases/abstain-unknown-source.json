@@ -1,0 +1,21 @@
+{
+  "id": "abstain-unknown-source",
+  "instruction": "Put cam9 on air.",
+  "tags": [
+    "abstain"
+  ],
+  "initial": {
+    "sources": [
+      {
+        "id": "cam-wide",
+        "uri": "test://smpte"
+      },
+      {
+        "id": "cam-close",
+        "uri": "test://ball"
+      }
+    ]
+  },
+  "expect_changes": [],
+  "notes": "cam9 is not a source here. Guessing which camera was meant is how the wrong shot goes out; the right answer is no call at all."
+}

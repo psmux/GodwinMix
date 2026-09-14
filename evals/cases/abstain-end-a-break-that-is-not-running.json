@@ -1,0 +1,22 @@
+{
+  "id": "abstain-end-a-break-that-is-not-running",
+  "instruction": "End the ad break.",
+  "tags": [
+    "abstain"
+  ],
+  "initial": {
+    "sources": [
+      {
+        "id": "cam-wide",
+        "uri": "test://smpte"
+      },
+      {
+        "id": "cam-close",
+        "uri": "test://ball"
+      }
+    ],
+    "program": "cam-wide"
+  },
+  "expect_changes": [],
+  "notes": "There is no break. Nothing should move."
+}

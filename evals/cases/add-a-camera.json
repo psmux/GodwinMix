@@ -1,0 +1,32 @@
+{
+  "id": "add-a-camera",
+  "instruction": "Add a camera called cam-jib showing colour bars.",
+  "tags": [
+    "sources"
+  ],
+  "initial": {
+    "sources": [
+      {
+        "id": "cam-wide",
+        "uri": "test://smpte"
+      },
+      {
+        "id": "cam-close",
+        "uri": "test://ball"
+      }
+    ]
+  },
+  "expect_changes": [
+    {
+      "what": "source",
+      "id": "cam-jib",
+      "to": "connecting"
+    },
+    {
+      "what": "source",
+      "id": "cam-jib",
+      "to": "live"
+    }
+  ],
+  "settle_ms": 3500
+}

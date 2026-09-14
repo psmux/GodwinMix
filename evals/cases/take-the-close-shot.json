@@ -1,0 +1,26 @@
+{
+  "id": "take-the-close-shot",
+  "instruction": "Switch to the close camera.",
+  "tags": [
+    "take"
+  ],
+  "initial": {
+    "sources": [
+      {
+        "id": "cam-wide",
+        "uri": "test://smpte"
+      },
+      {
+        "id": "cam-close",
+        "uri": "test://ball"
+      }
+    ],
+    "program": "cam-wide"
+  },
+  "expect_changes": [
+    {
+      "what": "program",
+      "to": "cam-close"
+    }
+  ]
+}
