@@ -252,8 +252,12 @@ export class Composer {
     }
     try {
       const frame = await this.client.call("scene.preview.frame", { width: 960 });
-      if (frame && frame.jpeg) {
-        this.canvas.picture.appendChild(el("img", { src: `data:image/jpeg;base64,${frame.jpeg}`, alt: "" }));
+      // `image`, base64, is what the core answers with. `jpeg` is read as well
+      // because that is what the method's own name suggests and a second
+      // implementation of this endpoint may well use it.
+      const data = frame && (frame.image || frame.jpeg);
+      if (data) {
+        this.canvas.picture.appendChild(el("img", { src: `data:image/jpeg;base64,${data}`, alt: "" }));
         this.note.textContent = "A still of the armed scene. Arm this one to see it move.";
         return;
       }

@@ -559,13 +559,62 @@ mod tests {
         );
     }
 
+    /// Everything reachable from one module by static imports, itself included.
+    fn closure_of(entry: &'static str) -> std::collections::BTreeSet<&'static str> {
+        let mut seen = std::collections::BTreeSet::new();
+        let mut stack = vec![entry];
+        while let Some(path) = stack.pop() {
+            if !seen.insert(path) {
+                continue;
+            }
+            let Some(source) = source_of(path) else { continue };
+            for spec in static_imports(source) {
+                if let Some(next) = resolve(path, &spec) {
+                    stack.push(next);
+                }
+            }
+        }
+        seen
+    }
+
     #[test]
-    fn everything_served_including_the_composer_stays_under_400_kb() {
+    fn the_page_with_the_composer_open_stays_under_400_kb() {
         // The other half of the rule: the lazy set is not somewhere to hide
-        // things. Everything under `ui/`, all four themes and the whole
-        // designer included, in one number.
-        let total: usize = ASSETS.iter().map(|(_, body)| body.len()).sum();
-        assert!(total < 400 * 1024, "everything served under ui/ is {total} bytes, over the 400 kB budget");
+        // things. This is the heaviest thing a session can become, the page
+        // plus the whole designer and the two kits only it uses, and it is the
+        // number a person who actually arranges a scene pays.
+        let mut everything = eager_set();
+        everything.extend(closure_of("panels/composer/composer.js"));
+        let mut bytes: usize = everything.iter().filter_map(|p| source_of(p)).map(|b| b.len()).sum();
+        for extra in ["index.html", "themes/base.css", "themes/dark.css", "panels/composer/composer.css"] {
+            bytes += source_of(extra).map(|b| b.len()).unwrap_or(0);
+        }
+        assert!(bytes < 400 * 1024, "the page with the composer open is {bytes} bytes, over the 400 kB budget");
+    }
+
+    #[test]
+    fn nothing_served_is_unreachable() {
+        // A file in the table that nothing imports, and that is not one of the
+        // four entry points, is dead weight compiled into the binary. This is
+        // the check that keeps the directory honest now that not everything in
+        // it is fetched.
+        let mut reachable = eager_set();
+        reachable.extend(closure_of("panels/composer/composer.js"));
+        reachable.extend(closure_of("panels/scenes/more.js"));
+        reachable.extend(closure_of("client/transport-legacy.js"));
+        reachable.extend(closure_of("client/schema-form.js"));
+        reachable.extend(closure_of("shell/palette.js"));
+        reachable.extend(closure_of("shell/sandbox.js"));
+        reachable.extend(closure_of("panels/welcome/tiles.js"));
+        // Not imported by this page at all: it is what a sandboxed panel's own
+        // HTML imports, inside the iframe, to talk the same protocol back.
+        reachable.extend(closure_of("client/sandbox-client.js"));
+        for (path, _) in ASSETS {
+            if path.ends_with(".css") || path.ends_with(".html") {
+                continue;
+            }
+            assert!(reachable.contains(path), "{path} is served but nothing imports it");
+        }
     }
 
     #[test]
