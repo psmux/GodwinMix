@@ -60,6 +60,7 @@ pub mod scene;
 pub mod snapshot;
 pub mod telemetry;
 pub mod state;
+pub mod tasks;
 
 /// The handful of names a program that embeds the engine reaches for first.
 ///
