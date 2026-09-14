@@ -13,21 +13,21 @@
 // hand over; that video is left to the browser, which keeps drawing it, and
 // the report says so.
 //
-// The sidecar sets window.__lbxHideMedia in front of this script when it runs
+// The sidecar sets window.__gmxHideMedia in front of this script when it runs
 // with --transparent. That is the other half of the handover: a video the
 // mixer is about to draw itself must not also be painted by Chromium. See
 // hide().
 
 (() => {
   "use strict";
-  if (window.__lbxDetect) return;
-  window.__lbxDetect = true;
+  if (window.__gmxDetect) return;
+  window.__gmxDetect = true;
 
-  const TAG = "LBX_MEDIA ";
+  const TAG = "GMX_MEDIA ";
   let last = "";
 
   // Set by the one line prelude the sidecar puts in front of this script.
-  const hideMedia = !!window.__lbxHideMedia;
+  const hideMedia = !!window.__gmxHideMedia;
   // Elements hide() has taken over. Their paused and muted state is ours from
   // then on, so what the page itself asked for is remembered separately.
   const taken = new WeakSet();
@@ -48,12 +48,12 @@
     const r = el.getBoundingClientRect();
     // A page that feeds its player through Media Source Extensions (hls.js and
     // anything else that builds its own buffers) can say what it is really
-    // playing, with data-lbx-src on the element. Without that the element's
+    // playing, with data-gmx-src on the element. Without that the element's
     // own address is a blob: that exists nowhere outside this renderer, the
     // mixer cannot open it, and the whole page has to be rendered instead.
     // A page that declares its address gets its video handed over like any
     // other, which is what lets its sound be balanced separately.
-    const declared = (el.dataset && el.dataset.lbxSrc) || "";
+    const declared = (el.dataset && el.dataset.gmxSrc) || "";
     const src = declared || el.currentSrc || el.src || "";
     // Media Source Extensions and the File API both hand the element a blob:
     // URL that only exists inside this renderer. Encrypted Media Extensions

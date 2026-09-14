@@ -368,7 +368,7 @@ mod tests {
 
     #[test]
     fn a_listed_name_resolves_inside_the_library_and_nowhere_else() {
-        let dir = std::env::temp_dir().join(format!("lbx-resolve-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("gmx-resolve-{}", std::process::id()));
         let _ = std::fs::create_dir_all(dir.join("sub"));
         std::fs::write(dir.join("a.mp4"), b"x").unwrap();
         std::fs::write(dir.join("sub").join("c.mkv"), b"x").unwrap();
@@ -385,7 +385,7 @@ mod tests {
     #[test]
     fn a_converted_copy_folds_onto_its_original() {
         let _ = gst::init();
-        let dir = std::env::temp_dir().join(format!("lbx-fold-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("gmx-fold-{}", std::process::id()));
         let _ = std::fs::create_dir_all(&dir);
         std::fs::write(dir.join("clip.mkv"), b"x").unwrap();
         std::fs::write(dir.join("clip.web.mp4"), b"x").unwrap();
@@ -425,7 +425,7 @@ mod tests {
     #[test]
     fn lists_media_and_ignores_everything_else() {
         let _ = gst::init();
-        let dir = std::env::temp_dir().join(format!("lbx-media-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("gmx-media-{}", std::process::id()));
         let _ = std::fs::create_dir_all(dir.join("sub"));
         std::fs::write(dir.join("b.mp4"), b"not really a video").unwrap();
         std::fs::write(dir.join("a.mov"), b"nor this").unwrap();

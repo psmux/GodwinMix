@@ -547,6 +547,36 @@ dependencies = [
 ]
 
 [[package]]
+name = "godwinmix"
+version = "0.2.0"
+dependencies = [
+ "anyhow",
+ "axum",
+ "base64",
+ "clap",
+ "futures-util",
+ "glib",
+ "gstreamer",
+ "gstreamer-app",
+ "gstreamer-audio",
+ "gstreamer-pbutils",
+ "gstreamer-video",
+ "image",
+ "libc",
+ "parking_lot",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "shell-words",
+ "thiserror",
+ "tokio",
+ "toml 0.9.12+spec-1.1.0",
+ "tower-http",
+ "tracing",
+ "tracing-subscriber",
+]
+
+[[package]]
 name = "gstreamer"
 version = "0.24.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1043,36 +1073,6 @@ name = "litemap"
 version = "0.8.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "47d9d19d1d6efa0109d2f65ff4c85cddd50bd572e5a00127ab10987290bcefae"
-
-[[package]]
-name = "liveboxmix"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "axum",
- "base64",
- "clap",
- "futures-util",
- "glib",
- "gstreamer",
- "gstreamer-app",
- "gstreamer-audio",
- "gstreamer-pbutils",
- "gstreamer-video",
- "image",
- "libc",
- "parking_lot",
- "reqwest",
- "serde",
- "serde_json",
- "shell-words",
- "thiserror",
- "tokio",
- "toml 0.9.12+spec-1.1.0",
- "tower-http",
- "tracing",
- "tracing-subscriber",
-]
 
 [[package]]
 name = "lock_api"

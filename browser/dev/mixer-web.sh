@@ -6,7 +6,7 @@
 set -e
 export PATH="/home/dev/.cargo/bin:/opt/homebrew/bin:/usr/bin:/bin"
 PAGE="${1:-sync}"; URL="${2:-http://127.0.0.1:8080}"
-D="$(cd "$(dirname "$0")" && pwd)"; LB="$D/../../target/release/liveboxmix"; OUT="$D/out"
+D="$(cd "$(dirname "$0")" && pwd)"; LB="$D/../../target/release/godwinmix"; OUT="$D/out"
 "$LB" ctl --url "$URL" source remove web1 >/dev/null 2>&1 || true
 "$LB" ctl --url "$URL" source add web1 "web+http://$WEB_HOST/$PAGE.html" --name "Web page"
 sleep ${PRE_TAKE:-6}

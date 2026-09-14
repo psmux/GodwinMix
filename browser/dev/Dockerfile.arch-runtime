@@ -1,6 +1,6 @@
 # The browser sidecar with H.264 and AAC, as a container: Arch's CEF plus the
 # sidecar built against it (dev/linux-arch-codecs.sh puts the binary in the
-# lbx-target-x86 volume; copy target/release/liveboxmix-browser into this
+# gmx-target-x86 volume; copy target/release/godwinmix-browser into this
 # directory before building). stdout is the stream, so it runs under the
 # mixer through dev/sidecar-docker.sh.
 FROM --platform=linux/amd64 archlinux:latest
@@ -9,8 +9,8 @@ RUN sed -i "s/^#DisableSandbox/DisableSandbox/; /^\[options\]/a DisableSandbox" 
     cef gstreamer gst-plugins-base gst-plugins-good xorg-server-xvfb ttf-dejavu noto-fonts \
     && pacman -Scc --noconfirm
 # The sidecar finds libcef and the resources next to itself.
-RUN mkdir -p /opt/lbx && cp -r /usr/lib/cef/. /opt/lbx/
-COPY liveboxmix-browser /opt/lbx/liveboxmix-browser
-COPY entrypoint.sh /opt/lbx/entrypoint.sh
+RUN mkdir -p /opt/gmx && cp -r /usr/lib/cef/. /opt/gmx/
+COPY godwinmix-browser /opt/gmx/godwinmix-browser
+COPY entrypoint.sh /opt/gmx/entrypoint.sh
 ENV DISPLAY=:99
-ENTRYPOINT ["/opt/lbx/entrypoint.sh"]
+ENTRYPOINT ["/opt/gmx/entrypoint.sh"]

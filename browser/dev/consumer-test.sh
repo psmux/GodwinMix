@@ -15,4 +15,4 @@ run cat            cat
 run fdsrc_fakesink gst-launch-1.0 fdsrc fd=0 ! fakesink sync=false
 run fdsrc_decodebin gst-launch-1.0 fdsrc fd=0 ! decodebin name=d d. ! queue ! fakesink sync=false d. ! queue ! fakesink sync=false
 run fdsrc_1M_queue gst-launch-1.0 fdsrc fd=0 blocksize=1048576 ! queue max-size-bytes=300000000 max-size-buffers=0 max-size-time=0 ! decodebin name=d d. ! queue ! fakesink sync=false d. ! queue ! fakesink sync=false
-docker ps -q --filter ancestor=lbx-browser | xargs -r docker kill >/dev/null 2>&1; true
+docker ps -q --filter ancestor=gmx-browser | xargs -r docker kill >/dev/null 2>&1; true

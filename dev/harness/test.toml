@@ -45,5 +45,5 @@ uri = "rtmp://127.0.0.1:1935/live/program"
 # web+ sources render in the containerised sidecar (the CEF build with H.264
 # and AAC); the native .app next to the mixer is the codec-less official CEF.
 [browser]
-sidecar = "/home/dev/workspace/LiveboxMix/browser/dev/sidecar-docker.sh"
-env = { DOCKER_HOST = "unix:///home/dev/.colima/default/docker.sock", LBX_SIDECAR_LOG = "/home/dev/workspace/LiveboxMix/dev/harness/logs/sidecar.log" }
+sidecar = "/home/dev/workspace/GodwinMix/browser/dev/sidecar-docker.sh"
+env = { DOCKER_HOST = "unix:///home/dev/.colima/default/docker.sock", GMX_SIDECAR_LOG = "/home/dev/workspace/GodwinMix/dev/harness/logs/sidecar.log" }

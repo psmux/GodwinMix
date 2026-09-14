@@ -1,4 +1,4 @@
-//! liveboxmix-browser: a web page as a raw audio and video source.
+//! godwinmix-browser: a web page as a raw audio and video source.
 //!
 //! Chromium is embedded through CEF and run windowless. It hands back every
 //! rendered frame as a BGRA buffer and every audio packet as PCM, straight from
@@ -9,8 +9,8 @@
 //! Output is a Matroska stream of raw I420 video and float PCM on stdout, which
 //! is exactly what the mixer's `exec:` source reads:
 //!
-//!   liveboxmix ctl source add site \
-//!     "exec:liveboxmix-browser --url https://example.com --width 1920 --height 1080 --fps 30"
+//!   godwinmix ctl source add site \
+//!     "exec:godwinmix-browser --url https://example.com --width 1920 --height 1080 --fps 30"
 //!
 //! CEF's process model: the same executable is re-launched by Chromium for its
 //! renderer, GPU and utility subprocesses. `execute_process` returns >= 0 in
@@ -60,7 +60,7 @@ fn opts() -> Opts {
         // Every instance gets its own profile. CEF treats the cache directory
         // as a process singleton lock, so two sources sharing one would block
         // each other, and `initialize` would hang waiting for the lock.
-        cache_dir: std::env::temp_dir().join(format!("lbx-browser-{}", std::process::id())),
+        cache_dir: std::env::temp_dir().join(format!("gmx-browser-{}", std::process::id())),
         detect_media: false,
         transparent: false,
     };
@@ -257,7 +257,7 @@ const UNMUTE_JS: &str = include_str!("unmute.js");
 
 /// Prefix the injected script puts on its console line, so the page's own
 /// logging is not mistaken for a report.
-const MEDIA_TAG: &str = "LBX_MEDIA ";
+const MEDIA_TAG: &str = "GMX_MEDIA ";
 
 wrap_load_handler! {
     struct Load {
@@ -285,7 +285,7 @@ wrap_load_handler! {
                 if let Some(f) = frame.as_deref() {
                     f.execute_java_script(
                         Some(&UNMUTE_JS.into()),
-                        Some(&"lbx://unmute.js".into()),
+                        Some(&"gmx://unmute.js".into()),
                         0,
                     );
                 }
@@ -296,13 +296,13 @@ wrap_load_handler! {
                     // second injection because the flag has to be set before
                     // the script reads it, and the script refuses to run twice.
                     let js = if self.transparent {
-                        format!("window.__lbxHideMedia = true;\n{DETECT_MEDIA_JS}")
+                        format!("window.__gmxHideMedia = true;\n{DETECT_MEDIA_JS}")
                     } else {
                         DETECT_MEDIA_JS.to_string()
                     };
                     f.execute_java_script(
                         Some(&js.as_str().into()),
-                        Some(&"lbx://detect-media.js".into()),
+                        Some(&"gmx://detect-media.js".into()),
                         0,
                     );
                 }
@@ -481,12 +481,12 @@ wrap_app! {
             cl.append_switch_with_value(
                 Some(&CefString::from("user-agent-product")),
                 Some(&CefString::from(
-                    concat!("LiveboxMix/", env!("CARGO_PKG_VERSION")).to_string().as_str(),
+                    concat!("GodwinMix/", env!("CARGO_PKG_VERSION")).to_string().as_str(),
                 )),
             );
             // Extra Chromium switches from the operator, comma separated,
-            // without the leading dashes: LBX_BROWSER_SWITCHES="enable-gpu,foo=bar".
-            if let Ok(extra) = std::env::var("LBX_BROWSER_SWITCHES") {
+            // without the leading dashes: GMX_BROWSER_SWITCHES="enable-gpu,foo=bar".
+            if let Ok(extra) = std::env::var("GMX_BROWSER_SWITCHES") {
                 for sw in extra.split(',').map(str::trim).filter(|s| !s.is_empty()) {
                     match sw.split_once('=') {
                         Some((k, v)) => cl.append_switch_with_value(

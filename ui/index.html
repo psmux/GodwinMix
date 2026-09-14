@@ -1,7 +1,7 @@
 <!doctype html>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>LiveboxMix</title>
+<title>GodwinMix</title>
 <style>
   :root {
     --bg: #090b0e; --panel: #12151a; --panel2: #171b21; --raise: #1f242c;
@@ -652,7 +652,7 @@
 </style>
 
 <header>
-  <div class="brand"><i></i>LiveboxMix</div>
+  <div class="brand"><i></i>GodwinMix</div>
   <div id="tally"><span class="tl">on<br>program</span><span class="tn" id="pgm">…</span></div>
   <div id="pgmmeter" title="Program bus, peak dBFS. This is what the outputs are carrying.">
     <span class="cap">pgm<br>audio</span>
@@ -768,20 +768,32 @@
 "use strict";
   // The desktop shell announces itself in the user agent. In a browser these
   // two buttons mean nothing and stay hidden.
-  if (navigator.userAgent.includes("LiveboxMix-Desktop")) {
+  if (navigator.userAgent.includes("GodwinMix-Desktop")) {
     const desk = document.getElementById("desk");
     desk.hidden = false;
-    document.getElementById("closewin").onclick = () => { location.href = "liveboxmix://quit"; };
+    document.getElementById("closewin").onclick = () => { location.href = "godwinmix://quit"; };
     const stop = document.getElementById("stopall");
     let armed = 0;
     // Two clicks, four seconds apart at most. A modal confirm would do the
     // same job and freeze the window while it asked.
     stop.onclick = () => {
-      if (Date.now() - armed < 4000) { location.href = "liveboxmix://quit-all"; return; }
+      if (Date.now() - armed < 4000) { location.href = "godwinmix://quit-all"; return; }
       armed = Date.now(); stop.textContent = "Click again to stop everything";
       setTimeout(() => { if (Date.now() - armed >= 4000) stop.textContent = "Stop everything"; }, 4200);
     };
   }
+// The rename moved every stored key from lbx. to gmx. Whatever this browser
+// remembered under the old names is moved across once, so an operator does not
+// have to type the token again or lose the strips they had hidden. Delete this
+// block in the release after 0.2.
+try {
+  for (const k of ["token", "adUri", "strips"]) {
+    const old = localStorage.getItem("lbx." + k);
+    if (old !== null && localStorage.getItem("gmx." + k) === null) localStorage.setItem("gmx." + k, old);
+    if (old !== null) localStorage.removeItem("lbx." + k);
+  }
+} catch {}
+
 const $ = (id) => document.getElementById(id);
 let status = null;
 let objectUrl = null;
@@ -792,7 +804,7 @@ let objectUrl = null;
 // in its query because a WebSocket has nowhere else to put it. Without a token
 // configured none of this is ever exercised.
 let token = null;
-try { token = localStorage.getItem("lbx.token"); } catch {}
+try { token = localStorage.getItem("gmx.token"); } catch {}
 let tokenAsked = false;
 
 function askToken() {
@@ -803,7 +815,7 @@ function askToken() {
   const t = window.prompt("This mixer needs a token.");
   if (!t || !t.trim()) return false;
   token = t.trim();
-  try { localStorage.setItem("lbx.token", token); } catch {}
+  try { localStorage.setItem("gmx.token", token); } catch {}
   return true;
 }
 
@@ -819,7 +831,7 @@ async function api(path, init = {}) {
     // A stored token that no longer works is worse than none: forget it so a
     // reload asks again instead of failing quietly forever.
     token = null;
-    try { localStorage.removeItem("lbx.token"); } catch {}
+    try { localStorage.removeItem("gmx.token"); } catch {}
   }
   return r;
 }
@@ -1391,7 +1403,7 @@ function adTarget() {
 function rollAd() {
   const uri = adTarget();
   if (!uri) { alert_("warning", "Pick a clip first."); return; }
-  try { localStorage.setItem("lbx.adUri", uri); } catch {}
+  try { localStorage.setItem("gmx.adUri", uri); } catch {}
   // A cue is an absolute point on the program's running time, so the mixer can
   // arm it on the pipeline clock and land it on the intended frame.
   const delay = Math.max(0, Number($("adcue").value) || 0);
@@ -1406,7 +1418,7 @@ $("adplay").onclick = rollAd;
 $("adstop").onclick = () => post("/api/adbreak/end");
 $("aduri").oninput = renderAd;
 try {
-  const saved = localStorage.getItem("lbx.adUri");
+  const saved = localStorage.getItem("gmx.adUri");
   if (saved) selectedClip = saved;
 } catch {}
 loadMedia();
@@ -1659,7 +1671,7 @@ let deferredRender = false;
 // an interface that cannot remember simply starts with everything showing.
 const STRIPS = { meter: true, fader: true, lane: true };
 try {
-  const saved = JSON.parse(localStorage.getItem("lbx.strips") || "null");
+  const saved = JSON.parse(localStorage.getItem("gmx.strips") || "null");
   if (saved && typeof saved === "object") {
     for (const k of Object.keys(STRIPS)) if (typeof saved[k] === "boolean") STRIPS[k] = saved[k];
   }
@@ -1675,7 +1687,7 @@ function applyStrips() {
   // label never changes leaves an operator guessing which way it goes.
   $("tgvert").textContent = STRIPS.meter || STRIPS.fader ? "Hide vertical" : "Show vertical";
   $("tghorz").textContent = STRIPS.lane ? "Hide horizontal" : "Show horizontal";
-  try { localStorage.setItem("lbx.strips", JSON.stringify(STRIPS)); } catch {}
+  try { localStorage.setItem("gmx.strips", JSON.stringify(STRIPS)); } catch {}
 }
 $("tgmeter").onclick = () => { STRIPS.meter = !STRIPS.meter; applyStrips(); };
 $("tgfader").onclick = () => { STRIPS.fader = !STRIPS.fader; applyStrips(); };
@@ -2121,7 +2133,7 @@ const KIND_UI = {
     hint: "Runs on the mixer machine; its output is the source. Needs security.allow_exec_sources.",
   },
   file: {
-    placeholder: "/var/lib/liveboxmix/media/clip.mp4",
+    placeholder: "/var/lib/godwinmix/media/clip.mp4",
     hint: "A video file already on the mixer machine. The library above adds these for you.",
   },
 };

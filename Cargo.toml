@@ -1,9 +1,24 @@
 [package]
-name = "liveboxmix"
-version = "0.1.0"
+name = "godwinmix"
+version = "0.2.0"
 edition = "2021"
 rust-version = "1.82"
 description = "Live RTMP video mixer with hot source switching and uninterrupted output"
+
+# The program is a library with two binaries over it. `gmx` is the name an
+# operator types; `godwinmix` is the name a package manager and a service unit
+# use. They are the same code, not a copy each.
+[lib]
+name = "godwinmix"
+path = "src/lib.rs"
+
+[[bin]]
+name = "godwinmix"
+path = "src/main.rs"
+
+[[bin]]
+name = "gmx"
+path = "src/bin/gmx.rs"
 
 [dependencies]
 gstreamer = "0.24"

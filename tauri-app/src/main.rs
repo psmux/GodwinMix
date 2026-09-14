@@ -1,4 +1,4 @@
-// LiveboxMix desktop shell.
+// GodwinMix desktop shell.
 //
 // Deliberately thin. The operator UI is a web app served by the mixer daemon,
 // so this is a native window pointed at it. Running the same UI locally and
@@ -22,7 +22,8 @@ use tauri::{Manager, WebviewWindowBuilder};
 
 /// What the page sees in `navigator.userAgent`, so the UI can show the two
 /// exit buttons only when it is running in this window and not in a browser.
-const USER_AGENT: &str = "LiveboxMix-Desktop";
+/// The page matches on the name, so the version after it is free to change.
+const USER_AGENT: &str = concat!("GodwinMix-Desktop/", env!("CARGO_PKG_VERSION"));
 
 /// Where the mixer is. The same address the window is pointed at.
 const MIXER: &str = "127.0.0.1:8080";
@@ -53,13 +54,16 @@ fn main() {
         .setup(|app| {
             // The window is built here rather than by the config so that
             // navigations can be watched: the UI's two exit buttons navigate
-            // to liveboxmix://quit and liveboxmix://quit-all, which is the
+            // to godwinmix://quit and godwinmix://quit-all, which is the
             // one channel a page has into this shell without a plugin.
+            // liveboxmix:// is answered too, for one release: a page cached
+            // from before the rename would otherwise have a quit button that
+            // navigates the window to a scheme nothing handles.
             let cfg = app.config().app.windows[0].clone();
             WebviewWindowBuilder::from_config(app, &cfg)?
                 .user_agent(USER_AGENT)
                 .on_navigation(|url| {
-                    if url.scheme() != "liveboxmix" {
+                    if !matches!(url.scheme(), "godwinmix" | "liveboxmix") {
                         return true;
                     }
                     match url.host_str().unwrap_or("") {
@@ -80,7 +84,7 @@ fn main() {
                 .accelerator("CmdOrCtrl+Shift+Q")
                 .build(app)?;
             // The first submenu is the application menu on macOS.
-            let app_menu = SubmenuBuilder::new(app, "LiveboxMix")
+            let app_menu = SubmenuBuilder::new(app, "GodwinMix")
                 .item(&quit)
                 .item(&quit_all)
                 .build()?;
@@ -109,5 +113,5 @@ fn main() {
             Ok(())
         })
         .run(tauri::generate_context!())
-        .expect("failed to start the LiveboxMix desktop shell");
+        .expect("failed to start the GodwinMix desktop shell");
 }

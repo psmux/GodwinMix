@@ -2,7 +2,7 @@
 set -e
 cd /work/browser; export CEF_PATH=/cefcache
 cargo build --release 2>&1 | grep -E '^(error|\s+-->)' -A6 | head -20 || true
-BIN=/work/browser/target/release/liveboxmix-browser; OUT=/work/browser/dev/out
+BIN=/work/browser/target/release/godwinmix-browser; OUT=/work/browser/dev/out
 Xvfb :99 -screen 0 1280x720x24 -nolisten tcp >/dev/null 2>&1 &
 sleep 1; export DISPLAY=:99
 echo "=== audio pts vs arrival ==="

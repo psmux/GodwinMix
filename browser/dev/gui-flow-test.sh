@@ -2,7 +2,7 @@
 # The operator's flow, driven through the API exactly as the UI drives it:
 # paste plain URLs, add, click tiles. The programme is recorded throughout.
 export PATH="/home/dev/.cargo/bin:/opt/homebrew/bin:/usr/bin:/bin"; export DOCKER_HOST=unix://$HOME/.colima/default/docker.sock
-cd "$(dirname "$0")/../.."; LB=target/release/liveboxmix; OUT=browser/dev/out; API=http://127.0.0.1:8080
+cd "$(dirname "$0")/../.."; LB=target/release/godwinmix; OUT=browser/dev/out; API=http://127.0.0.1:8080
 have() { $LB ctl source list | awk '{print $1}' | grep -qx "$1"; }
 add() { have "$2" && { echo "  $2 already there"; return; }; printf "  add %-16s -> HTTP %s\n" "$2" "$(curl -s -o /dev/null -w '%{http_code}' -X POST $API/api/sources -H 'content-type: application/json' -d "$1")"; }
 echo "=== add sites (no prefix, no id) ==="
@@ -27,6 +27,6 @@ for seg in "1 8 cam1" "12 8 h264-page" "22 8 youtube" "32 8 h264-page" "42 6 cam
   printf "  %-11s %-26s %s\n" "$3" "$v" "$m"
 done
 echo "=== sync on the H264 page segments ==="; python3 browser/dev/measure-sync.py $CAP -ss 11 -t 10; python3 browser/dev/measure-sync.py $CAP -ss 31 -t 10
-echo "=== containers match web sources? ==="; echo "  web sources: $($LB ctl source list | grep -c 'web+')  containers: $(docker ps -q --filter ancestor=lbx-browser | wc -l | tr -d ' ')"
+echo "=== containers match web sources? ==="; echo "  web sources: $($LB ctl source list | grep -c 'web+')  containers: $(docker ps -q --filter ancestor=gmx-browser | wc -l | tr -d ' ')"
 echo "  dropouts logged during the run: $(tail -400 dev/harness/logs/sidecar.log | grep -c re-anchored)"
 ffmpeg -hide_banner -loglevel error -y -i $CAP -vf "select='eq(n\,150)+eq(n\,480)+eq(n\,780)',tile=3x1,scale=1536:-1" -frames:v 1 $OUT/gui_flow_tiles.png && echo "  frames from the three sites: $OUT/gui_flow_tiles.png"

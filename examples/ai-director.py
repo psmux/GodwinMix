@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""An AI director for LiveboxMix.
+"""An AI director for GodwinMix.
 
 Every few seconds this reads the mixer's compact state (GET /api/agent/state),
 decides whether it needs to see the picture, and if so fetches the mosaic of
@@ -196,15 +196,15 @@ def summarise(state):
 
 def main():
     ap = argparse.ArgumentParser(
-        description="Direct a LiveboxMix programme with a Claude model.",
+        description="Direct a GodwinMix programme with a Claude model.",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=__doc__.split("Run it:")[0].strip(),
     )
     ap.add_argument("goal", help="what the programme should show, in plain words")
-    ap.add_argument("--url", default=os.environ.get("LIVEBOXMIX_URL", "http://127.0.0.1:8080"),
-                    help="the mixer's control address (default: $LIVEBOXMIX_URL or http://127.0.0.1:8080)")
-    ap.add_argument("--token", default=os.environ.get("LIVEBOXMIX_TOKEN"),
-                    help="bearer token for the mixer (default: $LIVEBOXMIX_TOKEN)")
+    ap.add_argument("--url", default=os.environ.get("GODWINMIX_URL", "http://127.0.0.1:8080"),
+                    help="the mixer's control address (default: $GODWINMIX_URL or http://127.0.0.1:8080)")
+    ap.add_argument("--token", default=os.environ.get("GODWINMIX_TOKEN"),
+                    help="bearer token for the mixer (default: $GODWINMIX_TOKEN)")
     ap.add_argument("--interval", type=float, default=2.0,
                     help="seconds between cycles, 1 or more (default 2)")
     ap.add_argument("--look-every", type=int, default=5,

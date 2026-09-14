@@ -25,7 +25,7 @@ for d in "$DIST" "$REL"; do
 done
 echo "libcef now: $(ls -la $REL/libcef.so | awk '{print $5}') bytes; h264 symbols: $(strings $REL/libcef.so | grep -c 'H264Decoder\|ff_h264' || true)"
 
-BIN=$REL/liveboxmix-browser; OUT=/work/browser/dev/out-arch; mkdir -p "$OUT"
+BIN=$REL/godwinmix-browser; OUT=/work/browser/dev/out-arch; mkdir -p "$OUT"
 Xvfb :99 -screen 0 1280x720x24 -nolisten tcp >/dev/null 2>&1 &
 sleep 1; export DISPLAY=:99
 for page in video-mp4 sync; do

@@ -495,7 +495,7 @@ mod tests {
     #[test]
     fn moov_first_reads_the_box_order() {
         // moov before mdat.
-        let dir = std::env::temp_dir().join(format!("lbx-moov-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("gmx-moov-{}", std::process::id()));
         let _ = std::fs::create_dir_all(&dir);
         let mut good = Vec::new();
         good.extend_from_slice(&16u32.to_be_bytes());

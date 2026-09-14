@@ -1,9 +1,9 @@
 #!/bin/sh
-# Capture a web page, picture and sound, and write it to stdout for LiveboxMix.
+# Capture a web page, picture and sound, and write it to stdout for GodwinMix.
 #
 # Used as an `exec:` source:
 #
-#   liveboxmix ctl source add site \
+#   godwinmix ctl source add site \
 #     "exec:/path/to/browser-source.sh https://example.com/page"
 #
 # A real Chromium renders the page on a virtual display while its audio goes to
@@ -24,7 +24,7 @@ H="${3:-720}"
 FPS="${4:-30}"
 # A display number unlikely to collide when several of these run at once.
 DISP="${BROWSER_SOURCE_DISPLAY:-$((90 + (($$ % 60))))}"
-SINK="lbxcap$$"
+SINK="gmxcap$$"
 PROFILE="$(mktemp -d)"
 
 CHROME="${CHROME_BIN:-}"
@@ -46,7 +46,7 @@ cleanup() {
 }
 trap cleanup EXIT INT TERM
 
-export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/tmp/lbx-xdg-$$}"
+export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/tmp/gmx-xdg-$$}"
 mkdir -p "$XDG_RUNTIME_DIR" && chmod 700 "$XDG_RUNTIME_DIR"
 
 # A sink with no hardware behind it gives the tab somewhere to play, and its

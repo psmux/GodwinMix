@@ -1,5 +1,5 @@
-# LiveboxMix inside the container built from deploy/docker/Dockerfile.
-# Sources are added from the UI or the API and kept in liveboxmix.runtime.toml
+# GodwinMix inside the container built from deploy/docker/Dockerfile.
+# Sources are added from the UI or the API and kept in godwinmix.runtime.toml
 # next to this file. The programme goes to an RTMP server; point `outputs` at the real RTMP destination when there is one, or
 # add it while live with `POST /api/outputs`.
 
@@ -29,11 +29,11 @@ allow_exec_sources = false
 
 [browser]
 # The CEF sidecar with H.264 and AAC, shipped in the image next to the mixer.
-sidecar = "/opt/lbx/bin/liveboxmix-browser"
+sidecar = "/opt/gmx/bin/godwinmix-browser"
 overlay_fps = 10
 
 [media]
-dir = "/var/lib/liveboxmix/media"
+dir = "/var/lib/godwinmix/media"
 
 [control]
 bind = "0.0.0.0:8080"

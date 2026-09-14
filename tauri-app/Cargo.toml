@@ -1,6 +1,6 @@
 [package]
-name = "liveboxmix-desktop"
-version = "0.1.0"
+name = "godwinmix-desktop"
+version = "0.2.0"
 edition = "2021"
 
 # Its own workspace: this crate is built separately from the mixer daemon and

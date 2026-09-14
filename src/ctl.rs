@@ -1,4 +1,4 @@
-//! `liveboxmix ctl`: drive a running mixer from the command line.
+//! `godwinmix ctl`: drive a running mixer from the command line.
 //!
 //! The daemon is controlled entirely over HTTP, so this is a thin client rather
 //! than a second control path. Everything it does can equally be done with curl

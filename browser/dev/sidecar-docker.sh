@@ -5,7 +5,7 @@
 # group; that reaches this script, not the container (its stdout is a pipe to
 # the Docker daemon, so it would not notice the reader going away), so the
 # signal is forwarded by name and the container is gone before this exits.
-NAME="lbx-browser-$$"
+NAME="gmx-browser-$$"
 # TERM first, so the browser can close; then, if the container is still there
 # a few seconds on, remove it by force. A Chromium that does not act on TERM
 # left containers running for hours after their mixer was gone, each one
@@ -19,15 +19,15 @@ stop() {
   exit 0
 }
 trap stop TERM INT HUP
-# LBX_SIDECAR_LOG=<file> keeps a copy of the sidecar's stderr, which the mixer
+# GMX_SIDECAR_LOG=<file> keeps a copy of the sidecar's stderr, which the mixer
 # only logs at debug level. A copy, through tee, and not a redirect: the mixer
 # reads this stderr when it probes a page for superimpose, and a plain
 # `exec 2>>file` closed that pipe on it, so every probe through this script
 # came back empty and the source quietly rendered the page whole.
-if [ -n "$LBX_SIDECAR_LOG" ]; then exec 2> >(tee -a "$LBX_SIDECAR_LOG" >&2); fi
+if [ -n "$GMX_SIDECAR_LOG" ]; then exec 2> >(tee -a "$GMX_SIDECAR_LOG" >&2); fi
 # --log-driver none: the stream is stdout, and the default json-file driver copies
 # everything a container writes to disk. 41 MB/s of raw video filled a 30 GB
 # disk in minutes, and the players stalled on the full disk.
-docker run -i --rm --init --log-driver none --name "$NAME" ${LBX_DOCKER_ARGS:---network host} lbx-browser "$@" &
+docker run -i --rm --init --log-driver none --name "$NAME" ${GMX_DOCKER_ARGS:---network host} gmx-browser "$@" &
 CHILD=$!
 wait "$CHILD"
