@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" role="img" aria-label="WHIP">
+  <title>WHIP</title>
+  <circle cx="12" cy="12" r="2.5"/>
+  <path d="M12 3a9 9 0 0 1 7.8 13.5M12 21a9 9 0 0 1-7.8-13.5"/>
+  <path d="M19 4.5 21 3l-.4 2.6M5 19.5 3 21l.4-2.6"/>
+</svg>

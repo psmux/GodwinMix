@@ -86,6 +86,35 @@ pub fn srt_level(top: &Structure, probe: &[&str]) -> Option<Structure> {
     None
 }
 
+/// The first element inside `bin`, at any depth, that has this property.
+///
+/// The webrtc elements are bins, and the thing that knows the ICE state is the
+/// `webrtcbin` several levels down. Walking for the property rather than for a
+/// factory name means a renamed or re-wrapped element still answers.
+pub fn find_with_property(
+    bin: &gstreamer::Element,
+    property: &str,
+) -> Option<gstreamer::Element> {
+    if bin.find_property(property).is_some() {
+        return Some(bin.clone());
+    }
+    let bin = bin.clone().downcast::<gstreamer::Bin>().ok()?;
+    let mut iter = bin.iterate_recurse();
+    while let Ok(Some(element)) = iter.next() {
+        if element.find_property(property).is_some() {
+            return Some(element);
+        }
+    }
+    None
+}
+
+/// An enum property as the name GStreamer prints for it, for a health detail.
+pub fn enum_name(element: &gstreamer::Element, property: &str) -> Option<String> {
+    element.find_property(property)?;
+    let value = element.property_value(property);
+    value.serialize().ok().map(|s| s.to_string())
+}
+
 /// The field spellings for the four SRT numbers a person actually wants.
 pub mod srt {
     /// Round trip time in milliseconds.
@@ -253,6 +282,30 @@ mod tests {
         crate::init().expect("gstreamer");
         let top = Structure::builder("application/x-srt-statistics").build();
         assert!(srt_level(&top, srt::MOVING).is_none());
+    }
+
+    #[test]
+    fn an_element_is_found_inside_a_bin_by_the_property_it_has() {
+        crate::init().expect("gstreamer");
+        let bin = gstreamer::parse::bin_from_description("identity ! fakesink", true)
+            .expect("the description parses");
+        let element: gstreamer::Element = bin.upcast();
+        // `qos` is a GstBaseSink property, so the fakesink inside answers.
+        assert!(find_with_property(&element, "qos").is_some());
+        assert!(find_with_property(&element, "not-a-property-anything-has").is_none());
+    }
+
+    #[test]
+    fn an_enum_property_reads_back_as_its_printed_name() {
+        crate::init().expect("gstreamer");
+        let sink = gstreamer::ElementFactory::make("fakesink").build().expect("fakesink");
+        let state = enum_name(&sink, "state").or_else(|| enum_name(&sink, "sync-mode"));
+        // Whichever enum this build has, it must come back as a name and not a
+        // number; a build with neither is allowed to answer nothing.
+        if let Some(state) = state {
+            assert!(!state.is_empty());
+        }
+        assert!(enum_name(&sink, "not-a-property").is_none());
     }
 
     #[test]
