@@ -715,6 +715,10 @@ impl InputPipeline {
         overlay: Option<MediaReport>,
         thumb: bool,
     ) -> Result<Self> {
+        // Tags every line logged below with this source's instance, so
+        // `log.set {instance, level}` reaches it, and times the build for
+        // `--startup-report`. See `observe::source_span`.
+        let _observe = crate::observe::source_span(&cfg.id);
         let mut provide = crate::plugin::source::resolve_config(cfg)?;
         // A page that was probed and came back with media to take over is
         // built as layers instead. The substitution is here, in the core,
@@ -1792,7 +1796,9 @@ pub fn spawn_exec(id: &str, spec: &ExecSpec) -> Result<(ExecStdout, std::process
     let stderr = child.stderr.take().map(|err| {
         let name = id.to_string();
         StderrReader::spawn(format!("exec-stderr-{id}"), err, move |line| {
-            debug!(source = %name, "{line}");
+            // Inside the instance's span, so `log.set {instance, level}`
+            // reaches a sidecar's own output. See `observe::in_instance`.
+            crate::observe::in_instance(&name, || debug!(source = %name, "{line}"));
         })
     });
 
