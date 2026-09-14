@@ -341,7 +341,7 @@ the section entirely and checks only the mixer.
 copyleft ones it kept:
 
 ```
-copyleft plugins in this tree: x264 x265
+copyleft plugins in this tree: faad x264 x265
 ```
 
 An installer carrying x264 is a GPL installer. `--exclude-gpl` drops those
