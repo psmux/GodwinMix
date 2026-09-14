@@ -42,3 +42,9 @@ clients/typescript/node_modules/
 clients/typescript/dist/
 clients/python/*.egg-info/
 clients/**/__pycache__/
+
+# The staged binary a first party plugin is started from. `gmx plugin add`
+# copies the plugin directory and the core runs `[run] bin` inside the copy, so
+# the binary has to sit beside the manifest rather than in the workspace target
+# directory. dev/harness/stage-plugins.sh puts it there.
+plugins/*/bin/
