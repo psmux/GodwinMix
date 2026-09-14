@@ -201,15 +201,23 @@ def plugin_file(prefix: Path, plugins: Path, registry: Path,
                 name: str, licence: dict[str, str] | None = None) -> Path | None:
     """Where a plugin lives, and under what licence, asked of GStreamer
     rather than guessed."""
+    found = None
+    # Read the whole answer before returning. `Filename` comes before
+    # `License` in what gst-inspect prints, so returning at the first match
+    # would mean never learning the licence, which is how a GPL plugin gets
+    # into a build nobody meant to make copyleft.
     for line in inspect(prefix, plugins, registry, [name]).splitlines():
         m = re.match(r"^\s*License\s+(.+?)\s*$", line)
         if m and licence is not None:
             licence[name] = m.group(1)
+            continue
         m = re.match(r"^\s*Filename:?\s+(.+?)\s*$", line)
-        if m:
+        if m and found is None:
             path = Path(m.group(1))
             if path.is_file():
-                return path
+                found = path
+    if found is not None:
+        return found
     # Every platform names the file the same way, so this is only the fallback
     # for a gst-inspect that answered oddly.
     for suffix in (".dylib", ".so", ".dll"):
@@ -474,8 +482,10 @@ def relocate_macos(out: Path) -> None:
             return False
         if p.suffix in (".dylib", ".so"):
             return True
-        # The binaries have no suffix at all, so the test is the file's magic.
-        return p.read_bytes()[:4] in (b"\xcf\xfa\xed\xfe", b"\xca\xfe\xba\xbe")
+        # The binaries have no suffix at all, so the test is the file's magic:
+        # a 64 bit Mach-O, or a fat one carrying both architectures.
+        with p.open("rb") as f:
+            return f.read(4) in (b"\xcf\xfa\xed\xfe", b"\xca\xfe\xba\xbe")
 
     files = [p for p in out.rglob("*") if mach_o(p)]
     names = {p.name: p for p in files}
@@ -631,8 +641,11 @@ def main() -> int:
     p.add_argument("--budget-mb", type=float, default=0,
                    help="fail if the tree is bigger than this")
     p.add_argument("--exclude-gpl", action="store_true",
-                   help="leave out plugins whose licence is GPL, for a build "
-                        "that is going to be redistributed under Apache 2.0")
+                   help="leave out plugins whose licence is GPL (x264, x265, "
+                        "faad). Note that this drops plugins, not libraries: a "
+                        "libav built against libx264, which is what most "
+                        "distributions ship, still carries it. A licence clean "
+                        "build needs a libav built without it as well")
     return build(p.parse_args())
 
 

@@ -344,10 +344,18 @@ copyleft ones it kept:
 copyleft plugins in this tree: x264 x265
 ```
 
-An installer carrying x264 is a GPL installer. `--exclude-gpl` drops them, and
-the catalogue falls back to openh264, which is exactly what its `license`
-field is for. Whoever cuts a release decides; the script makes sure nobody
-decides by accident.
+An installer carrying x264 is a GPL installer. `--exclude-gpl` drops those
+plugins, and the catalogue falls back to openh264, which is exactly what its
+`license` field is for. Whoever cuts a release decides; the script makes sure
+nobody decides by accident.
+
+One thing the flag cannot do on its own: it drops **plugins**, not libraries.
+A libav built against `libx264`, which is what Homebrew and most
+distributions ship, still carries it into the closure through
+`libavcodec`. On the Homebrew tree, `--exclude-gpl` takes the tree from 84.3
+MB to 83.8 MB and leaves `libavcodec` where it was. A genuinely licence clean
+build needs a libav built without x264 as well, which means building FFmpeg,
+and that is a decision for a release rather than a flag.
 
 ### What CI does with all this
 
