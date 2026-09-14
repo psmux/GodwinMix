@@ -11,6 +11,10 @@ tauri-app/target/
 templates/*/Cargo.lock
 crates/godwinmix-sdk/Cargo.lock
 templates/go/bin/
+# A plugin's built binary, copied beside its manifest so the manifest's `bin`
+# path resolves. `cargo build --release -p gmx-<name>` then a copy; the
+# plugin's README says the line.
+plugins/*/bin/
 templates/*/plugin
 
 # Tauri generated schemas

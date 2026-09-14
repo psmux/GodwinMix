@@ -48,6 +48,8 @@
 //! This lives in its own pipeline so that a preview encoder falling over
 //! cannot disturb the program path.
 
+pub mod preview;
+
 use crate::caps::{CanvasCaps, Grid};
 use crate::config::MultiviewConfig;
 use crate::gstutil::{self, make};
@@ -62,7 +64,7 @@ use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::sync::broadcast;
-use tracing::{debug, info};
+use tracing::{debug, info, warn};
 
 /// Frames are dropped rather than queued when a viewer cannot keep up. A late
 /// preview frame has no value, so the newest always wins.
@@ -70,6 +72,11 @@ const FRAME_CHANNEL_DEPTH: usize = 2;
 
 /// Bounds on what a subscriber may ask for. A client asking for a 4K mosaic at
 /// 60 fps would cost more than the programme it is previewing.
+/// The name the preview's own cell on the mosaic carries, so a UI can label it
+/// and a client asking for `/mjpeg/preview` is not told to add a source called
+/// that. Reserved: a configured source may not use it.
+pub const PREVIEW_CELL: &str = "__preview__";
+
 const MIN_MOSAIC_WIDTH: i32 = 160;
 const MAX_MOSAIC_WIDTH: i32 = 1920;
 const MAX_MOSAIC_FPS: i32 = 30;
@@ -108,6 +115,11 @@ pub struct MultiviewShape {
 pub enum Demand {
     Build(MultiviewShape),
     Teardown,
+    /// Reconcile the preview against what is subscribed: build it, rebuild it
+    /// at another shape, or take it away. One verb rather than three, because
+    /// the mixer thread is the only place where the count and the pipeline are
+    /// both in hand and it can simply look.
+    Preview,
 }
 
 /// A demand with the subscriber generation it was decided at.
@@ -173,6 +185,13 @@ struct Shared {
     /// dropped anywhere, so the linger is scheduled through a captured handle.
     rt: tokio::runtime::Handle,
     demand: Option<DemandSink>,
+    /// Preview frames, on their own channel: a client watching the armed scene
+    /// is not watching the mosaic and should not be sent both.
+    preview_frames: broadcast::Sender<Arc<[u8]>>,
+    /// Who wants a preview and at what shape, counted exactly as the mosaic's
+    /// subscribers are. Empty means no preview compositor exists.
+    preview_subs: Mutex<Vec<(u64, PreviewRequest)>>,
+    preview_built: Mutex<Option<crate::multiview::preview::PreviewShape>>,
 }
 
 impl Shared {
@@ -233,6 +252,41 @@ impl Shared {
     fn current(&self, generation: u64) -> bool {
         self.generation.load(Ordering::SeqCst) == generation
     }
+
+    /// The preview shape the live subscriptions add up to, or `None` when
+    /// nobody is watching one.
+    ///
+    /// `full` wins over a size: one client asking for the canvas gets it, and
+    /// the mosaic sized watchers see the same picture scaled, which is the
+    /// same rule the mosaic's own width follows.
+    fn preview_wanted(&self, canvas: &CanvasCaps) -> Option<preview::PreviewShape> {
+        let subs = self.preview_subs.lock();
+        if subs.is_empty() {
+            return None;
+        }
+        let fps = subs.iter().map(|(_, r)| r.fps).max().unwrap_or(0);
+        let fps = if fps <= 0 { self.cfg.fps } else { fps }.clamp(1, MAX_MOSAIC_FPS);
+        if subs.iter().any(|(_, r)| r.full) {
+            return Some(preview::PreviewShape::full(canvas, fps));
+        }
+        let width = subs.iter().map(|(_, r)| r.width).max().unwrap_or(0);
+        let width = even(if width <= 0 { self.cfg.width / 2 } else { width }
+            .clamp(MIN_MOSAIC_WIDTH, MAX_MOSAIC_WIDTH));
+        let height = even(
+            ((width as i64 * self.cfg.height.max(1) as i64) / self.cfg.width.max(1) as i64) as i32,
+        )
+        .max(2);
+        Some(preview::PreviewShape::at(width, height, fps))
+    }
+}
+
+/// What one client wants of the preview.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct PreviewRequest {
+    pub fps: i32,
+    pub width: i32,
+    /// `ext.preview = "full"`: composited at the canvas's own size.
+    pub full: bool,
 }
 
 fn even(v: i32) -> i32 {
@@ -268,10 +322,14 @@ impl MultiviewHandle {
         demand: Option<DemandSink>,
     ) -> Self {
         let (frames, _) = broadcast::channel(FRAME_CHANNEL_DEPTH);
+        let (preview_frames, _) = broadcast::channel(FRAME_CHANNEL_DEPTH);
         Self {
             shared: Arc::new(Shared {
                 cfg,
                 frames,
+                preview_frames,
+                preview_subs: Mutex::new(Vec::new()),
+                preview_built: Mutex::new(None),
                 subs: Mutex::new(Vec::new()),
                 next_id: AtomicU64::new(1),
                 subscribers: AtomicU64::new(0),
@@ -298,6 +356,49 @@ impl MultiviewHandle {
     /// See the note in `input.rs` about `Source::start(.., thumb)`.
     pub fn wants_thumbs(&self) -> bool {
         self.enabled() && !self.shared.subs.lock().is_empty()
+    }
+
+    /// Watch the armed scene.
+    ///
+    /// Asking for a preview is also asking for the mosaic, because the preview
+    /// is composited from the mosaic's thumbnails: the subscription holds both
+    /// up and gives both back. A client that wants only the preview does not
+    /// have to know that, which is what `ext.preview` promises.
+    pub fn subscribe_preview(&self, req: PreviewRequest) -> PreviewSubscription {
+        let id = self.shared.next_id.fetch_add(1, Ordering::SeqCst);
+        let frames = self.shared.preview_frames.subscribe();
+        self.shared.preview_subs.lock().push((id, req));
+        self.shared.generation.fetch_add(1, Ordering::SeqCst);
+        let mosaic = self.subscribe(MultiviewRequest::configured());
+        self.shared.ask(Demand::Preview);
+        PreviewSubscription { id, shared: self.shared.clone(), frames, _mosaic: mosaic }
+    }
+
+    /// The preview shape the subscriptions add up to, for the mixer thread.
+    pub fn preview_wanted(&self, canvas: &CanvasCaps) -> Option<preview::PreviewShape> {
+        self.shared.preview_wanted(canvas)
+    }
+
+    /// What the preview is actually built at, or `None` when there is none.
+    pub fn preview_built(&self) -> Option<preview::PreviewShape> {
+        *self.shared.preview_built.lock()
+    }
+
+    pub fn mark_preview_built(&self, shape: Option<preview::PreviewShape>) {
+        *self.shared.preview_built.lock() = shape;
+    }
+
+    /// How many clients are watching the armed scene.
+    pub fn preview_subscribers(&self) -> u64 {
+        self.shared.preview_subs.lock().len() as u64
+    }
+
+    /// Where a built preview publishes its frames.
+    pub fn preview_publisher(&self) -> impl Fn(Arc<[u8]>) + Send + Sync + 'static {
+        let tx = self.shared.preview_frames.clone();
+        move |frame| {
+            let _ = tx.send(frame);
+        }
     }
 
     /// How many clients are holding the mosaic up. `gmx_multiview_subscribers`.
@@ -414,6 +515,30 @@ impl Publisher {
 }
 
 /// Proof that somebody wants the mosaic. Dropping it gives the pipeline up.
+/// One client's hold on the preview. Dropping it is what eventually takes the
+/// preview compositor away, and the mosaic with it if nothing else wants one.
+pub struct PreviewSubscription {
+    id: u64,
+    shared: Arc<Shared>,
+    frames: broadcast::Receiver<Arc<[u8]>>,
+    /// The mosaic subscription the preview implies, held for the same life.
+    _mosaic: MultiviewSubscription,
+}
+
+impl PreviewSubscription {
+    pub async fn recv(&mut self) -> Result<Arc<[u8]>, broadcast::error::RecvError> {
+        self.frames.recv().await
+    }
+}
+
+impl Drop for PreviewSubscription {
+    fn drop(&mut self) {
+        self.shared.preview_subs.lock().retain(|(id, _)| *id != self.id);
+        self.shared.generation.fetch_add(1, Ordering::SeqCst);
+        self.shared.ask(Demand::Preview);
+    }
+}
+
 pub struct MultiviewSubscription {
     shared: Arc<Shared>,
     id: u64,
@@ -477,10 +602,19 @@ struct Tile {
     source: Option<SourceId>,
     pad: gst::Pad,
     branch: Vec<gst::Element>,
+    /// The end of the tile branch, carrying `allow-not-linked`, so the preview
+    /// compositor can take the same picture without a second decode, a second
+    /// scale or a second proxy. A tee with one branch has no thread and costs
+    /// nothing, which is why it is always there rather than spliced in when a
+    /// preview arrives.
+    tee: gst::Element,
 }
 
 pub struct Multiview {
     cfg: MultiviewConfig,
+    /// The armed scene, composited from the same thumbnails. Built when a
+    /// client subscribes with `ext.preview` and taken down after.
+    preview: Option<preview::ScenePreview>,
     /// Held so the live count falls when this is dropped.
     shared: Arc<Shared>,
     pipeline: gst::Pipeline,
@@ -566,6 +700,7 @@ impl Multiview {
 
         let mut mv = Self {
             cfg,
+            preview: None,
             shared: handle.shared.clone(),
             pipeline,
             compositor,
@@ -634,7 +769,12 @@ impl Multiview {
             ),
         )?;
 
-        let branch = vec![src, queue, rate, scale, caps];
+        // `allow-not-linked` so the preview taking a branch, or giving one
+        // back, is nothing to the tile: the mosaic keeps drawing whatever
+        // happens on the other side.
+        let tee = make("tee", &format!("mv-tee-{tag}"))?;
+        tee.set_property("allow-not-linked", true);
+        let branch = vec![src, queue, rate, scale, caps, tee.clone()];
         self.pipeline.add_many(&branch).context("adding tile branch")?;
         gst::Element::link_many(&branch).context("linking tile branch")?;
 
@@ -645,19 +785,14 @@ impl Multiview {
         // Letterbox rather than stretch, so a 4:3 camera beside a 16:9 one
         // still looks like itself.
         pad.set_property_from_str("sizing-policy", "keep-aspect-ratio");
-        branch
-            .last()
-            .unwrap()
-            .static_pad("src")
-            .context("tile branch has no src pad")?
-            .link(&pad)
-            .context("linking tile into the mosaic")?;
+        let tee_pad = tee.request_pad_simple("src_%u").context("a tile tee refused a pad")?;
+        tee_pad.link(&pad).context("linking tile into the mosaic")?;
 
         for el in &branch {
             el.sync_state_with_parent().ok();
         }
 
-        self.tiles.push(Tile { source, pad, branch });
+        self.tiles.push(Tile { source, pad, branch, tee });
         self.relayout();
         debug!(%tag, "added multiview tile");
         Ok(())
@@ -672,6 +807,11 @@ impl Multiview {
             return Ok(());
         };
         let tile = self.tiles.remove(pos);
+        // The preview draws off this tile's tee, so its slot goes first or the
+        // branch would be taken down under a linked pad.
+        if let Some(preview) = self.preview.as_mut() {
+            preview.drop_source(source);
+        }
         for el in &tile.branch {
             let _ = el.set_state(gst::State::Null);
             let _ = self.pipeline.remove(el);
@@ -697,6 +837,120 @@ impl Multiview {
             tile.pad.set_property("zorder", if tile.source.is_none() { 1u32 } else { 0u32 });
         }
         info!(tiles = self.tiles.len(), cols = grid.cols, rows = grid.rows, "multiview relaid out");
+    }
+
+    // -- the armed scene ------------------------------------------------
+
+    /// Build the preview compositor, or rebuild it at another shape.
+    ///
+    /// Idempotent: asked for a shape it already has, it does nothing. A
+    /// different shape is a rebuild, because a compositor's output caps are
+    /// fixed and there is no client watching a preview who would rather see it
+    /// at the wrong size than wait a frame.
+    pub fn preview_on(
+        &mut self,
+        shape: preview::PreviewShape,
+        publish: impl Fn(Arc<[u8]>) + Send + Sync + 'static,
+    ) -> Result<()> {
+        if self.preview.as_ref().is_some_and(|p| p.shape() == shape) {
+            return Ok(());
+        }
+        self.preview_off();
+        let mut built =
+            preview::ScenePreview::build(&self.pipeline, shape, publish, self.cfg.jpeg_quality as i32)?;
+        // A tile of its own on the mosaic, so an operator watching the sheet
+        // sees what is armed beside what is live without a second stream.
+        match self.attach_preview_tile(&built) {
+            Ok(pad) => built.set_tile_pad(Some(pad)),
+            Err(e) => warn!(?e, "the preview has no tile on the mosaic; the stream still works"),
+        }
+        self.preview = Some(built);
+        self.relayout();
+        Ok(())
+    }
+
+    /// Take the preview away. Nothing is left: no compositor, no pads, no
+    /// queues, and no tile on the mosaic.
+    pub fn preview_off(&mut self) {
+        let Some(mut preview) = self.preview.take() else { return };
+        if let Some(pad) = preview.tile_pad().cloned() {
+            if let Some(pos) = self.tiles.iter().position(|t| t.pad == pad) {
+                let tile = self.tiles.remove(pos);
+                for el in &tile.branch {
+                    let _ = el.set_state(gst::State::Null);
+                    let _ = self.pipeline.remove(el);
+                }
+                self.compositor.release_request_pad(&tile.pad);
+            }
+        }
+        preview.teardown();
+        self.relayout();
+    }
+
+    /// The preview's own cell on the mosaic.
+    fn attach_preview_tile(&mut self, built: &preview::ScenePreview) -> Result<gst::Pad> {
+        let queue = gstutil::queue_preview("mv-q-preview")?;
+        let tee = make("tee", "mv-tee-preview")?;
+        tee.set_property("allow-not-linked", true);
+        let branch = vec![queue.clone(), tee.clone()];
+        self.pipeline.add_many(&branch).context("adding the preview tile")?;
+        let out = built
+            .output()
+            .request_pad_simple("src_%u")
+            .context("the preview tee refused a pad for the mosaic")?;
+        out.link(&queue.static_pad("sink").context("the preview tile queue has no sink pad")?)
+            .context("linking the preview into its mosaic tile")?;
+        queue.link(&tee).context("linking the preview tile")?;
+        let pad = self
+            .compositor
+            .request_pad_simple("sink_%u")
+            .context("the mosaic refused a pad for the preview")?;
+        pad.set_property_from_str("sizing-policy", "keep-aspect-ratio");
+        let tee_pad = tee.request_pad_simple("src_%u").context("the preview tee refused a pad")?;
+        tee_pad.link(&pad).context("linking the preview into the mosaic")?;
+        for el in &branch {
+            el.sync_state_with_parent().ok();
+        }
+        self.tiles.push(Tile { source: Some(PREVIEW_CELL.into()), pad: pad.clone(), branch, tee });
+        Ok(pad)
+    }
+
+    /// Draw the armed scene. Nothing to draw is a black preview, not an error:
+    /// disarming a scene is a thing an operator does.
+    pub fn apply_preview(&mut self, canvas: &CanvasCaps, cells: &[preview::Cell]) -> Result<()> {
+        let tiles: Vec<(SourceId, gst::Element)> = self
+            .tiles
+            .iter()
+            .filter_map(|t| t.source.clone().map(|id| (id, t.tee.clone())))
+            .collect();
+        let Some(preview) = self.preview.as_mut() else { return Ok(()) };
+        preview.apply(canvas, cells, |source| {
+            tiles.iter().find(|(id, _)| id == source).map(|(_, tee)| tee.clone())
+        })
+    }
+
+    /// What the preview is composited at, or `None` when there is none.
+    pub fn preview_shape(&self) -> Option<preview::PreviewShape> {
+        self.preview.as_ref().map(|p| p.shape())
+    }
+
+    /// How many sources the preview is drawing, for a test and for `/metrics`.
+    pub fn preview_drawn(&self) -> usize {
+        self.preview.as_ref().map(|p| p.drawn()).unwrap_or(0)
+    }
+
+    /// Break the preview on purpose, for the test that proves it cannot reach
+    /// air.
+    ///
+    /// Taking the preview's own compositor to NULL while its inputs are still
+    /// pushing is about the worst thing that can happen to it: the branch
+    /// errors, its queues fill and its pads refuse. The programme is two proxy
+    /// boundaries away and the tile tees carry `allow-not-linked`, so the
+    /// measurement is that nothing downstream of them moves at all.
+    pub fn break_preview_for_a_test(&self) -> bool {
+        let Some(preview) = self.preview.as_ref() else { return false };
+        preview.break_for_a_test();
+        true
     }
 
     pub fn start(&self) -> Result<()> {
@@ -853,6 +1107,128 @@ mod tests {
         drop(sub);
         assert_eq!(h.shared.frames.receiver_count(), 0);
         mv.stop();
+    }
+
+    /// Nothing is composited for a preview until somebody asks, and asking is
+    /// what builds it.
+    #[tokio::test]
+    async fn the_preview_is_built_by_asking_and_goes_when_the_asking_stops() {
+        init();
+        let h = handle();
+        let canvas = CanvasCaps::new(&Default::default());
+        assert!(h.preview_wanted(&canvas).is_none(), "nobody has asked for a preview");
+        let mut mv = Multiview::build(&h, default_shape(&h), &fake_proxy("pvp1")).unwrap();
+        assert!(mv.preview_shape().is_none(), "a mosaic must not build a preview by itself");
+        let tiles = mv.status().cells.len();
+
+        let sub = h.subscribe_preview(PreviewRequest { fps: 8, width: 320, full: false });
+        let shape = h.preview_wanted(&canvas).expect("a subscriber wants one");
+        assert!(!shape.full);
+        mv.preview_on(shape, h.preview_publisher()).unwrap();
+        assert_eq!(mv.preview_shape(), Some(shape));
+        assert_eq!(
+            mv.status().cells.len(),
+            tiles + 1,
+            "the preview takes a cell of its own on the mosaic"
+        );
+        assert!(
+            mv.status().cells.iter().any(|c| c.source.as_deref() == Some(PREVIEW_CELL)),
+            "and it is named so a UI can label it"
+        );
+
+        drop(sub);
+        assert!(h.preview_wanted(&canvas).is_none());
+        mv.preview_off();
+        assert!(mv.preview_shape().is_none());
+        assert_eq!(mv.status().cells.len(), tiles, "the preview's cell went with it");
+        mv.stop();
+    }
+
+    /// The armed scene is drawn from the tiles that are already there, and
+    /// disarming takes every slot back.
+    #[tokio::test]
+    async fn the_armed_scene_is_drawn_from_the_tiles_the_mosaic_already_has() {
+        init();
+        let h = handle();
+        let canvas = CanvasCaps::new(&Default::default());
+        let mut mv = Multiview::build(&h, default_shape(&h), &fake_proxy("pvp2")).unwrap();
+        for i in 1..=3 {
+            mv.add_tile(Some(format!("cam{i}")), &fake_proxy(&format!("pc{i}"))).unwrap();
+        }
+        let _sub = h.subscribe_preview(PreviewRequest::default());
+        let shape = h.preview_wanted(&canvas).expect("a subscriber wants one");
+        mv.preview_on(shape, h.preview_publisher()).unwrap();
+
+        let cell = |source: &str, x: i32| preview::Cell {
+            source: source.into(),
+            x,
+            y: 0,
+            width: 960,
+            height: 540,
+            alpha: 1.0,
+        };
+        mv.apply_preview(&canvas, &[cell("cam1", 0), cell("cam2", 960)]).unwrap();
+        assert_eq!(mv.preview_drawn(), 2);
+
+        // A source the mosaic does not carry is skipped rather than drawn as a
+        // black rectangle over the ones that are there.
+        mv.apply_preview(&canvas, &[cell("cam1", 0), cell("cam9", 960)]).unwrap();
+        assert_eq!(mv.preview_drawn(), 1, "a source with no tile has no preview slot");
+
+        // Disarming gives every slot back and leaves the compositor standing,
+        // because the client is still watching an empty preview.
+        mv.apply_preview(&canvas, &[]).unwrap();
+        assert_eq!(mv.preview_drawn(), 0);
+        assert!(mv.preview_shape().is_some());
+        mv.stop();
+    }
+
+    /// A tile going away takes its preview slot with it. Without this the
+    /// tile branch would go to NULL under a linked pad.
+    #[tokio::test]
+    async fn a_source_leaving_takes_its_preview_slot_with_it() {
+        init();
+        let h = handle();
+        let canvas = CanvasCaps::new(&Default::default());
+        let mut mv = Multiview::build(&h, default_shape(&h), &fake_proxy("pvp3")).unwrap();
+        mv.add_tile(Some("cam1".into()), &fake_proxy("pd1")).unwrap();
+        let _sub = h.subscribe_preview(PreviewRequest::default());
+        mv.preview_on(h.preview_wanted(&canvas).unwrap(), h.preview_publisher()).unwrap();
+        mv.apply_preview(
+            &canvas,
+            &[preview::Cell {
+                source: "cam1".into(),
+                x: 0,
+                y: 0,
+                width: 1920,
+                height: 1080,
+                alpha: 1.0,
+            }],
+        )
+        .unwrap();
+        assert_eq!(mv.preview_drawn(), 1);
+        mv.remove_tile(&"cam1".to_string()).unwrap();
+        assert_eq!(mv.preview_drawn(), 0, "the slot must go with the tile");
+        mv.stop();
+    }
+
+    /// `ext.preview = "full"` is the canvas's own size, and one client asking
+    /// for it decides for everybody watching.
+    #[tokio::test]
+    async fn a_full_preview_wins_over_a_mosaic_sized_one() {
+        init();
+        let h = handle();
+        let canvas = CanvasCaps::new(&Default::default());
+        let _small = h.subscribe_preview(PreviewRequest { fps: 4, width: 320, full: false });
+        let shape = h.preview_wanted(&canvas).expect("a subscriber");
+        assert!(!shape.full);
+        let full = h.subscribe_preview(PreviewRequest { fps: 8, width: 0, full: true });
+        let shape = h.preview_wanted(&canvas).expect("a subscriber");
+        assert!(shape.full, "one client asking for full decides");
+        assert_eq!((shape.width, shape.height), (canvas.width, canvas.height));
+        assert_eq!(shape.fps, 8, "and the highest rate anybody asked for");
+        drop(full);
+        assert!(!h.preview_wanted(&canvas).expect("still one").full, "and it goes back after");
     }
 
     #[tokio::test]

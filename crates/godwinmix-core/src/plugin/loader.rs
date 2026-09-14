@@ -113,6 +113,15 @@ struct Registry {
     /// reloading the same plugin reuses its entry, so a core that reloads a
     /// plugin a thousand times does not grow a thousand manifests.
     interned: BTreeMap<String, &'static Provide>,
+    /// One interned manifest per provide of every kind, so a service, a device
+    /// or a transition can be launched and supervised with the same `&'static
+    /// Manifest` a source gets. Only sources reach `interned`, because only
+    /// sources have a factory the URI resolver can call.
+    manifests: BTreeMap<String, &'static Manifest>,
+    /// The same for outputs, which have a registry of their own: a plugin's
+    /// `output` provide has to sit in the same table a built in one does or
+    /// `output.add` cannot reach it.
+    outputs: BTreeMap<String, &'static crate::plugin::output::OutputProvide>,
     /// Per instance numbers, refreshed once a second by the sampler.
     stats: BTreeMap<String, InstanceStats>,
     /// The pid behind each instance, so the sampler can read a set at a time.
@@ -309,11 +318,24 @@ pub fn remove(name: &str) -> Option<Installed> {
     let gone = reg.plugins.remove(name)?;
     for id in &gone.provides {
         reg.interned.remove(id);
+        reg.manifests.remove(id);
     }
+    // Every instance this plugin ever had, by the two shapes an instance id
+    // takes: a source is named by whoever added it, a singleton is named after
+    // its provide (`ndi-discovery`). Gathering the keys from the stats table
+    // first is what stops a service's pid and budget watch outliving the
+    // plugin, which is the difference between `plugin.remove` leaving nothing
+    // and leaving a process nobody can name.
     let prefix = format!("{name}/");
-    reg.stats.retain(|k, v| !k.starts_with(&prefix) && v.plugin != name);
-    reg.pids.retain(|k, _| !k.starts_with(&prefix));
-    reg.watches.retain(|k, _| !k.starts_with(&prefix));
+    let instances: Vec<String> = reg
+        .stats
+        .iter()
+        .filter(|(k, v)| v.plugin == name || k.starts_with(&prefix))
+        .map(|(k, _)| k.clone())
+        .collect();
+    reg.stats.retain(|k, v| !instances.contains(k) && v.plugin != name);
+    reg.pids.retain(|k, _| !instances.contains(k) && !k.starts_with(&prefix));
+    reg.watches.retain(|k, _| !instances.contains(k) && !k.starts_with(&prefix));
     Some(gone)
 }
 
@@ -354,42 +376,173 @@ fn intern_all() {
     let plugins: Vec<Installed> =
         registry().read().plugins.values().filter(|p| p.live()).cloned().collect();
     let mut made: BTreeMap<String, &'static Provide> = BTreeMap::new();
+    let mut manifests: BTreeMap<String, &'static Manifest> = BTreeMap::new();
+    let mut outputs: BTreeMap<String, &'static crate::plugin::output::OutputProvide> =
+        BTreeMap::new();
     {
         let reg = registry().read();
         for plugin in &plugins {
             for decl in &plugin.manifest.provides {
                 let id = format!("{}/{}", plugin.name(), decl.id);
-                if let Some(existing) = reg.interned.get(&id) {
-                    // Same id, same manifest: reuse rather than leak a second.
-                    if existing.manifest.rank == decl.rank.unwrap_or(128) as u16 {
-                        made.insert(id, *existing);
+                if let Some(existing) = reg.manifests.get(&id) {
+                    // Same id, same rank: reuse rather than leak a second.
+                    if existing.rank == decl.rank.unwrap_or(128) as u16 {
+                        manifests.insert(id.clone(), *existing);
+                        if let Some(provide) = reg.interned.get(&id) {
+                            made.insert(id, *provide);
+                        }
                         continue;
                     }
                 }
-                if decl.kind != "source" {
-                    // Only sources reach the URI resolver. Outputs and filters
-                    // are looked up by `type` through their own registries.
+                let manifest: &'static Manifest =
+                    Box::leak(Box::new(manifest_of(plugin, decl)));
+                manifests.insert(id.clone(), manifest);
+                if decl.kind == "output" {
+                    outputs.insert(
+                        id.clone(),
+                        match reg.outputs.get(&id) {
+                            Some(existing) if existing.manifest.rank == manifest.rank => *existing,
+                            _ => Box::leak(Box::new(crate::plugin::output::OutputProvide {
+                                manifest: *manifest,
+                                claims: output_claims_by_scheme,
+                                make: make_sidecar_output,
+                            })),
+                        },
+                    );
                     continue;
                 }
-                made.insert(id.clone(), intern_provide(plugin, decl));
+                if decl.kind != "source" {
+                    // Only sources reach the URI resolver. Everything else is
+                    // looked up by `type` through its own registry or run as a
+                    // singleton by the supervisor.
+                    continue;
+                }
+                made.insert(
+                    id.clone(),
+                    Box::leak(Box::new(Provide {
+                        manifest: *manifest,
+                        claims: claims_by_scheme,
+                        make: super::host::make_source,
+                    })),
+                );
             }
         }
     }
-    registry().write().interned = made;
+    let mut reg = registry().write();
+    reg.interned = made;
+    reg.manifests = manifests;
+    reg.outputs = outputs;
 }
 
-/// Make one `&'static Provide` for a plugin's source provide.
+/// The output provide a `type` names, if a loaded plugin has one.
+///
+/// Consulted by `output::by_type` after the built in registry, so a plugin can
+/// never shadow an output that ships with the core.
+pub fn output_provide(type_id: &str) -> Option<&'static crate::plugin::output::OutputProvide> {
+    let reg = registry().read();
+    if let Some(p) = reg.outputs.get(type_id) {
+        return Some(*p);
+    }
+    reg.outputs
+        .iter()
+        .find(|(id, _)| id.split('/').next() == Some(type_id))
+        .map(|(_, p)| *p)
+}
+
+/// Every loaded output provide, for the list an error prints.
+pub fn output_provides() -> Vec<&'static crate::plugin::output::OutputProvide> {
+    registry().read().outputs.values().copied().collect()
+}
+
+/// The loaded output a bare URI resolves to, by scheme and rank.
+pub fn output_for_uri(uri: &str) -> Option<&'static crate::plugin::output::OutputProvide> {
+    let lower = uri.trim().to_lowercase();
+    registry()
+        .read()
+        .outputs
+        .values()
+        .filter(|p| p.manifest.uri_schemes.iter().any(|s| lower.starts_with(*s)))
+        .max_by_key(|p| p.manifest.rank)
+        .copied()
+}
+
+/// A loaded output claims a bare URI by the schemes it declared.
+fn output_claims_by_scheme(uri: &str) -> Option<u16> {
+    output_for_uri(uri).map(|p| p.manifest.rank)
+}
+
+/// Spawn a sidecar for an output a plugin provides.
+///
+/// The canvas is the default one, as `output::open` has always used: an output
+/// consumes the encoded programme and the canvas it is told about is
+/// informational. A sidecar that needs the real one reads it from the
+/// handshake the core sends when the instance starts.
+fn make_sidecar_output(
+    cfg: &crate::config::OutputConfig,
+) -> anyhow::Result<Box<dyn crate::plugin::output::Output>> {
+    let type_id = match cfg.type_id.as_deref().filter(|t| !t.trim().is_empty()) {
+        Some(t) => t.trim().to_string(),
+        None => output_for_uri(&cfg.uri)
+            .map(|p| p.manifest.provide_id())
+            .with_context(|| {
+                format!("nothing installed sends to `{}`; write `type` to say what it is", cfg.uri)
+            })?,
+    };
+    let canvas = crate::caps::CanvasCaps::new(&crate::config::Canvas::default());
+    super::host::make_output(&type_id, cfg, &canvas)
+}
+
+/// The interned manifest of any provide, whatever kind it is.
+///
+/// What the supervisor hands the sidecar host when it starts a service, a
+/// device or a transition. `source_provide` answers only for sources, because
+/// only a source has a factory behind it.
+pub fn provide_manifest(type_id: &str) -> Option<&'static Manifest> {
+    let reg = registry().read();
+    if let Some(m) = reg.manifests.get(type_id) {
+        return Some(*m);
+    }
+    reg.manifests
+        .iter()
+        .find(|(id, _)| id.split('/').next() == Some(type_id))
+        .map(|(_, m)| *m)
+}
+
+/// Every provide of a kind, across every live plugin, as `<plugin>/<id>`.
+///
+/// How the supervisor knows what to start. Sorted, so a core starts its
+/// plugins in the same order every time and a startup report is comparable
+/// between runs.
+pub fn provides_of_kind(kind: &str) -> Vec<String> {
+    let reg = registry().read();
+    let mut found: Vec<String> = reg
+        .plugins
+        .values()
+        .filter(|p| p.live())
+        .flat_map(|p| {
+            p.manifest
+                .provides
+                .iter()
+                .filter(|d| d.kind == kind)
+                .map(move |d| format!("{}/{}", p.name(), d.id))
+        })
+        .collect();
+    found.sort();
+    found
+}
+
+/// Make one `&'static Manifest` for a plugin's provide, whatever kind it is.
 ///
 /// The strings are leaked once per distinct provide. A core that installs
 /// twenty plugins leaks twenty manifests' worth of short strings and never
 /// grows again, which is the price of letting a runtime provide sit in the
 /// same table as a compiled in one and be looked up with no allocation on the
 /// hot path.
-fn intern_provide(plugin: &Installed, decl: &ProvideDecl) -> &'static Provide {
-    let manifest = Manifest {
+fn manifest_of(plugin: &Installed, decl: &ProvideDecl) -> Manifest {
+    Manifest {
         plugin: leak(plugin.name()),
         id: leak(&decl.id),
-        kind: ProvideKind::Source,
+        kind: ProvideKind::parse(&decl.kind),
         api: plugin.manifest.plugin.api,
         description: leak(&plugin.manifest.plugin.description),
         uri_schemes: leak_list(&decl.uri_schemes),
@@ -398,8 +551,7 @@ fn intern_provide(plugin: &Installed, decl: &ProvideDecl) -> &'static Provide {
         capabilities: capabilities_of(decl),
         latency_ms: decl.latency_ms.unwrap_or(0),
         tier: Tier::Sidecar,
-    };
-    Box::leak(Box::new(Provide { manifest, claims: claims_by_scheme, make: super::host::make_source }))
+    }
 }
 
 /// A sidecar source claims a bare URI by the schemes it declared, at the rank

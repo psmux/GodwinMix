@@ -72,7 +72,50 @@ fn state_events() -> Vec<EventDef> {
                         "scene": { "type": ["string", "null"] },
                         "transition": { "type": "string" },
                         "duration_ms": { "type": "integer" },
+                        "transition_id": { "type": "integer" },
                         "at_running_time_ms": { "type": "integer" }
+                    }
+                }))
+            },
+        },
+        EventDef {
+            name: "scene.patch",
+            since: "1",
+            summary: "One change to the scene document, as records rather than a snapshot: \
+                      what was added, what changed with its before and after, and what was \
+                      removed. One per transaction, batched and ended by event/flush.",
+            ext: None,
+            legacy: None,
+            payload: |_| {
+                inline(json!({
+                    "type": "object",
+                    "properties": {
+                        "seq": { "type": "integer" },
+                        "source_client": {
+                            "type": ["string", "null"],
+                            "description": "Who asked for the change, so a client suppresses \
+                                            the echo of its own edits."
+                        },
+                        "client_seq": {
+                            "type": ["integer", "null"],
+                            "description": "The client's own sequence number, from the `seq` \
+                                            on the command, so a drag discards echoes of \
+                                            moves it has already drawn past."
+                        },
+                        "scope": { "type": "string", "enum": ["document"] },
+                        "added": { "type": "array", "items": { "type": "object" } },
+                        "updated": {
+                            "type": "array",
+                            "items": {
+                                "type": "object",
+                                "properties": {
+                                    "before": { "type": "object" },
+                                    "after": { "type": "object" }
+                                }
+                            }
+                        },
+                        "removed": { "type": "array", "items": { "type": "string" } },
+                        "label": { "type": ["string", "null"] }
                     }
                 }))
             },
@@ -356,7 +399,15 @@ pub fn ext_table() -> Vec<(&'static str, &'static str, &'static str, bool)> {
         ("tally", "true", "event/tally", true),
         ("positions", "true", "event/source.position", true),
         ("thumb", "{fps}", "per source thumbnails from a node", false),
-        ("preview", "{fps, width} or \"full\"", "the preview scene", false),
+        (
+            "preview",
+            "{fps, width} or \"full\"",
+            "the armed scene, composited in the multiview pipeline from the per source \
+             thumbnails and published to /mjpeg/preview, scene.preview.frame and its own \
+             cell on the mosaic. \"full\" composites it at the canvas's own size while a \
+             client is subscribed, so a designer's handles land on real coordinates",
+            true,
+        ),
         ("telemetry", "{hz: 1..10}", "event/telemetry", false),
         ("agent", "true or thresholds", "event/agent.state with a snapshot URL", false),
     ]
@@ -768,12 +819,14 @@ mod tests {
     fn the_published_ext_table_matches_what_the_subscription_struct_reads() {
         let implemented: Vec<&str> =
             ext_table().into_iter().filter(|(_, _, _, yes)| *yes).map(|(k, _, _, _)| k).collect();
-        assert_eq!(implemented, vec!["multiview", "meters", "tally", "positions"]);
+        assert_eq!(implemented, vec!["multiview", "meters", "tally", "positions", "preview"]);
         // And every implemented key is one `Ext` has a field for.
         let ext: requests::Ext = serde_json::from_value(json!({
-            "multiview": false, "meters": true, "tally": true, "positions": true
+            "multiview": false, "meters": true, "tally": true, "positions": true,
+            "preview": {"fps": 8, "width": 480}
         }))
         .unwrap();
         assert!(ext.unsupported().is_empty(), "a published key landed in `other`");
+        assert!(ext.wants_preview(), "the preview key has to turn the preview on");
     }
 }

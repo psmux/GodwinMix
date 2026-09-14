@@ -128,6 +128,10 @@ pub struct AppState {
     /// first. Empty on a core nobody has configured a hook on, and then every
     /// call site costs one atomic read. See `control/hooks/`.
     pub hooks: Arc<hooks::Hooks>,
+    /// Every plugin instance that is not a source: services, devices and
+    /// transitions, kept running as singletons. See
+    /// `godwinmix_core::plugin::supervisor`.
+    pub plugins: Arc<godwinmix_core::plugin::supervisor::Supervisor>,
 }
 
 /// The handles onto one running engine, gathered so `AppState::new` takes a
@@ -143,13 +147,34 @@ pub struct Engine {
     /// The scene collection and everything true about it. See
     /// `godwinmix_core::scene::server`.
     pub scenes: Arc<godwinmix_core::scene::server::SceneServer>,
+    /// The plugin singletons. Built before the mixer thread starts so a
+    /// service is up by the time the first client connects.
+    pub plugins: Arc<godwinmix_core::plugin::supervisor::Supervisor>,
+}
+
+/// Tell the mixer what the armed scene is, so a preview compositor draws it.
+///
+/// Here rather than beside `scene.preview.set` because the stream handlers
+/// need it too: opening `/mjpeg/preview` is what builds the preview, and it
+/// has to know what to draw before the first frame.
+pub fn push_preview(app: &AppState) {
+    methods::scenes::edit::push_preview_for(app);
 }
 
 impl AppState {
     /// Everything the control plane holds, worked out from the config once.
     pub fn new(cfg: &Config, engine: Engine, rehearsal: bool) -> Self {
-        let Engine { mixer, multiview, preview, encoder, library, converter, quit, scenes } =
-            engine;
+        let Engine {
+            mixer,
+            multiview,
+            preview,
+            encoder,
+            library,
+            converter,
+            quit,
+            scenes,
+            plugins,
+        } = engine;
         let tokens = cfg.tokens(rehearsal);
         let safety =
             godwinmix_core::safety::Guard::new(cfg.safety.clone(), cfg.canvas.fps.max(1) as u32);
@@ -198,7 +223,14 @@ impl AppState {
             marketplaces_only: cfg.marketplaces_only(),
             config_path: Arc::new(cfg.source_path.clone()),
             hooks,
+            plugins,
         }
+    }
+
+    /// The transitions a plugin has added to the built in four, for
+    /// `program.take` to accept by name and for the error that lists them.
+    pub fn transition_names(&self) -> Vec<String> {
+        self.plugins.transition_names()
     }
 
     /// Write one plugin's settings back to the config file.
@@ -1406,6 +1438,14 @@ fn spawn_operator_watchdog(app: AppState) {
 pub async fn serve(bind: &str, state: AppState) -> Result<()> {
     let listener = tokio::net::TcpListener::bind(bind).await?;
     info!(%bind, "control server listening");
+    serve_on(listener, state).await
+}
+
+/// The same, on a listener somebody else opened.
+///
+/// What a test uses to get a port the operating system picked, so two of them
+/// can run at once and neither has to guess a number that is free.
+pub async fn serve_on(listener: tokio::net::TcpListener, state: AppState) -> Result<()> {
     let snapshots =
         Tracker::new(state.snapshot.clone(), state.multiview.clone(), state.mixer.clone());
     spawn_background(state.clone());

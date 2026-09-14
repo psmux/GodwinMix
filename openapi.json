@@ -852,6 +852,21 @@
         ],
         "type": "object"
       },
+      "DiscoverRequest": {
+        "description": "`device.discover`.",
+        "properties": {
+          "timeout_ms": {
+            "description": "How long to look, shared between the devices. Two seconds by default,\nfour and a half at most, because no method blocks for five.",
+            "format": "uint64",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          }
+        },
+        "type": "object"
+      },
       "DraftRecord": {
         "description": "`scene.edit.begin`.",
         "properties": {
@@ -1718,6 +1733,15 @@
           "scene": {
             "type": "string"
           },
+          "seq": {
+            "description": "A client's own sequence number, echoed on the patch. See\n`SetItemRequest::seq`.",
+            "format": "uint64",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
           "to": {
             "description": "`match_size`: the item to match.",
             "type": [
@@ -2375,6 +2399,15 @@
             },
             "type": "array"
           },
+          "client_seq": {
+            "description": "The client's own sequence number, echoed back.\n\nA drag cannot wait for a round trip, so the client kit draws the move\nitself and reconciles when the echo arrives. Without this it cannot\ntell an echo of the move it has already drawn past from a correction,\nand the handle rubber bands backwards under the cursor. Every geometry\ncommand carries a `seq`; this is that number coming back.",
+            "format": "uint64",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
           "label": {
             "description": "What the client called this change, for a label in an undo menu.",
             "type": [
@@ -2977,6 +3010,15 @@
           },
           "scene": {
             "type": "string"
+          },
+          "seq": {
+            "description": "A client's own sequence number, echoed on the patch.",
+            "format": "uint64",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
           }
         },
         "required": [
@@ -3667,11 +3709,15 @@
             ]
           },
           "transition": {
-            "description": "`cut` in this build.",
-            "type": [
-              "string",
-              "null"
-            ]
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Transition"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "\"fade\", or {type, duration_ms, params}. Absent is a cut."
           }
         },
         "type": "object"
@@ -3784,6 +3830,23 @@
         ],
         "type": "object"
       },
+      "ToolCallRequest": {
+        "description": "`tool.call`.",
+        "properties": {
+          "arguments": {
+            "default": null,
+            "description": "The tool's own arguments, as its input schema describes them."
+          },
+          "name": {
+            "description": "`<plugin>/<tool>`, or the bare tool name when only one plugin has it.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "type": "object"
+      },
       "Transform": {
         "additionalProperties": false,
         "description": "Where an item sits and how it is sized.",
@@ -3837,6 +3900,44 @@
             }
           }
         },
+        "type": "object"
+      },
+      "Transition": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "$ref": "#/components/schemas/TransitionRequest"
+          }
+        ],
+        "description": "A name, or an object."
+      },
+      "TransitionRequest": {
+        "description": "How a take gets there. See docs/reference/transitions.md.",
+        "properties": {
+          "duration_ms": {
+            "description": "How long it takes. 0 is a cut.",
+            "format": "uint64",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "params": {
+            "additionalProperties": true,
+            "description": "A stinger takes clip, cut_at_ms, luma.",
+            "type": "object"
+          },
+          "type": {
+            "description": "cut, fade, move, stinger, or a plugin name.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type"
+        ],
         "type": "object"
       },
       "UiDefaults": {
@@ -4320,6 +4421,44 @@
         "x-destructive": false,
         "x-idempotent": true,
         "x-scope": "read"
+      }
+    },
+    "/api/v1/device/discover": {
+      "post": {
+        "description": "JSON-RPC method `device.discover`. Needs the `operate` scope. Accepts `idempotency_key`, honoured for 24 hours.",
+        "operationId": "device.discover",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DiscoverRequest"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Ask every device plugin what it can see: cameras, NDI senders, publishers. Each candidate's params are ready for source.add.",
+        "tags": [
+          "device"
+        ],
+        "x-destructive": false,
+        "x-idempotent": true,
+        "x-scope": "operate"
       }
     },
     "/api/v1/filters": {
@@ -8148,6 +8287,44 @@
         "x-destructive": false,
         "x-idempotent": true,
         "x-scope": "read"
+      }
+    },
+    "/api/v1/tool/call": {
+      "post": {
+        "description": "JSON-RPC method `tool.call`. Needs the `operate` scope. Accepts `idempotency_key`, honoured for 24 hours.",
+        "operationId": "tool.call",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ToolCallRequest"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Call one of a plugin's tools, in MCP's shape. The name is `<plugin>/<tool>`, or the bare tool name when only one plugin has it.",
+        "tags": [
+          "tool"
+        ],
+        "x-destructive": false,
+        "x-idempotent": false,
+        "x-scope": "operate"
       }
     }
   },

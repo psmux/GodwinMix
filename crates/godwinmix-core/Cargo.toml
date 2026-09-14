@@ -19,6 +19,7 @@ gstreamer-video = { workspace = true }
 gstreamer-audio = { workspace = true }
 gstreamer-app = { workspace = true }
 gstreamer-pbutils = { workspace = true }
+gstreamer-controller = { workspace = true }
 glib = { workspace = true }
 
 tokio = { workspace = true, features = ["rt-multi-thread", "macros", "sync", "signal", "time", "io-std", "io-util", "fs"] }

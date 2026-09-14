@@ -42,7 +42,7 @@ pub enum Stream {
     Audio,
 }
 
-/// Which of the four insertion points a filter sits at.
+/// Which insertion point a filter sits at.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum FilterSide {
     /// On one source, before the proxy boundary. The programme and the
@@ -55,6 +55,11 @@ pub enum FilterSide {
     /// On the programme, on the encoder's branch only. The multiview is
     /// untouched.
     ProgrammeOutput,
+    /// On one item of the scene, between that slot's flip and its compositor
+    /// pad. The same source drawn twice can be keyed in one place and clean in
+    /// the other, which is the thing the other four cannot say. Owned by the
+    /// slot pool and torn down when the item goes.
+    SceneItem,
 }
 
 impl FilterSide {
@@ -64,6 +69,7 @@ impl FilterSide {
             Self::SourceProgramme => "source-programme",
             Self::Programme => "programme",
             Self::ProgrammeOutput => "programme-output",
+            Self::SceneItem => "scene-item",
         }
     }
 }

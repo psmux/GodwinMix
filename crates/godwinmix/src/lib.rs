@@ -582,6 +582,13 @@ pub async fn run() -> Result<()> {
         }
         drop(stage);
     }
+    // The supervisor is built here, before the mixer, because the transition
+    // renderer has to be installed on the mixer at build time and because
+    // `plugin.add` later needs something to hand a new plugin to.
+    let supervisor = godwinmix_core::plugin::supervisor::Supervisor::new(
+        godwinmix_core::caps::CanvasCaps::new(&cfg.canvas),
+        cfg.plugins.settings.clone(),
+    );
     // Which config `preset.apply` writes to, and what the surface starts with.
     control::methods::presets::configure(&config_path, cfg.ui.clone());
     // Kept for the control plane, which reads the canvas, the snapshot limits,
@@ -592,6 +599,9 @@ pub async fn run() -> Result<()> {
     let build = core_observe::introspect::stage("mixer build");
     let (mut mix, handle, cmd_rx, mut bus_rx) = mixer::Mixer::build(cfg)?;
     mix.persist_runtime_to(Config::runtime_store_path(&config_path));
+    // A take may name a transition that lives in a plugin. The mixer never
+    // launches one: it asks this, with a budget, before the window starts.
+    mix.set_transition_renderer(supervisor.clone());
     drop(build);
 
     // Logs to files, the session log, and the task that records every event.
@@ -617,6 +627,7 @@ pub async fn run() -> Result<()> {
             // and idle while nothing is running. What it finds over budget is
             // acted on here, because the loader has no mixer to act with.
             let budgets = handle.clone();
+            let supervised = supervisor.clone();
             plugin::loader::start_sampler(move |breach| {
                 use godwinmix_host::budget::OverBudget;
                 budgets.publish_alert(
@@ -627,6 +638,24 @@ pub async fn run() -> Result<()> {
                     format!("{} is over its budget: {}", breach.instance, breach.reason),
                 );
                 match breach.action {
+                    // A singleton is named after its provide (`ndi-discovery`)
+                    // and the mixer has never heard of it, so a breach on one
+                    // goes to the supervisor and a breach on a source goes to
+                    // the mixer. Sending a service id down the source path
+                    // would be a restart that quietly never happened.
+                    OverBudget::Restart
+                        if supervised
+                            .instances()
+                            .iter()
+                            .any(|(name, _, _, _)| *name == breach.instance) =>
+                    {
+                        let supervisor = supervised.clone();
+                        let plugin = breach.plugin.clone();
+                        std::thread::spawn(move || {
+                            supervisor.stop_plugin(&plugin, "over budget");
+                            supervisor.start_all();
+                        });
+                    }
                     OverBudget::Restart => {
                         let _ = budgets.send(mixer::Command::RestartSource(breach.instance));
                     }
@@ -682,6 +711,22 @@ pub async fn run() -> Result<()> {
         godwinmix_core::caps::CanvasCaps::new(&cfg_for_control.canvas),
     )
     .context("opening the scene collection")?;
+    // Every plugin that is not a source: the services, the devices and the
+    // transitions, each one instance per plugin, started now and kept up by
+    // its own pump thread. A device that finds a publisher adds a source
+    // through the same queue an operator's `source.add` goes through.
+    supervisor.attach(handle.clone());
+    {
+        let _stage = core_observe::introspect::stage("plugin singletons");
+        for (provide, why) in supervisor.start_all() {
+            warn!(%provide, %why, "a plugin singleton would not start");
+            handle.publish_alert(
+                godwinmix_core::state::Severity::Warning,
+                format!("the plugin provide {provide} would not start: {why}"),
+            );
+        }
+    }
+    supervisor.spawn_pump();
     let state = control::AppState::new(
         &cfg_for_control,
         control::Engine {
@@ -693,6 +738,7 @@ pub async fn run() -> Result<()> {
             converter,
             quit: quit.clone(),
             scenes,
+            plugins: supervisor.clone(),
         },
         args.rehearsal,
     );

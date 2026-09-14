@@ -292,6 +292,31 @@
           "signed": true
         }
       ]
+    },
+    {
+      "name": "wipe",
+      "source": "./plugins/wipe",
+      "description": "A wipe: the incoming scene slides in over the outgoing one, from any edge.",
+      "tier": "gold",
+      "kinds": [
+        "transition"
+      ],
+      "license": "Apache-2.0",
+      "repository": "https://github.com/psmux/godwinmix/tree/main/plugins/wipe",
+      "versions": [
+        {
+          "version": "0.2.0",
+          "api": 1,
+          "platforms": [
+            "linux-x86_64",
+            "linux-aarch64",
+            "macos-aarch64",
+            "macos-x86_64",
+            "windows-x86_64"
+          ],
+          "signed": true
+        }
+      ]
     }
   ]
 }

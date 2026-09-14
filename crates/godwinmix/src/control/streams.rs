@@ -118,6 +118,15 @@ async fn mjpeg_stream(
         return *r;
     }
     let target = mjpeg::Target::parse(&target);
+    mjpeg_for(ctx, target, q).await
+}
+
+/// One MJPEG stream, whatever named it.
+async fn mjpeg_for(
+    ctx: Ctx,
+    target: mjpeg::Target,
+    q: HashMap<String, String>,
+) -> Response {
     if !ctx.app.multiview.enabled() {
         return refuse(
             StatusCode::NOT_FOUND,
@@ -136,10 +145,26 @@ async fn mjpeg_stream(
     // The subscription and the client count live in the stream's own state, so
     // the mosaic is released the moment the client goes: axum drops the body
     // when the connection ends, and that drops both.
+    //
+    // The armed scene is composited rather than cut out of the mosaic, so it
+    // holds a preview subscription: that is what builds the preview compositor
+    // and what takes it away again at the end of this response.
+    let feed = if matches!(target, mjpeg::Target::Preview) {
+        crate::control::push_preview(&ctx.app);
+        Feed::Preview(ctx.app.multiview.subscribe_preview(
+            godwinmix_core::multiview::PreviewRequest {
+                fps: number(&q, "fps").unwrap_or(0),
+                width: width.unwrap_or(0) as i32,
+                full: q.get("full").is_some_and(|v| v != "0" && v != "false"),
+            },
+        ))
+    } else {
+        Feed::Mosaic(ctx.app.multiview.subscribe(mosaic))
+    };
     let state = MjpegState {
         pick: target.pick_in(Some(&ctx.app.scenes)),
         width,
-        subscription: ctx.app.multiview.subscribe(mosaic),
+        feed,
         _counted: ctx.app.preview.count("mjpeg"),
         ctx,
     };
@@ -156,13 +181,37 @@ async fn mjpeg_stream(
         .into_response()
 }
 
+/// Where one MJPEG stream's frames come from.
+///
+/// Two, because the armed scene is a picture of its own rather than a cell of
+/// the mosaic: it is composited from the same thumbnails and comes out ready
+/// to send, so it is neither decoded nor cropped on the way to a client.
+enum Feed {
+    Mosaic(MultiviewSubscription),
+    Preview(godwinmix_core::multiview::PreviewSubscription),
+}
+
+impl Feed {
+    async fn recv(&mut self) -> Result<std::sync::Arc<[u8]>, broadcast::error::RecvError> {
+        match self {
+            Feed::Mosaic(sub) => sub.recv().await,
+            Feed::Preview(sub) => sub.recv().await,
+        }
+    }
+
+    /// Whether this feed's frames need a cell cut out of them.
+    fn is_mosaic(&self) -> bool {
+        matches!(self, Feed::Mosaic(_))
+    }
+}
+
 /// Everything one MJPEG stream carries between frames.
 struct MjpegState {
     ctx: Ctx,
     pick: Option<Pick>,
     width: Option<u32>,
-    /// What keeps the mosaic up for this client's whole life.
-    subscription: MultiviewSubscription,
+    /// What keeps the picture up for this client's whole life.
+    feed: Feed,
     /// What `gmx_stream_clients{kind="mjpeg"}` reads.
     _counted: godwinmix_core::preview::ClientGuard,
 }
@@ -174,7 +223,7 @@ struct MjpegState {
 /// stream, because a source that is still connecting will appear on it.
 async fn next_part(state: &mut MjpegState) -> Option<Vec<u8>> {
     loop {
-        let jpeg = match tokio::time::timeout(FIRST_FRAME_WAIT, state.subscription.recv()).await {
+        let jpeg = match tokio::time::timeout(FIRST_FRAME_WAIT, state.feed.recv()).await {
             Ok(Ok(frame)) => frame,
             Ok(Err(broadcast::error::RecvError::Lagged(n))) => {
                 debug!(skipped = n, "mjpeg client fell behind");
@@ -187,8 +236,10 @@ async fn next_part(state: &mut MjpegState) -> Option<Vec<u8>> {
             }
         };
         // The cell this client wants, from the layout as it stands. A source
-        // added or removed moves the cells, so it is read per frame.
+        // added or removed moves the cells, so it is read per frame. A preview
+        // frame is already the picture that was asked for.
         let cell = match &state.pick {
+            _ if !state.feed.is_mosaic() => None,
             Some(Pick::Sheet) | None => None,
             Some(p) => {
                 let status = state.ctx.app.mixer.status().await.ok()?;
@@ -216,24 +267,32 @@ async fn next_part(state: &mut MjpegState) -> Option<Vec<u8>> {
     }
 }
 
-/// One scene item as a projector. The scene server owns items, so until it
-/// lands this says so and names what does work.
+/// One scene item as a projector: the cell of the source that item draws.
+///
+/// An item that draws no source (a graphic, or a group) has no tile on the
+/// mosaic, and the refusal says which items do rather than sending black.
 async fn mjpeg_item(
     State(ctx): State<Ctx>,
     Path(id): Path<String>,
+    Query(q): Query<HashMap<String, String>>,
     req: Request,
 ) -> Response {
     if let Err(r) = authorise(&ctx, req.method(), req.headers(), req.uri()) {
         return *r;
     }
-    refuse(
-        StatusCode::NOT_IMPLEMENTED,
-        &format!(
-            "a projector for one scene item ('{id}') needs the scene server, which this build \
-             does not have yet. Use /mjpeg/preview for the armed scene, /mjpeg/program for the \
-             programme, or /mjpeg/{{source}} for one camera."
-        ),
-    )
+    let target = mjpeg::Target::Item(id.clone());
+    if target.pick_in(Some(&ctx.app.scenes)).is_none() {
+        return refuse(
+            StatusCode::NOT_FOUND,
+            &format!(
+                "no scene item called '{id}' draws a source, so there is no picture to \
+                 project. A group and a graphic have no tile of their own. Use \
+                 /mjpeg/preview for the armed scene, /mjpeg/program for the programme, or \
+                 /mjpeg/{{source}} for one camera."
+            ),
+        );
+    }
+    mjpeg_for(ctx, target, q).await
 }
 
 // --- audio ------------------------------------------------------------------

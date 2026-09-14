@@ -155,6 +155,10 @@ pub struct ItemsRequest {
     pub duration_ms: Option<u64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub easing: Option<String>,
+    /// A client's own sequence number, echoed on the patch. See
+    /// `SetItemRequest::seq`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub seq: Option<u64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub draft: Option<String>,
 }
@@ -170,6 +174,9 @@ pub struct ReorderRequest {
     /// Put it in front of this one. With neither, it goes to the front.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub after: Option<String>,
+    /// A client's own sequence number, echoed on the patch.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub seq: Option<u64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub draft: Option<String>,
 }

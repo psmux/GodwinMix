@@ -201,6 +201,10 @@ fn preview(reg: &mut Registry<Call>) {
                 call.app.mixer.emit(godwinmix_protocol::types::Event::PreviewChanged {
                     scene: armed.as_ref().map(|s| s.name.clone()),
                 });
+                // What the preview compositor should draw, if one exists. The
+                // mixer holds it either way, so arming before anybody is
+                // watching still costs one message.
+                push_preview(&call);
                 body(json!({ "preview": armed }))
             }),
         )
@@ -227,6 +231,40 @@ fn preview(reg: &mut Registry<Call>) {
     );
 }
 
+/// Tell the mixer what the armed scene is, in canvas pixels.
+///
+/// The scene document lives here and the pipeline lives there, so the cells
+/// cross once, as plain numbers. Called when a scene is armed or disarmed,
+/// when a client subscribes with `ext.preview`, and after an edit to the scene
+/// that is armed.
+pub(crate) fn push_preview(call: &Call) {
+    crate::control::push_preview(&call.app);
+}
+
+/// The same, from an `AppState` alone, for the stream handlers.
+pub(crate) fn push_preview_for(app: &crate::control::AppState) {
+    let canvas = app.scenes.canvas();
+    let cells = app
+        .scenes
+        .preview_layout(canvas.width as i32, canvas.height as i32)
+        .map(|layout| {
+            layout
+                .cells
+                .into_iter()
+                .map(|c| godwinmix_core::multiview::preview::Cell {
+                    source: c.source,
+                    x: c.x,
+                    y: c.y,
+                    width: c.width,
+                    height: c.height,
+                    alpha: c.alpha,
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+    app.preview.set_scene(cells);
+}
+
 /// The preview still.
 ///
 /// The armed scene is composited in the multiview pipeline from the per source
@@ -246,32 +284,77 @@ async fn preview_frame(call: Call, params: Value) -> Result<Value, RpcError> {
                 .to_string(),
         ));
     };
-    let latest = call.snapshots.latest_wanted(std::time::Duration::from_secs(2)).await;
-    let Some(latest) = latest else {
+    // One frame of the armed scene, from the preview compositor. Subscribing
+    // here is what builds it: a still asked for on a core nobody is watching
+    // costs the preview branch for as long as this call takes and no longer,
+    // which is the same rule every other stream follows.
+    push_preview(&call);
+    let mut sub = call.app.multiview.subscribe_preview(godwinmix_core::multiview::PreviewRequest {
+        fps: 0,
+        width: req.width.unwrap_or(640) as i32,
+        full: false,
+    });
+    let jpeg = tokio::time::timeout(FRAME_WAIT, sub.recv()).await;
+    let Ok(Ok(jpeg)) = jpeg else {
         return Err(RpcError::new(
             ErrorCode::NotInState,
             format!(
-                "the scene {:?} is armed, but the preview picture is composited in the \
-                 multiview pipeline and no mosaic is running. Subscribe with ext.preview \
-                 or ext.multiview, or open /mjpeg/preview, and ask again.",
-                layout.name
+                "the scene {:?} is armed, but no preview frame arrived within {} ms. The \
+                 preview is composited from the per source thumbnails, so a scene whose \
+                 sources are all still connecting has nothing to photograph yet. Wait for \
+                 event/source.state and ask again.",
+                layout.name,
+                FRAME_WAIT.as_millis()
             ),
         )
         .with("scene", layout.name.clone())
         .with("retryable", true));
     };
     use base64::Engine;
+    let shape = call.app.multiview.preview_built();
     Ok(json!({
         "scene": layout.name,
-        "width": layout.width,
-        "height": layout.height,
+        "width": shape.map(|s| s.width).unwrap_or(layout.width),
+        "height": shape.map(|s| s.height).unwrap_or(layout.height),
         "layout": layout.cells,
-        "image": base64::engine::general_purpose::STANDARD.encode(&latest.jpeg),
+        "image": base64::engine::general_purpose::STANDARD.encode(&jpeg[..]),
         "encoding": "base64",
         "format": "jpeg",
-        "note": "the still is the programme mosaic; the layout says where the armed \
-                 scene's items would sit on it",
     }))
+}
+
+/// How long `scene.preview.frame` waits for the compositor to make one.
+///
+/// The preview may have to be built first, which is a compositor, a queue per
+/// source and an encoder going to PLAYING. Two seconds covers that on a Pi and
+/// is well inside the five second ceiling every method is held to.
+const FRAME_WAIT: std::time::Duration = std::time::Duration::from_secs(2);
+
+/// Push a scene that is on air again, as a cut.
+///
+/// What a filter change needs: `scene.item.filter.add` writes the filter onto
+/// the item, and the slot pool puts it on that item's chain the next time the
+/// scene is applied. Without this the filter would be in the document and not
+/// in the picture until somebody took the scene again, which is the gap the
+/// comment on those methods used to paper over.
+///
+/// A no op off air, and a property write on air: the pads are already drawing
+/// these items, so the apply binds nothing and relinks nothing except the
+/// filter chain that actually changed.
+pub(crate) async fn reapply_if_on_air(call: &Call, view: &SceneView) {
+    let Ok(status) = call.app.mixer.status().await else { return };
+    if status.scene.as_deref() != Some(view.name.as_str()) {
+        return;
+    }
+    let Ok((name, placements)) = server(call).placements(&view.name) else { return };
+    let _ = call.app.mixer.send(Command::TakeScene {
+        scene: Box::new(ProgramScene { name, placements }),
+        at_running_time_ms: None,
+        duration_ms: None,
+        transition: None,
+        ack: None,
+    });
+    tracing::debug!(scene = %view.name, "a change to the scene on air was pushed to the pipeline");
 }
 
 /// Ramp the pads of a scene that is on air towards what the document now says.
@@ -291,6 +374,10 @@ pub(crate) async fn ramp_if_on_air(call: &Call, view: &SceneView, ms: u64, easin
         scene: Box::new(ProgramScene { name, placements }),
         at_running_time_ms: None,
         duration_ms: Some(ms),
+        // A reshape of the scene already on air, not a crossing between two.
+        // The pads are already drawing these items, so easing them is a ramp
+        // on the pads they have rather than a second scene beside them.
+        transition: None,
         ack: None,
     });
     tracing::debug!(scene = %view.name, duration_ms = ms, easing, "layout change applied on air");

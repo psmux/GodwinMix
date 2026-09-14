@@ -19,6 +19,7 @@ pub mod filter;
 pub mod filters;
 pub mod harness;
 pub mod host;
+pub mod supervisor;
 pub mod loader;
 pub mod kinds;
 pub mod output;
@@ -41,14 +42,59 @@ pub use source::Source;
 pub const API_LEVEL: u32 = 1;
 pub const API_COMPATIBLE: u32 = 1;
 
-/// What a plugin provides. The enum from 03 section 2; only the kinds the core
-/// can host today are spelled out, the rest arrive with the sidecar host.
+/// What a plugin provides. The enum from 03 section 2, for the kinds the core
+/// hosts: the media kinds it builds pipelines for, and the three the
+/// supervisor runs as singletons beside them. The surface kinds (`panel`,
+/// `surface`, `preset`, `graphic`, `collection`) are contributions to a
+/// client, never a process the core starts, and are `Other`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum ProvideKind {
     Source,
     Output,
     Filter,
+    /// Control plane only. One instance per plugin, started with the core.
+    Service,
+    /// Finds things the core could add as sources, and says when they arrive
+    /// and leave. One instance per plugin, as a service is.
+    Device,
+    /// Drives compositor pads over a take. One instance per plugin.
+    Transition,
+    /// A kind this core does not host: a panel, a surface, a preset, a
+    /// graphic, a collection.
+    Other,
+}
+
+impl ProvideKind {
+    /// The word in the manifest.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Source => "source",
+            Self::Output => "output",
+            Self::Filter => "filter",
+            Self::Service => "service",
+            Self::Device => "device",
+            Self::Transition => "transition",
+            Self::Other => "other",
+        }
+    }
+
+    pub fn parse(s: &str) -> ProvideKind {
+        match s {
+            "source" => Self::Source,
+            "output" => Self::Output,
+            "filter" => Self::Filter,
+            "service" => Self::Service,
+            "device" => Self::Device,
+            "transition" => Self::Transition,
+            _ => Self::Other,
+        }
+    }
+
+    /// True for the kinds the supervisor runs as one instance per plugin.
+    pub fn is_singleton(self) -> bool {
+        matches!(self, Self::Service | Self::Device | Self::Transition)
+    }
 }
 
 /// Where an implementation runs. A built in kind is `Core`; the same trait

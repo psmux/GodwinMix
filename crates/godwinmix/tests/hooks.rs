@@ -172,6 +172,12 @@ impl Core {
                 library,
                 converter,
                 quit: Arc::new(tokio::sync::Notify::new()),
+                // A test core runs no plugin singletons; the supervisor is
+                // here because the control plane asks it what transitions exist.
+                plugins: godwinmix_core::plugin::supervisor::Supervisor::new(
+                    godwinmix_core::caps::CanvasCaps::new(&cfg.canvas),
+                    Default::default(),
+                ),
                 // In memory: a hook test writes no scene collection to disk.
                 scenes: godwinmix_core::scene::server::SceneServer::in_memory(
                     godwinmix_core::caps::CanvasCaps::new(&cfg.canvas),

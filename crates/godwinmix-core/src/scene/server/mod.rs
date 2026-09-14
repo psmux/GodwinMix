@@ -204,6 +204,29 @@ impl SceneServer {
         Ok((scene.name.clone(), compose::placements(&inner.doc, scene, &inner.canvas)))
     }
 
+    /// A transition the collection stores under a name.
+    ///
+    /// A collection carries its own transitions (11 section 7), so a church
+    /// that has settled on a 400 ms dissolve calls it "house" and every take
+    /// in every scene means the same thing by it. `program.take {transition:
+    /// "house"}` resolves here before the built in names are tried, so a
+    /// collection can also give "fade" a duration of its own.
+    pub fn transition(&self, name: &str) -> Option<crate::scene::Transition> {
+        let name = name.trim();
+        self.inner
+            .lock()
+            .doc
+            .transitions
+            .iter()
+            .find(|t| t.name.eq_ignore_ascii_case(name) || t.id.to_string() == name)
+            .cloned()
+    }
+
+    /// Every transition the collection names, for an error that lists them.
+    pub fn transition_names(&self) -> Vec<String> {
+        self.inner.lock().doc.transitions.iter().map(|t| t.name.clone()).collect()
+    }
+
     /// The armed scene, for `program.take` with no argument.
     pub fn armed(&self) -> Option<Id> {
         self.inner.lock().preview
@@ -262,11 +285,26 @@ impl SceneServer {
         client: Option<&str>,
         f: impl FnOnce(&mut Collection) -> Result<T>,
     ) -> Result<(T, Patch)> {
+        self.edit_at(client, None, f)
+    }
+
+    /// The same, carrying the client's own sequence number so its optimistic
+    /// drawing can be reconciled against the echo. See `Patch::client_seq`.
+    pub fn edit_at<T>(
+        &self,
+        client: Option<&str>,
+        client_seq: Option<u64>,
+        f: impl FnOnce(&mut Collection) -> Result<T>,
+    ) -> Result<(T, Patch)> {
         let mut inner = self.inner.lock();
         let before = inner.doc.to_flat();
         let mut working = inner.doc.clone();
         let value = f(&mut working)?;
         working.check_refs().context("the change would make a scene contain itself")?;
+        // Anything the change added has no order key yet. Giving it one here,
+        // between its neighbours, is what makes the patch below name the one
+        // record that moved instead of every sibling.
+        working.renumber_order();
         let after = working.to_flat();
         let mut p = patch::diff(&before, &after);
         if p.is_empty() {
@@ -274,6 +312,7 @@ impl SceneServer {
         }
         p.seq = self.seq.fetch_add(1, Ordering::SeqCst) + 1;
         p.source_client = client.map(str::to_string);
+        p.client_seq = client_seq;
         p.label = inner.group.clone();
         inner.doc = working;
         inner.remember(p.clone());
@@ -296,7 +335,18 @@ impl SceneServer {
         which: &str,
         f: impl FnOnce(&mut Collection, usize) -> Result<()>,
     ) -> Result<Outcome> {
-        let (id, patch) = self.edit(client, |doc| {
+        self.edit_scene_at(client, None, which, f)
+    }
+
+    /// The same, carrying the client's own sequence number.
+    pub fn edit_scene_at(
+        &self,
+        client: Option<&str>,
+        client_seq: Option<u64>,
+        which: &str,
+        f: impl FnOnce(&mut Collection, usize) -> Result<()>,
+    ) -> Result<Outcome> {
+        let (id, patch) = self.edit_at(client, client_seq, |doc| {
             let index = find::scene_index(doc, which)?;
             f(doc, index)?;
             Ok(doc.scenes[index].id)
