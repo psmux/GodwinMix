@@ -512,3 +512,139 @@ fn the_software_entry_survives_a_one_second_encode_here() {
     let psnr = report.psnr_db.expect("a video round trip has a psnr");
     assert!(psnr > check::PSNR_FLOOR, "psnr {psnr} is too low to be the same picture");
 }
+
+// ---------------------------------------------------------------------------
+// The other platforms
+//
+// The registry differs on every one of them, and the promise is that the
+// software entry resolves regardless. These are the registries the reference
+// machines in 09 actually have, written out as names so the check runs on any
+// runner, including this Mac.
+// ---------------------------------------------------------------------------
+
+fn windows_registry() -> FakeRegistry {
+    FakeRegistry::with(&[
+        "compositor",
+        "videoconvert",
+        "openh264enc",
+        "openh264dec",
+        "avdec_h264",
+        "h264parse",
+        "avenc_aac",
+        "avdec_aac",
+        "aacparse",
+        "flvmux",
+        "mfh264enc",
+        "d3d11h264dec",
+        "d3d11download",
+        "d3d11compositor",
+        "d3d11convert",
+        "d3d12h264dec",
+        "d3d12download",
+    ])
+}
+
+fn linux_intel_registry() -> FakeRegistry {
+    FakeRegistry::with(&[
+        "compositor",
+        "videoconvert",
+        "x264enc",
+        "avdec_h264",
+        "h264parse",
+        "avenc_aac",
+        "avdec_aac",
+        "aacparse",
+        "flvmux",
+        "vah264enc",
+        "vah264dec",
+        "vapostproc",
+        "vacompositor",
+    ])
+}
+
+fn macos_registry() -> FakeRegistry {
+    FakeRegistry::with(&[
+        "compositor",
+        "videoconvert",
+        "x264enc",
+        "avdec_h264",
+        "h264parse",
+        "avenc_aac",
+        "avdec_aac",
+        "aacparse",
+        "flvmux",
+        "vtenc_h264_hw",
+        "vtdec_hw",
+        "glvideomixer",
+        "glcolorconvert",
+        "gldownload",
+        "glupload",
+    ])
+}
+
+/// The Raspberry Pi 4: hardware encode through V4L2, software everything else.
+fn pi4_registry() -> FakeRegistry {
+    with(permissive_only(), &["v4l2h264enc", "v4l2h264dec"])
+}
+
+/// The Raspberry Pi 5, which has no hardware video encoder at all. This is the
+/// entry in 09 that says the newer board is the harder target, written as a
+/// test so nobody quietly assumes otherwise.
+fn pi5_registry() -> FakeRegistry {
+    permissive_only()
+}
+
+#[test]
+fn every_platform_resolves_an_encoder_and_a_compositor() {
+    let cat = Catalogue::shipped().unwrap();
+    let machines: [(&str, FakeRegistry, &str); 6] = [
+        ("windows", windows_registry(), "mfh264enc"),
+        ("linux-intel", linux_intel_registry(), "vah264enc"),
+        ("macos", macos_registry(), "vtenc_h264_hw"),
+        ("pi4", pi4_registry(), "v4l2h264enc"),
+        ("pi5", pi5_registry(), "openh264enc"),
+        ("laptop", laptop(), "x264enc"),
+    ];
+    for (name, reg, expect) in machines {
+        let sel = cat.select(&Request::default(), &reg).unwrap_or_else(|e| {
+            panic!("{name} must resolve a programme encoder: {e:#}");
+        });
+        assert_eq!(sel.video_encode.element, expect, "on {name}");
+        assert_eq!(sel.graphics.compositor, "compositor", "software stays the default on {name}");
+        assert!(!sel.audio_encode.element.is_empty(), "on {name}");
+    }
+}
+
+/// And whatever the machine has, forcing software must still work, because
+/// that is the switch an operator reaches for when the GPU misbehaves during
+/// a show.
+#[test]
+fn forcing_software_works_on_every_platform() {
+    let cat = Catalogue::shipped().unwrap();
+    let req = Request { encode: Accel::Software, decode: Accel::Software, ..Default::default() };
+    for (name, reg) in [
+        ("windows", windows_registry()),
+        ("linux-intel", linux_intel_registry()),
+        ("macos", macos_registry()),
+        ("pi4", pi4_registry()),
+        ("pi5", pi5_registry()),
+    ] {
+        let sel = cat
+            .select(&req, &reg)
+            .unwrap_or_else(|e| panic!("the software floor must hold on {name}: {e:#}"));
+        assert_eq!(sel.video_encode.accel, "software", "on {name}");
+        assert_eq!(sel.video_decode.accel, "software", "on {name}");
+    }
+}
+
+/// The Pi 4 has an encoder and the Pi 5 does not, which is the whole reason
+/// the comment is in the file.
+#[test]
+fn the_pi_4_encodes_in_hardware_and_the_pi_5_does_not() {
+    let cat = Catalogue::shipped().unwrap();
+    let pi4 = cat.select(&Request::default(), &pi4_registry()).unwrap();
+    assert_eq!(pi4.video_encode.accel, "v4l2");
+    let pi5 = cat.select(&Request::default(), &pi5_registry()).unwrap();
+    assert_eq!(pi5.video_encode.accel, "software");
+    assert_eq!(pi5.video_encode.element, "openh264enc");
+}
