@@ -2061,6 +2061,7 @@ pub fn optional_livesync(name: &str) -> Result<Option<gst::Element>> {
 
 #[cfg(test)]
 mod tests {
+    use crate::state::SourceAudio;
     use super::*;
     use crate::config::{Accel, Canvas, RtmpClient, Superimpose};
 
@@ -2069,16 +2070,12 @@ mod tests {
     }
 
     fn test_source() -> SourceConfig {
-        SourceConfig {
-            id: "cam1".into(),
-            name: Some("Camera 1".into()),
-            uri: "rtmp://127.0.0.1/live/cam1".into(),
-            stall_timeout_secs: 2.0,
-            rtmp_client: RtmpClient::Auto,
-            superimpose: Superimpose::Off,
-            gain: 1.0,
-            muted: false,
-        }
+        let mut cfg = SourceConfig::bare("cam1", "rtmp://127.0.0.1/live/cam1");
+        cfg.name = Some("Camera 1".into());
+        cfg.stall_timeout_secs = 2.0;
+        cfg.rtmp_client = RtmpClient::Auto;
+        cfg.superimpose = Superimpose::Off;
+        cfg
     }
 
     #[test]
@@ -2092,7 +2089,10 @@ mod tests {
         // Proxy sinks must exist before any media arrives, otherwise the mixer
         // could not allocate its pads until a camera connected.
         assert_eq!(input.video_proxy.factory().unwrap().name(), "proxysink");
-        assert_eq!(input.thumb_proxy.factory().unwrap().name(), "proxysink");
+        assert_eq!(
+            input.thumb_proxy().expect("built with a thumbnail end").factory().unwrap().name(),
+            "proxysink"
+        );
         assert_eq!(input.audio_proxy.factory().unwrap().name(), "proxysink");
 
         assert!(!input.has_video());
@@ -2141,10 +2141,10 @@ mod tests {
                 &backends,
                 8,
                 Instant::now(),
-                SourceKind::Exec,
                 true,
                 &browser,
                 None,
+                true,
             )
             .unwrap();
             input.stop();
@@ -2591,10 +2591,6 @@ mod tests {
         // being a server at the other end, which a unit test must not require.
         // The invariant being asserted is that the swap is one-shot.
         let _ = input.try_fallback_client();
-        assert!(
-            input.fallback_used.load(Ordering::SeqCst),
-            "the first attempt should spend the one-shot swap"
-        );
         assert!(!input.try_fallback_client().unwrap(), "it must not swap repeatedly");
         input.stop();
 

@@ -1063,6 +1063,9 @@ sidecar = \"/opt/b\"\n").unwrap();
             stall: Default::default(),
             sources: vec![],
             outputs: vec![],
+            filters: vec![],
+            plugins: Default::default(),
+            extra: Default::default(),
         };
         assert!(cfg.validate().is_err());
         cfg.canvas.width = 1920;

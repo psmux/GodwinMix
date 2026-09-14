@@ -1320,8 +1320,8 @@ fn restart_round(el: gst::Element, me: Arc<Placement>, id: SourceId) {
 /// already mixed everything into one stream by the time the mixer sees it.
 #[derive(Clone)]
 pub struct AudioLevels {
-    page: gst::Element,
-    media: Vec<gst::Element>,
+    pub page: gst::Element,
+    pub media: Vec<gst::Element>,
 }
 
 impl AudioLevels {

@@ -2770,6 +2770,9 @@ mod tests {
             stall: Default::default(),
             sources: vec![],
             outputs: vec![],
+            filters: vec![],
+            plugins: Default::default(),
+            extra: Default::default(),
         })
         .err()
         .expect("must refuse to build without a runtime");

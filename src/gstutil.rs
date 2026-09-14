@@ -664,7 +664,7 @@ mod tests {
         init();
         let pipeline = gst::Pipeline::with_name("watched");
         let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
-        let watch = watch_bus(&pipeline, "watched", tx).unwrap();
+        let watch = watch_bus(&pipeline, BusOwner::Other("watched".into()), tx).unwrap();
 
         let bus = pipeline.bus().unwrap();
         bus.post(gst::message::Eos::new()).unwrap();

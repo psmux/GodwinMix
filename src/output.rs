@@ -521,13 +521,7 @@ mod tests {
     }
 
     fn cfg(id: &str) -> OutputConfig {
-        OutputConfig {
-            id: id.into(),
-            uri: format!("rtmp://127.0.0.1:1935/live/{id}"),
-            policy: OutputPolicy::Own,
-            reconnect: None,
-            queue_secs: 5.0,
-        }
+        OutputConfig::bare(id, &format!("rtmp://127.0.0.1:1935/live/{id}"))
     }
 
     #[test]
@@ -585,13 +579,13 @@ mod tests {
         let a = OutputSlot::attach(&program, &vtee, &atee, &cfg("primary"), tx.clone()).unwrap();
         let b = OutputSlot::attach(&program, &vtee, &atee, &cfg("backup"), tx).unwrap();
 
-        assert!(a.owns_pipeline("output-primary"));
-        assert!(!a.owns_pipeline("output-backup"));
-        assert!(b.owns_pipeline("output-backup"));
+        assert!(a.owns_pipeline(&BusOwner::Output("primary".into())));
+        assert!(!a.owns_pipeline(&BusOwner::Output("backup".into())));
+        assert!(b.owns_pipeline(&BusOwner::Output("backup".into())));
         // Must not claim the program's own errors, which are unrecoverable and
         // have to be reported rather than silently retried.
-        assert!(!a.owns_pipeline("program"));
-        assert!(!b.owns_pipeline("multiview"));
+        assert!(!a.owns_pipeline(&BusOwner::Programme));
+        assert!(!b.owns_pipeline(&BusOwner::Multiview));
 
         a.shutdown();
         b.shutdown();

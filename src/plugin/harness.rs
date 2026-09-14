@@ -236,7 +236,13 @@ fn caps_match(
     let deadline = Instant::now() + PLAYING_TIMEOUT;
     while Instant::now() < deadline {
         if let Some(have) = pad.current_caps() {
-            return if have.can_intersect(&want) && want.is_subset(&have) {
+            // A subset, not an equality. What negotiated is always at least as
+            // specific as the canvas contract: `videotestsrc` adds
+            // `multiview-mode`, an audio decoder adds `channel-mask`, and a
+            // demuxer adds both. What matters is that every field the contract
+            // names is there and says what the contract says, which is exactly
+            // what `is_subset` asks.
+            return if have.is_subset(&want) {
                 CheckResult::pass(name, have.to_string())
             } else {
                 CheckResult::fail(name, format!("wanted {want}, got {have}"))
