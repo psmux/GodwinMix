@@ -204,19 +204,23 @@ jobs:
       # directory that can be run in place, so the check runs against the
       # built executable with the resources beside it, which is the same
       # resolution path.
+      # `cargo tauri build` copies bundle.resources next to the executable as
+      # well as into the installer, so the resources are already there and the
+      # resolution path is the same one the installed app takes.
       - name: --headless-check (Linux)
         if: runner.os == 'Linux'
         run: |
-          mkdir -p tauri-app/target/release/gstreamer
-          cp -r tauri-app/gstreamer/linux tauri-app/target/release/gstreamer/linux
+          test -d tauri-app/target/release/gstreamer/linux \
+            || { echo "::error::the bundler did not place the runtime" >&2; exit 1; }
           xvfb-run -a ./tauri-app/target/release/godwinmix-desktop --headless-check
 
       - name: --headless-check (Windows)
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
-          New-Item -ItemType Directory -Force -Path tauri-app\target\release\gstreamer | Out-Null
-          Copy-Item -Recurse -Force tauri-app\gstreamer\windows tauri-app\target\release\gstreamer\windows
+          if (-not (Test-Path tauri-app\target\release\gstreamer\windows)) {
+            throw "the bundler did not place the runtime next to the executable"
+          }
           & .\tauri-app\target\release\godwinmix-desktop.exe --headless-check
           if ($LASTEXITCODE -ne 0) { throw "--headless-check failed" }
 
