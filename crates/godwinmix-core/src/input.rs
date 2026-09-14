@@ -2244,6 +2244,25 @@ mod tests {
         std::fs::read_dir(dir).map(|d| d.count()).unwrap_or(0)
     }
 
+    /// The lowest descriptor count seen over a few seconds of sampling.
+    ///
+    /// The count is process wide and the suite runs beside these tests,
+    /// holding pipelines and sockets of its own for seconds at a time. A leak
+    /// keeps the floor up for good; a neighbour's descriptors go away when
+    /// it finishes, and this waits for that.
+    fn fd_floor() -> usize {
+        let mut floor = usize::MAX;
+        let start = std::time::Instant::now();
+        while start.elapsed() < Duration::from_secs(6) {
+            floor = floor.min(open_fds());
+            if floor <= 40 {
+                break;
+            }
+            std::thread::sleep(Duration::from_millis(150));
+        }
+        floor
+    }
+
     /// A source that comes and goes must leave nothing open.
     ///
     /// It left two descriptors a build on air: the read end of the child's
@@ -2281,10 +2300,10 @@ mod tests {
             input.stop();
             drop(input);
             if i == 4 {
-                baseline = open_fds();
+                baseline = fd_floor();
             }
         }
-        let after = open_fds();
+        let after = fd_floor();
         assert!(
             after <= baseline + 2,
             "fifteen builds added {} descriptors ({baseline} to {after})",
@@ -2450,10 +2469,10 @@ mod tests {
         for i in 0..12 {
             assert!(probe_page_media(&"s".to_string(), &spec, Duration::from_secs(5)).is_some());
             if i == 2 {
-                baseline = open_fds();
+                baseline = fd_floor();
             }
         }
-        let after = open_fds();
+        let after = fd_floor();
         assert!(
             after <= baseline + 2,
             "nine probes added {} descriptors ({baseline} to {after})",
