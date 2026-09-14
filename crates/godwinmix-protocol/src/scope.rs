@@ -14,9 +14,18 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 /// What a token may reach. Ordered: `admin` implies `operate` implies `read`.
+///
+/// `Plugin` is the exception and sits below the ladder on purpose. It is what
+/// a plugin's own per instance token carries, and it grants exactly one thing:
+/// calling that plugin's own tools. It implies no reading and no operating, so
+/// a plugin that tries `program.take` is refused with -32002, which is what 04
+/// section 8 asks for. Which plugin a token belongs to is `Token::plugin`,
+/// beside the scope rather than inside it, so `Scope` stays `Copy` and the
+/// method table stays a table of constants.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "lowercase")]
 pub enum Scope {
+    Plugin,
     Read,
     Operate,
     Admin,
@@ -25,6 +34,7 @@ pub enum Scope {
 impl Scope {
     pub const fn as_str(self) -> &'static str {
         match self {
+            Self::Plugin => "plugin",
             Self::Read => "read",
             Self::Operate => "operate",
             Self::Admin => "admin",
@@ -99,6 +109,16 @@ pub struct Token {
     /// Per token safety numbers. `None` leaves the core's `[safety]` table in
     /// force, which is the usual case.
     pub safety: Option<TokenSafety>,
+    /// The plugin this token was minted for, when it was minted for one.
+    ///
+    /// Set only on the per instance token a plugin gets in `GMX_TOKEN`. It
+    /// narrows `tool.call` to that plugin's own tools and nothing else; every
+    /// other method is decided by `scopes` as usual.
+    pub plugin: Option<String>,
+    /// The node hosting the instance this token was minted for. Reported so a
+    /// refusal can say which machine the caller is on, and so a node leaving
+    /// can revoke every token it was carrying.
+    pub node: Option<String>,
 }
 
 impl Token {
@@ -114,6 +134,24 @@ impl Token {
             profile: Profile::Standard,
             agent: false,
             safety: None,
+            plugin: None,
+            node: None,
+        }
+    }
+
+    /// The token a plugin instance is given in `GMX_TOKEN`.
+    ///
+    /// It carries `plugin` and nothing else, so the plugin may call its own
+    /// tools and read nothing, take nothing and remove nothing. `node` names
+    /// the machine when the instance is remote.
+    pub fn for_plugin(id: &str, secret: &str, plugin: &str, node: Option<&str>) -> Self {
+        Self {
+            id: id.to_string(),
+            secret: secret.to_string(),
+            scopes: vec![Scope::Plugin],
+            plugin: Some(plugin.to_string()),
+            node: node.map(str::to_string),
+            ..Self::legacy("")
         }
     }
 
@@ -123,8 +161,32 @@ impl Token {
         Self { id: "open".into(), secret: String::new(), ..Self::legacy("") }
     }
 
+    /// Whether this token reaches a method registered at `needed`.
+    ///
+    /// The ladder answers everything except `Plugin`, which is not a rung on
+    /// it. A method registered at `Plugin` is reachable by a plugin's own
+    /// token and by any operator token, and not by a read only one; and a
+    /// plugin's token, holding only `Plugin`, reaches nothing else.
     pub fn has(&self, needed: Scope) -> bool {
-        self.scopes.iter().any(|s| *s >= needed)
+        if needed == Scope::Plugin {
+            return self
+                .scopes
+                .iter()
+                .any(|s| *s == Scope::Plugin || *s >= Scope::Operate);
+        }
+        self.scopes.iter().any(|s| *s != Scope::Plugin && *s >= needed)
+    }
+
+    /// Whether this token may call a tool that `owner` contributed.
+    ///
+    /// An operator token may call anybody's. A plugin's own token may call its
+    /// own and nothing else, which is the narrowing 04 section 8 asks for and
+    /// the check `tool.call` was registered under `operate` for want of.
+    pub fn may_call_tool_of(&self, owner: &str) -> bool {
+        match &self.plugin {
+            None => true,
+            Some(mine) => mine == owner,
+        }
     }
 
     pub fn scope_names(&self) -> Vec<String> {
@@ -146,9 +208,15 @@ impl Token {
 }
 
 /// Every credential this core accepts, and whether it is a rehearsal core.
+///
+/// Two lists. The configured one never changes while the core runs. The minted
+/// one holds the per instance tokens plugins are given in `GMX_TOKEN`: they
+/// come and go with the instances, and they are shared between clones of this
+/// type so the control server and the loader see the same set.
 #[derive(Debug, Clone, Default)]
 pub struct Tokens {
     entries: Vec<Token>,
+    minted: Arc<parking_lot::Mutex<Vec<Token>>>,
     /// True when the core was started with `--rehearsal`.
     pub rehearsal_core: bool,
 }
@@ -175,11 +243,70 @@ impl AuthFailure {
 
 impl Tokens {
     pub fn new(entries: Vec<Token>, rehearsal_core: bool) -> Self {
-        Self { entries, rehearsal_core }
+        Self { entries, minted: Arc::default(), rehearsal_core }
+    }
+
+    /// Mint the token one plugin instance is given in `GMX_TOKEN`.
+    ///
+    /// Scoped `plugin`, carrying the plugin's name, and carrying the node when
+    /// the instance is hosted on one. It lives until the instance is removed
+    /// or the node leaves, which is what `revoke_instance` and `revoke_node`
+    /// are for. A token per instance rather than per plugin, so revoking one
+    /// source does not silence the other three.
+    pub fn mint_for_plugin(&self, plugin: &str, instance: &str, node: Option<&str>) -> String {
+        let mut secret = [0u8; 32];
+        if getrandom::fill(&mut secret).is_err() {
+            tracing::warn!(
+                instance,
+                "no random bytes for a plugin token; this instance gets none and cannot call \
+                 core methods"
+            );
+            return String::new();
+        }
+        let secret: String = secret.iter().map(|b| format!("{b:02x}")).collect();
+        let token = Token::for_plugin(instance, &secret, plugin, node);
+        let mut minted = self.minted.lock();
+        minted.retain(|t| t.id != instance);
+        minted.push(token);
+        secret
+    }
+
+    /// Forget the token one instance was given.
+    pub fn revoke_instance(&self, instance: &str) -> bool {
+        let mut minted = self.minted.lock();
+        let before = minted.len();
+        minted.retain(|t| t.id != instance);
+        before != minted.len()
+    }
+
+    /// Forget every token minted for one plugin. `plugin.remove`.
+    pub fn revoke_plugin(&self, plugin: &str) -> usize {
+        let mut minted = self.minted.lock();
+        let before = minted.len();
+        minted.retain(|t| t.plugin.as_deref() != Some(plugin));
+        before - minted.len()
+    }
+
+    /// Forget every token minted for an instance on one node. A node that has
+    /// gone takes its plugins' credentials with it.
+    pub fn revoke_node(&self, node: &str) -> usize {
+        let mut minted = self.minted.lock();
+        let before = minted.len();
+        minted.retain(|t| t.node.as_deref() != Some(node));
+        before - minted.len()
+    }
+
+    /// How many per instance tokens are live.
+    pub fn minted(&self) -> usize {
+        self.minted.lock().len()
     }
 
     /// No token configured: the control port is open, which is how it has
     /// always worked and is fine behind a firewall.
+    ///
+    /// Minted plugin tokens do not close an open port. A core with no token is
+    /// open by the operator's choice, and a plugin starting must not silently
+    /// turn that into a core nobody can reach.
     pub fn is_open(&self) -> bool {
         self.entries.is_empty()
     }
@@ -198,10 +325,10 @@ impl Tokens {
         let Some(presented) = presented.filter(|p| !p.is_empty()) else {
             return Err(AuthFailure::Missing);
         };
-        let mut found: Option<&Token> = None;
-        for entry in &self.entries {
+        let mut found: Option<Token> = None;
+        for entry in self.entries.iter().chain(self.minted.lock().iter()) {
             if constant_time_eq(presented.as_bytes(), entry.secret.as_bytes()) {
-                found = Some(entry);
+                found = Some(entry.clone());
             }
         }
         let Some(token) = found else { return Err(AuthFailure::Wrong) };
@@ -217,7 +344,7 @@ impl Tokens {
                 "this core was started with --rehearsal and that is a live token. \
                  Use a token with rehearsal = true.",
             )),
-            _ => Ok(token.clone()),
+            _ => Ok(token),
         }
     }
 }
@@ -343,7 +470,56 @@ mod tests {
             profile: Profile::Standard,
             agent: false,
             safety: None,
+            plugin: None,
+            node: None,
         }
+    }
+
+    #[test]
+    fn a_plugin_token_reaches_its_own_tools_and_nothing_else() {
+        let mine = Token::for_plugin("cam1", "s", "ndi", Some("studio-b"));
+        assert!(mine.has(Scope::Plugin), "it must reach a method registered at plugin scope");
+        assert!(!mine.has(Scope::Read), "and nothing on the ladder");
+        assert!(!mine.has(Scope::Operate));
+        assert!(!mine.has(Scope::Admin));
+        assert!(mine.may_call_tool_of("ndi"));
+        assert!(!mine.may_call_tool_of("obs"));
+        assert_eq!(mine.node.as_deref(), Some("studio-b"));
+    }
+
+    #[test]
+    fn an_operator_token_still_reaches_every_tool() {
+        let operator = token("op", "s", &[Scope::Operate]);
+        assert!(operator.has(Scope::Plugin), "operate satisfies a plugin scoped method");
+        assert!(operator.may_call_tool_of("anything"));
+    }
+
+    #[test]
+    fn a_read_only_token_does_not_reach_a_plugin_scoped_method() {
+        let reader = token("r", "s", &[Scope::Read]);
+        assert!(!reader.has(Scope::Plugin), "tool.call must stay out of a read only token's reach");
+    }
+
+    #[test]
+    fn a_minted_token_authenticates_and_can_be_revoked() {
+        let tokens = Tokens::new(vec![token("op", "operator-secret", &[Scope::Admin])], false);
+        let secret = tokens.mint_for_plugin("ndi", "cam1", Some("studio-b"));
+        assert_eq!(tokens.minted(), 1);
+        let who = tokens.authenticate(Some(&secret)).unwrap();
+        assert_eq!(who.plugin.as_deref(), Some("ndi"));
+        assert!(tokens.revoke_node("studio-b") == 1);
+        assert_eq!(tokens.authenticate(Some(&secret)), Err(AuthFailure::Wrong));
+    }
+
+    #[test]
+    fn revoking_one_instance_leaves_the_others_alone() {
+        let tokens = Tokens::new(vec![token("op", "operator-secret", &[Scope::Admin])], false);
+        let one = tokens.mint_for_plugin("ndi", "cam1", None);
+        let two = tokens.mint_for_plugin("ndi", "cam2", None);
+        assert!(tokens.revoke_instance("cam1"));
+        assert_eq!(tokens.authenticate(Some(&one)), Err(AuthFailure::Wrong));
+        assert!(tokens.authenticate(Some(&two)).is_ok());
+        assert_eq!(tokens.revoke_plugin("ndi"), 1);
     }
 
     #[test]

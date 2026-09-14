@@ -1102,6 +1102,7 @@ dependencies = [
 name = "godwinmix-protocol"
 version = "0.2.0"
 dependencies = [
+ "getrandom 0.3.4",
  "parking_lot",
  "schemars",
  "serde",

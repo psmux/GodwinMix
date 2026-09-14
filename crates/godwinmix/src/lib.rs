@@ -558,6 +558,16 @@ pub async fn run() -> Result<()> {
     if args.rehearsal {
         info!("rehearsal core: output.add is refused and only rehearsal tokens are accepted");
     }
+    // Every plugin instance gets its own token in `GMX_TOKEN`, scoped to the
+    // plugin it belongs to. Without this the loader has nothing to mint with
+    // and hands out an empty string, which is right for an embedded core with
+    // no control server and wrong for this one.
+    {
+        let minting = tokens.clone();
+        plugin::loader::set_token_minter(Box::new(move |plugin, instance| {
+            minting.mint_for_plugin(plugin, instance, None)
+        }));
+    }
     let cfg_media = cfg.media.clone();
     // Where the web UI and any plugin panels are read from.
     ui::configure(cfg.control.ui_dir.as_deref(), cfg.control.plugins_dir.as_deref());

@@ -212,7 +212,7 @@ impl Node {
         let mut source = crate::plugin::host::make_source(request)
             .with_context(|| format!("start `{}` on this node", spawn.type_id))?;
         let hello = crate::plugin::Hello {
-            instance: spawn.instance.clone().into(),
+            instance: spawn.instance.clone(),
             canvas: canvas.clone(),
             api_level: crate::plugin::API_LEVEL,
             params: cfg.effective_params(),

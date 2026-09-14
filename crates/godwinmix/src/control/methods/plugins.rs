@@ -838,12 +838,28 @@ async fn tool_call(call: Call, params: Value) -> Result<Value, RpcError> {
                 .to_string(),
         ));
     }
-    // 03 section 6 gives a plugin's own token the scope `plugin:<name>`, so a
-    // plugin may call its own tools and nobody else's. The `Token` type this
-    // build carries has read, operate and admin and no per plugin scope, so
-    // the method is registered under `operate` and a plugin's token reaches
-    // any tool. Narrowing that is one variant on `Scope` and one check here.
+    // 03 section 6 gives a plugin's own token the scope `plugin:<name>`: it
+    // may call its own tools and nobody else's. An operator's token carries no
+    // plugin and reaches every tool, which is what it always did. The method
+    // is registered at `Scope::Plugin`, which an operate or admin token also
+    // satisfies and a read only token does not.
     let supervisor = call.app.plugins.clone();
+    if let Some(mine) = call.token.plugin.clone() {
+        let owner = supervisor.tool_owner(&name);
+        if !owner.as_deref().is_some_and(|o| o == mine) {
+            return Err(RpcError::new(
+                ErrorCode::Scope,
+                format!(
+                    "this token belongs to the plugin `{mine}`, and `{name}` is {}. A plugin's \
+                     own token reaches its own tools and nothing else",
+                    match owner {
+                        Some(other) => format!("a tool of `{other}`"),
+                        None => "not one of its tools".to_string(),
+                    }
+                ),
+            ));
+        }
+    }
     let arguments = req.arguments.clone();
     let answered = tokio::task::spawn_blocking(move || supervisor.tool_call(&name, arguments))
         .await
