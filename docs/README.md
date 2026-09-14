@@ -42,6 +42,8 @@ Start here if you have never run it.
 * [Write a source plugin in Rust](how-to/write-a-source-plugin.md)
 * [Install a plugin](how-to/install-a-plugin.md)
 * [Test a plugin](how-to/test-a-plugin.md)
+* [Run your own code when something happens](how-to/hooks.md)
+* [Turn a bug into a test](how-to/turn-a-bug-into-a-test.md)
 
 ## Reference
 
@@ -61,6 +63,8 @@ Start here if you have never run it.
 * [The plugin protocol](reference/plugin-protocol.md)
 * [The plugin lifecycle](reference/plugin-lifecycle.md)
 * [The client libraries](reference/clients.md)
+* [Hooks](reference/hooks.md)
+* [The session log](reference/session-log.md)
 
 ## Explanation
 
@@ -70,6 +74,7 @@ Start here if you have never run it.
 * [Why the UI is a client](explanation/why-the-ui-is-a-client.md)
 * [Footprint budgets and the reference machines](explanation/footprint-budgets.md)
 * [The crate map](explanation/architecture.md)
+* [Why the evals grade the world](explanation/evals.md)
 
 ## For AI agents
 

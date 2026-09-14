@@ -116,6 +116,7 @@ class Core:
         self.dir = pathlib.Path(tempfile.mkdtemp(prefix="gmx-eval-"))
         self.process = None
         self.mark = 0
+        self.baseline = None
 
     def __enter__(self):
         config = self.dir / "godwinmix.toml"
@@ -259,6 +260,7 @@ class Core:
             time.sleep(initial["wait_ms"] / 1000)
         self.settle()
         self.mark = self.log_size()
+        self.baseline = self.status_event()
 
     def settle(self, quiet=0.5, limit=10):
         """Wait until the log stops growing.
@@ -276,6 +278,16 @@ class Core:
                 return
             last = now
             time.sleep(quiet)
+
+    def status_event(self):
+        """The whole status, shaped like the event that carries it.
+
+        The mixer publishes a status when the shape of the show changes, not
+        when a source finishes connecting, so the log on its own can be a few
+        seconds behind the world. Reading the status at the mark and again at
+        the end pins both ends of what the agent is answerable for.
+        """
+        return dict(self.get("core/status"), type="status")
 
     def wait_for_log(self, ids, seconds=15):
         """Wait until the log has said every source is live."""
@@ -469,14 +481,29 @@ class Tracker:
         return [{"what": "adbreak", "to": to or "ended"}]
 
 
-def deltas_of(records, after=0):
-    """Deltas from the records at or past `after`, with the rest for context."""
+def deltas_of(records, after=0, baseline=None, final=None):
+    """Deltas from the records at or past `after`.
+
+    The records before it are read for context and produce nothing: the world
+    before the instruction is not the agent's doing.
+
+    `baseline` is the status as it actually was at the mark, and `final` the
+    status at the end. Both are read from the core rather than from the log,
+    because the mixer publishes a status when the shape of the show changes
+    and not when a source finishes connecting. Without them a source that went
+    live a moment before the mark is reported as the agent's doing, and one
+    that went live a moment after it is not reported at all.
+    """
     tracker = Tracker()
+    for record in records[:after]:
+        tracker.absorb(record)
+    if baseline is not None:
+        tracker.event(baseline)
     out = []
-    for index, record in enumerate(records):
-        produced = tracker.absorb(record)
-        if index >= after:
-            out += produced
+    for record in records[after:]:
+        out += tracker.absorb(record)
+    if final is not None:
+        out += tracker.event(final)
     return out
 
 
@@ -552,7 +579,12 @@ def run_once(case, driver, options):
         # that arms something for later says how much later.
         time.sleep(case.get("settle_ms", 1200) / 1000)
         core.settle()
-        produced = deltas_of(core.records(), after=core.mark)
+        produced = deltas_of(
+            core.records(),
+            after=core.mark,
+            baseline=core.baseline,
+            final=core.status_event(),
+        )
     problems = grade(case.get("expect_changes", []), produced)
     return {
         "passed": not problems,
