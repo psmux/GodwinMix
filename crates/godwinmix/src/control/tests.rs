@@ -485,6 +485,58 @@ fn the_legacy_paths_carry_the_scope_of_the_method_they_alias() {
     assert!(reader.has(scope_of(Method::GET, "/api/agent/state").1));
 }
 
+/// The other half of the same rule, which the deprecated door used to miss: a
+/// token whose policy is `confirm = required` could remove a source, drop an
+/// output or shut the mixer down through `/api`, because the guard there
+/// checked the scope and the rehearsal flag and not the confirm policy. Those
+/// paths have no envelope to carry a confirm token, so the answer is to send
+/// the caller to the versioned route rather than to invent a round trip they
+/// cannot complete.
+#[test]
+fn a_confirm_required_token_cannot_destroy_anything_through_the_deprecated_door() {
+    let routes = rest::legacy_routes();
+    let registry = methods::registry();
+    let careful = Token {
+        id: "studio-agent".into(),
+        secret: "x".into(),
+        scopes: vec![Scope::Read, Scope::Operate, Scope::Admin],
+        confirm: ConfirmPolicy::Required,
+        rehearsal: false,
+        profile: Profile::Standard,
+        agent: true,
+        safety: None,
+    };
+    let easy = Token { confirm: ConfirmPolicy::None, ..careful.clone() };
+
+    let destructive = [
+        (Method::DELETE, "/api/sources/cam1", "source.remove"),
+        (Method::DELETE, "/api/outputs/yt", "output.remove"),
+        (Method::DELETE, "/api/media/clip.mp4", "media.remove"),
+        (Method::POST, "/api/shutdown", "core.shutdown"),
+    ];
+    for (http, path, method) in destructive {
+        let (route, _) = rest::resolve(&routes, &http, path).expect("a legacy route");
+        assert_eq!(route.method, method);
+        let def = registry.get(route.method).unwrap();
+        assert!(def.destructive, "{method} should be marked destructive");
+        assert!(careful.has(def.scope), "the scope is not what is refusing this");
+
+        let refusal = super::legacy_refusal(&careful, def, path)
+            .unwrap_or_else(|| panic!("{path} let a confirm-required token through"));
+        assert!(refusal.contains("/api/v1"), "the refusal has to name the way through: {refusal}");
+        assert!(refusal.contains(method), "{refusal}");
+        // A token that needs no confirmation is not affected.
+        assert!(super::legacy_refusal(&easy, def, path).is_none(), "{path}");
+    }
+
+    // And nothing that is not destructive is refused.
+    for (http, path) in [(Method::POST, "/api/take"), (Method::GET, "/api/status")] {
+        let (route, _) = rest::resolve(&routes, &http, path).unwrap();
+        let def = registry.get(route.method).unwrap();
+        assert!(super::legacy_refusal(&careful, def, path).is_none(), "{path}");
+    }
+}
+
 // --- the pieces the legacy handlers still lean on --------------------------
 
 /// `add_source` builds its `SourceConfig` through JSON, so the strings the

@@ -926,6 +926,8 @@ Subscribe with `core.subscribe`. Patterns match the part after `event/`, so `pro
 | `event/meters` | `meters` | `audio_level, source_audio_level` | Peak dBFS for the programme bus and every source, in one message at 10 per second. Replaces the two separate meter events on /ws. |
 | `event/tally` | `tally` |  | Which sources are on programme, on preview, or off. Derived by the core so a Stream Deck does not have to. |
 | `event/alert` |  | `alert` | Something an operator should see. Also written to the log and to the alert webhook. |
+| `event/telemetry` | `telemetry` |  | Numbers instead of a picture, up to ten times a second and under 200 bytes: the shot change score, the black ratio, a freeze flag, short term and integrated loudness, a silence flag and which sources are live. From cheap probes on the raw programme frames, which run only while a client is subscribed. |
+| `event/agent.state` | `agent` |  | The agent.state document, pushed when a telemetry threshold crosses or a take lands, with `why` naming which and a snapshot URL beside it. Edge triggered and at most one a second, so a picture that stays black is one message rather than one a tick. |
 | `event/multiview.layout` | `multiview` |  | How to read the binary frames that follow: the cells, and the layout id carried in every frame header. |
 | `event/multiview.frame` | `multiview` | `raw JPEG binary frame` | A mosaic frame, as a binary WebSocket frame rather than JSON: a 16 byte little endian header (seq u32, layout id u32, programme running time in milliseconds u64) then the JPEG. |
 | `event/resync` |  |  | This client fell behind and events were dropped. Re-subscribe for a fresh snapshot; nothing between from_seq and the new snapshot arrives. |

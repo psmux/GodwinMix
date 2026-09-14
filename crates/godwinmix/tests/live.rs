@@ -35,6 +35,13 @@ struct Core {
 
 impl Core {
     async fn start(safety: godwinmix_core::safety::SafetyConfig) -> Core {
+        Core::start_with(safety, false).await
+    }
+
+    async fn start_with(
+        safety: godwinmix_core::safety::SafetyConfig,
+        rehearsal: bool,
+    ) -> Core {
         let _ = gstreamer::init();
         let mut cfg: Config = toml::from_str("").expect("an empty config is every default");
         cfg.canvas.width = 320;
@@ -74,7 +81,7 @@ impl Core {
             library,
             converter,
             Arc::new(tokio::sync::Notify::new()),
-            false,
+            rehearsal,
         );
         let core = Core {
             snapshots,
@@ -316,4 +323,77 @@ async fn every_refusal_carries_data_retryable_and_a_way_forward() {
     if let Err(e) = refusal {
         assert_ne!(e.data.get("rehearsal"), Some(&json!(true)), "this is a live core");
     }
+}
+
+/// 09 section 5 item 14, the method half: a core started with `--rehearsal`
+/// will not add an output, so an agent rehearsing cannot put anything on a
+/// real destination by accident. The credential half is in `scope.rs`.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_rehearsal_core_refuses_to_add_an_output_and_does_everything_else() {
+    let core = Core::start_with(
+        godwinmix_core::safety::SafetyConfig { min_hold_ms: 0, flash_guard: false, ..Default::default() },
+        true,
+    )
+    .await;
+    let token = desk();
+
+    let refusal = core
+        .call(&token, "output.add", json!({ "id": "yt", "url": "rtmp://127.0.0.1/live/x" }))
+        .await
+        .expect_err("a rehearsal core must not add an output");
+    assert_eq!(refusal.code, -32003, "{refusal:?}");
+    assert_eq!(refusal.data["rehearsal"], true);
+    assert!(refusal.message.contains("--rehearsal"), "{}", refusal.message);
+    assert!(
+        refusal.message.contains("Everything else works"),
+        "the refusal has to say what still works: {}",
+        refusal.message
+    );
+
+    // And everything else does work, which is the point of rehearsing.
+    let taken = core.call(&token, "program.take", json!({ "source": "cam1" })).await.unwrap();
+    assert_eq!(taken["program"], "cam1");
+    assert!(core.call(&token, "core.info", json!({})).await.unwrap()["rehearsal"] == true);
+}
+
+/// The task surface, end to end through the dispatcher: an unknown id names
+/// the ids that exist, and a task read back carries the shape 03 section 6
+/// describes.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_task_is_readable_and_cancellable_through_the_method_table() {
+    let core = Core::start(godwinmix_core::safety::SafetyConfig::default()).await;
+    let token = desk();
+
+    let missing = core
+        .call(&token, "task.get", json!({ "task_id": "nope" }))
+        .await
+        .expect_err("an unknown task is refused");
+    assert_eq!(missing.code, -32004);
+    assert_eq!(missing.data["kind"], "task");
+
+    let id = core.app.tasks.spawn("plugin.add", |ctx| async move {
+        for _ in 0..200 {
+            if ctx.cancelled() {
+                return Ok(json!({ "stopped": true }));
+            }
+            tokio::time::sleep(Duration::from_millis(5)).await;
+        }
+        Ok(json!({ "installed": true }))
+    });
+
+    let view = core.call(&token, "task.get", json!({ "task_id": &id })).await.unwrap();
+    assert_eq!(view["state"], "running");
+    assert_eq!(view["kind"], "plugin.add");
+    assert_eq!(view["poll_interval_ms"], 1_000);
+
+    core.call(&token, "task.cancel", json!({ "task_id": &id })).await.unwrap();
+    for _ in 0..200 {
+        let view = core.call(&token, "task.get", json!({ "task_id": &id })).await.unwrap();
+        if view["state"] != "running" {
+            assert_eq!(view["state"], "cancelled");
+            return;
+        }
+        tokio::time::sleep(Duration::from_millis(10)).await;
+    }
+    panic!("the task never stopped");
 }
