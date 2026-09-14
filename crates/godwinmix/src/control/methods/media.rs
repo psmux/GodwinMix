@@ -65,12 +65,31 @@ pub fn register(reg: &mut Registry<Call>) {
                 let input = call.app.library.resolve(&req.name).map_err(|e| {
                     RpcError::not_found("media file", &req.name, &[]).with("detail", e.to_string())
                 })?;
+                let name = req.name.clone();
                 let state = call
                     .app
                     .converter
                     .start(req.name, input)
                     .map_err(|e| call.mixer_error(e))?;
-                body(state)
+                // A transcode runs for minutes and no call may block for more
+                // than five seconds, so the answer carries a task handle
+                // beside the conversion state. The work is already going; the
+                // task follows it so `task.get` can report the outcome.
+                let converter = call.app.converter.clone();
+                let mut handle = super::tasks::spawn_task(
+                    &call.app.tasks,
+                    "media.convert",
+                    Some(body(&state)?),
+                    move |ctx| async move { follow_conversion(converter, name, ctx).await },
+                );
+                if let (Some(map), Ok(state)) = (handle.as_object_mut(), body(&state)) {
+                    if let Some(state) = state.as_object() {
+                        for (k, v) in state {
+                            map.entry(k.clone()).or_insert(v.clone());
+                        }
+                    }
+                }
+                Ok(handle)
             }),
         )
         .params(schema_of::<NameRequest>)
@@ -268,4 +287,48 @@ async fn remove_media(call: Call, params: Value) -> Result<Value, RpcError> {
         .mixer
         .emit(Event::MediaChanged { name: req.name.clone(), conversion: None });
     Ok(json!({ "removed": removed, "name": req.name }))
+}
+
+/// Watch one transcode to its end, so `task.get` can answer for it.
+///
+/// Polls the converter's own job table rather than reaching into the
+/// pipeline: the conversion is already running and this only reports.
+async fn follow_conversion(
+    converter: std::sync::Arc<godwinmix_core::convert::Converter>,
+    name: String,
+    ctx: godwinmix_core::tasks::TaskContext,
+) -> Result<Value, String> {
+    use godwinmix_protocol::types::ConversionPhase;
+    loop {
+        if ctx.cancelled() {
+            return Err(format!(
+                "the conversion of {name} was asked to stop. It runs to the end whatever \
+                 this task says, because stopping a transcode half way leaves a file \
+                 nothing can read; read media.list to see where it got to."
+            ));
+        }
+        let Some(state) = converter.state(&name) else {
+            return Err(format!(
+                "the conversion of {name} is no longer in the table. Call media.list to see \
+                 whether the converted copy is there, and media.convert again if it is not."
+            ));
+        };
+        ctx.progress(state.progress);
+        match state.state {
+            ConversionPhase::Running => {
+                tokio::time::sleep(std::time::Duration::from_millis(
+                    godwinmix_core::tasks::POLL_INTERVAL_MS,
+                ))
+                .await;
+            }
+            ConversionPhase::Done => {
+                return serde_json::to_value(&state).map_err(|e| e.to_string())
+            }
+            ConversionPhase::Failed => {
+                return Err(state.error.unwrap_or_else(|| {
+                    format!("converting {name} failed without saying why. Try media.convert again.")
+                }))
+            }
+        }
+    }
 }

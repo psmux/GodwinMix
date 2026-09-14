@@ -7,8 +7,10 @@
 //! large enough to be files of their own.
 
 pub mod build;
+pub mod agent;
 pub mod bundle;
 pub mod codec;
 pub mod observe;
 pub mod preset;
 pub mod scene;
+pub mod skill;

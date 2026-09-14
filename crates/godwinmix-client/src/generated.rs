@@ -122,6 +122,16 @@ pub struct AddSourceRequest {
     pub extra: BTreeMap<String, Value>,
 }
 
+/// `ext.agent`. `true` takes the default thresholds; an object moves them.
+pub type AgentExt = Value;
+
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct AgentStateRequest {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub response_format: Option<ResponseFormat>,
+}
+
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct ApplyRequest {
@@ -265,6 +275,10 @@ pub struct CoreInfo {
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Ext {
+    /// `event/agent.state` when a threshold crosses or a state flips, with a
+    /// snapshot URL. `true` takes the defaults from 09 section 5 item 12.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub agent: Option<AgentExt>,
     /// `event/meters` at 10 per second.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub meters: Option<bool>,
@@ -278,6 +292,10 @@ pub struct Ext {
     /// `event/tally`.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tally: Option<bool>,
+    /// `event/telemetry`: a line of numbers per tick, at 1 to 10 per second.
+    /// This is what turns the probes on; nothing measures until it is here.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub telemetry: Option<TelemetryExt>,
     /// Anything this build does not know a name for.
     #[serde(flatten)]
     pub extra: BTreeMap<String, Value>,
@@ -617,6 +635,10 @@ pub struct ProgramState {
     pub running_time_ms: u64,
 }
 
+pub type ResponseFormat = String;
+/// The values api_level 1 knows for [`ResponseFormat`].
+pub const RESPONSE_FORMAT_VALUES: &[&str] = &["concise", "detailed"];
+
 /// `event/resync`: the client fell behind and the stream has a hole in it.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
@@ -852,6 +874,46 @@ pub struct Tally {
     pub sources: BTreeMap<String, Value>,
 }
 
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct TaskRequest {
+    /// The id a long running method answered with. Spelled `id` on the REST
+    /// route, where it is in the path, and `task_id` everywhere else, which
+    /// is what 03 section 6 calls it.
+    pub task_id: String,
+}
+
+pub type TaskState = String;
+/// The values api_level 1 knows for [`TaskState`].
+pub const TASK_STATE_VALUES: &[&str] = &["running", "completed", "failed", "cancelled"];
+
+/// What `task.get` answers with.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct TaskView {
+    /// Seconds since the task was started.
+    pub age_secs: u64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
+    /// The method that started it, so a client reading a list knows what it is
+    /// looking at.
+    pub kind: String,
+    /// How long to wait before asking again, while it is still running.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub poll_interval_ms: Option<u64>,
+    /// 0 to 1 where the work can say, absent where it cannot.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub progress: Option<f64>,
+    /// The body the method would have answered with, once it is done.
+    pub result: Value,
+    pub state: TaskState,
+    pub task_id: String,
+}
+
+/// `ext.telemetry`. Accepts `false` to mean off, `true` for the default rate,
+/// or an object naming it.
+pub type TelemetryExt = Value;
+
 /// What the calling token is allowed to do, echoed back so a surface can grey
 /// out what it cannot reach instead of discovering it at the first refusal.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
@@ -969,6 +1031,26 @@ pub struct AlertEvent {
     pub severity: Option<Severity>,
 }
 
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct TelemetryEvent {
+    /// fraction of the picture at or below black, 0 to 1
+    pub black: f64,
+    pub freeze: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub lufs_i: Option<f64>,
+    /// short term loudness over three seconds, approximated from the programme meter
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub lufs_s: Option<f64>,
+    /// how much the picture changed since the last frame, 0 to 1
+    pub shot: f64,
+    pub silence: bool,
+    /// source id to 1 when it is live and 0 otherwise
+    pub sources: BTreeMap<String, Value>,
+    /// milliseconds since the Unix epoch
+    pub ts: i64,
+}
+
 /// What a method is, for a surface that builds its own menu or its own REST call.
 #[derive(Debug, Clone, Copy)]
 pub struct MethodInfo {
@@ -980,7 +1062,7 @@ pub struct MethodInfo {
     pub rest: Option<(&'static str, &'static str)>,
 }
 
-pub const METHODS: [MethodInfo; 48] = [
+pub const METHODS: [MethodInfo; 51] = [
     MethodInfo { name: "adbreak.end", summary: "Cut a running ad short, or disarm one that is scheduled.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/adbreak/end")) },
     MethodInfo { name: "adbreak.start", summary: "Interrupt the programme with a clip, then rejoin live when it ends.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/adbreak/start")) },
     MethodInfo { name: "agent.state", summary: "The compact document written for agents: the programme, each source's state and a motion score saying how much its picture is changing.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/agent/state")) },
@@ -1029,9 +1111,12 @@ pub const METHODS: [MethodInfo; 48] = [
     MethodInfo { name: "source.list", summary: "Every source, with its state, whether it has video and audio, and its fader.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/sources")) },
     MethodInfo { name: "source.remove", summary: "Remove a source. If it is on programme the mixer cuts to the slate first.", scope: "operate", mutating: true, destructive: true, rest: Some(("DELETE", "/api/v1/sources/{id}")) },
     MethodInfo { name: "source.seek", summary: "Move a seekable source to a position. Answers with where it actually landed.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/sources/{id}/seek")) },
+    MethodInfo { name: "task.cancel", summary: "Ask a piece of long running work to stop. Cooperative: the answer says the request landed, not that the work has stopped yet.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/task/cancel")) },
+    MethodInfo { name: "task.get", summary: "How a piece of long running work is getting on, and its answer once it has one.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/task")) },
+    MethodInfo { name: "task.list", summary: "Every background job this core knows about, newest first.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/task/list")) },
 ];
 
-pub const EVENT_NAMES: [&str; 15] = [
+pub const EVENT_NAMES: [&str; 17] = [
     "snapshot",
     "program.took",
     "source.state",
@@ -1043,6 +1128,8 @@ pub const EVENT_NAMES: [&str; 15] = [
     "meters",
     "tally",
     "alert",
+    "telemetry",
+    "agent.state",
     "multiview.layout",
     "multiview.frame",
     "resync",
@@ -1088,6 +1175,10 @@ pub enum Event {
     Tally(Tally),
     /// Something an operator should see. Also written to the log and to the alert webhook.
     Alert(AlertEvent),
+    /// Numbers instead of a picture, up to ten times a second and under 200 bytes: the shot change score, the black ratio, a freeze flag, short term and integrated loudness, a silence flag and which sources are live. From cheap probes on the raw programme frames, which run only while a client is subscribed.
+    Telemetry(TelemetryEvent),
+    /// The agent.state document, pushed when a telemetry threshold crosses or a take lands, with `why` naming which and a snapshot URL beside it. Edge triggered and at most one a second, so a picture that stays black is one message rather than one a tick.
+    AgentState(BTreeMap<String, Value>),
     /// How to read the binary frames that follow: the cells, and the layout id carried in every frame header.
     MultiviewLayout(MultiviewLayout),
     /// 16 byte header then JPEG, decoded by [`crate::frames::parse_frame`].
@@ -1150,6 +1241,14 @@ impl Event {
                 Ok(payload) => Event::Alert(payload),
                 Err(_) => Event::Other { name: pattern.to_string(), params },
             },
+            "telemetry" => match serde_json::from_value(params.clone()) {
+                Ok(payload) => Event::Telemetry(payload),
+                Err(_) => Event::Other { name: pattern.to_string(), params },
+            },
+            "agent.state" => match serde_json::from_value(params.clone()) {
+                Ok(payload) => Event::AgentState(payload),
+                Err(_) => Event::Other { name: pattern.to_string(), params },
+            },
             "multiview.layout" => match serde_json::from_value(params.clone()) {
                 Ok(payload) => Event::MultiviewLayout(payload),
                 Err(_) => Event::Other { name: pattern.to_string(), params },
@@ -1180,6 +1279,8 @@ impl Event {
             Event::Meters(_) => "meters",
             Event::Tally(_) => "tally",
             Event::Alert(_) => "alert",
+            Event::Telemetry(_) => "telemetry",
+            Event::AgentState(_) => "agent.state",
             Event::MultiviewLayout(_) => "multiview.layout",
             Event::MultiviewFrame(_) => "multiview.frame",
             Event::Resync(_) => "resync",
@@ -1203,8 +1304,8 @@ impl Client {
     }
 
     /// The compact document written for agents: the programme, each source's state and a motion score saying how much its picture is changing.
-    pub async fn agent_state(&self) -> Result<BTreeMap<String, Value>> {
-        self.call("agent.state", &serde_json::json!({})).await
+    pub async fn agent_state(&self, params: &AgentStateRequest) -> Result<BTreeMap<String, Value>> {
+        self.call("agent.state", params).await
     }
 
     /// Every codec and element in the catalogue, which of them this machine actually has, and what it would pick.
@@ -1430,6 +1531,21 @@ impl Client {
     /// Move a seekable source to a position. Answers with where it actually landed.
     pub async fn source_seek(&self, params: &SeekParams) -> Result<SourcePositionState> {
         self.call("source.seek", params).await
+    }
+
+    /// Ask a piece of long running work to stop. Cooperative: the answer says the request landed, not that the work has stopped yet.
+    pub async fn task_cancel(&self, params: &TaskRequest) -> Result<BTreeMap<String, Value>> {
+        self.call("task.cancel", params).await
+    }
+
+    /// How a piece of long running work is getting on, and its answer once it has one.
+    pub async fn task_get(&self, params: &TaskRequest) -> Result<TaskView> {
+        self.call("task.get", params).await
+    }
+
+    /// Every background job this core knows about, newest first.
+    pub async fn task_list(&self) -> Result<Vec<TaskView>> {
+        self.call("task.list", &serde_json::json!({})).await
     }
 
 }

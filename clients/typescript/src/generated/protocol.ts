@@ -57,6 +57,18 @@ export interface AddSourceRequest {
   [key: string]: unknown;
 }
 
+/** `ext.agent`. `true` takes the default thresholds; an object moves them. */
+export type AgentExt = boolean | {
+  black?: number | null;
+  freeze_ms?: number | null;
+  shot?: number | null;
+  silence_ms?: number | null;
+};
+
+export interface AgentStateRequest {
+  response_format?: ResponseFormat;
+}
+
 export interface ApplyRequest {
   dry_run?: boolean;
   force?: boolean;
@@ -140,10 +152,12 @@ export interface CoreInfo {
  * declines multiview; a Stream Deck takes tally only; an agent takes nothing.
  */
 export interface Ext {
+  agent?: AgentExt | null;
   meters?: boolean;
   multiview?: MultiviewExt | null;
   positions?: boolean;
   tally?: boolean;
+  telemetry?: TelemetryExt | null;
   [key: string]: unknown;
 }
 
@@ -345,6 +359,8 @@ export interface ProgramState {
   running_time_ms: number;
 }
 
+export type ResponseFormat = "concise" | "detailed";
+
 /** `event/resync`: the client fell behind and the stream has a hole in it. */
 export interface Resync {
   dropped: number;
@@ -475,6 +491,32 @@ export interface Tally {
   sources: Record<string, unknown>;
 }
 
+export interface TaskRequest {
+  task_id: string;
+}
+
+export type TaskState = "running" | "completed" | "failed" | "cancelled";
+
+/** What `task.get` answers with. */
+export interface TaskView {
+  age_secs: number;
+  error?: string | null;
+  kind: string;
+  poll_interval_ms?: number | null;
+  progress?: number | null;
+  result?: unknown;
+  state: TaskState;
+  task_id: string;
+}
+
+/**
+ * `ext.telemetry`. Accepts `false` to mean off, `true` for the default rate,
+ * or an object naming it.
+ */
+export type TelemetryExt = boolean | {
+  hz?: number | null;
+};
+
 /**
  * What the calling token is allowed to do, echoed back so a surface can grey
  * out what it cannot reach instead of discovering it at the first refusal.
@@ -547,11 +589,22 @@ export interface AlertEvent {
   severity?: Severity;
 }
 
+export interface TelemetryEvent {
+  black: number;
+  freeze: boolean;
+  lufs_i?: number | null;
+  lufs_s?: number | null;
+  shot: number;
+  silence: boolean;
+  sources: Record<string, unknown>;
+  ts: number;
+}
+
 /** The params each method takes, by method name. */
 export interface MethodParams {
   "adbreak.end": Record<string, never>;
   "adbreak.start": AdBreakRequest;
-  "agent.state": Record<string, never>;
+  "agent.state": AgentStateRequest;
   "codec.list": Record<string, never>;
   "core.api": Record<string, never>;
   "core.doctor": Record<string, never>;
@@ -597,6 +650,9 @@ export interface MethodParams {
   "source.list": Record<string, never>;
   "source.remove": IdRequest;
   "source.seek": SeekParams;
+  "task.cancel": TaskRequest;
+  "task.get": TaskRequest;
+  "task.list": Record<string, never>;
 }
 
 /** What each method answers with, by method name. */
@@ -649,6 +705,9 @@ export interface MethodResults {
   "source.list": SourceStatus[];
   "source.remove": Record<string, unknown>;
   "source.seek": SourcePositionState;
+  "task.cancel": Record<string, unknown>;
+  "task.get": TaskView;
+  "task.list": TaskView[];
 }
 
 export type MethodName = keyof MethodParams;
@@ -666,6 +725,8 @@ export interface EventPayloads {
   "meters": Meters;
   "tally": Tally;
   "alert": AlertEvent;
+  "telemetry": TelemetryEvent;
+  "agent.state": Record<string, unknown>;
   "multiview.layout": MultiviewLayout;
   "multiview.frame": Uint8Array;
   "resync": Resync;
@@ -733,6 +794,9 @@ export const METHODS: readonly MethodInfo[] = [
   { name: "source.list", summary: "Every source, with its state, whether it has video and audio, and its fader.", scope: "read", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/sources" } },
   { name: "source.remove", summary: "Remove a source. If it is on programme the mixer cuts to the slate first.", scope: "operate", mutating: true, destructive: true, rest: { method: "DELETE", path: "/api/v1/sources/{id}" } },
   { name: "source.seek", summary: "Move a seekable source to a position. Answers with where it actually landed.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/sources/{id}/seek" } },
+  { name: "task.cancel", summary: "Ask a piece of long running work to stop. Cooperative: the answer says the request landed, not that the work has stopped yet.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/task/cancel" } },
+  { name: "task.get", summary: "How a piece of long running work is getting on, and its answer once it has one.", scope: "read", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/task" } },
+  { name: "task.list", summary: "Every background job this core knows about, newest first.", scope: "read", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/task/list" } },
 ] as const;
 
 /** The `ext` keys this api_level knows, and whether the core implements them yet. */
@@ -759,6 +823,8 @@ export const EVENT_NAMES: readonly EventName[] = [
   "meters",
   "tally",
   "alert",
+  "telemetry",
+  "agent.state",
   "multiview.layout",
   "multiview.frame",
   "resync",
@@ -789,8 +855,8 @@ export class GeneratedMethods {
   }
 
   /** The compact document written for agents: the programme, each source's state and a motion score saying how much its picture is changing. */
-  agentState(): Promise<Record<string, unknown>> {
-    return this._call("agent.state", {}) as Promise<Record<string, unknown>>;
+  agentState(params: AgentStateRequest = {}): Promise<Record<string, unknown>> {
+    return this._call("agent.state", params as unknown as Record<string, unknown>) as Promise<Record<string, unknown>>;
   }
 
   /** Every codec and element in the catalogue, which of them this machine actually has, and what it would pick. */
@@ -1016,6 +1082,21 @@ export class GeneratedMethods {
   /** Move a seekable source to a position. Answers with where it actually landed. */
   sourceSeek(params: SeekParams): Promise<SourcePositionState> {
     return this._call("source.seek", params as unknown as Record<string, unknown>) as Promise<SourcePositionState>;
+  }
+
+  /** Ask a piece of long running work to stop. Cooperative: the answer says the request landed, not that the work has stopped yet. */
+  taskCancel(params: TaskRequest): Promise<Record<string, unknown>> {
+    return this._call("task.cancel", params as unknown as Record<string, unknown>) as Promise<Record<string, unknown>>;
+  }
+
+  /** How a piece of long running work is getting on, and its answer once it has one. */
+  taskGet(params: TaskRequest): Promise<TaskView> {
+    return this._call("task.get", params as unknown as Record<string, unknown>) as Promise<TaskView>;
+  }
+
+  /** Every background job this core knows about, newest first. */
+  taskList(): Promise<TaskView[]> {
+    return this._call("task.list", {}) as Promise<TaskView[]>;
   }
 
 }

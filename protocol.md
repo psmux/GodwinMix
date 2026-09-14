@@ -81,6 +81,9 @@ Keys accepted on every method, handled before a method runs.
 | `source.list` | `GET /api/v1/sources` | read |  | 1 | Every source, with its state, whether it has video and audio, and its fader. |
 | `source.remove` | `DELETE /api/v1/sources/{id}` | operate | yes | 1 | Remove a source. If it is on programme the mixer cuts to the slate first. |
 | `source.seek` | `POST /api/v1/sources/{id}/seek` | operate |  | 1 | Move a seekable source to a position. Answers with where it actually landed. |
+| `task.cancel` | `POST /api/v1/task/cancel` | operate |  | 1 | Ask a piece of long running work to stop. Cooperative: the answer says the request landed, not that the work has stopped yet. |
+| `task.get` | `GET /api/v1/task` | read |  | 1 | How a piece of long running work is getting on, and its answer once it has one. |
+| `task.list` | `GET /api/v1/task/list` | read |  | 1 | Every background job this core knows about, newest first. |
 
 ### Params and results
 
@@ -129,9 +132,7 @@ MCP tool `agent_state` in the `minimal` profile: readOnlyHint true, destructiveH
 ```json
 {
   "params": {
-    "additionalProperties": false,
-    "properties": {},
-    "type": "object"
+    "$ref": "#/$defs/AgentStateRequest"
   },
   "result": {
     "type": "object"
@@ -909,6 +910,60 @@ MCP tool `seek_source` in the `search` profile: readOnlyHint false, destructiveH
 }
 ```
 
+#### `task.cancel`
+
+Ask a piece of long running work to stop. Cooperative: the answer says the request landed, not that the work has stopped yet.
+
+MCP tool `task_cancel` in the `search` profile: readOnlyHint false, destructiveHint false, idempotentHint true.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/TaskRequest"
+  },
+  "result": {
+    "type": "object"
+  }
+}
+```
+
+#### `task.get`
+
+How a piece of long running work is getting on, and its answer once it has one.
+
+MCP tool `task_get` in the `search` profile: readOnlyHint true, destructiveHint false, idempotentHint true.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/TaskRequest"
+  },
+  "result": {
+    "$ref": "#/$defs/TaskView"
+  }
+}
+```
+
+#### `task.list`
+
+Every background job this core knows about, newest first.
+
+```json
+{
+  "params": {
+    "additionalProperties": false,
+    "properties": {},
+    "type": "object"
+  },
+  "result": {
+    "items": {
+      "$ref": "#/$defs/TaskView"
+    },
+    "type": "array"
+  }
+}
+```
+
 ## Events
 
 Subscribe with `core.subscribe`. Patterns match the part after `event/`, so `program.*` matches `event/program.took`. Every event carries `seq`; every batch ends with `event/flush`; a client that falls behind gets `event/resync`.
@@ -926,6 +981,8 @@ Subscribe with `core.subscribe`. Patterns match the part after `event/`, so `pro
 | `event/meters` | `meters` | `audio_level, source_audio_level` | Peak dBFS for the programme bus and every source, in one message at 10 per second. Replaces the two separate meter events on /ws. |
 | `event/tally` | `tally` |  | Which sources are on programme, on preview, or off. Derived by the core so a Stream Deck does not have to. |
 | `event/alert` |  | `alert` | Something an operator should see. Also written to the log and to the alert webhook. |
+| `event/telemetry` | `telemetry` |  | Numbers instead of a picture, up to ten times a second and under 200 bytes: the shot change score, the black ratio, a freeze flag, short term and integrated loudness, a silence flag and which sources are live. From cheap probes on the raw programme frames, which run only while a client is subscribed. |
+| `event/agent.state` | `agent` |  | The agent.state document, pushed when a telemetry threshold crosses or a take lands, with `why` naming which and a snapshot URL beside it. Edge triggered and at most one a second, so a picture that stays black is one message rather than one a tick. |
 | `event/multiview.layout` | `multiview` |  | How to read the binary frames that follow: the cells, and the layout id carried in every frame header. |
 | `event/multiview.frame` | `multiview` | `raw JPEG binary frame` | A mosaic frame, as a binary WebSocket frame rather than JSON: a 16 byte little endian header (seq u32, layout id u32, programme running time in milliseconds u64) then the JPEG. |
 | `event/resync` |  |  | This client fell behind and events were dropped. Re-subscribe for a fresh snapshot; nothing between from_seq and the new snapshot arrives. |
