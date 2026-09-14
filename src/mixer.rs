@@ -2353,6 +2353,42 @@ impl Mixer {
 
     // -- supervision -----------------------------------------------------
 
+    /// A name for one command, for a log line and for the alert after a
+    /// panic. Cheap: no ids, no URIs, nothing that would put a stream key in a
+    /// log.
+    pub fn label(cmd: &Command) -> &'static str {
+        match cmd {
+            Command::Take { .. } => "program.take",
+            Command::AdBreak { .. } => "adbreak.start",
+            Command::EndAdBreak(_) => "adbreak.end",
+            Command::AddSource(..) | Command::AddSourceProbed(..) => "source.add",
+            Command::RemoveSource(..) => "source.remove",
+            Command::ReconnectOutput(..) => "output.reconnect",
+            Command::AddOutput(..) => "output.add",
+            Command::RemoveOutput(..) => "output.remove",
+            Command::RestartSource(_) => "source.restart",
+            Command::SetAudio { .. } => "source.audio.set",
+            Command::Seek { .. } => "source.seek",
+            Command::AddFilter(..) => "filter.add",
+            Command::SetFilter { .. } => "filter.set",
+            Command::RemoveFilter(..) => "filter.remove",
+            Command::ListFilters(_) => "filter.list",
+            Command::Status(_) => "core.status",
+            Command::Configs(_) => "core.configs",
+            Command::Bus(_) => "bus message",
+            Command::Tick => "tick",
+            Command::PositionTick => "position tick",
+            Command::Multiview(_) => "multiview demand",
+            Command::Shutdown => "core.shutdown",
+        }
+    }
+
+    /// Say on the event stream that a command failed in a way nothing planned
+    /// for, so an operator watching the UI sees it rather than reading logs.
+    pub fn alert(&self, severity: Severity, message: String) {
+        let _ = self.events.send(Event::Alert { severity, message });
+    }
+
     pub fn handle(&mut self, cmd: Command) -> Result<bool> {
         match cmd {
             Command::Take { source, at_running_time_ms, ack } => {
@@ -3187,10 +3223,38 @@ pub fn spawn(
         .name("mixer".into())
         .spawn(move || {
             while let Some(cmd) = rx.blocking_recv() {
-                match mixer.handle(cmd) {
-                    Ok(true) => {}
-                    Ok(false) => break,
-                    Err(e) => warn!(?e, "command failed"),
+                let label = Mixer::label(&cmd);
+                // A net under every command. The programme's encoder lives in
+                // GStreamer's own threads and a panic here does not stop it,
+                // but without this the mixer thread dies and every command
+                // after it is refused for the life of the process: the show
+                // stays on air and nothing can be changed. One command failing
+                // must not cost the other twenty.
+                //
+                // `AssertUnwindSafe` is the honest spelling: the mixer is
+                // `&mut` and a handler that panicked halfway may have left a
+                // pad requested and unlinked. That is why the alert says the
+                // state is uncertain rather than pretending nothing happened.
+                let outcome =
+                    std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| mixer.handle(cmd)));
+                match outcome {
+                    Ok(Ok(true)) => {}
+                    Ok(Ok(false)) => break,
+                    Ok(Err(e)) => warn!(?e, "command failed"),
+                    // The panic message itself has already gone to the log
+                    // through the default hook. The caller's reply channel was
+                    // dropped in the unwind, so it is already getting an error.
+                    Err(_) => {
+                        error!(command = label, "the mixer panicked handling a command");
+                        mixer.alert(
+                            Severity::Error,
+                            format!(
+                                "the mixer failed while handling {label} and the command did \
+                                 not complete. The programme is still on air. Check whatever \
+                                 you just changed; restart the mixer when you can."
+                            ),
+                        );
+                    }
                 }
             }
             mixer.shutdown();
@@ -3482,5 +3546,71 @@ mod tests {
         let text = format!("{err:#}");
         assert!(text.contains("cuda"), "{text}");
         assert!(text.contains("software"), "the error must list what was available: {text}");
+    }
+
+    /// A panic inside one command must not end the mixer thread.
+    ///
+    /// `POST /api/sources {"uri":"test://bars"}` used to panic inside
+    /// `set_property_from_str`, and with it went every command after it: the
+    /// programme stayed on air with nothing able to change it. The pattern is
+    /// checked now, but the net stays, because the next panic will be
+    /// somewhere nobody predicted.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn a_panic_in_one_command_leaves_the_mixer_answering() {
+        gst::init().expect("gstreamer");
+        let (mut mix, handle, _cmds, _bus) =
+            Mixer::build(programme_config(crate::config::Accel::Auto)).expect("mixer builds");
+        let mut events = handle.subscribe();
+
+        // The loop's guard, with a handler that panics standing in for one
+        // that panicked by accident. The hook is quietened so the test output
+        // is not a backtrace nobody is going to read.
+        let previous = std::panic::take_hook();
+        std::panic::set_hook(Box::new(|_| {}));
+        let outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            // Touching the mixer is the point: the unwind happens while it is
+            // borrowed, which is what `AssertUnwindSafe` is asserting about.
+            let _ = mix.status();
+            panic!("a command went wrong");
+        }));
+        std::panic::set_hook(previous);
+        assert!(outcome.is_err(), "the panic has to be caught, not propagated");
+
+        // What the loop does next: say so, and carry on.
+        mix.alert(Severity::Error, "the mixer failed while handling source.add".into());
+        let envelope = tokio::time::timeout(Duration::from_secs(2), events.recv())
+            .await
+            .expect("an alert arrives")
+            .expect("the bus is still open");
+        match envelope.event {
+            Event::Alert { severity, message } => {
+                assert_eq!(severity, Severity::Error);
+                assert!(message.contains("source.add"), "the alert names the command: {message}");
+            }
+            other => panic!("expected an alert, got {other:?}"),
+        }
+
+        // And the mixer still answers, which is the whole claim.
+        assert!(mix.handle(Command::Tick).expect("a tick after the panic"));
+        let status = mix.status();
+        assert!(status.sources.is_empty(), "a status read still works");
+    }
+
+    /// Every command has a name, so the alert after a panic can say which one
+    /// it was rather than "something".
+    #[test]
+    fn every_command_has_a_label() {
+        let (tx, _rx) = oneshot::channel();
+        for cmd in [
+            Command::Tick,
+            Command::PositionTick,
+            Command::Shutdown,
+            Command::Status(tx),
+            Command::RemoveSource("cam1".into(), None),
+            Command::RemoveFilter("key".into(), None),
+        ] {
+            let label = Mixer::label(&cmd);
+            assert!(!label.is_empty() && !label.contains("cam1"), "{label}");
+        }
     }
 }

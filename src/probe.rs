@@ -267,6 +267,61 @@ pub fn set_bool(el: &gst::Element, prop: &str, v: bool) {
     }
 }
 
+/// Every nickname an enum property on this element accepts, in the order the
+/// enum declares them. Empty when there is no such property or it is not an
+/// enum.
+///
+/// Read off the element rather than written down here, because the list
+/// belongs to whichever version of the plugin is installed: `videotestsrc`
+/// has gained patterns over the years, and a list typed into this repository
+/// would refuse one that works on the machine in front of you.
+pub fn enum_nicks(el: &gst::Element, prop: &str) -> Vec<String> {
+    let Some(pspec) = el.find_property(prop) else {
+        return Vec::new();
+    };
+    let t = pspec.value_type();
+    if !t.is_a(glib::Type::ENUM) {
+        return Vec::new();
+    }
+    match glib::EnumClass::with_type(t) {
+        Some(class) => class.values().iter().map(|v| v.nick().to_string()).collect(),
+        None => Vec::new(),
+    }
+}
+
+/// The same list, for an element that has not been made yet. Used by a kind's
+/// `validate`, which runs before anything is built and must not panic or cost
+/// a pipeline.
+pub fn factory_enum_nicks(factory: &str, prop: &str) -> Vec<String> {
+    match gst::ElementFactory::make(factory).build() {
+        Ok(el) => enum_nicks(&el, prop),
+        Err(_) => Vec::new(),
+    }
+}
+
+/// Set an enum property by nickname, refusing rather than panicking when the
+/// element has never heard of it.
+///
+/// `set_property_from_str` panics on an unknown value, and a panic on the
+/// mixer thread takes the programme with it. Anything that comes from an
+/// operator, a config file or an API call goes through here.
+pub fn try_set_enum(el: &gst::Element, prop: &str, nick: &str) -> Result<()> {
+    let nicks = enum_nicks(el, prop);
+    if nicks.is_empty() {
+        anyhow::bail!(
+            "{} has no enum property `{prop}` on this build of GStreamer",
+            el.factory().map(|f| f.name().to_string()).unwrap_or_else(|| el.name().to_string())
+        );
+    }
+    anyhow::ensure!(
+        nicks.iter().any(|n| n == nick),
+        "`{nick}` is not one of the {prop} values this build accepts. It takes: {}",
+        nicks.join(", ")
+    );
+    el.set_property_from_str(prop, nick);
+    Ok(())
+}
+
 /// Set an enum or flags property by its nickname. Nicknames are stable across
 /// plugin versions in a way that numeric enum values are not.
 ///
