@@ -69,6 +69,8 @@ Keys accepted on every method, handled before a method runs.
 | `preset.apply` | `POST /api/v1/preset/apply` | admin | yes | 1 | Put a preset on this core: its config, its scenes, its layout, its theme and its gallery mode. Pass dry_run to get the plan and write nothing. |
 | `preset.list` | `GET /api/v1/preset/list` | read |  | 1 | Every preset this core can apply: the six built in, plus anything installed beside the binary or under ~/.godwinmix/presets. |
 | `preset.save` | `POST /api/v1/preset/save` | admin |  | 1 | Turn this core's working setup into a preset directory somebody else can apply. Stream keys and the control token are replaced with placeholders. |
+| `preview.close` | `POST /api/v1/preview/close` | read |  | 1 | Give up a raw frame socket. The socket goes when the last holder closes it. |
+| `preview.open` | `POST /api/v1/preview/open` | read |  | 1 | Open a raw frame socket on this machine for a source or the programme, and answer with its path. No encode anywhere: a client on the same host reads the frames the mixer already has. Close it with preview.close. |
 | `program.get` | `GET /api/v1/program` | read |  | 1 | What is on air, the programme running time, and what revert would go back to. |
 | `program.golive` | `POST /api/v1/program/golive` | operate |  | 1 | One call to put a web page on air: add the page, add the destination, and take the page as soon as it renders. |
 | `program.history` | `GET /api/v1/program/history` | read |  | 1 | The last hundred takes, newest first, with the token that asked for each. |
@@ -694,6 +696,36 @@ Turn this core's working setup into a preset directory somebody else can apply. 
   },
   "result": {
     "type": "object"
+  }
+}
+```
+
+#### `preview.close`
+
+Give up a raw frame socket. The socket goes when the last holder closes it.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/PreviewOpenRequest"
+  },
+  "result": {
+    "$ref": "#/$defs/PreviewClosed"
+  }
+}
+```
+
+#### `preview.open`
+
+Open a raw frame socket on this machine for a source or the programme, and answer with its path. No encode anywhere: a client on the same host reads the frames the mixer already has. Close it with preview.close.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/PreviewOpenRequest"
+  },
+  "result": {
+    "$ref": "#/$defs/PreviewSocket"
   }
 }
 ```

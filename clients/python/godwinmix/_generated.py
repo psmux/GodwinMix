@@ -191,6 +191,8 @@ class Ext(TypedDict, total=False):
     # The mosaic: binary frames and `event/multiview.layout`. `false` or omitted builds nothing.
     positions: bool
     # `event/source.position` for seekable sources.
+    preview: Union[PreviewExt, None]
+    # The preview scene, composited in the multiview pipeline at mosaic size, or `"full"` for a full resolution preview compositor built while subscribed. See 11 section 3.
     tally: bool
     # `event/tally`.
     telemetry: Union[TelemetryExt, None]
@@ -397,6 +399,30 @@ class PipelineRequest(TypedDict, total=False):
     """Which pipeline to look at. A source id, an output id, `programme` or `multiview`. `pipeline.list` says what is running."""
 
     name: str
+
+class PreviewClosed(TypedDict, total=False):
+    """What `preview.close` answers with."""
+
+    closed: bool
+    target: str
+
+# `ext.preview`. Either `"full"`, `false`, or an object.
+PreviewExt = Union[str, bool, Dict[str, Any]]
+
+class PreviewOpenRequest(TypedDict, total=False):
+    """`preview.open {target}`."""
+
+    target: str
+    # `program`, or a source id.
+
+class PreviewSocket(TypedDict, total=False):
+    """What `preview.open` answers with."""
+
+    path: str
+    # The Unix socket to connect to, absolute. Read it with `unixfdsrc` in GStreamer, or with the media contract's own reader.
+    target: str
+    transport: str
+    # What is on the far end, so a client knows what to expect before it connects.
 
 class ProgramState(TypedDict, total=False):
     """What `program.get` answers with, and what `program.take` returns so that no follow up read is needed."""
@@ -691,6 +717,8 @@ METHODS = (
     {"name": "preset.apply", "scope": "admin", "mutating": True, "destructive": True, "rest": ("POST", "/api/v1/preset/apply"), "summary": 'Put a preset on this core: its config, its scenes, its layout, its theme and its gallery mode. Pass dry_run to get the plan and write nothing.'},
     {"name": "preset.list", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/preset/list"), "summary": 'Every preset this core can apply: the six built in, plus anything installed beside the binary or under ~/.godwinmix/presets.'},
     {"name": "preset.save", "scope": "admin", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/preset/save"), "summary": "Turn this core's working setup into a preset directory somebody else can apply. Stream keys and the control token are replaced with placeholders."},
+    {"name": "preview.close", "scope": "read", "mutating": False, "destructive": False, "rest": ("POST", "/api/v1/preview/close"), "summary": 'Give up a raw frame socket. The socket goes when the last holder closes it.'},
+    {"name": "preview.open", "scope": "read", "mutating": False, "destructive": False, "rest": ("POST", "/api/v1/preview/open"), "summary": 'Open a raw frame socket on this machine for a source or the programme, and answer with its path. No encode anywhere: a client on the same host reads the frames the mixer already has. Close it with preview.close.'},
     {"name": "program.get", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/program"), "summary": 'What is on air, the programme running time, and what revert would go back to.'},
     {"name": "program.golive", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/program/golive"), "summary": 'One call to put a web page on air: add the page, add the destination, and take the page as soon as it renders.'},
     {"name": "program.history", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/program/history"), "summary": 'The last hundred takes, newest first, with the token that asked for each.'},
@@ -1120,6 +1148,24 @@ class GeneratedMethods:
         if out is not None:
             params["out"] = out
         return await self._call("preset.save", params)
+
+    async def preview_close(
+        self,
+        target: str,
+    ) -> PreviewClosed:
+        """Give up a raw frame socket. The socket goes when the last holder closes it."""
+        params: Dict[str, Any] = {}
+        params["target"] = target
+        return await self._call("preview.close", params)
+
+    async def preview_open(
+        self,
+        target: str,
+    ) -> PreviewSocket:
+        """Open a raw frame socket on this machine for a source or the programme, and answer with its path. No encode anywhere: a client on the same host reads the frames the mixer already has. Close it with preview.close."""
+        params: Dict[str, Any] = {}
+        params["target"] = target
+        return await self._call("preview.open", params)
 
     async def program_get(
         self,

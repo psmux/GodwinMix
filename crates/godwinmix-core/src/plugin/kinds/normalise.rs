@@ -30,7 +30,7 @@ pub struct ThumbEnd {
 impl ThumbEnd {
     fn build(id: &SourceId, thumb_fps: i32) -> Result<Self> {
         Ok(Self {
-            queue: gstutil::queue_thread(&format!("{id}-vthumb-q"))?,
+            queue: gstutil::queue_preview(&format!("{id}-vthumb-q"))?,
             scale: make("videoscale", &format!("{id}-tscale"))?,
             rate: make("videorate", &format!("{id}-trate"))?,
             caps: gstutil::capsfilter(
@@ -66,6 +66,8 @@ pub struct Normaliser {
     pub ares: gst::Element,
     /// The canvas audio capsfilter, and the audio filter insertion point.
     pub acaps: gst::Element,
+    /// The audio tee a monitoring branch hangs off, the counterpart of `vtee`.
+    pub atee: gst::Element,
     pub audio_proxy: gst::Element,
 }
 
@@ -112,6 +114,16 @@ impl Normaliser {
             aconv: make("audioconvert", &format!("{id}-aconv"))?,
             ares: make("audioresample", &format!("{id}-ares"))?,
             acaps: gstutil::capsfilter(&format!("{id}-acaps"), &canvas.audio())?,
+            atee: {
+                // The audio counterpart of `vtee`. Audio monitoring (/pcm and
+                // /opus for one source) hangs off it, and like `vtee` it
+                // carries allow-not-linked so a branch coming and going is
+                // nothing to it. With nothing attached it is one pad passing
+                // buffers through, which costs nothing measurable.
+                let t = make("tee", &format!("{id}-atee"))?;
+                t.set_property("allow-not-linked", true);
+                t
+            },
             audio_proxy: make("proxysink", &format!("{id}-aproxy"))?,
         })
     }
@@ -128,6 +140,7 @@ impl Normaliser {
             &self.aconv,
             &self.ares,
             &self.acaps,
+            &self.atee,
             &self.audio_proxy,
         ];
         if let Some(s) = &self.vsync {
@@ -155,8 +168,10 @@ impl Normaliser {
             gst::Element::link_many([&self.vtee, &t.queue, &t.rate, &t.scale, &t.caps, &t.proxy])
                 .context("linking thumbnail branch")?;
         }
-        gst::Element::link_many([&self.aconv, &self.ares, &self.acaps, &self.audio_proxy])
+        gst::Element::link_many([&self.aconv, &self.ares, &self.acaps, &self.atee])
             .context("linking audio normaliser")?;
+        gst::Element::link_many([&self.atee, &self.audio_proxy])
+            .context("linking program audio branch")?;
         Ok(())
     }
 

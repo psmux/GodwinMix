@@ -86,6 +86,30 @@ const DEFS: &[(&str, Kind, &str, &[f64])] = &[
     ("gmx_multiview_fps", Kind::Gauge, "Configured mosaic frame rate. Zero when disabled.", &[]),
     ("gmx_multiview_subscribers", Kind::Gauge, "Clients receiving mosaic frames.", &[]),
     ("gmx_plugin_restarts_total", Kind::Counter, "Times a plugin instance was rebuilt.", &[]),
+    (
+        "gmx_stream_clients",
+        Kind::Gauge,
+        "Clients on a preview or monitoring stream, by kind.",
+        &[],
+    ),
+    (
+        "gmx_encoder_running",
+        Kind::Gauge,
+        "1 while the programme encode chain is attached and encoding, 0 when it is not.",
+        &[],
+    ),
+    (
+        "gmx_encoder_consumers",
+        Kind::Gauge,
+        "Things holding the programme encoder up, by kind: output, whep, record.",
+        &[],
+    ),
+    (
+        "gmx_encoder_starts_total",
+        Kind::Counter,
+        "Times the programme encode chain has been started since boot.",
+        &[],
+    ),
 ];
 
 type Labels = Vec<(String, String)>;
@@ -433,6 +457,39 @@ pub fn set_multiview_subscribers(n: usize) {
 /// The mosaic's measured rate, zero when no mosaic exists.
 pub fn set_multiview_fps(fps: f64) {
     gauge("gmx_multiview_fps", &[]).set(fps);
+}
+
+/// Clients on each preview or monitoring stream.
+///
+/// Every known kind is written, including the ones with nobody on them, so a
+/// scrape of an idle core lists them all at zero rather than leaving a
+/// dashboard to tell "none" from "not yet scraped". A kind whose last client
+/// left is written as zero for the same reason.
+pub fn set_stream_clients(counts: &std::collections::BTreeMap<String, u64>) {
+    for kind in crate::preview::STREAM_KINDS {
+        let n = counts.get(*kind).copied().unwrap_or(0);
+        gauge("gmx_stream_clients", &[("kind", kind)]).set(n as f64);
+    }
+    // A kind the core did not declare, which a plugin could add later.
+    for (kind, n) in counts {
+        if !crate::preview::STREAM_KINDS.contains(&kind.as_str()) {
+            gauge("gmx_stream_clients", &[("kind", kind.as_str())]).set(*n as f64);
+        }
+    }
+}
+
+/// Whether the programme encoder is running, and what is keeping it up.
+///
+/// With `[program] encoder = "on-demand"` and nothing attached, `running` is 0
+/// and every consumer kind is 0, which is how an operator checks that an idle
+/// core really is idle.
+pub fn set_encoder(stats: &crate::encoder::EncoderStats) {
+    gauge("gmx_encoder_running", &[]).set(if stats.running { 1.0 } else { 0.0 });
+    for kind in ["output", "whep", "record"] {
+        let n = stats.consumers.get(kind).copied().unwrap_or(0);
+        gauge("gmx_encoder_consumers", &[("kind", kind)]).set(n as f64);
+    }
+    counter("gmx_encoder_starts_total", &[]).set(stats.starts);
 }
 
 /// How full each source's queues are, read off the pipelines at scrape time.

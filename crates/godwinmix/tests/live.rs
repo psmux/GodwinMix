@@ -64,6 +64,8 @@ impl Core {
             });
         }
         let multiview = mix.multiview_handle();
+        let preview = mix.preview_handle();
+        let encoder = mix.encoder_handle();
         let thread = mixer::spawn(mix, cmd_rx, handle.clone());
         let snapshots =
             Tracker::new(cfg.snapshot.clone(), multiview.clone(), handle.clone());
@@ -76,11 +78,15 @@ impl Core {
         ));
         let app = AppState::new(
             &cfg,
-            handle.clone(),
-            multiview,
-            library,
-            converter,
-            Arc::new(tokio::sync::Notify::new()),
+            godwinmix::control::Engine {
+                mixer: handle.clone(),
+                multiview,
+                preview,
+                encoder,
+                library,
+                converter,
+                quit: Arc::new(tokio::sync::Notify::new()),
+            },
             rehearsal,
         );
         let core = Core {

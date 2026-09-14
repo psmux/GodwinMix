@@ -24,6 +24,7 @@ pub mod history;
 pub mod methods;
 pub mod push;
 pub mod rest;
+pub mod streams;
 pub mod ws;
 
 use godwinmix_protocol::error::{ErrorCode, RpcError};
@@ -69,6 +70,14 @@ pub struct AppState {
     /// other way to reach the frames, and holding a subscription is the only
     /// thing that keeps the pipeline up. See `multiview.rs`.
     pub multiview: MultiviewHandle,
+    /// Preview and monitoring streams: `/mjpeg`, `/pcm`, `/opus`, `/whep` and
+    /// the local raw socket. Opening one through this is what builds its
+    /// branch, and there is no other way to reach the bytes. See
+    /// `preview/hub.rs`.
+    pub preview: godwinmix_core::preview::PreviewHandle,
+    /// Whether the programme encoder is running and what is holding it up.
+    /// Read by `/metrics`; a WHEP session will take a lease from it.
+    pub encoder: godwinmix_core::encoder::EncoderHandle,
     /// The still and motion limits, `[snapshot]` in the config.
     pub snapshot: SnapshotConfig,
     /// Ad clips available on this machine.
@@ -101,17 +110,22 @@ pub struct AppState {
     pub rehearsal: bool,
 }
 
+/// The handles onto one running engine, gathered so `AppState::new` takes a
+/// config, an engine and a flag rather than a list nobody can read.
+pub struct Engine {
+    pub mixer: MixerHandle,
+    pub multiview: MultiviewHandle,
+    pub preview: godwinmix_core::preview::PreviewHandle,
+    pub encoder: godwinmix_core::encoder::EncoderHandle,
+    pub library: Arc<MediaLibrary>,
+    pub converter: Arc<godwinmix_core::convert::Converter>,
+    pub quit: Arc<tokio::sync::Notify>,
+}
+
 impl AppState {
     /// Everything the control plane holds, worked out from the config once.
-    pub fn new(
-        cfg: &Config,
-        mixer: MixerHandle,
-        multiview: MultiviewHandle,
-        library: Arc<MediaLibrary>,
-        converter: Arc<godwinmix_core::convert::Converter>,
-        quit: Arc<tokio::sync::Notify>,
-        rehearsal: bool,
-    ) -> Self {
+    pub fn new(cfg: &Config, engine: Engine, rehearsal: bool) -> Self {
+        let Engine { mixer, multiview, preview, encoder, library, converter, quit } = engine;
         let tokens = cfg.tokens(rehearsal);
         let safety =
             godwinmix_core::safety::Guard::new(cfg.safety.clone(), cfg.canvas.fps.max(1) as u32);
@@ -123,6 +137,8 @@ impl AppState {
         Self {
             mixer,
             multiview,
+            preview,
+            encoder,
             snapshot: cfg.snapshot.clone(),
             library,
             converter,
@@ -160,6 +176,16 @@ fn features(cfg: &Config, tokens: &Tokens, rehearsal: bool) -> Vec<String> {
         features.push("multiview".into());
         // Snapshots are cut out of the mosaic, so there are none without it.
         features.push("snapshot".into());
+    }
+    // Every build has these; a client branches on the feature rather than on
+    // a 404 it has to provoke first.
+    features.push("mjpeg".into());
+    features.push("audio-monitor".into());
+    if godwinmix_core::preview::whep::available() {
+        features.push("whep".into());
+    }
+    if godwinmix_core::preview::local::supported() {
+        features.push("local-preview".into());
     }
     if cfg.media.allow_upload {
         features.push("uploads".into());
@@ -215,6 +241,7 @@ pub fn router(app: AppState, snapshots: Arc<Tracker>) -> Router {
     Router::new()
         .merge(crate::ui::router())
         .route("/rpc", get(rpc_upgrade))
+        .merge(streams::router(ctx.clone()))
         .merge(legacy(ctx.clone(), max_upload))
         .merge(rest::router(ctx.clone(), max_upload))
         // The Tauri shell and a browser on another origin both need this. It
@@ -1330,6 +1357,8 @@ fn observe_state(state: &AppState) -> crate::observe::ObserveState {
     crate::observe::ObserveState {
         mixer: Some(state.mixer.clone()),
         multiview: Some(state.multiview.clone()),
+        preview: Some(state.preview.clone()),
+        encoder: Some(state.encoder.clone()),
         tokens: Some(state.tokens.clone()),
         // Prometheus scrapes with no credentials. See the field's own note.
         metrics_open: true,

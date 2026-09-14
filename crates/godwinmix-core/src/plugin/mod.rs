@@ -335,6 +335,8 @@ pub struct MediaEnds {
     /// The video tee. A thumbnail end is a branch off this, added and removed
     /// while the source runs without the programme branch noticing.
     pub vtee: gst::Element,
+    /// The source's raw audio tee, where audio monitoring hangs off.
+    pub atee: gst::Element,
     /// Liveness, marked from pad probes on the proxy sinks.
     pub health: Arc<SourceHealth>,
     pub last_video: Arc<crate::input::LastBuffer>,

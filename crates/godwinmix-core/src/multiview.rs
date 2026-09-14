@@ -110,7 +110,21 @@ pub enum Demand {
     Teardown,
 }
 
-type DemandSink = Arc<dyn Fn(Demand) + Send + Sync>;
+/// A demand with the subscriber generation it was decided at.
+///
+/// Teardown used to be decided from a generation and an emptiness check taken
+/// separately from the enqueueing, so a subscriber arriving between the two saw
+/// a pipeline that was already condemned, enqueued nothing of its own, and then
+/// lost the mosaic under it. The generation travels with the command now and
+/// the mixer thread refuses one that is no longer current, reconciling the
+/// count as it stands there instead of trusting the verb in the message.
+#[derive(Debug, Clone, Copy)]
+pub struct DemandAt {
+    pub demand: Demand,
+    pub generation: u64,
+}
+
+type DemandSink = Arc<dyn Fn(DemandAt) + Send + Sync>;
 
 /// What the mosaic is doing, for `/metrics` and for anybody who wants to know
 /// without holding a subscription. `gmx_multiview_subscribers` is
@@ -162,7 +176,13 @@ struct Shared {
 }
 
 impl Shared {
-    fn ask(&self, d: Demand) {
+    /// Say what is wanted, stamped with the generation it was decided at.
+    fn ask(&self, demand: Demand) {
+        let generation = self.generation.load(Ordering::SeqCst);
+        self.ask_at(DemandAt { demand, generation });
+    }
+
+    fn ask_at(&self, d: DemandAt) {
         if let Some(sink) = &self.demand {
             sink(d);
         }
@@ -204,6 +224,14 @@ impl Shared {
         if *self.shape.lock() != Some(shape) || !self.built.load(Ordering::Acquire) {
             self.ask(Demand::Build(shape));
         }
+    }
+
+    /// Whether a command that has reached the mixer thread is still the truth.
+    /// Anything that changed the subscriber list since it was decided has
+    /// bumped the generation and put its own command on the queue behind this
+    /// one, so the stale one is dropped and the fresh one decides.
+    fn current(&self, generation: u64) -> bool {
+        self.generation.load(Ordering::SeqCst) == generation
     }
 }
 
@@ -350,6 +378,21 @@ impl MultiviewHandle {
         self.shared.wanted()
     }
 
+    /// Whether a demand that has reached the mixer thread is still current.
+    ///
+    /// A subscriber that arrived after the demand was decided has bumped the
+    /// generation and asked for what it wants, so the stale command is dropped
+    /// rather than applied over the top of the fresh one.
+    pub fn accepts(&self, d: DemandAt) -> bool {
+        self.shared.current(d.generation)
+    }
+
+    /// The current subscriber generation, for a command the mixer thread
+    /// raises itself.
+    pub fn generation(&self) -> u64 {
+        self.shared.generation.load(Ordering::SeqCst)
+    }
+
     fn publisher(&self) -> Publisher {
         Publisher { shared: self.shared.clone() }
     }
@@ -412,15 +455,19 @@ impl Drop for MultiviewSubscription {
         shared.rt.clone().spawn(async move {
             tokio::time::sleep(linger).await;
             // A client that came back during the linger bumped the generation,
-            // and its own settle has already asked for what it needs.
-            if shared.generation.load(Ordering::SeqCst) != gen {
+            // and its own settle has already asked for what it needs. This is
+            // the cheap check; the one that matters is on the mixer thread,
+            // because a client can arrive between here and there.
+            if !shared.current(gen) {
                 return;
             }
             if !shared.subs.lock().is_empty() {
                 return;
             }
             info!("last multiview subscriber left, taking the mosaic down");
-            shared.ask(Demand::Teardown);
+            // Stamped with the generation this decision was made at, not with
+            // whatever it is by the time the mixer thread reads it.
+            shared.ask_at(DemandAt { demand: Demand::Teardown, generation: gen });
         });
     }
 }
@@ -482,7 +529,7 @@ impl Multiview {
             "mv-caps",
             &CanvasCaps::video_at(cfg.width, cfg.height, fps),
         )?;
-        let vqueue = gstutil::queue_thread("mv-q")?;
+        let vqueue = gstutil::queue_preview("mv-q")?;
         let vconv = make("videoconvert", "mv-conv")?;
         let enc = make("jpegenc", "mv-jpeg")?;
         crate::probe::set_int(&enc, "quality", cfg.jpeg_quality as i64);
@@ -565,7 +612,7 @@ impl Multiview {
 
         let src = make("proxysrc", &format!("mv-src-{tag}"))?;
         src.set_property("proxysink", proxy);
-        let queue = gstutil::queue_thread(&format!("mv-q-{tag}"))?;
+        let queue = gstutil::queue_preview(&format!("mv-q-{tag}"))?;
         let rate = make("videorate", &format!("mv-rate-{tag}"))?;
         // Start at the first buffer that arrives, not at the start of the
         // segment. The mosaic is built when a client asks for it, which may be
@@ -827,7 +874,7 @@ mod tests {
         let seen: Arc<Mutex<Vec<Demand>>> = Arc::new(Mutex::new(Vec::new()));
         let sink = {
             let seen = seen.clone();
-            Arc::new(move |d: Demand| seen.lock().push(d)) as DemandSink
+            Arc::new(move |d: DemandAt| seen.lock().push(d.demand)) as DemandSink
         };
         let h = MultiviewHandle::new(
             MultiviewConfig { linger_secs: 2, ..Default::default() },
@@ -880,7 +927,7 @@ mod tests {
         let seen: Arc<Mutex<Vec<Demand>>> = Arc::new(Mutex::new(Vec::new()));
         let sink = {
             let seen = seen.clone();
-            Arc::new(move |d: Demand| seen.lock().push(d)) as DemandSink
+            Arc::new(move |d: DemandAt| seen.lock().push(d.demand)) as DemandSink
         };
         let h = MultiviewHandle::new(
             MultiviewConfig { linger_secs: 2, ..Default::default() },
@@ -907,7 +954,7 @@ mod tests {
         let seen: Arc<Mutex<Vec<Demand>>> = Arc::new(Mutex::new(Vec::new()));
         let sink = {
             let seen = seen.clone();
-            Arc::new(move |d: Demand| seen.lock().push(d)) as DemandSink
+            Arc::new(move |d: DemandAt| seen.lock().push(d.demand)) as DemandSink
         };
         let h = MultiviewHandle::new(
             MultiviewConfig { enabled: false, ..Default::default() },
@@ -1078,6 +1125,179 @@ mod tests {
         );
 
         drop(sub);
+        let _ = handle.send(crate::mixer::Command::Shutdown);
+        tokio::task::spawn_blocking(move || thread.join()).await.unwrap().unwrap();
+    }
+
+    /// Codex's finding: teardown was decided from a generation and an
+    /// emptiness check taken separately from the enqueueing, so a subscriber
+    /// arriving between the two saw the pipeline, enqueued nothing, and then
+    /// lost it.
+    ///
+    /// The demand carries the generation it was decided at now, and the mixer
+    /// thread refuses one that is no longer current.
+    #[tokio::test(start_paused = true)]
+    async fn a_subscriber_arriving_after_a_teardown_was_decided_keeps_the_mosaic() {
+        let seen: Arc<Mutex<Vec<DemandAt>>> = Arc::new(Mutex::new(Vec::new()));
+        let sink = {
+            let seen = seen.clone();
+            Arc::new(move |d: DemandAt| seen.lock().push(d)) as DemandSink
+        };
+        let h = MultiviewHandle::new(
+            MultiviewConfig { linger_secs: 1, ..Default::default() },
+            tokio::runtime::Handle::current(),
+            sink,
+        );
+        let a = h.subscribe(MultiviewRequest::configured());
+        h.mark_built(h.wanted());
+        drop(a);
+        // Past the linger, so the teardown has been decided and posted.
+        tokio::time::sleep(Duration::from_millis(1_200)).await;
+        let teardown = *seen
+            .lock()
+            .iter()
+            .find(|d| matches!(d.demand, Demand::Teardown))
+            .expect("no teardown was ever asked for");
+        assert!(h.accepts(teardown), "the teardown is current until somebody arrives");
+
+        // The mixer thread has not read it yet, and a client turns up.
+        let _b = h.subscribe(MultiviewRequest::configured());
+        assert!(
+            !h.accepts(teardown),
+            "a teardown decided before this subscriber must be refused"
+        );
+        assert!(h.wanted().is_some(), "and the mosaic is still wanted");
+    }
+
+    /// A source with a thumbnail end, for the two tests below.
+    fn test_source() -> crate::config::SourceConfig {
+        crate::config::SourceConfig::bare("cam1", "test://smpte")
+    }
+
+    /// Reported from live runs: a `test://` source went live and then stalled
+    /// within about twenty seconds, repeatedly, whenever a client subscribed to
+    /// the mosaic and left again.
+    ///
+    /// The mosaic stops reading its `proxysrc`s while it is being torn down or
+    /// rebuilt. The thumbnail branch hanging off the source's `vtee` then fills
+    /// up, and a queue that blocks when full holds the tee, which holds the
+    /// programme branch beside it, which is where the liveness probe lives. The
+    /// source looked dead and the supervisor restarted it. This subscribes and
+    /// leaves repeatedly and insists the source stays live throughout.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn a_subscriber_coming_and_going_never_stalls_a_source() {
+        init();
+        let mut cfg = mixer_cfg(MultiviewConfig {
+            width: 320,
+            height: 180,
+            fps: 8,
+            linger_secs: 0,
+            ..Default::default()
+        });
+        cfg.sources = vec![test_source()];
+        let (mut mix, handle, cmd_rx, _bus_rx) = crate::mixer::Mixer::build(cfg).unwrap();
+        mix.start().unwrap();
+        let mv = mix.multiview_handle();
+        let thread = crate::mixer::spawn(mix, cmd_rx, handle.clone());
+
+        // Let the source deliver a picture before anything is asked of it.
+        let live = async {
+            loop {
+                let status = handle.status().await.unwrap();
+                if status.sources.iter().any(|s| s.state == crate::state::SourceState::Live) {
+                    return;
+                }
+                tokio::time::sleep(Duration::from_millis(100)).await;
+            }
+        };
+        tokio::time::timeout(Duration::from_secs(10), live)
+            .await
+            .expect("the source never went live");
+
+        for round in 0..12 {
+            let mut sub = mv.subscribe(MultiviewRequest::configured());
+            let _ = tokio::time::timeout(Duration::from_secs(2), sub.recv()).await;
+            drop(sub);
+            tokio::time::sleep(Duration::from_millis(120)).await;
+            // Every status read has a deadline, so a mixer thread that has
+            // wedged fails this rather than hanging the suite.
+            let status = tokio::time::timeout(Duration::from_secs(2), handle.status())
+                .await
+                .unwrap_or_else(|_| panic!("the mixer stopped answering on round {round}"))
+                .unwrap();
+            let state = status.sources.first().map(|s| s.state);
+            assert_ne!(
+                state,
+                Some(crate::state::SourceState::Stalled),
+                "the source was judged stalled on round {round} by a mosaic coming and going"
+            );
+        }
+
+        let _ = handle.send(crate::mixer::Command::Shutdown);
+        tokio::task::spawn_blocking(move || thread.join()).await.unwrap().unwrap();
+    }
+
+    /// Reported from live runs: the core stopped answering HTTP entirely right
+    /// after "last multiview subscriber left, taking the mosaic down", stayed
+    /// alive and never recovered.
+    ///
+    /// Anything that wedges the mixer thread does that, because every control
+    /// call ends at `handle.status()`. This builds and tears the mosaic down
+    /// fifty times while a source runs and another task polls status, with a
+    /// deadline on every step, so a teardown that blocks fails here instead of
+    /// in a show.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn fifty_mosaic_teardowns_never_wedge_the_mixer() {
+        init();
+        let mut cfg = mixer_cfg(MultiviewConfig {
+            width: 320,
+            height: 180,
+            fps: 8,
+            linger_secs: 0,
+            ..Default::default()
+        });
+        cfg.sources = vec![test_source()];
+        let (mut mix, handle, cmd_rx, _bus_rx) = crate::mixer::Mixer::build(cfg).unwrap();
+        mix.start().unwrap();
+        let mv = mix.multiview_handle();
+        let thread = crate::mixer::spawn(mix, cmd_rx, handle.clone());
+
+        // A second task asking the mixer questions throughout. It records the
+        // worst answer time it saw, which is the number that matters: a mixer
+        // thread held for two seconds is a mixer thread that is not switching
+        // cameras either.
+        let polling = handle.clone();
+        let worst = Arc::new(AtomicU64::new(0));
+        let poll_worst = worst.clone();
+        let poller = tokio::spawn(async move {
+            for _ in 0..300 {
+                let at = Instant::now();
+                if tokio::time::timeout(Duration::from_secs(3), polling.status()).await.is_err() {
+                    return Err("the mixer stopped answering status");
+                }
+                let ms = at.elapsed().as_millis() as u64;
+                poll_worst.fetch_max(ms, Ordering::Relaxed);
+                tokio::time::sleep(Duration::from_millis(20)).await;
+            }
+            Ok(())
+        });
+
+        for round in 0..50 {
+            let sub = mv.subscribe(MultiviewRequest::configured());
+            tokio::time::sleep(Duration::from_millis(30)).await;
+            drop(sub);
+            tokio::time::sleep(Duration::from_millis(30)).await;
+            let alive = tokio::time::timeout(Duration::from_secs(3), handle.status()).await;
+            assert!(alive.is_ok(), "the mixer wedged on teardown round {round}");
+        }
+
+        poller.abort();
+        let worst_ms = worst.load(Ordering::Relaxed);
+        assert!(
+            worst_ms < 1_500,
+            "a status call took {worst_ms} ms: the mixer thread is being held across a teardown"
+        );
+
         let _ = handle.send(crate::mixer::Command::Shutdown);
         tokio::task::spawn_blocking(move || thread.join()).await.unwrap().unwrap();
     }
