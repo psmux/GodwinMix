@@ -282,7 +282,8 @@ fn still_pending(plan: &preset::Plan, live: &[String]) -> Vec<String> {
                 addition.id
             )),
             None => out.push(format!(
-                "{} is in the config file and starts on the next `gmx` restart",
+                "{} is in the config file; this core did not bring it up now, so it \
+                 starts on the next `gmx` restart",
                 addition.id
             )),
         }

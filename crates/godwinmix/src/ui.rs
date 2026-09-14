@@ -53,6 +53,9 @@ const ASSETS: &[(&str, &str)] = &[
     ("panels/sources/local.js", include_str!("../../../ui/panels/sources/local.js")),
     ("panels/sources/panel.js", include_str!("../../../ui/panels/sources/panel.js")),
     ("panels/sources/tile.js", include_str!("../../../ui/panels/sources/tile.js")),
+    ("panels/welcome/defaults.js", include_str!("../../../ui/panels/welcome/defaults.js")),
+    ("panels/welcome/panel.js", include_str!("../../../ui/panels/welcome/panel.js")),
+    ("panels/welcome/tiles.js", include_str!("../../../ui/panels/welcome/tiles.js")),
     ("shell/commands.js", include_str!("../../../ui/shell/commands.js")),
     ("shell/dom.js", include_str!("../../../ui/shell/dom.js")),
     ("shell/fader.js", include_str!("../../../ui/shell/fader.js")),
@@ -73,8 +76,6 @@ const ASSETS: &[(&str, &str)] = &[
     ("shell/theme.js", include_str!("../../../ui/shell/theme.js")),
     ("shell/toast.js", include_str!("../../../ui/shell/toast.js")),
     ("shell/undo.js", include_str!("../../../ui/shell/undo.js")),
-    ("test/index.html", include_str!("../../../ui/test/index.html")),
-    ("test/run.js", include_str!("../../../ui/test/run.js")),
     ("themes/base.css", include_str!("../../../ui/themes/base.css")),
     ("themes/dark.css", include_str!("../../../ui/themes/dark.css")),
     ("themes/high-contrast.css", include_str!("../../../ui/themes/high-contrast.css")),
@@ -85,6 +86,22 @@ const ASSETS: &[(&str, &str)] = &[
 /// The page as it was before the split, kept at `/legacy` for one release so an
 /// operator mid show has something to fall back to.
 const LEGACY: &str = include_str!("../../../ui/legacy/index.html");
+
+/// The DOM harness, which is a development page and not part of the product.
+///
+/// It is 19 kB of assertions nobody running a show ever loads, and the served
+/// set has a 250,000 byte budget it was eating eight percent of. `GMX_UI_DEV=1`
+/// puts it back at `/test/`, which is what a developer running the harness
+/// sets and what CI sets.
+const DEV_ASSETS: &[(&str, &str)] = &[
+    ("test/index.html", include_str!("../../../ui/test/index.html")),
+    ("test/run.js", include_str!("../../../ui/test/run.js")),
+];
+
+/// True when this process was started with `GMX_UI_DEV=1`.
+fn dev_pages() -> bool {
+    std::env::var("GMX_UI_DEV").is_ok_and(|v| v == "1" || v.eq_ignore_ascii_case("true"))
+}
 
 /// Where `/plugins/<name>/ui/` is read from, and where the UI is read from when
 /// an operator wants to edit it without rebuilding.
@@ -133,15 +150,60 @@ where
     let mut router = Router::new()
         .route("/", get(|| async { asset("index.html") }))
         .route("/legacy", get(|| async { html(LEGACY) }))
-        // A directory URL is what a person types, so it answers rather than 404s.
-        .route("/test/", get(|| async { asset("test/index.html") }))
         .route("/plugins/index.json", get(plugin_index))
-        .route("/plugins/{name}/ui/{*path}", get(plugin_file));
+        .route("/plugins/{name}/ui/{*path}", get(plugin_file))
+        // A preset's own theme, read out of the preset it was applied from, so
+        // a theme travels with the preset and needs no rebuild.
+        .route("/presets/{name}/theme.css", get(preset_theme));
     for (path, _) in ASSETS {
         let p = *path;
         router = router.route(&format!("/{p}"), get(move || async move { asset(p) }));
     }
+    if dev_pages() {
+        // A directory URL is what a person types, so it answers rather than 404s.
+        router = router.route("/test/", get(|| async { dev_asset("test/index.html") }));
+        for (path, _) in DEV_ASSETS {
+            let p = *path;
+            router = router.route(&format!("/{p}"), get(move || async move { dev_asset(p) }));
+        }
+    }
     router
+}
+
+/// One of the development pages. Only routed when `GMX_UI_DEV=1`.
+fn dev_asset(path: &'static str) -> Response {
+    let body = DEV_ASSETS.iter().find(|(p, _)| *p == path).map(|(_, b)| *b).unwrap_or("");
+    with_headers(content_type(path), Body::from(body), path)
+}
+
+/// `/presets/<name>/theme.css`.
+///
+/// A preset names a theme its surface resolves, and a preset that ships its own
+/// stylesheet has it at `theme_css` in the manifest. Nothing else in a preset is
+/// served: this is a stylesheet route, not a file server.
+async fn preset_theme(UrlPath(name): UrlPath<String>) -> Response {
+    if !legible_name(&name) {
+        return (StatusCode::NOT_FOUND, "no such preset").into_response();
+    }
+    let found = match godwinmix_core::preset::resolve(&name) {
+        Ok(p) => p,
+        Err(e) => return (StatusCode::NOT_FOUND, format!("{e:#}")).into_response(),
+    };
+    let css = found.block().ok().and_then(|b| b.theme_css.clone());
+    let Some(css) = css else {
+        return (
+            StatusCode::NOT_FOUND,
+            format!(
+                "the preset '{name}' ships no stylesheet. Add `theme_css = \"theme.css\"` \
+                 to its [provides.preset] table and put the file beside the manifest."
+            ),
+        )
+            .into_response();
+    };
+    match found.read(&css) {
+        Ok(body) => with_headers("text/css; charset=utf-8", Body::from(body), "theme.css"),
+        Err(e) => (StatusCode::NOT_FOUND, format!("{e:#}")).into_response(),
+    }
 }
 
 /// One embedded file, or the same file from `ui_dir` when one is configured.
@@ -365,14 +427,15 @@ mod tests {
         // chose are served and never loaded, so they are counted separately.
         let page: usize = ASSETS
             .iter()
-            .filter(|(p, _)| !p.starts_with("test/"))
             .filter(|(p, _)| !p.starts_with("themes/") || *p == "themes/base.css" || *p == "themes/dark.css")
             .map(|(_, body)| body.len())
             .sum();
         assert!(page < 250 * 1024, "the page loads {page} bytes, over the 250 kB budget");
 
         // And the plain reading of the same budget: everything served under
-        // ui/, the test page and all four themes included, under 250,000 bytes.
+        // ui/, all four themes included, under 250,000 bytes. The DOM harness
+        // is not in it: `GMX_UI_DEV=1` serves that, and nothing a volunteer
+        // opens ever fetches it.
         let total: usize = ASSETS.iter().map(|(_, body)| body.len()).sum();
         assert!(total < 250_000, "everything served under ui/ is {total} bytes");
     }
@@ -417,11 +480,29 @@ mod tests {
     }
 
     #[test]
-    fn the_test_page_is_served_with_and_without_its_file_name() {
-        // Both `/test/` and `/test/index.html` answer, because a person types
-        // the first and a link carries the second.
-        assert!(ASSETS.iter().any(|(p, _)| *p == "test/index.html"));
-        assert!(ASSETS.iter().any(|(p, _)| *p == "test/run.js"));
+    fn the_test_page_is_a_development_page_and_not_part_of_the_product() {
+        // It is served at `/test/` when GMX_UI_DEV=1 and nowhere otherwise, so
+        // its 19 kB is not in the budget a volunteer's page is measured by.
+        assert!(!ASSETS.iter().any(|(p, _)| p.starts_with("test/")));
+        assert!(DEV_ASSETS.iter().any(|(p, _)| *p == "test/index.html"));
+        assert!(DEV_ASSETS.iter().any(|(p, _)| *p == "test/run.js"));
+    }
+
+    #[test]
+    fn the_welcome_panel_is_served() {
+        for wanted in [
+            "panels/welcome/panel.js",
+            "panels/welcome/tiles.js",
+            "panels/welcome/defaults.js",
+        ] {
+            assert!(ASSETS.iter().any(|(p, _)| *p == wanted), "{wanted} is not served");
+        }
+        // The tiles are drawn, not fetched, and small enough to stay that way.
+        let tiles = ASSETS.iter().find(|(p, _)| *p == "panels/welcome/tiles.js").unwrap().1;
+        for art in tiles.split("frame(").skip(1) {
+            let one = art.split(");").next().unwrap_or("");
+            assert!(one.len() < 2048, "one tile is {} bytes, over the 2 kB budget", one.len());
+        }
     }
 
     #[test]
