@@ -453,6 +453,33 @@
       ],
       "type": "object"
     },
+    "SourceMeta": {
+      "additionalProperties": false,
+      "description": "A source's name, colour and tray folder, as this collection has them.",
+      "properties": {
+        "color": {
+          "description": "Free text so a client can use whatever it draws with. Absent means the\nclient picks one by kind.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "group": {
+          "description": "A tray folder: a tag on the source, purely for finding things. Not a\nscene group, which is a thing on the canvas.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "name": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "type": "object"
+    },
     "Transform": {
       "additionalProperties": false,
       "description": "Where an item sits and how it is sized.",
@@ -596,6 +623,13 @@
       "format": "uint32",
       "minimum": 0,
       "type": "integer"
+    },
+    "sources": {
+      "additionalProperties": {
+        "$ref": "#/$defs/SourceMeta"
+      },
+      "description": "What this collection calls the sources it refers to: a name, a colour\nand a tray folder each (11 section 6b). Not a source list, which the\nmixer owns; a place for the labels every client, the tally, the Stream\nDeck and an agent have to agree on.",
+      "type": "object"
     },
     "transitions": {
       "items": {

@@ -20,9 +20,11 @@ pub mod presets;
 pub mod schema;
 pub mod validate;
 
+pub mod server;
+
 pub use document::{
     Align, Asset, Audio, Blend, Canvas, Collection, Content, Crop, Filter, Fit, Frame, Item,
-    Override, Scene, Transform, Transition, Vec2, SCHEMA_VERSION,
+    Override, Scene, SourceMeta, Transform, Transition, Vec2, SCHEMA_VERSION,
 };
 pub use flat::{FlatContent, FlatDocument, ItemProps, Props, Record};
 pub use id::Id;
