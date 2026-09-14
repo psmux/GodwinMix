@@ -4,6 +4,8 @@ version = "0.2.0"
 edition = "2021"
 rust-version = "1.82"
 description = "Live RTMP video mixer with hot source switching and uninterrupted output"
+# Two binaries, so `cargo run` has to be told which one it is.
+default-run = "godwinmix"
 
 # The program is a library with two binaries over it. `gmx` is the name an
 # operator types; `godwinmix` is the name a package manager and a service unit

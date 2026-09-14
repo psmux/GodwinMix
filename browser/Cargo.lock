@@ -597,6 +597,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "godwinmix-browser"
+version = "0.2.0"
+dependencies = [
+ "cef",
+ "cef-dll-sys",
+ "gstreamer",
+ "gstreamer-app",
+ "libc",
+ "objc2",
+ "objc2-app-kit",
+]
+
+[[package]]
 name = "gstreamer"
 version = "0.24.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -924,19 +937,6 @@ name = "litrs"
 version = "1.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "11d3d7f243d5c5a8b9bb5d6dd2b1602c0cb0b9db1621bafc7ed66e35ff9fe092"
-
-[[package]]
-name = "godwinmix-browser"
-version = "0.2.0"
-dependencies = [
- "cef",
- "cef-dll-sys",
- "gstreamer",
- "gstreamer-app",
- "libc",
- "objc2",
- "objc2-app-kit",
-]
 
 [[package]]
 name = "log"
