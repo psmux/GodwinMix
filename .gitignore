@@ -35,3 +35,10 @@ auto.key
 
 .DS_Store
 dev/linux-x86/out/
+
+# A crate built on its own, outside the workspace, puts its target here.
+crates/*/target/
+clients/typescript/node_modules/
+clients/typescript/dist/
+clients/python/*.egg-info/
+clients/**/__pycache__/

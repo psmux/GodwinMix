@@ -29,6 +29,7 @@ Start here if you have never run it.
 * [Add a theme](how-to/add-a-theme.md) (planned)
 * [Write a preset](how-to/write-a-preset.md) (planned)
 * [Upgrade from LiveboxMix](how-to/upgrade-from-liveboxmix.md)
+* [Write a UI of your own](how-to/write-a-ui.md)
 * [Run the smoke test](how-to/smoke-test.md)
 * [Embed the engine in your own program](how-to/embed-the-engine.md)
 * [Write a source plugin in Rust](how-to/write-a-source-plugin.md)
@@ -44,6 +45,7 @@ Start here if you have never run it.
 * [The generated protocol reference](reference/protocol.md)
 * [The plugin manifest](reference/plugin-manifest.md)
 * [The plugin protocol](reference/plugin-protocol.md)
+* [The client libraries](reference/clients.md)
 
 ## Explanation
 
