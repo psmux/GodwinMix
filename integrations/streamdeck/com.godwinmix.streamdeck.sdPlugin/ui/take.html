@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<!--
+  The property inspector for a take key. Two fields and nothing else: the
+  source id the mixer knows, and an optional title for the key.
+
+  Stream Deck loads this in a webview beside the key and talks to it over the
+  same WebSocket protocol the plugin uses. `sdpi-components` is Elgato's own
+  component set and it ships with the app, so this page pulls nothing off the
+  network.
+-->
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <script src="https://sdpi-components.dev/releases/v3/sdpi-components.js"></script>
+  </head>
+  <body>
+    <sdpi-item label="Source">
+      <sdpi-textfield setting="source" placeholder="cam1" required></sdpi-textfield>
+    </sdpi-item>
+    <sdpi-item label="Title">
+      <sdpi-textfield setting="title" placeholder="the source id"></sdpi-textfield>
+    </sdpi-item>
+    <sdpi-item label="Mixer">
+      <sdpi-textfield global setting="base" placeholder="http://127.0.0.1:8080"></sdpi-textfield>
+    </sdpi-item>
+    <sdpi-item label="Token">
+      <sdpi-password global setting="token"></sdpi-password>
+    </sdpi-item>
+  </body>
+</html>

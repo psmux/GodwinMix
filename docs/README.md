@@ -34,6 +34,11 @@ Start here if you have never run it.
 * [Roll an ad break](how-to/ad-breaks.md)
 * [See and hear the mixer from anywhere](how-to/preview-and-audio.md)
 * [Run the terminal UI](how-to/terminal-ui.md)
+* [Put GodwinMix on a hardware panel](how-to/companion-and-streamdeck.md),
+  Bitfocus Companion and Elgato Stream Deck
+* [Control the mixer from OSC, and light the tally lamps](how-to/osc-and-tally.md)
+* [Let the mixer cut by itself](how-to/run-a-director.md), rule based first,
+  then with a model and what that costs
 * [Add a theme](how-to/add-a-theme.md) (planned)
 * [Write a preset](how-to/write-a-preset.md) (planned)
 * [Add a theme](how-to/add-a-theme.md)
@@ -68,6 +73,7 @@ Start here if you have never run it.
 * [The plugin manifest](reference/plugin-manifest.md)
 * [The index format](reference/index-format.md)
 * [The quality scale](reference/quality-scale.md)
+* [Surfaces: a whole UI, and `gmx ui`](reference/surfaces.md)
 * [The plugin protocol](reference/plugin-protocol.md)
 * [The plugin lifecycle](reference/plugin-lifecycle.md)
 * [The client libraries](reference/clients.md)

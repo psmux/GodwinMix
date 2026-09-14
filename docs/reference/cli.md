@@ -184,6 +184,35 @@ See [install a plugin](../how-to/install-a-plugin.md),
 [publish a plugin](../how-to/publish-a-plugin.md) and
 [run a marketplace](../how-to/run-a-marketplace.md).
 
+## Surfaces
+
+A surface is a whole UI: a plugin whose manifest says `kind = "surface"` and
+names the command to start and the protocol level it speaks. `gmx ui` finds one
+and starts it against the mixer you are already talking to.
+
+| Command | Does |
+|---|---|
+| `gmx ui` or `gmx ui list [--json]` | every surface this machine can start, with where its command was found or every place it was looked for |
+| `gmx ui <name>` | start it, with `GODWINMIX_URL` and `GODWINMIX_TOKEN` in its environment and stdio inherited |
+| `gmx ui <name> -- <args>` | everything after `--` goes to the surface untouched |
+
+```sh
+gmx ui tui                        # the terminal UI
+gmx ui tui -- --multiview --fps 8 # with its own flags
+```
+
+A surface may not be called `list`, because `gmx ui list` is the listing.
+`gmx ui` carries the surface's exit code out, so a script can act on it.
+
+The command is looked for inside the plugin directory, then beside the `gmx`
+binary, then on `PATH`. A surface whose protocol level is above the core's is
+refused with both numbers.
+
+`gmx preset apply` writes the preset's chosen surface into the runtime store,
+and `gmx ui list` marks it with a star.
+
+See [surfaces](surfaces.md).
+
 ## Chaos
 
 Break something on purpose, to see that the programme survives it. Both
