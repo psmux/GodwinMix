@@ -29,6 +29,11 @@ pub struct ObserveState {
     /// without a second counter kept in step by hand.
     /// The multiview handle, for the subscriber count and the mosaic rate.
     pub multiview: Option<godwinmix_core::multiview::MultiviewHandle>,
+    /// The preview and monitoring streams, for `gmx_stream_clients{kind}`.
+    pub preview: Option<godwinmix_core::preview::PreviewHandle>,
+    /// The programme encoder's lifecycle, for `gmx_encoder_running` and
+    /// `gmx_encoder_consumers{kind}`.
+    pub encoder: Option<godwinmix_core::encoder::EncoderHandle>,
     /// The same bearer token the rest of the control plane uses. `None` leaves
     /// these routes as open as the rest of it.
     pub tokens: Option<Arc<godwinmix_protocol::scope::Tokens>>,
@@ -180,6 +185,15 @@ async fn scrape(State(state): State<ObserveState>) -> Response {
         let stats = mv.stats();
         metrics::set_multiview_subscribers(stats.subscribers as usize);
         metrics::set_multiview_fps(stats.fps);
+    }
+    // What is on a preview or monitoring stream, and whether the programme
+    // encoder is running at all. Both are gauges nothing else samples, and both
+    // are how an operator checks that an idle core is idle.
+    if let Some(preview) = &state.preview {
+        metrics::set_stream_clients(&preview.clients().counts());
+    }
+    if let Some(encoder) = &state.encoder {
+        metrics::set_encoder(&encoder.stats());
     }
     metrics::sample_source_queues();
     (
@@ -436,10 +450,47 @@ mod tests {
         ObserveState {
             mixer: None,
             multiview: None,
+            preview: None,
+            encoder: None,
             tokens: None,
             metrics_open: true,
             config_path: crate::observe::tempdir("routes").join("godwinmix.toml"),
         }
+    }
+
+    /// Nothing runs unless asked, read off `/metrics`: an idle core lists every
+    /// stream kind at zero and says the encoder is not running.
+    #[tokio::test]
+    async fn an_idle_core_reports_no_stream_clients_and_no_encoder() {
+        let mut state = test_state();
+        let preview = godwinmix_core::preview::PreviewHandle::detached();
+        state.preview = Some(preview.clone());
+        state.encoder = Some(godwinmix_core::encoder::EncoderHandle::detached(
+            godwinmix_core::encoder::EncoderPolicy::OnDemand,
+        ));
+        let server = Served::start(state).await;
+        let body = server.get("/metrics").send().await.unwrap().text().await.unwrap();
+        for kind in godwinmix_core::preview::STREAM_KINDS {
+            assert!(
+                body.contains(&format!("gmx_stream_clients{{kind=\"{kind}\"}} 0")),
+                "no zero line for {kind} in:\n{body}"
+            );
+        }
+        assert!(body.contains("gmx_encoder_running 0"), "{body}");
+        assert!(body.contains("gmx_encoder_consumers{kind=\"output\"} 0"), "{body}");
+        assert!(body.contains("gmx_encoder_consumers{kind=\"whep\"} 0"), "{body}");
+
+        // And a client shows up. In the same test because the metric registry
+        // is process wide: two tests moving one gauge would flap.
+        let client = preview.count("mjpeg");
+        let body = server.get("/metrics").send().await.unwrap().text().await.unwrap();
+        assert!(body.contains("gmx_stream_clients{kind=\"mjpeg\"} 1"), "{body}");
+        assert!(body.contains("gmx_stream_clients{kind=\"pcm\"} 0"), "{body}");
+
+        // And goes again when it leaves, rather than keeping its last value.
+        drop(client);
+        let body = server.get("/metrics").send().await.unwrap().text().await.unwrap();
+        assert!(body.contains("gmx_stream_clients{kind=\"mjpeg\"} 0"), "{body}");
     }
 
     /// The acceptance criterion: a scrape lists the programme frame interval

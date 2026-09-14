@@ -54,6 +54,14 @@ struct Args {
     #[arg(long)]
     example_config: bool,
 
+    /// Print where this core's local sockets and files live, then exit.
+    ///
+    /// The control socket, the runtime directory, and the raw preview socket
+    /// for the programme and for a source, so a client on the same machine
+    /// never has to guess a path.
+    #[arg(long)]
+    info: bool,
+
     /// Report the codec backends that would be selected on this machine, then
     /// exit. Useful for checking a new server before pointing cameras at it.
     #[arg(long)]
@@ -289,6 +297,59 @@ impl From<McpProfile> for godwinmix_protocol::scope::Profile {
 }
 
 /// Parse the command line and do what it says. Both binaries call this.
+/// Where this core's local files and sockets live, for `--info`.
+///
+/// Printed rather than logged, because it is an answer somebody asked for. The
+/// preview lines name paths that exist only while a client holds them open
+/// through `preview.open`, and say so, so nobody waits for a socket that is not
+/// coming.
+fn local_info(config: &std::path::Path) -> String {
+    let config_path = godwinmix_core::config::path_in_force(config);
+    let runtime = Some(core_observe::runtime_dir(&config_path));
+    let mut out = String::new();
+    out.push_str(&format!("config          {}\n", config_path.display()));
+    match &runtime {
+        Some(dir) => {
+            out.push_str(&format!("runtime dir     {}\n", dir.display()));
+            out.push_str(&format!("logs            {}\n", dir.join("godwinmix.log").display()));
+            out.push_str(&format!("session log     {}\n", dir.join("session.jsonl").display()));
+            let sockets = godwinmix_core::preview::local::socket_dir(dir);
+            out.push_str(&format!("preview sockets {}\n", sockets.display()));
+            out.push_str(&format!(
+                "  programme     {}\n",
+                godwinmix_core::preview::local::socket_path(
+                    dir,
+                    &godwinmix_core::preview::local::Target::Program
+                )
+                .display()
+            ));
+            out.push_str(&format!(
+                "  a source      {}\n",
+                godwinmix_core::preview::local::socket_path(
+                    dir,
+                    &godwinmix_core::preview::local::Target::Source("<source id>".into())
+                )
+                .display()
+            ));
+        }
+        None => out.push_str("runtime dir     none: logs stay on stderr\n"),
+    }
+    if godwinmix_core::preview::local::supported_platform() {
+        out.push_str(
+            "\nA preview socket exists only while a client holds it open. Call\n\
+             preview.open {target} on /rpc to create one and preview.close to give it up.\n\
+             A core whose GStreamer has no unixfdsink says so when you call it.\n",
+        );
+    } else {
+        out.push_str(&format!(
+            "\n{}\n",
+            godwinmix_core::preview::local::unsupported_message()
+        ));
+    }
+    out
+}
+
+
 pub async fn run() -> Result<()> {
     let args = Args::parse();
 
@@ -372,6 +433,11 @@ pub async fn run() -> Result<()> {
         return Ok(());
     }
 
+    if args.info {
+        print!("{}", local_info(&args.config));
+        return Ok(());
+    }
+
     // Before anything is started: the mixer is PID 1 in its container and
     // inherits every orphan on the box, and a sidecar's grandchildren are
     // orphaned the moment their parent is killed. See `reap_orphans_if_init`.
@@ -434,7 +500,12 @@ pub async fn run() -> Result<()> {
         startup_report: args.startup_report,
     };
     match core_observe::start(&handle, &observe_options) {
-        Ok(dir) => info!(runtime_dir = %dir.display(), "logs and the session log are here"),
+        Ok(dir) => {
+            info!(runtime_dir = %dir.display(), "logs and the session log are here");
+            // Local raw preview sockets go beside the logs, and `--info` prints
+            // the directory so a native client never has to guess.
+            mix.preview_sockets_in(dir);
+        }
         Err(e) => warn!(?e, "no runtime directory, so logs stay on stderr only"),
     }
 
@@ -444,6 +515,8 @@ pub async fn run() -> Result<()> {
     }
 
     let multiview = mix.multiview_handle();
+    let preview = mix.preview_handle();
+    let encoder = mix.encoder_handle();
 
     // Bus messages from every pipeline are funnelled into the same command
     // queue the operator's requests use, so the mixer handles a camera dying
@@ -470,11 +543,15 @@ pub async fn run() -> Result<()> {
     let quit = Arc::new(tokio::sync::Notify::new());
     let state = control::AppState::new(
         &cfg_for_control,
-        handle.clone(),
-        multiview,
-        library,
-        converter,
-        quit.clone(),
+        control::Engine {
+            mixer: handle.clone(),
+            multiview,
+            preview,
+            encoder,
+            library,
+            converter,
+            quit: quit.clone(),
+        },
         args.rehearsal,
     );
     let server = tokio::spawn(async move {

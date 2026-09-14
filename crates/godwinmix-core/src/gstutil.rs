@@ -72,6 +72,29 @@ pub fn queue_thread(name: &str) -> Result<gst::Element> {
     queue_time(name, 1.0, false)
 }
 
+/// The queue at the head of a preview branch: a second deep and leaky.
+///
+/// Every preview branch hangs off a tee that the programme also hangs off: the
+/// thumbnail end hangs off a source's `vtee` beside that source's programme
+/// branch, and the programme return hangs off `vraw-tee` beside the encoder.
+/// A queue that blocks when full therefore reaches back through the tee and
+/// stops the programme, because a tee pushes to its pads one after another on
+/// the one upstream thread and a blocked pad holds all of them.
+///
+/// That is not theoretical. A mosaic being torn down or rebuilt stops reading
+/// its `proxysrc`s; a second later the thumbnail queue was full; the source's
+/// tee blocked; the liveness probe on the programme proxy saw nothing; and the
+/// supervisor judged a perfectly healthy `test://` source stalled and restarted
+/// it, over and over. On the programme return the same backpressure reaches the
+/// compositor itself.
+///
+/// A late preview frame is worth nothing to anybody, so the newest wins and the
+/// rest go. This is the same reasoning as the output feed queues, applied to
+/// the other side of the mixer.
+pub fn queue_preview(name: &str) -> Result<gst::Element> {
+    queue_time(name, 1.0, true)
+}
+
 /// Current fill level of a queue, in seconds.
 pub fn queue_level_secs(q: &gst::Element) -> f64 {
     q.property::<u64>("current-level-time") as f64 / 1e9

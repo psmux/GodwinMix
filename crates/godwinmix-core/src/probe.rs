@@ -267,6 +267,22 @@ pub fn set_bool(el: &gst::Element, prop: &str, v: bool) {
     }
 }
 
+/// Set a string property, leaving an element that has no such property alone.
+///
+/// Plugins outside the core's control rename properties between versions, and a
+/// preview setting that has moved must degrade to the default rather than stop
+/// the element being built.
+pub fn set_str(el: &gst::Element, prop: &str, v: &str) {
+    let Some(pspec) = writable_property(el, prop) else {
+        return;
+    };
+    if pspec.value_type() == String::static_type() {
+        el.set_property(prop, v);
+    } else {
+        el.set_property_from_str(prop, v);
+    }
+}
+
 /// Every nickname an enum property on this element accepts, in the order the
 /// enum declares them. Empty when there is no such property or it is not an
 /// enum.

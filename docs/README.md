@@ -28,6 +28,7 @@ Start here if you have never run it.
 * [Run it on a Raspberry Pi](how-to/raspberry-pi.md)
 * [Choose a hardware encoder](how-to/choose-a-hardware-encoder.md)
 * [Roll an ad break](how-to/ad-breaks.md)
+* [See and hear the mixer from anywhere](how-to/preview-and-audio.md)
 * [Run the terminal UI](how-to/terminal-ui.md)
 * [Add a theme](how-to/add-a-theme.md) (planned)
 * [Write a preset](how-to/write-a-preset.md) (planned)
@@ -52,6 +53,7 @@ Start here if you have never run it.
 * [Presets, every manifest key and the merge rules](reference/presets.md)
 * [Sources](reference/sources.md)
 * [Web page sources](reference/web-page-sources.md)
+* [Streams: MJPEG, PCM, Opus, WHEP and the local socket](reference/streams.md)
 * [The generated protocol reference](reference/protocol.md)
 * [The plugin manifest](reference/plugin-manifest.md)
 * [The plugin protocol](reference/plugin-protocol.md)
@@ -60,6 +62,7 @@ Start here if you have never run it.
 ## Explanation
 
 * [Why the programme never stops](explanation/why-the-programme-never-stops.md)
+* [Nothing runs unless asked](explanation/nothing-runs-unless-asked.md)
 * [Why plugins are processes](explanation/why-plugins-are-processes.md)
 * [Why the UI is a client](explanation/why-the-ui-is-a-client.md)
 * [Footprint budgets and the reference machines](explanation/footprint-budgets.md)

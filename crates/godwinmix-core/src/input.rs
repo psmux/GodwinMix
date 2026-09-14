@@ -211,6 +211,10 @@ pub struct InputPipeline {
     vcaps: gst::Element,
     acaps: gst::Element,
     vtee: gst::Element,
+    /// The raw audio tee, where an audio monitoring branch hangs off. The
+    /// counterpart of `vtee`, and the reason `/pcm/cam1` costs nothing until
+    /// somebody opens it.
+    atee: gst::Element,
     has_video: Arc<AtomicBool>,
     has_audio: Arc<AtomicBool>,
     /// Whether the page's media ended up being decoded outside the browser.
@@ -770,6 +774,7 @@ impl InputPipeline {
             vcaps: ends.vcaps,
             acaps: ends.acaps,
             vtee: ends.vtee,
+            atee: ends.atee,
             has_video: parts.has_video.unwrap_or_default(),
             has_audio: parts.has_audio.unwrap_or_default(),
             superimposed: parts.superimposed,
@@ -812,6 +817,15 @@ impl InputPipeline {
         self.kind.lock().call(method, params)
     }
 
+    /// This source's raw video tee and raw audio tee, and the pipeline they
+    /// live in, for a preview or monitoring branch to hang off.
+    ///
+    /// Both carry `allow-not-linked`, so a branch that comes and goes is
+    /// nothing to the programme side beside it.
+    pub fn taps(&self) -> (gst::Pipeline, gst::Element, gst::Element) {
+        (self.pipeline.clone(), self.vtee.clone(), self.atee.clone())
+    }
+
     /// The thumbnail proxy, when this source has a thumbnail end.
     pub fn thumb_proxy(&self) -> Option<gst::Element> {
         self.thumb_proxy.lock().clone()
@@ -830,7 +844,7 @@ impl InputPipeline {
             return Ok(existing.clone());
         }
         let id = &self.id;
-        let queue = gstutil::queue_thread(&format!("{id}-vthumb-q"))?;
+        let queue = gstutil::queue_preview(&format!("{id}-vthumb-q"))?;
         let rate = make("videorate", &format!("{id}-trate"))?;
         let scale = make("videoscale", &format!("{id}-tscale"))?;
         let caps = gstutil::capsfilter(
@@ -856,20 +870,38 @@ impl InputPipeline {
     }
 
     /// Take the thumbnail end back out, for a source nobody is looking at.
+    ///
+    /// Unlink from the tee first, then release the pad, then take the elements
+    /// down. That order is the whole of it: an element on its way to NULL must
+    /// never be handed another buffer, and `vtee` carries `allow-not-linked`,
+    /// so a tee with one fewer branch is nothing to it. It is the same runtime
+    /// tee surgery `OutputSlot::detach` has always done.
+    ///
+    /// This used to install an idle probe on the tee pad and do the work
+    /// *outside* it, which bought nothing (the block was already released) and
+    /// cost up to two seconds of the mixer thread whenever the probe did not
+    /// fire, because a tee pad whose siblings are blocked never goes idle. The
+    /// mixer thread stopping for two seconds per source is enough to make every
+    /// source look stalled and to stop the control port answering. Nothing
+    /// blocks now.
     pub fn detach_thumb_end(&self) {
         let Some(proxy) = self.thumb_proxy.lock().take() else { return };
         let name = format!("{}-vthumb-q", self.id);
         let Some(queue) = self.pipeline.by_name(&name) else { return };
-        let Some(sink) = queue.static_pad("sink") else { return };
-        let Some(teepad) = sink.peer() else { return };
-        let _ = gstutil::with_pad_blocked(&teepad, std::time::Duration::from_secs(2), || {});
+        if let Some(sink) = queue.static_pad("sink") {
+            if let Some(teepad) = sink.peer() {
+                if let Err(e) = teepad.unlink(&sink) {
+                    warn!(source = %self.id, ?e, "could not unlink the thumbnail end");
+                }
+                self.vtee.release_request_pad(&teepad);
+            }
+        }
         for part in ["vthumb-q", "trate", "tscale", "tcaps", "tproxy"] {
             if let Some(el) = self.pipeline.by_name(&format!("{}-{part}", self.id)) {
                 let _ = el.set_state(gst::State::Null);
                 let _ = self.pipeline.remove(&el);
             }
         }
-        self.vtee.release_request_pad(&teepad);
         let _ = proxy;
         debug!(source = %self.id, "thumbnail end detached");
     }

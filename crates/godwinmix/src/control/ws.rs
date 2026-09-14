@@ -23,10 +23,26 @@ use axum::extract::ws::{Message, WebSocket};
 use futures_util::stream::{SplitSink, StreamExt};
 use futures_util::SinkExt;
 use serde_json::{json, Map, Value};
+use std::time::Duration;
 use tokio::sync::broadcast;
 use tracing::{debug, warn};
 
 type Sink = SplitSink<WebSocket, Message>;
+
+/// How long one frame may take to reach a client before the connection is
+/// given up on.
+///
+/// Every send in this file goes through it. A peer that stops reading, a laptop
+/// that sleeps with the lid shut, a proxy that keeps the socket open and
+/// forwards nothing: in all three the send future simply never completes, and
+/// this task owns the `MultiviewSubscription` that keeps the mosaic running.
+/// One dead client therefore used to hold the mosaic encoder up for everybody,
+/// for as long as the TCP connection survived, which on a LAN is minutes.
+///
+/// Five seconds is far longer than any real send on any link worth serving, and
+/// far shorter than a mosaic anybody is paying for. On expiry the connection
+/// ends, the subscription drops, and the pipeline goes after its linger.
+const SEND_DEADLINE: Duration = Duration::from_secs(5);
 
 /// One `/rpc` client.
 struct Connection {
@@ -56,6 +72,10 @@ struct Connection {
     /// What this client asked the mosaic for, or None when it asked for no
     /// mosaic at all. `serve_rpc` turns a change here into a subscription.
     wants_mosaic: Option<MultiviewRequest>,
+    /// Whether this client asked for the preview scene. Decides whether
+    /// `event/tally` carries `preview` and whether the layout says the preview
+    /// is empty.
+    wants_preview: bool,
     /// `ext.telemetry` and `ext.agent`. Holding this is what keeps the
     /// telemetry probes measuring. See `control/push.rs`.
     push: crate::control::push::Push,
@@ -77,6 +97,7 @@ pub async fn serve_rpc(socket: WebSocket, ctx: Ctx, token: Token) {
         clock: RunningTime::default(),
         frame_no: 0,
         wants_mosaic: None,
+        wants_preview: false,
         push: crate::control::push::Push::none(),
     };
     // Holding this is what keeps the mosaic up, and dropping it is what takes
@@ -177,12 +198,28 @@ impl Connection {
         let mut out = Vec::with_capacity(header.len() + jpeg.len());
         out.extend_from_slice(&header);
         out.extend_from_slice(jpeg);
-        self.tx.send(Message::Binary(out.into())).await.map_err(|_| ())
+        self.write(Message::Binary(out.into())).await
     }
 
     async fn send(&mut self, value: Value) -> Result<(), ()> {
         let text = serde_json::to_string(&value).map_err(|_| ())?;
-        self.tx.send(Message::Text(text.into())).await.map_err(|_| ())
+        self.write(Message::Text(text.into())).await
+    }
+
+    /// The one place this connection writes to its socket, so the deadline
+    /// cannot be forgotten on a path added later.
+    async fn write(&mut self, message: Message) -> Result<(), ()> {
+        match tokio::time::timeout(SEND_DEADLINE, self.tx.send(message)).await {
+            Ok(Ok(())) => Ok(()),
+            Ok(Err(_)) => Err(()),
+            Err(_) => {
+                warn!(
+                    secs = SEND_DEADLINE.as_secs(),
+                    "rpc client stopped reading; closing it so it stops holding the mosaic up"
+                );
+                Err(())
+            }
+        }
     }
 
     /// One text frame in: a request, a notification, or nonsense.
@@ -238,7 +275,17 @@ impl Connection {
     async fn subscribe(&mut self, params: &Value) -> Result<Value, ()> {
         let request: SubscribeRequest = serde_json::from_value(params.clone()).unwrap_or_default();
         let ignored = request.ext.unsupported();
-        let wants_multiview = request.ext.wants_multiview();
+        // The preview scene is composited in the multiview pipeline (11
+        // section 3), so asking for it is also asking for the mosaic. A client
+        // that wants only the preview does not have to know that.
+        let wants_multiview = request.ext.wants_multiview() || request.ext.wants_preview();
+        self.wants_preview = request.ext.wants_preview();
+        if request.ext.wants_full_preview() {
+            warn!(
+                "a client asked for ext.preview = \"full\"; this build composites the preview \
+                 at mosaic size and does not build a full resolution compositor yet"
+            );
+        }
         // What the mosaic is asked to run at. Zero on either means "whatever
         // is configured", which is what the clamp in multiview.rs reads it as.
         self.wants_mosaic = match (&request.ext.multiview, wants_multiview) {
@@ -297,7 +344,25 @@ impl Connection {
             return Ok(());
         }
         self.layout = layout.id;
-        let value = serde_json::to_value(layout).map_err(|_| ())?;
+        let mut value = serde_json::to_value(layout).map_err(|_| ())?;
+        // A client that asked for the preview is told whether there is one. An
+        // empty preview is a fact about the show, not an error, and saying so
+        // is what stops a designer waiting for a picture that is not coming.
+        if self.wants_preview {
+            if let Some(map) = value.as_object_mut() {
+                let sources = self.preview_sources();
+                map.insert("preview_empty".into(), json!(sources.is_empty()));
+                map.insert("preview_sources".into(), json!(sources));
+                if sources.is_empty() {
+                    map.insert(
+                        "preview_note".into(),
+                        json!(
+                            "no scene is armed, so the preview is empty. Arm one with                              scene.preview.set when the scene server is available."
+                        ),
+                    );
+                }
+            }
+        }
         self.send(rpc::notification("event/multiview.layout", value)).await
     }
 
@@ -339,6 +404,16 @@ impl Connection {
         Ok(())
     }
 
+    /// Which sources the armed scene shows.
+    ///
+    /// Empty until the scene server lands: there is no armed scene to read, so
+    /// nothing is on preview. Written as its own function so that the day
+    /// `preview_layout()` exists, one body changes and tally, the layout and
+    /// `/mjpeg/preview` all follow.
+    fn preview_sources(&self) -> Vec<String> {
+        Vec::new()
+    }
+
     /// Keep enough of the state to derive tally without asking the mixer.
     fn remember(&mut self, event: &Event) {
         self.clock.observe(event);
@@ -361,9 +436,21 @@ impl Connection {
         if !self.sub.as_ref().is_some_and(|s| s.wants("tally")) {
             return Ok(());
         }
+        // The armed scene's sources are `preview`. They come from the scene
+        // server's `preview_layout()`; with no scene server, and so no armed
+        // scene, nothing is on preview and every source is `program` or `off`.
+        // A client reading this cannot tell the two apart and does not need to:
+        // `event/multiview.layout` says whether a preview exists.
+        let previewing = self.preview_sources();
         let mut sources = Map::new();
         for id in &self.sources {
-            let state = if Some(id) == self.program.as_ref() { "program" } else { "off" };
+            let state = if Some(id) == self.program.as_ref() {
+                "program"
+            } else if previewing.iter().any(|p| p == id) {
+                "preview"
+            } else {
+                "off"
+            };
             sources.insert(id.clone(), Value::String(state.into()));
         }
         let mut value = serde_json::to_value(Tally { sources }).map_err(|_| ())?;
@@ -456,7 +543,7 @@ pub async fn serve_legacy(socket: WebSocket, ctx: Ctx) {
         Ok(s) => {
             let ev = Event::Status(Box::new(s));
             let Ok(json) = serde_json::to_string(&ev) else { return };
-            if tx.send(Message::Text(json.into())).await.is_err() {
+            if write_legacy(&mut tx, Message::Text(json.into())).await.is_err() {
                 return;
             }
         }
@@ -482,7 +569,7 @@ pub async fn serve_legacy(socket: WebSocket, ctx: Ctx) {
             ev = events.recv() => match ev {
                 Ok(ev) => {
                     let Ok(json) = serde_json::to_string(&ev.event) else { continue };
-                    if tx.send(Message::Text(json.into())).await.is_err() {
+                    if write_legacy(&mut tx, Message::Text(json.into())).await.is_err() {
                         break;
                     }
                 }
@@ -495,7 +582,10 @@ pub async fn serve_legacy(socket: WebSocket, ctx: Ctx) {
             // handles events and no special case is needed.
             frame = frames.recv() => match frame {
                 Ok(bytes) => {
-                    if tx.send(Message::Binary(bytes.to_vec().into())).await.is_err() {
+                    if write_legacy(&mut tx, Message::Binary(bytes.to_vec().into()))
+                        .await
+                        .is_err()
+                    {
                         break;
                     }
                 }
@@ -507,4 +597,20 @@ pub async fn serve_legacy(socket: WebSocket, ctx: Ctx) {
         }
     }
     debug!("legacy websocket client disconnected");
+}
+
+/// The same deadline for the legacy socket, which holds a mosaic subscription
+/// for its whole life and so can hold the pipeline up for everybody.
+async fn write_legacy(tx: &mut Sink, message: Message) -> Result<(), ()> {
+    match tokio::time::timeout(SEND_DEADLINE, tx.send(message)).await {
+        Ok(Ok(())) => Ok(()),
+        Ok(Err(_)) => Err(()),
+        Err(_) => {
+            warn!(
+                secs = SEND_DEADLINE.as_secs(),
+                "legacy websocket client stopped reading; closing it"
+            );
+            Err(())
+        }
+    }
 }
