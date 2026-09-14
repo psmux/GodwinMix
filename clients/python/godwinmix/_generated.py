@@ -16,7 +16,7 @@ one api_level ahead may leave out a field this build thinks is required.
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Literal, Optional, TypedDict
+from typing import Any, Dict, List, Literal, Optional, TypedDict, Union
 
 API_LEVEL = 1
 API_COMPATIBLE = 1
@@ -143,7 +143,7 @@ class CoreInfo(TypedDict, total=False):
     limits: Limits
     rehearsal: bool
     # True when the core was started with `--rehearsal`, which refuses `output.add` and accepts rehearsal tokens.
-    token: TokenInfo | None
+    token: Union[TokenInfo, None]
     # Present when the request carried a token the core recognises.
     version: str
     # The build's own version, as in Cargo.toml.
@@ -153,7 +153,7 @@ class Ext(TypedDict, total=False):
 
     meters: bool
     # `event/meters` at 10 per second.
-    multiview: MultiviewExt | None
+    multiview: Union[MultiviewExt, None]
     # The mosaic: binary frames and `event/multiview.layout`. `false` or omitted builds nothing.
     positions: bool
     # `event/source.position` for seekable sources.
@@ -261,7 +261,7 @@ class LogSetRequest(TypedDict, total=False):
 
 class MediaItem(TypedDict, total=False):
     audio_codec: Optional[str]
-    conversion: ConversionState | None
+    conversion: Union[ConversionState, None]
     # Where a conversion of this file stands, None when none was asked for in this process's lifetime.
     converted_path: Optional[str]
     duration_ms: Optional[int]
@@ -299,7 +299,7 @@ class Meters(TypedDict, total=False):
     # Peak dBFS per channel, per source id.
 
 class MixerStatus(TypedDict, total=False):
-    ad: AdStatus | None
+    ad: Union[AdStatus, None]
     # Present while an ad break is armed or running.
     backend: BackendInfo
     multiview: MultiviewStatus
@@ -312,7 +312,7 @@ class MixerStatus(TypedDict, total=False):
     uptime_secs: int
 
 # `ext.multiview`. Accepts `false` to mean off, or an object.
-MultiviewExt = bool | Dict[str, Any]
+MultiviewExt = Union[bool, Dict[str, Any]]
 
 class MultiviewLayout(TypedDict, total=False):
     """`event/multiview.layout`: how to read the binary frames that follow."""
@@ -365,7 +365,7 @@ class PipelineRequest(TypedDict, total=False):
 class ProgramState(TypedDict, total=False):
     """What `program.get` answers with, and what `program.take` returns so that no follow up read is needed."""
 
-    ad: AdStatus | None
+    ad: Union[AdStatus, None]
     # Present while an ad break is armed or on air.
     previous: Optional[str]
     # The previous source, which is what `program.revert` would take back to.
@@ -403,7 +403,7 @@ class SetFilterRequest(TypedDict, total=False):
     params: Dict[str, Any]
     # The settings to apply. Only the keys named are changed.
 
-Severity = Literal['info', 'warning', 'error'] | Literal['critical']
+Severity = Union[Literal['info', 'warning', 'error'], Literal['critical']]
 
 class Snapshot(TypedDict, total=False):
     """`event/snapshot`: the full state, and where in the stream it sits."""
@@ -544,7 +544,7 @@ class OutputStateEvent(TypedDict, total=False):
     state: OutputState
 
 class AdbreakChangedEvent(TypedDict, total=False):
-    ad: AdStatus | None
+    ad: Union[AdStatus, None]
 
 class MediaChangedEvent(TypedDict, total=False):
     conversion: Any

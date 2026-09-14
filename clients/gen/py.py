@@ -21,7 +21,7 @@ one api_level ahead may leave out a field this build thinks is required.
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Literal, Optional, TypedDict
+from typing import Any, Dict, List, Literal, Optional, TypedDict, Union
 '''
 
 SCALARS = {"string": "str", "integer": "int", "number": "float", "boolean": "bool"}
@@ -73,7 +73,10 @@ def _union(parts):
         return "Any"
     if len(out) == 1:
         return out[0]
-    return " | ".join(out)
+    # `Union[...]` rather than `a | b`: a type alias is an assignment, not an
+    # annotation, so `from __future__ import annotations` does not defer it and
+    # 3.9 would evaluate the `|` and fail.
+    return "Union[" + ", ".join(out) + "]"
 
 
 def _literal_union(values):

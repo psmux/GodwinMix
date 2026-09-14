@@ -12,10 +12,6 @@ categories = ["api-bindings", "multimedia::video"]
 # The major version is the api_level this library speaks. 1.x talks to any core
 # whose core.info reports api_compatible <= 1 <= api_level.
 
-# Standalone on purpose: this crate is not part of the core's build, and saying
-# so here keeps it that way even if the repository gains a workspace later.
-[workspace]
-
 [dependencies]
 tokio = { version = "1", features = ["rt", "macros", "sync", "time", "net"] }
 # rustls rather than the platform's TLS, for the same reason the core uses it:
