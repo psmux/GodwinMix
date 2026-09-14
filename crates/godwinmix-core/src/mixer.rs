@@ -250,6 +250,9 @@ pub enum Command {
     /// the first consumer arrives or the last one leaves, never by the API.
     /// See `encoder.rs`.
     Encoder(crate::encoder::EncoderDemand),
+    /// Open or close a preview or monitoring branch. Sent by `PreviewHandle`
+    /// when a client opens or closes a stream. See `preview/hub.rs`.
+    Preview(crate::preview::PreviewDemand),
     Shutdown,
 }
 
@@ -593,6 +596,11 @@ pub struct Mixer {
     amix: gst::Element,
     venc_tee: gst::Element,
     aenc_tee: gst::Element,
+    /// The raw programme tees, where a preview or monitoring branch hangs off.
+    /// Both carry `allow-not-linked`, so a branch coming and going never
+    /// reaches the encoder beside it.
+    vraw_tee: gst::Element,
+    araw_tee: gst::Element,
     pgm_video_proxy: gst::Element,
 
     sources: Vec<SourceSlot>,
@@ -608,6 +616,16 @@ pub struct Mixer {
     /// One lease per attached output, so an encoder on demand runs for as long
     /// as there is somewhere for its bytes to go.
     output_leases: HashMap<OutputId, crate::encoder::Lease>,
+    /// Audio monitoring branches, by the shape key they were opened under,
+    /// with how many clients are on each. The branch goes when the count does.
+    audio_taps: HashMap<String, (crate::preview::audio::AudioTap, u32)>,
+    /// Local raw preview sockets, by target, counted the same way.
+    #[cfg(unix)]
+    local_previews: HashMap<String, (crate::preview::local::LocalPreview, u32)>,
+    /// What the control plane holds to ask for the two above.
+    preview: crate::preview::PreviewHandle,
+    /// Where preview sockets live, from `persist_runtime_to`'s neighbour.
+    runtime_dir: Option<std::path::PathBuf>,
     program_source: Option<SourceId>,
     ad: Option<AdStatus>,
     /// Running time an armed break was asked to land on, so the roll can hit
@@ -1103,6 +1121,16 @@ impl Mixer {
             crate::encoder::EncodeChain::new("audio", &araw_tee, achain.clone()),
         );
         encoder.arm().context("arming the programme encoder")?;
+
+        // Preview and monitoring branches ask through the same queue, for the
+        // same reason: a pipeline change belongs on the mixer thread. See
+        // `preview/hub.rs`.
+        let preview = crate::preview::PreviewHandle::new(crate::preview::StreamClients::new(), {
+            let h = handle.clone();
+            Arc::new(move |d| {
+                let _ = h.send(Command::Preview(d));
+            })
+        });
         // --- end of the encoder lifecycle block -----------------------------
 
         let mixer = Self {
@@ -1115,6 +1143,8 @@ impl Mixer {
             amix,
             venc_tee,
             aenc_tee,
+            vraw_tee: vraw_tee.clone(),
+            araw_tee: araw_tee.clone(),
             pgm_video_proxy,
             sources: Vec::new(),
             outputs: Vec::new(),
@@ -1123,6 +1153,11 @@ impl Mixer {
             encoder,
             enc,
             output_leases: HashMap::new(),
+            audio_taps: HashMap::new(),
+            #[cfg(unix)]
+            local_previews: HashMap::new(),
+            preview,
+            runtime_dir: None,
             program_source: None,
             ad: None,
             ad_cue_ms: None,
@@ -2425,6 +2460,7 @@ impl Mixer {
             Command::PositionTick => "position tick",
             Command::Multiview(_) => "multiview demand",
             Command::Encoder(_) => "encoder demand",
+            Command::Preview(_) => "preview demand",
             Command::Shutdown => "core.shutdown",
         }
     }
@@ -2465,6 +2501,7 @@ impl Mixer {
             }
             Command::Multiview(d) => self.multiview_demand(d)?,
             Command::Encoder(d) => self.encoder.demand(d)?,
+            Command::Preview(d) => self.preview_demand(d),
             Command::AddSource(cfg, ack) => {
                 self.begin_add_source(*cfg, ack)?;
             }
@@ -3241,6 +3278,138 @@ impl Mixer {
         Ok(())
     }
 
+    /// What the control plane holds to open a preview or monitoring stream.
+    pub fn preview_handle(&self) -> crate::preview::PreviewHandle {
+        self.preview.clone()
+    }
+
+    /// Where preview sockets go. Set beside the runtime store.
+    pub fn preview_sockets_in(&mut self, dir: std::path::PathBuf) {
+        self.runtime_dir = Some(dir);
+    }
+
+    /// One preview demand off the queue. Everything that decides *whether*
+    /// lives in `preview/hub.rs`; this is the part that has to happen on the
+    /// thread that owns GStreamer state changes.
+    fn preview_demand(&mut self, d: crate::preview::PreviewDemand) {
+        use crate::preview::PreviewDemand as P;
+        match d {
+            P::OpenAudio { target, request, reply } => {
+                let _ = reply.send(self.open_audio_tap(&target, request));
+            }
+            P::CloseAudio { key } => {
+                if let Some((_, n)) = self.audio_taps.get_mut(&key) {
+                    *n = n.saturating_sub(1);
+                    if *n == 0 {
+                        self.audio_taps.remove(&key);
+                        debug!(%key, "last audio monitoring client left");
+                    }
+                }
+            }
+            P::OpenLocal { target, reply } => {
+                let _ = reply.send(self.open_local_preview(&target));
+            }
+            P::CloseLocal { target } => self.close_local_preview(&target),
+        }
+    }
+
+    /// Join an audio monitoring branch, building it if it is not there.
+    fn open_audio_tap(
+        &mut self,
+        target: &str,
+        request: crate::preview::audio::AudioRequest,
+    ) -> Result<tokio::sync::broadcast::Receiver<crate::preview::audio::Frame>, String> {
+        let key = request.key(target);
+        if let Some((tap, n)) = self.audio_taps.get_mut(&key) {
+            *n += 1;
+            return Ok(tap.subscribe());
+        }
+        // `program` is the programme's own raw audio tee; anything else is a
+        // source's, which lives in that source's pipeline.
+        let (pipeline, tee) = if target == "program" || target == "programme" {
+            (self.program.clone(), self.araw_tee.clone())
+        } else {
+            let slot = self
+                .sources
+                .iter()
+                .find(|s| s.input.id == target)
+                .ok_or_else(|| self.no_such_source(target))?;
+            let (pipeline, _vtee, atee) = slot.input.taps();
+            (pipeline, atee)
+        };
+        let tap = crate::preview::audio::AudioTap::build(&pipeline, &tee, &key, request)
+            .map_err(|e| format!("could not open audio monitoring on {target}: {e:#}"))?;
+        let frames = tap.subscribe();
+        self.audio_taps.insert(key.clone(), (tap, 1));
+        info!(%key, "audio monitoring branch opened");
+        Ok(frames)
+    }
+
+    /// The refusal for a target that is not here, naming what is.
+    fn no_such_source(&self, target: &str) -> String {
+        let live: Vec<&str> = self.sources.iter().map(|s| s.input.id.as_str()).collect();
+        format!(
+            "no source '{target}'. Sources here: {}. Ask for 'program' for the programme mix.",
+            if live.is_empty() { "none".to_string() } else { live.join(", ") }
+        )
+    }
+
+    #[cfg(unix)]
+    fn open_local_preview(&mut self, target: &str) -> Result<String, String> {
+        if !crate::preview::local::supported() {
+            return Err(crate::preview::local::unsupported_message());
+        }
+        let t = crate::preview::local::Target::parse(target);
+        let slug = t.slug();
+        if let Some((preview, n)) = self.local_previews.get_mut(&slug) {
+            *n += 1;
+            return Ok(preview.path().to_string_lossy().to_string());
+        }
+        let dir = self
+            .runtime_dir
+            .clone()
+            .ok_or_else(|| "this core has no runtime directory, so it cannot place a preview socket".to_string())?;
+        let path = crate::preview::local::socket_path(&dir, &t);
+        let (pipeline, tee) = match &t {
+            crate::preview::local::Target::Program => (self.program.clone(), self.vraw_tee.clone()),
+            crate::preview::local::Target::Source(id) => {
+                let slot = self
+                    .sources
+                    .iter()
+                    .find(|s| &s.input.id == id)
+                    .ok_or_else(|| self.no_such_source(id))?;
+                let (pipeline, vtee, _atee) = slot.input.taps();
+                (pipeline, vtee)
+            }
+        };
+        let preview = crate::preview::local::LocalPreview::build(&pipeline, &tee, t, path)
+            .map_err(|e| format!("could not open a local preview for {target}: {e:#}"))?;
+        let answer = preview.path().to_string_lossy().to_string();
+        self.local_previews.insert(slug, (preview, 1));
+        info!(target = %target, path = %answer, "local raw preview opened");
+        Ok(answer)
+    }
+
+    #[cfg(not(unix))]
+    fn open_local_preview(&mut self, _target: &str) -> Result<String, String> {
+        Err(crate::preview::local::unsupported_message())
+    }
+
+    #[cfg(unix)]
+    fn close_local_preview(&mut self, target: &str) {
+        let slug = crate::preview::local::Target::parse(target).slug();
+        if let Some((_, n)) = self.local_previews.get_mut(&slug) {
+            *n = n.saturating_sub(1);
+            if *n == 0 {
+                self.local_previews.remove(&slug);
+                debug!(%target, "last local preview client left");
+            }
+        }
+    }
+
+    #[cfg(not(unix))]
+    fn close_local_preview(&mut self, _target: &str) {}
+
     /// Take the mosaic away, thumbnail ends first.
     ///
     /// The order is load bearing. A mosaic pipeline on its way to NULL stops
@@ -3271,6 +3440,9 @@ impl Mixer {
             slot.input.stop();
         }
         self.drop_mosaic();
+        self.audio_taps.clear();
+        #[cfg(unix)]
+        self.local_previews.clear();
         self.output_leases.clear();
         self.encoder.shutdown();
         let _ = self.program.set_state(gst::State::Null);
