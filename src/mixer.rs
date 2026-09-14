@@ -29,7 +29,7 @@ use crate::caps::CanvasCaps;
 use crate::config::{Config, OutputConfig, SourceConfig};
 use crate::gstutil::{self, make, BusEvent};
 use crate::input::{InputPipeline, MediaReport};
-use crate::multiview::Multiview;
+use crate::multiview::{Demand, Multiview, MultiviewHandle};
 use crate::output::OutputSlot;
 use crate::probe::Backends;
 use crate::state::*;
@@ -241,6 +241,10 @@ pub enum Command {
     /// supervisor's work has no business being done twice as often to suit a
     /// scrubber.
     PositionTick,
+    /// Build or tear down the mosaic. Sent by `MultiviewHandle` when the first
+    /// client subscribes or the last one leaves, never by the API. See
+    /// `multiview.rs`.
+    Multiview(Demand),
     Shutdown,
 }
 
@@ -583,6 +587,8 @@ pub struct Mixer {
     sources: Vec<SourceSlot>,
     outputs: Vec<Arc<OutputSlot>>,
     multiview: Option<Multiview>,
+    /// The mosaic's demand counter. Alive whether or not the pipeline is.
+    mv: MultiviewHandle,
     program_source: Option<SourceId>,
     ad: Option<AdStatus>,
     /// Running time an armed break was asked to land on, so the roll can hit
@@ -1046,6 +1052,16 @@ impl Mixer {
             .link(&silence_pad)
             .context("linking silence into the mixer")?;
 
+        // The mosaic asks for itself through the mixer's own queue, so the
+        // pipeline is still created and destroyed on the one thread that owns
+        // GStreamer state changes.
+        let mv = MultiviewHandle::new(cfg.multiview.clone(), rt.clone(), {
+            let h = handle.clone();
+            Arc::new(move |d| {
+                let _ = h.send(Command::Multiview(d));
+            })
+        });
+
         let mixer = Self {
             cfg,
             canvas,
@@ -1060,6 +1076,7 @@ impl Mixer {
             sources: Vec::new(),
             outputs: Vec::new(),
             multiview: None,
+            mv,
             program_source: None,
             ad: None,
             ad_cue_ms: None,
@@ -1089,16 +1106,12 @@ impl Mixer {
         self.runtime_store = Some(path);
     }
 
-    /// Bring up multiview, outputs, sources, then start rolling.
+    /// Bring up outputs, sources, then start rolling.
+    ///
+    /// The mosaic is not built here. Nothing runs unless asked: it appears
+    /// when the first client subscribes through `MultiviewHandle` and goes
+    /// again when the last one leaves. See `multiview.rs`.
     pub fn start(&mut self) -> Result<()> {
-        if self.cfg.multiview.enabled {
-            let mv = Multiview::build(&self.cfg.multiview, &self.pgm_video_proxy)
-                .context("building multiview")?;
-            self.watches
-                .push(gstutil::watch_bus(mv.pipeline(), gstutil::BusOwner::Multiview, self.bus_tx.clone())?);
-            self.multiview = Some(mv);
-        }
-
         for out in self.cfg.outputs.clone() {
             match OutputSlot::attach(
                 &self.program,
@@ -1115,9 +1128,6 @@ impl Mixer {
         self.watches
             .push(gstutil::watch_bus(&self.program, gstutil::BusOwner::Programme, self.bus_tx.clone())?);
         self.program.set_state(gst::State::Playing).context("starting program pipeline")?;
-        if let Some(mv) = &self.multiview {
-            mv.start().context("starting multiview")?;
-        }
 
         for src in self.cfg.sources.clone() {
             let id = src.id.clone();
@@ -2365,6 +2375,7 @@ impl Mixer {
                 reply(ack, &r);
                 r?;
             }
+            Command::Multiview(d) => self.multiview_demand(d)?,
             Command::AddSource(cfg, ack) => {
                 self.begin_add_source(*cfg, ack)?;
             }
@@ -2991,14 +3002,18 @@ impl Mixer {
             program: self.program_source.clone(),
             sources,
             outputs: self.outputs.iter().map(|o| o.status()).collect(),
+            // With no mosaic running the configured shape is still what a
+            // client would get if it asked, so `enabled` answers "may I have
+            // one", not "is one running". The cells are empty because there
+            // are none until it is built.
             multiview: multiview.unwrap_or_else(|| MultiviewStatus {
-                enabled: false,
-                width: 0,
-                height: 0,
+                enabled: self.cfg.multiview.enabled,
+                width: self.cfg.multiview.width,
+                height: self.cfg.multiview.height,
                 cols: 0,
                 rows: 0,
                 cells: Vec::new(),
-                fps: 0,
+                fps: self.cfg.multiview.fps,
             }),
             uptime_secs: self.origin.elapsed().as_secs(),
             running_time_ms: self.running_time().map(|t| t.mseconds()).unwrap_or(0),
@@ -3014,9 +3029,68 @@ impl Mixer {
         }
     }
 
-    /// The mosaic's frame publisher, if the mosaic is running.
-    pub fn multiview_sender(&self) -> Option<broadcast::Sender<Arc<[u8]>>> {
-        self.multiview.as_ref().map(|mv| mv.sender())
+    /// The mosaic's demand counter. Clients subscribe through this; the
+    /// pipeline exists only while at least one of them does.
+    pub fn multiview_handle(&self) -> MultiviewHandle {
+        self.mv.clone()
+    }
+
+    /// The programme pipeline itself, so `gmx bench` can put a pad probe on
+    /// the encoder and time the first frame out of it. Nothing in the running
+    /// mixer uses this.
+    pub fn program_pipeline(&self) -> &gst::Pipeline {
+        &self.program
+    }
+
+    /// Build or destroy the mosaic because the subscriber count changed.
+    /// Everything that decides *whether* lives in `multiview.rs`; this is only
+    /// the part that has to happen on the mixer thread.
+    fn multiview_demand(&mut self, d: Demand) -> Result<()> {
+        match d {
+            Demand::Build(shape) => {
+                if self.multiview.as_ref().is_some_and(|mv| mv.shape() == shape) {
+                    return Ok(());
+                }
+                // A rebuild at another size drops the old one first, so there
+                // is never a moment with two mosaic encoders running.
+                self.multiview = None;
+                self.mv.mark_built(None);
+                let mut mv = Multiview::build(&self.mv, shape, &self.pgm_video_proxy)
+                    .context("building multiview")?;
+                mv.attach_watch(gstutil::watch_bus(
+                    mv.pipeline(),
+                    gstutil::BusOwner::Multiview,
+                    self.bus_tx.clone(),
+                )?);
+                for slot in &self.sources {
+                    if slot.input.id == AD_ID {
+                        continue;
+                    }
+                    // A source pays for its thumbnail branch only while a
+                    // mosaic exists to show it; the end is attached to the
+                    // running source here and taken back at teardown.
+                    let proxy = slot
+                        .input
+                        .attach_thumb_end(&self.canvas, shape.fps)
+                        .context("attaching a thumbnail end for the mosaic")?;
+                    mv.add_tile(Some(slot.input.id.clone()), &proxy)
+                        .context("adding multiview tile")?;
+                }
+                mv.follow_clock_of(&self.program);
+                mv.start().context("starting multiview")?;
+                self.multiview = Some(mv);
+                self.mv.mark_built(Some(shape));
+                info!(?shape, "multiview built for a subscriber");
+            }
+            Demand::Teardown => {
+                self.multiview = None;
+                self.mv.mark_built(None);
+                for slot in &self.sources {
+                    slot.input.detach_thumb_end();
+                }
+            }
+        }
+        Ok(())
     }
 
     pub fn shutdown(&mut self) {
@@ -3030,9 +3104,8 @@ impl Mixer {
         for slot in &self.sources {
             slot.input.stop();
         }
-        if let Some(mv) = &self.multiview {
-            mv.stop();
-        }
+        self.multiview = None;
+        self.mv.mark_built(None);
         let _ = self.program.set_state(gst::State::Null);
     }
 }
@@ -3273,6 +3346,7 @@ mod tests {
             canvas: Default::default(),
             program: Default::default(),
             multiview: Default::default(),
+            snapshot: Default::default(),
             control: Default::default(),
             hardware: Default::default(),
             codecs: Default::default(),
@@ -3305,6 +3379,7 @@ mod tests {
             },
             program: Default::default(),
             multiview: Default::default(),
+            snapshot: Default::default(),
             control: Default::default(),
             hardware: Default::default(),
             codecs: Default::default(),

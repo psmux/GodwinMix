@@ -23,16 +23,46 @@ audio_ramp_ms = 180
 # avenc_aac 21 ms), which puts a page's beep on its flash to within a frame.
 # av_offset_ms = 43
 
+# The operator's mosaic. Nothing here runs until a client subscribes: the
+# pipeline is built for the first subscriber and taken down after the last one
+# leaves, so a mixer nobody is watching pays nothing for it. false removes it
+# altogether, including the thumbnail branch on every source, and makes the
+# snapshot routes answer 404. Every field has a default, so `enabled = false`
+# on its own is a complete section.
 [multiview]
 enabled = true
 # Size of the whole mosaic, not of one cell. This costs roughly
-# width * height * fps * quality in bandwidth to each connected operator.
+# width * height * fps * quality in bandwidth to each connected operator. A
+# client may ask for more; the mosaic follows the highest request among the
+# clients connected.
 width = 960
 height = 540
 fps = 8
 jpeg_quality = 60
 # Show what is going out as one of the cells.
 include_program = true
+# Seconds to keep the mosaic up after the last client leaves, so that a browser
+# reloading its page does not pay for a rebuild.
+linger_secs = 2
+
+# Stills for agents, and the motion score that usually saves them from needing
+# one. The tracker decodes a mosaic frame per tick, so it runs only while
+# something is asking: a snapshot request, an agent.state read, or a client
+# watching thresholds. false removes it, and then the snapshot routes answer
+# 404 naming this switch and agent.state reports motion: null.
+[snapshot]
+enabled = true
+# What a request without ?width= gets. 320x180 is 84 tokens to a vision model
+# against 2,691 for a 1080p frame, and answers "is anybody in the shot" about
+# as well.
+default_width = 320
+# Seconds between snapshots for one client, unless the request says force=true.
+# Zero turns the limit off.
+min_interval_secs = 5
+# Wider than this is refused unless the request says allow_large=true.
+max_width = 1280
+# Seconds the tracker keeps following the mosaic after the last request.
+idle_secs = 15
 
 # Ad clips available to the operator. Listed by the control server and shown as
 # a clickable library in the UI, so it works the same whether the operator is at
