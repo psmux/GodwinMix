@@ -14,8 +14,9 @@
 //! guessed. Added to this crate at 0.14 with `verify` and `sigstore-trust-root`
 //! on, and called from a path the binary actually reaches so that fat LTO
 //! cannot strip it, the release binary went from 15,512,032 bytes to
-//! 21,569,952: 5.78 MiB for one check, against the 3 MB this project allows a
-//! single feature to cost. It brings its own TUF client, an X.509 stack, a
+//! 21,569,952 in a back to back build: 5.78 MiB for one check, against the
+//! 3 MB this project allows a single feature to cost. Everything in this
+//! module and in `sources/` together costs 720 KiB. It brings its own TUF client, an X.509 stack, a
 //! protobuf runtime, the Rekor and Fulcio API models, and aws-lc-rs beside the
 //! rustls already here.
 //!

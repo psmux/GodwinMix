@@ -32,16 +32,20 @@ argued with:
 | Build | Release binary |
 |---|---|
 | before any of this | 14,774,544 bytes |
-| with the check that shipped | 15,512,032 bytes |
-| with the `sigstore` crate instead | 21,569,952 bytes |
+| with the check that shipped | 15,512,208 bytes |
+
+Everything on this page, the marketplaces and all seven source forms included,
+costs 720 KiB.
+
+Then the same tree with the `sigstore` crate swapped in for the check, measured
+back to back: 15,512,032 bytes became 21,569,952. That is 5.78 MiB for one
+check, against the 3 MB this project allows any one feature.
 
 The crate was added at 0.14 with `verify` and `sigstore-trust-root` on, and
 called from a path the binary actually reaches, because fat LTO strips a
 verifier nothing calls and a measurement of stripped code is not a measurement.
-It costs 5.78 MiB for one check, against the 3 MB this project allows any one
-feature. It brings its own TUF client, an X.509 stack, a protobuf runtime, the
-Rekor and Fulcio API models, and aws-lc-rs beside the rustls that is already
-here.
+It brings its own TUF client, an X.509 stack, a protobuf runtime, the Rekor and
+Fulcio API models, and aws-lc-rs beside the rustls that is already here.
 
 It also does not compile into this workspace as it stands. Its transitive
 `typed_path` dependency carries a blanket `AsRef` implementation for
