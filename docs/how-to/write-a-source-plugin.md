@@ -434,7 +434,7 @@ To see the whole thing end to end, drive the example by hand the way the core
 does:
 
 ```sh
-cargo build --example colour-bars
+cargo build -p godwinmix-sdk --example colour-bars
 {
 cat <<'EOF'
 {"jsonrpc":"2.0","id":0,"result":{"core":"godwinmix","version":"0.0.0","api_level":1,"api_compatible":1,"canvas":{"width":320,"height":180,"fps":30},"transport":"container","media":"","instance":"bars","provide":"source","params":{"drift_px_per_sec":40}}}
