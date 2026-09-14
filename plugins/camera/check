@@ -36,7 +36,7 @@ else
     printf '%-34s%s\n' "cargo clippy" "skipped (rustup component add clippy)"
 fi
 
-step "unit tests" cargo test -p gmx-camera --lib --bins --quiet
+step "unit tests" cargo test -p gmx-camera --bins --quiet
 step "gmx-plugin.toml" cargo run --quiet -p gmx-camera --bin check-manifest
 step "offline transcript" cargo test -p gmx-camera --test offline --quiet
 step "staged binary" ./build

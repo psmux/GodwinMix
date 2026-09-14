@@ -66,21 +66,18 @@ impl CameraSource {
         let settings = self.settings.clone();
         let params = params.clone();
         let reporter = self.reporter.clone();
-        let capture = capture::open_with_retry(OPEN_ATTEMPTS, OPEN_GAP, FIRST_FRAME_WITHIN, reporter.as_ref(), || {
-            let pipeline = pipeline::build(
-                &settings,
-                params.canvas,
-                params.transport,
-                &params.media,
-            )?;
-            Capture::start(pipeline, Some("gmx-video-queue"), reporter.clone())
-        })
-        .map_err(|why| {
-            internal(format!(
-                "{} would not start: {why}",
-                describe(&settings)
-            ))
-        })?;
+        let capture = capture::open_with_retry(
+            OPEN_ATTEMPTS,
+            OPEN_GAP,
+            FIRST_FRAME_WITHIN,
+            reporter.as_ref(),
+            || {
+                let pipeline =
+                    pipeline::build(&settings, params.canvas, params.transport, &params.media)?;
+                Capture::start(pipeline, Some("gmx-video-queue"), reporter.clone())
+            },
+        )
+        .map_err(|why| internal(format!("{} would not start: {why}", describe(&settings))))?;
         if let Some(r) = &self.reporter {
             r.info(format!(
                 "{} is running at {}x{}@{} over {}",
