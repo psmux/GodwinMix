@@ -7,9 +7,9 @@
 //! arithmetic; nothing is reimplemented here.
 
 use crate::caps::CanvasCaps;
-use crate::mixer::slots::{Placement, PlacementAudio, Sizing};
+use crate::mixer::slots::{ItemFilter, Placement, PlacementAudio, Sizing};
 use crate::scene::document::{
-    Align, Audio, Collection, Content, Fit, Item, Override, Scene,
+    Align, Audio, Collection, Content, Filter, Fit, Item, Override, Scene,
 };
 use crate::scene::geometry;
 use crate::scene::id::Id;
@@ -98,6 +98,8 @@ pub fn placements(doc: &Collection, scene: &Scene, canvas: &CanvasCaps) -> Vec<P
             let Content::Source { source } = &p.item.content else { return None };
             Some(Placement {
                 source: source.clone(),
+                item: Some(p.item.id),
+                filters: filters(&p.item.filters),
                 xpos: p.rect.x.round() as i32,
                 ypos: p.rect.y.round() as i32,
                 width: p.rect.w.round() as i32,
@@ -126,6 +128,31 @@ pub fn sizing(fit: Fit) -> Sizing {
         Fit::None | Fit::Stretch => Sizing::Fill,
         Fit::Contain | Fit::Max => Sizing::Contain,
         Fit::Cover | Fit::FitWidth | Fit::FitHeight => Sizing::Cover,
+    }
+}
+
+/// The item's filters as the slot chain needs them.
+///
+/// A disabled filter is not a filter with a flag: it is simply not in the
+/// chain, so turning one off costs one pad block and then nothing at all. The
+/// params are JSON on the document and a toml table in the pipeline, which is
+/// the one place the two spellings meet; a value toml cannot hold (a null, a
+/// nested array of tables) is dropped and the filter's own defaults stand.
+fn filters(list: &[Filter]) -> Vec<ItemFilter> {
+    list.iter()
+        .filter(|f| f.enabled)
+        .map(|f| ItemFilter {
+            type_id: f.kind.clone(),
+            name: f.name.clone(),
+            params: params(&f.params),
+        })
+        .collect()
+}
+
+fn params(value: &serde_json::Value) -> crate::config::Params {
+    match toml::Value::try_from(value) {
+        Ok(toml::Value::Table(table)) => table,
+        _ => Default::default(),
     }
 }
 

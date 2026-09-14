@@ -515,6 +515,171 @@ pub fn from_samples(x: &Crossing, samples: &[(f64, String, String, f64)]) -> Vec
 }
 
 // ---------------------------------------------------------------------------
+// Transitions that live in a plugin
+// ---------------------------------------------------------------------------
+
+/// What the core calls to reach a `transition` plugin.
+///
+/// The mixer owns pipelines, not processes, so it never launches one of these:
+/// the plugin supervisor installs a renderer and the mixer asks it by name.
+/// A core with no plugins has none, and a take naming one gets an error that
+/// lists the built in transitions.
+pub trait Renderer: Send + Sync {
+    /// One `render` call, in the protocol's own shape. `Err` is a plugin that
+    /// is not there, is not running, or did not answer in time.
+    fn render(&self, plugin: &str, request: &RenderRequest) -> anyhow::Result<serde_json::Value>;
+}
+
+/// The params of `render`, as `docs/reference/plugin-protocol.md` has them.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct RenderRequest {
+    pub from: Vec<String>,
+    pub to: Vec<String>,
+    pub progress: f64,
+    pub running_time_ns: u64,
+}
+
+/// Ask a plugin what every pad should be, once per frame of the window.
+///
+/// Sampled before the window rather than during it. The plugin sees exactly
+/// the progress and running time it would have seen frame by frame, and what
+/// it answers becomes control points the aggregator reads on the frame, so a
+/// wipe written in Python lands as precisely as a built in fade. The cost is
+/// paid once, up front, inside `budget`; a plugin slower than that is not one
+/// a take waits for.
+///
+/// A plugin may answer once with `{"curve": [[t, progress], ...]}` instead. It
+/// is then a shape rather than a set of pad values, and the core applies it as
+/// a crossfade eased by that shape, which is what a transition with nothing to
+/// say about geometry wants.
+pub fn sample_plugin(
+    x: &Crossing,
+    budget: Duration,
+    mut render: impl FnMut(&RenderRequest) -> anyhow::Result<serde_json::Value>,
+) -> anyhow::Result<Vec<Curve>> {
+    let from: Vec<String> = x.out.iter().map(Leg::id).collect();
+    let to: Vec<String> = x.incoming.iter().map(Leg::id).collect();
+    let ms = x.duration.mseconds().max(1);
+    let frames = ((ms * SAMPLES_PER_SECOND) / 1000).clamp(2, MAX_PLUGIN_SAMPLES);
+    let started = std::time::Instant::now();
+    let mut samples: Vec<(f64, String, String, f64)> = Vec::new();
+    for i in 0..=frames {
+        let progress = i as f64 / frames as f64;
+        let request = RenderRequest {
+            from: from.clone(),
+            to: to.clone(),
+            progress,
+            running_time_ns: (x.start
+                + gst::ClockTime::from_nseconds(
+                    (x.duration.nseconds() as f64 * progress) as u64,
+                ))
+            .nseconds(),
+        };
+        let answer = render(&request)?;
+        if let Some(curve) = answer.get("curve") {
+            return Ok(shaped(x, curve));
+        }
+        collect(&answer, progress, &mut samples);
+        if started.elapsed() > budget {
+            warn!(
+                spent_ms = started.elapsed().as_millis() as u64,
+                sampled = i,
+                of = frames,
+                "the transition plugin ran out of budget; the rest of the curve is a straight line"
+            );
+            break;
+        }
+    }
+    Ok(from_samples(x, &samples))
+}
+
+/// The most points a plugin is asked for, whatever the duration says. A long
+/// stinger does not need six hundred round trips to look smooth.
+const MAX_PLUGIN_SAMPLES: u64 = 64;
+
+/// Pull `{pads: {id: {alpha, xpos, ...}}}` into flat samples.
+fn collect(answer: &serde_json::Value, progress: f64, out: &mut Vec<(f64, String, String, f64)>) {
+    let Some(pads) = answer.get("pads").and_then(|p| p.as_object()) else { return };
+    for (pad, values) in pads {
+        let Some(values) = values.as_object() else { continue };
+        for (property, value) in values {
+            if let Some(v) = value.as_f64() {
+                out.push((progress, pad.clone(), property.clone(), v));
+            }
+        }
+    }
+}
+
+/// A plugin's `{curve}`: a shape for a crossfade, as `[[t, progress], ...]`
+/// with both in 0 to 1.
+fn shaped(x: &Crossing, curve: &serde_json::Value) -> Vec<Curve> {
+    let mut points: Vec<(f64, f64)> = Vec::new();
+    if let Some(list) = curve.as_array() {
+        for entry in list {
+            let pair = entry.as_array().map(|p| p.as_slice()).unwrap_or(&[]);
+            if let [t, v] = pair {
+                if let (Some(t), Some(v)) = (t.as_f64(), v.as_f64()) {
+                    points.push((t.clamp(0.0, 1.0), v.clamp(0.0, 1.0)));
+                }
+            }
+        }
+    }
+    if points.len() < 2 {
+        return Vec::new();
+    }
+    points.sort_by(|a, b| a.0.total_cmp(&b.0));
+    let at = |t: f64| -> f64 {
+        let mut last = points[0];
+        for p in &points {
+            if p.0 > t {
+                let span = p.0 - last.0;
+                if span <= 0.0 {
+                    return p.1;
+                }
+                return last.1 + (p.1 - last.1) * ((t - last.0) / span);
+            }
+            last = *p;
+        }
+        last.1
+    };
+    let mut curves = Vec::new();
+    for leg in &x.out {
+        let alpha = leg.from.alpha;
+        curves.push(Curve {
+            pad: leg.pad.clone(),
+            property: "alpha",
+            points: sample(x, |t| alpha * (1.0 - at(t))),
+        });
+    }
+    for leg in &x.incoming {
+        let alpha = leg.to.alpha;
+        curves.push(Curve {
+            pad: leg.pad.clone(),
+            property: "alpha",
+            points: sample(x, |t| alpha * at(t)),
+        });
+    }
+    curves
+}
+
+/// The volume curves for a crossing, on the audiomixer pads.
+///
+/// One pad per source however many places its picture is drawn in, because a
+/// source heard twice is not louder. A pad already where it is going is left
+/// alone rather than bound and unbound for nothing.
+pub fn audio_curves(x: &Crossing) -> Vec<Curve> {
+    x.audio
+        .iter()
+        .filter(|(_, from, to)| (from - to).abs() > 1e-6)
+        .map(|(pad, from, to)| Curve {
+            pad: pad.clone(),
+            property: "volume",
+            points: sample(x, |t| from + (to - from) * ease(t)),
+        })
+        .collect()
+}
+
+// ---------------------------------------------------------------------------
 // Binding
 // ---------------------------------------------------------------------------
 
@@ -605,6 +770,37 @@ pub fn bind(curves: Vec<Curve>) -> Bound {
     Bound { bindings, unbound }
 }
 
+/// Write a curve's value at a fraction of its window, for the fallback thread.
+///
+/// The curve is in running time and the thread only knows how far through it
+/// is, so the fraction is read against the curve's own span rather than
+/// against a clock. That keeps the fallback and the binding describing the
+/// same shape even though only one of them lands on a frame.
+pub fn write_at(curve: &Curve, t: f64) {
+    let Some((first, _)) = curve.points.first() else { return };
+    let Some((last, _)) = curve.points.last() else { return };
+    let span = last.nseconds().saturating_sub(first.nseconds()) as f64;
+    let at = gst::ClockTime::from_nseconds(first.nseconds() + (span * t.clamp(0.0, 1.0)) as u64);
+    let mut previous = curve.points[0];
+    let mut value = previous.1;
+    for point in &curve.points {
+        if point.0 > at {
+            let gap = (point.0.nseconds() - previous.0.nseconds()) as f64;
+            value = match gap > 0.0 {
+                true => {
+                    let f = (at.nseconds() - previous.0.nseconds()) as f64 / gap;
+                    previous.1 + (point.1 - previous.1) * f
+                }
+                false => point.1,
+            };
+            break;
+        }
+        previous = *point;
+        value = point.1;
+    }
+    write(&curve.pad, curve.property, value);
+}
+
 /// Write one of the driven properties, whatever type the pad holds it as.
 ///
 /// A compositor pad's `width` is an int and its `alpha` a double, and setting
@@ -612,6 +808,7 @@ pub fn bind(curves: Vec<Curve>) -> Bound {
 fn write(pad: &gst::Pad, property: &str, value: f64) {
     match property {
         "alpha" => pad.set_property(property, value.clamp(0.0, 1.0)),
+        "volume" => pad.set_property(property, value.clamp(0.0, 10.0)),
         "width" | "height" => pad.set_property(property, (value.round() as i32).max(1)),
         _ => pad.set_property(property, value.round() as i32),
     }
