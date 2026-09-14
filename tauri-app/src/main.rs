@@ -98,14 +98,29 @@ fn main() {
                     }
                 }
             }
-            // Any other route to the door, the operating system's included.
-            // Only when a mixer of ours is still running: otherwise there is
-            // nothing to wind down and the exit should just happen.
-            RunEvent::ExitRequested { api, code: None, .. }
+            // Any other route to the door: the last window closing on
+            // Windows and Linux, or the operating system asking, which is
+            // what macOS does for Quit in the Dock and for an Apple Event.
+            // Only when a mixer of ours is running: with nothing to wind
+            // down, the exit should simply happen.
+            RunEvent::ExitRequested { api, .. }
                 if app.state::<Shell>().local.lock().unwrap().is_some() =>
             {
                 api.prevent_exit();
                 quit(app, false);
+            }
+            // The door itself, which on macOS is where Quit in the Dock and
+            // a quit Apple Event arrive: no ExitRequested first, and the run
+            // loop already winding down. Blocking the main thread here is
+            // right, because the alternative is the process leaving before
+            // the daemon has closed its outputs. Every wait inside is
+            // bounded, and the daemon is killed if it overruns them.
+            RunEvent::Exit => {
+                let local = app.state::<Shell>().local.lock().unwrap().take();
+                if let Some(local) = local {
+                    let app = app.clone();
+                    tauri::async_runtime::block_on(sidecar::stop(&app, local));
+                }
             }
             _ => {}
         });

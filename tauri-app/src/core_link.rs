@@ -105,7 +105,13 @@ fn describe(body: &serde_json::Value, target: &Target, label: &str) -> CoreInfo 
 /// Ask a core to shut down. Used by "Quit and stop the mixer" and when the
 /// app quits with a mixer of its own running.
 pub async fn shutdown(http: &reqwest::Client, target: &Target) -> Result<(), String> {
-    let mut req = http.post(format!("{}/api/shutdown", target.base));
+    // Shorter than the client's own timeout. This request is made on the way
+    // out, sometimes with the operating system counting how long the app is
+    // taking to go, and a mixer that has not answered in three seconds is not
+    // going to answer: it gets killed instead.
+    let mut req = http
+        .post(format!("{}/api/shutdown", target.base))
+        .timeout(Duration::from_secs(3));
     if !target.token.is_empty() {
         req = req.bearer_auth(&target.token);
     }
