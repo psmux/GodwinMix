@@ -188,6 +188,35 @@ enum Command {
         cmd: cli::codec::Codec,
     },
 
+    /// Write, test, install and inspect plugins. See `src/cli/plugin.rs`.
+    ///
+    /// `new` and `test` need no running mixer; everything else is a thin
+    /// client of the `plugin.*` methods, which is the same contract a third
+    /// party surface calls.
+    Plugin {
+        /// Address of the mixer's control server [default: http://127.0.0.1:8080].
+        #[arg(long, env = "GODWINMIX_URL")]
+        url: Option<String>,
+        /// Bearer token, when the mixer has one configured.
+        #[arg(long, env = "GODWINMIX_TOKEN", hide_env_values = true)]
+        token: Option<String>,
+        #[command(subcommand)]
+        cmd: cli::plugin::Plugin,
+    },
+
+    /// Break something on purpose and watch what the programme does.
+    ///
+    /// Refused on a core that is not in rehearsal unless `--i-am-sure`. See
+    /// `src/cli/chaos.rs`.
+    Chaos {
+        #[arg(long, env = "GODWINMIX_URL")]
+        url: Option<String>,
+        #[arg(long, env = "GODWINMIX_TOKEN", hide_env_values = true)]
+        token: Option<String>,
+        #[command(subcommand)]
+        cmd: cli::chaos::Chaos,
+    },
+
     /// doctor, logs, trace, dot and support-bundle. See `src/cli/observe.rs`.
     #[command(flatten)]
     Observe(cli::observe::ObserveCmd),
@@ -289,6 +318,16 @@ pub async fn run() -> Result<()> {
             gstreamer::init().context("initialising GStreamer")?;
             let cfg = Config::load(&config::path_in_force(&args.config)).ok();
             return cli::codec::run(cmd, cfg.as_ref(), args.codecs.as_deref());
+        }
+        Some(Command::Plugin { url, token, cmd }) => {
+            let url = url.or_else(|| config::env_var("URL")).unwrap_or_else(|| DEFAULT_URL.into());
+            let token = token.or_else(|| config::env_var("TOKEN"));
+            return cli::plugin::run(&url, token.as_deref(), cmd).await;
+        }
+        Some(Command::Chaos { url, token, cmd }) => {
+            let url = url.or_else(|| config::env_var("URL")).unwrap_or_else(|| DEFAULT_URL.into());
+            let token = token.or_else(|| config::env_var("TOKEN"));
+            return cli::chaos::run(&url, token.as_deref(), cmd).await;
         }
         Some(Command::Import { cmd }) => return cli::scene::run_import(cmd),
         Some(Command::Scene { cmd }) => return cli::scene::run_scene(cmd),

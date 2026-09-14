@@ -7,6 +7,8 @@
 //! large enough to be files of their own.
 
 pub mod bundle;
+pub mod chaos;
 pub mod codec;
 pub mod observe;
+pub mod plugin;
 pub mod scene;

@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "{{name}}",
+  "type": "object",
+  "properties": {
+    "pattern": {
+      "type": "string",
+      "default": "smpte",
+      "description": "Which test pattern to draw.",
+      "examples": ["smpte", "ball", "snow"]
+    }
+  },
+  "additionalProperties": false
+}

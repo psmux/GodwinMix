@@ -782,6 +782,17 @@ fn megabytes(value: Option<u64>) -> String {
 pub fn check_plugin(root: &std::path::Path, quick: bool) -> Result<Report> {
     let manifest = PluginManifest::load(root.join("gmx-plugin.toml"))
         .map_err(|e| anyhow::anyhow!("{e}"))?;
+    // Register the directory under test so the media checks can reach it by
+    // `type`, exactly as a source added to a running mixer would. Registered
+    // where it stands rather than installed: testing a working copy must not
+    // put a half finished plugin in the operator's plugins directory.
+    let installed = super::loader::read(root, &Default::default());
+    if let Some(problem) = &installed.problem {
+        anyhow::bail!("{problem}");
+    }
+    let already = super::loader::get(&manifest.plugin.name).is_some();
+    super::loader::insert(installed);
+    let _restore = Restore { name: manifest.plugin.name.clone(), remove: !already };
     let provide = manifest
         .provides
         .iter()
@@ -812,6 +823,20 @@ pub fn check_plugin(root: &std::path::Path, quick: bool) -> Result<Report> {
         report.checks.push(check_footprint(None, provide.transports.first().map(|t| t.as_str())));
     }
     Ok(report)
+}
+
+/// Put the registry back the way the check found it, however the check ended.
+struct Restore {
+    name: String,
+    remove: bool,
+}
+
+impl Drop for Restore {
+    fn drop(&mut self) {
+        if self.remove {
+            super::loader::remove(&self.name);
+        }
+    }
 }
 
 /// Run every check that applies to every plugin the loader has, for

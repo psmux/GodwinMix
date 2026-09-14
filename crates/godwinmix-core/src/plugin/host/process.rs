@@ -328,11 +328,11 @@ impl Sidecar {
         info!(%instance, %reason, "stopped a plugin process");
     }
 
-    /// Is the process still there? Cheap: one non blocking wait.
+    /// Is the process still there? One non blocking wait on the child we own.
     pub fn running(&mut self) -> bool {
-        match self.pid {
+        match self.child.as_mut() {
             None => false,
-            Some(pid) => crate::input::process_alive(pid),
+            Some(child) => !child.finished(),
         }
     }
 
