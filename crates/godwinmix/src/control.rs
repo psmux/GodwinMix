@@ -1418,6 +1418,14 @@ fn spawn_operator_watchdog(app: AppState) {
 pub async fn serve(bind: &str, state: AppState) -> Result<()> {
     let listener = tokio::net::TcpListener::bind(bind).await?;
     info!(%bind, "control server listening");
+    serve_on(listener, state).await
+}
+
+/// The same, on a listener somebody else opened.
+///
+/// What a test uses to get a port the operating system picked, so two of them
+/// can run at once and neither has to guess a number that is free.
+pub async fn serve_on(listener: tokio::net::TcpListener, state: AppState) -> Result<()> {
     let snapshots =
         Tracker::new(state.snapshot.clone(), state.multiview.clone(), state.mixer.clone());
     spawn_background(state.clone());
