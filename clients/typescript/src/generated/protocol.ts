@@ -233,6 +233,11 @@ export interface Crop {
   top: number;
 }
 
+/** `device.discover`. */
+export interface DiscoverRequest {
+  timeout_ms?: number | null;
+}
+
 /** `scene.edit.begin`. */
 export interface DraftRecord {
   draft: string;
@@ -486,6 +491,7 @@ export interface ItemsRequest {
   items: string[];
   name?: string | null;
   scene: string;
+  seq?: number | null;
   to?: string | null;
 }
 
@@ -673,6 +679,7 @@ export interface ParamsRequest {
 /** What changed in one transaction. */
 export interface Patch {
   added?: Record[];
+  client_seq?: number | null;
   label?: string | null;
   removed?: Id[];
   scope: string;
@@ -825,6 +832,7 @@ export interface ReorderRequest {
   draft?: string | null;
   item: string;
   scene: string;
+  seq?: number | null;
 }
 
 export type ResponseFormat = "concise" | "detailed";
@@ -1064,6 +1072,12 @@ export interface TokenInfo {
   scopes: string[];
 }
 
+/** `tool.call`. */
+export interface ToolCallRequest {
+  arguments?: unknown;
+  name: string;
+}
+
 /** Where an item sits and how it is sized. */
 export interface Transform {
   align?: Align;
@@ -1129,6 +1143,21 @@ export interface ProgramTookEvent {
   scene?: string | null;
   source?: string | null;
   transition?: string;
+  transition_id?: number;
+}
+
+export interface ScenePatchEvent {
+  added?: Array<Record<string, unknown>>;
+  client_seq?: number | null;
+  label?: string | null;
+  removed?: string[];
+  scope?: "document";
+  seq?: number;
+  source_client?: string | null;
+  updated?: Array<{
+    after?: Record<string, unknown>;
+    before?: Record<string, unknown>;
+  }>;
 }
 
 export interface PreviewChangedEvent {
@@ -1196,6 +1225,7 @@ export interface MethodParams {
   "core.startup_report": Record<string, never>;
   "core.status": Record<string, never>;
   "core.subscribe": SubscribeRequest;
+  "device.discover": DiscoverRequest;
   "filter.add": AddFilterRequest;
   "filter.list": Record<string, never>;
   "filter.remove": FilterIdRequest;
@@ -1294,6 +1324,7 @@ export interface MethodParams {
   "task.cancel": TaskRequest;
   "task.get": TaskRequest;
   "task.list": Record<string, never>;
+  "tool.call": ToolCallRequest;
 }
 
 /** What each method answers with, by method name. */
@@ -1310,6 +1341,7 @@ export interface MethodResults {
   "core.startup_report": Record<string, unknown>;
   "core.status": MixerStatus;
   "core.subscribe": SubscribeResult;
+  "device.discover": Record<string, unknown>;
   "filter.add": FilterRecord;
   "filter.list": FilterListing;
   "filter.remove": FilterRemoved;
@@ -1408,6 +1440,7 @@ export interface MethodResults {
   "task.cancel": Record<string, unknown>;
   "task.get": TaskView;
   "task.list": TaskView[];
+  "tool.call": Record<string, unknown>;
 }
 
 export type MethodName = keyof MethodParams;
@@ -1416,6 +1449,7 @@ export type MethodName = keyof MethodParams;
 export interface EventPayloads {
   "snapshot": Snapshot;
   "program.took": ProgramTookEvent;
+  "scene.patch": ScenePatchEvent;
   "preview.changed": PreviewChangedEvent;
   "source.state": SourceStateEvent;
   "source.position": SourcePositionEvent;
@@ -1459,6 +1493,7 @@ export const METHODS: readonly MethodInfo[] = [
   { name: "core.startup_report", summary: "How long each stage of the start took, and what was over the 250 ms mark.", scope: "read", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/core/startup_report" } },
   { name: "core.status", summary: "The full state: programme, every source, every output, the multiview grid, the encoder backend and any ad break.", scope: "read", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/core/status" } },
   { name: "core.subscribe", summary: "Subscribe to the event stream. WebSocket only: the core answers event/snapshot then deltas, ending every batch with event/flush.", scope: "read", mutating: false, destructive: false },
+  { name: "device.discover", summary: "Ask every device plugin what it can see: cameras, NDI senders, publishers. Each candidate's params are ready for source.add.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/device/discover" } },
   { name: "filter.add", summary: "Hang a filter on one source or on the programme, live.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/filters" } },
   { name: "filter.list", summary: "Every filter in place, with what it is and where it sits.", scope: "read", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/filters" } },
   { name: "filter.remove", summary: "Take a filter out of the pipeline.", scope: "operate", mutating: true, destructive: true, rest: { method: "DELETE", path: "/api/v1/filters/{id}" } },
@@ -1557,6 +1592,7 @@ export const METHODS: readonly MethodInfo[] = [
   { name: "task.cancel", summary: "Ask a piece of long running work to stop. Cooperative: the answer says the request landed, not that the work has stopped yet.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/task/cancel" } },
   { name: "task.get", summary: "How a piece of long running work is getting on, and its answer once it has one.", scope: "read", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/task" } },
   { name: "task.list", summary: "Every background job this core knows about, newest first.", scope: "read", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/task/list" } },
+  { name: "tool.call", summary: "Call one of a plugin's tools, in MCP's shape. The name is `<plugin>/<tool>`, or the bare tool name when only one plugin has it.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/tool/call" } },
 ] as const;
 
 /** The `ext` keys this api_level knows, and whether the core implements them yet. */
@@ -1574,6 +1610,7 @@ export const EXT_KEYS: Readonly<Record<string, { value: string; implemented: boo
 export const EVENT_NAMES: readonly EventName[] = [
   "snapshot",
   "program.took",
+  "scene.patch",
   "preview.changed",
   "source.state",
   "source.position",
@@ -1663,6 +1700,11 @@ export class GeneratedMethods {
   /** Subscribe to the event stream. WebSocket only: the core answers event/snapshot then deltas, ending every batch with event/flush. */
   coreSubscribe(params: SubscribeRequest = {}): Promise<SubscribeResult> {
     return this._call("core.subscribe", params as unknown as Record<string, unknown>) as Promise<SubscribeResult>;
+  }
+
+  /** Ask every device plugin what it can see: cameras, NDI senders, publishers. Each candidate's params are ready for source.add. */
+  deviceDiscover(params: DiscoverRequest = {}): Promise<Record<string, unknown>> {
+    return this._call("device.discover", params as unknown as Record<string, unknown>) as Promise<Record<string, unknown>>;
   }
 
   /** Hang a filter on one source or on the programme, live. */
@@ -2153,6 +2195,11 @@ export class GeneratedMethods {
   /** Every background job this core knows about, newest first. */
   taskList(): Promise<TaskView[]> {
     return this._call("task.list", {}) as Promise<TaskView[]>;
+  }
+
+  /** Call one of a plugin's tools, in MCP's shape. The name is `<plugin>/<tool>`, or the bare tool name when only one plugin has it. */
+  toolCall(params: ToolCallRequest): Promise<Record<string, unknown>> {
+    return this._call("tool.call", params as unknown as Record<string, unknown>) as Promise<Record<string, unknown>>;
   }
 
 }

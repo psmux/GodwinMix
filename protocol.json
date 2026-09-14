@@ -846,6 +846,21 @@
       ],
       "type": "object"
     },
+    "DiscoverRequest": {
+      "description": "`device.discover`.",
+      "properties": {
+        "timeout_ms": {
+          "description": "How long to look, shared between the devices. Two seconds by default,\nfour and a half at most, because no method blocks for five.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        }
+      },
+      "type": "object"
+    },
     "DraftRecord": {
       "description": "`scene.edit.begin`.",
       "properties": {
@@ -1790,6 +1805,15 @@
         "scene": {
           "type": "string"
         },
+        "seq": {
+          "description": "A client's own sequence number, echoed on the patch. See\n`SetItemRequest::seq`.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
         "to": {
           "description": "`match_size`: the item to match.",
           "type": [
@@ -2536,6 +2560,15 @@
           },
           "type": "array"
         },
+        "client_seq": {
+          "description": "The client's own sequence number, echoed back.\n\nA drag cannot wait for a round trip, so the client kit draws the move\nitself and reconciles when the echo arrives. Without this it cannot\ntell an echo of the move it has already drawn past from a correction,\nand the handle rubber bands backwards under the cursor. Every geometry\ncommand carries a `seq`; this is that number coming back.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
         "label": {
           "description": "What the client called this change, for a label in an undo menu.",
           "type": [
@@ -3120,6 +3153,15 @@
         },
         "scene": {
           "type": "string"
+        },
+        "seq": {
+          "description": "A client's own sequence number, echoed on the patch.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
         }
       },
       "required": [
@@ -3995,6 +4037,23 @@
       ],
       "type": "object"
     },
+    "ToolCallRequest": {
+      "description": "`tool.call`.",
+      "properties": {
+        "arguments": {
+          "default": null,
+          "description": "The tool's own arguments, as its input schema describes them."
+        },
+        "name": {
+          "description": "`<plugin>/<tool>`, or the bare tool name when only one plugin has it.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "type": "object"
+    },
     "Transform": {
       "additionalProperties": false,
       "description": "Where an item sits and how it is sized.",
@@ -4343,12 +4402,83 @@
           },
           "transition": {
             "type": "string"
+          },
+          "transition_id": {
+            "type": "integer"
           }
         },
         "type": "object"
       },
       "since": "1",
       "summary": "The programme changed. Carries the running time the cut landed on, so a client can see how close a scheduled take was to its mark."
+    },
+    {
+      "ext": null,
+      "legacy": null,
+      "name": "event/scene.patch",
+      "pattern": "scene.patch",
+      "payload": {
+        "properties": {
+          "added": {
+            "items": {
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "client_seq": {
+            "description": "The client's own sequence number, from the `seq` on the command, so a drag discards echoes of moves it has already drawn past.",
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "label": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "removed": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "scope": {
+            "enum": [
+              "document"
+            ],
+            "type": "string"
+          },
+          "seq": {
+            "type": "integer"
+          },
+          "source_client": {
+            "description": "Who asked for the change, so a client suppresses the echo of its own edits.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "updated": {
+            "items": {
+              "properties": {
+                "after": {
+                  "type": "object"
+                },
+                "before": {
+                  "type": "object"
+                }
+              },
+              "type": "object"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "since": "1",
+      "summary": "One change to the scene document, as records rather than a snapshot: what was added, what changed with its before and after, and what was removed. One per transaction, batched and ended by event/flush."
     },
     {
       "ext": null,
@@ -5186,6 +5316,32 @@
       "scope": "read",
       "since": "1",
       "summary": "Subscribe to the event stream. WebSocket only: the core answers event/snapshot then deltas, ending every batch with event/flush."
+    },
+    {
+      "destructive": false,
+      "idempotent": true,
+      "mcp": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "profile": "search",
+        "readOnlyHint": false,
+        "tool": "discover_sources"
+      },
+      "mutating": true,
+      "name": "device.discover",
+      "params": {
+        "$ref": "#/$defs/DiscoverRequest"
+      },
+      "rest": {
+        "method": "POST",
+        "path": "/api/v1/device/discover"
+      },
+      "result": {
+        "type": "object"
+      },
+      "scope": "operate",
+      "since": "1",
+      "summary": "Ask every device plugin what it can see: cameras, NDI senders, publishers. Each candidate's params are ready for source.add."
     },
     {
       "destructive": false,
@@ -7349,6 +7505,25 @@
       "scope": "read",
       "since": "1",
       "summary": "Every background job this core knows about, newest first."
+    },
+    {
+      "destructive": false,
+      "idempotent": false,
+      "mutating": true,
+      "name": "tool.call",
+      "params": {
+        "$ref": "#/$defs/ToolCallRequest"
+      },
+      "rest": {
+        "method": "POST",
+        "path": "/api/v1/tool/call"
+      },
+      "result": {
+        "type": "object"
+      },
+      "scope": "operate",
+      "since": "1",
+      "summary": "Call one of a plugin's tools, in MCP's shape. The name is `<plugin>/<tool>`, or the bare tool name when only one plugin has it."
     }
   ],
   "transports": [

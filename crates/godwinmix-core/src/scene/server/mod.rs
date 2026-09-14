@@ -285,6 +285,17 @@ impl SceneServer {
         client: Option<&str>,
         f: impl FnOnce(&mut Collection) -> Result<T>,
     ) -> Result<(T, Patch)> {
+        self.edit_at(client, None, f)
+    }
+
+    /// The same, carrying the client's own sequence number so its optimistic
+    /// drawing can be reconciled against the echo. See `Patch::client_seq`.
+    pub fn edit_at<T>(
+        &self,
+        client: Option<&str>,
+        client_seq: Option<u64>,
+        f: impl FnOnce(&mut Collection) -> Result<T>,
+    ) -> Result<(T, Patch)> {
         let mut inner = self.inner.lock();
         let before = inner.doc.to_flat();
         let mut working = inner.doc.clone();
@@ -301,6 +312,7 @@ impl SceneServer {
         }
         p.seq = self.seq.fetch_add(1, Ordering::SeqCst) + 1;
         p.source_client = client.map(str::to_string);
+        p.client_seq = client_seq;
         p.label = inner.group.clone();
         inner.doc = working;
         inner.remember(p.clone());
@@ -323,7 +335,18 @@ impl SceneServer {
         which: &str,
         f: impl FnOnce(&mut Collection, usize) -> Result<()>,
     ) -> Result<Outcome> {
-        let (id, patch) = self.edit(client, |doc| {
+        self.edit_scene_at(client, None, which, f)
+    }
+
+    /// The same, carrying the client's own sequence number.
+    pub fn edit_scene_at(
+        &self,
+        client: Option<&str>,
+        client_seq: Option<u64>,
+        which: &str,
+        f: impl FnOnce(&mut Collection, usize) -> Result<()>,
+    ) -> Result<Outcome> {
+        let (id, patch) = self.edit_at(client, client_seq, |doc| {
             let index = find::scene_index(doc, which)?;
             f(doc, index)?;
             Ok(doc.scenes[index].id)

@@ -411,6 +411,16 @@ pub struct Crop {
     pub top: f64,
 }
 
+/// `device.discover`.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct DiscoverRequest {
+    /// How long to look, shared between the devices. Two seconds by default,
+    /// four and a half at most, because no method blocks for five.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub timeout_ms: Option<u64>,
+}
+
 /// `scene.edit.begin`.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
@@ -802,6 +812,10 @@ pub struct ItemsRequest {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub name: Option<String>,
     pub scene: String,
+    /// A client's own sequence number, echoed on the patch. See
+    /// `SetItemRequest::seq`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub seq: Option<u64>,
     /// `match_size`: the item to match.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub to: Option<String>,
@@ -1127,6 +1141,15 @@ pub struct ParamsRequest {
 #[serde(default)]
 pub struct Patch {
     pub added: Vec<Record>,
+    /// The client's own sequence number, echoed back.
+    ///
+    /// A drag cannot wait for a round trip, so the client kit draws the move
+    /// itself and reconciles when the echo arrives. Without this it cannot
+    /// tell an echo of the move it has already drawn past from a correction,
+    /// and the handle rubber bands backwards under the cursor. Every geometry
+    /// command carries a `seq`; this is that number coming back.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub client_seq: Option<u64>,
     /// What the client called this change, for a label in an undo menu.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub label: Option<String>,
@@ -1367,6 +1390,9 @@ pub struct ReorderRequest {
     pub draft: Option<String>,
     pub item: String,
     pub scene: String,
+    /// A client's own sequence number, echoed on the patch.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub seq: Option<u64>,
 }
 
 pub type ResponseFormat = String;
@@ -1776,6 +1802,16 @@ pub struct TokenInfo {
     pub scopes: Vec<String>,
 }
 
+/// `tool.call`.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct ToolCallRequest {
+    /// The tool's own arguments, as its input schema describes them.
+    pub arguments: Value,
+    /// `<plugin>/<tool>`, or the bare tool name when only one plugin has it.
+    pub name: String,
+}
+
 /// Where an item sits and how it is sized.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
@@ -1891,6 +1927,28 @@ pub struct ProgramTookEvent {
     pub source: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub transition: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub transition_id: Option<i64>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct ScenePatchEvent {
+    pub added: Vec<BTreeMap<String, Value>>,
+    /// The client's own sequence number, from the `seq` on the command, so a drag discards echoes of moves it has already drawn past.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub client_seq: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub label: Option<String>,
+    pub removed: Vec<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub scope: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub seq: Option<i64>,
+    /// Who asked for the change, so a client suppresses the echo of its own edits.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub source_client: Option<String>,
+    pub updated: Vec<Value>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
@@ -1995,7 +2053,7 @@ pub struct MethodInfo {
     pub rest: Option<(&'static str, &'static str)>,
 }
 
-pub const METHODS: [MethodInfo; 110] = [
+pub const METHODS: [MethodInfo; 112] = [
     MethodInfo { name: "adbreak.end", summary: "Cut a running ad short, or disarm one that is scheduled.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/adbreak/end")) },
     MethodInfo { name: "adbreak.start", summary: "Interrupt the programme with a clip, then rejoin live when it ends.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/adbreak/start")) },
     MethodInfo { name: "agent.state", summary: "The compact document written for agents: the programme, each source's state and a motion score saying how much its picture is changing.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/agent/state")) },
@@ -2008,6 +2066,7 @@ pub const METHODS: [MethodInfo; 110] = [
     MethodInfo { name: "core.startup_report", summary: "How long each stage of the start took, and what was over the 250 ms mark.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/core/startup_report")) },
     MethodInfo { name: "core.status", summary: "The full state: programme, every source, every output, the multiview grid, the encoder backend and any ad break.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/core/status")) },
     MethodInfo { name: "core.subscribe", summary: "Subscribe to the event stream. WebSocket only: the core answers event/snapshot then deltas, ending every batch with event/flush.", scope: "read", mutating: false, destructive: false, rest: None },
+    MethodInfo { name: "device.discover", summary: "Ask every device plugin what it can see: cameras, NDI senders, publishers. Each candidate's params are ready for source.add.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/device/discover")) },
     MethodInfo { name: "filter.add", summary: "Hang a filter on one source or on the programme, live.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/filters")) },
     MethodInfo { name: "filter.list", summary: "Every filter in place, with what it is and where it sits.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/filters")) },
     MethodInfo { name: "filter.remove", summary: "Take a filter out of the pipeline.", scope: "operate", mutating: true, destructive: true, rest: Some(("DELETE", "/api/v1/filters/{id}")) },
@@ -2106,11 +2165,13 @@ pub const METHODS: [MethodInfo; 110] = [
     MethodInfo { name: "task.cancel", summary: "Ask a piece of long running work to stop. Cooperative: the answer says the request landed, not that the work has stopped yet.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/task/cancel")) },
     MethodInfo { name: "task.get", summary: "How a piece of long running work is getting on, and its answer once it has one.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/task")) },
     MethodInfo { name: "task.list", summary: "Every background job this core knows about, newest first.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/task/list")) },
+    MethodInfo { name: "tool.call", summary: "Call one of a plugin's tools, in MCP's shape. The name is `<plugin>/<tool>`, or the bare tool name when only one plugin has it.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/tool/call")) },
 ];
 
-pub const EVENT_NAMES: [&str; 18] = [
+pub const EVENT_NAMES: [&str; 19] = [
     "snapshot",
     "program.took",
+    "scene.patch",
     "preview.changed",
     "source.state",
     "source.position",
@@ -2150,6 +2211,8 @@ pub enum Event {
     Snapshot(Snapshot),
     /// The programme changed. Carries the running time the cut landed on, so a client can see how close a scheduled take was to its mark.
     ProgramTook(ProgramTookEvent),
+    /// One change to the scene document, as records rather than a snapshot: what was added, what changed with its before and after, and what was removed. One per transaction, batched and ended by event/flush.
+    ScenePatch(ScenePatchEvent),
     /// A scene was armed, or the arming was cleared. The armed scene is the preview, and program.take with no argument takes it.
     PreviewChanged(PreviewChangedEvent),
     /// A source moved between connecting, live, stalled and failed.
@@ -2198,6 +2261,10 @@ impl Event {
             },
             "program.took" => match serde_json::from_value(params.clone()) {
                 Ok(payload) => Event::ProgramTook(payload),
+                Err(_) => Event::Other { name: pattern.to_string(), params },
+            },
+            "scene.patch" => match serde_json::from_value(params.clone()) {
+                Ok(payload) => Event::ScenePatch(payload),
                 Err(_) => Event::Other { name: pattern.to_string(), params },
             },
             "preview.changed" => match serde_json::from_value(params.clone()) {
@@ -2269,6 +2336,7 @@ impl Event {
         match self {
             Event::Snapshot(_) => "snapshot",
             Event::ProgramTook(_) => "program.took",
+            Event::ScenePatch(_) => "scene.patch",
             Event::PreviewChanged(_) => "preview.changed",
             Event::SourceState(_) => "source.state",
             Event::SourcePosition(_) => "source.position",
@@ -2351,6 +2419,11 @@ impl Client {
     /// Subscribe to the event stream. WebSocket only: the core answers event/snapshot then deltas, ending every batch with event/flush.
     pub async fn core_subscribe(&self, params: &SubscribeRequest) -> Result<SubscribeResult> {
         self.call("core.subscribe", params).await
+    }
+
+    /// Ask every device plugin what it can see: cameras, NDI senders, publishers. Each candidate's params are ready for source.add.
+    pub async fn device_discover(&self, params: &DiscoverRequest) -> Result<BTreeMap<String, Value>> {
+        self.call("device.discover", params).await
     }
 
     /// Hang a filter on one source or on the programme, live.
@@ -2841,6 +2914,11 @@ impl Client {
     /// Every background job this core knows about, newest first.
     pub async fn task_list(&self) -> Result<Vec<TaskView>> {
         self.call("task.list", &serde_json::json!({})).await
+    }
+
+    /// Call one of a plugin's tools, in MCP's shape. The name is `<plugin>/<tool>`, or the bare tool name when only one plugin has it.
+    pub async fn tool_call(&self, params: &ToolCallRequest) -> Result<BTreeMap<String, Value>> {
+        self.call("tool.call", params).await
     }
 
 }
