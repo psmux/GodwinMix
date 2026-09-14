@@ -53,6 +53,10 @@ Start here if you have never run it.
 * [Test a plugin](how-to/test-a-plugin.md)
 * [Publish a plugin](how-to/publish-a-plugin.md)
 * [Run a marketplace](how-to/run-a-marketplace.md)
+* [Receive a phone or an OBS stream](how-to/receive-a-phone-or-obs-stream.md)
+* [Receive and send SRT](how-to/srt.md)
+* [Send the programme to a WHIP endpoint](how-to/send-to-whip.md)
+* [Use NDI](how-to/use-ndi.md)
 
 ## Reference
 
@@ -76,6 +80,7 @@ Start here if you have never run it.
 * [Surfaces: a whole UI, and `gmx ui`](reference/surfaces.md)
 * [The plugin protocol](reference/plugin-protocol.md)
 * [The plugin lifecycle](reference/plugin-lifecycle.md)
+* [The network plugins: srt, whip, ingest and ndi](reference/plugins-network.md)
 * [The client libraries](reference/clients.md)
 
 ## Explanation

@@ -1,0 +1,72 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "SRT source",
+  "description": "Where to receive SRT from, and how much delay to trade for reliability.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "mode": {
+      "title": "Connection mode",
+      "description": "listener waits for a sender to dial in, which is what a phone or a hardware encoder usually wants. caller dials out to a sender that is already waiting. rendezvous is both ends dialling at once, for when a firewall sits between them.",
+      "type": "string",
+      "enum": ["listener", "caller", "rendezvous"],
+      "default": "listener",
+      "examples": ["listener", "caller", "rendezvous"]
+    },
+    "host": {
+      "title": "Address",
+      "description": "In listener mode, the interface to wait on: 0.0.0.0 is every one. In caller mode, the address of the sender.",
+      "type": "string",
+      "default": "0.0.0.0",
+      "examples": ["0.0.0.0", "203.0.113.10"]
+    },
+    "port": {
+      "title": "Port",
+      "description": "The UDP port. SRT is UDP, so a firewall rule for TCP will not do.",
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 65535,
+      "default": 9000,
+      "examples": [9000, 4200]
+    },
+    "uri": {
+      "title": "Full address",
+      "description": "An srt:// address pasted from a hardware encoder or another mixer, options and all. When this is set it wins, and host and port are ignored. Anything already in its query string is left alone.",
+      "type": "string",
+      "default": "",
+      "examples": ["", "srt://203.0.113.10:9000?mode=caller&latency=300"]
+    },
+    "latency_ms": {
+      "title": "Latency budget",
+      "description": "How long SRT may spend asking for lost packets again before it gives up and passes a gap through. More is steadier on a bad link and adds exactly this much delay. 125 ms is fine on a LAN; 200 to 500 ms suits the public internet.",
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 10000,
+      "default": 125,
+      "x-gmx-unit": "ms",
+      "examples": [125, 200, 1000]
+    },
+    "passphrase": {
+      "title": "Passphrase",
+      "description": "Encrypts the stream. Both ends must use the same one. SRT requires 10 to 79 characters; leave it empty for no encryption.",
+      "type": "string",
+      "format": "secret",
+      "default": "",
+      "examples": ["", "a-passphrase-of-ten-or-more"]
+    },
+    "stream_id": {
+      "title": "Stream id",
+      "description": "The name the sender publishes under, when the far end sorts streams by it. Leave empty when there is only one stream on the port.",
+      "type": "string",
+      "default": "",
+      "examples": ["", "live/guest"]
+    },
+    "auto_reconnect": {
+      "title": "Reconnect on its own",
+      "description": "Dial again when the link drops, rather than waiting for the supervisor to rebuild the source.",
+      "type": "boolean",
+      "default": true,
+      "examples": [true, false]
+    }
+  }
+}

@@ -1,0 +1,28 @@
+# One recorded conversation with the core. `core` lines are written to the
+# plugin's stdin; `plugin` lines must appear on its stderr, in this order, as a
+# subset of the real line. "*" matches any value, and lines the plugin sends
+# that are not the next expected one (its log lines, its media report) are
+# skipped rather than failed.
+#
+# Replay it with `gmx plugin test plugins/srt --offline`. No core, no sockets
+# that outlive the run, no clock. Port 0 means the operating system picks one,
+# so two runs never collide and nothing is left listening on 9000.
+{"plugin": {"jsonrpc": "2.0", "id": 0, "method": "initialize", "params": {"plugin": "srt", "api": 1, "transports": ["container"]}}}
+{"core": {"jsonrpc": "2.0", "id": 0, "result": {"core": "godwinmix", "version": "0.2.0", "api_level": 1, "api_compatible": 1, "canvas": {"width": 1280, "height": 720, "fps": 30}, "transport": "container", "media": "", "instance": "guest", "provide": "source", "params": {"mode": "listener", "host": "127.0.0.1", "port": 0, "latency_ms": 125}}}}
+{"plugin": {"jsonrpc": "2.0", "method": "initialized"}}
+{"core": {"jsonrpc": "2.0", "id": 1, "method": "start", "params": {"canvas": {"width": 1280, "height": 720, "fps": 30}, "transport": "container", "media": ""}}}
+{"plugin": {"jsonrpc": "2.0", "id": 1, "result": {"latency_ms": 125}}}
+{"core": {"jsonrpc": "2.0", "id": 2, "method": "health", "params": {}}}
+{"plugin": {"jsonrpc": "2.0", "id": 2, "result": {"state": "*"}}}
+{"core": {"jsonrpc": "2.0", "id": 3, "method": "stats", "params": {}}}
+{"plugin": {"jsonrpc": "2.0", "id": 3, "result": {"address": "*", "stats": "*"}}}
+# A live SRT connection cannot be moved to another address underneath the
+# stream, so configure says so rather than pretending.
+{"core": {"jsonrpc": "2.0", "id": 4, "method": "configure", "params": {"params": {"mode": "caller", "host": "203.0.113.10", "port": 9000}}}}
+{"plugin": {"jsonrpc": "2.0", "id": 4, "result": {"applied": false, "restart_required": true, "reason": "*"}}}
+{"core": {"jsonrpc": "2.0", "id": 5, "method": "teleport", "params": {}}}
+{"plugin": {"jsonrpc": "2.0", "id": 5, "error": {"code": -32601, "message": "*"}}}
+{"core": {"jsonrpc": "2.0", "id": 6, "method": "stop", "params": {}}}
+{"plugin": {"jsonrpc": "2.0", "id": 6, "result": {}}}
+{"core": {"jsonrpc": "2.0", "id": 7, "method": "shutdown", "params": {"reason": "offline test"}}}
+{"plugin": {"jsonrpc": "2.0", "id": 7, "result": {}}}
