@@ -242,6 +242,10 @@ impl Guard {
     /// The same with the clock supplied, which is how the tests are written
     /// without sleeping through an eight second hold.
     pub fn check_at(&self, token: &Token, now: Instant) -> Result<(), Refusal> {
+        self.check_inner(token, now, true)
+    }
+
+    fn check_inner(&self, token: &Token, now: Instant, min_hold: bool) -> Result<(), Refusal> {
         let limits = self.cfg.for_token(token);
         let mut state = self.state.lock();
         state.forget_before(now);
@@ -258,7 +262,7 @@ impl Guard {
                 ),
             });
         }
-        if let Some(last) = state.last_take {
+        if let Some(last) = state.last_take.filter(|_| min_hold) {
             let held = now.saturating_duration_since(last).as_millis() as u64;
             if held < limits.min_hold_ms {
                 let left = limits.min_hold_ms - held;
@@ -340,6 +344,13 @@ impl Guard {
             });
         }
         None
+    }
+
+    /// `program.revert`: the rate limit and the flash guard, without the
+    /// minimum hold. Revert exists to undo a take that was wrong, and one
+    /// that has to wait out the hold is not one.
+    pub fn check_revert(&self, token: &Token) -> Result<(), Refusal> {
+        self.check_inner(token, Instant::now(), false)
     }
 
     /// A take the mixer accepted. Called after the cut is queued, so a refusal
@@ -614,6 +625,26 @@ mod tests {
 
         // A token with no override is held to the config, whoever it is.
         assert_eq!(cfg.for_token(&human()).min_hold_ms, 8_000);
+    }
+
+    /// Revert is not held by the minimum hold, because undoing a take that
+    /// was wrong is the one cut that must not wait. The rate limit and the
+    /// flash guard still apply to it.
+    #[test]
+    fn revert_is_not_held_by_the_minimum_hold_but_is_by_the_other_rules() {
+        let g = guard(SafetyConfig { flash_guard: false, ..SafetyConfig::default() });
+        g.record("desk");
+        assert_eq!(g.check(&human()).unwrap_err().rule, "min_hold");
+        assert!(g.check_revert(&human()).is_ok());
+
+        // And the hold is still in force for the next ordinary take.
+        assert_eq!(g.check(&human()).unwrap_err().rule, "min_hold");
+
+        // The flash guard reaches revert too.
+        let g = guard(SafetyConfig { min_hold_ms: 0, ..SafetyConfig::default() });
+        g.set_luma_observed(true);
+        g.note_flash();
+        assert_eq!(g.check_revert(&human()).unwrap_err().rule, "flash_guard");
     }
 
     #[test]

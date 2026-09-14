@@ -29,7 +29,7 @@ pub const POLL_INTERVAL_MS: u64 = 1_000;
 /// reloading in a loop must not be a leak.
 const MAX_TASKS: usize = 256;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "lowercase")]
 pub enum TaskState {
     Running,
@@ -45,7 +45,7 @@ impl TaskState {
 }
 
 /// What `task.get` answers with.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 pub struct TaskView {
     pub task_id: String,
     /// The method that started it, so a client reading a list knows what it is
@@ -278,7 +278,12 @@ pub fn handle_body(task_id: &str, extra: Option<Value>) -> Value {
         "poll_interval_ms": POLL_INTERVAL_MS,
         "outcome": "indeterminate",
         "state": "running",
-        "next": format!("call task.get with task_id '{task_id}' every {POLL_INTERVAL_MS} ms until state is completed, failed or cancelled"),
+        "next": format!(
+            "the work is still running. Call task.get with task_id '{task_id}' every \
+             {POLL_INTERVAL_MS} ms until state is completed, failed or cancelled. Over MCP: \
+             tasks/get if your client speaks the tasks extension, otherwise search_tools \
+             for \"task\" and call task_get."
+        ),
     });
     if let (Some(Value::Object(extra)), Some(map)) = (extra, body.as_object_mut()) {
         for (k, v) in extra {

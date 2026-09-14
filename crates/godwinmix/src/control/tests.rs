@@ -418,6 +418,8 @@ fn a_read_only_token_is_refused_before_the_handler_runs() {
         confirm: ConfirmPolicy::None,
         rehearsal: false,
         profile: Profile::Standard,
+        agent: false,
+        safety: None,
     };
     let reg = methods::registry();
     assert!(reader.has(reg.get("source.list").unwrap().scope));
@@ -467,6 +469,8 @@ fn the_legacy_paths_carry_the_scope_of_the_method_they_alias() {
         confirm: ConfirmPolicy::None,
         rehearsal: false,
         profile: Profile::Standard,
+        agent: false,
+        safety: None,
     };
     for (http, path) in [
         (Method::POST, "/api/take"),
