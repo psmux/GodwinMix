@@ -97,8 +97,10 @@ pub struct AddOutputRequest {
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct AddPluginRequest {
-    /// A local directory with `gmx-plugin.toml` at its root. Git, an index and
-    /// a signed release are Phase 5; this takes a path.
+    /// Where the plugin comes from. One of: `owner/repo` (a GitHub release,
+    /// optionally `@version`), a git URL ending in `.git`, `cargo:name`,
+    /// `npm:@scope/name`, `pypi:name`, `oci:ref`, an absolute path to a
+    /// directory, or a bare plugin name to look up in the marketplaces.
     pub source: String,
 }
 
@@ -678,9 +680,18 @@ pub struct PluginDescription {
     pub schemas: BTreeMap<String, Value>,
     /// Per provide id, the description line from its SKILL.md.
     pub skills: BTreeMap<String, Value>,
+    /// Where it was installed from, as it was typed.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub source: Option<String>,
     /// Its MCP tools, as `gmx_<plugin>_<tool>`. Reachable with `search_tools`;
     /// never in the hot list.
     pub tools: Vec<String>,
+    /// What was checked about where this came from: "signed", "signed, digest
+    /// only", or "custom, unreviewed". 06 section 4: an operator can only
+    /// judge a plugin if the catalogue says what was checked.
+    pub trust: String,
+    /// The sentence behind the label.
+    pub trust_detail: String,
     pub version: String,
 }
 
@@ -722,9 +733,18 @@ pub struct PluginRecord {
     pub provides: Vec<String>,
     /// Where it is installed.
     pub root: String,
+    /// Where it was installed from, as it was typed.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub source: Option<String>,
     /// Its MCP tools, as `gmx_<plugin>_<tool>`. Reachable with `search_tools`;
     /// never in the hot list.
     pub tools: Vec<String>,
+    /// What was checked about where this came from: "signed", "signed, digest
+    /// only", or "custom, unreviewed". 06 section 4: an operator can only
+    /// judge a plugin if the catalogue says what was checked.
+    pub trust: String,
+    /// The sentence behind the label.
+    pub trust_detail: String,
     pub version: String,
 }
 
@@ -744,6 +764,17 @@ pub struct PluginSettings {
     /// The JSON Schema every surface renders, one per provide.
     pub schemas: BTreeMap<String, Value>,
     pub settings: BTreeMap<String, Value>,
+}
+
+/// What `plugin.update` answers with.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct PluginUpdated {
+    pub from: String,
+    /// How long the new build took to answer `initialize`.
+    pub handshake_ms: u64,
+    pub plugin: PluginRecord,
+    pub to: String,
 }
 
 /// What `preview.close` answers with.
@@ -819,6 +850,43 @@ pub struct SaveRequest {
     /// Where to write it. Defaults to `~/.godwinmix/presets/<name>`.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub out: Option<String>,
+}
+
+/// `plugin.search`.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct SearchRequest {
+    /// A word to look for in a plugin's name, description or kind. Empty
+    /// lists everything.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub term: Option<String>,
+}
+
+/// One plugin a marketplace lists.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct SearchResult {
+    pub description: String,
+    /// Whether it is already on this mixer.
+    pub installed: bool,
+    pub kinds: Vec<String>,
+    pub marketplace: String,
+    pub name: String,
+    /// What to pass to `plugin.add`.
+    pub source: String,
+    /// custom, bronze, silver or gold. 06 section 4.
+    pub tier: String,
+    /// The newest listed version this core's api range can run.
+    pub version: String,
+}
+
+/// What `plugin.search` answers with.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct SearchResults {
+    /// The marketplaces that were searched.
+    pub marketplaces: Vec<String>,
+    pub results: Vec<SearchResult>,
 }
 
 /// `source.seek`.
@@ -1128,6 +1196,17 @@ pub struct UiDefaults {
     pub theme: Option<String>,
 }
 
+/// `plugin.update`.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct UpdatePluginRequest {
+    pub id: String,
+    /// Where the new build comes from. Defaults to wherever this plugin was
+    /// installed from last time.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub source: Option<String>,
+}
+
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct ProgramTookEvent {
@@ -1238,7 +1317,7 @@ pub struct MethodInfo {
     pub rest: Option<(&'static str, &'static str)>,
 }
 
-pub const METHODS: [MethodInfo; 63] = [
+pub const METHODS: [MethodInfo; 65] = [
     MethodInfo { name: "adbreak.end", summary: "Cut a running ad short, or disarm one that is scheduled.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/adbreak/end")) },
     MethodInfo { name: "adbreak.start", summary: "Interrupt the programme with a clip, then rejoin live when it ends.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/adbreak/start")) },
     MethodInfo { name: "agent.state", summary: "The compact document written for agents: the programme, each source's state and a motion score saying how much its picture is changing.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/agent/state")) },
@@ -1272,16 +1351,18 @@ pub const METHODS: [MethodInfo; 63] = [
     MethodInfo { name: "pipeline.latency", summary: "How much delay one pipeline is carrying, and which stage put it there.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/pipeline/latency")) },
     MethodInfo { name: "pipeline.list", summary: "Every pipeline running right now, by the name the other pipeline methods accept.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/pipeline/list")) },
     MethodInfo { name: "pipeline.queues", summary: "Every queue in one pipeline with how full it is, fullest first. A queue that stays full is where the trouble is.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/pipeline/queues")) },
-    MethodInfo { name: "plugin.add", summary: "Install a plugin from a local directory, while live. The directory is the one with gmx-plugin.toml at its root.", scope: "admin", mutating: true, destructive: true, rest: Some(("POST", "/api/v1/plugins")) },
+    MethodInfo { name: "plugin.add", summary: "Install a plugin, while live, from any source form: a GitHub release (owner/repo), a git URL, cargo:, npm:, pypi:, a local directory, or a bare name looked up in the marketplaces this mixer knows. The signature and the api level are checked before anything is copied.", scope: "admin", mutating: true, destructive: true, rest: Some(("POST", "/api/v1/plugins")) },
     MethodInfo { name: "plugin.describe", summary: "One plugin in full: its manifest, the settings schema of every provide, and the description from each SKILL.md.", scope: "read", mutating: false, destructive: false, rest: Some(("POST", "/api/v1/plugins/{id}/describe")) },
     MethodInfo { name: "plugin.disable", summary: "Turn a plugin off without uninstalling it. It registers nothing and runs no process until it is enabled again.", scope: "admin", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/plugins/{id}/disable")) },
     MethodInfo { name: "plugin.enable", summary: "Turn a plugin back on. It registers what it declares and its instances start.", scope: "admin", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/plugins/{id}/enable")) },
     MethodInfo { name: "plugin.list", summary: "Every plugin installed, with what it provides and what each running instance is costing in cpu, memory, latency, dropped buffers and restarts.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/plugins")) },
     MethodInfo { name: "plugin.reload", summary: "Read a plugin's directory again and swap its running instances one at a time, with the freeze frame covering each.", scope: "admin", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/plugins/{id}/reload")) },
     MethodInfo { name: "plugin.remove", summary: "Uninstall a plugin and unwind everything it registered: its provides, its tools, its panels, its hooks and its discovery matchers.", scope: "admin", mutating: true, destructive: true, rest: Some(("DELETE", "/api/v1/plugins/{id}")) },
+    MethodInfo { name: "plugin.search", summary: "Search every marketplace this mixer knows for a plugin, by name, description or kind. Answers what `gmx plugin add <name>` would install.", scope: "read", mutating: false, destructive: false, rest: Some(("POST", "/api/v1/plugins/{id}/search")) },
     MethodInfo { name: "plugin.settings.get", summary: "A plugin's settings as they stand, with its schema beside them.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/plugins/{id}/settings")) },
     MethodInfo { name: "plugin.settings.set", summary: "Change a plugin's settings. A plugin that cannot take a change while running says so rather than being restarted behind your back.", scope: "admin", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/plugins/{id}/settings")) },
     MethodInfo { name: "plugin.stats", summary: "Per instance cpu, memory, media latency, dropped buffers and restarts, refreshed once a second.", scope: "read", mutating: false, destructive: false, rest: Some(("POST", "/api/v1/plugins/{id}/stats")) },
+    MethodInfo { name: "plugin.update", summary: "Fetch a newer build of a plugin, install it beside the one that is running, and prove it starts. A build that does not answer `initialize` within ten seconds is rolled back and the plugin that was working stays working.", scope: "admin", mutating: true, destructive: true, rest: Some(("POST", "/api/v1/plugins/{id}/update")) },
     MethodInfo { name: "preset.apply", summary: "Put a preset on this core: its config, its scenes, its layout, its theme and its gallery mode. Pass dry_run to get the plan and write nothing.", scope: "admin", mutating: true, destructive: true, rest: Some(("POST", "/api/v1/preset/apply")) },
     MethodInfo { name: "preset.list", summary: "Every preset this core can apply: the six built in, plus anything installed beside the binary or under ~/.godwinmix/presets.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/preset/list")) },
     MethodInfo { name: "preset.save", summary: "Turn this core's working setup into a preset directory somebody else can apply. Stream keys and the control token are replaced with placeholders.", scope: "admin", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/preset/save")) },
@@ -1646,7 +1727,7 @@ impl Client {
         self.call("pipeline.queues", params).await
     }
 
-    /// Install a plugin from a local directory, while live. The directory is the one with gmx-plugin.toml at its root.
+    /// Install a plugin, while live, from any source form: a GitHub release (owner/repo), a git URL, cargo:, npm:, pypi:, a local directory, or a bare name looked up in the marketplaces this mixer knows. The signature and the api level are checked before anything is copied.
     pub async fn plugin_add(&self, params: &AddPluginRequest) -> Result<PluginRecord> {
         self.call("plugin.add", params).await
     }
@@ -1681,6 +1762,11 @@ impl Client {
         self.call("plugin.remove", params).await
     }
 
+    /// Search every marketplace this mixer knows for a plugin, by name, description or kind. Answers what `gmx plugin add <name>` would install.
+    pub async fn plugin_search(&self, params: &SearchRequest) -> Result<SearchResults> {
+        self.call("plugin.search", params).await
+    }
+
     /// A plugin's settings as they stand, with its schema beside them.
     pub async fn plugin_settings_get(&self, params: &PluginName) -> Result<PluginSettings> {
         self.call("plugin.settings.get", params).await
@@ -1694,6 +1780,11 @@ impl Client {
     /// Per instance cpu, memory, media latency, dropped buffers and restarts, refreshed once a second.
     pub async fn plugin_stats(&self) -> Result<StatsListing> {
         self.call("plugin.stats", &serde_json::json!({})).await
+    }
+
+    /// Fetch a newer build of a plugin, install it beside the one that is running, and prove it starts. A build that does not answer `initialize` within ten seconds is rolled back and the plugin that was working stays working.
+    pub async fn plugin_update(&self, params: &UpdatePluginRequest) -> Result<PluginUpdated> {
+        self.call("plugin.update", params).await
     }
 
     /// Put a preset on this core: its config, its scenes, its layout, its theme and its gallery mode. Pass dry_run to get the plan and write nothing.

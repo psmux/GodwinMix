@@ -25,6 +25,7 @@ use anyhow::{Context, Result};
 use godwinmix_host::budget::{Budget, Stats, Watch};
 use godwinmix_host::launch::{self, Launch, LaunchCtx};
 use godwinmix_host::sampler::Sampler;
+use godwinmix_host::verify::Trust;
 use godwinmix_protocol::plugin::manifest::{
     Manifest as PluginManifest, Provide as ProvideDecl, Tool,
 };
@@ -70,6 +71,10 @@ pub struct Installed {
     pub budget: Budget,
     /// Why it is not loaded, when it is not.
     pub problem: Option<String>,
+    /// Where it came from and what was checked about it. Read off the
+    /// `.gmx-trust.json` the install wrote, so it survives a restart, and
+    /// "custom, unreviewed" for anything that arrived before this existed.
+    pub trust: Trust,
 }
 
 impl Installed {
@@ -149,6 +154,11 @@ pub fn scan(budgets: &BTreeMap<String, crate::config::Params>) -> Vec<Installed>
         let Ok(versions) = std::fs::read_dir(&name_dir) else { continue };
         for version in versions.flatten() {
             let path = version.path();
+            // `.rollback-x` is a working version an update moved aside. If a
+            // core died mid update it is still there, and it is not a version.
+            if version.file_name().to_string_lossy().starts_with('.') {
+                continue;
+            }
             if path.is_dir() && path.join("gmx-plugin.toml").is_file() {
                 found.push(read(&path, budgets));
             }
@@ -183,6 +193,7 @@ pub fn read(root: &Path, budgets: &BTreeMap<String, crate::config::Params>) -> I
                 hooks,
                 budget,
                 problem: None,
+                trust: trust_of(root),
             }
         }
         Err(e) => Installed {
@@ -194,8 +205,23 @@ pub fn read(root: &Path, budgets: &BTreeMap<String, crate::config::Params>) -> I
             hooks: Vec::new(),
             budget: Budget::default(),
             problem: Some(format!("{e}")),
+            trust: trust_of(root),
         },
     }
+}
+
+/// What is known about where this install came from.
+///
+/// A plugin directory with no record is one that was put there by hand or by a
+/// core from before trust was recorded. Either way nothing checked it, and the
+/// honest answer is the one Home Assistant gives: custom, unreviewed.
+fn trust_of(root: &Path) -> Trust {
+    Trust::read(root).unwrap_or_else(|| {
+        Trust::unsigned(
+            root.display().to_string(),
+            "it was already in the plugins directory, and nothing recorded where it came from",
+        )
+    })
 }
 
 /// The MCP name a plugin's tool is exposed under: `gmx_<plugin>_<tool>`.
@@ -607,16 +633,68 @@ pub fn launch_for(
 
 /// Copy a plugin from a local directory into `<plugins_dir>/<name>/<version>`.
 ///
-/// Phase 2 takes a path and nothing else. A git source, an index and a
-/// signature are Phase 5, and `plugin.add` says so by name rather than failing
-/// on a URL with a parse error.
+/// The oldest of the install paths and still the one a plugin author uses
+/// after every rebuild. It is [`install`] with the source already parsed and
+/// no verification to do, because a directory on this machine has nothing to
+/// verify; the trust record it writes says exactly that.
 pub fn install_from_path(source: &Path) -> Result<Installed> {
-    anyhow::ensure!(
-        source.is_dir(),
-        "`{}` is not a directory. `plugin.add` takes the directory a plugin was built in, the \
-         one with gmx-plugin.toml at its root.",
-        source.display()
+    let fetched = godwinmix_host::sources::path::fetch(source)?;
+    place(&fetched, &InstallOptions::default())
+}
+
+/// What an install is allowed to do.
+///
+/// Read off the operator's config by the caller rather than from a global
+/// here, because the engine is a library and a config file is the server's.
+#[derive(Debug, Clone)]
+pub struct InstallOptions {
+    /// Whether a plugin nothing signed may be installed. `true` is the
+    /// default, and is what a development machine and every `gmx plugin add
+    /// ./my-plugin` needs. An operator who wants a locked down mixer sets
+    /// `[plugins] allow_unsigned = false` and then only a signed release
+    /// installs.
+    pub allow_unsigned: bool,
+    /// `[marketplaces] only`: the marketplaces a name may be resolved through.
+    /// Empty means every marketplace the operator added.
+    pub only: Vec<String>,
+    /// Refuse anything that would touch the network.
+    pub offline: bool,
+}
+
+impl Default for InstallOptions {
+    fn default() -> Self {
+        Self { allow_unsigned: true, only: Vec::new(), offline: false }
+    }
+}
+
+/// Install from any of the forms in 06 section 2.
+///
+/// A bare name is resolved through the marketplaces the operator added; every
+/// other form is fetched directly. What arrives is checked three ways before
+/// anything is copied: the manifest parses, its `api` is one this core speaks,
+/// and its signature (when there is one) covers the bytes that arrived.
+pub fn install(spec: &str, opts: &InstallOptions) -> Result<Installed> {
+    let staging = Staging::new()?;
+    let (source, identity, note) = resolve(spec, opts)?;
+    let mut ctx = godwinmix_host::sources::FetchCtx::new(
+        staging.dir.clone(),
+        launch::this_platform(),
     );
+    ctx.offline = opts.offline;
+    ctx.identity = identity;
+    let fetched = godwinmix_host::sources::fetch(&source, &ctx)?;
+    for line in note.into_iter().chain(fetched.notes.iter().cloned()) {
+        info!(plugin = %spec, "{line}");
+    }
+    place(&fetched, opts)
+}
+
+/// Check what arrived and copy it into the plugins directory.
+///
+/// Every install path ends here, so the api check, the signature gate and the
+/// preparation step happen once rather than once per source.
+fn place(fetched: &godwinmix_host::sources::Fetched, opts: &InstallOptions) -> Result<Installed> {
+    let source = &fetched.dir;
     let manifest_path = source.join("gmx-plugin.toml");
     anyhow::ensure!(
         manifest_path.is_file(),
@@ -627,19 +705,37 @@ pub fn install_from_path(source: &Path) -> Result<Installed> {
     let manifest = PluginManifest::load(&manifest_path).map_err(|e| anyhow::anyhow!("{e}"))?;
     let name = manifest.plugin.name.clone();
     let version = manifest.plugin.version.clone();
+    godwinmix_host::verify::check_api(&name, &version, manifest.plugin.api)
+        .map_err(|e| anyhow::anyhow!("{e}"))?;
     anyhow::ensure!(
-        manifest.plugin.platforms.iter().any(|p| p == launch::this_platform()),
+        manifest.plugin.platforms.is_empty()
+            || manifest.plugin.platforms.iter().any(|p| p == launch::this_platform()),
         "`{name}` has no asset for {}. It ships: {}. Install it from a git source with a \
          [build] section, or ask the author for this platform.",
         launch::this_platform(),
         manifest.plugin.platforms.join(", ")
     );
+    if !fetched.trust.is_signed() && !opts.allow_unsigned {
+        anyhow::bail!(
+            "`{name}` is unsigned ({}) and this mixer is configured to install signed \
+             plugins only. Either install a signed release of it, or add this to your \
+             config and accept that a plugin runs with the permissions you give it:\n\n  \
+             [plugins]\n  allow_unsigned = true",
+            fetched
+                .trust
+                .unsigned_because
+                .as_deref()
+                .unwrap_or("nothing signed it")
+        );
+    }
     let target = dir().join(&name).join(&version);
     if target.exists() {
         std::fs::remove_dir_all(&target)
             .with_context(|| format!("replacing {}", target.display()))?;
     }
     copy_tree(source, &target)?;
+    fetched.trust.write(&target).ok();
+    prepare(&manifest, &target)?;
     let installed = read(&target, &BTreeMap::new());
     if let Some(problem) = &installed.problem {
         // Do not leave a broken copy behind for the next scan to find.
@@ -647,8 +743,273 @@ pub fn install_from_path(source: &Path) -> Result<Installed> {
         anyhow::bail!("{problem}");
     }
     insert(installed.clone());
-    info!(plugin = %name, version = %version, at = %target.display(), "installed a plugin");
+    info!(
+        plugin = %name,
+        version = %version,
+        at = %target.display(),
+        trust = installed.trust.label(),
+        "installed a plugin"
+    );
     Ok(installed)
+}
+
+/// Run the runtime preparation the manifest implies: a venv for a Python
+/// plugin, `npm install` for a Node one.
+///
+/// It happens after the copy rather than before it, because the copy skips
+/// `.venv` and `node_modules` on purpose: those are machine specific and
+/// often larger than the plugin.
+fn prepare(manifest: &PluginManifest, root: &Path) -> Result<()> {
+    for step in launch::preparation(manifest, root) {
+        let Some((program, args)) = step.split_first() else { continue };
+        info!(plugin = %manifest.plugin.name, "{}", step.join(" "));
+        let out = std::process::Command::new(program)
+            .args(args)
+            .current_dir(root)
+            .output()
+            .with_context(|| {
+                format!(
+                    "`{program}` is not installed, or not on PATH. {} needs it to run. \
+                     Install it and add the plugin again.",
+                    manifest.plugin.name
+                )
+            })?;
+        if !out.status.success() {
+            let stderr = String::from_utf8_lossy(&out.stderr);
+            let tail: Vec<&str> = stderr.lines().rev().take(8).collect();
+            let _ = std::fs::remove_dir_all(root);
+            anyhow::bail!(
+                "preparing {} failed: {}\n{}",
+                manifest.plugin.name,
+                step.join(" "),
+                tail.into_iter().rev().collect::<Vec<_>>().join("\n")
+            );
+        }
+    }
+    Ok(())
+}
+
+/// Turn what the operator typed into a source, and say where it came from.
+fn resolve(
+    spec: &str,
+    opts: &InstallOptions,
+) -> Result<(
+    godwinmix_host::sources::Source,
+    Option<godwinmix_host::verify::Identity>,
+    Option<String>,
+)> {
+    use godwinmix_host::sources::Source;
+    // A name with no slash and no scheme is a marketplace lookup, and it is
+    // the form the docs teach because it is the one that does not change when
+    // an author moves their repository.
+    if Source::parse(spec).is_err() {
+        if let Some((market, listing)) = godwinmix_host::marketplace::resolve(spec, &opts.only) {
+            let source = listing.source()?;
+            let note = format!(
+                "{spec} is {} in the {} marketplace ({})",
+                listing.source,
+                market.name,
+                listing.tier.label()
+            );
+            return Ok((source, market.signing_identity(), Some(note)));
+        }
+    }
+    let source = Source::parse(spec)?;
+    // Even an explicit source is checked against the marketplaces, so a plugin
+    // listed on the official one is verified against the identity that signs
+    // it rather than against nobody in particular.
+    let identity = godwinmix_host::marketplace::documents(&opts.only)
+        .into_iter()
+        .find(|m| m.plugins.iter().any(|p| p.source == spec))
+        .and_then(|m| m.signing_identity());
+    Ok((source, identity, None))
+}
+
+/// What an update did.
+#[derive(Debug, Clone)]
+pub struct Updated {
+    pub installed: Installed,
+    pub from: String,
+    pub to: String,
+    /// How long the new version took to say hello.
+    pub handshake_ms: u128,
+}
+
+/// Fetch a new version, install it beside the old one, and prove it starts.
+///
+/// 06 section 2: "an update that fails its handshake is rolled back to the
+/// previous version automatically". The order matters and is the whole of the
+/// safety here: the old version is never removed until the new one has
+/// answered `initialize`, and if it does not, what was there is put back and
+/// the registry is left holding the version that was working.
+pub fn update(name: &str, spec: &str, opts: &InstallOptions) -> Result<Updated> {
+    let old = get(name).with_context(|| {
+        format!(
+            "`{name}` is not installed, so there is nothing to update. \
+             `gmx plugin add {spec}` installs it."
+        )
+    })?;
+    let old_version = old.version().to_string();
+    let old_root = old.root.clone();
+    // A new version with the same number would land on top of the old one, so
+    // the old one is moved out of the way first and moved back on a failure.
+    let backup = Backup::take(&old_root)?;
+
+    let outcome = install(spec, opts).and_then(|installed| {
+        anyhow::ensure!(
+            installed.name() == name,
+            "that source is `{}`, not `{name}`. An update replaces a plugin with a newer \
+             build of itself; installing a different plugin is `gmx plugin add`.",
+            installed.name()
+        );
+        let took = probe(&installed)?;
+        Ok((installed, took))
+    });
+
+    match outcome {
+        Ok((installed, took)) => {
+            backup.discard();
+            if installed.root != old_root && old_root.exists() {
+                let _ = std::fs::remove_dir_all(&old_root);
+            }
+            info!(
+                plugin = %name,
+                from = %old_version,
+                to = installed.version(),
+                "updated a plugin"
+            );
+            Ok(Updated {
+                from: old_version,
+                to: installed.version().to_string(),
+                handshake_ms: took,
+                installed,
+            })
+        }
+        Err(why) => {
+            // Take out whatever the failed install left behind, then put the
+            // working version back exactly where it was.
+            if let Some(broken) = get(name) {
+                if broken.root != old_root {
+                    let _ = std::fs::remove_dir_all(&broken.root);
+                }
+            }
+            backup.restore(&old_root)?;
+            let restored = read(&old_root, &BTreeMap::new());
+            insert(restored);
+            warn!(plugin = %name, version = %old_version, "rolled an update back");
+            Err(anyhow::anyhow!(
+                "{name} was not updated and {old_version} is still running.\n  {why:#}\n\
+                 Nothing was lost: the new version never took over. Report this to the \
+                 plugin's author with the lines above."
+            ))
+        }
+    }
+}
+
+/// Start the plugin's first provide and wait for `initialize`.
+fn probe(installed: &Installed) -> Result<u128> {
+    let Some(decl) = installed.manifest.provides.first() else {
+        // Nothing to launch (a preset, a theme). Installing it is the whole of
+        // the work, so there is no handshake to fail.
+        return Ok(0);
+    };
+    let ctx = LaunchCtx {
+        root: installed.root.clone(),
+        provide: decl.id.clone(),
+        instance: "probe".into(),
+        api_level: super::API_LEVEL,
+        token: String::new(),
+        rpc: String::new(),
+        media: String::new(),
+    };
+    let launch = launch::plan(&installed.manifest, &ctx)?;
+    let probed = godwinmix_host::probe::handshake(
+        &launch,
+        &installed.root,
+        godwinmix_host::probe::HANDSHAKE_DEADLINE,
+    )
+    .with_context(|| {
+        format!("{} {} did not start", installed.name(), installed.version())
+    })?;
+    anyhow::ensure!(
+        probed.hello.plugin == installed.manifest.plugin.name,
+        "the new build says it is `{}` and its manifest says `{}`.",
+        probed.hello.plugin,
+        installed.manifest.plugin.name
+    );
+    Ok(probed.took.as_millis())
+}
+
+/// A scratch directory that removes itself.
+struct Staging {
+    dir: PathBuf,
+}
+
+impl Staging {
+    fn new() -> Result<Self> {
+        let unique = format!(
+            "gmx-install-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_nanos())
+                .unwrap_or(0)
+        );
+        let dir = std::env::temp_dir().join(unique);
+        std::fs::create_dir_all(&dir)
+            .with_context(|| format!("making the staging directory {}", dir.display()))?;
+        Ok(Self { dir })
+    }
+}
+
+impl Drop for Staging {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_dir_all(&self.dir);
+    }
+}
+
+/// The working version, moved aside while a new one is tried.
+struct Backup {
+    at: Option<PathBuf>,
+}
+
+impl Backup {
+    fn take(root: &Path) -> Result<Self> {
+        if !root.exists() {
+            return Ok(Self { at: None });
+        }
+        // Beside the original rather than in the temp directory: a rename
+        // within one filesystem cannot half fail, and a plugin directory can
+        // be hundreds of megabytes.
+        let at = root.with_file_name(format!(
+            ".rollback-{}",
+            root.file_name().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default()
+        ));
+        let _ = std::fs::remove_dir_all(&at);
+        std::fs::rename(root, &at).with_context(|| {
+            format!("moving {} aside before the update", root.display())
+        })?;
+        Ok(Self { at: Some(at) })
+    }
+
+    fn restore(self, root: &Path) -> Result<()> {
+        let Some(at) = &self.at else { return Ok(()) };
+        let _ = std::fs::remove_dir_all(root);
+        std::fs::rename(at, root).with_context(|| {
+            format!(
+                "putting {} back after a failed update. The working version is at {}; \
+                 move it back by hand if this failed too.",
+                root.display(),
+                at.display()
+            )
+        })
+    }
+
+    fn discard(self) {
+        if let Some(at) = &self.at {
+            let _ = std::fs::remove_dir_all(at);
+        }
+    }
 }
 
 /// Take a plugin's directory off the disk as well as out of the registry.
