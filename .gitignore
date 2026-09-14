@@ -6,8 +6,10 @@ tauri-app/target/
 # Tauri generated schemas
 tauri-app/gen/schemas/
 
-# Local test rig: logs, runtime state, captures
+# Local test rig: logs, runtime state, captures, and the mediamtx release
+# binary dev/harness/up.sh downloads on first run.
 dev/harness/logs/
+dev/harness/bin/
 dev/harness/*.runtime.toml
 browser/dev/out/
 browser/dev/out-arch/

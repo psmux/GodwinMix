@@ -1,7 +1,12 @@
 # GodwinMix inside the container built from deploy/docker/Dockerfile.
-# Sources are added from the UI or the API and kept in godwinmix.runtime.toml
-# next to this file. The programme goes to an RTMP server; point `outputs` at the real RTMP destination when there is one, or
-# add it while live with `POST /api/outputs`.
+#
+# This is the config the entrypoint copies into /etc/godwinmix/godwinmix.toml
+# when nothing is mounted there, so an image with no configuration at all still
+# starts a mixer you can drive over the API. Mount your own directory at
+# /etc/godwinmix to replace it.
+#
+# Sources and outputs added over the API are written to
+# godwinmix.runtime.toml next to this file and come back after a restart.
 
 [canvas]
 width = 1280
@@ -10,12 +15,17 @@ fps = 30
 sample_rate = 48000
 channels = 2
 
+# 720p30 at 2,500 kbit/s is the default preset for a reason: YouTube asks for
+# 6 Mbit/s at 720p30 and most of the uplinks this runs on cannot hold that.
+# Raise it when you know the uplink.
 [program]
-video_bitrate_kbps = 4000
+video_bitrate_kbps = 2500
 audio_bitrate_kbps = 160
 keyframe_interval_secs = 2
 audio_ramp_ms = 180
 
+# The mosaic costs an encoder. It is on here because the UI is the first thing
+# a new operator opens, and it stops the moment nobody is watching it.
 [multiview]
 enabled = true
 width = 960
@@ -24,12 +34,16 @@ fps = 8
 jpeg_quality = 60
 include_program = true
 
+# Running a command line as a source is arbitrary code execution for anyone who
+# can reach the control port. Off in a container, where the port is often
+# published.
 [security]
 allow_exec_sources = false
 
 [browser]
-# The CEF sidecar with H.264 and AAC, shipped in the image next to the mixer.
-sidecar = "/opt/gmx/bin/godwinmix-browser"
+# No sidecar path: a `web+` source renders through GStreamer's wpesrc, which is
+# in the image when it was built with WITH_WPE=1. Install the CEF sidecar next
+# to the binary and name it here for H.264 and AAC playback inside the page.
 overlay_fps = 10
 
 [media]
@@ -37,16 +51,22 @@ dir = "/var/lib/godwinmix/media"
 
 [control]
 bind = "0.0.0.0:8080"
-# Every API call and the WebSocket need Authorization: Bearer <token>; the
-# UI asks for it once. Agents driving this mixer from outside use the same.
-token = "CHANGE-ME"   # the real one lives only on the server
+# Set GODWINMIX_TOKEN in the environment instead of writing a token here. The
+# environment variable wins over this file, and a secret in a config file gets
+# committed eventually.
+# token = "change-me"
 
 [hardware]
 decode = "auto"
 encode = "auto"
 
-[[outputs]]
-id = "primary"
-uri = "rtmp://rtmp-server/live/program"
-policy = "own"
-queue_secs = 5.0
+# No sources and no outputs. Add them over the API:
+#
+#   curl -X POST localhost:8080/api/sources -H 'content-type: application/json' \
+#     -d '{"id":"cam1","uri":"rtmp://rtmp:1935/live/cam1"}'
+#   curl -X POST localhost:8080/api/outputs -H 'content-type: application/json' \
+#     -d '{"id":"primary","uri":"rtmp://rtmp:1935/live/program","policy":"own"}'
+#
+# or put them here, which is what a server that always mixes the same thing
+# should do. See godwinmix.example.toml at the root of the repository for every
+# key with its explanation.

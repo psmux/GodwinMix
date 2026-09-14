@@ -1,0 +1,52 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>GodwinMix harness page</title>
+<!--
+  The test page for `web+` sources on the local rig. Everything on it moves, so
+  a frozen frame on the multiview is obvious rather than plausible, and the
+  second counter makes a dropped or repeated frame visible when you step
+  through a recording.
+
+  Served by dev/harness/up.sh on http://127.0.0.1:8090 when browser/test is not
+  in the tree. Add it as a source with:
+
+      gmx ctl source add page web+http://127.0.0.1:8090/
+-->
+<style>
+  :root { color-scheme: dark; }
+  body {
+    margin: 0; height: 100vh; display: grid; place-items: center;
+    background: #101820; color: #f2f2f2;
+    font: 600 2vw/1.4 system-ui, -apple-system, "Segoe UI", sans-serif;
+  }
+  #board { text-align: center; }
+  #clock { font-size: 12vw; font-variant-numeric: tabular-nums; letter-spacing: -0.02em; }
+  #bar { height: 4vh; margin-top: 3vh; background: #2a3a4a; overflow: hidden; }
+  #fill { height: 100%; width: 0; background: #e0492f; }
+  #caption { opacity: 0.65; font-size: 1.4vw; margin-top: 2vh; }
+</style>
+<div id="board">
+  <div id="clock">00:00</div>
+  <div id="bar"><div id="fill"></div></div>
+  <div id="caption">GodwinMix harness page</div>
+</div>
+<script>
+  // A second counter, a sweeping bar and a hue that changes once a second.
+  // Three different rates, so whichever one you are watching tells you
+  // something about the frame you are looking at.
+  let t = 0;
+  const clock = document.getElementById('clock');
+  const fill = document.getElementById('fill');
+  setInterval(() => {
+    t += 1;
+    const m = String(Math.floor(t / 60)).padStart(2, '0');
+    const s = String(t % 60).padStart(2, '0');
+    clock.textContent = `${m}:${s}`;
+    document.body.style.background = `hsl(${(t * 7) % 360} 35% 12%)`;
+  }, 1000);
+  function sweep(now) {
+    fill.style.width = `${(now / 40) % 100}%`;
+    requestAnimationFrame(sweep);
+  }
+  requestAnimationFrame(sweep);
+</script>
