@@ -12,20 +12,18 @@ unavailable to a script you write yourself.
 
 ## Build it
 
-The crate lives in `crates/godwinmix-tui` and builds on its own:
+The crate is `crates/godwinmix-tui`, one member of the workspace:
 
 ```sh
-cd crates/godwinmix-tui
-cargo build --release
+cargo build --release -p godwinmix-tui
 ./target/release/gmx-tui --help
 ```
 
-There is no GStreamer in it. The binary is 2.3 MB on macOS arm64 and it needs
-nothing on the machine it runs on but a terminal, which is the point: you can
-copy it to a jump host and leave the mixer where it is. (Built as part of the
-repository's workspace rather than on its own, Cargo uses the workspace's
-release profile instead of the crate's, which leaves the symbols in and takes
-it to 3.4 MB. `strip` brings it back.)
+There is no GStreamer in it and it links nothing the core links, so this
+builds on a machine with no media stack at all. The binary is 2.8 MB on macOS
+arm64, 2.4 MB once stripped, and it needs nothing where it runs but a
+terminal. That is the point: copy it to a jump host and leave the mixer where
+it is.
 
 ## Connect
 
