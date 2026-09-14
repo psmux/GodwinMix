@@ -213,8 +213,11 @@ label { display: block; }
 }
 
 .tile .pic { aspect-ratio: 16 / 9; background: #000; display: block; width: 100%; object-fit: contain; }
+/* The plain background comes first so a WebKitGTK older than 2.38, which has no
+   color-mix, still gets a readable tile rather than a transparent one. */
 .tile .kindbox {
   aspect-ratio: 16 / 9; display: grid; place-items: center;
+  background: var(--panel2);
   background: color-mix(in srgb, var(--tile-color, var(--kind-other)) 22%, var(--panel2));
 }
 .tile .kindbox svg { width: 34%; max-width: 46px; opacity: 0.9; color: var(--tile-color, var(--kind-other)); }
