@@ -123,31 +123,19 @@ impl SourceKind {
     /// protocol: a continuous source is re-timed onto programme time and
     /// restarted when it drops, while a finite one is expected to end.
     pub fn detect(uri: &str) -> Self {
-        if exec_command(uri).is_some() {
-            return Self::Exec;
+        // One table, not two. The prefix rules that used to be written out here
+        // live in the kinds now, one `claims` function each, and the highest
+        // rank wins; this maps the winner back onto the enum the control plane
+        // and the ad break still speak. Anything a plugin adds that this build
+        // has never heard of reads as a file, which is what an unrecognised URI
+        // always read as.
+        match crate::plugin::source::resolve(uri).map(|p| p.manifest.plugin) {
+            Some("exec") => Self::Exec,
+            Some("browser") | Some("layered") => Self::Web,
+            Some("rtmp") => Self::Rtmp,
+            Some("hls") | Some("test") => Self::Live,
+            _ => Self::File,
         }
-        if web_url(uri).is_some() {
-            return Self::Web;
-        }
-        let lower = uri.trim().to_lowercase();
-        if lower.starts_with("rtmp://") || lower.starts_with("rtmps://") {
-            return Self::Rtmp;
-        }
-        if lower.starts_with("rtsp://")
-            || lower.starts_with("rtsps://")
-            || lower.starts_with("srt://")
-            || lower.starts_with("udp://")
-            || lower.starts_with("rtp://")
-        {
-            return Self::Live;
-        }
-        // Playlist manifests are live regardless of being fetched over HTTP.
-        let path = lower.split(['?', '#']).next().unwrap_or(&lower);
-        if path.ends_with(".m3u8") || path.ends_with(".mpd") {
-            return Self::Live;
-        }
-        // Anything else, including a plain file over HTTP, is finite.
-        Self::File
     }
 
     /// True for sources expected to run indefinitely.
