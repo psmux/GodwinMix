@@ -553,6 +553,7 @@ dependencies = [
  "clap",
  "futures-util",
  "godwinmix-core",
+ "godwinmix-host",
  "godwinmix-protocol",
  "gstreamer",
  "libc",

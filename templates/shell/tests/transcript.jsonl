@@ -1,0 +1,8 @@
+# A recorded transcript. `gmx plugin test --offline` writes every `core` line to
+# the plugin's stdin and matches its stderr against every `plugin` line, as a
+# subset, in order. "*" matches whatever is there.
+{"plugin": {"method": "initialize", "params": {"plugin": "{{name}}", "api": 1}}}
+{"core":   {"jsonrpc": "2.0", "id": 0, "result": {"core": "godwinmix", "version": "0.2.0", "api_level": 1, "api_compatible": 1, "canvas": {"width": 1280, "height": 720, "fps": 30}, "transport": "container", "media": "", "instance": "offline", "provide": "{{kind}}", "params": {}}}}
+{"plugin": {"method": "initialized"}}
+{"core":   {"jsonrpc": "2.0", "id": 1, "method": "health", "params": {}}}
+{"plugin": {"id": 1, "result": {"state": "ok"}}}

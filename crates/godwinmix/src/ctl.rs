@@ -351,13 +351,15 @@ fn source_line(s: &SourceStatus) -> String {
 
 /// Where the mixer is and how to be let in. The token, when there is one,
 /// rides as a default header so no call site can forget it.
-struct Api {
+/// A thin client over `/api/v1`, shared with the subcommands in `cli/` so that
+/// `gmx plugin list` and `gmx ctl status` reach the mixer the same way.
+pub struct Api {
     base: String,
     client: reqwest::Client,
 }
 
 impl Api {
-    fn new(base: &str, token: Option<&str>) -> Result<Self> {
+    pub fn new(base: &str, token: Option<&str>) -> Result<Self> {
         let mut headers = HeaderMap::new();
         if let Some(t) = token.map(str::trim).filter(|t| !t.is_empty()) {
             let mut v = HeaderValue::from_str(&format!("Bearer {t}"))
@@ -389,7 +391,7 @@ impl Api {
     }
 
     /// A read, with query parameters.
-    async fn get<T: DeserializeOwned>(
+    pub async fn get<T: DeserializeOwned>(
         &self,
         method: &str,
         id: Option<&str>,
@@ -406,7 +408,7 @@ impl Api {
         read(method, r).await
     }
 
-    async fn call<Req: Serialize, T: DeserializeOwned>(
+    pub async fn call<Req: Serialize, T: DeserializeOwned>(
         &self,
         method: &str,
         id: Option<&str>,

@@ -27,6 +27,9 @@ path = "src/bin/gmx.rs"
 [dependencies]
 godwinmix-protocol = { workspace = true }
 godwinmix-core = { workspace = true }
+# For `gmx plugin test --offline`, which replays a transcript against a plugin
+# binary with no core running at all.
+godwinmix-host = { workspace = true }
 
 # The control plane builds pipelines through the engine, but it also starts
 # GStreamer itself and the bench command builds elements directly.

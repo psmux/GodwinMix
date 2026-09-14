@@ -1733,6 +1733,20 @@ pub struct ExecChild {
 }
 
 impl ExecChild {
+    /// Has it finished? One non blocking wait, and the status is collected
+    /// here rather than left for the drop, which is what makes a plugin that
+    /// exits on `shutdown` stop being waited for straight away.
+    ///
+    /// `kill(pid, 0)` cannot answer this: a process that has exited and not
+    /// been waited on is a zombie, its pid is still allocated, and the signal
+    /// succeeds. Asking the `Child` we own is the only answer that is true.
+    pub fn finished(&mut self) -> bool {
+        match self.child.as_mut() {
+            None => true,
+            Some(child) => matches!(child.try_wait(), Ok(Some(_)) | Err(_)),
+        }
+    }
+
     /// Take ownership of a freshly spawned process and its two pipes. Letting
     /// go of the result is what kills the process; see `Drop`.
     pub fn new(
