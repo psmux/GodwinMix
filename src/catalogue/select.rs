@@ -304,7 +304,7 @@ impl Catalogue {
             req.graphics,
             &rows.iter().map(|(_, c)| c.clone()).collect::<Vec<_>>(),
         )?;
-        let (entry, chosen_row) = &rows[idx];
+        let (entry, _) = &rows[idx];
         let why = if pinned {
             format!("pinned by [hardware] graphics = \"{}\"", entry.accel)
         } else if entry.memory == "system" {
@@ -312,7 +312,6 @@ impl Catalogue {
         } else {
             format!("highest ranked entry present and verified on {}", req.platform)
         };
-        let _ = chosen_row;
         for (i, (_, c)) in rows.iter().enumerate() {
             let mut c = c.clone();
             c.chosen = i == idx;

@@ -213,7 +213,6 @@ struct Spec {
 #[derive(Default)]
 struct Tally {
     queue: VecDeque<Vec<u8>>,
-    reference_done: bool,
     abort: bool,
     frames_in: u64,
     frames_out: u64,
@@ -243,9 +242,7 @@ fn video_round_trip(spec: &Spec, seconds: f64, width: i32, height: i32, fps: i32
     let outcome = run_to_eos(&pipeline, Duration::from_secs_f64(seconds * 3.0 + 20.0));
     let wall = started.elapsed().as_secs_f64();
     {
-        let mut t = shared.tally.lock();
-        t.abort = true;
-        t.reference_done = true;
+        shared.tally.lock().abort = true;
     }
     shared.space.notify_all();
     shared.filled.notify_all();
