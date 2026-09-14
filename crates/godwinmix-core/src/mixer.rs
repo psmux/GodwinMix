@@ -245,6 +245,10 @@ pub enum Command {
     /// client subscribes or the last one leaves, never by the API. See
     /// `multiview.rs`.
     Multiview(Demand),
+    /// Start or stop the programme encode chain. Sent by `EncoderHandle` when
+    /// the first consumer arrives or the last one leaves, never by the API.
+    /// See `encoder.rs`.
+    Encoder(crate::encoder::EncoderDemand),
     Shutdown,
 }
 
@@ -595,6 +599,14 @@ pub struct Mixer {
     multiview: Option<Multiview>,
     /// The mosaic's demand counter. Alive whether or not the pipeline is.
     mv: MultiviewHandle,
+    /// The encode chains and whether they are joined to the raw tees.
+    encoder: crate::encoder::Encoder,
+    /// The encoder's demand counter, handed to anything that wants to keep it
+    /// up. Alive whether or not the chain is.
+    enc: crate::encoder::EncoderHandle,
+    /// One lease per attached output, so an encoder on demand runs for as long
+    /// as there is somewhere for its bytes to go.
+    output_leases: HashMap<OutputId, crate::encoder::Lease>,
     program_source: Option<SourceId>,
     ad: Option<AdStatus>,
     /// Running time an armed break was asked to land on, so the roll can hit
@@ -1068,6 +1080,30 @@ impl Mixer {
             })
         });
 
+        // --- encoder lifecycle: the whole of it, in one block ---------------
+        //
+        // Everything above built and linked the encode chains exactly as it
+        // always did. This adopts them, and with `[program] encoder =
+        // "on-demand"` (the default) takes them straight back off the raw tees
+        // so a core nobody is reading encodes nothing. The first consumer, an
+        // output or a WHEP session or a recording, takes a lease and the chain
+        // comes back with a keyframe on its first frame. The raw programme is
+        // untouched either way. See `encoder.rs`.
+        let enc_policy = cfg.program.encoder_policy();
+        let enc = crate::encoder::EncoderHandle::new(enc_policy, {
+            let h = handle.clone();
+            Arc::new(move |d| {
+                let _ = h.send(Command::Encoder(d));
+            })
+        });
+        let mut encoder = crate::encoder::Encoder::new(
+            enc.clone(),
+            crate::encoder::EncodeChain::new("video", &vraw_tee, vchain.clone()),
+            crate::encoder::EncodeChain::new("audio", &araw_tee, achain.clone()),
+        );
+        encoder.arm().context("arming the programme encoder")?;
+        // --- end of the encoder lifecycle block -----------------------------
+
         let mixer = Self {
             cfg,
             canvas,
@@ -1083,6 +1119,9 @@ impl Mixer {
             outputs: Vec::new(),
             multiview: None,
             mv,
+            encoder,
+            enc,
+            output_leases: HashMap::new(),
             program_source: None,
             ad: None,
             ad_cue_ms: None,
@@ -1126,7 +1165,10 @@ impl Mixer {
                 &out,
                 self.bus_tx.clone(),
             ) {
-                Ok(slot) => self.outputs.push(slot),
+                Ok(slot) => {
+                    self.hold_encoder_for(&out.id);
+                    self.outputs.push(slot);
+                }
                 Err(e) => error!(output = %out.id, ?e, "failed to attach output"),
             }
         }
@@ -2004,6 +2046,7 @@ impl Mixer {
             self.bus_tx.clone(),
         )
         .with_context(|| format!("attaching output {}", cfg.id))?;
+        self.hold_encoder_for(&cfg.id);
         self.outputs.push(slot);
         info!(output = %cfg.id, "output added");
         self.persist_runtime();
@@ -2018,6 +2061,7 @@ impl Mixer {
         };
         let slot = self.outputs.remove(pos);
         slot.detach(&self.program);
+        self.release_encoder_for(id);
         self.output_attempts.remove(id);
         info!(output = %id, "output removed");
         self.persist_runtime();
@@ -2379,6 +2423,7 @@ impl Mixer {
             Command::Tick => "tick",
             Command::PositionTick => "position tick",
             Command::Multiview(_) => "multiview demand",
+            Command::Encoder(_) => "encoder demand",
             Command::Shutdown => "core.shutdown",
         }
     }
@@ -2418,6 +2463,7 @@ impl Mixer {
                 r?;
             }
             Command::Multiview(d) => self.multiview_demand(d)?,
+            Command::Encoder(d) => self.encoder.demand(d)?,
             Command::AddSource(cfg, ack) => {
                 self.begin_add_source(*cfg, ack)?;
             }
@@ -3084,6 +3130,45 @@ impl Mixer {
         &self.program
     }
 
+    /// The encoder's demand counter, for `/metrics` and for anything outside
+    /// the mixer that wants to hold the encode chain up.
+    pub fn encoder_handle(&self) -> crate::encoder::EncoderHandle {
+        self.enc.clone()
+    }
+
+    /// Whether the encode chain is joined to the raw tees right now. What a
+    /// test asks to prove that an idle core is not merely flagged off.
+    pub fn encoder_running(&self) -> bool {
+        self.encoder.is_running()
+    }
+
+    /// The state of the two encoder elements, by name, for the same reason.
+    pub fn encoder_element_states(&self) -> (Option<gst::State>, Option<gst::State>) {
+        self.encoder.element_states("venc", "aenc")
+    }
+
+    /// Take a lease for an output and act on it here and now.
+    ///
+    /// The lease also posts a `Command::Encoder` on the queue, which this
+    /// thread will read later and find nothing to do. Reconciling inline means
+    /// the chain is up before the output's first buffer could want it.
+    fn hold_encoder_for(&mut self, id: &OutputId) {
+        self.output_leases.insert(id.clone(), self.enc.lease("output"));
+        self.sync_encoder();
+    }
+
+    fn release_encoder_for(&mut self, id: &OutputId) {
+        self.output_leases.remove(id);
+        self.sync_encoder();
+    }
+
+    fn sync_encoder(&mut self) {
+        let wanted = self.enc.wanted();
+        if let Err(e) = self.encoder.reconcile(wanted) {
+            error!(?e, "could not move the programme encoder");
+        }
+    }
+
     /// Build or destroy the mosaic because the subscriber count changed.
     /// Everything that decides *whether* lives in `multiview.rs`; this is only
     /// the part that has to happen on the mixer thread.
@@ -3148,6 +3233,8 @@ impl Mixer {
         }
         self.multiview = None;
         self.mv.mark_built(None);
+        self.output_leases.clear();
+        self.encoder.shutdown();
         let _ = self.program.set_state(gst::State::Null);
     }
 }

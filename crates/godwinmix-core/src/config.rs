@@ -171,6 +171,38 @@ pub struct ProgramConfig {
     /// a measurement on your output says otherwise (`browser/dev/measure-sync.py`).
     #[serde(default)]
     pub av_offset_ms: Option<i64>,
+    /// When the programme encoder runs.
+    ///
+    /// `on-demand`, the default, starts the encode chain for the first thing
+    /// that reads it (an output, a WHEP session, a recording) and stops it
+    /// after the last one leaves. The raw programme, the compositor, the audio
+    /// mixer and both raw tees run from boot either way, so the picture never
+    /// stops and a take is never delayed. `always` is what every release
+    /// before this one did: built and encoding a black slate from boot whether
+    /// or not anything is listening. See `encoder.rs`.
+    #[serde(default = "default_encoder_policy")]
+    pub encoder: String,
+}
+
+fn default_encoder_policy() -> String {
+    "on-demand".to_string()
+}
+
+impl ProgramConfig {
+    /// The parsed policy. An unreadable value is a warning and the default,
+    /// not a refusal to start: a mixer must come up.
+    pub fn encoder_policy(&self) -> crate::encoder::EncoderPolicy {
+        match crate::encoder::EncoderPolicy::parse(&self.encoder) {
+            Some(p) => p,
+            None => {
+                tracing::warn!(
+                    value = %self.encoder,
+                    "[program] encoder must be \"always\" or \"on-demand\"; using on-demand"
+                );
+                crate::encoder::EncoderPolicy::OnDemand
+            }
+        }
+    }
 }
 
 impl Default for ProgramConfig {
@@ -181,6 +213,7 @@ impl Default for ProgramConfig {
             keyframe_interval_secs: 2,
             audio_ramp_ms: 180,
             av_offset_ms: None,
+            encoder: default_encoder_policy(),
         }
     }
 }
