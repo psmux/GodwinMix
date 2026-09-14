@@ -186,15 +186,16 @@ pub fn event_name_and_payload(event: &Event) -> Option<(&'static str, Value)> {
     let payload = |v: Value| v;
     Some(match event {
         Event::Status(_) => return None,
-        Event::Took { source, scene, at_running_time_ms } => (
+        Event::Took { source, scene, at_running_time_ms, transition, duration_ms, transition_id } => (
             "program.took",
             payload(json!({
                 "source": source,
                 // A bare source id is shorthand for a one item full canvas
                 // scene, so a client reading `scene` gets an answer either way.
                 "scene": scene.clone().or_else(|| source.clone()),
-                "transition": "cut",
-                "duration_ms": 0,
+                "transition": transition.clone().unwrap_or_else(|| "cut".into()),
+                "duration_ms": duration_ms,
+                "transition_id": transition_id,
                 "at_running_time_ms": at_running_time_ms,
             })),
         ),
@@ -437,7 +438,7 @@ mod tests {
     fn legacy_events_are_renamed_onto_the_published_table() {
         let name = |e: Event| event_name_and_payload(&e).map(|(n, _)| n);
         assert_eq!(
-            name(Event::Took { source: None, scene: None, at_running_time_ms: 1 }),
+            name(Event::took_cut(None, None, 1)),
             Some("program.took")
         );
         assert_eq!(
@@ -456,14 +457,26 @@ mod tests {
         );
 
         let (_, payload) =
-            event_name_and_payload(&Event::Took {
-                source: Some("cam1".into()),
-                scene: None,
-                at_running_time_ms: 42,
-            })
-                .unwrap();
+            event_name_and_payload(&Event::took_cut(Some("cam1".into()), None, 42)).unwrap();
         assert_eq!(payload["source"], "cam1");
         assert_eq!(payload["at_running_time_ms"], 42);
+        assert_eq!(payload["transition"], "cut", "a take with nothing said about it is a cut");
+        assert_eq!(payload["duration_ms"], 0);
+
+        // And a take that was a transition says which one and how long it
+        // took, so a client can draw the change rather than guess at it.
+        let (_, payload) = event_name_and_payload(&Event::Took {
+            source: None,
+            scene: Some("wide".into()),
+            at_running_time_ms: 42,
+            transition: Some("fade".into()),
+            duration_ms: 300,
+            transition_id: 7,
+        })
+        .unwrap();
+        assert_eq!(payload["transition"], "fade");
+        assert_eq!(payload["duration_ms"], 300);
+        assert_eq!(payload["transition_id"], 7);
     }
 
     #[test]
@@ -475,7 +488,7 @@ mod tests {
             source: "cam1".into(),
             peak_db: vec![-12.0]
         }));
-        assert!(!batch.absorb(&Event::Took { source: None, scene: None, at_running_time_ms: 0 }));
+        assert!(!batch.absorb(&Event::took_cut(None, None, 0)));
         let m = batch.take().unwrap();
         assert_eq!(m.program, vec![-6.0, -6.5]);
         assert_eq!(m.sources["cam1"][0], -12.0);

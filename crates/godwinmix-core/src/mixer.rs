@@ -61,6 +61,12 @@ const OVERFLOW_TICKS: u32 = 6;
 const CLIENT_FALLBACK_AFTER: Duration = Duration::from_secs(6);
 /// Source id used for the ad break. Reserved: a configured source may not use it.
 pub const AD_ID: &str = "__ad__";
+/// Source id the stinger clip is added under. Reserved the same way.
+pub const STINGER_ID: &str = "__stinger__";
+/// How long the mixer will spend asking a transition plugin what its curves
+/// are. A plugin that cannot describe a 300 ms wipe in a fifth of a second is
+/// not one a show should wait for, and the take falls back to a cut.
+const PLUGIN_SAMPLE_BUDGET: Duration = Duration::from_millis(200);
 /// How long to wait for an ad to preroll before taking it anyway.
 const AD_PREROLL: Duration = Duration::from_millis(1200);
 /// Upstream latency the mixers assume from the start, so that attaching a
@@ -254,8 +260,21 @@ pub enum Command {
         /// what a take is. A duration is what a geometry command asks for
         /// when it reshapes a scene that is already on air.
         duration_ms: Option<u64>,
+        /// How to get there: a cut, a fade, a move, a stinger or a plugin.
+        /// Absent is the cut a take has always been. A transition puts both
+        /// scenes on the canvas for its length, which is the one thing a
+        /// reshape of the scene already on air does not do.
+        transition: Option<crate::mixer::transition::TransitionSpec>,
         ack: Option<Ack>,
     },
+    /// The window of a transition has passed: take the control bindings off,
+    /// leave every pad where its curve ended, and give the outgoing scene's
+    /// slots back to the pool.
+    ///
+    /// Armed on the pipeline clock by the take that started it and carrying
+    /// that take's transition id, so one that has been overtaken does nothing
+    /// rather than undoing the newer one. Never sent by the API.
+    TransitionEnd { transition: u64 },
     /// Interrupt the programme with an ad, then return to live.
     ///
     /// `return_to` defaults to whatever is on program when the break starts.
@@ -766,9 +785,28 @@ pub struct Mixer {
     /// ready. Preroll can take anywhere from tens of milliseconds upwards.
     ad_cue_ms: Option<u64>,
 
-    /// Bumped on every take so a superseded audio ramp abandons its work
-    /// instead of fighting the newer one.
+    /// Bumped on every take. It is the transition id: a ramp, a curve or a
+    /// scheduled end that belongs to an older take abandons its work rather
+    /// than fighting the newer one, and `event/program.took` carries it so a
+    /// client can tell two takes apart.
     take_generation: Arc<AtomicU64>,
+    /// The transition on the canvas right now, with the bindings to take off
+    /// when its window passes.
+    running_transition: Option<RunningTransition>,
+    /// What to ask when a take names a transition this build does not have.
+    /// Installed by the plugin supervisor; `None` on a core with no plugins,
+    /// where a transition plugin's name is simply an error that lists the
+    /// built in ones.
+    transitions: Option<Arc<dyn transition::Renderer>>,
+    /// Where the compositor has got to, from a probe on its own src pad.
+    ///
+    /// Not the same as the clock's running time. A live aggregator composes
+    /// the frame for running time T and pushes it a latency later, so the
+    /// clock is ahead of the picture by that latency. A curve is read by the
+    /// compositor against the frame it is blending, so it has to be written in
+    /// the picture's timeline and not the clock's, or a 300 ms crossfade
+    /// starts a second after the button.
+    pgm_out: Arc<crate::input::LastBuffer>,
     pending_take: Option<gst::SingleShotClockId>,
     pending_ad_end: Option<gst::SingleShotClockId>,
     output_attempts: HashMap<OutputId, u32>,
@@ -853,6 +891,22 @@ struct RetiredBranch {
     /// Dropped whether or not the rebuild ever finishes. A source that never
     /// comes back must not leave its elements in the programme pipeline.
     until: Instant,
+}
+
+/// A transition that is on the canvas: what to undo when its window passes.
+struct RunningTransition {
+    /// The take that started it. An end carrying a different one is stale.
+    id: u64,
+    kind: String,
+    /// The control bindings, and the value to leave each property at.
+    bound: crate::mixer::transition::Bound,
+    /// Where the window sits on the compositor's own timeline. Read by the
+    /// tests that measure whether a crossfade landed where it was armed.
+    window: (gst::ClockTime, gst::ClockTime),
+    /// Armed on the pipeline clock; unscheduled if a newer take supersedes it.
+    end: Option<gst::SingleShotClockId>,
+    /// A clip added for a stinger, removed with the transition.
+    clip: Option<SourceId>,
 }
 
 /// The numbers `Mixer::timeline_of` gathers. Plain data so that gathering them
@@ -1264,7 +1318,8 @@ impl Mixer {
         // The slots every scene is drawn in. Built before the pipeline runs,
         // so the eight the pool starts with cost one pad request each and
         // never another. See `mixer::slots`.
-        let pool = SlotPool::build(&program, &vmix).context("building the compositor slots")?;
+        let pool = SlotPool::build(&program, &vmix, &canvas)
+            .context("building the compositor slots")?;
 
         // --- encoder lifecycle: the whole of it, in one block ---------------
         //
@@ -1300,6 +1355,14 @@ impl Mixer {
         });
         // --- end of the encoder lifecycle block -----------------------------
 
+        // Where the compositor has got to, so a transition can be written in
+        // the picture's timeline rather than the clock's. Two relaxed atomic
+        // stores per frame on a thread that is already carrying the programme,
+        // which is the same instrumentation every source branch already has.
+        let pgm_out = Arc::new(crate::input::LastBuffer::default());
+        crate::input::install_timeline_probe(&vmix, "src", &pgm_out)
+            .context("watching where the compositor has got to")?;
+
         let mixer = Self {
             cfg,
             canvas,
@@ -1330,6 +1393,9 @@ impl Mixer {
             ad: None,
             ad_cue_ms: None,
             take_generation: Arc::new(AtomicU64::new(0)),
+            running_transition: None,
+            transitions: None,
+            pgm_out,
             pending_take: None,
             pending_ad_end: None,
             output_attempts: HashMap::new(),
@@ -1351,6 +1417,16 @@ impl Mixer {
             ramp: None,
         };
         Ok((mixer, handle, rx, bus_rx))
+    }
+
+    /// Let a take name a transition that lives in a plugin.
+    ///
+    /// The supervisor installs this once at startup. The mixer never launches
+    /// a process and never waits on one for longer than
+    /// `PLUGIN_SAMPLE_BUDGET`, because a transition that is slow to describe
+    /// itself must not be a transition that holds the command queue.
+    pub fn set_transition_renderer(&mut self, renderer: Arc<dyn transition::Renderer>) {
+        self.transitions = Some(renderer);
     }
 
     /// Persist runtime source and output changes to this path.
@@ -2403,6 +2479,9 @@ impl Mixer {
             source,
             scene: None,
             at_running_time_ms: at.mseconds(),
+            transition: Some("cut".into()),
+            duration_ms: 0,
+            transition_id: self.take_generation.load(Ordering::SeqCst),
         });
         self.broadcast_status();
         Ok(())
@@ -2449,7 +2528,7 @@ impl Mixer {
     /// same cut a bare source id gets and the encoder cannot tell the two
     /// apart.
     pub fn take_scene(&mut self, scene: ProgramScene, at_running_time_ms: Option<u64>) -> Result<()> {
-        self.take_scene_over(scene, at_running_time_ms, None)
+        self.take_scene_over(scene, at_running_time_ms, None, None)
     }
 
     /// The same, easing into place over `duration_ms` rather than cutting.
@@ -2465,31 +2544,283 @@ impl Mixer {
         scene: ProgramScene,
         at_running_time_ms: Option<u64>,
         duration_ms: Option<u64>,
+        transition: Option<transition::TransitionSpec>,
     ) -> Result<()> {
         if let Some(ms) = at_running_time_ms {
-            return self.schedule_scene_take(scene, ms, duration_ms);
+            return self.schedule_scene_take(scene, ms, duration_ms, transition);
         }
         let ramp = duration_ms.filter(|ms| *ms > 0).map(Duration::from_millis);
+        let crossing = transition.filter(|t| !t.is_cut());
         let name = scene.name.clone();
+        // What is on the canvas now, read before the new scene replaces it:
+        // a transition needs both, and after this line the old one is gone
+        // from everything but the pads.
+        let leaving = self.current_placements();
         // A one item full canvas scene is a source take, and saying so keeps
         // the programme state, the tally and `program.revert` reading the same
         // as they did before scenes existed.
         self.program_source = self.shorthand_source(&scene);
         self.program_scene = Some(scene);
-        self.take_generation.fetch_add(1, Ordering::SeqCst);
-        self.ramp = ramp;
-        self.apply_visibility(true);
-        self.ramp = None;
+        let id = self.take_generation.fetch_add(1, Ordering::SeqCst) + 1;
+        // Whatever the last take was doing, it is over. Settling leaves every
+        // pad where that transition's curves ended rather than halfway.
+        self.settle_transition();
+        let mut took = transition::Kind::Cut;
+        let mut duration = 0u64;
+        match crossing {
+            Some(spec) => match self.cross_to(id, &spec, &leaving) {
+                Ok(()) => {
+                    took = spec.kind.clone();
+                    duration = spec.duration().as_millis() as u64;
+                }
+                Err(e) => {
+                    // A transition that could not be set up is a cut, and the
+                    // programme is on the new scene either way. Refusing the
+                    // take because the fade would not build is the wrong
+                    // trade for something that is going out live.
+                    warn!(?e, "the transition could not be set up; the take was a cut");
+                    self.pool.end_transition();
+                    self.apply_visibility(true);
+                }
+            },
+            None => {
+                self.ramp = ramp;
+                self.apply_visibility(true);
+                self.ramp = None;
+            }
+        }
 
         let at = self.running_time().unwrap_or(gst::ClockTime::ZERO);
-        info!(scene = %name, at_ms = at.mseconds(), "took scene to program");
+        info!(
+            scene = %name,
+            at_ms = at.mseconds(),
+            transition = took.name(),
+            duration_ms = duration,
+            "took scene to program"
+        );
         let _ = self.events.send(Event::Took {
             source: self.program_source.clone(),
             scene: Some(name),
             at_running_time_ms: at.mseconds(),
+            transition: Some(took.name().to_string()),
+            duration_ms: duration,
+            transition_id: id,
         });
         self.broadcast_status();
         Ok(())
+    }
+
+    /// Put both scenes on the canvas and bind the curves that cross between
+    /// them.
+    ///
+    /// Everything here is arithmetic and property writes. The picture changes
+    /// because the compositor reads the curves on its own schedule, not
+    /// because anything in this function keeps running.
+    fn cross_to(
+        &mut self,
+        id: u64,
+        spec: &transition::TransitionSpec,
+        leaving: &[Placement],
+    ) -> Result<()> {
+        let arriving = self.current_placements();
+        let clip = self.stinger_clip(spec)?;
+        let branches: Vec<(&SourceId, &ProgrammeBranch)> =
+            self.sources.iter().map(|s| (&s.input.id, &s.branch)).collect();
+        let crossed = self.pool.begin_transition(&arriving, &branches)?;
+        let cover = clip.as_ref().and_then(|id| self.cover_leg(id));
+        let duration = gst::ClockTime::from_mseconds(spec.duration().as_millis() as u64);
+        let x = transition::Crossing {
+            out: crossed.out,
+            incoming: crossed.incoming,
+            audio: self.audio_crossing(leaving, &arriving),
+            cover,
+            start: self.compositor_now(),
+            duration,
+        };
+        let mut curves = match transition::built_in(&spec.kind) {
+            Some(t) => t.curves(&x),
+            None => self.plugin_curves(spec, &x)?,
+        };
+        curves.extend(transition::audio_curves(&x));
+        let bound = transition::bind(curves);
+        if !bound.unbound.is_empty() {
+            // A pad that would not take a binding is driven the old way. One
+            // thread for the whole transition, abandoned the moment a newer
+            // take bumps the id.
+            ramp_curves(bound.unbound.clone(), spec.duration(), self.take_generation.clone());
+        }
+        let window = (x.start, x.end());
+        // The end is armed on the clock, which is a latency ahead of the
+        // picture: the last frame of the window is composed at `start +
+        // duration` on the compositor's timeline and pushed one latency later,
+        // which is `duration` from now.
+        let now = self.running_time().unwrap_or(gst::ClockTime::ZERO);
+        let frame = gst::ClockTime::from_mseconds(1000 / self.canvas.fps.numer().max(1) as u64);
+        let end = self
+            .schedule_command(
+                Command::TransitionEnd { transition: id },
+                (now + duration + frame).mseconds(),
+            )
+            .ok();
+        self.running_transition = Some(RunningTransition {
+            id,
+            kind: spec.kind.name().to_string(),
+            bound,
+            window,
+            end,
+            clip,
+        });
+        Ok(())
+    }
+
+    /// End the transition on the canvas, whatever stage it reached.
+    ///
+    /// Idempotent and safe to call from a newer take, from the scheduled end,
+    /// and from a shutdown. Taking the bindings off leaves each property at
+    /// the value its curve finished on, so a transition cut short lands on its
+    /// destination rather than halfway.
+    fn settle_transition(&mut self) {
+        let Some(running) = self.running_transition.take() else { return };
+        if let Some(end) = running.end {
+            end.unschedule();
+        }
+        running.bound.settle();
+        self.pool.end_transition();
+        if let Some(clip) = running.clip {
+            if let Err(e) = self.remove_source(&clip) {
+                warn!(?e, "the stinger clip could not be taken out");
+            }
+        }
+        debug!(transition = %running.kind, "transition settled");
+    }
+
+    /// The running time the compositor is composing right now.
+    ///
+    /// Not the clock's. A live aggregator is a latency behind the clock, and a
+    /// curve is read against the frame being blended, so a transition written
+    /// in the clock's timeline would start a latency late. With no frame seen
+    /// yet (a pipeline that has just started) the clock is the best guess
+    /// there is.
+    fn compositor_now(&self) -> gst::ClockTime {
+        // One frame on, because the frame the probe saw has already been
+        // blended: the next one the compositor makes is the first one a curve
+        // can reach. Without it every transition starts up to a frame late and
+        // the measured error is a frame rather than a third of one.
+        let next = gst::ClockTime::from_nseconds(self.canvas.frame_duration().nseconds());
+        self.pgm_out
+            .running()
+            .map(|at| at + next)
+            .or_else(|| self.running_time())
+            .unwrap_or(gst::ClockTime::ZERO)
+    }
+
+    /// Where the transition on the canvas sits on the compositor's timeline.
+    /// For the tests that measure whether a crossfade landed where it was
+    /// armed, and for `gmx dot`.
+    pub fn transition_window(&self) -> Option<(u64, u64)> {
+        self.running_transition
+            .as_ref()
+            .map(|t| (t.window.0.nseconds(), t.window.1.nseconds()))
+    }
+
+    /// The transition id of the take on air. `event/program.took` carries the
+    /// same number.
+    pub fn transition_id(&self) -> u64 {
+        self.take_generation.load(Ordering::SeqCst)
+    }
+
+    /// Where every source's audio is and where the new scene wants it.
+    fn audio_crossing(
+        &self,
+        leaving: &[Placement],
+        arriving: &[Placement],
+    ) -> Vec<(gst::Pad, f64, f64)> {
+        self.sources
+            .iter()
+            .map(|slot| {
+                let healthy = matches!(slot.input.observed_state(), SourceState::Live);
+                let was = audible(leaving, &slot.input.id);
+                let now = healthy && audible(arriving, &slot.input.id);
+                (
+                    slot.branch.apad.clone(),
+                    if was { 1.0 } else { 0.0 },
+                    if now { 1.0 } else { 0.0 },
+                )
+            })
+            .collect()
+    }
+
+    /// The clip a stinger draws over the crossing, added as a source of its
+    /// own so it goes through the same normalising every picture does.
+    fn stinger_clip(&mut self, spec: &transition::TransitionSpec) -> Result<Option<SourceId>> {
+        let transition::Kind::Stinger { clip, luma, .. } = &spec.kind else { return Ok(None) };
+        if self.sources.iter().any(|s| s.input.id.as_str() == clip.as_str()) {
+            // A clip already in the mixer is used where it is. Nothing to add
+            // and nothing to take away afterwards.
+            return Ok(None);
+        }
+        let id: SourceId = STINGER_ID.into();
+        let mut cfg = SourceConfig::bare(&id, clip);
+        cfg.name = Some("stinger".into());
+        if *luma {
+            debug!("the stinger clip is luma keyed: its black is what it draws through");
+        }
+        let _ = self.remove_source(&id);
+        self.add_source(&cfg, None).context("adding the stinger clip")?;
+        Ok(Some(id))
+    }
+
+    /// The slot the stinger clip landed on, put above the live band so it
+    /// draws over both scenes.
+    fn cover_leg(&mut self, clip: &SourceId) -> Option<transition::Leg> {
+        let index = *self.pool.slots_of(clip).first()?;
+        let slot = self.pool.slots().get(index)?;
+        let pad = slot.pad().clone();
+        pad.set_property("zorder", u32::MAX);
+        pad.set_property("xpos", 0i32);
+        pad.set_property("ypos", 0i32);
+        pad.set_property("width", self.canvas.width);
+        pad.set_property("height", self.canvas.height);
+        pad.set_property("alpha", 0.0f64);
+        let from = slots::PadState {
+            xpos: 0,
+            ypos: 0,
+            width: self.canvas.width,
+            height: self.canvas.height,
+            alpha: 0.0,
+        };
+        Some(transition::Leg { pad, item: None, source: clip.clone(), from, to: from })
+    }
+
+    /// Ask a `transition` plugin what every pad should be, once per frame of
+    /// the window, before the window starts.
+    ///
+    /// Sampled ahead rather than during, so a plugin in Python over a pipe is
+    /// exactly as accurate as a built in: what it says becomes control points
+    /// and the aggregator reads them on the frame. A plugin that answers with
+    /// a `curve` instead is taken at its word and the sampling stops.
+    fn plugin_curves(
+        &mut self,
+        spec: &transition::TransitionSpec,
+        x: &transition::Crossing,
+    ) -> Result<Vec<transition::Curve>> {
+        let Some(renderer) = self.transitions.clone() else {
+            anyhow::bail!(
+                "no transition called {:?} in this build. It has: {}. A `transition` plugin                  is reached through `plugin.add`; see docs/reference/transitions.md",
+                spec.kind.name(),
+                transition::Kind::BUILT_IN.join(", ")
+            )
+        };
+        let curves = transition::sample_plugin(x, PLUGIN_SAMPLE_BUDGET, |req| {
+            renderer.render(spec.kind.name(), req)
+        })?;
+        if curves.is_empty() {
+            anyhow::bail!(
+                "the transition plugin {:?} drove no pad. It must answer `render` with                  `{{pads: {{...}}}}` or once with `{{curve: [[t, progress], ...]}}`; see                  docs/reference/transitions.md",
+                spec.kind.name()
+            );
+        }
+        Ok(curves)
     }
 
     /// The source id a scene is shorthand for, when it is one full canvas item
@@ -2509,6 +2840,7 @@ impl Mixer {
         scene: ProgramScene,
         at_ms: u64,
         duration_ms: Option<u64>,
+        transition: Option<transition::TransitionSpec>,
     ) -> Result<()> {
         if let Some(prev) = self.pending_take.take() {
             prev.unschedule();
@@ -2518,6 +2850,7 @@ impl Mixer {
                 scene: Box::new(scene),
                 at_running_time_ms: None,
                 duration_ms,
+                transition,
                 ack: None,
             },
             at_ms,
@@ -2597,6 +2930,10 @@ impl Mixer {
             targets.push((slot.branch.apad.clone(), if on { 1.0f64 } else { 0.0f64 }));
         }
 
+        // A pad a transition is driving is the transition's until it settles.
+        // The visibility tick runs twice a second and would otherwise stamp a
+        // fade flat halfway through it.
+        targets.retain(|(pad, _)| pad.control_binding("volume").is_none());
         if ramp_audio && self.cfg.program.audio_ramp_ms > 0 {
             ramp_volumes(
                 targets,
@@ -2784,6 +3121,7 @@ impl Mixer {
     pub fn label(cmd: &Command) -> &'static str {
         match cmd {
             Command::Take { .. } | Command::TakeScene { .. } => "program.take",
+            Command::TransitionEnd { .. } => "transition.end",
             Command::AdBreak { .. } => "adbreak.start",
             Command::EndAdBreak(_) => "adbreak.end",
             Command::AddSource(..) | Command::AddSourceProbed(..) => "source.add",
@@ -2834,8 +3172,21 @@ impl Mixer {
                     r?;
                 }
             }
-            Command::TakeScene { scene, at_running_time_ms, duration_ms, ack } => {
-                let r = self.take_scene_over(*scene, at_running_time_ms, duration_ms);
+            Command::TransitionEnd { transition } => {
+                // A transition that has been overtaken by a newer take has
+                // already been settled by it. Doing it again would undo the
+                // newer one, so the id has to match.
+                if self.running_transition.as_ref().is_some_and(|t| t.id == transition) {
+                    self.settle_transition();
+                    // The outgoing scene's slots are back in the pool; this is
+                    // what hides them, on the same declarative path a take has
+                    // always used.
+                    self.apply_visibility(false);
+                    self.broadcast_status();
+                }
+            }
+            Command::TakeScene { scene, at_running_time_ms, duration_ms, transition, ack } => {
+                let r = self.take_scene_over(*scene, at_running_time_ms, duration_ms, transition);
                 reply(ack, &r);
                 r?;
             }
@@ -3926,6 +4277,47 @@ fn ramp_pads(ramps: Vec<slots::Ramp>, over: Duration, generation: Arc<AtomicU64>
         .unwrap_or_else(|e| warn!(?e, "could not start the scene ramp; the change was a cut"));
 }
 
+/// Run curves the pads would not take, the old way.
+///
+/// The property thread is the fallback and nothing else now. A `compositor`
+/// pad takes a control binding on every property a transition drives, so this
+/// runs only where the element does not: a GPU compositor whose pad does not
+/// declare a property controllable, or a build older than the control library.
+/// It is less accurate by exactly the jitter of a sleeping thread, which is
+/// why it is the fallback and not the design.
+fn ramp_curves(curves: Vec<transition::Curve>, over: Duration, generation: Arc<AtomicU64>) {
+    if curves.is_empty() {
+        return;
+    }
+    let mine = generation.load(Ordering::SeqCst);
+    std::thread::Builder::new()
+        .name("transition-fallback".into())
+        .spawn(move || {
+            let start = Instant::now();
+            loop {
+                if generation.load(Ordering::SeqCst) != mine {
+                    return;
+                }
+                let elapsed = start.elapsed();
+                if elapsed >= over {
+                    break;
+                }
+                let t = elapsed.as_secs_f64() / over.as_secs_f64().max(f64::EPSILON);
+                for curve in &curves {
+                    transition::write_at(curve, t);
+                }
+                std::thread::sleep(Duration::from_millis(16));
+            }
+            if generation.load(Ordering::SeqCst) == mine {
+                for curve in &curves {
+                    transition::write_at(curve, 1.0);
+                }
+            }
+        })
+        .map(|_| ())
+        .unwrap_or_else(|e| warn!(?e, "could not start the transition fallback; it was a cut"));
+}
+
 /// Smooth at both ends. The one easing this build has; `easing` on the wire
 /// accepts `linear` and `ease` and anything else is refused by the command.
 fn ease(t: f64) -> f64 {
@@ -4832,7 +5224,7 @@ mod tests {
         gaps.largest.store(0, Ordering::Relaxed);
 
         // The same scene, a bigger inset, over 300 ms.
-        mix.take_scene_over(scene("pip", big.clone()), None, Some(300))
+        mix.take_scene_over(scene("pip", big.clone()), None, Some(300), None)
             .expect("the animated change");
 
         // Halfway through, the inset must be between the two sizes: a cut
@@ -4936,6 +5328,299 @@ mod tests {
             "largest interval was {largest} ns, more than two frames ({} ns)",
             frame * 2
         );
+        mix.shutdown();
+    }
+
+    /// Watch what the compositor actually blended: the running time of every
+    /// output frame, and what one pad's alpha was when that frame was made.
+    ///
+    /// This is the only honest way to measure a transition. A thread reading
+    /// the property on a timer measures the thread; reading it on the
+    /// compositor's own src pad, frame by frame, measures the picture.
+    #[derive(Default)]
+    struct AlphaTrace {
+        seen: Mutex<Vec<(u64, f64)>>,
+    }
+
+    impl AlphaTrace {
+        fn watch(self: &Arc<Self>, comp: &gst::Element, of: gst::Pad) {
+            let pad = comp.static_pad("src").expect("a compositor has a src pad");
+            let me = self.clone();
+            let segment: Mutex<Option<gst::FormattedSegment<gst::ClockTime>>> = Mutex::new(None);
+            pad.add_probe(
+                gst::PadProbeType::BUFFER | gst::PadProbeType::EVENT_DOWNSTREAM,
+                move |_pad, info| {
+                    match &info.data {
+                        Some(gst::PadProbeData::Event(e)) => {
+                            if let gst::EventView::Segment(sg) = e.view() {
+                                *segment.lock() =
+                                    sg.segment().downcast_ref::<gst::ClockTime>().cloned();
+                            }
+                        }
+                        Some(gst::PadProbeData::Buffer(b)) => {
+                            if let (Some(pts), Some(sg)) = (b.pts(), segment.lock().as_ref()) {
+                                if let Some(rt) = sg.to_running_time(pts) {
+                                    me.seen
+                                        .lock()
+                                        .push((rt.nseconds(), of.property::<f64>("alpha")));
+                                }
+                            }
+                        }
+                        _ => {}
+                    }
+                    gst::PadProbeReturn::Ok
+                },
+            );
+        }
+
+        /// When the fade was half done, interpolated between the two frames
+        /// that straddle it.
+        ///
+        /// Interpolated rather than "the first frame at or past half", which
+        /// would be biased up by as much as a whole frame and would measure
+        /// the frame rate rather than the transition.
+        fn crossed_half(&self) -> Option<u64> {
+            let seen = self.seen.lock();
+            let mut previous: Option<(u64, f64)> = None;
+            for (at, alpha) in seen.iter().copied() {
+                if alpha >= 0.5 {
+                    let Some((was_at, was)) = previous else { return Some(at) };
+                    let span = alpha - was;
+                    if span <= 0.0 {
+                        return Some(at);
+                    }
+                    let f = (0.5 - was) / span;
+                    return Some(was_at + ((at - was_at) as f64 * f) as u64);
+                }
+                previous = Some((at, alpha));
+            }
+            None
+        }
+    }
+
+    /// The Phase 6 acceptance: a crossfade lands on the running time it was
+    /// armed for, within one frame.
+    ///
+    /// Measured with a pad probe reading `alpha` against the running time of
+    /// the frame the compositor was blending, against the window the mixer
+    /// says it armed. Ignored by default because it runs a pipeline for a few
+    /// seconds; run it with `cargo test -p godwinmix-core -- --ignored
+    /// --nocapture crossfade_lands`.
+    #[tokio::test(flavor = "multi_thread")]
+    #[ignore = "runs a live pipeline for several seconds"]
+    async fn crossfade_lands_on_the_running_time_it_was_armed_for() {
+        let mut mix = with_sources(&["cam1", "cam2"]).await;
+        let canvas = mix.canvas.clone();
+        let frame = canvas.frame_duration().nseconds();
+
+        mix.take_scene(scene("a", vec![Placement::full_canvas("cam1".into(), &canvas)]), None)
+            .expect("the first scene");
+        tokio::time::sleep(Duration::from_millis(600)).await;
+
+        // The pad the incoming scene will land on is not known until the
+        // transition binds, so the trace is attached after the take and the
+        // first frames of the fade are what it measures.
+        let trace = Arc::new(AlphaTrace::default());
+        mix.take_scene_over(
+            scene("b", vec![Placement::full_canvas("cam2".into(), &canvas)]),
+            None,
+            None,
+            Some(transition::TransitionSpec {
+                kind: transition::Kind::Fade,
+                duration_ms: 300,
+            }),
+        )
+        .expect("a crossfade");
+        let window = mix.transition_window().expect("a transition is on the canvas");
+        let rising = mix
+            .pool
+            .slots()
+            .iter()
+            .find(|s| s.source().map(String::as_str) == Some("cam2"))
+            .map(|s| s.pad().clone())
+            .expect("the incoming scene has a pad");
+        trace.watch(mix.pool.compositor(), rising);
+
+        tokio::time::sleep(Duration::from_millis(1800)).await;
+        let half = window.0 + (window.1 - window.0) / 2;
+        let landed = trace.crossed_half().expect("the fade never reached half");
+        let error = landed.abs_diff(half);
+        println!(
+            "crossfade: armed to be half done at {:.1} ms running time, was at {:.1} ms, \
+             error {:.1} ms, one frame is {:.1} ms",
+            half as f64 / 1e6,
+            landed as f64 / 1e6,
+            error as f64 / 1e6,
+            frame as f64 / 1e6
+        );
+        assert!(
+            error <= frame,
+            "the crossfade was {error} ns from where it was armed; one frame is {frame} ns"
+        );
+        mix.shutdown();
+    }
+
+    /// The other half of the acceptance: the programme's frame interval never
+    /// exceeds one frame while a 300 ms crossfade runs between two eight item
+    /// scenes, which is sixteen pads on the canvas at once.
+    #[tokio::test(flavor = "multi_thread")]
+    #[ignore = "builds nine pipelines and runs for several seconds"]
+    async fn a_crossfade_between_two_eight_item_scenes_never_costs_a_frame() {
+        let ids: Vec<String> = (1..=8).map(|i| format!("cam{i}")).collect();
+        let refs: Vec<&str> = ids.iter().map(String::as_str).collect();
+        let mut mix = with_sources(&refs).await;
+        let canvas = mix.canvas.clone();
+        let frame = canvas.frame_duration().nseconds();
+
+        let gaps = Arc::new(Gaps::default());
+        gaps.watch(&mix.venc_tee.static_pad("sink").expect("the encoder tee has a sink pad"));
+        gaps.wait_for(15).await;
+
+        let grid = |name: &str, offset: i32| {
+            scene(
+                name,
+                ids.iter()
+                    .enumerate()
+                    .map(|(i, id)| {
+                        box_at(&canvas, id, (i as i32 % 4) * 70 + offset, (i as i32 / 4) * 80)
+                    })
+                    .collect(),
+            )
+        };
+        mix.take_scene(grid("a", 0), None).expect("the first scene");
+        gaps.wait_for(10).await;
+        gaps.largest.store(0, Ordering::Relaxed);
+
+        let mut most_visible = 0usize;
+        for i in 0..6 {
+            mix.take_scene_over(
+                grid(if i % 2 == 0 { "b" } else { "a" }, if i % 2 == 0 { 20 } else { 0 }),
+                None,
+                None,
+                Some(transition::TransitionSpec {
+                    kind: transition::Kind::Fade,
+                    duration_ms: 300,
+                }),
+            )
+            .expect("a crossfade");
+            most_visible = most_visible.max(mix.pool.visible());
+            gaps.wait_for(20).await;
+        }
+        let largest = gaps.largest.load(Ordering::Relaxed);
+        println!(
+            "crossfade gaps: six 300 ms crossfades between two eight item scenes, largest \
+             interval {:.1} ms, one frame is {:.1} ms, {} pads visible at the moment of the \
+             take (the incoming scene is still at alpha 0), pool grew to {}",
+            largest as f64 / 1e6,
+            frame as f64 / 1e6,
+            most_visible,
+            mix.pool.len()
+        );
+        assert!(
+            largest <= frame * 2,
+            "largest interval was {largest} ns, more than two frames ({} ns)",
+            frame * 2
+        );
+        assert!(
+            mix.pool.len() >= 16,
+            "both scenes have to be on the canvas at once, so the pool must have grown past \
+             eight; it is {}",
+            mix.pool.len()
+        );
+        mix.shutdown();
+    }
+
+    /// Both scenes are on the canvas for the length of a transition, and the
+    /// outgoing one leaves when it ends.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn a_transition_holds_both_scenes_and_gives_the_slots_back() {
+        let mut mix = with_sources(&["cam1", "cam2"]).await;
+        let canvas = mix.canvas.clone();
+        mix.take_scene(scene("a", vec![Placement::full_canvas("cam1".into(), &canvas)]), None)
+            .expect("the first scene");
+        assert_eq!(mix.pool.visible(), 1);
+
+        mix.take_scene_over(
+            scene("b", vec![Placement::full_canvas("cam2".into(), &canvas)]),
+            None,
+            None,
+            Some(transition::TransitionSpec {
+                kind: transition::Kind::Fade,
+                duration_ms: 300,
+            }),
+        )
+        .expect("a crossfade");
+        assert!(mix.pool.crossing(), "both scenes must be on the canvas");
+        let id = mix.transition_id();
+        assert!(mix.transition_window().is_some());
+
+        // The scene coming in is on a different pad from the one going out,
+        // which is what doubles the slot pressure and what lets the two cross.
+        let cam1 = mix.pool.slots_of(&"cam1".to_string());
+        let cam2 = mix.pool.slots_of(&"cam2".to_string());
+        assert!(!cam1.is_empty() && !cam2.is_empty());
+        assert!(cam1.iter().all(|a| !cam2.contains(a)));
+
+        // An end carrying an older id is ignored rather than undoing this one.
+        mix.handle(Command::TransitionEnd { transition: id - 1 }).expect("a stale end");
+        assert!(mix.pool.crossing(), "a stale end must not settle a live transition");
+
+        mix.handle(Command::TransitionEnd { transition: id }).expect("the end of the window");
+        assert!(!mix.pool.crossing(), "the outgoing scene must give its slots back");
+        assert!(mix.transition_window().is_none());
+        assert_eq!(mix.pool.visible(), 1, "only the new scene is drawn once it has landed");
+        assert!(
+            mix.pool
+                .slots()
+                .iter()
+                .all(|s| s.pad().control_binding("alpha").is_none()),
+            "settling must take every binding off"
+        );
+        mix.shutdown();
+    }
+
+    /// A take during a transition ends it where it stands and lands on the
+    /// newest scene rather than fighting the older one for the pads.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn a_take_during_a_transition_supersedes_it() {
+        let mut mix = with_sources(&["cam1", "cam2", "cam3"]).await;
+        let canvas = mix.canvas.clone();
+        let one = |id: &str| scene(id, vec![Placement::full_canvas(id.into(), &canvas)]);
+        mix.take_scene(one("cam1"), None).expect("the first scene");
+        let fade = |ms| {
+            Some(transition::TransitionSpec { kind: transition::Kind::Fade, duration_ms: ms })
+        };
+        mix.take_scene_over(one("cam2"), None, None, fade(3000)).expect("a long crossfade");
+        let first = mix.transition_id();
+        mix.take_scene_over(one("cam3"), None, None, fade(300)).expect("a take over the top");
+        assert!(mix.transition_id() > first, "the transition id must move with the take");
+        assert_eq!(mix.status().program.as_deref(), Some("cam3"));
+        mix.handle(Command::TransitionEnd { transition: mix.transition_id() }).expect("the end");
+        assert_eq!(mix.pool.visible(), 1);
+        mix.shutdown();
+    }
+
+    /// A transition the build does not have is a cut, not a refusal: the
+    /// programme goes where it was told to go and the log says why.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn an_unknown_transition_is_a_cut_rather_than_a_refused_take() {
+        let mut mix = with_sources(&["cam1", "cam2"]).await;
+        let canvas = mix.canvas.clone();
+        mix.take_scene(scene("a", vec![Placement::full_canvas("cam1".into(), &canvas)]), None)
+            .expect("the first scene");
+        mix.take_scene_over(
+            scene("b", vec![Placement::full_canvas("cam2".into(), &canvas)]),
+            None,
+            None,
+            Some(transition::TransitionSpec {
+                kind: transition::Kind::Plugin("wipe".into()),
+                duration_ms: 300,
+            }),
+        )
+        .expect("the take must still land");
+        assert_eq!(mix.status().program.as_deref(), Some("cam2"));
+        assert!(!mix.pool.crossing(), "a failed transition must not hold the slots");
+        assert_eq!(mix.pool.visible(), 1);
         mix.shutdown();
     }
 
