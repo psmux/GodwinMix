@@ -1,59 +1,62 @@
-# The protocol reference
+# The control protocol: where the reference lives
 
-**This page is a pointer, not the reference.** The reference itself is
-generated from the code, and the generator is being built now. Nothing here is
-typed by hand, because a protocol document maintained by hand is wrong within a
-release and nobody notices until somebody's client breaks.
+The reference is generated, not written. Three artefacts sit at the repository
+root, all built from the method table in `src/api/`, all checked by a test
+that regenerates them and fails on any difference.
 
-## What will be generated, and from where
-
-| File | Produced by | What it is |
+| File | What it is | Read it when |
 |---|---|---|
-| `protocol.json` | `godwinmix --api-info` | every request, response, event and status type, as JSON Schema. Committed to the repository; CI fails when it drifts from the code |
-| `protocol.md` | from `protocol.json` | the same thing as a page to read |
-| `openapi.json` | served at `/api/openapi.json` | the HTTP surface, for generating clients |
+| [`../../protocol.md`](../../protocol.md) | every method, event and type, obs-websocket style | you are writing a client, or wondering what a method answers |
+| [`../../protocol.json`](../../protocol.json) | the same thing as JSON Schema | you are generating a client, or checking a payload |
+| [`../../openapi.json`](../../openapi.json) | the REST layer as OpenAPI 3.1 | you want Swagger UI, or a generated HTTP client |
 
-The drift check already has a job in
-[`.github/workflows/build.yml`](../../.github/workflows/build.yml): the test
-suite asserts that every route the control server serves appears in the
-committed schema, and a step regenerates `protocol.json` and fails if the
-result differs from what is in the tree. Until `--api-info` exists that step
-reports that there is nothing to check, which is the correct thing for it to
-do.
+A running mixer serves the same documents, so a client can ask the box in
+front of it rather than trusting a file it shipped with:
 
-## Until then
+```sh
+curl -s localhost:8080/api/v1/core/api | jq .api_level     # 1
+```
 
-[The HTTP API](http-api.md) is the hand written list of routes. It is accurate
-as of the release it ships with and it will be deleted the day the generated
-reference exists.
+And a binary will print them with no config, no GStreamer and no mixer
+running, which is what CI uses:
 
-## The compatibility promise
+```sh
+godwinmix --api-info                  # protocol.json
+godwinmix --api-info --markdown       # protocol.md
+godwinmix --api-info --openapi        # openapi.json
+```
 
-This is the part that will not change.
+## Regenerating them
 
-* `api_level` 1 is frozen for breaking changes.
-* Additions bump `api_level`. A client written against level 1 keeps working
-  against a mixer at level 3.
-* `api_compatible` moves only at an announced major version, at most once a
-  year, and the previous level is supported for a year after that.
-* Every error carries a machine readable shape and a message that names the
-  next action, not only what went wrong.
+If a test tells you the committed files are out of date, that is the drift
+check doing its job. Run:
 
-`core.info` will carry `version`, `api_level`, `api_compatible`, the feature
-list and the limits, so a client can decide what it may call without guessing
-from a version string.
+```sh
+cargo run --quiet -- --api-info > protocol.json
+cargo run --quiet -- --api-info --markdown > protocol.md
+cargo run --quiet -- --api-info --openapi > openapi.json
+```
 
-The models for this are Go 1, Rust's RFC 1105 and Stripe's versioning since
-2011. The anti model is a plugin surface that breaks on every major release,
-which is what the research on plugin ecosystems found kills them.
+and commit the result with the change that caused it.
 
-## Writing a client before the generator lands
+## Version
 
-The API is small enough to write against by hand, and
-[`gmx ctl`](cli.md) is a worked example of a complete client in the repository.
-Two rules that will not change under you:
+`api_level` is what this build speaks and `api_compatible` is the oldest level
+it still answers. Both are 1. A client that speaks level 1 works against every
+core from here until `api_compatible` moves, and `core.info` reports both
+along with the features and limits of the particular box you are talking to.
 
-* Ids are legible slugs (`cam-wide`), stable across restarts, never UUIDs. An
-  unknown id answers with the valid ones.
-* A mutating call returns the resulting state, so you never need a follow up
-  read to find out what happened.
+Every method and every event carries a `since`, so a client can tell what it
+may use against an older core without probing for a 404.
+
+## Adding to it
+
+Methods are rows in a table, and the table is the only place a method is
+declared: `/rpc`, `/api/v1`, these three documents and the MCP tool list are
+all built from it. `src/api/README.md` is the how to, and it is short.
+
+## The rest of the shelf
+
+* `docs/how-to/control-the-mixer.md`: curl and a twenty line Python client.
+* `docs/how-to/use-with-an-ai-agent.md`: the MCP server and the agent surface.
+* `docs/agents.md`: a director loop, end to end.

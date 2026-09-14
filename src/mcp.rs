@@ -1,22 +1,31 @@
 //! `godwinmix mcp`: the mixer as a set of tools for an AI agent.
 //!
 //! A Model Context Protocol server over stdio. An MCP client (Claude Code,
-//! Claude Desktop, anything that speaks the protocol) starts this binary as a
-//! child process, writes JSON-RPC 2.0 requests one per line on stdin and reads
-//! replies one per line on stdout. Nothing else may ever go to stdout, because
-//! the client parses every byte of it as JSON; logging goes to stderr.
+//! Claude Desktop, Codex, Cursor, anything that speaks the protocol) starts
+//! this binary as a child process, writes JSON-RPC 2.0 requests one per line
+//! on stdin and reads replies one per line on stdout. Nothing else may ever go
+//! to stdout, because the client parses every byte of it as JSON; logging goes
+//! to stderr.
 //!
-//! Like `ctl`, this is a thin client for the HTTP API rather than a second
-//! control path. Every tool is a request to a running mixer, so the agent and
-//! the operator's browser see the same state and the same refusals. The tool
-//! descriptions below are the agent's only manual for the mixer, which is why
-//! they say when to use each tool and what comes back, not just what it does.
+//! There is no list of tools in this file. Every tool is a method in
+//! `crate::api` that carries an MCP binding, its input schema is that method's
+//! params schema, and its annotations are read off the same flags the server
+//! enforces. Adding a method adds a tool; nothing here has to be edited.
+//!
+//! Two profiles, because a tool list is charged for on every single call.
+//! `standard` is at most twelve hot tools and `minimal` is five, with the rest
+//! behind `search_tools`. The hot list is a pure function of the profile, so
+//! adding a source or a plugin never invalidates a client's prompt cache.
 
+use crate::api::mcp_tools;
+use crate::api::method::{rest_transform, Registry};
+use crate::api::scope::Profile;
+use crate::control::call::Call;
 use anyhow::{Context, Result};
 use base64::Engine;
 use reqwest::header::CONTENT_TYPE;
 use reqwest::{Method, StatusCode};
-use serde_json::{json, Value};
+use serde_json::{json, Map, Value};
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tracing::{debug, warn};
 
@@ -39,12 +48,14 @@ pub struct Server {
     base: String,
     token: Option<String>,
     client: reqwest::Client,
+    registry: Registry<Call>,
+    profile: Profile,
 }
 
 /// Serve until stdin closes. EOF is how a client says goodbye, so it exits 0.
-pub async fn run(url: &str, token: Option<String>) -> Result<()> {
-    let server = Server::new(url, token);
-    debug!(base = %server.base, "mcp server ready");
+pub async fn run(url: &str, token: Option<String>, profile: Profile) -> Result<()> {
+    let server = Server::new(url, token, profile);
+    debug!(base = %server.base, profile = profile.as_str(), "mcp server ready");
     let mut lines = BufReader::new(tokio::io::stdin()).lines();
     let mut stdout = tokio::io::stdout();
     while let Some(line) = lines.next_line().await.context("reading stdin")? {
@@ -63,12 +74,19 @@ pub async fn run(url: &str, token: Option<String>) -> Result<()> {
 }
 
 impl Server {
-    pub fn new(url: &str, token: Option<String>) -> Self {
+    pub fn new(url: &str, token: Option<String>, profile: Profile) -> Self {
         Self {
             base: url.trim_end_matches('/').to_string(),
             token: token.filter(|t| !t.trim().is_empty()),
             client: reqwest::Client::new(),
+            registry: crate::control::methods::registry(),
+            profile,
         }
+    }
+
+    /// The hot list this client is shown.
+    pub fn tools(&self) -> Vec<Value> {
+        mcp_tools::tools(&self.registry, self.profile)
     }
 
     /// One line in, at most one line out. Notifications (no `id`) never get a
@@ -92,9 +110,9 @@ impl Server {
         };
         debug!(method, "request");
         let result = match method {
-            "initialize" => Ok(initialize_result(&params)),
+            "initialize" => Ok(initialize_result(&params, self.profile)),
             "ping" => Ok(json!({})),
-            "tools/list" => Ok(json!({ "tools": tool_list() })),
+            "tools/list" => Ok(json!({ "tools": self.tools() })),
             "tools/call" => match params.get("name").and_then(Value::as_str) {
                 Some(name) => {
                     let args = params.get("arguments").cloned().unwrap_or_else(|| json!({}));
@@ -114,7 +132,10 @@ impl Server {
     /// the mixer refusing, is a result with `isError` rather than a protocol
     /// error: the agent is expected to read it and try something else.
     async fn call(&self, name: &str, args: &Value) -> Value {
-        let plan = match plan(name, args) {
+        if name == mcp_tools::SEARCH_TOOL {
+            return self.search(args);
+        }
+        let plan = match self.plan(name, args) {
             Ok(p) => p,
             Err(msg) => return error_result(msg),
         };
@@ -127,31 +148,161 @@ impl Server {
         }
     }
 
-    async fn execute(&self, plan: Plan) -> Result<Value, String> {
-        let resp = self.send(&plan.method, &plan.path, plan.body.as_ref()).await?;
-        let status = resp.status();
-        if status == StatusCode::NOT_FOUND {
-            match plan.missing {
-                Missing::Explain(why) => return Err(why.to_string()),
-                Missing::FallBackToStatus => {
-                    let resp = self.send(&Method::GET, "/api/status", None).await?;
-                    let status = resp.status();
-                    let text = read_text(resp).await?;
-                    if !status.is_success() {
-                        return Err(format!("HTTP {status}: {}", text.trim()));
-                    }
-                    return Ok(text_result(format!(
-                        "This mixer build has no /api/agent/state (404), so this is the full \
-                         /api/status instead. It has no motion scores.\n{}",
-                        render_body(&text)
-                    )));
-                }
-                Missing::Refusal => {}
-            }
+    /// `search_tools`: everything that is not in the hot list, found by what
+    /// the agent is trying to do rather than by name.
+    fn search(&self, args: &Value) -> Value {
+        let query = args.get("query").and_then(Value::as_str).unwrap_or_default();
+        if query.trim().is_empty() {
+            return error_result(
+                "search_tools needs a `query`: what you are trying to do, in plain words, \
+                 such as \"stop sending to youtube\" or \"play a clip\"."
+                    .to_string(),
+            );
         }
+        let limit = args.get("limit").and_then(Value::as_u64).unwrap_or(5) as usize;
+        let found = mcp_tools::search(&self.registry, query, limit);
+        if found.is_empty() {
+            let names: Vec<&str> = self
+                .registry
+                .iter()
+                .filter_map(|m| m.mcp.as_ref().map(|b| b.tool))
+                .collect();
+            return text_result(format!(
+                "Nothing matches {query:?}. Every tool this mixer has: {}.",
+                names.join(", ")
+            ));
+        }
+        let text = serde_json::to_string_pretty(&json!({ "tools": found }))
+            .unwrap_or_else(|_| "{}".into());
+        text_result(format!(
+            "Call any of these by name with tools/call. They are not in your tool list, and \
+             they do not need to be.\n{text}"
+        ))
+    }
+
+    /// A tool call worked out into an HTTP request against `/api/v1`.
+    ///
+    /// The route comes from the same transform the server builds its router
+    /// from, so a tool cannot point at a path that does not exist.
+    fn plan(&self, tool: &str, args: &Value) -> Result<Plan, String> {
+        let Some(method) = mcp_tools::method_for(&self.registry, tool) else {
+            let names: Vec<&str> =
+                self.registry.iter().filter_map(|m| m.mcp.as_ref().map(|b| b.tool)).collect();
+            return Err(format!(
+                "there is no tool {tool:?}. Tools: {}. Use search_tools to find one by what \
+                 it does.",
+                names.join(", ")
+            ));
+        };
+        // The table wins: two methods carry bytes rather than JSON and sit at
+        // a path of their own, and the table is where that is written down.
+        let rest = self
+            .registry
+            .get(method)
+            .and_then(|m| m.rest.clone())
+            .or_else(|| rest_transform(method))
+            .ok_or_else(|| format!("{tool} has no HTTP route"))?;
+        let mut args = match args {
+            Value::Object(map) => map.clone(),
+            _ => Map::new(),
+        };
+        // `{id}` in the path is filled from the argument of that name, or from
+        // `name` where the method calls it that.
+        let path = if rest.path.contains("{id}") {
+            let id = args
+                .get("id")
+                .or_else(|| args.get("name"))
+                .and_then(Value::as_str)
+                .map(str::trim)
+                .filter(|s| !s.is_empty())
+                .ok_or_else(|| format!("{tool} needs a non-empty string `id`"))?
+                .to_string();
+            if id.contains(['/', '?', '#', '%']) {
+                return Err(format!("{tool}: `id` {id:?} is not a valid id"));
+            }
+            args.remove("id");
+            rest.path.replace("{id}", &id)
+        } else {
+            rest.path.clone()
+        };
+        let verb = Method::from_bytes(rest.http.as_bytes())
+            .map_err(|_| format!("{} is not an HTTP method", rest.http))?;
+        let args = Value::Object(args);
+        // Caught here as well as at the server, because a model that forgot an
+        // argument should be told which one rather than being told the mixer
+        // could not be reached, which is what a missing argument looks like
+        // when the mixer happens to be down too.
+        self.check_required(tool, method, &args, &path)?;
+        let image = tool == "snapshot";
+        Ok(Plan { verb, path, args, image })
+    }
+
+    /// Every required property of the tool's own input schema, present and
+    /// not empty. The schema is the one the agent was shown, so this refuses
+    /// exactly what the agent was told to send.
+    fn check_required(
+        &self,
+        tool: &str,
+        method: &str,
+        args: &Value,
+        path: &str,
+    ) -> Result<(), String> {
+        let Some(def) = mcp_tools::all_tools(&self.registry).into_iter().find(|t| t["name"] == tool)
+        else {
+            return Ok(());
+        };
+        let required = def["inputSchema"]["required"].as_array().cloned().unwrap_or_default();
+        let missing: Vec<String> = required
+            .iter()
+            .filter_map(Value::as_str)
+            // An id that has already gone into the path is not missing.
+            .filter(|key| !(*key == "id" && !path.contains("{id}")))
+            .filter(|key| {
+                !args
+                    .get(*key)
+                    .map(|v| !v.is_null() && v.as_str().is_none_or(|s| !s.trim().is_empty()))
+                    .unwrap_or(false)
+            })
+            .map(String::from)
+            .collect();
+        if missing.is_empty() {
+            return Ok(());
+        }
+        Err(format!(
+            "{tool} needs {}. Call it again with {} filled in; the schema is on the tool, \
+             and {method} rejects it for the same reason.",
+            missing.iter().map(|m| format!("`{m}`")).collect::<Vec<_>>().join(" and "),
+            missing.join(" and ")
+        ))
+    }
+
+    async fn execute(&self, plan: Plan) -> Result<Value, String> {
+        let url = format!("{}{}", self.base, plan.path);
+        let mut req = self.client.request(plan.verb.clone(), &url);
+        if let Some(token) = &self.token {
+            req = req.bearer_auth(token);
+        }
+        if plan.verb == Method::GET {
+            if let Some(map) = plan.args.as_object() {
+                let query: Vec<(String, String)> = map
+                    .iter()
+                    .map(|(k, v)| {
+                        (k.clone(), v.as_str().map(String::from).unwrap_or_else(|| v.to_string()))
+                    })
+                    .collect();
+                req = req.query(&query);
+            }
+        } else {
+            req = req.json(&plan.args);
+        }
+        let resp = req
+            .send()
+            .await
+            .map_err(|e| format!("could not reach the mixer at {url}: {e}"))?;
+        let status = resp.status();
         if !status.is_success() {
-            let text = read_text(resp).await.unwrap_or_default();
-            return Err(format!("HTTP {status}: {}", text.trim()));
+            let text = resp.text().await.unwrap_or_default();
+            return Err(refusal(status, &text));
         }
         if plan.image {
             let mime = resp
@@ -162,41 +313,47 @@ impl Server {
                 .to_string();
             let bytes = resp.bytes().await.map_err(|e| format!("reading image: {e}"))?;
             let data = base64::engine::general_purpose::STANDARD.encode(&bytes);
-            return Ok(json!({
-                "content": [{ "type": "image", "data": data, "mimeType": mime }]
-            }));
+            return Ok(json!({ "content": [{ "type": "image", "data": data, "mimeType": mime }] }));
         }
-        let text = read_text(resp).await?;
+        let text = resp.text().await.map_err(|e| format!("reading response: {e}"))?;
         Ok(text_result(render_body(&text)))
     }
+}
 
-    async fn send(
-        &self,
-        method: &Method,
-        path: &str,
-        body: Option<&Value>,
-    ) -> Result<reqwest::Response, String> {
-        let url = format!("{}{path}", self.base);
-        let mut req = self.client.request(method.clone(), &url);
-        if let Some(token) = &self.token {
-            req = req.bearer_auth(token);
+/// One tool call worked out into a request, before anything is sent.
+/// Separating this from sending is what lets the tests cover every tool
+/// without a mixer to talk to.
+#[derive(Debug)]
+struct Plan {
+    verb: Method,
+    path: String,
+    args: Value,
+    /// The answer is a picture, to be returned as MCP image content.
+    image: bool,
+}
+
+/// The mixer's own sentence, out of the one error shape.
+///
+/// Those messages name the current state and the next step, which is exactly
+/// what an agent needs, so they are passed through rather than summarised.
+fn refusal(status: StatusCode, text: &str) -> String {
+    match serde_json::from_str::<Value>(text) {
+        Ok(v) => {
+            let message = v["error"]["message"].as_str().unwrap_or(text.trim());
+            let data = &v["error"]["data"];
+            if data.is_object() {
+                format!("{message}\n{}", serde_json::to_string(data).unwrap_or_default())
+            } else {
+                message.to_string()
+            }
         }
-        if let Some(body) = body {
-            req = req.json(body);
-        }
-        req.send()
-            .await
-            .map_err(|e| format!("could not reach the mixer at {url}: {e}"))
+        Err(_) => format!("HTTP {status}: {}", text.trim()),
     }
 }
 
-async fn read_text(resp: reqwest::Response) -> Result<String, String> {
-    resp.text().await.map_err(|e| format!("reading response: {e}"))
-}
-
-/// The API answers most commands with an empty 200. An empty string is a poor
-/// thing to hand a language model, so it becomes a small JSON object; a JSON
-/// body is reformatted so it reads well; anything else passes through.
+/// An empty string is a poor thing to hand a language model, so it becomes a
+/// small JSON object; a JSON body is reformatted so it reads well; anything
+/// else passes through.
 fn render_body(text: &str) -> String {
     let trimmed = text.trim();
     if trimmed.is_empty() {
@@ -208,7 +365,7 @@ fn render_body(text: &str) -> String {
     }
 }
 
-fn initialize_result(params: &Value) -> Value {
+fn initialize_result(params: &Value, profile: Profile) -> Value {
     let asked = params.get("protocolVersion").and_then(Value::as_str);
     let version = match asked {
         Some(v) if KNOWN_PROTOCOLS.contains(&v) => v,
@@ -218,12 +375,19 @@ fn initialize_result(params: &Value) -> Value {
         "protocolVersion": version,
         "capabilities": { "tools": {} },
         "serverInfo": { "name": SERVER_NAME, "version": env!("CARGO_PKG_VERSION") },
-        "instructions": "GodwinMix is a live video mixer: several sources come in, one is on \
-            program at a time, and the program goes out to RTMP destinations without \
-            interruption. Start with `status` or `agent_state` to learn the source ids, then \
-            `take` to switch what is on air. Use `snapshot` to look at the pictures before \
-            deciding. Every tool talks to the running mixer over its HTTP API, so refusals \
-            come back verbatim as error results with the mixer's own reason."
+        "instructions": format!(
+            "GodwinMix is a live video mixer: several sources come in, one is on programme at \
+             a time, and the programme goes out to RTMP destinations without interruption. \
+             Start with `agent_state` to learn the source ids and how much each picture is \
+             moving, then `take` to switch what is on air. `snapshot` shows you the pictures \
+             when a number is not enough. You are on the {} tool profile; anything not in \
+             your list is reachable through `search_tools` and can be called by name. Every \
+             tool talks to the running mixer over its HTTP API, so refusals come back \
+             verbatim with the mixer's own reason and the next step to take. Mutating tools \
+             accept an `idempotency_key`, so a retry after a timeout is free; destructive \
+             ones accept `dry_run: true`, which answers what would change without changing it.",
+            profile.as_str()
+        )
     })
 }
 
@@ -243,358 +407,12 @@ fn error_result(text: String) -> Value {
     json!({ "content": [{ "type": "text", "text": text }], "isError": true })
 }
 
-/// What a 404 from the API means for a given tool.
-enum Missing {
-    /// The endpoint exists and 404 is its answer, for instance an unknown id.
-    /// Reported like any other failure.
-    Refusal,
-    /// The endpoint is newer than the mixer build we are talking to. Say so
-    /// in words the agent can act on.
-    Explain(&'static str),
-    /// Fetch /api/status instead and say that is what happened.
-    FallBackToStatus,
-}
-
-/// A tool call worked out into an HTTP request, before anything is sent.
-/// Separating this from sending is what lets the tests cover every tool
-/// without a mixer to talk to.
-struct Plan {
-    method: Method,
-    path: String,
-    body: Option<Value>,
-    missing: Missing,
-    /// The response is a picture, to be returned as MCP image content.
-    image: bool,
-}
-
-impl Plan {
-    fn get(path: impl Into<String>) -> Self {
-        Self { method: Method::GET, path: path.into(), body: None, missing: Missing::Refusal, image: false }
-    }
-    fn post(path: impl Into<String>, body: Value) -> Self {
-        Self { method: Method::POST, path: path.into(), body: Some(body), missing: Missing::Refusal, image: false }
-    }
-    fn delete(path: impl Into<String>) -> Self {
-        Self { method: Method::DELETE, path: path.into(), body: None, missing: Missing::Refusal, image: false }
-    }
-}
-
-fn plan(name: &str, args: &Value) -> Result<Plan, String> {
-    Ok(match name {
-        "status" => Plan::get("/api/status"),
-        "agent_state" => Plan { missing: Missing::FallBackToStatus, ..Plan::get("/api/agent/state") },
-        "take" => {
-            // Absent, null or an empty string all mean the slate.
-            let source = args.get("source").and_then(Value::as_str).filter(|s| !s.is_empty());
-            Plan::post(
-                "/api/take",
-                json!({ "source": source, "at_running_time_ms": opt_u64(args, "at_running_time_ms")? }),
-            )
-        }
-        "add_source" => Plan::post(
-            "/api/sources",
-            json!({
-                "id": opt_str(args, "id"),
-                "name": opt_str(args, "name"),
-                "uri": req_str(name, args, "uri")?,
-                "kind": opt_str(args, "kind"),
-                "superimpose": opt_str(args, "superimpose"),
-            }),
-        ),
-        "remove_source" => Plan::delete(format!("/api/sources/{}", req_id(name, args, "id")?)),
-        "list_outputs" => Plan::get("/api/outputs"),
-        "add_output" => Plan::post(
-            "/api/outputs",
-            json!({
-                "id": req_str(name, args, "id")?,
-                "uri": req_str(name, args, "uri")?,
-                "policy": opt_str(args, "policy").unwrap_or_else(|| "own".to_string()),
-            }),
-        ),
-        "remove_output" => Plan::delete(format!("/api/outputs/{}", req_id(name, args, "id")?)),
-        "reconnect_output" => {
-            Plan::post(format!("/api/outputs/{}/reconnect", req_id(name, args, "id")?), json!({}))
-        }
-        "ad_break" => Plan::post(
-            "/api/adbreak",
-            json!({
-                "uri": req_str(name, args, "uri")?,
-                "at_running_time_ms": opt_u64(args, "at_running_time_ms")?,
-                "return_to": opt_str(args, "return_to"),
-            }),
-        ),
-        "end_ad_break" => Plan::post("/api/adbreak/end", json!({})),
-        "list_media" => Plan::get("/api/media"),
-        "snapshot" => {
-            let what = req_id(name, args, "what")?;
-            let mut path = format!("/api/snapshot/{what}.jpg");
-            if let Some(w) = opt_u64(args, "width")? {
-                path.push_str(&format!("?width={w}"));
-            }
-            Plan {
-                missing: Missing::Explain(
-                    "This mixer build has no snapshot endpoint (GET /api/snapshot/... returned \
-                     404), so there is no picture to show. Use `status` or `agent_state` to \
-                     reason about the sources instead.",
-                ),
-                image: true,
-                ..Plan::get(path)
-            }
-        }
-        "go_live" => Plan {
-            missing: Missing::Explain(
-                "This mixer build has no /api/golive (404). Do it in steps instead: `add_source` \
-                 with kind \"web\" for the page, `add_output` for the RTMP destination, then \
-                 `take` the new source.",
-            ),
-            ..Plan::post(
-                "/api/golive",
-                json!({
-                    "url": req_str(name, args, "url")?,
-                    "rtmp": req_str(name, args, "rtmp")?,
-                    "superimpose": opt_str(args, "superimpose"),
-                }),
-            )
-        },
-        _ => {
-            let known: Vec<String> =
-                tool_list().iter().filter_map(|t| t["name"].as_str().map(String::from)).collect();
-            return Err(format!("unknown tool {name:?}. Tools: {}", known.join(", ")));
-        }
-    })
-}
-
-fn opt_str(args: &Value, key: &str) -> Option<String> {
-    args.get(key).and_then(Value::as_str).map(str::trim).filter(|s| !s.is_empty()).map(String::from)
-}
-
-fn req_str(tool: &str, args: &Value, key: &str) -> Result<String, String> {
-    opt_str(args, key).ok_or_else(|| format!("{tool} needs a non-empty string `{key}`"))
-}
-
-/// An id that goes into a URL path. Slashes and query characters would turn
-/// it into a different request, so they are refused rather than encoded.
-fn req_id(tool: &str, args: &Value, key: &str) -> Result<String, String> {
-    let id = req_str(tool, args, key)?;
-    if id.contains(['/', '?', '#', '%']) {
-        return Err(format!("{tool}: `{key}` {id:?} is not a valid id"));
-    }
-    Ok(id)
-}
-
-fn opt_u64(args: &Value, key: &str) -> Result<Option<u64>, String> {
-    match args.get(key) {
-        None | Some(Value::Null) => Ok(None),
-        Some(v) => v.as_u64().map(Some).ok_or_else(|| format!("`{key}` must be a non-negative integer")),
-    }
-}
-
-fn tool(name: &str, description: &str, properties: Value, required: &[&str]) -> Value {
-    json!({
-        "name": name,
-        "description": description,
-        "inputSchema": {
-            "type": "object",
-            "properties": properties,
-            "required": required,
-            "additionalProperties": false,
-        }
-    })
-}
-
-/// The agent reads these and nothing else, so each one says what the tool
-/// does, when to reach for it and what it returns.
-pub fn tool_list() -> Vec<Value> {
-    let ms = json!({
-        "type": "integer",
-        "description": "Program running time, in milliseconds, to land this on. The mixer arms \
-            it on the pipeline clock so it hits the intended frame. Omit for right now. Read the \
-            current running time from `status` first."
-    });
-    vec![
-        tool(
-            "status",
-            "Full snapshot of the mixer: what is on program, every source with its id, name, \
-             URL, connection state and whether it currently has video and audio, every output \
-             with its state and reconnect count, the encoder backend, and any ad break that is \
-             armed or on air. Use it first to learn the source ids you can `take`, and after a \
-             change to confirm it happened. Returns the JSON from GET /api/status.",
-            json!({}),
-            &[],
-        ),
-        tool(
-            "agent_state",
-            "Compact state written for agents: the program source, each source's state and a \
-             motion score saying how much its picture is changing, so you can tell a live \
-             camera from a frozen or black one without looking at it. Prefer this over `status` \
-             when deciding what to put on air. If the mixer build lacks this endpoint the tool \
-             says so and returns the full `status` instead, without motion scores.",
-            json!({}),
-            &[],
-        ),
-        tool(
-            "take",
-            "Put a source on program. The cut is instant and the outgoing stream is not \
-             disturbed. Pass the source id from `status`; omit it or pass null to cut to black. \
-             Use `at_running_time_ms` to schedule the cut on a frame instead of now. Returns \
-             {\"ok\": true}, or an error with the mixer's reason such as an unknown id.",
-            json!({
-                "source": {
-                    "type": ["string", "null"],
-                    "description": "Id of the source to put on air. Null or omitted cuts to black."
-                },
-                "at_running_time_ms": ms,
-            }),
-            &[],
-        ),
-        tool(
-            "add_source",
-            "Add a source while the mixer is running. The protocol is worked out from the \
-             URL: rtmp://, rtmps://, an https:// .m3u8 or .mpd manifest, rtsp://, srt://, \
-             udp://, a file path or a media file URL all work. To show a web page (a YouTube \
-             watch page, a scoreboard, a dashboard) pass its https:// URL with kind \"web\": \
-             the mixer renders the page in a real browser, with its audio, and that picture is \
-             the source. For web sources, superimpose \"auto\" makes the mixer find the page's \
-             own video and decode it itself where it can, drawing the page over the top; this \
-             saves about a CPU core and falls back to plain rendering without saying so when \
-             the page gives nothing to hand over (YouTube and DRM pages do this). Omit id to \
-             have one derived from the name or the host. The source starts connecting at once; \
-             check `status` for its state before you `take` it. Returns {\"ok\": true}.",
-            json!({
-                "id": {
-                    "type": "string",
-                    "description": "Stable id used by `take` and `remove_source`. Lowercase letters, digits and dashes. Derived from the name or host when omitted."
-                },
-                "name": { "type": "string", "description": "Name shown to the operator. Defaults to the host of the URL." },
-                "uri": { "type": "string", "description": "Stream URL, file path or, with kind \"web\", the address of a page." },
-                "kind": {
-                    "type": "string",
-                    "enum": ["auto", "web"],
-                    "description": "\"web\" renders the URL as a page. \"auto\" (the default) opens it as a stream or file according to the URL."
-                },
-                "superimpose": {
-                    "type": "string",
-                    "enum": ["off", "auto"],
-                    "description": "Web sources only. \"auto\" lets the mixer decode the page's own video outside the browser when the page allows it. Default \"off\"."
-                },
-            }),
-            &["uri"],
-        ),
-        tool(
-            "remove_source",
-            "Remove a source by id. If it is on program the mixer cuts to black first. \
-             Returns {\"ok\": true}, or an error naming the problem.",
-            json!({ "id": { "type": "string", "description": "Source id as listed by `status`." } }),
-            &["id"],
-        ),
-        tool(
-            "list_outputs",
-            "List the RTMP destinations the program is being sent to, with each one's id, \
-             URL, connection state, reconnect count and how many seconds are buffered. Use it \
-             to check that the broadcast is actually reaching its destinations. Returns the \
-             JSON array from GET /api/outputs.",
-            json!({}),
-            &[],
-        ),
-        tool(
-            "add_output",
-            "Start sending the program to another RTMP destination, for instance a YouTube or \
-             Twitch ingest URL with the stream key on the end. The output encoder is shared, so \
-             adding one costs nothing on air. `policy` sets the reconnect behaviour: \"own\" \
-             (default) retries quickly, for servers you run; \"cdn\" backs off harder, for \
-             public platforms that penalise hammering. Returns {\"ok\": true}.",
-            json!({
-                "id": { "type": "string", "description": "Stable id for this destination, for `remove_output` and `reconnect_output`." },
-                "uri": { "type": "string", "description": "rtmp:// or rtmps:// URL including the stream key." },
-                "policy": { "type": "string", "enum": ["own", "cdn"], "description": "Reconnect policy. Default \"own\"." },
-            }),
-            &["id", "uri"],
-        ),
-        tool(
-            "remove_output",
-            "Stop sending to a destination and forget it. Other outputs are unaffected. \
-             Returns {\"ok\": true}.",
-            json!({ "id": { "type": "string", "description": "Output id as listed by `list_outputs`." } }),
-            &["id"],
-        ),
-        tool(
-            "reconnect_output",
-            "Drop and re-establish one destination's RTMP connection now, without waiting \
-             for its reconnect policy. Use it when `list_outputs` shows an output stuck or \
-             the platform reports no data arriving. Returns {\"ok\": true}.",
-            json!({ "id": { "type": "string", "description": "Output id as listed by `list_outputs`." } }),
-            &["id"],
-        ),
-        tool(
-            "ad_break",
-            "Interrupt the program with a clip, then rejoin live automatically when the clip \
-             ends. The clip is a file path on the machine running the mixer or a URL; `list_media` \
-             shows the clips in the mixer's library with their durations. There is no time \
-             shift: whatever the live source did during the break is not shown afterwards. \
-             `return_to` picks the source to rejoin, defaulting to whatever was on program. \
-             `at_running_time_ms` schedules the break on a frame. Returns {\"ok\": true}.",
-            json!({
-                "uri": { "type": "string", "description": "Path or URL of the clip to play." },
-                "at_running_time_ms": ms,
-                "return_to": { "type": "string", "description": "Source id to rejoin after the clip. Defaults to the current program source." },
-            }),
-            &["uri"],
-        ),
-        tool(
-            "end_ad_break",
-            "Cut a running ad short and return to live now, or disarm one that is scheduled \
-             and has not started. Returns {\"ok\": true}, or an error if no ad break is active.",
-            json!({}),
-            &[],
-        ),
-        tool(
-            "list_media",
-            "List the clips in the mixer's media library: each one's path, name, duration in \
-             milliseconds and whether it has an audio track. Use it to find a `uri` for \
-             `ad_break`. Returns the JSON from GET /api/media; if the library directory is not \
-             configured or readable the JSON carries an `error` field saying why.",
-            json!({}),
-            &[],
-        ),
-        tool(
-            "snapshot",
-            "Look at the pictures. Returns a JPEG as image content you can view directly. \
-             `what` is \"sheet\" for a contact sheet of every source and the program side by \
-             side (the best first look), \"program\" for what is going out right now, or a \
-             source id for that one source. Use it to check a source is showing the right \
-             thing before you `take` it, or to confirm what viewers see. `width` scales the \
-             image down; smaller is faster and cheaper to look at. If this mixer build has no \
-             snapshot endpoint the tool returns a text error saying so.",
-            json!({
-                "what": { "type": "string", "description": "\"sheet\", \"program\", or a source id from `status`." },
-                "width": { "type": "integer", "description": "Width in pixels to scale the image to. Omit for the native size." },
-            }),
-            &["what"],
-        ),
-        tool(
-            "go_live",
-            "One call to put a web page on air: add the page as a web source, add the RTMP \
-             destination, and take the page to program. Use it when someone says \"stream this \
-             page to that RTMP URL\" and nothing is set up yet. `superimpose` is the same option \
-             as in `add_source`. Returns the mixer's JSON describing what it created. If this \
-             mixer build lacks the endpoint the tool returns a text error telling you to do \
-             the three steps with `add_source`, `add_output` and `take` instead.",
-            json!({
-                "url": { "type": "string", "description": "The https:// address of the page to render." },
-                "rtmp": { "type": "string", "description": "rtmp:// or rtmps:// destination including the stream key." },
-                "superimpose": { "type": "string", "enum": ["off", "auto"], "description": "\"auto\" lets the mixer decode the page's own video itself where it can." },
-            }),
-            &["url", "rtmp"],
-        ),
-    ]
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
 
     fn server() -> Server {
-        Server::new("http://127.0.0.1:1", None)
+        Server::new("http://127.0.0.1:1", None, Profile::Standard)
     }
 
     async fn ask(line: &str) -> Value {
@@ -610,6 +428,11 @@ mod tests {
         assert!(r["result"]["capabilities"]["tools"].is_object());
         assert_eq!(r["result"]["serverInfo"]["name"], "godwinmix");
         assert!(r.get("error").is_none());
+        // The instructions tell the agent which surface it has and how to
+        // reach the rest of it.
+        let instructions = r["result"]["instructions"].as_str().unwrap();
+        assert!(instructions.contains("standard"), "{instructions}");
+        assert!(instructions.contains("search_tools"), "{instructions}");
     }
 
     #[tokio::test]
@@ -617,7 +440,6 @@ mod tests {
         let r = ask(r#"{"jsonrpc":"2.0","id":"a","method":"initialize","params":{"protocolVersion":"1999-01-01"}}"#).await;
         assert_eq!(r["id"], "a");
         assert_eq!(r["result"]["protocolVersion"], DEFAULT_PROTOCOL);
-        // No version at all is treated the same way.
         let r = ask(r#"{"jsonrpc":"2.0","id":2,"method":"initialize"}"#).await;
         assert_eq!(r["result"]["protocolVersion"], DEFAULT_PROTOCOL);
     }
@@ -637,35 +459,96 @@ mod tests {
         assert_eq!(r["result"], json!({}));
     }
 
+    /// Every hot tool has a schema, an honest set of annotations, and a plan
+    /// that resolves. The list itself is generated, so this is checking the
+    /// generator rather than a list somebody maintained.
     #[tokio::test]
-    async fn tools_list_names_every_tool_with_a_schema() {
+    async fn tools_list_is_generated_and_every_tool_is_callable() {
+        let s = server();
         let r = ask(r#"{"jsonrpc":"2.0","id":3,"method":"tools/list"}"#).await;
         let tools = r["result"]["tools"].as_array().expect("tools array");
         let names: Vec<&str> = tools.iter().map(|t| t["name"].as_str().unwrap()).collect();
-        for expected in [
-            "status", "agent_state", "take", "add_source", "remove_source", "list_outputs",
-            "add_output", "remove_output", "reconnect_output", "ad_break", "end_ad_break",
-            "list_media", "snapshot", "go_live",
-        ] {
-            assert!(names.contains(&expected), "missing tool {expected}");
+        for expected in ["take", "list_sources", "agent_state", "add_source", "search_tools"] {
+            assert!(names.contains(&expected), "missing tool {expected}: {names:?}");
         }
         for t in tools {
-            assert!(!t["description"].as_str().unwrap().is_empty(), "{} has no description", t["name"]);
-            assert_eq!(t["inputSchema"]["type"], "object", "{} schema is not an object", t["name"]);
-            assert!(t["inputSchema"]["properties"].is_object());
-            assert!(t["inputSchema"]["required"].is_array());
-            // Every plan must be reachable by name, so the two tables agree.
             let name = t["name"].as_str().unwrap();
-            let args = json!({
-                "id": "x", "uri": "rtmp://h/l/k", "what": "sheet", "url": "https://e.com", "rtmp": "rtmp://h/l/k"
-            });
-            assert!(plan(name, &args).is_ok(), "no plan for tool {name}");
+            assert!(!t["description"].as_str().unwrap().is_empty(), "{name} has no description");
+            assert_eq!(t["inputSchema"]["type"], "object", "{name} schema is not an object");
+            assert!(t["annotations"]["readOnlyHint"].is_boolean(), "{name} has no annotations");
+            if name == mcp_tools::SEARCH_TOOL {
+                continue;
+            }
+            let args = json!({ "id": "cam1", "uri": "rtmp://h/l/k", "url": "https://e.com" });
+            assert!(s.plan(name, &args).is_ok(), "no route for tool {name}");
         }
         // Names are unique.
         let mut sorted = names.clone();
         sorted.sort();
         sorted.dedup();
         assert_eq!(sorted.len(), names.len());
+    }
+
+    /// The minimal profile is five tools and no more, and the way out is in
+    /// the list.
+    #[tokio::test]
+    async fn the_minimal_profile_is_five_tools_with_a_way_out() {
+        let s = Server::new("http://127.0.0.1:1", None, Profile::Minimal);
+        let tools = s.tools();
+        assert_eq!(tools.len(), 5, "minimal is five tools: {tools:#?}");
+        let names: Vec<&str> = tools.iter().map(|t| t["name"].as_str().unwrap()).collect();
+        // Ordered by the method name behind each tool, so two runs of the same
+        // build give byte identical output and a prompt cache survives a
+        // reconnect. search_tools is last, because it is the way out.
+        assert_eq!(
+            names,
+            vec!["agent_state", "take", "add_source", "list_sources", "search_tools"]
+        );
+        // A tool that is not in the list is still callable by name.
+        assert!(s.plan("remove_output", &json!({ "id": "yt" })).is_ok());
+    }
+
+    /// Searching finds a tool by what it does, not only by its name, and says
+    /// enough about it to call it.
+    #[tokio::test]
+    async fn search_tools_finds_what_is_not_in_the_hot_list() {
+        let s = Server::new("http://127.0.0.1:1", None, Profile::Minimal);
+        let r = s.call(mcp_tools::SEARCH_TOOL, &json!({ "query": "reconnect an output" })).await;
+        assert!(r.get("isError").is_none(), "{r:#?}");
+        let text = r["content"][0]["text"].as_str().unwrap();
+        assert!(text.contains("reconnect_output"), "{text}");
+        assert!(text.contains("inputSchema"), "a match has to carry its schema: {text}");
+
+        // Plain words, no tool name in them at all.
+        let r = s.call(mcp_tools::SEARCH_TOOL, &json!({ "query": "play a clip then rejoin live" })).await;
+        let text = r["content"][0]["text"].as_str().unwrap();
+        assert!(text.contains("ad_break"), "{text}");
+
+        // Nothing at all still tells the agent what exists.
+        let r = s.call(mcp_tools::SEARCH_TOOL, &json!({ "query": "zzzzqqq" })).await;
+        let text = r["content"][0]["text"].as_str().unwrap();
+        assert!(text.contains("Nothing matches"), "{text}");
+        // And an empty query is a mistake worth naming.
+        let r = s.call(mcp_tools::SEARCH_TOOL, &json!({})).await;
+        assert_eq!(r["isError"], true);
+    }
+
+    /// A model that forgot an argument is told which one, before anything is
+    /// sent, because "could not reach the mixer" is what a missing argument
+    /// would otherwise look like when the mixer is down as well.
+    #[tokio::test]
+    async fn a_missing_required_argument_is_an_error_result() {
+        let r = ask(r#"{"jsonrpc":"2.0","id":9,"method":"tools/call","params":{"name":"add_source","arguments":{"name":"x"}}}"#).await;
+        assert_eq!(r["result"]["isError"], true);
+        let text = r["result"]["content"][0]["text"].as_str().unwrap();
+        assert!(text.contains("uri"), "{text}");
+        assert!(!text.contains("could not reach"), "it never left the process: {text}");
+
+        // An empty string is missing too, not a value.
+        let s = server();
+        assert!(s.plan("add_source", &json!({ "uri": "  " })).is_err());
+        // And an id in the path is not missing from the body.
+        assert!(s.plan("remove_source", &json!({ "id": "cam1" })).is_ok());
     }
 
     #[tokio::test]
@@ -694,13 +577,7 @@ mod tests {
         assert_eq!(r["result"]["isError"], true);
         let text = r["result"]["content"][0]["text"].as_str().unwrap();
         assert!(text.contains("explode") && text.contains("take"), "{text}");
-    }
-
-    #[tokio::test]
-    async fn a_missing_required_argument_is_an_error_result() {
-        let r = ask(r#"{"jsonrpc":"2.0","id":9,"method":"tools/call","params":{"name":"add_source","arguments":{"name":"x"}}}"#).await;
-        assert_eq!(r["result"]["isError"], true);
-        assert!(r["result"]["content"][0]["text"].as_str().unwrap().contains("uri"));
+        assert!(text.contains("search_tools"), "the way out has to be named: {text}");
     }
 
     #[tokio::test]
@@ -712,40 +589,54 @@ mod tests {
         assert!(r["result"]["content"][0]["text"].as_str().unwrap().contains("could not reach"));
     }
 
+    /// Plans go to `/api/v1`, at the paths the transform rule produces.
     #[test]
-    fn plans_match_the_http_api() {
-        let p = plan("take", &json!({})).unwrap();
-        assert_eq!(p.method, Method::POST);
-        assert_eq!(p.path, "/api/take");
-        assert_eq!(p.body, Some(json!({ "source": null, "at_running_time_ms": null })));
+    fn plans_match_the_versioned_api() {
+        let s = server();
+        let at = |tool: &str, args: Value| {
+            let p = s.plan(tool, &args).unwrap();
+            format!("{} {}", p.verb, p.path)
+        };
+        assert_eq!(at("take", json!({})), "POST /api/v1/program/take");
+        assert_eq!(at("list_sources", json!({})), "GET /api/v1/sources");
+        assert_eq!(at("add_source", json!({ "uri": "rtmp://h/l" })), "POST /api/v1/sources");
+        assert_eq!(at("remove_source", json!({ "id": "cam1" })), "DELETE /api/v1/sources/cam1");
+        assert_eq!(
+            at("reconnect_output", json!({ "id": "yt" })),
+            "POST /api/v1/outputs/yt/reconnect"
+        );
+        assert_eq!(at("agent_state", json!({})), "GET /api/v1/agent/state");
+        assert_eq!(at("snapshot", json!({ "id": "program" })), "GET /api/v1/snapshot/program");
 
-        let p = plan("take", &json!({ "source": "cam2", "at_running_time_ms": 1500 })).unwrap();
-        assert_eq!(p.body, Some(json!({ "source": "cam2", "at_running_time_ms": 1500 })));
-        assert!(plan("take", &json!({ "at_running_time_ms": -1 })).is_err());
-
-        let p = plan("remove_source", &json!({ "id": "cam1" })).unwrap();
-        assert_eq!((p.method, p.path.as_str()), (Method::DELETE, "/api/sources/cam1"));
-        assert!(plan("remove_source", &json!({ "id": "../status" })).is_err());
-
-        let p = plan("reconnect_output", &json!({ "id": "yt" })).unwrap();
-        assert_eq!((p.method, p.path.as_str()), (Method::POST, "/api/outputs/yt/reconnect"));
-
-        let p = plan("add_output", &json!({ "id": "yt", "uri": "rtmp://a/b" })).unwrap();
-        assert_eq!(p.body.unwrap()["policy"], "own");
-
-        let p = plan("snapshot", &json!({ "what": "program", "width": 640 })).unwrap();
-        assert_eq!(p.path, "/api/snapshot/program.jpg?width=640");
+        // The id moves from the body to the path, so the body carries only the
+        // rest of the arguments.
+        let p = s.plan("snapshot", &json!({ "id": "program", "width": 640 })).unwrap();
         assert!(p.image);
-        assert!(matches!(p.missing, Missing::Explain(_)));
+        assert_eq!(p.args["width"], 640);
+        assert!(p.args.get("id").is_none());
 
-        let p = plan("agent_state", &json!({})).unwrap();
-        assert!(matches!(p.missing, Missing::FallBackToStatus));
+        // An id that would change the route is refused rather than encoded.
+        assert!(s.plan("remove_source", &json!({ "id": "../status" })).is_err());
+        assert!(s.plan("remove_source", &json!({})).is_err());
+    }
 
-        let p = plan("add_source", &json!({ "uri": "https://example.com", "kind": "web", "superimpose": "auto" })).unwrap();
-        let body = p.body.unwrap();
-        assert_eq!(body["kind"], "web");
-        assert_eq!(body["superimpose"], "auto");
-        assert!(body["id"].is_null());
+    /// The mixer's refusal is what the agent reads: the sentence and the data
+    /// beside it, not an HTTP status code.
+    #[test]
+    fn a_refusal_reaches_the_agent_with_its_next_step_intact() {
+        let body = json!({
+            "error": {
+                "code": -32004,
+                "message": "there is no source 'cam9'. The sources: cam1, cam2. Use one of those.",
+                "data": { "valid": ["cam1", "cam2"], "retryable": false }
+            }
+        });
+        let text = refusal(StatusCode::NOT_FOUND, &serde_json::to_string(&body).unwrap());
+        assert!(text.contains("cam9") && text.contains("cam1, cam2"), "{text}");
+        assert!(text.contains("\"retryable\":false"), "the data rides along: {text}");
+        // A legacy route's plain text answer still reads.
+        let text = refusal(StatusCode::BAD_REQUEST, "no such source cam9");
+        assert!(text.contains("no such source cam9"), "{text}");
     }
 
     #[test]

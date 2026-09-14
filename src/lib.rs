@@ -12,6 +12,7 @@
 //! `gmx`, because the short name is what an operator types and neither should
 //! be a copy of the other. `run` below is what both call.
 
+pub mod api;
 pub mod bench;
 pub mod caps;
 pub mod catalogue;
@@ -91,6 +92,31 @@ struct Args {
     #[arg(long, value_enum, default_value_t = observe::logs::Format::Auto)]
     log_format: observe::logs::Format,
 
+    /// Print the whole control protocol as JSON Schema and exit: every
+    /// method, event and type, with `api_level`. This is `protocol.json`, and
+    /// it is what `core.api` answers with. Needs no config and no GStreamer.
+    #[arg(long)]
+    api_info: bool,
+
+    /// With `--api-info`, print the human readable reference instead of the
+    /// JSON. This is `protocol.md`.
+    #[arg(long)]
+    markdown: bool,
+
+    /// With `--api-info`, print the OpenAPI 3.1 description of the REST layer
+    /// instead. This is `openapi.json`.
+    #[arg(long)]
+    openapi: bool,
+
+    /// Refuse `output.add`, and accept only tokens marked `rehearsal`.
+    ///
+    /// An agent behaves differently when it believes a show is real, and it
+    /// guesses wrong most of the time, so the guess must not matter: the
+    /// credential decides which core it belongs to. A live core refuses a
+    /// rehearsal token outright and this one refuses a live token.
+    #[arg(long)]
+    rehearsal: bool,
+
     #[command(subcommand)]
     command: Option<Command>,
 }
@@ -131,6 +157,13 @@ enum Command {
         /// Bearer token for a mixer whose API requires one.
         #[arg(long, env = "GODWINMIX_TOKEN")]
         token: Option<String>,
+        /// How many tools to put in front of the agent.
+        ///
+        /// `standard` is twelve hot tools, about 4,000 tokens. `minimal` is
+        /// five, for a model with a small context; everything else is still
+        /// callable by name and findable with `search_tools`.
+        #[arg(long, env = "GODWINMIX_MCP_PROFILE", default_value = "standard")]
+        profile: McpProfile,
     },
     /// Inspect and test the codec catalogue.
     ///
@@ -186,6 +219,24 @@ fn run_test_core() -> Result<()> {
     Ok(())
 }
 
+/// Which MCP tool surface a client is shown. The same two names the
+/// `[[tokens]]` table uses, so a token's `profile` and this flag mean the
+/// same thing.
+#[derive(Copy, Clone, Debug, clap::ValueEnum)]
+enum McpProfile {
+    Standard,
+    Minimal,
+}
+
+impl From<McpProfile> for api::scope::Profile {
+    fn from(p: McpProfile) -> Self {
+        match p {
+            McpProfile::Standard => Self::Standard,
+            McpProfile::Minimal => Self::Minimal,
+        }
+    }
+}
+
 /// Parse the command line and do what it says. Both binaries call this.
 pub async fn run() -> Result<()> {
     let args = Args::parse();
@@ -216,10 +267,10 @@ pub async fn run() -> Result<()> {
             gstreamer::init().context("initialising GStreamer")?;
             return bench::run(b).await;
         }
-        Some(Command::Mcp { url, token }) => {
+        Some(Command::Mcp { url, token, profile }) => {
             let url = url.or_else(|| config::env_var("URL")).unwrap_or_else(|| DEFAULT_URL.into());
             let token = token.or_else(|| config::env_var("TOKEN"));
-            return mcp::run(&url, token).await;
+            return mcp::run(&url, token, profile.into()).await;
         }
         Some(Command::Codec { cmd }) => {
             gstreamer::init().context("initialising GStreamer")?;
@@ -237,6 +288,20 @@ pub async fn run() -> Result<()> {
             return observe::cli::run(cmd).await;
         }
         None => {}
+    }
+
+    // Before the config is read and before GStreamer is touched: the
+    // protocol is a property of the build, not of this machine, and CI
+    // regenerates it on a box with no media stack installed.
+    if args.api_info {
+        if args.openapi {
+            print!("{}", api::openapi::json_text(control::openapi()));
+        } else if args.markdown {
+            print!("{}", api::protocol::markdown(control::descriptor()));
+        } else {
+            print!("{}", api::protocol::json_text(control::descriptor()));
+        }
+        return Ok(());
     }
 
     if args.example_config {
@@ -273,15 +338,20 @@ pub async fn run() -> Result<()> {
         )
     })?;
     let bind = args.bind.unwrap_or_else(|| cfg.control.bind.clone());
-    let token = cfg.token().map(Arc::from);
-    match &token {
-        Some(_) => info!("control API requires a bearer token"),
-        None => info!("control API is open: no token configured"),
+    let tokens = cfg.tokens(args.rehearsal);
+    match tokens.entries().len() {
+        0 => info!("control API is open: no token configured"),
+        n => info!(tokens = n, "control API requires a token"),
+    }
+    if args.rehearsal {
+        info!("rehearsal core: output.add is refused and only rehearsal tokens are accepted");
     }
     let cfg_media = cfg.media.clone();
     // Where the web UI and any plugin panels are read from.
     ui::configure(cfg.control.ui_dir.as_deref(), cfg.control.plugins_dir.as_deref());
-    let cfg_snapshot = cfg.snapshot.clone();
+    // Kept for the control plane, which reads the canvas, the snapshot limits,
+    // the feature list and the token table off it once at startup.
+    let cfg_for_control = cfg.clone();
     drop(load);
 
     let build = observe::introspect::stage("mixer build");
@@ -333,15 +403,15 @@ pub async fn run() -> Result<()> {
         library.cfg().probe_timeout_secs,
     ));
     let quit = Arc::new(tokio::sync::Notify::new());
-    let state = control::AppState {
-        mixer: handle.clone(),
+    let state = control::AppState::new(
+        &cfg_for_control,
+        handle.clone(),
         multiview,
-        snapshot: cfg_snapshot,
         library,
         converter,
-        quit: quit.clone(),
-        token,
-    };
+        quit.clone(),
+        args.rehearsal,
+    );
     let server = tokio::spawn(async move {
         if let Err(e) = control::serve(&bind, state).await {
             error!(?e, "control server stopped");

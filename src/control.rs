@@ -5,44 +5,68 @@
 //! a webview at this server; a remote operator points a browser at it. There
 //! is no second implementation to keep in step.
 //!
-//! One WebSocket carries everything the UI needs: JSON text frames for state
-//! and events, binary frames for mosaic JPEGs. One connection, one port, which
-//! matters when the only way in is a firewall rule somebody else has to write.
+//! Three doors onto one set of methods:
 //!
-//! Alongside the UI's endpoints sit a few meant for software rather than
-//! people: still snapshots cut from the mosaic and a compact state document.
-//! They exist so that an AI agent can look at the mixer for the price of one
-//! small request rather than a video stream. See `snapshot.rs`.
+//! * `/rpc`, a WebSocket carrying JSON-RPC 2.0 text frames and mosaic frames
+//!   as binary. This is what a UI, a node or a service uses.
+//! * `/api/v1`, generated from the method names by the transform rule in 03
+//!   section 6, for curl, an `<img>` tag and anything with an HTTP client.
+//! * `/api` and `/ws`, the routes that existed before, kept working for one
+//!   release and answered with a `Deprecation` header.
+//!
+//! The methods themselves are in `control/methods.rs` and everything that
+//! happens around a call is in `control/call.rs`. This file is the plumbing:
+//! what the server holds, how a request finds a method, and how the two
+//! background tasks that feed the event stream are started.
 
-use crate::config::{OutputConfig, SnapshotConfig, SourceConfig};
+pub mod call;
+pub mod history;
+pub mod methods;
+pub mod rest;
+pub mod ws;
+
+use crate::api::error::{ErrorCode, RpcError};
+use crate::api::idempotency;
+use crate::api::method::Registry;
+use crate::api::scope::{Confirmations, Tokens};
+use crate::api::types::{CanvasInfo, Limits, MultiviewStatus};
+use crate::api::{AddSourceRequest, GoLiveRequest, GoLiveResult, MultiviewLayout};
+use crate::config::{Config, OutputConfig, SnapshotConfig, SourceConfig};
 use crate::media::{MediaLibrary, MediaListing};
 use crate::mixer::{AudioOutcome, Command, MixerHandle, SeekOutcome};
-use crate::multiview::{MultiviewHandle, MultiviewRequest};
+use crate::multiview::MultiviewHandle;
 use crate::snapshot::{self, Ask, Pick, Tracker};
 use crate::state::{Event, MixerStatus, SourceState};
 use anyhow::Result;
-use axum::extract::ws::{Message, WebSocket, WebSocketUpgrade};
 use axum::body::Body;
+use axum::extract::ws::WebSocketUpgrade;
 use axum::extract::{DefaultBodyLimit, FromRef, Path, Query, Request, State};
-use axum::http::{header, HeaderMap, Method, StatusCode, Uri};
+use axum::http::{header, HeaderMap, HeaderValue, Method, StatusCode, Uri};
 use axum::middleware::{self, Next};
 use axum::response::{IntoResponse, Response};
 use axum::routing::{delete, get, post};
 use axum::{Json, Router};
-use futures_util::{sink::SinkExt, stream::StreamExt};
+use call::Call;
+use history::History;
 use serde::Deserialize;
-use serde_json::json;
-use std::sync::Arc;
+use serde_json::{json, Value};
+use std::sync::{Arc, OnceLock};
 use std::time::Duration;
 use tokio::sync::broadcast;
 use tower_http::cors::CorsLayer;
-use tracing::{debug, info, warn};
+use tracing::{info, warn};
+
+/// What every legacy route answers with, so a client watching its own logs
+/// finds out before the routes go rather than after.
+const SUNSET_NOTE: &str = "/api and /ws are replaced by /api/v1 and /rpc and will be removed \
+                           one release after this one. See GET /api/v1/core/api.";
 
 #[derive(Clone)]
 pub struct AppState {
     pub mixer: MixerHandle,
     /// The mosaic. Subscribing through this is what builds it; there is no
-    /// other way to reach the frames. See `multiview.rs`.
+    /// other way to reach the frames, and holding a subscription is the only
+    /// thing that keeps the pipeline up. See `multiview.rs`.
     pub multiview: MultiviewHandle,
     /// The still and motion limits, `[snapshot]` in the config.
     pub snapshot: SnapshotConfig,
@@ -50,23 +74,100 @@ pub struct AppState {
     pub library: Arc<MediaLibrary>,
     /// Runs file transcodes and remembers their progress.
     pub converter: Arc<crate::convert::Converter>,
-    /// Rung by `POST /api/shutdown`. `main` waits on it alongside Ctrl-C and
-    /// takes the whole process down the same way for either.
+    /// Rung by `core.shutdown`. `main` waits on it alongside Ctrl-C and takes
+    /// the whole process down the same way for either.
     pub quit: Arc<tokio::sync::Notify>,
-    /// Bearer token the API and the WebSocket demand. `None` leaves them open,
-    /// which is the original behaviour and right for a mixer that only
+    /// Every credential this core accepts. Empty leaves the control port
+    /// open, which is the original behaviour and right for a mixer that only
     /// listens on a LAN nobody else is on.
-    pub token: Option<Arc<str>>,
+    pub tokens: Arc<Tokens>,
+    pub confirmations: Arc<Confirmations>,
+    pub idempotency: Arc<idempotency::Cache>,
+    pub history: Arc<History>,
+    pub features: Arc<Vec<String>>,
+    pub limits: Limits,
+    pub canvas: CanvasInfo,
+    /// True when the core was started with `--rehearsal`.
+    pub rehearsal: bool,
 }
 
-/// What the router actually carries: the shared `AppState` plus the snapshot
-/// tracker, which is started by `serve` because it needs a running runtime and
-/// the mosaic broadcast, and nothing outside this module needs to know it
-/// exists. `FromRef` lets every existing handler keep asking for `AppState`.
+impl AppState {
+    /// Everything the control plane holds, worked out from the config once.
+    pub fn new(
+        cfg: &Config,
+        mixer: MixerHandle,
+        multiview: MultiviewHandle,
+        library: Arc<MediaLibrary>,
+        converter: Arc<crate::convert::Converter>,
+        quit: Arc<tokio::sync::Notify>,
+        rehearsal: bool,
+    ) -> Self {
+        let tokens = cfg.tokens(rehearsal);
+        Self {
+            mixer,
+            multiview,
+            snapshot: cfg.snapshot.clone(),
+            library,
+            converter,
+            quit,
+            features: Arc::new(features(cfg, &tokens, rehearsal)),
+            limits: Limits {
+                max_upload_bytes: cfg.media.max_upload_bytes,
+                max_gain: MAX_GAIN,
+                max_call_secs: crate::api::MAX_CALL_SECS,
+                max_idempotency_key_bytes: 255,
+                event_queue: 256,
+            },
+            canvas: CanvasInfo {
+                width: cfg.canvas.width,
+                height: cfg.canvas.height,
+                fps: cfg.canvas.fps,
+            },
+            tokens: Arc::new(tokens),
+            confirmations: Confirmations::new(),
+            idempotency: idempotency::Cache::new(),
+            history: Arc::new(History::new()),
+            rehearsal,
+        }
+    }
+}
+
+/// What `core.info` reports, so a client branches on a feature string rather
+/// than on a 404 it has to provoke first.
+fn features(cfg: &Config, tokens: &Tokens, rehearsal: bool) -> Vec<String> {
+    let mut features = vec!["api-v1".to_string(), "mcp".to_string(), "rpc".to_string()];
+    if cfg.multiview.enabled {
+        features.push("multiview".into());
+        // Snapshots are cut out of the mosaic, so there are none without it.
+        features.push("snapshot".into());
+    }
+    if cfg.media.allow_upload {
+        features.push("uploads".into());
+    }
+    if cfg.security.allow_exec_sources {
+        features.push("exec-sources".into());
+    }
+    if !tokens.is_open() {
+        features.push("tokens".into());
+    }
+    if rehearsal {
+        features.push("rehearsal".into());
+    }
+    features.sort();
+    features
+}
+
+/// What the router carries: the state, the snapshot tracker, and the method
+/// table with the routes generated from it.
 #[derive(Clone)]
-struct Ctx {
-    app: AppState,
-    snapshots: Arc<Tracker>,
+pub struct Ctx {
+    pub app: AppState,
+    pub snapshots: Arc<Tracker>,
+    pub registry: Arc<Registry<Call>>,
+    pub routes: Arc<Vec<rest::Route>>,
+    /// The deprecated paths, resolvable the same way, so the token check in
+    /// front of them can apply the scope of the method each one aliases.
+    pub legacy_routes: Arc<Vec<rest::Route>>,
 }
 
 impl FromRef<Ctx> for AppState {
@@ -83,11 +184,30 @@ impl FromRef<Ctx> for Arc<Tracker> {
 
 pub fn router(app: AppState, snapshots: Arc<Tracker>) -> Router {
     let max_upload = app.library.cfg().max_upload_bytes;
-    let state = Ctx { app, snapshots };
-    // Everything that reads or drives the mixer sits behind the token. The
-    // page at `/` does not: it is the same for everyone, contains nothing
-    // secret, and is where a browser finds out that it needs a token at all.
-    let guarded = Router::new()
+    let registry = Arc::new(methods::registry());
+    let routes = Arc::new(rest::routes(registry.as_ref()));
+    let legacy_routes = Arc::new(rest::legacy_routes());
+    let ctx = Ctx { app, snapshots, registry, routes, legacy_routes };
+
+    // The page, its modules, its themes and `/plugins/<name>/ui/` are open:
+    // they are the same for everyone, hold nothing secret, and are where a
+    // browser finds out that it needs a token at all.
+    Router::new()
+        .merge(crate::ui::router())
+        .route("/rpc", get(rpc_upgrade))
+        .merge(legacy(ctx.clone(), max_upload))
+        .merge(rest::router(ctx.clone(), max_upload))
+        // The Tauri shell and a browser on another origin both need this. It
+        // sits outside the token check so that a preflight, which carries no
+        // Authorization header by design, is answered rather than refused.
+        .layer(CorsLayer::permissive())
+        .with_state(ctx)
+}
+
+/// The routes that existed before `/api/v1`, unchanged in shape and answered
+/// with a `Deprecation` header. The web UI and the Python example use them.
+fn legacy(ctx: Ctx, max_upload: usize) -> Router<Ctx> {
+    Router::new()
         .route("/api/status", get(status))
         .route("/api/agent/state", get(agent_state))
         .route("/api/snapshot/{name}", get(snapshot_image))
@@ -111,311 +231,177 @@ pub fn router(app: AppState, snapshots: Arc<Tracker>) -> Router {
         .route("/api/outputs/{id}", delete(remove_output))
         .route("/api/outputs/{id}/reconnect", post(reconnect_output))
         .route("/ws", get(ws_upgrade))
-        .route_layer(middleware::from_fn_with_state(state.clone(), require_token));
-    Router::new()
-        // The page, its modules, its themes and `/plugins/<name>/ui/`. Served
-        // without the token: it is the same for everyone, holds nothing
-        // secret, and is where a browser finds out a token is needed at all.
-        .merge(crate::ui::router())
-        .merge(guarded)
-        // The Tauri shell and a browser on another origin both need this. It
-        // sits outside the token check so that a preflight, which carries no
-        // Authorization header by design, is answered rather than refused.
-        .layer(CorsLayer::permissive())
-        .with_state(state)
+        .route_layer(middleware::from_fn(mark_deprecated))
+        .route_layer(middleware::from_fn_with_state(ctx.clone(), guard_legacy))
+        .with_state(ctx)
 }
 
-/// Turn away a request without the token. Does nothing when none is set.
-async fn require_token(State(app): State<AppState>, req: Request, next: Next) -> Response {
-    match token_check(app.token.as_deref(), req.method(), req.headers(), req.uri()) {
-        Ok(()) => next.run(req).await,
-        Err(reason) => (
-            StatusCode::UNAUTHORIZED,
-            [(header::WWW_AUTHENTICATE, "Bearer")],
-            Json(json!({ "error": reason })),
-        )
-            .into_response(),
+/// Say so on the way out, on every legacy answer.
+async fn mark_deprecated(req: Request, next: Next) -> Response {
+    let mut response = next.run(req).await;
+    let headers = response.headers_mut();
+    headers.insert("deprecation", HeaderValue::from_static("true"));
+    if let Ok(note) = HeaderValue::from_str(SUNSET_NOTE) {
+        headers.insert("link", note);
     }
+    response
 }
 
-/// Whether a request carries the token. `Authorization: Bearer <token>` is
-/// the normal form. A GET may put it in the query as `token=` instead,
-/// because a browser opening a WebSocket has no way to set a header. Other
-/// methods do not get the query form: they come from code that can set the
-/// header, and a token in a POST's URL ends up in more logs than it should.
-fn token_check(
-    expected: Option<&str>,
-    method: &Method,
-    headers: &HeaderMap,
-    uri: &Uri,
-) -> Result<(), &'static str> {
-    let Some(expected) = expected else { return Ok(()) };
-    let presented =
-        bearer_token(headers).or_else(|| if method == Method::GET { query_token(uri) } else { None });
-    match presented {
-        None => Err("missing token"),
-        Some(t) if constant_time_eq(t.as_bytes(), expected.as_bytes()) => Ok(()),
-        Some(_) => Err("wrong token"),
-    }
-}
-
-fn bearer_token(headers: &HeaderMap) -> Option<String> {
-    let value = headers.get(header::AUTHORIZATION)?.to_str().ok()?;
-    let (scheme, token) = value.trim().split_once(' ')?;
-    if !scheme.eq_ignore_ascii_case("bearer") {
-        return None;
-    }
-    let token = token.trim();
-    (!token.is_empty()).then(|| token.to_string())
-}
-
-fn query_token(uri: &Uri) -> Option<String> {
-    let Query(pairs) = Query::<Vec<(String, String)>>::try_from_uri(uri).ok()?;
-    pairs.into_iter().find(|(k, _)| k == "token").map(|(_, v)| v).filter(|v| !v.is_empty())
-}
-
-/// Compare without stopping at the first difference, so how long the check
-/// takes says nothing about how much of a guess was right. The length goes
-/// into the same accumulator rather than being tested up front.
-fn constant_time_eq(a: &[u8], b: &[u8]) -> bool {
-    let mut diff = a.len() ^ b.len();
-    for i in 0..a.len().max(b.len()) {
-        let x = a.get(i).copied().unwrap_or(0);
-        let y = b.get(i).copied().unwrap_or(0);
-        diff |= usize::from(x ^ y);
-    }
-    std::hint::black_box(diff) == 0
-}
-
-/// Anything that goes wrong becomes a 400 with the message. The UI shows it
-/// verbatim, because "no such source cam9" is more use to an operator than a
-/// generic failure.
-struct ApiError(anyhow::Error);
-
-impl IntoResponse for ApiError {
-    fn into_response(self) -> Response {
-        warn!(error = %self.0, "request failed");
-        (StatusCode::BAD_REQUEST, self.0.to_string()).into_response()
-    }
-}
-
-impl<E: Into<anyhow::Error>> From<E> for ApiError {
-    fn from(e: E) -> Self {
-        Self(e.into())
-    }
-}
-
-async fn status(State(app): State<AppState>) -> Result<Json<MixerStatus>, ApiError> {
-    Ok(Json(app.mixer.status().await?))
-}
-
-#[derive(Debug, Deserialize)]
-struct TakeRequest {
-    /// Omit or null to cut to the slate.
-    #[serde(default)]
-    source: Option<String>,
-    /// Running time to land the cut on. Omit for immediate.
-    #[serde(default)]
-    at_running_time_ms: Option<u64>,
-}
-
-async fn take(
-    State(app): State<AppState>,
-    Json(req): Json<TakeRequest>,
-) -> Result<StatusCode, ApiError> {
-    app.mixer
-        .request(|ack| Command::Take {
-            source: req.source,
-            at_running_time_ms: req.at_running_time_ms,
-            ack: Some(ack),
-        })
-        .await?;
-    Ok(StatusCode::OK)
-}
-
-/// Scanning opens and demuxes files, so it runs off the async workers.
-async fn list_media(State(app): State<AppState>) -> Result<Json<MediaListing>, ApiError> {
-    let library = app.library.clone();
-    let converter = app.converter.clone();
-    let listing = tokio::task::spawn_blocking(move || library.list_with(Some(&converter)))
-        .await
-        .map_err(|e| anyhow::anyhow!("media scan failed: {e}"))?;
-    Ok(Json(listing))
-}
-
-#[derive(Debug, Deserialize)]
-struct UploadQuery {
-    name: String,
-}
-
-/// Stream an uploaded file to disk. Never buffered: a large clip must cost a
-/// chunk of memory, not its whole size, and the process has a live programme
-/// in it. Written under a dotted `.part` name and renamed on success so a half
-/// uploaded file never appears in the listing and never gets taken to air.
-async fn upload_media(
-    State(app): State<AppState>,
-    Query(q): Query<UploadQuery>,
-    body: Body,
-) -> Result<Json<serde_json::Value>, ApiError> {
-    use tokio::io::AsyncWriteExt;
-    if !app.library.cfg().allow_upload {
-        return Err(anyhow::anyhow!("uploads are disabled on this server").into());
-    }
-    let name = crate::media::safe_upload_name(&q.name)?;
-    let dir = app.library.dir().to_path_buf();
-    let part = dir.join(format!(".{name}.part"));
-    let final_path = dir.join(&name);
-
-    let mut file = tokio::fs::File::create(&part)
-        .await
-        .map_err(|e| anyhow::anyhow!("creating {}: {e}", part.display()))?;
-    let mut stream = body.into_data_stream();
-    let mut written: u64 = 0;
-    while let Some(chunk) = stream.next().await {
-        let chunk = match chunk {
-            Ok(c) => c,
-            Err(e) => {
-                drop(file);
-                let _ = tokio::fs::remove_file(&part).await;
-                return Err(anyhow::anyhow!("upload interrupted: {e}").into());
-            }
-        };
-        written += chunk.len() as u64;
-        if let Err(e) = file.write_all(&chunk).await {
-            drop(file);
-            let _ = tokio::fs::remove_file(&part).await;
-            return Err(anyhow::anyhow!("writing upload: {e}").into());
+/// The token check in front of the deprecated routes.
+///
+/// It applies the scope of the method each path aliases, because two doors
+/// onto one set of methods must not mean two sets of permissions: a read only
+/// token that could still `POST /api/take` would make the whole table a
+/// decoration. The refusal keeps the plain `{"error": ...}` shape those
+/// clients already parse.
+async fn guard_legacy(State(ctx): State<Ctx>, req: Request, next: Next) -> Response {
+    let presented = presented_token(req.method(), req.headers(), req.uri());
+    let token = match ctx.app.tokens.authenticate(presented.as_deref()) {
+        Ok(t) => t,
+        Err(reason) => {
+            return (
+                StatusCode::UNAUTHORIZED,
+                [(header::WWW_AUTHENTICATE, "Bearer")],
+                Json(json!({ "error": reason.message() })),
+            )
+                .into_response()
         }
+    };
+    if let Some(refusal) = legacy_refusal(&ctx, &token, req.method(), req.uri().path()) {
+        return (StatusCode::FORBIDDEN, Json(json!({ "error": refusal }))).into_response();
     }
-    file.flush().await.ok();
-    file.sync_all().await.ok();
-    drop(file);
-    tokio::fs::rename(&part, &final_path)
-        .await
-        .map_err(|e| anyhow::anyhow!("finishing upload: {e}"))?;
-
-    info!(%name, bytes = written, "media uploaded");
-    app.mixer.emit(crate::state::Event::MediaChanged { name: name.clone(), conversion: None });
-    Ok(Json(json!({
-        "name": name,
-        "path": final_path.display().to_string(),
-        "size_bytes": written,
-    })))
+    next.run(req).await
 }
 
-/// Start a background transcode of a library file to a web safe copy.
-async fn convert_media(
-    State(app): State<AppState>,
-    Path(name): Path<String>,
-) -> Result<Json<crate::convert::ConversionState>, ApiError> {
-    let input = app.library.resolve(&name)?;
-    let state = app.converter.start(name, input)?;
-    Ok(Json(state))
+/// Why this token may not use this legacy path, if it may not.
+fn legacy_refusal(
+    ctx: &Ctx,
+    token: &crate::api::scope::Token,
+    http: &Method,
+    path: &str,
+) -> Option<String> {
+    let (route, _) = rest::resolve(&ctx.legacy_routes, http, path).ok()?;
+    let def = ctx.registry.get(route.method)?;
+    if !token.has(def.scope) {
+        return Some(
+            RpcError::scope(route.method, def.scope.as_str(), &token.scope_names()).message,
+        );
+    }
+    if ctx.app.rehearsal && route.method == "output.add" {
+        return Some(
+            "this core was started with --rehearsal and will not add an output, so nothing \
+             here reaches a real destination. Start a core without --rehearsal to go on air."
+                .to_string(),
+        );
+    }
+    None
 }
 
-/// Delete a library file and its converted copy. Refused while the file is a
-/// live source, the one way this could take the show off air.
-async fn delete_media(
-    State(app): State<AppState>,
-    Path(name): Path<String>,
-) -> Result<Json<serde_json::Value>, ApiError> {
-    let path = app.library.resolve(&name)?;
-    let target = crate::input::to_uri(&path.display().to_string());
-    let configs = app.mixer.configs().await?;
-    if let Some(s) = configs.sources.iter().find(|s| crate::input::to_uri(&s.uri) == target) {
-        return Err(anyhow::anyhow!("{name} is the source \"{}\". Remove the source first.", s.id).into());
-    }
-    let mut removed = Vec::new();
-    for p in [path.clone(), crate::convert::converted_sibling(&path)] {
-        if p.exists() && std::fs::remove_file(&p).is_ok() {
-            removed.push(p.display().to_string());
+/// The token a request carries. `Authorization: Bearer <token>` is the normal
+/// form. A GET may put it in the query instead, because a browser opening a
+/// WebSocket or an `<img>` tag has no way to set a header. Other methods do
+/// not get the query form: they come from code that can set the header, and a
+/// token in a POST's URL ends up in more logs than it should.
+pub fn presented_token(method: &Method, headers: &HeaderMap, uri: &Uri) -> Option<String> {
+    rest::bearer(headers)
+        .or_else(|| if method == Method::GET { rest::query_token(uri) } else { None })
+}
+
+/// The trace id in force for one HTTP request.
+pub fn trace_of(headers: &HeaderMap, explicit: Option<&str>) -> String {
+    let traceparent =
+        headers.get(crate::api::trace::TRACEPARENT).and_then(|v| v.to_str().ok());
+    crate::api::trace::from_parts(traceparent, explicit)
+}
+
+/// The whole protocol document, built once.
+///
+/// `core.api`, `godwinmix --api-info` and the committed `protocol.json` are
+/// all this value. Built from a fresh registry, so it needs no mixer and can
+/// be printed on a machine with no GStreamer and no configuration.
+pub fn descriptor() -> &'static Value {
+    static DOC: OnceLock<Value> = OnceLock::new();
+    DOC.get_or_init(|| crate::api::protocol::descriptor(&methods::registry()))
+}
+
+/// The OpenAPI 3.1 description of the REST layer, built once.
+///
+/// The committed `openapi.json`, and what a client generator or Swagger UI
+/// reads. Built from the same table as everything else.
+pub fn openapi() -> &'static Value {
+    static DOC: OnceLock<Value> = OnceLock::new();
+    DOC.get_or_init(|| crate::api::openapi::openapi(&methods::registry()))
+}
+
+async fn rpc_upgrade(
+    ws: WebSocketUpgrade,
+    State(ctx): State<Ctx>,
+    headers: HeaderMap,
+    uri: Uri,
+) -> Response {
+    let presented = presented_token(&Method::GET, &headers, &uri);
+    let token = match ctx.app.tokens.authenticate(presented.as_deref()) {
+        Ok(t) => t,
+        Err(reason) => {
+            let trace = trace_of(&headers, None);
+            let e = RpcError::new(
+                ErrorCode::Scope,
+                format!(
+                    "{}. Open /rpc?token=<token>, or send an Authorization header.",
+                    reason.message()
+                ),
+            );
+            return (StatusCode::UNAUTHORIZED, Json(e.body(&trace))).into_response();
         }
+    };
+    ws.on_upgrade(move |socket| ws::serve_rpc(socket, ctx, token))
+}
+
+async fn ws_upgrade(ws: WebSocketUpgrade, State(ctx): State<Ctx>) -> Response {
+    ws.on_upgrade(move |socket| ws::serve_legacy(socket, ctx))
+}
+
+// --- work shared by the legacy handlers and the method table ---------------
+
+/// The loudest a channel can be asked for, matching the ceiling the volume
+/// elements apply. Kept here as well so the request is pinned before it
+/// reaches the pipeline and the answer cannot disagree with what was sent.
+const MAX_GAIN: f64 = 10.0;
+
+/// Pin one gain to the range a volume element accepts.
+///
+/// Out of range is clamped rather than refused: a fader dragged past the end
+/// of its track should still move the sound, and an operator mid-broadcast
+/// has better things to do than read a validation error. A value that is not
+/// a number at all is refused instead, because `f64::clamp` hands NaN back
+/// unchanged and a volume element set to NaN goes silent for good with
+/// nothing in the log to say why.
+pub fn checked_gain(gain: f64) -> Result<f64> {
+    if gain.is_nan() {
+        anyhow::bail!("a gain has to be a number");
     }
-    app.mixer.emit(crate::state::Event::MediaChanged { name, conversion: None });
-    Ok(Json(json!({ "removed": removed })))
+    Ok(gain.clamp(0.0, MAX_GAIN))
 }
 
-#[derive(Debug, Deserialize)]
-struct AdBreakRequest {
-    /// File path or URI of the ad to play.
-    uri: String,
-    /// Running time to open the break on. Omit to roll immediately.
-    #[serde(default)]
-    at_running_time_ms: Option<u64>,
-    /// Source to rejoin afterwards. Omit to return to whatever is on program.
-    #[serde(default)]
-    return_to: Option<String>,
+/// Pin a requested position to something a pipeline can be asked for.
+///
+/// Out of range is clamped rather than refused, the same bargain
+/// `checked_gain` makes. The far end is clamped by the mixer instead, which is
+/// the only thing that knows the duration.
+pub fn checked_position(position_ms: f64) -> Result<u64> {
+    if position_ms.is_nan() {
+        anyhow::bail!("a position has to be a number");
+    }
+    // `as` on a float saturates in Rust, so a silly number becomes the ceiling
+    // rather than wrapping to somewhere near the start.
+    Ok(position_ms.max(0.0).round() as u64)
 }
 
-async fn start_ad_break(
-    State(app): State<AppState>,
-    Json(req): Json<AdBreakRequest>,
-) -> Result<StatusCode, ApiError> {
-    app.mixer
-        .request(|ack| Command::AdBreak {
-            uri: req.uri,
-            at_running_time_ms: req.at_running_time_ms,
-            return_to: req.return_to,
-            ack: Some(ack),
-        })
-        .await?;
-    Ok(StatusCode::OK)
-}
-
-/// Stop the mixer, and with it the programme. Deliberately a separate call
-/// from anything the UI does by itself: closing a window must never take the
-/// stream down, so only the desktop shell's "Quit and stop the mixer" and the
-/// CLI send this.
-async fn shutdown(State(app): State<AppState>) -> StatusCode {
-    info!("shutdown requested over the API");
-    app.quit.notify_one();
-    StatusCode::ACCEPTED
-}
-
-async fn end_ad_break(State(app): State<AppState>) -> Result<StatusCode, ApiError> {
-    app.mixer.request(|ack| Command::EndAdBreak(Some(ack))).await?;
-    Ok(StatusCode::OK)
-}
-
-/// What the UI and the CLI send to add a source. Everything but the URL is
-/// optional: a person pasting a link should not have to invent an id or know
-/// the mixer's URL prefixes.
-#[derive(Debug, Deserialize)]
-struct AddSourceRequest {
-    /// Stable id used by `take` and the API. Derived from the name or the
-    /// host when omitted, made unique with a numeric suffix if needed.
-    #[serde(default)]
-    id: Option<String>,
-    /// Name shown in the UI. Defaults to the host of the URL.
-    #[serde(default)]
-    name: Option<String>,
-    uri: String,
-    /// "web" renders the URL as a page in the browser sidecar (the same as
-    /// writing `web+` in front of it); "auto" or omitted works the protocol
-    /// out from the URL.
-    #[serde(default)]
-    kind: Option<String>,
-    /// "off" or "auto", the same spellings the config file uses. "auto" lets
-    /// the mixer decode the page's own video itself and draw the page over
-    /// the top, when the page turns out to have an address worth handing
-    /// over. See `Superimpose`.
-    ///
-    /// Only a website source ever reads it. It is accepted on any source and
-    /// ignored by the rest rather than refused, because the field is part of
-    /// every `SourceConfig` and a camera simply never consults it. Refusing
-    /// would mean the API knowing which URLs are pages, which is the one
-    /// thing this endpoint deliberately works out later.
-    #[serde(default)]
-    superimpose: Option<String>,
-}
-
-async fn add_source(
-    State(app): State<AppState>,
-    Json(req): Json<AddSourceRequest>,
-) -> Result<StatusCode, ApiError> {
+/// Add a source from a request, and say which id it got.
+pub async fn add_source_now(app: &AppState, req: AddSourceRequest) -> Result<String> {
     let uri = req.uri.trim().to_string();
     if uri.is_empty() {
-        return Err(anyhow::anyhow!("a source needs a URL").into());
+        anyhow::bail!("a source needs a URL");
     }
     let uri = match req.kind.as_deref().map(str::to_ascii_lowercase).as_deref() {
         Some("web") | Some("page") | Some("website") => crate::input::as_web_uri(&uri),
@@ -435,8 +421,7 @@ async fn add_source(
         Some(n) => slug(n),
         None => derived_id(&uri),
     });
-    create_source(&app, base_id, uri, name, &superimpose).await?;
-    Ok(StatusCode::OK)
+    create_source(app, base_id, uri, name, &superimpose, &req.params).await
 }
 
 /// Add a source under `base_id` or the first free suffix of it, and say which
@@ -448,17 +433,20 @@ async fn create_source(
     uri: String,
     name: Option<String>,
     superimpose: &str,
+    params: &serde_json::Map<String, Value>,
 ) -> Result<String> {
     for id in id_candidates(&base_id) {
-        let cfg: SourceConfig = serde_json::from_value(json!({
-            "id": id, "uri": uri, "name": name, "superimpose": superimpose,
-        }))
-        .map_err(|e| anyhow::anyhow!("bad source: {e}"))?;
-        match app
-            .mixer
-            .request(|ack| Command::AddSource(Box::new(cfg), Some(ack)))
-            .await
-        {
+        // Whatever a source kind of its own understands rides underneath the
+        // fields the core knows, so a plugin's keys reach its config and the
+        // core's keys still win.
+        let mut fields = params.clone();
+        fields.insert("id".into(), json!(id));
+        fields.insert("uri".into(), json!(uri));
+        fields.insert("name".into(), json!(name));
+        fields.insert("superimpose".into(), json!(superimpose));
+        let cfg: SourceConfig = serde_json::from_value(Value::Object(fields))
+            .map_err(|e| anyhow::anyhow!("bad source: {e}"))?;
+        match app.mixer.request(|ack| Command::AddSource(Box::new(cfg), Some(ack))).await {
             Ok(()) => return Ok(id),
             Err(e) if e.to_string().contains("already exists") => continue,
             Err(e) => return Err(e),
@@ -467,19 +455,13 @@ async fn create_source(
     anyhow::bail!("could not find a free id for {base_id}")
 }
 
-/// Same again for an output, named after the host it sends to. The reconnect
-/// policy is the default one; golive has no way to ask for another, and a
-/// caller who cares can add the output through `/api/outputs` first.
+/// Same again for an output, named after the host it sends to.
 async fn create_output(app: &AppState, uri: &str) -> Result<String> {
     let base_id = derived_id(uri);
     for id in id_candidates(&base_id) {
         let cfg: OutputConfig = serde_json::from_value(json!({ "id": id, "uri": uri }))
             .map_err(|e| anyhow::anyhow!("bad output: {e}"))?;
-        match app
-            .mixer
-            .request(|ack| Command::AddOutput(Box::new(cfg), Some(ack)))
-            .await
-        {
+        match app.mixer.request(|ack| Command::AddOutput(Box::new(cfg), Some(ack))).await {
             Ok(()) => return Ok(id),
             Err(e) if e.to_string().contains("already exists") => continue,
             Err(e) => return Err(e),
@@ -498,49 +480,21 @@ fn derived_id(uri: &str) -> String {
     slug(&host_of(uri))
 }
 
-/// What a "Go Live" button sends. One request, from the customer's backend
-/// so the page itself never holds the mixer's token, and the page is on air
-/// as soon as it renders.
-#[derive(Debug, Deserialize)]
-struct GoLiveRequest {
-    /// The page to put on air. Plain http(s); `web+` is added here.
-    url: String,
-    /// Where to send the programme. Added as an output unless one already
-    /// sends there. Omit to keep the outputs as they are.
-    #[serde(default)]
-    rtmp: Option<String>,
-    /// "auto" (the default) or "off". See `AddSourceRequest::superimpose`.
-    #[serde(default)]
-    superimpose: Option<String>,
-    /// Source id. Derived from the host when omitted.
-    #[serde(default)]
-    id: Option<String>,
-}
-
 /// How long golive waits for the page to produce a frame before giving up on
 /// the take. A page that has not rendered in a minute is not about to.
 const GOLIVE_WAIT: Duration = Duration::from_secs(60);
 
-async fn golive(
-    State(app): State<AppState>,
-    Json(req): Json<GoLiveRequest>,
-) -> Result<Response, ApiError> {
+/// Add the page, add the destination, and arrange for the take.
+pub async fn golive_now(app: &AppState, req: GoLiveRequest) -> Result<GoLiveResult> {
     let url = req.url.trim();
     if url.is_empty() {
-        return Err(anyhow::anyhow!("golive needs a url").into());
+        anyhow::bail!("golive needs a url");
     }
     let uri = crate::input::as_web_uri(url);
-    let superimpose = match req
-        .superimpose
-        .as_deref()
-        .map(|s| s.trim().to_ascii_lowercase())
-        .as_deref()
-    {
+    let superimpose = match req.superimpose.as_deref().map(str::trim) {
         None | Some("") | Some("auto") => "auto",
         Some("off") => "off",
-        Some(other) => {
-            return Err(anyhow::anyhow!("superimpose must be \"auto\" or \"off\", not {other:?}").into())
-        }
+        Some(other) => anyhow::bail!("superimpose must be \"auto\" or \"off\", not {other:?}"),
     };
     let wanted_id = req.id.map(|i| i.trim().to_string()).filter(|i| !i.is_empty());
 
@@ -558,11 +512,11 @@ async fn golive(
         None => {
             if let Some(w) = &wanted_id {
                 if configs.sources.iter().any(|s| &s.id == w) {
-                    return Err(anyhow::anyhow!("source {w} already exists with a different URL").into());
+                    anyhow::bail!("source {w} already exists with a different URL");
                 }
             }
             let base_id = wanted_id.unwrap_or_else(|| derived_id(&uri));
-            create_source(&app, base_id, uri, None, superimpose).await?
+            create_source(app, base_id, uri, None, superimpose, &serde_json::Map::new()).await?
         }
     };
 
@@ -570,7 +524,7 @@ async fn golive(
         None => None,
         Some(rtmp) => match configs.outputs.iter().find(|o| o.uri == rtmp) {
             Some(o) => Some(o.id.clone()),
-            None => Some(create_output(&app, rtmp).await?),
+            None => Some(create_output(app, rtmp).await?),
         },
     };
 
@@ -585,13 +539,9 @@ async fn golive(
         .find(|s| s.id == source)
         .map(|s| s.state)
         .unwrap_or(SourceState::Connecting);
-    take_when_live(app, source.clone());
+    take_when_live(app.clone(), source.clone());
     info!(%source, output = output.as_deref().unwrap_or("none"), "golive accepted");
-    Ok((
-        StatusCode::ACCEPTED,
-        Json(json!({ "source": source, "output": output, "state": state })),
-    )
-        .into_response())
+    Ok(GoLiveResult { source, output, state })
 }
 
 /// Take the source to programme the moment it is live. Runs on its own
@@ -610,6 +560,7 @@ fn take_when_live(app: AppState, id: String) {
             let live = status.sources.iter().any(|s| s.id == id && s.state == SourceState::Live);
             if live {
                 let source = id.clone();
+                app.history.expect("golive");
                 let r = app
                     .mixer
                     .request(|ack| Command::Take {
@@ -667,72 +618,330 @@ fn slug(text: &str) -> String {
     if out.is_empty() { "source".into() } else { out }
 }
 
-async fn remove_source(
+/// Stream an uploaded file to disk. Never buffered: a large clip must cost a
+/// chunk of memory, not its whole size, and the process has a live programme
+/// in it. Written under a dotted `.part` name and renamed on success so a half
+/// uploaded file never appears in the listing and never gets taken to air.
+pub async fn store_upload(app: &AppState, name: &str, body: Body) -> Result<Value, RpcError> {
+    use futures_util::StreamExt;
+    use tokio::io::AsyncWriteExt;
+    if !app.library.cfg().allow_upload {
+        return Err(RpcError::not_in_state(
+            "uploads are disabled on this server. Set `allow_upload = true` under [media] \
+             and restart, or put the file in the media directory yourself.",
+        ));
+    }
+    let name = crate::media::safe_upload_name(name)
+        .map_err(|e| RpcError::invalid_params(e.to_string()))?;
+    let dir = app.library.dir().to_path_buf();
+    let part = dir.join(format!(".{name}.part"));
+    let final_path = dir.join(&name);
+
+    let mut file = tokio::fs::File::create(&part)
+        .await
+        .map_err(|e| RpcError::internal(format!("creating {}: {e}", part.display())))?;
+    let mut stream = body.into_data_stream();
+    let mut written: u64 = 0;
+    while let Some(chunk) = stream.next().await {
+        let chunk = match chunk {
+            Ok(c) => c,
+            Err(e) => {
+                drop(file);
+                let _ = tokio::fs::remove_file(&part).await;
+                return Err(RpcError::internal(format!("upload interrupted: {e}")));
+            }
+        };
+        written += chunk.len() as u64;
+        if let Err(e) = file.write_all(&chunk).await {
+            drop(file);
+            let _ = tokio::fs::remove_file(&part).await;
+            return Err(RpcError::internal(format!("writing upload: {e}")));
+        }
+    }
+    file.flush().await.ok();
+    file.sync_all().await.ok();
+    drop(file);
+    tokio::fs::rename(&part, &final_path)
+        .await
+        .map_err(|e| RpcError::internal(format!("finishing upload: {e}")))?;
+
+    info!(%name, bytes = written, "media uploaded");
+    app.mixer.emit(Event::MediaChanged { name: name.clone(), conversion: None });
+    Ok(json!({
+        "name": name,
+        "path": final_path.display().to_string(),
+        "size_bytes": written,
+    }))
+}
+
+/// One JPEG: the whole sheet, the programme, or a cell cut out of the mosaic.
+///
+/// Cutting means a decode and an encode, a few milliseconds of CPU, so it
+/// goes on a blocking thread rather than on a Tokio worker.
+pub async fn snapshot_bytes(
+    snapshots: &Arc<Tracker>,
+    client: &str,
+    name: &str,
+    ask: &Ask,
+) -> Result<Vec<u8>, RpcError> {
+    // The legacy path spells it `cam1.jpg` and the versioned one spells it
+    // `cam1`, because `/api/v1/snapshot/{id}` takes an id like every other
+    // route. Both reach the same picture.
+    let with_suffix = snapshot_name(name);
+    let Some(pick) = snapshot::parse_pick(&with_suffix) else {
+        return Err(RpcError::not_found("snapshot", name, &[]).with(
+            "valid",
+            vec!["sheet".to_string(), "program".to_string(), "<source id>".to_string()],
+        ));
+    };
+    if let Some(why) = snapshots.disabled_reason() {
+        return Err(RpcError::not_in_state(why));
+    }
+    // The width the limits allow for this client, which is also what says no
+    // when one client asks too often.
+    let width = match snapshots.resolve(client, ask) {
+        Ok(w) => w,
+        Err(refusal @ snapshot::Refusal::TooWide { .. }) => {
+            return Err(RpcError::invalid_params(refusal.message()))
+        }
+        Err(refusal) => {
+            return Err(RpcError::new(ErrorCode::Safety, refusal.message()));
+        }
+    };
+    // Asking is what starts the tracker and, through it, the mosaic. The first
+    // request after a quiet spell pays for the build; the rest are free.
+    let Some(latest) = snapshots.latest_wanted(Duration::from_secs(3)).await else {
+        return Err(RpcError::not_in_state(
+            "no mosaic frame yet: the mosaic is being built for you. Retry in a second.",
+        ));
+    };
+    if pick == Pick::Sheet && width.is_none() {
+        return Ok(latest.jpeg.to_vec());
+    }
+    let cell = match &pick {
+        Pick::Sheet => None,
+        _ => match snapshot::find_cell(&latest.cells, &pick) {
+            Some(c) => Some(c.clone()),
+            None => {
+                let on_sheet: Vec<String> =
+                    latest.cells.iter().filter_map(|c| c.source.clone()).collect();
+                return Err(RpcError::not_found("cell on the mosaic", name, &on_sheet));
+            }
+        },
+    };
+    let bytes = latest.jpeg.clone();
+    tokio::task::spawn_blocking(move || {
+        let mosaic = snapshot::decode_jpeg(&bytes)?;
+        let img = match &cell {
+            Some(c) => snapshot::crop_cell(&mosaic, c),
+            None => mosaic,
+        };
+        snapshot::encode_jpeg(&snapshot::fit_width(img, width))
+    })
+    .await
+    .map_err(|e| RpcError::internal(format!("snapshot task failed: {e}")))?
+    .map_err(|e| RpcError::internal(format!("the mosaic frame could not be decoded: {e}")))
+}
+
+/// `sheet`, `sheet.jpg` and `cam1` all name a picture. The tracker's parser
+/// wants the extension, and an id in a path has no business carrying one.
+fn snapshot_name(name: &str) -> String {
+    match name.strip_suffix(".jpg") {
+        Some(_) => name.to_string(),
+        None => format!("{name}.jpg"),
+    }
+}
+
+/// The layout a client matches frames against.
+pub fn layout_of(multiview: &MultiviewStatus) -> MultiviewLayout {
+    MultiviewLayout {
+        id: crate::api::rpc::layout_id(&multiview.cells),
+        width: multiview.width,
+        height: multiview.height,
+        cells: multiview.cells.clone(),
+    }
+}
+
+// --- legacy handlers, unchanged in shape -----------------------------------
+
+/// Anything that goes wrong on a legacy route becomes a 400 with the message,
+/// exactly as it did. `/api/v1` has the one error shape; this door keeps the
+/// shape the clients behind it already parse.
+struct ApiError(anyhow::Error);
+
+impl IntoResponse for ApiError {
+    fn into_response(self) -> Response {
+        warn!(error = %self.0, "request failed");
+        (StatusCode::BAD_REQUEST, self.0.to_string()).into_response()
+    }
+}
+
+impl<E: Into<anyhow::Error>> From<E> for ApiError {
+    fn from(e: E) -> Self {
+        Self(e.into())
+    }
+}
+
+async fn status(State(app): State<AppState>) -> Result<Json<MixerStatus>, ApiError> {
+    Ok(Json(app.mixer.status().await?))
+}
+
+#[derive(Debug, Deserialize)]
+struct TakeBody {
+    /// Omit or null to cut to the slate.
+    #[serde(default)]
+    source: Option<String>,
+    /// Running time to land the cut on. Omit for immediate.
+    #[serde(default)]
+    at_running_time_ms: Option<u64>,
+}
+
+async fn take(
     State(app): State<AppState>,
-    Path(id): Path<String>,
+    Json(req): Json<TakeBody>,
 ) -> Result<StatusCode, ApiError> {
+    app.history.expect("legacy");
     app.mixer
-        .request(|ack| Command::RemoveSource(id, Some(ack)))
+        .request(|ack| Command::Take {
+            source: req.source,
+            at_running_time_ms: req.at_running_time_ms,
+            ack: Some(ack),
+        })
         .await?;
     Ok(StatusCode::OK)
 }
 
-/// What a fader sends. Every part is optional, because the UI moves one
-/// control at a time and has no reason to restate the others.
+/// Scanning opens and demuxes files, so it runs off the async workers.
+async fn list_media(State(app): State<AppState>) -> Result<Json<MediaListing>, ApiError> {
+    let library = app.library.clone();
+    let converter = app.converter.clone();
+    let listing = tokio::task::spawn_blocking(move || library.list_with(Some(&converter)))
+        .await
+        .map_err(|e| anyhow::anyhow!("media scan failed: {e}"))?;
+    Ok(Json(listing))
+}
+
 #[derive(Debug, Deserialize)]
-struct AudioRequest {
-    /// The operator's fader for the whole source, 0.0 to 10.0. Works on any
-    /// source. Omit to leave it where it is.
-    #[serde(default)]
-    gain: Option<f64>,
-    /// Mute the whole source. Works on any source, and is held apart from the
-    /// fader so unmuting comes back to the level that was set.
-    #[serde(default)]
-    muted: Option<bool>,
-    /// Gain on the page's own sound. Omit to leave it where it is.
-    #[serde(default)]
-    page: Option<f64>,
-    /// Gain per video underneath, by position. A null entry, or a list
-    /// shorter than the number of videos, leaves those alone: sending
-    /// `[null, 0.0]` silences the second video and touches nothing else.
-    #[serde(default)]
-    media: Vec<Option<f64>>,
+struct UploadQuery {
+    name: String,
 }
 
-/// The loudest a channel can be asked for, matching the ceiling the volume
-/// elements apply. Kept here as well so the request is pinned before it
-/// reaches the pipeline and the answer cannot disagree with what was sent.
-const MAX_GAIN: f64 = 10.0;
+async fn upload_media(
+    State(app): State<AppState>,
+    Query(q): Query<UploadQuery>,
+    body: Body,
+) -> Result<Json<Value>, ApiError> {
+    store_upload(&app, &q.name, body)
+        .await
+        .map(Json)
+        .map_err(|e| ApiError(anyhow::anyhow!("{}", e.message)))
+}
 
-/// Pin one gain to the range a volume element accepts.
-///
-/// Out of range is clamped rather than refused: a fader dragged past the end
-/// of its track should still move the sound, and an operator mid-broadcast
-/// has better things to do than read a validation error. A value that is not
-/// a number at all is refused instead, because `f64::clamp` hands NaN back
-/// unchanged and a volume element set to NaN goes silent for good with
-/// nothing in the log to say why.
-fn checked_gain(gain: f64) -> Result<f64> {
-    if gain.is_nan() {
-        anyhow::bail!("a gain has to be a number");
+/// Start a background transcode of a library file to a web safe copy.
+async fn convert_media(
+    State(app): State<AppState>,
+    Path(name): Path<String>,
+) -> Result<Json<crate::convert::ConversionState>, ApiError> {
+    let input = app.library.resolve(&name)?;
+    let state = app.converter.start(name, input)?;
+    Ok(Json(state))
+}
+
+/// Delete a library file and its converted copy. Refused while the file is a
+/// live source, the one way this could take the show off air.
+async fn delete_media(
+    State(app): State<AppState>,
+    Path(name): Path<String>,
+) -> Result<Json<Value>, ApiError> {
+    let path = app.library.resolve(&name)?;
+    let target = crate::input::to_uri(&path.display().to_string());
+    let configs = app.mixer.configs().await?;
+    if let Some(s) = configs.sources.iter().find(|s| crate::input::to_uri(&s.uri) == target) {
+        return Err(
+            anyhow::anyhow!("{name} is the source \"{}\". Remove the source first.", s.id).into()
+        );
     }
-    Ok(gain.clamp(0.0, MAX_GAIN))
+    let mut removed = Vec::new();
+    for p in [path.clone(), crate::convert::converted_sibling(&path)] {
+        if p.exists() && std::fs::remove_file(&p).is_ok() {
+            removed.push(p.display().to_string());
+        }
+    }
+    app.mixer.emit(Event::MediaChanged { name, conversion: None });
+    Ok(Json(json!({ "removed": removed })))
 }
 
-/// Move a source's audio: the operator's fader and mute, and for a superimposed
-/// source the balance between its page sound and the videos under it.
-///
-/// 404 and 409 rather than one failure, because they mean different things to
-/// whoever is calling: a wrong id, against a source that exists but has its
-/// audio pre-mixed by Chromium and so has nothing to balance. Answering the
-/// second with a quiet 200 would leave a caller moving a fader that was never
-/// connected to anything. Only `page` and `media` can earn the 409 though. The
-/// fader and the mute are elements the program pipeline owns for every source,
-/// so a request naming just those works on a camera as well as on a page.
+#[derive(Debug, Deserialize)]
+struct AdBreakBody {
+    /// File path or URI of the ad to play.
+    uri: String,
+    #[serde(default)]
+    at_running_time_ms: Option<u64>,
+    #[serde(default)]
+    return_to: Option<String>,
+}
+
+async fn start_ad_break(
+    State(app): State<AppState>,
+    Json(req): Json<AdBreakBody>,
+) -> Result<StatusCode, ApiError> {
+    app.mixer
+        .request(|ack| Command::AdBreak {
+            uri: req.uri,
+            at_running_time_ms: req.at_running_time_ms,
+            return_to: req.return_to,
+            ack: Some(ack),
+        })
+        .await?;
+    Ok(StatusCode::OK)
+}
+
+/// Stop the mixer, and with it the programme. Deliberately a separate call
+/// from anything the UI does by itself: closing a window must never take the
+/// stream down, so only the desktop shell's "Quit and stop the mixer" and the
+/// CLI send this.
+async fn shutdown(State(app): State<AppState>) -> StatusCode {
+    info!("shutdown requested over the API");
+    app.quit.notify_one();
+    StatusCode::ACCEPTED
+}
+
+async fn end_ad_break(State(app): State<AppState>) -> Result<StatusCode, ApiError> {
+    app.mixer.request(|ack| Command::EndAdBreak(Some(ack))).await?;
+    Ok(StatusCode::OK)
+}
+
+async fn add_source(
+    State(app): State<AppState>,
+    Json(req): Json<AddSourceRequest>,
+) -> Result<StatusCode, ApiError> {
+    add_source_now(&app, req).await?;
+    Ok(StatusCode::OK)
+}
+
+async fn golive(
+    State(app): State<AppState>,
+    Json(req): Json<GoLiveRequest>,
+) -> Result<Response, ApiError> {
+    let result = golive_now(&app, req).await?;
+    Ok((StatusCode::ACCEPTED, Json(result)).into_response())
+}
+
+async fn remove_source(
+    State(app): State<AppState>,
+    Path(id): Path<String>,
+) -> Result<StatusCode, ApiError> {
+    app.mixer.request(|ack| Command::RemoveSource(id, Some(ack))).await?;
+    Ok(StatusCode::OK)
+}
+
+/// Move a source's audio: the operator's fader and mute, and for a
+/// superimposed source the balance between its page sound and the videos
+/// under it.
 async fn set_source_audio(
     State(app): State<AppState>,
     Path(id): Path<String>,
-    Json(req): Json<AudioRequest>,
+    Json(req): Json<crate::api::AudioRequest>,
 ) -> Result<Response, ApiError> {
     let gain = req.gain.map(checked_gain).transpose()?;
     let page = req.page.map(checked_gain).transpose()?;
@@ -746,6 +955,9 @@ async fn set_source_audio(
     Ok(audio_response(&id, outcome))
 }
 
+/// 404 and 409 rather than one failure, because they mean different things to
+/// whoever is calling: a wrong id, against a source that exists but has its
+/// audio pre-mixed by Chromium and so has nothing to balance.
 fn audio_response(id: &str, outcome: AudioOutcome) -> Response {
     match outcome {
         AudioOutcome::Set(state) => (StatusCode::OK, Json(state)).into_response(),
@@ -767,43 +979,11 @@ fn audio_response(id: &str, outcome: AudioOutcome) -> Response {
     }
 }
 
-/// Where to move a source to, in milliseconds from its start.
-#[derive(Debug, Deserialize)]
-struct SeekRequest {
-    /// Signed and fractional on purpose, so that anything a scrubber can
-    /// plausibly send is clamped rather than refused. See `checked_position`.
-    position_ms: f64,
-}
-
-/// Pin a requested position to something a pipeline can be asked for.
-///
-/// Out of range is clamped rather than refused, the same bargain `checked_gain`
-/// makes: a scrubber dragged past either end of its track should land at that
-/// end, and an operator mid-broadcast should not be reading a validation error.
-/// The far end is clamped by the mixer instead, which is the only thing that
-/// knows the duration. A value that is not a number at all is refused, because
-/// there is no sensible position to take it as.
-fn checked_position(position_ms: f64) -> Result<u64> {
-    if position_ms.is_nan() {
-        anyhow::bail!("a position has to be a number");
-    }
-    // `as` on a float saturates in Rust, so a silly number becomes the ceiling
-    // rather than wrapping to somewhere near the start.
-    Ok(position_ms.max(0.0).round() as u64)
-}
-
 /// Move a seekable source to a position and answer with where it landed.
-///
-/// 404, 409 and 200 mean three different things to whoever is calling. A wrong
-/// id is a bug in the caller. A live feed is a source that exists and is working
-/// perfectly and simply has no position to move to, which is worth saying rather
-/// than answering 200 and leaving a scrubber to drift back on the next status
-/// snapshot. And the 200 carries the position read back off the pipeline, which
-/// is not quite the one that was asked for, because a seek snaps to a key unit.
 async fn seek_source(
     State(app): State<AppState>,
     Path(id): Path<String>,
-    Json(req): Json<SeekRequest>,
+    Json(req): Json<crate::api::SeekRequest>,
 ) -> Result<Response, ApiError> {
     let position_ms = checked_position(req.position_ms)?;
     let outcome = app.mixer.seek(id.clone(), position_ms).await?;
@@ -828,9 +1008,8 @@ fn seek_response(id: &str, outcome: SeekOutcome) -> Response {
             })),
         )
             .into_response(),
-        // A pipeline that took the request and refused it is an ordinary failure,
-        // so it answers 400 like every other one, carrying the reason in the same
-        // `error` field as the two above. The UI shows it verbatim.
+        // A pipeline that took the request and refused it is an ordinary
+        // failure, so it answers 400 like every other one.
         SeekOutcome::Failed(message) => {
             warn!(source = %id, %message, "seek refused");
             (StatusCode::BAD_REQUEST, Json(json!({ "error": message }))).into_response()
@@ -842,9 +1021,7 @@ async fn reconnect_output(
     State(app): State<AppState>,
     Path(id): Path<String>,
 ) -> Result<StatusCode, ApiError> {
-    app.mixer
-        .request(|ack| Command::ReconnectOutput(id, Some(ack)))
-        .await?;
+    app.mixer.request(|ack| Command::ReconnectOutput(id, Some(ack))).await?;
     Ok(StatusCode::OK)
 }
 
@@ -858,9 +1035,7 @@ async fn add_output(
     State(app): State<AppState>,
     Json(cfg): Json<OutputConfig>,
 ) -> Result<StatusCode, ApiError> {
-    app.mixer
-        .request(|ack| Command::AddOutput(Box::new(cfg), Some(ack)))
-        .await?;
+    app.mixer.request(|ack| Command::AddOutput(Box::new(cfg), Some(ack))).await?;
     Ok(StatusCode::OK)
 }
 
@@ -868,14 +1043,11 @@ async fn remove_output(
     State(app): State<AppState>,
     Path(id): Path<String>,
 ) -> Result<StatusCode, ApiError> {
-    app.mixer
-        .request(|ack| Command::RemoveOutput(id, Some(ack)))
-        .await?;
+    app.mixer.request(|ack| Command::RemoveOutput(id, Some(ack))).await?;
     Ok(StatusCode::OK)
 }
 
-/// The compact document an agent reads instead of `/api/status`. See
-/// `snapshot::AgentState` for what is in it and why.
+/// The compact document an agent reads instead of `/api/status`.
 async fn agent_state(
     State(app): State<AppState>,
     State(snapshots): State<Arc<Tracker>>,
@@ -906,7 +1078,7 @@ struct SnapshotQuery {
 /// Who is asking, for the snapshot rate limit. The peer address when the
 /// server was started with connect info (always, in production), the bearer
 /// token when there is one and no address, and otherwise one shared bucket.
-fn client_key(req: &Request) -> String {
+pub fn client_key(req: &Request) -> String {
     if let Some(peer) = req
         .extensions()
         .get::<axum::extract::ConnectInfo<std::net::SocketAddr>>()
@@ -919,170 +1091,97 @@ fn client_key(req: &Request) -> String {
     }
 }
 
-/// `sheet.jpg`, `program.jpg` or `{source_id}.jpg`: the newest mosaic frame,
-/// or one cell cut out of it. Cutting means a decode and an encode, which is
-/// a few milliseconds of CPU and goes on a blocking thread.
-///
-/// Errors are plain text with a status an agent can branch on: 404 for a
-/// name that is not on the mosaic or a mosaic that is switched off, 503 while
-/// the first frame is still on its way.
+/// `sheet.jpg`, `program.jpg` or `{source_id}.jpg`, with the plain text
+/// errors and the status codes the old clients branch on.
 async fn snapshot_image(
     State(snapshots): State<Arc<Tracker>>,
     Path(name): Path<String>,
     Query(q): Query<SnapshotQuery>,
     req: Request,
 ) -> Response {
-    let plain = |code: StatusCode, msg: String| {
-        (code, [(header::CACHE_CONTROL, "no-store")], msg).into_response()
-    };
-
-    let Some(pick) = snapshot::parse_pick(&name) else {
-        return plain(
-            StatusCode::NOT_FOUND,
-            "no such snapshot; use sheet.jpg, program.jpg or {source_id}.jpg".into(),
-        );
-    };
-    if let Some(why) = snapshots.disabled_reason() {
-        return plain(StatusCode::NOT_FOUND, why);
-    }
+    let plain =
+        |code: StatusCode, msg: String| (code, [(header::CACHE_CONTROL, "no-store")], msg).into_response();
     let ask = Ask { width: q.width, force: q.force, allow_large: q.allow_large };
-    let width = match snapshots.resolve(&client_key(&req), &ask) {
-        Ok(w) => w,
-        Err(refusal @ snapshot::Refusal::TooWide { .. }) => {
-            return plain(StatusCode::BAD_REQUEST, refusal.message())
+    match snapshot_bytes(&snapshots, &client_key(&req), &name, &ask).await {
+        Ok(jpeg) => (
+            StatusCode::OK,
+            [(header::CONTENT_TYPE, "image/jpeg"), (header::CACHE_CONTROL, "no-store")],
+            jpeg,
+        )
+            .into_response(),
+        Err(e) if e.code == ErrorCode::NotFound.number() => {
+            plain(StatusCode::NOT_FOUND, e.message)
         }
-        Err(refusal) => return plain(StatusCode::TOO_MANY_REQUESTS, refusal.message()),
-    };
-    // Asking is what starts the tracker and, through it, the mosaic. The first
-    // request after a quiet spell pays for the build; the rest are free.
-    let Some(latest) = snapshots.latest_wanted(Duration::from_secs(3)).await else {
-        return plain(
-            StatusCode::SERVICE_UNAVAILABLE,
-            "no mosaic frame yet: the mosaic is being built for you. Retry in a second."
-                .into(),
-        );
-    };
-
-    // The whole sheet at its own size is the frame as it came off the
-    // encoder, no work at all.
-    if pick == Pick::Sheet && width.is_none() {
-        return jpeg_response(latest.jpeg.to_vec());
-    }
-    let cell = match &pick {
-        Pick::Sheet => None,
-        Pick::Program => match snapshot::find_cell(&latest.cells, &pick) {
-            Some(c) => Some(c.clone()),
-            None => return plain(StatusCode::NOT_FOUND, "the programme is not on the mosaic".into()),
-        },
-        Pick::Source(id) => match snapshot::find_cell(&latest.cells, &pick) {
-            Some(c) => Some(c.clone()),
-            None => return plain(StatusCode::NOT_FOUND, format!("no source {id} on the mosaic")),
-        },
-    };
-
-    let bytes = latest.jpeg.clone();
-    let encoded = tokio::task::spawn_blocking(move || {
-        let mosaic = snapshot::decode_jpeg(&bytes)?;
-        let img = match &cell {
-            Some(c) => snapshot::crop_cell(&mosaic, c),
-            None => mosaic,
-        };
-        snapshot::encode_jpeg(&snapshot::fit_width(img, width))
-    })
-    .await;
-    match encoded {
-        Ok(Ok(jpeg)) => jpeg_response(jpeg),
-        Ok(Err(e)) => {
-            warn!(error = %e, "snapshot re-encode failed");
-            plain(StatusCode::INTERNAL_SERVER_ERROR, "the mosaic frame could not be decoded".into())
+        Err(e) if e.code == ErrorCode::NotInState.number() => {
+            plain(StatusCode::SERVICE_UNAVAILABLE, e.message)
         }
-        Err(e) => {
-            warn!(error = %e, "snapshot task failed");
-            plain(StatusCode::INTERNAL_SERVER_ERROR, "snapshot task failed".into())
+        Err(e) if e.code == ErrorCode::InvalidParams.number() => {
+            plain(StatusCode::BAD_REQUEST, e.message)
         }
+        Err(e) if e.code == ErrorCode::Safety.number() => {
+            plain(StatusCode::TOO_MANY_REQUESTS, e.message)
+        }
+        Err(e) => plain(StatusCode::INTERNAL_SERVER_ERROR, e.message),
     }
 }
 
-fn jpeg_response(bytes: Vec<u8>) -> Response {
-    (
-        StatusCode::OK,
-        [(header::CONTENT_TYPE, "image/jpeg"), (header::CACHE_CONTROL, "no-store")],
-        bytes,
-    )
-        .into_response()
+// --- the background task and the per connection clock ---------------------
+
+/// The programme running time, carried forward between status snapshots.
+///
+/// A status is published on a change rather than on a tick, so the number in
+/// the last one goes stale. Programme running time advances with the pipeline
+/// clock, which advances with wall time, so adding the elapsed time since the
+/// snapshot keeps the frame header monotonic and close enough for a client
+/// lining a frame up against a layout.
+pub struct RunningTime {
+    base_ms: u64,
+    at: std::time::Instant,
+    layout: u32,
 }
 
-async fn ws_upgrade(ws: WebSocketUpgrade, State(app): State<AppState>) -> Response {
-    ws.on_upgrade(move |socket| serve_ws(socket, app))
+impl Default for RunningTime {
+    fn default() -> Self {
+        Self { base_ms: 0, at: std::time::Instant::now(), layout: 0 }
+    }
 }
 
-async fn serve_ws(socket: WebSocket, app: AppState) {
-    let (mut tx, mut rx) = socket.split();
+impl RunningTime {
+    pub fn observe(&mut self, event: &Event) {
+        if let Event::Status(status) = event {
+            self.base_ms = status.running_time_ms;
+            self.at = std::time::Instant::now();
+            self.layout = crate::api::rpc::layout_id(&status.multiview.cells);
+        }
+    }
 
-    // Send a snapshot first so a UI that connects mid-broadcast, or reconnects
-    // after a dropout, can rebuild its whole view without any replay.
-    match app.mixer.status().await {
-        Ok(s) => {
-            let ev = Event::Status(Box::new(s));
-            if let Ok(json) = serde_json::to_string(&ev) {
-                if tx.send(Message::Text(json.into())).await.is_err() {
-                    return;
+    pub fn now_ms(&self) -> u64 {
+        self.base_ms.saturating_add(self.at.elapsed().as_millis() as u64)
+    }
+
+    /// The layout id of the grid the last status described. A frame header
+    /// carries it so a client can tell which grid a late frame belongs to.
+    pub fn layout(&self) -> u32 {
+        self.layout
+    }
+}
+
+/// Write every take down, whoever made it.
+fn spawn_history(app: AppState) {
+    tokio::spawn(async move {
+        let mut events = app.mixer.subscribe();
+        loop {
+            match events.recv().await {
+                Ok(envelope) => {
+                    if let Event::Took { source, at_running_time_ms } = envelope.event {
+                        app.history.record_event(source, at_running_time_ms, envelope.seq);
+                    }
                 }
+                Err(broadcast::error::RecvError::Closed) => return,
+                Err(broadcast::error::RecvError::Lagged(_)) => {}
             }
         }
-        Err(e) => {
-            warn!(?e, "could not snapshot state for new websocket client");
-            return;
-        }
-    }
-
-    let mut events = app.mixer.subscribe();
-    // Holding this is what keeps the mosaic up. It goes when the socket does,
-    // and with it, after the linger, the mosaic itself if this was the last
-    // client. A UI that asks for nothing in particular gets the configured
-    // size.
-    let mut frames = app.multiview.subscribe(MultiviewRequest::configured());
-
-    loop {
-        tokio::select! {
-            // Client closed, or sent something. We accept no commands here;
-            // control goes over HTTP so that failures get a status code.
-            incoming = rx.next() => match incoming {
-                None | Some(Err(_)) | Some(Ok(Message::Close(_))) => break,
-                Some(Ok(_)) => {}
-            },
-
-            ev = events.recv() => match ev {
-                Ok(ev) => {
-                    let Ok(json) = serde_json::to_string(&ev) else { continue };
-                    if tx.send(Message::Text(json.into())).await.is_err() {
-                        break;
-                    }
-                }
-                Err(broadcast::error::RecvError::Lagged(n)) => {
-                    debug!(skipped = n, "websocket client fell behind on events");
-                }
-                Err(broadcast::error::RecvError::Closed) => break,
-            },
-
-            // With multiview off this never yields, so the select just
-            // handles events and no special case is needed.
-            frame = frames.recv() => match frame {
-                Ok(bytes) => {
-                    if tx.send(Message::Binary(bytes.to_vec().into())).await.is_err() {
-                        break;
-                    }
-                }
-                Err(broadcast::error::RecvError::Lagged(n)) => {
-                    // Expected on a slow link. Dropping preview frames is the
-                    // correct response; the newest one is along shortly.
-                    debug!(skipped = n, "websocket client fell behind on preview frames");
-                }
-                Err(broadcast::error::RecvError::Closed) => break,
-            },
-        }
-    }
-    debug!("websocket client disconnected");
+    });
 }
 
 pub async fn serve(bind: &str, state: AppState) -> Result<()> {
@@ -1090,6 +1189,7 @@ pub async fn serve(bind: &str, state: AppState) -> Result<()> {
     info!(%bind, "control server listening");
     let snapshots =
         Tracker::new(state.snapshot.clone(), state.multiview.clone(), state.mixer.clone());
+    spawn_history(state.clone());
     let observe = crate::observe::router(observe_state(&state));
     // Connect info so the snapshot rate limit can tell one client from
     // another. Nothing else uses it, and a request without it still works.
@@ -1106,7 +1206,7 @@ fn observe_state(state: &AppState) -> crate::observe::ObserveState {
     crate::observe::ObserveState {
         mixer: Some(state.mixer.clone()),
         multiview: Some(state.multiview.clone()),
-        token: state.token.clone(),
+        tokens: Some(state.tokens.clone()),
         // Prometheus scrapes with no credentials. See the field's own note.
         metrics_open: true,
         config_path: crate::config::path_in_force(std::path::Path::new("godwinmix.toml")),
@@ -1114,344 +1214,4 @@ fn observe_state(state: &AppState) -> crate::observe::ObserveState {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::config::Superimpose;
-
-    /// `add_source` builds its `SourceConfig` through JSON, so the strings the
-    /// API accepts have to be exactly the ones serde knows. A spelling that
-    /// drifts, "on" or `true`, would be a 400 on a field that reads as
-    /// obviously correct to whoever sent it.
-    #[test]
-    fn superimpose_spellings_survive_the_trip_through_json() {
-        let cfg = |v: serde_json::Value| -> Result<SourceConfig, _> {
-            serde_json::from_value(serde_json::json!({
-                "id": "page", "uri": "web+https://example.com/live", "name": null,
-                "superimpose": v,
-            }))
-        };
-        assert_eq!(cfg("auto".into()).unwrap().superimpose, Superimpose::Auto);
-        assert_eq!(cfg("off".into()).unwrap().superimpose, Superimpose::Off);
-        assert!(cfg("on".into()).is_err());
-        // Why the handler substitutes "off" rather than passing a null on:
-        // the serde default fills in a missing key, not a null one.
-        assert!(cfg(serde_json::Value::Null).is_err());
-        // And omitting it entirely is the default, which is today's behaviour.
-        let bare: SourceConfig = serde_json::from_value(serde_json::json!({
-            "id": "page", "uri": "web+https://example.com/live",
-        }))
-        .unwrap();
-        assert_eq!(bare.superimpose, Superimpose::Off);
-    }
-
-    #[test]
-    fn ids_are_derived_from_hosts_and_names() {
-        assert_eq!(host_of("https://www.youtube.com/watch?v=x"), "youtube.com");
-        assert_eq!(host_of("web+https://user:pw@host.tv:8443/live"), "host.tv");
-        assert_eq!(host_of("rtmp://127.0.0.1:1935/live/cam1"), "127.0.0.1");
-        assert_eq!(slug("youtube.com"), "youtube-com");
-        assert_eq!(slug("  Camera #2 (wide) "), "camera-2-wide");
-        assert_eq!(slug("***"), "source");
-    }
-
-    /// golive names a source and an output after their host. The web+ prefix
-    /// and the port must not leak into the id, and a bare host given to
-    /// `as_web_uri` must come out the same as its https form.
-    #[test]
-    fn golive_ids_come_from_the_host() {
-        assert_eq!(derived_id("web+http://127.0.0.1:8090/demo.html"), "127-0-0-1");
-        assert_eq!(derived_id("web+https://www.example.com/live?x=1"), "example-com");
-        assert_eq!(derived_id(&crate::input::as_web_uri("example.com/page")), "example-com");
-        assert_eq!(derived_id("rtmp://a.rtmp.youtube.com/live2/KEY"), "a-rtmp-youtube-com");
-        assert_eq!(derived_id("web+"), "source");
-        let mut c = id_candidates("demo");
-        assert_eq!(c.next().as_deref(), Some("demo"));
-        assert_eq!(c.next().as_deref(), Some("demo-2"));
-        assert_eq!(c.last().as_deref(), Some("demo-9"));
-    }
-
-    fn headers_with(auth: Option<&str>) -> HeaderMap {
-        let mut h = HeaderMap::new();
-        if let Some(a) = auth {
-            h.insert(header::AUTHORIZATION, a.parse().unwrap());
-        }
-        h
-    }
-
-    fn uri(s: &str) -> Uri {
-        s.parse().unwrap()
-    }
-
-    #[test]
-    fn no_token_configured_means_everything_is_open() {
-        let plain = uri("/api/status");
-        assert_eq!(token_check(None, &Method::GET, &headers_with(None), &plain), Ok(()));
-        assert_eq!(token_check(None, &Method::POST, &headers_with(Some("Bearer junk")), &plain), Ok(()));
-    }
-
-    #[test]
-    fn token_in_the_header_is_checked_on_every_method() {
-        let plain = uri("/api/take");
-        let ok = headers_with(Some("Bearer s3cret"));
-        assert_eq!(token_check(Some("s3cret"), &Method::POST, &ok, &plain), Ok(()));
-        assert_eq!(token_check(Some("s3cret"), &Method::GET, &ok, &plain), Ok(()));
-        assert_eq!(token_check(Some("s3cret"), &Method::DELETE, &ok, &plain), Ok(()));
-        // The scheme is case insensitive, as HTTP says it is.
-        let lower = headers_with(Some("bearer s3cret"));
-        assert_eq!(token_check(Some("s3cret"), &Method::POST, &lower, &plain), Ok(()));
-
-        assert_eq!(
-            token_check(Some("s3cret"), &Method::POST, &headers_with(None), &plain),
-            Err("missing token")
-        );
-        let wrong = headers_with(Some("Bearer s3cres"));
-        assert_eq!(token_check(Some("s3cret"), &Method::POST, &wrong, &plain), Err("wrong token"));
-        let short = headers_with(Some("Bearer s3cre"));
-        assert_eq!(token_check(Some("s3cret"), &Method::POST, &short, &plain), Err("wrong token"));
-        let long = headers_with(Some("Bearer s3cret1"));
-        assert_eq!(token_check(Some("s3cret"), &Method::POST, &long, &plain), Err("wrong token"));
-        // Another scheme is not a bearer token at all.
-        let basic = headers_with(Some("Basic czNjcmV0"));
-        assert_eq!(token_check(Some("s3cret"), &Method::GET, &basic, &plain), Err("missing token"));
-    }
-
-    #[test]
-    fn token_in_the_query_is_taken_on_get_only() {
-        let none = headers_with(None);
-        let right = uri("/ws?token=s3cret");
-        assert_eq!(token_check(Some("s3cret"), &Method::GET, &none, &right), Ok(()));
-        // Percent encoded, as a browser would send it, and among other keys.
-        let encoded = uri("/ws?x=1&token=s3%63ret&y=2");
-        assert_eq!(token_check(Some("s3cret"), &Method::GET, &none, &encoded), Ok(()));
-        let wrong = uri("/ws?token=nope");
-        assert_eq!(token_check(Some("s3cret"), &Method::GET, &none, &wrong), Err("wrong token"));
-        let empty = uri("/ws?token=");
-        assert_eq!(token_check(Some("s3cret"), &Method::GET, &none, &empty), Err("missing token"));
-        // A POST does not get to put the token in its URL.
-        assert_eq!(token_check(Some("s3cret"), &Method::POST, &none, &right), Err("missing token"));
-        // A header wins over a query when both are present, wrong or not.
-        let bad_header = headers_with(Some("Bearer nope"));
-        assert_eq!(token_check(Some("s3cret"), &Method::GET, &bad_header, &right), Err("wrong token"));
-    }
-
-    /// A slider that overshoots still moves the sound, so out of range is
-    /// clamped. NaN is the one value refused: it cannot arrive from JSON, but
-    /// `f64::clamp` would hand it straight through to a volume element that
-    /// then goes silent with nothing in the log to explain it.
-    #[test]
-    fn gains_are_clamped_before_they_reach_the_pipeline() {
-        assert_eq!(checked_gain(0.5).unwrap(), 0.5);
-        assert_eq!(checked_gain(-2.0).unwrap(), 0.0);
-        assert_eq!(checked_gain(1e6).unwrap(), MAX_GAIN);
-        assert_eq!(checked_gain(f64::INFINITY).unwrap(), MAX_GAIN);
-        assert_eq!(checked_gain(f64::NEG_INFINITY).unwrap(), 0.0);
-        assert!(checked_gain(f64::NAN).is_err());
-    }
-
-    /// Every field optional, and a missing `media` is an empty list rather
-    /// than a list of zeroes: the difference is whether sending one fader
-    /// silences every video underneath it.
-    #[test]
-    fn a_partial_audio_body_names_only_what_it_moves() {
-        let parse = |v: serde_json::Value| serde_json::from_value::<AudioRequest>(v).unwrap();
-        let page_only = parse(serde_json::json!({ "page": 0.8 }));
-        assert_eq!(page_only.page, Some(0.8));
-        assert!(page_only.media.is_empty());
-        assert_eq!(page_only.gain, None);
-        assert_eq!(page_only.muted, None);
-
-        // What a source's own fader sends, and what the mute button sends.
-        // Neither names a balance, which is what keeps them off the 409 path.
-        let fader = parse(serde_json::json!({ "gain": 0.4 }));
-        assert_eq!(fader.gain, Some(0.4));
-        assert_eq!(fader.muted, None);
-        assert_eq!(fader.page, None);
-        assert!(fader.media.is_empty());
-
-        let mute = parse(serde_json::json!({ "muted": true }));
-        assert_eq!(mute.muted, Some(true));
-        assert_eq!(mute.gain, None);
-
-        // Unmuting is an explicit false, not an omission. Omitting it has to
-        // leave the mute alone, or every fader move would unmute the source.
-        let unmute = parse(serde_json::json!({ "muted": false }));
-        assert_eq!(unmute.muted, Some(false));
-
-        let media_only = parse(serde_json::json!({ "media": [1.0, 0.0] }));
-        assert_eq!(media_only.page, None);
-        assert_eq!(media_only.media, vec![Some(1.0), Some(0.0)]);
-
-        // An empty body is a read of the current levels, not a reset.
-        let nothing = parse(serde_json::json!({}));
-        assert_eq!(nothing.page, None);
-        assert!(nothing.media.is_empty());
-        assert_eq!(nothing.gain, None);
-        assert_eq!(nothing.muted, None);
-
-        let both = parse(serde_json::json!({ "page": 0.8, "media": [1.0, 0.0] }));
-        assert_eq!(both.page, Some(0.8));
-        assert_eq!(both.media, vec![Some(1.0), Some(0.0)]);
-
-        // What the UI actually sends when the second video's fader moves. A
-        // short list could not say this: `[0.5]` would move the first video.
-        let second_only = parse(serde_json::json!({ "media": [null, 0.5] }));
-        assert_eq!(second_only.page, None);
-        assert_eq!(second_only.media, vec![None, Some(0.5)]);
-    }
-
-    async fn body_json(r: Response) -> serde_json::Value {
-        let bytes = axum::body::to_bytes(r.into_body(), usize::MAX).await.unwrap();
-        serde_json::from_slice(&bytes).unwrap()
-    }
-
-    /// Three answers, three statuses. The 409 is the one that earns its keep:
-    /// a whole page source exists and takes the request happily, but its
-    /// sounds were mixed by Chromium and there is nothing behind the balance
-    /// faders. A quiet 200 there would have the caller dragging a dead control.
-    #[tokio::test]
-    async fn balancing_says_which_kind_of_no_it_is() {
-        let ok = audio_response(
-            "page",
-            AudioOutcome::Set(crate::state::SourceAudioState {
-                gain: 1.0,
-                muted: false,
-                page: Some(0.8),
-                media: Some(vec![1.0, 0.0]),
-            }),
-        );
-        assert_eq!(ok.status(), StatusCode::OK);
-        let v = body_json(ok).await;
-        assert_eq!(v["gain"], 1.0);
-        assert_eq!(v["muted"], false);
-        assert_eq!(v["page"], 0.8);
-        assert_eq!(v["media"][1], 0.0);
-
-        // A camera answers with the fader and the mute and nothing else. The UI
-        // draws balance faders when `page` is there, so writing a null would
-        // have it drawing controls with nothing behind them.
-        let camera = audio_response(
-            "cam1",
-            AudioOutcome::Set(crate::state::SourceAudioState {
-                gain: 0.4,
-                muted: true,
-                page: None,
-                media: None,
-            }),
-        );
-        assert_eq!(camera.status(), StatusCode::OK);
-        let v = body_json(camera).await;
-        assert_eq!(v["gain"], 0.4);
-        assert_eq!(v["muted"], true);
-        assert!(v.get("page").is_none(), "a camera answer must carry no balance");
-        assert!(v.get("media").is_none(), "a camera answer must carry no balance");
-
-        let missing = audio_response("cam9", AudioOutcome::NoSuchSource);
-        assert_eq!(missing.status(), StatusCode::NOT_FOUND);
-        let v = body_json(missing).await;
-        assert!(
-            v["error"].as_str().unwrap().contains("cam9"),
-            "the message has to name the id that was asked for: {v}"
-        );
-
-        let flat = audio_response("cam1", AudioOutcome::NotSuperimposed);
-        assert_eq!(flat.status(), StatusCode::CONFLICT);
-        let v = body_json(flat).await;
-        let msg = v["error"].as_str().unwrap();
-        assert!(msg.contains("cam1") && msg.contains("superimposed"), "unclear message: {msg}");
-    }
-
-    /// The scrubber's three answers. The 409 is the one worth having: a camera
-    /// exists, works, and has no position to move to, and a quiet 200 there
-    /// would leave the UI drawing a scrubber that snaps back on the next poll.
-    #[tokio::test]
-    async fn seeking_says_which_kind_of_no_it_is() {
-        let ok = seek_response(
-            "clip1",
-            SeekOutcome::Moved(crate::state::SourcePositionState {
-                position_ms: 42_000,
-                duration_ms: Some(154_000),
-            }),
-        );
-        assert_eq!(ok.status(), StatusCode::OK);
-        let v = body_json(ok).await;
-        assert_eq!(v["position_ms"], 42_000);
-        assert_eq!(v["duration_ms"], 154_000);
-
-        // A clip whose duration the demuxer has not worked out yet still says
-        // where it landed, and leaves the duration out rather than writing a zero
-        // that the UI would draw a full length track from.
-        let early = seek_response(
-            "clip1",
-            SeekOutcome::Moved(crate::state::SourcePositionState {
-                position_ms: 1_000,
-                duration_ms: None,
-            }),
-        );
-        let v = body_json(early).await;
-        assert_eq!(v["position_ms"], 1_000);
-        assert!(v.get("duration_ms").is_none());
-
-        let missing = seek_response("cam9", SeekOutcome::NoSuchSource);
-        assert_eq!(missing.status(), StatusCode::NOT_FOUND);
-        let v = body_json(missing).await;
-        assert!(
-            v["error"].as_str().unwrap().contains("cam9"),
-            "the message has to name the id that was asked for: {v}"
-        );
-
-        let live = seek_response("cam1", SeekOutcome::NotSeekable);
-        assert_eq!(live.status(), StatusCode::CONFLICT);
-        let v = body_json(live).await;
-        let msg = v["error"].as_str().unwrap();
-        assert!(msg.contains("cam1") && msg.contains("live feed"), "unclear message: {msg}");
-
-        // A pipeline that took the request and refused it is an ordinary failure
-        // and comes back as one, with the reason intact.
-        let refused =
-            seek_response("clip1", SeekOutcome::Failed("demuxer refused the seek".into()));
-        assert_eq!(refused.status(), StatusCode::BAD_REQUEST);
-        let v = body_json(refused).await;
-        assert!(v["error"].as_str().unwrap().contains("demuxer refused"), "{v}");
-    }
-
-    /// A scrubber dragged off either end of its track should land at that end.
-    /// The near end is clamped here; the far one is clamped by the mixer, which
-    /// is the only thing that knows how long the clip is.
-    #[test]
-    fn a_position_off_the_end_of_the_track_is_clamped_not_refused() {
-        assert_eq!(checked_position(0.0).unwrap(), 0);
-        assert_eq!(checked_position(42_000.0).unwrap(), 42_000);
-        // Dragged past the left hand end, which a scrubber does on a quick flick.
-        assert_eq!(checked_position(-5_000.0).unwrap(), 0);
-        // Fractions come of dividing a pixel position by a track width.
-        assert_eq!(checked_position(41_999.6).unwrap(), 42_000);
-        // Saturating rather than wrapping: a silly number must not land near the
-        // start of the clip, which is what `as` on a float used to do.
-        assert_eq!(checked_position(1e300).unwrap(), u64::MAX);
-        // Not a number is the one thing refused, because there is no position to
-        // read it as.
-        assert!(checked_position(f64::NAN).is_err());
-    }
-
-    #[test]
-    fn the_seek_request_needs_a_position() {
-        let parse = |v: serde_json::Value| serde_json::from_value::<SeekRequest>(v);
-        assert_eq!(parse(serde_json::json!({ "position_ms": 42000 })).unwrap().position_ms, 42_000.0);
-        // An integer and a float both arrive as the same thing, so the UI can
-        // send whatever its slider gives it.
-        assert_eq!(parse(serde_json::json!({ "position_ms": 42000.5 })).unwrap().position_ms, 42_000.5);
-        // An empty body is not a read here. There is nothing to read: the
-        // position is in the status snapshot and in the position event already.
-        assert!(parse(serde_json::json!({})).is_err());
-    }
-
-    #[test]
-    fn constant_time_eq_agrees_with_plain_equality() {
-        assert!(constant_time_eq(b"", b""));
-        assert!(constant_time_eq(b"abc", b"abc"));
-        assert!(!constant_time_eq(b"abc", b"abd"));
-        assert!(!constant_time_eq(b"abc", b"ab"));
-        assert!(!constant_time_eq(b"ab", b"abc"));
-        assert!(!constant_time_eq(b"abc", b""));
-    }
-}
+mod tests;

@@ -31,7 +31,7 @@ pub struct ObserveState {
     pub multiview: Option<crate::multiview::MultiviewHandle>,
     /// The same bearer token the rest of the control plane uses. `None` leaves
     /// these routes as open as the rest of it.
-    pub token: Option<Arc<str>>,
+    pub tokens: Option<Arc<crate::api::scope::Tokens>>,
     /// Whether `/metrics` answers without the token.
     ///
     /// On by default, because a Prometheus server scrapes with no credentials
@@ -115,7 +115,7 @@ pub async fn rpc_metrics(req: Request, next: Next) -> Response {
 }
 
 async fn require_token(State(state): State<ObserveState>, req: Request, next: Next) -> Response {
-    let Some(token) = state.token.as_deref() else {
+    let Some(tokens) = state.tokens.as_ref() else {
         return next.run(req).await;
     };
     let presented = req
@@ -124,18 +124,17 @@ async fn require_token(State(state): State<ObserveState>, req: Request, next: Ne
         .and_then(|v| v.to_str().ok())
         .and_then(|v| v.strip_prefix("Bearer "))
         .map(str::trim);
-    // Constant time is not the point here (the token is not a password hash
-    // and the comparison is against a value the caller already chose), but a
-    // length check first keeps the comparison cheap.
-    if presented.is_some_and(|p| p.len() == token.len() && p == token) {
-        return next.run(req).await;
+    // One authenticator for the whole core: the same table, the same constant
+    // time comparison and the same refusal text the rest of the API uses.
+    match tokens.authenticate(presented) {
+        Ok(_) => next.run(req).await,
+        Err(reason) => (
+            StatusCode::UNAUTHORIZED,
+            [(header::WWW_AUTHENTICATE, "Bearer")],
+            Json(json!({ "error": reason.message() })),
+        )
+            .into_response(),
     }
-    (
-        StatusCode::UNAUTHORIZED,
-        [(header::WWW_AUTHENTICATE, "Bearer")],
-        Json(json!({ "error": "this endpoint needs the control token" })),
-    )
-        .into_response()
 }
 
 // --- handlers ----------------------------------------------------------------
@@ -408,7 +407,7 @@ mod tests {
         ObserveState {
             mixer: None,
             multiview: None,
-            token: None,
+            tokens: None,
             metrics_open: true,
             config_path: crate::observe::tempdir("routes").join("godwinmix.toml"),
         }
@@ -433,7 +432,10 @@ mod tests {
     #[tokio::test]
     async fn metrics_is_open_by_default_and_closed_when_the_operator_says_so() {
         let mut state = test_state();
-        state.token = Some("secret".into());
+        state.tokens = Some(std::sync::Arc::new(crate::api::scope::Tokens::new(
+            vec![crate::api::scope::Token::legacy("secret")],
+            false,
+        )));
         state.metrics_open = true;
         let open = Served::start(state.clone()).await;
         assert_eq!(open.get("/metrics").send().await.unwrap().status(), 200);
@@ -571,7 +573,10 @@ mod tests {
     #[tokio::test]
     async fn the_guarded_routes_need_the_token_and_the_right_one_gets_in() {
         let mut state = test_state();
-        state.token = Some("secret".into());
+        state.tokens = Some(std::sync::Arc::new(crate::api::scope::Tokens::new(
+            vec![crate::api::scope::Token::legacy("secret")],
+            false,
+        )));
         let server = Served::start(state).await;
         assert_eq!(server.get("/api/v1/pipeline/list").send().await.unwrap().status(), 401);
         assert_eq!(
