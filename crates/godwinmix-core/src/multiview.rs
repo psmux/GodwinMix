@@ -482,7 +482,7 @@ impl Multiview {
             "mv-caps",
             &CanvasCaps::video_at(cfg.width, cfg.height, fps),
         )?;
-        let vqueue = gstutil::queue_thread("mv-q")?;
+        let vqueue = gstutil::queue_preview("mv-q")?;
         let vconv = make("videoconvert", "mv-conv")?;
         let enc = make("jpegenc", "mv-jpeg")?;
         crate::probe::set_int(&enc, "quality", cfg.jpeg_quality as i64);
@@ -565,7 +565,7 @@ impl Multiview {
 
         let src = make("proxysrc", &format!("mv-src-{tag}"))?;
         src.set_property("proxysink", proxy);
-        let queue = gstutil::queue_thread(&format!("mv-q-{tag}"))?;
+        let queue = gstutil::queue_preview(&format!("mv-q-{tag}"))?;
         let rate = make("videorate", &format!("mv-rate-{tag}"))?;
         // Start at the first buffer that arrives, not at the start of the
         // segment. The mosaic is built when a client asks for it, which may be
@@ -1078,6 +1078,139 @@ mod tests {
         );
 
         drop(sub);
+        let _ = handle.send(crate::mixer::Command::Shutdown);
+        tokio::task::spawn_blocking(move || thread.join()).await.unwrap().unwrap();
+    }
+
+    /// A source with a thumbnail end, for the two tests below.
+    fn test_source() -> crate::config::SourceConfig {
+        crate::config::SourceConfig::bare("cam1", "test://smpte")
+    }
+
+    /// Reported from live runs: a `test://` source went live and then stalled
+    /// within about twenty seconds, repeatedly, whenever a client subscribed to
+    /// the mosaic and left again.
+    ///
+    /// The mosaic stops reading its `proxysrc`s while it is being torn down or
+    /// rebuilt. The thumbnail branch hanging off the source's `vtee` then fills
+    /// up, and a queue that blocks when full holds the tee, which holds the
+    /// programme branch beside it, which is where the liveness probe lives. The
+    /// source looked dead and the supervisor restarted it. This subscribes and
+    /// leaves repeatedly and insists the source stays live throughout.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn a_subscriber_coming_and_going_never_stalls_a_source() {
+        init();
+        let mut cfg = mixer_cfg(MultiviewConfig {
+            width: 320,
+            height: 180,
+            fps: 8,
+            linger_secs: 0,
+            ..Default::default()
+        });
+        cfg.sources = vec![test_source()];
+        let (mut mix, handle, cmd_rx, _bus_rx) = crate::mixer::Mixer::build(cfg).unwrap();
+        mix.start().unwrap();
+        let mv = mix.multiview_handle();
+        let thread = crate::mixer::spawn(mix, cmd_rx, handle.clone());
+
+        // Let the source deliver a picture before anything is asked of it.
+        let live = async {
+            loop {
+                let status = handle.status().await.unwrap();
+                if status.sources.iter().any(|s| s.state == crate::state::SourceState::Live) {
+                    return;
+                }
+                tokio::time::sleep(Duration::from_millis(100)).await;
+            }
+        };
+        tokio::time::timeout(Duration::from_secs(10), live)
+            .await
+            .expect("the source never went live");
+
+        for round in 0..12 {
+            let mut sub = mv.subscribe(MultiviewRequest::configured());
+            let _ = tokio::time::timeout(Duration::from_secs(2), sub.recv()).await;
+            drop(sub);
+            tokio::time::sleep(Duration::from_millis(120)).await;
+            // Every status read has a deadline, so a mixer thread that has
+            // wedged fails this rather than hanging the suite.
+            let status = tokio::time::timeout(Duration::from_secs(2), handle.status())
+                .await
+                .unwrap_or_else(|_| panic!("the mixer stopped answering on round {round}"))
+                .unwrap();
+            let state = status.sources.first().map(|s| s.state);
+            assert_ne!(
+                state,
+                Some(crate::state::SourceState::Stalled),
+                "the source was judged stalled on round {round} by a mosaic coming and going"
+            );
+        }
+
+        let _ = handle.send(crate::mixer::Command::Shutdown);
+        tokio::task::spawn_blocking(move || thread.join()).await.unwrap().unwrap();
+    }
+
+    /// Reported from live runs: the core stopped answering HTTP entirely right
+    /// after "last multiview subscriber left, taking the mosaic down", stayed
+    /// alive and never recovered.
+    ///
+    /// Anything that wedges the mixer thread does that, because every control
+    /// call ends at `handle.status()`. This builds and tears the mosaic down
+    /// fifty times while a source runs and another task polls status, with a
+    /// deadline on every step, so a teardown that blocks fails here instead of
+    /// in a show.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn fifty_mosaic_teardowns_never_wedge_the_mixer() {
+        init();
+        let mut cfg = mixer_cfg(MultiviewConfig {
+            width: 320,
+            height: 180,
+            fps: 8,
+            linger_secs: 0,
+            ..Default::default()
+        });
+        cfg.sources = vec![test_source()];
+        let (mut mix, handle, cmd_rx, _bus_rx) = crate::mixer::Mixer::build(cfg).unwrap();
+        mix.start().unwrap();
+        let mv = mix.multiview_handle();
+        let thread = crate::mixer::spawn(mix, cmd_rx, handle.clone());
+
+        // A second task asking the mixer questions throughout. It records the
+        // worst answer time it saw, which is the number that matters: a mixer
+        // thread held for two seconds is a mixer thread that is not switching
+        // cameras either.
+        let polling = handle.clone();
+        let worst = Arc::new(AtomicU64::new(0));
+        let poll_worst = worst.clone();
+        let poller = tokio::spawn(async move {
+            for _ in 0..300 {
+                let at = Instant::now();
+                if tokio::time::timeout(Duration::from_secs(3), polling.status()).await.is_err() {
+                    return Err("the mixer stopped answering status");
+                }
+                let ms = at.elapsed().as_millis() as u64;
+                poll_worst.fetch_max(ms, Ordering::Relaxed);
+                tokio::time::sleep(Duration::from_millis(20)).await;
+            }
+            Ok(())
+        });
+
+        for round in 0..50 {
+            let sub = mv.subscribe(MultiviewRequest::configured());
+            tokio::time::sleep(Duration::from_millis(30)).await;
+            drop(sub);
+            tokio::time::sleep(Duration::from_millis(30)).await;
+            let alive = tokio::time::timeout(Duration::from_secs(3), handle.status()).await;
+            assert!(alive.is_ok(), "the mixer wedged on teardown round {round}");
+        }
+
+        poller.abort();
+        let worst_ms = worst.load(Ordering::Relaxed);
+        assert!(
+            worst_ms < 1_500,
+            "a status call took {worst_ms} ms: the mixer thread is being held across a teardown"
+        );
+
         let _ = handle.send(crate::mixer::Command::Shutdown);
         tokio::task::spawn_blocking(move || thread.join()).await.unwrap().unwrap();
     }

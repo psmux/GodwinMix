@@ -30,7 +30,7 @@ pub struct ThumbEnd {
 impl ThumbEnd {
     fn build(id: &SourceId, thumb_fps: i32) -> Result<Self> {
         Ok(Self {
-            queue: gstutil::queue_thread(&format!("{id}-vthumb-q"))?,
+            queue: gstutil::queue_preview(&format!("{id}-vthumb-q"))?,
             scale: make("videoscale", &format!("{id}-tscale"))?,
             rate: make("videorate", &format!("{id}-trate"))?,
             caps: gstutil::capsfilter(
