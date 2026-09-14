@@ -1,0 +1,12 @@
+{
+  "name": "godwinmix",
+  "title": "GodwinMix official",
+  "description": "The plugins the project maintains. Everything here is built on the public sidecar contract, tested by the conformance harness in CI on every declared platform, and signed by the release workflow.",
+  "owner": "psmux",
+  "version": 1,
+  "signing": {
+    "identity_regexp": "^https://github.com/psmux/godwinmix/.github/workflows/.+",
+    "oidc_issuer": "https://token.actions.githubusercontent.com"
+  },
+  "plugins": []
+}

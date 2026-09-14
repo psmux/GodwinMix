@@ -1,0 +1,338 @@
+name: installers
+
+# What this workflow does, in order:
+#
+#   1. reads build.toml, the one file a fork edits, in the `settings` job;
+#   2. checks GodwinMix out at the pinned tag on Linux, macOS and Windows;
+#   3. builds the core there and runs `gmx build`, which writes `dist/`: the
+#      preset, the config, the permissive codec catalogue and a branding
+#      fragment for tauri.conf.json;
+#   4. merges that fragment over `tauri-app/tauri.conf.json`, stages the core
+#      as the desktop app's sidecar, and runs `cargo tauri build`;
+#   5. uploads each platform's installer, and on a tag attaches all three to
+#      the GitHub release.
+#
+# Nothing here forks GodwinMix. Raising `tag` in build.toml and pushing a new
+# tag of your own is the whole of a version bump.
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+
+# A second tag pushed while the first is still building makes the first
+# pointless, and three runners are expensive enough to care.
+concurrency:
+  group: installers-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ---------------------------------------------------------------- settings --
+  # One job reads build.toml so the three platform jobs never parse TOML in
+  # three shells. Everything downstream comes from these outputs.
+  settings:
+    name: Read build.toml
+    runs-on: ubuntu-latest
+    outputs:
+      preset: ${{ steps.read.outputs.preset }}
+      name: ${{ steps.read.outputs.name }}
+      identifier: ${{ steps.read.outputs.identifier }}
+      icon: ${{ steps.read.outputs.icon }}
+      repository: ${{ steps.read.outputs.repository }}
+      tag: ${{ steps.read.outputs.tag }}
+    steps:
+      - name: Check out this repository
+        uses: actions/checkout@v4
+
+      - name: Parse build.toml into job outputs
+        id: read
+        run: |
+          python3 - <<'PY' >> "$GITHUB_OUTPUT"
+          import os, sys, tomllib
+
+          with open("build.toml", "rb") as f:
+              settings = tomllib.load(f)
+
+          product = settings.get("product", {})
+          upstream = settings.get("upstream", {})
+
+          def need(table, key, where):
+              value = str(table.get(key, "")).strip()
+              if not value:
+                  sys.exit(f"build.toml: [{where}] {key} is empty and has to be set")
+              return value
+
+          out = {
+              "preset": need(product, "preset", "product"),
+              "name": need(product, "name", "product"),
+              "identifier": need(product, "identifier", "product"),
+              "icon": str(product.get("icon", "")).strip(),
+              "repository": need(upstream, "repository", "upstream"),
+              "tag": need(upstream, "tag", "upstream"),
+          }
+
+          if out["icon"] and not os.path.exists(out["icon"]):
+              sys.exit(
+                  f"build.toml: icon {out['icon']} is not in this repository. "
+                  "Commit the PNG there, or set icon = \"\" to ship the stock "
+                  "GodwinMix icon."
+              )
+
+          for key, value in out.items():
+              print(f"{key}={value}")
+          PY
+
+      - name: Say what is about to be built
+        run: |
+          {
+            echo "## ${{ steps.read.outputs.name }}"
+            echo
+            echo "| Setting | Value |"
+            echo "|---|---|"
+            echo "| preset | ${{ steps.read.outputs.preset }} |"
+            echo "| identifier | ${{ steps.read.outputs.identifier }} |"
+            echo "| icon | ${{ steps.read.outputs.icon || 'the stock GodwinMix icon' }} |"
+            echo "| core | ${{ steps.read.outputs.repository }} at ${{ steps.read.outputs.tag }} |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  # -------------------------------------------------------------- installers --
+  installers:
+    name: ${{ matrix.label }}
+    needs: settings
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 90
+    strategy:
+      # One platform failing should not throw away the two that worked.
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            label: Linux installer (.deb)
+            bundles: deb
+          - os: macos-latest
+            label: macOS installer (.app and .dmg)
+            bundles: app,dmg
+          - os: windows-latest
+            label: Windows installer (.msi)
+            bundles: msi
+    steps:
+      - name: Check out this repository
+        uses: actions/checkout@v4
+
+      - name: Check out GodwinMix at the pinned tag
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ needs.settings.outputs.repository }}
+          ref: ${{ needs.settings.outputs.tag }}
+          path: godwinmix
+
+      - name: Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache the cargo build
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            godwinmix
+            godwinmix/tauri-app
+
+      - name: GStreamer (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev \
+            libgstreamer-plugins-bad1.0-dev gstreamer1.0-plugins-base gstreamer1.0-plugins-good \
+            gstreamer1.0-plugins-bad gstreamer1.0-libav gstreamer1.0-tools
+
+      - name: GStreamer (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          brew install gstreamer
+          echo "PKG_CONFIG_PATH=$(brew --prefix gstreamer)/lib/pkgconfig:$(brew --prefix)/lib/pkgconfig" >> "$GITHUB_ENV"
+
+      # The gstreamer crate's build script looks at these three variables on
+      # Windows. The chocolatey packages install the official MSIs under
+      # Program Files, which is where they point.
+      - name: GStreamer (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          choco install -y --no-progress gstreamer gstreamer-devel
+          $gst = "C:\Program Files\gstreamer\1.0\msvc_x86_64"
+          "PKG_CONFIG_PATH=$gst\lib\pkgconfig" | Out-File -FilePath $env:GITHUB_ENV -Append
+          "GSTREAMER_1_0_ROOT_MSVC_X86_64=$gst\" | Out-File -FilePath $env:GITHUB_ENV -Append
+          "$gst\bin" | Out-File -FilePath $env:GITHUB_PATH -Append
+
+      # The desktop shell is a webview, so it does not link GStreamer, but it
+      # does need the platform's webview toolkit. Only Linux needs packages.
+      - name: Desktop app dependencies (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libayatana-appindicator3-dev \
+            librsvg2-dev patchelf libssl-dev
+
+      - name: Build the GodwinMix core
+        working-directory: godwinmix
+        run: cargo build --release --locked -p godwinmix --bins
+
+      # This is the command a person runs on their own machine. It writes
+      # godwinmix.toml, codecs.toml with every copyleft codec entry taken out,
+      # the whole preset under preset/, icons/icon.png, and the branding
+      # fragment tauri.conf.json.
+      - name: Assemble the build with gmx build
+        working-directory: godwinmix
+        shell: bash
+        run: |
+          gmx=./target/release/gmx
+          [ "$RUNNER_OS" = "Windows" ] && gmx=./target/release/gmx.exe
+
+          icon=""
+          if [ -n "${{ needs.settings.outputs.icon }}" ]; then
+            icon="$GITHUB_WORKSPACE/${{ needs.settings.outputs.icon }}"
+          fi
+
+          if [ -n "$icon" ]; then
+            "$gmx" build \
+              --preset "${{ needs.settings.outputs.preset }}" \
+              --name "${{ needs.settings.outputs.name }}" \
+              --identifier "${{ needs.settings.outputs.identifier }}" \
+              --icon "$icon" \
+              --out dist
+          else
+            "$gmx" build \
+              --preset "${{ needs.settings.outputs.preset }}" \
+              --name "${{ needs.settings.outputs.name }}" \
+              --identifier "${{ needs.settings.outputs.identifier }}" \
+              --out dist
+          fi
+          ls -la dist
+
+      # `cargo tauri build` refuses to run without the sidecar for the host
+      # triple, and the file name has to carry that triple. dist/bin holds the
+      # same binary under a fixed name, so the copy comes from target/release.
+      - name: Stage the core as the desktop app's sidecar
+        working-directory: godwinmix
+        shell: bash
+        run: |
+          triple="$(rustc -vV | sed -n 's/^host: //p')"
+          mkdir -p tauri-app/binaries
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            cp target/release/godwinmix.exe "tauri-app/binaries/godwinmix-$triple.exe"
+          else
+            cp target/release/godwinmix "tauri-app/binaries/godwinmix-$triple"
+          fi
+          ls -la tauri-app/binaries
+
+      # Field by field rather than a deep merge of the two JSON documents. A
+      # deep merge replaces app.windows wholesale, and the fragment's window
+      # object carries only a title and a label, so the URL the window opens
+      # and its size would be lost.
+      - name: Merge the branding over the upstream desktop config
+        working-directory: godwinmix
+        shell: bash
+        run: |
+          version="$(jq -r .version tauri-app/tauri.conf.json)"
+          if printf '%s' "$GITHUB_REF_NAME" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+'; then
+            version="${GITHUB_REF_NAME#v}"
+          fi
+          echo "the installers will carry version $version"
+
+          jq --slurpfile brand dist/tauri.conf.json --arg version "$version" '
+              .productName = $brand[0].productName
+            | .identifier  = $brand[0].identifier
+            | .version     = $version
+            | .bundle.publisher = $brand[0].bundle.publisher
+            | .app.windows = [
+                .app.windows[]
+                | if .label == "main" then .title = $brand[0].app.windows[0].title else . end
+              ]
+          ' tauri-app/tauri.conf.json > tauri.conf.merged.json
+
+          mv tauri.conf.merged.json tauri-app/tauri.conf.json
+          cat tauri-app/tauri.conf.json
+
+      - name: Install the Tauri CLI
+        run: cargo install tauri-cli --locked --version "^2.0" || cargo install tauri-cli --version "^2.0"
+
+      # The macOS bundle wants an .icns and the Windows bundle a .ico, and the
+      # icon in build.toml is one PNG. The Tauri CLI generates the whole set
+      # over the stock icons, so the merged config's icon list still resolves.
+      - name: Generate the platform icons
+        if: needs.settings.outputs.icon != ''
+        working-directory: godwinmix/tauri-app
+        run: cargo tauri icon ../dist/icons/icon.png --output icons
+
+      # Signing and notarising happen inside this step when the secrets exist.
+      # With none of them set the bundle is still produced, unsigned. See the
+      # README: the Windows and Linux installers need no Apple account at all.
+      - name: Build the installer
+        working-directory: godwinmix/tauri-app
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: cargo tauri build --bundles ${{ matrix.bundles }}
+
+      - name: Collect the installer
+        shell: bash
+        run: |
+          mkdir -p installers
+          find godwinmix/tauri-app/target/release/bundle -type f \
+            \( -name '*.deb' -o -name '*.msi' -o -name '*.dmg' \) \
+            -exec cp {} installers/ \;
+          # The .app is a directory, so it travels as an archive.
+          if [ -d godwinmix/tauri-app/target/release/bundle/macos ]; then
+            (cd godwinmix/tauri-app/target/release/bundle/macos && \
+              tar czf "$GITHUB_WORKSPACE/installers/macos-app.tar.gz" *.app)
+          fi
+          ls -la installers
+
+      - name: Upload the installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: installers-${{ matrix.os }}
+          path: installers/
+          if-no-files-found: error
+
+  # ----------------------------------------------------------------- release --
+  release:
+    name: Attach the installers to the release
+    needs: installers
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download all three platforms' installers
+        uses: actions/download-artifact@v4
+        with:
+          path: installers
+          merge-multiple: true
+
+      - name: Checksums over everything that will be published
+        working-directory: installers
+        run: |
+          find . -maxdepth 1 -type f ! -name SHA256SUMS -exec sha256sum {} + > SHA256SUMS
+          cat SHA256SUMS
+
+      - name: Create the release and attach the installers
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            gh release upload "$GITHUB_REF_NAME" installers/* --clobber
+          else
+            gh release create "$GITHUB_REF_NAME" \
+              --title "$GITHUB_REF_NAME" \
+              --generate-notes \
+              installers/*
+          fi

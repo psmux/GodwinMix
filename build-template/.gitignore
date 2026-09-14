@@ -1,0 +1,12 @@
+# The GodwinMix checkout the workflow makes, and everything gmx build writes.
+# Both are produced from build.toml on every run, so neither belongs in git.
+godwinmix/
+dist/
+installers/
+
+# Icons are the exception: branding/icon.png is source and is committed. The
+# .icns and .ico generated from it are not.
+branding/*.icns
+branding/*.ico
+
+.DS_Store
