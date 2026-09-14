@@ -9,6 +9,10 @@
 # See docs/explanation/architecture.md for what belongs in each.
 [workspace]
 resolver = "2"
+# A glob, so a new crate joins by existing and nobody has to remember to edit
+# this list. The one rule it imposes: a directory under `crates/` must carry a
+# `Cargo.toml`. Git does not track empty directories, so a clone never has one;
+# if you make a crate by hand, write the manifest before running cargo.
 members = ["crates/*"]
 # Same glob, so `cargo build` at the root builds every crate and `cargo run`
 # still reaches the `godwinmix` binary through its `default-run`.
