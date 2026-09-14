@@ -299,13 +299,17 @@ pub struct CanvasInfo {
 pub struct Limits {
     /// Largest upload the media endpoint accepts, in bytes.
     pub max_upload_bytes: usize,
-    /// Cells the multiview grid can hold, which is the practical source count
-    /// an operator can see at once.
-    pub multiview_cells: u32,
-    /// Loudest a fader can be asked for.
+    /// Loudest a fader can be asked for. Out of range is clamped to this
+    /// rather than refused.
     pub max_gain: f64,
-    /// Longest any method blocks before it answers or hands back a task.
+    /// Longest any method blocks before it answers. The tightest client
+    /// default in the wild, so nothing here can time out a client that used
+    /// its own.
     pub max_call_secs: u64,
+    /// Longest `idempotency_key` accepted, in bytes.
+    pub max_idempotency_key_bytes: usize,
+    /// How many events the bus holds before a slow client is told to resync.
+    pub event_queue: usize,
 }
 
 /// What the calling token is allowed to do, echoed back so a surface can grey
