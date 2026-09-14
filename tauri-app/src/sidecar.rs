@@ -46,6 +46,13 @@ impl Local {
     pub fn is_running(&self) -> bool {
         !self.stopped.load(Ordering::Relaxed)
     }
+
+    /// The daemon's process id. Printed by `--headless-check` and worth
+    /// having when someone has to look at the process list on a machine that
+    /// is misbehaving.
+    pub fn pid(&self) -> u32 {
+        self.child.pid()
+    }
 }
 
 /// Start the mixer on this computer and wait until it answers.
@@ -58,6 +65,10 @@ pub async fn start(app: &AppHandle) -> Result<Local, String> {
     let target = Target::new(format!("http://127.0.0.1:{port}"), token.clone());
     let mut env = environment(app);
     env.insert("GODWINMIX_TOKEN".into(), token);
+    // The daemon colours its output for a terminal. This one goes to a file
+    // that a person opens in a text editor, where the escape codes are just
+    // noise around every word.
+    env.insert("NO_COLOR".into(), "1".into());
 
     let command = app
         .shell()
@@ -172,7 +183,11 @@ fn record(mut rx: tauri::async_runtime::Receiver<CommandEvent>, path: PathBuf, s
             match event {
                 CommandEvent::Stdout(line) | CommandEvent::Stderr(line) => {
                     put(&line);
-                    put(b"\n");
+                    // The plugin hands over whole lines, and the daemon's own
+                    // newline is sometimes still on the end of one.
+                    if !line.ends_with(b"\n") {
+                        put(b"\n");
+                    }
                 }
                 CommandEvent::Error(why) => put(format!("[shell] {why}\n").as_bytes()),
                 CommandEvent::Terminated(end) => {
