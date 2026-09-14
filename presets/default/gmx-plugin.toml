@@ -18,5 +18,14 @@ plugins = ["rtmp@^1"]
 config = "config/godwinmix.toml"
 layout = "config/layout.json"
 surface = "web"
-theme = "slate"
+theme = "dark"
 scenes = "scenes"
+gallery = "live"
+
+# The three things the person does next. The welcome panel in the web UI
+# shows these in this order, and the README repeats them.
+steps = [
+  "Put your camera's RTMP address into the two [[sources]] blocks, or drop a file on the page.",
+  "Put your destination's URL and stream key into the [[outputs]] block.",
+  "Run `gmx`, open http://localhost:8080, and press a tile to put it on air.",
+]

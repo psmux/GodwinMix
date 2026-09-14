@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Colour bars",
+  "description": "Eight standard colour bars at the canvas caps.",
+  "type": "object",
+  "properties": {
+    "drift_px_per_sec": {
+      "type": "number",
+      "title": "Drift",
+      "description": "How fast the bars slide sideways. 0 holds them still, and a negative number sends them the other way.",
+      "default": 0,
+      "minimum": -960,
+      "maximum": 960,
+      "examples": [0, 60, -120]
+    }
+  },
+  "additionalProperties": false
+}

@@ -30,6 +30,47 @@ model rather than a shell:
 godwinmix mcp --url http://127.0.0.1:8080 --token TOKEN
 ```
 
+`--http <addr>` serves the same tools over the Streamable HTTP transport
+instead of stdio: `POST /mcp` for calls, `GET /mcp` for the server initiated
+messages, which is where `notifications/gmx/agent.state` arrives.
+
+```sh
+gmx mcp --http 127.0.0.1:8765 --url http://127.0.0.1:8080
+```
+
+### `gmx agent cost`
+
+What an agent pays to look at this mixer. Three tables: the size of
+`agent.state` at 2, 6 and 16 sources against its budget, the MCP hot tool list
+per profile against the committed baseline in `bench/agent-cost.json`, and one
+snapshot at 320, 640 and 1280 wide with the tokens a vision model charges for
+it. The tool list needs no mixer; the snapshots need a running one.
+
+```sh
+gmx agent cost
+gmx agent cost --json
+gmx agent cost --write-baseline     # move the CI baseline, on purpose
+```
+
+A test fails the build when the hot list grows by more than five percent
+against that baseline, because a tool list is charged for on every call.
+
+### `gmx skill install`
+
+Drops `godwinmix-operate` and `godwinmix-develop` where an AI coding tool
+reads them.
+
+```sh
+gmx skill install --for claude            # or codex, or gemini
+gmx skill install --for codex --print     # show what it would write
+gmx skill install --for claude --project  # into ./.claude/skills rather than ~
+gmx skill list --for gemini               # the skills and where they would go
+```
+
+`godwinmix-operate` is for running a show: the state document, the take, the
+safety rules that will refuse it, what a look costs. `godwinmix-develop` is
+for building on it: the manifest, the contract and the test loop.
+
 Requests answer with the mixer's own reason for refusing rather than a bare
 status code:
 
@@ -79,3 +120,49 @@ curl -X POST localhost:8080/api/golive -H 'content-type: application/json' \
 because the caller is a machine and the saving is a CPU core. Pass `"off"`
 to render the whole page in the browser.
 
+
+## Presets
+
+A preset is a name for a working setup: the plugins it needs, a configuration, a
+UI layout, a theme and the scenes. One command puts the whole of it on a
+machine.
+
+```sh
+gmx preset list                          # every preset this machine can apply
+gmx preset show church                   # what it is, and what applying it would do
+gmx preset show church --readme          # the page written for the person using it
+gmx preset diff church                   # only what would change in this config
+gmx preset apply church --dry-run        # the whole plan, writing nothing
+gmx preset apply church                  # do it
+gmx preset apply ./my-church --force     # from a directory, preset values winning
+gmx preset save my-church                # turn this machine back into a preset
+```
+
+Every one takes `--config` to name a config other than `godwinmix.toml`, and
+`--json` to print the same object the `preset.*` methods return.
+
+`apply` writes three files and nothing else: `godwinmix.toml`,
+`godwinmix.scenes.json` and a `[ui]` section in `godwinmix.runtime.toml`. Your
+own values win over the preset's unless `--force`; sources and outputs are
+appended by id and never duplicated, so applying the same preset twice changes
+nothing the second time. `--keep-sources` appends neither. It exits non zero
+only on a real error: a plugin that is not installed is named and the rest is
+applied.
+
+`save` takes the control token, the `[[tokens]]` table and the tail of every
+RTMP and SRT output URL out before it writes. Read the result before you publish
+it anyway.
+
+[The presets reference](presets.md) is every manifest key and the merge rules.
+
+## Custom builds
+
+```sh
+gmx build --preset church --name "AcmeMix" --icon acme.png
+```
+
+Assembles a directory holding the core binary, the preset whole, a generated
+config, the theme, a branded `tauri.conf.json` fragment and a README saying how
+CI turns it into installers. It refuses to bundle a codec entry whose licence is
+copyleft and names the ones it left out. See
+[Make a custom build](../how-to/custom-build.md).

@@ -20,7 +20,12 @@ these and nothing else. A generated `openapi.json` and a `protocol.md` from
 | `DELETE /api/outputs/{id}` | stop sending to one |
 | `POST /api/outputs/{id}/reconnect` | force a reconnect |
 | `POST /api/shutdown` | stop the mixer; what the desktop app's "Quit and stop the mixer" sends |
-| `GET /api/agent/state` | the state a language model needs, compact: programme, sources with motion and audio, outputs, snapshot URLs |
+| `GET /api/agent/state` | the state a language model needs, compact: programme, sources with their state and motion, outputs, a snapshot URL pattern. `?response_format=detailed` adds the audio peak per source, the last five takes and the safety limits in force. See [agent-state.md](agent-state.md) |
+| `POST /api/v1/program/revert` | take back to the shot before this one |
+| `GET /api/v1/program/history` | the last hundred takes, newest first, each with the token that asked |
+| `GET /api/v1/tasks` | every background job, newest first |
+| `GET /api/v1/tasks/{id}` | one job: `state`, `progress`, `result`, `error`. See [tasks.md](tasks.md) |
+| `POST /api/v1/task/cancel` | ask one to stop, cooperatively |
 | `GET /api/snapshot/sheet.jpg` | every source and the programme in one mosaic JPEG; `?width=N` scales it |
 | `GET /api/snapshot/program.jpg` | the programme alone |
 | `GET /api/snapshot/{source_id}.jpg` | one source alone |
@@ -29,6 +34,10 @@ these and nothing else. A generated `openapi.json` and a `protocol.md` from
 
 A scheduled take takes `at_running_time_ms`, armed on the pipeline clock so it
 lands on the intended frame rather than whenever the request happened to arrive.
+
+A take is also subject to the rules in [safety.md](safety.md): a minimum hold,
+a rate limit and the ITU-R BT.1702-3 flash guard. A refusal is HTTP 429 with
+`-32003`, `data.rule` and `data.retry_after_ms`.
 
 With `[control] token` set (or `GODWINMIX_TOKEN` in the environment) every
 request carries `Authorization: Bearer <token>`. `GET` requests and the

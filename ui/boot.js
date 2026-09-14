@@ -10,7 +10,8 @@ import { mountShell } from "./shell/shell.js";
 import { askForToken } from "./shell/firstrun.js";
 import { initTheme } from "./shell/theme.js";
 import { toast } from "./shell/toast.js";
-import { proposeGalleryMode, setSetting } from "./shell/settings.js";
+import { proposeGalleryMode } from "./shell/settings.js";
+import { applyCoreDefaults, watchCoreDefaults } from "./panels/welcome/defaults.js";
 
 const PANELS = [
   "./panels/header/panel.js",
@@ -20,6 +21,7 @@ const PANELS = [
   "./panels/outputs/panel.js",
   "./panels/media/panel.js",
   "./panels/alerts/panel.js",
+  "./panels/welcome/panel.js",
 ];
 
 /**
@@ -62,12 +64,19 @@ async function main() {
   migrateLegacyKeys();
   initTheme();
 
+  // What the gallery would start as if no preset says otherwise. Read before
+  // the client exists so the toast below can explain a modest machine; the
+  // core's own answer, when a preset applied one, replaces it a moment later.
   const proposed = proposeGalleryMode();
-  if (proposed) setSetting("gallery", proposed);
 
   const token = await authorise(location.origin);
   const client = await connect({ token });
   window.gmxClient = client;
+
+  // The core's [ui] section: the theme, the gallery mode and the layout a
+  // preset chose. Applied before the panels mount so nothing flashes.
+  await applyCoreDefaults(client);
+  watchCoreDefaults(client);
 
   installGlobal();
   await Promise.all(PANELS.map((path) => import(path).catch((e) => console.error(`panel ${path} failed`, e))));
