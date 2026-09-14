@@ -344,6 +344,25 @@ pub struct MediaEnds {
     pub parts: kinds::KindParts,
 }
 
+/// What this build can be asked to make: every source, output and filter type
+/// id, with what the plugin behind it says it is.
+///
+/// The picker in the UI reads this out of `protocol.json` so that a build with
+/// an extra kind offers it without the page being redeployed, and a build
+/// without one does not offer a tile that would be refused. Static data off
+/// the three registries: no pipeline is touched, which is why `--api-info` can
+/// print it on a machine with no GStreamer.
+///
+/// It lives here rather than in `godwinmix-protocol` because what a build can
+/// make is a property of the engine, not of the protocol.
+pub fn described_kinds() -> serde_json::Value {
+    serde_json::json!({
+        "source": source::described(),
+        "output": output::described(),
+        "filter": filter::described(),
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -386,23 +405,4 @@ mod tests {
         assert!(!m.is("file/output"));
         assert!(!m.is("filesource"));
     }
-}
-
-/// What this build can be asked to make: every source, output and filter type
-/// id, with what the plugin behind it says it is.
-///
-/// The picker in the UI reads this out of `protocol.json` so that a build with
-/// an extra kind offers it without the page being redeployed, and a build
-/// without one does not offer a tile that would be refused. Static data off
-/// the three registries: no pipeline is touched, which is why `--api-info` can
-/// print it on a machine with no GStreamer.
-///
-/// It lives here rather than in `godwinmix-protocol` because what a build can
-/// make is a property of the engine, not of the protocol.
-pub fn described_kinds() -> serde_json::Value {
-    serde_json::json!({
-        "source": source::described(),
-        "output": output::described(),
-        "filter": filter::described(),
-    })
 }
