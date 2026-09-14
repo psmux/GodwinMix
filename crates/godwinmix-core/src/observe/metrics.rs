@@ -58,9 +58,10 @@ const DEFS: &[(&str, Kind, &str, &[f64])] = &[
     (
         "gmx_programme_frame_stall_ms",
         Kind::Gauge,
-        "Worst average frame interval over sixty consecutive programme frames, in \
-         milliseconds. The measure the 34 ms acceptance bar is written against: a single \
-         late thread wake up averages out of it, a pipeline that really stopped does not.",
+        "Worst average frame interval over sixty consecutive programme frames in the last \
+         thirty to sixty seconds, in milliseconds. The measure the 34 ms acceptance bar is \
+         written against: a single late thread wake up averages out of it, a pipeline that \
+         really stopped does not.",
         &[],
     ),
     ("gmx_source_buffers_total", Kind::Counter, "Buffers seen from a source.", &[]),
@@ -392,6 +393,10 @@ pub fn attach_programme_probe(tee: &gstreamer::Element) {
     // against one from before it.
     let filled = AtomicU64::new(0);
     let generation = AtomicU64::new(WINDOW_GENERATION.load(Ordering::Relaxed));
+    // The gauge's own two buckets. See `GAUGE_SPAN`.
+    let bucket_opened = AtomicU64::new(0);
+    let this_bucket = AtomicU64::new(0);
+    let last_bucket = AtomicU64::new(0);
     pad.add_probe(gstreamer::PadProbeType::BUFFER, move |_, _| {
         frames.inc();
         let now = base.elapsed().as_nanos() as u64;
@@ -409,12 +414,40 @@ pub fn attach_programme_probe(tee: &gstreamer::Element) {
         let oldest = ring[(n % FRAME_WINDOW as u64) as usize].swap(now, Ordering::Relaxed);
         if n >= FRAME_WINDOW as u64 {
             let per_frame = now.saturating_sub(oldest) / FRAME_WINDOW as u64;
-            let worst = LONGEST_WINDOW_NS.fetch_max(per_frame, Ordering::Relaxed).max(per_frame);
-            stall.set(worst as f64 / 1_000_000.0);
+            LONGEST_WINDOW_NS.fetch_max(per_frame, Ordering::Relaxed);
+            // The gauge ages. Two buckets, rolled over every `GAUGE_SPAN`, and
+            // the gauge shows the worse of the one being filled and the one
+            // before it, so it always answers for at least `GAUGE_SPAN` of
+            // history and never for more than twice that.
+            if now.saturating_sub(bucket_opened.load(Ordering::Relaxed)) >= GAUGE_SPAN_NS {
+                last_bucket.store(this_bucket.swap(0, Ordering::Relaxed), Ordering::Relaxed);
+                bucket_opened.store(now, Ordering::Relaxed);
+            }
+            let recent = this_bucket
+                .fetch_max(per_frame, Ordering::Relaxed)
+                .max(per_frame)
+                .max(last_bucket.load(Ordering::Relaxed));
+            stall.set(recent as f64 / 1_000_000.0);
         }
         gstreamer::PadProbeReturn::Ok
     });
 }
+
+/// How long the published gauge looks back.
+///
+/// The gauge answers "has the programme stalled lately", not "did it ever",
+/// and the difference matters to everybody who reads it. A number that only
+/// ever goes up is poisoned for the life of the process by one bad moment
+/// during startup: an alert stays lit after the cause is gone, and a soak run
+/// cannot say which of its rounds was the bad one. Thirty seconds, in two
+/// buckets, so the answer covers between thirty and sixty seconds of history
+/// and a scrape at any ordinary interval cannot miss a spike.
+///
+/// The worst since the process started is not lost. The histogram keeps the
+/// whole distribution, `longest_frame_gap` keeps the single worst gap, and
+/// `worst_frame_stall` keeps the worst window since the last reset, which is
+/// what the tests assert on.
+const GAUGE_SPAN_NS: u64 = 30_000_000_000;
 
 /// How many consecutive frames the stall measure averages over.
 ///

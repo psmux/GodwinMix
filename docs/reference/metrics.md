@@ -25,7 +25,7 @@ against a running show does not break when the box restarts.
 |---|---|---|---|
 | `gmx_programme_frames_total` | counter | | Frames leaving the programme mixer. |
 | `gmx_programme_frame_interval_ms` | histogram | | Wall clock gap between two programme frames. |
-| `gmx_programme_frame_stall_ms` | gauge | | Worst average frame interval over any sixty consecutive frames. |
+| `gmx_programme_frame_stall_ms` | gauge | | Worst average frame interval over any sixty consecutive frames in the last 30 to 60 seconds. |
 
 Buckets: 8, 16, 20, 25, 33, 40, 50, 66, 100, 250, 1000 ms. They straddle the
 periods of 25, 30, 50 and 60 frames a second, so "frames are landing late" is
@@ -53,7 +53,11 @@ exactly 33.3. The aggregator is not late. It is jittery, and the frames it
 hands over carry the right timestamps and arrive at the right average rate.
 
 `gmx_programme_frame_stall_ms` is the same measurement averaged over sixty
-consecutive frames, which is two seconds at 30 fps. A wake up 8 ms late
+consecutive frames, which is two seconds at 30 fps. It looks back 30 to 60
+seconds rather than to the start of the process, so it answers "is the
+programme stalling" and not "did it ever stall", and an alert on it goes out
+again once the cause is gone. The histogram keeps the whole distribution if you
+want the history. A wake up 8 ms late
 followed by one 8 ms early averages to nothing. A programme that really stopped
 owes that time and every later frame in the window carries it, so a stall
 longer than about 73 ms still fails the 34 ms bar. Alert on this one, and use
