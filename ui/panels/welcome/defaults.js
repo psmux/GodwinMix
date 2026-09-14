@@ -76,21 +76,26 @@ export function watchCoreDefaults(client) {
 }
 
 function apply(ui, force) {
-  if (!ui) {
-    // No preset. The machine proposes the gallery mode, as it always has.
-    const proposed = proposeGalleryMode();
-    if (proposed) setSetting("gallery", proposed);
+  if (!ui || !ui.preset) {
+    // Nobody has set this core up. The core still says what the gallery should
+    // start as, from its own cores and memory (`gmx doctor`'s machine class),
+    // which beats guessing from `hardwareConcurrency` here. It is a first
+    // value only: a browser that has settings of its own keeps them.
+    const first = proposeGalleryMode();
+    const mode = (ui && ui.gallery) || first;
+    if (first && mode) setSetting("gallery", mode);
     return;
   }
   const already = remembered();
-  if (ui.theme && (force || already !== ui.preset)) {
+  const fresh = force || already !== ui.preset;
+  if (ui.theme && fresh) {
     register(ui);
     applyTheme(ui.theme);
   }
-  if (ui.gallery && (force || already !== ui.preset)) {
+  if (ui.gallery && fresh) {
     setSetting("gallery", ui.gallery);
   }
-  if (ui.layout && Object.keys(ui.layout).length && (force || already !== ui.preset)) {
+  if (ui.layout && Object.keys(ui.layout).length && fresh) {
     layout.save(resolvePanels(ui.layout));
   }
   remember(ui.preset);

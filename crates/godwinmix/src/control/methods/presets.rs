@@ -50,9 +50,21 @@ pub fn configure(config_path: &Path, ui: UiDefaults) {
 }
 
 /// What a surface should start with. `core.info` answers with this.
+///
+/// A core no preset has been applied to still answers with a gallery mode: the
+/// one `gmx doctor` proposes from this machine's cores and memory, so a client
+/// on a Pi starts on icons rather than guessing from `hardwareConcurrency`.
+/// `preset` is absent there, which is what tells a surface that nobody has set
+/// this core up yet.
 pub fn ui_defaults() -> Option<UiDefaults> {
     let ui = runtime().read().ui.clone();
-    (!ui.is_empty()).then_some(ui)
+    if !ui.is_empty() {
+        return Some(ui);
+    }
+    Some(UiDefaults {
+        gallery: Some(godwinmix_core::observe::doctor::gallery_default_here().to_string()),
+        ..UiDefaults::default()
+    })
 }
 
 fn config_path() -> PathBuf {
