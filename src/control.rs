@@ -172,6 +172,9 @@ pub struct Ctx {
     pub snapshots: Arc<Tracker>,
     pub registry: Arc<Registry<Call>>,
     pub routes: Arc<Vec<rest::Route>>,
+    /// The deprecated paths, resolvable the same way, so the token check in
+    /// front of them can apply the scope of the method each one aliases.
+    pub legacy_routes: Arc<Vec<rest::Route>>,
 }
 
 impl FromRef<Ctx> for AppState {
@@ -190,7 +193,8 @@ pub fn router(app: AppState, snapshots: Arc<Tracker>) -> Router {
     let max_upload = app.library.cfg().max_upload_bytes;
     let registry = Arc::new(methods::registry());
     let routes = Arc::new(rest::routes(registry.as_ref()));
-    let ctx = Ctx { app, snapshots, registry, routes };
+    let legacy_routes = Arc::new(rest::legacy_routes());
+    let ctx = Ctx { app, snapshots, registry, routes, legacy_routes };
 
     // The page at `/` is open: it is the same for everyone, contains nothing
     // secret, and is where a browser finds out that it needs a token at all.
@@ -234,7 +238,7 @@ fn legacy(ctx: Ctx, max_upload: usize) -> Router<Ctx> {
         .route("/api/outputs/{id}/reconnect", post(reconnect_output))
         .route("/ws", get(ws_upgrade))
         .route_layer(middleware::from_fn(mark_deprecated))
-        .route_layer(middleware::from_fn_with_state(ctx.clone(), require_token))
+        .route_layer(middleware::from_fn_with_state(ctx.clone(), guard_legacy))
         .with_state(ctx)
 }
 
@@ -253,18 +257,54 @@ async fn mark_deprecated(req: Request, next: Next) -> Response {
     response
 }
 
-/// Turn away a request without a token. Does nothing when none is configured.
-async fn require_token(State(app): State<AppState>, req: Request, next: Next) -> Response {
+/// The token check in front of the deprecated routes.
+///
+/// It applies the scope of the method each path aliases, because two doors
+/// onto one set of methods must not mean two sets of permissions: a read only
+/// token that could still `POST /api/take` would make the whole table a
+/// decoration. The refusal keeps the plain `{"error": ...}` shape those
+/// clients already parse.
+async fn guard_legacy(State(ctx): State<Ctx>, req: Request, next: Next) -> Response {
     let presented = presented_token(req.method(), req.headers(), req.uri());
-    match app.tokens.authenticate(presented.as_deref()) {
-        Ok(_) => next.run(req).await,
-        Err(reason) => (
-            StatusCode::UNAUTHORIZED,
-            [(header::WWW_AUTHENTICATE, "Bearer")],
-            Json(json!({ "error": reason.message() })),
-        )
-            .into_response(),
+    let token = match ctx.app.tokens.authenticate(presented.as_deref()) {
+        Ok(t) => t,
+        Err(reason) => {
+            return (
+                StatusCode::UNAUTHORIZED,
+                [(header::WWW_AUTHENTICATE, "Bearer")],
+                Json(json!({ "error": reason.message() })),
+            )
+                .into_response()
+        }
+    };
+    if let Some(refusal) = legacy_refusal(&ctx, &token, req.method(), req.uri().path()) {
+        return (StatusCode::FORBIDDEN, Json(json!({ "error": refusal }))).into_response();
     }
+    next.run(req).await
+}
+
+/// Why this token may not use this legacy path, if it may not.
+fn legacy_refusal(
+    ctx: &Ctx,
+    token: &crate::api::scope::Token,
+    http: &Method,
+    path: &str,
+) -> Option<String> {
+    let (route, _) = rest::resolve(&ctx.legacy_routes, http, path).ok()?;
+    let def = ctx.registry.get(route.method)?;
+    if !token.has(def.scope) {
+        return Some(
+            RpcError::scope(route.method, def.scope.as_str(), &token.scope_names()).message,
+        );
+    }
+    if ctx.app.rehearsal && route.method == "output.add" {
+        return Some(
+            "this core was started with --rehearsal and will not add an output, so nothing \
+             here reaches a real destination. Start a core without --rehearsal to go on air."
+                .to_string(),
+        );
+    }
+    None
 }
 
 /// The token a request carries. `Authorization: Bearer <token>` is the normal

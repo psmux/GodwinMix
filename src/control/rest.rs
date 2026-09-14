@@ -70,6 +70,27 @@ pub fn routes<C>(registry: &Registry<C>) -> Vec<Route> {
     routes
 }
 
+/// The deprecated `/api/...` paths, as routes that can be resolved the same
+/// way the versioned ones are.
+///
+/// Built so that the token check in front of them can find the method behind
+/// a legacy path and apply that method's scope. Two doors onto one set of
+/// methods must not mean two sets of permissions.
+pub fn legacy_routes() -> Vec<Route> {
+    let mut routes: Vec<Route> = crate::api::protocol::LEGACY_ROUTES
+        .iter()
+        .map(|(http, path, method)| Route {
+            http,
+            method,
+            segments: path.split('/').filter(|s| !s.is_empty()).map(segment).collect(),
+        })
+        .collect();
+    routes.sort_by(|a, b| {
+        b.segments.len().cmp(&a.segments.len()).then_with(|| a.method.cmp(b.method))
+    });
+    routes
+}
+
 fn segment(raw: &str) -> Segment {
     match raw.strip_prefix('{').and_then(|s| s.strip_suffix('}')) {
         Some(name) => Segment::Capture(name.to_string()),
