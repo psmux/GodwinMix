@@ -14,9 +14,19 @@ kind = "preset"
 id = "classroom"
 
 [provides.preset]
-plugins = ["camera@^1", "screen@^1", "rtmp@^1", "file-record@^1"]
+plugins = ["camera@^1", "screen@^1", "rtmp@^1"]
 config = "config/godwinmix.toml"
 layout = "config/layout.json"
 surface = "web"
 theme = "daylight"
 scenes = "scenes"
+theme_css = "theme.css"
+gallery = "snapshot"
+
+# The three things the person does next. The welcome panel in the web UI
+# shows these in this order, and the README repeats them.
+steps = [
+  "Point the camera source at your webcam, or leave the placeholder and drop a file on the page.",
+  "Put your school's streaming URL and key into the [[outputs]] block, or record only.",
+  "Run `gmx`, open http://localhost:8080, and press Camera to start the lesson.",
+]

@@ -56,10 +56,43 @@ pub struct Config {
     /// remove. See `api::scope` and `Config::tokens`.
     #[serde(default)]
     pub tokens: Vec<TokenConfig>,
+    /// What a surface starts with: the layout, the theme and the gallery mode.
+    /// Written by `gmx preset apply` into the runtime store, and readable here
+    /// so an operator can set it by hand. See `crate::preset`.
+    #[serde(default)]
+    pub ui: UiDefaults,
     /// Every other top level table. Without this a plugin's section was
     /// silently dropped, which is the closed schema the audit named.
     #[serde(flatten, default)]
     pub extra: std::collections::BTreeMap<String, toml::Value>,
+}
+
+/// The `[ui]` section: what a surface starts with, chosen by a preset.
+///
+/// None of it changes what the core does. It is what a client reads out of
+/// `core.info` so that the first page a volunteer sees is the one their preset
+/// chose, rather than the one the last person to use this browser chose.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
+pub struct UiDefaults {
+    /// The preset that set these, for the welcome panel to know it has run.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub preset: Option<String>,
+    /// A theme id the surface resolves, for example `dark` or `calm`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub theme: Option<String>,
+    /// `live`, `snapshot`, `icon` or `label` (05 section 3b). Absent means the
+    /// surface asks the machine, which is what `gmx doctor` proposes.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub gallery: Option<String>,
+    /// Slot to panels, top to bottom. Empty means the surface's own default.
+    #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
+    pub layout: std::collections::BTreeMap<String, Vec<String>>,
+}
+
+impl UiDefaults {
+    pub fn is_empty(&self) -> bool {
+        self == &Self::default()
+    }
 }
 
 /// A plugin's own settings, as written in `params = { .. }` or in
@@ -988,6 +1021,10 @@ struct StoredRuntime {
     sources: Option<Vec<SourceConfig>>,
     #[serde(default)]
     outputs: Option<Vec<OutputConfig>>,
+    /// What `gmx preset apply` chose for the surface. Absent means the config
+    /// file's own `[ui]` section stands.
+    #[serde(default)]
+    ui: Option<UiDefaults>,
 }
 
 /// The value of a `GODWINMIX_*` variable, accepting the `LIVEBOXMIX_*` name
@@ -1116,8 +1153,25 @@ impl Config {
                 );
                 cfg.outputs = outputs;
             }
+            if let Some(ui) = stored.ui {
+                if !ui.is_empty() {
+                    cfg.ui = ui;
+                }
+            }
         }
 
+        cfg.validate()?;
+        Ok(cfg)
+    }
+
+    /// Parse a configuration from text, with no runtime store beside it.
+    ///
+    /// The same rules `load` applies, for a config that is not a file on this
+    /// machine: a preset's, checked before it is written anywhere, or one that
+    /// arrived over the wire. `label` is what an error names.
+    pub fn from_toml(text: &str, label: &str) -> Result<Self> {
+        let cfg: Config =
+            toml::from_str(text).with_context(|| format!("parsing {label}"))?;
         cfg.validate()?;
         Ok(cfg)
     }
@@ -1547,6 +1601,7 @@ sidecar = \"/opt/b\"\n").unwrap();
             filters: vec![],
             plugins: Default::default(),
             tokens: vec![],
+            ui: Default::default(),
             extra: Default::default(),
         };
         assert!(cfg.validate().is_err());

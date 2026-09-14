@@ -120,8 +120,13 @@ Which panels go in which slot of the web UI, in order, top to bottom.
 
 Slots: `header`, `main`, `sidebar`, `strip`, `footer`, `modal`.
 Panels the first party UI ships: `header`, `multiview`, `sources`, `outputs`,
-`media`, `alerts`, `scenes`. A panel from a plugin is named
+`media`, `alerts`, `scenes`, `welcome`. A panel from a plugin is named
 `<plugin>/<panel id>`.
+
+`welcome` is the first five minutes: the three large tiles a person picks a
+preset from. The shell puts it up on its own when the core has no sources and
+no preset has been applied, so a layout never has to name it. Naming it anyway
+pins it to a slot, which is what a kiosk build wants.
 
 Leave out a slot you do not want to fill.
 

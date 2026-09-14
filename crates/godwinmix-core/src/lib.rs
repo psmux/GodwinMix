@@ -54,6 +54,7 @@ pub mod multiview;
 pub mod observe;
 pub mod output;
 pub mod plugin;
+pub mod preset;
 pub mod probe;
 pub mod scene;
 pub mod snapshot;
