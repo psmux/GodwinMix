@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<!--
+  The property inspector for an output key. The id is what the mixer calls the
+  destination; the address is only needed to start one that is not running.
+-->
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <script src="https://sdpi-components.dev/releases/v3/sdpi-components.js"></script>
+  </head>
+  <body>
+    <sdpi-item label="Output id">
+      <sdpi-textfield setting="id" placeholder="youtube" required></sdpi-textfield>
+    </sdpi-item>
+    <sdpi-item label="Address">
+      <sdpi-textfield setting="uri" placeholder="rtmp://a.rtmp.youtube.com/live2/KEY"></sdpi-textfield>
+    </sdpi-item>
+    <sdpi-item label="Title">
+      <sdpi-textfield setting="title" placeholder="the output id"></sdpi-textfield>
+    </sdpi-item>
+    <sdpi-item label="Mixer">
+      <sdpi-textfield global setting="base" placeholder="http://127.0.0.1:8080"></sdpi-textfield>
+    </sdpi-item>
+    <sdpi-item label="Token">
+      <sdpi-password global setting="token"></sdpi-password>
+    </sdpi-item>
+  </body>
+</html>
