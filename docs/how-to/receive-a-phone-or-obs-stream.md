@@ -19,6 +19,10 @@ gmx plugin add ./plugins/ingest
 beside its manifest, which is where `gmx plugin add` copies it from. From a
 release build the plugin is already staged and this step is not needed.
 
+The RTMP server itself is written in Rust, so nothing has to be installed beside
+the mixer. GStreamer is still needed for the remux that hands the stream to the
+core, and every element it uses ships with GStreamer itself.
+
 ## Add the source
 
 ```sh

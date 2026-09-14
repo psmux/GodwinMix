@@ -7,7 +7,7 @@
 //!
 //! | Provide | What it is |
 //! |---|---|
-//! | `ingest/rtmp` | an RTMP listener, in Rust, no GStreamer element involved |
+//! | `ingest/rtmp` | an RTMP listener written in Rust, remuxed to Matroska |
 //! | `ingest/whip` | a WHIP endpoint, so a browser needs nothing but the URL |
 //! | `ingest/discover` | one RTMP port for many publishers, each reported as a candidate |
 //!
@@ -19,6 +19,7 @@
 mod device;
 mod flv;
 mod relay;
+mod remux;
 mod rest;
 mod rtmp;
 mod source;
@@ -60,7 +61,7 @@ impl Source for RtmpIngest {
 
     fn start(&mut self, _params: &StartParams) -> Result<StartResult, RpcError> {
         let running =
-            source::Ingest::start(&self.settings, self.reporter.clone(), source::Out::Stdout)
+            source::Ingest::start(&self.settings, self.reporter.clone(), crate::remux::Out::Stdout)
                 .map_err(internal)?;
         self.running = Some(running);
         Ok(StartResult { latency_ms: Some(0) })

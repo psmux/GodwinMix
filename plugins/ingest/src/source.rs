@@ -16,7 +16,7 @@
 //! Either way what leaves on stdout is FLV, and the core opens it with
 //! `decodebin` exactly as it opens the stream `rtmp/source` dials out for.
 
-use std::io::{Read, Write};
+use std::io::Read;
 use std::sync::atomic::{AtomicBool, AtomicU16, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 
@@ -24,15 +24,8 @@ use godwinmix_sdk::plugin::Reporter;
 use godwinmix_sdk::wire::Health;
 use serde_json::Value;
 
+use crate::remux::{Out, Remux};
 use crate::rtmp::{Event, Filter, Server, Sink};
-
-/// Where the FLV goes. Stdout in a running plugin; a file in the tests, because
-/// a test harness owns its own stdout.
-pub enum Out {
-    Stdout,
-    #[allow(dead_code)]
-    File(std::path::PathBuf),
-}
 
 /// The settings of `ingest/rtmp`.
 #[derive(Debug, Clone, PartialEq)]
@@ -129,6 +122,9 @@ struct State {
     port: AtomicU16,
     /// The address to tell a publisher to use, filled in with the real port.
     where_from: Mutex<String>,
+    /// Set when the remuxer has failed. A source whose pipe is broken is not
+    /// carrying a picture whatever the publisher thinks.
+    broken: AtomicBool,
 }
 
 impl State {
@@ -138,6 +134,7 @@ impl State {
             bytes: AtomicU64::new(0),
             port: AtomicU16::new(0),
             where_from: Mutex::new(String::new()),
+            broken: AtomicBool::new(false),
         }
     }
 
@@ -153,21 +150,21 @@ impl Ingest {
         reporter: Option<Reporter>,
         out: Out,
     ) -> Result<Ingest, String> {
-        let writer = Writer::open(out)?;
+        let remux = Remux::open(out)?;
         if settings.relay.is_empty() {
-            Ingest::listen(settings, reporter, writer)
+            Ingest::listen(settings, reporter, remux)
         } else {
-            Ingest::read_relay(settings, reporter, writer)
+            Ingest::read_relay(settings, reporter, remux)
         }
     }
 
     fn listen(
         settings: &Settings,
         reporter: Option<Reporter>,
-        writer: Writer,
+        remux: Remux,
     ) -> Result<Ingest, String> {
         let state = Arc::new(State::new());
-        let sink = sink_for(Arc::clone(&state), writer, reporter.clone());
+        let sink = sink_for(Arc::clone(&state), remux, reporter.clone());
         let filter = Filter {
             app: settings.app.clone(),
             key: settings.stream_key.clone(),
@@ -191,7 +188,7 @@ impl Ingest {
     fn read_relay(
         settings: &Settings,
         reporter: Option<Reporter>,
-        mut writer: Writer,
+        remux: Remux,
     ) -> Result<Ingest, String> {
         let mut stream = std::net::TcpStream::connect(&settings.relay).map_err(|e| {
             format!(
@@ -217,8 +214,12 @@ impl Ingest {
                         match stream.read(&mut buffer) {
                             Ok(0) => break,
                             Ok(n) => {
-                                writer.write(&buffer[..n]);
+                                remux.write(&buffer[..n]);
                                 state.bytes.fetch_add(n as u64, Ordering::Relaxed);
+                                if remux.broken() {
+                                    state.broken.store(true, Ordering::Relaxed);
+                                    break;
+                                }
                             }
                             Err(_) => break,
                         }
@@ -240,6 +241,13 @@ impl Ingest {
     }
 
     pub fn health(&self) -> Health {
+        if self.state.broken.load(Ordering::Relaxed) {
+            return Health::failing(
+                "the stream could not be remuxed for the core. The publisher is sending \
+                 something this build cannot parse: check its video codec is H.264 and \
+                 its audio AAC, which is what RTMP carries.",
+            );
+        }
         let publisher = self
             .state
             .publisher
@@ -287,8 +295,7 @@ impl Drop for Ingest {
 /// SDK answers the core's `health` call from a cached value, and nothing else
 /// here would refresh it; a timer polling a boolean once a second would be work
 /// nobody asked for.
-fn sink_for(state: Arc<State>, writer: Writer, reporter: Option<Reporter>) -> Sink {
-    let writer = Mutex::new(writer);
+fn sink_for(state: Arc<State>, remux: Remux, reporter: Option<Reporter>) -> Sink {
     Arc::new(move |event| match event {
         Event::Arrived { app, key, peer } => {
             let who = format!("{app}/{key} from {peer}");
@@ -302,7 +309,10 @@ fn sink_for(state: Arc<State>, writer: Writer, reporter: Option<Reporter>) -> Si
         }
         Event::Bytes(bytes) => {
             state.bytes.fetch_add(bytes.len() as u64, Ordering::Relaxed);
-            writer.lock().unwrap_or_else(|e| e.into_inner()).write(&bytes);
+            remux.write(&bytes);
+            if remux.broken() {
+                state.broken.store(true, Ordering::Relaxed);
+            }
         }
         Event::Left { app, key } => {
             *state.publisher.lock().unwrap_or_else(|e| e.into_inner()) = None;
@@ -320,45 +330,6 @@ fn sink_for(state: Arc<State>, writer: Writer, reporter: Option<Reporter>) -> Si
             }
         }
     })
-}
-
-/// Somewhere to put the FLV. Cheap to make a second one pointing at the same
-/// place, which is what the two step bind in `listen` needs.
-pub struct Writer {
-    inner: Inner,
-}
-
-enum Inner {
-    Stdout(std::io::BufWriter<std::io::Stdout>),
-    File(std::fs::File),
-}
-
-impl Writer {
-    fn open(out: Out) -> Result<Writer, String> {
-        let inner = match out {
-            Out::Stdout => Inner::Stdout(std::io::BufWriter::with_capacity(
-                256 * 1024,
-                std::io::stdout(),
-            )),
-            Out::File(path) => Inner::File(
-                std::fs::File::create(&path)
-                    .map_err(|e| format!("could not write to {}: {e}", path.display()))?,
-            ),
-        };
-        Ok(Writer { inner })
-    }
-
-    /// Write and flush. A publisher's tag is small and the core is reading a
-    /// pipe, so holding tags back to fill a buffer would only add latency.
-    fn write(&mut self, bytes: &[u8]) {
-        let result = match &mut self.inner {
-            Inner::Stdout(out) => out.write_all(bytes).and_then(|_| out.flush()),
-            Inner::File(file) => file.write_all(bytes).and_then(|_| file.flush()),
-        };
-        // Nowhere to report to from here, and a broken pipe means the core has
-        // gone: the process is about to be reaped either way.
-        let _ = result;
-    }
 }
 
 #[cfg(test)]
@@ -414,7 +385,7 @@ mod tests {
     }
 
     #[test]
-    fn a_real_publisher_arrives_and_its_stream_reaches_the_pipe_as_flv() {
+    fn a_real_publisher_arrives_and_its_stream_reaches_the_pipe_as_matroska() {
         let Some(launcher) = which("gst-launch-1.0") else {
             eprintln!("skipping: gst-launch-1.0 is not on PATH");
             return;
@@ -426,7 +397,7 @@ mod tests {
             eprintln!("skipping: this build of GStreamer cannot publish RTMP");
             return;
         }
-        let path = std::env::temp_dir().join(format!("gmx-ingest-live-{}.flv", std::process::id()));
+        let path = std::env::temp_dir().join(format!("gmx-ingest-live-{}.mkv", std::process::id()));
         let settings = Settings::from_params(&json!({"bind": "127.0.0.1", "port": 0}));
         let ingest =
             Ingest::start(&settings, None, Out::File(path.clone())).expect("the listener starts");
@@ -475,14 +446,20 @@ mod tests {
         let _ = std::fs::remove_file(&path);
 
         assert!(publishing, "the listener never saw a publisher: {stats}");
-        assert!(bytes > 20_000, "only {bytes} bytes of FLV arrived");
-        assert_eq!(&head[0..3], b"FLV", "what came out is not an FLV stream");
+        assert!(bytes > 20_000, "only {bytes} bytes arrived");
+        // The EBML magic. The publisher's FLV is remuxed to Matroska here; the
+        // module comment in src/remux.rs says why.
+        assert_eq!(
+            &head[0..4],
+            &[0x1a, 0x45, 0xdf, 0xa3],
+            "what came out is not a Matroska stream"
+        );
         assert!(stats["publishing"].as_str().unwrap_or("").contains("live/test"));
 
         // The header being right is not the same as the stream being openable.
         // The core's container transport is `fdsrc ! decodebin`, so this runs
         // the same decodebin over what came out and insists it decodes.
-        let kept = std::env::temp_dir().join(format!("gmx-ingest-kept-{}.flv", std::process::id()));
+        let kept = std::env::temp_dir().join(format!("gmx-ingest-kept-{}.mkv", std::process::id()));
         std::fs::write(&kept, &head).expect("keep the capture for the decode check");
         let decoded = std::process::Command::new(which("gst-launch-1.0").expect("launcher"))
             .args([
@@ -499,7 +476,7 @@ mod tests {
         let _ = std::fs::remove_file(&kept);
         assert!(
             decoded.status.success(),
-            "decodebin would not open the FLV this plugin produced: {}",
+            "decodebin would not open the stream this plugin produced: {}",
             String::from_utf8_lossy(&decoded.stderr)
         );
     }

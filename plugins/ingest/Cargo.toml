@@ -17,6 +17,7 @@ godwinmix-sdk = { path = "../../crates/godwinmix-sdk" }
 gmx-netkit = { path = "../netkit" }
 
 gstreamer = { workspace = true }
+gstreamer-app = { workspace = true }
 glib = { workspace = true }
 serde_json = { workspace = true }
 
