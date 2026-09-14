@@ -237,6 +237,101 @@ if [[ $DOWN -eq 1 ]]; then ok; else bad "gmx_multiview_subscribers stuck at ${SU
 step "and the log says the mosaic was torn down"
 if grep -qi "multiview\|mosaic" "$LOG"; then ok; else bad "nothing in the log about the mosaic"; fi
 
+# --- scenes -----------------------------------------------------------------
+#
+# Two test sources into one scene, on air, reshaped by a layout, and undone.
+# Everything here is `gmx ctl scene`, which is the same `scene.*` calls the web
+# designer and an agent make.
+
+step "a second test source to build a scene from"
+curl -fsS -X POST "$BASE/api/v1/sources" "${AUTH[@]}" \
+    -H 'content-type: application/json' \
+    -d '{"id":"ball","uri":"test://ball","name":"Smoke ball"}' >"$WORK/second.log" 2>&1
+if grep -q '"ball"' "$WORK/second.log"; then ok; else bad "$(cat "$WORK/second.log")"; fi
+
+export GODWINMIX_URL="$BASE" GODWINMIX_TOKEN="$TOKEN"
+
+step "gmx ctl scene new makes a two box from two sources"
+"$GMX" ctl scene new "smoke two" bars ball >"$WORK/scene-new.log" 2>&1
+if grep -q "bars" "$WORK/scene-new.log" && grep -q "ball" "$WORK/scene-new.log"; then
+    ok
+else
+    bad "$(tr '\n' '; ' <"$WORK/scene-new.log")"
+fi
+
+step "both items are on the canvas and neither is off it"
+if "$GMX" ctl scene check "smoke two" 2>&1 | grep -q "nothing to fix"; then
+    ok
+else
+    bad "$("$GMX" ctl scene check "smoke two" 2>&1 | tr '\n' '; ')"
+fi
+
+step "gmx ctl take --scene puts the scene on air"
+"$GMX" ctl take --scene "smoke two" >"$WORK/scene-take.log" 2>&1
+if grep -q "smoke two" "$WORK/scene-take.log"; then
+    ok
+else
+    bad "$(tr '\n' '; ' <"$WORK/scene-take.log")"
+fi
+
+step "the programme reports the scene it is on"
+if curl -fsS "$BASE/api/v1/program" "${AUTH[@]}" | grep -q '"scene":"smoke two"'; then
+    ok
+else
+    bad "$(curl -fsS "$BASE/api/v1/program" "${AUTH[@]}")"
+fi
+
+step "the frame interval stays inside one frame across the take"
+# Two frames of slack at 30 fps. A lost frame reads as two intervals, which is
+# what the README's measurement calls a gap.
+WORST="$(curl -fsS "$BASE/metrics" | awk -F'[{} ]+' '/^gmx_programme_frame_interval_ms_bucket.*le="100"/ {print $NF}' | tail -1)"
+TOTAL="$(curl -fsS "$BASE/metrics" | awk '/^gmx_programme_frame_interval_ms_count/ {print $2}' | tail -1)"
+if [[ -n "$TOTAL" && "$WORST" == "$TOTAL" ]]; then
+    ok
+else
+    bad "frames outside the 100 ms bucket: $WORST of $TOTAL"
+fi
+
+step "applying a layout reshapes the scene in place"
+"$GMX" ctl scene layout pip-bottom-right --values "a=bars,b=ball" \
+    --scene "smoke two" --duration 300 >"$WORK/scene-layout.log" 2>&1
+if grep -q "smoke two" "$WORK/scene-layout.log"; then
+    ok
+else
+    bad "$(tr '\n' '; ' <"$WORK/scene-layout.log")"
+fi
+
+step "and undo puts the two box back exactly"
+BEFORE="$("$GMX" ctl scene get "smoke two" 2>&1 | tail -n +2)"
+"$GMX" ctl scene undo >"$WORK/scene-undo.log" 2>&1
+AFTER="$("$GMX" ctl scene get "smoke two" 2>&1 | tail -n +2)"
+if grep -q "step" "$WORK/scene-undo.log" && [[ "$BEFORE" != "$AFTER" ]]; then
+    ok
+else
+    bad "undo changed nothing: $(tr '\n' '; ' <"$WORK/scene-undo.log")"
+fi
+
+step "arming a scene makes it the preview"
+"$GMX" ctl scene arm "smoke two" >"$WORK/scene-arm.log" 2>&1
+if curl -fsS "$BASE/api/v1/scenes" "${AUTH[@]}" | grep -q '"armed":true'; then
+    ok
+else
+    bad "$(cat "$WORK/scene-arm.log")"
+fi
+
+step "the scene collection was written beside the runtime store"
+if compgen -G "$WORK/*.scenes.json" >/dev/null && grep -q "smoke two" "$WORK"/*.scenes.json; then
+    ok
+else
+    bad "no scene collection in $WORK"
+fi
+
+step "a source take still works and still reports the source"
+"$GMX" ctl take bars >"$WORK/scene-back.log" 2>&1
+if grep -q "bars" "$WORK/scene-back.log"; then ok; else bad "$(cat "$WORK/scene-back.log")"; fi
+
+unset GODWINMIX_URL GODWINMIX_TOKEN
+
 # --- presets ----------------------------------------------------------------
 #
 # The volunteer's install, on a directory that has nothing in it: the plan

@@ -123,6 +123,101 @@ mod doc_tests {
     }
 
     #[test]
+    fn the_command_reference_names_every_scene_method_the_core_answers() {
+        // The registry lives in the binary crate, so the list is written out
+        // here. A method added without a line in the reference is a method
+        // nobody outside this file knows about.
+        let text = doc("docs/reference/scene-commands.md");
+        for method in [
+            "scene.list",
+            "scene.get",
+            "scene.add",
+            "scene.create_from",
+            "scene.remove",
+            "scene.rename",
+            "scene.duplicate",
+            "scene.validate",
+            "scene.export",
+            "scene.import.obs",
+            "scene.item.add",
+            "scene.item.remove",
+            "scene.item.set",
+            "scene.item.move",
+            "scene.item.copy",
+            "scene.item.reorder",
+            "scene.item.bind",
+            "scene.item.align",
+            "scene.item.distribute",
+            "scene.item.fit_to_canvas",
+            "scene.item.cover_canvas",
+            "scene.item.arrange_grid",
+            "scene.item.match_size",
+            "scene.item.group",
+            "scene.item.ungroup",
+            "scene.item.filter.add",
+            "scene.item.filter.set",
+            "scene.item.filter.remove",
+            "scene.layout.list",
+            "scene.apply_layout",
+            "scene.layout.copy",
+            "scene.layout.paste",
+            "scene.params.get",
+            "scene.params.set",
+            "scene.preview.set",
+            "scene.preview.frame",
+            "scene.edit.begin",
+            "scene.edit.apply",
+            "scene.edit.discard",
+            "scene.transaction.begin",
+            "scene.transaction.commit",
+            "scene.transaction.abort",
+            "scene.undo",
+            "scene.redo",
+            "scene.history.mark",
+            "source.set",
+            "source.group",
+            "program.take",
+        ] {
+            assert!(text.contains(method), "the method {method:?} is not in the reference");
+        }
+    }
+
+    #[test]
+    fn the_how_to_gets_a_scene_on_air_in_five_commands() {
+        let text = doc("docs/how-to/scenes.md");
+        for command in [
+            "gmx ctl scene new",
+            "gmx ctl scene get",
+            "gmx ctl take --scene",
+            "gmx ctl scene layout",
+            "gmx ctl scene undo",
+            "gmx ctl scene arm",
+            "gmx ctl scene check",
+        ] {
+            assert!(text.contains(command), "the guide does not show {command:?}");
+        }
+    }
+
+    #[test]
+    fn the_explanation_carries_the_numbers_it_claims() {
+        let text = doc("docs/explanation/how-a-scene-reaches-the-compositor.md");
+        // The two acceptance measurements, and the commands that reproduce
+        // them. A number in a document that nobody can re run is a rumour.
+        for phrase in [
+            "33.3 ms",
+            "--ignored --nocapture gapless",
+            "--ignored --nocapture hidden_slots",
+            "2913",
+        ] {
+            assert!(text.contains(phrase), "the explanation does not carry {phrase:?}");
+        }
+        // And the three bands, which are the thing most likely to drift.
+        for band in ["1000", "1 to 99"] {
+            assert!(text.contains(band), "the z band {band:?} is not explained");
+        }
+    }
+
+    #[test]
     fn the_import_guide_says_what_the_report_means() {
         let text = doc("docs/how-to/import-from-obs.md");
         for phrase in ["imported as", "needs the", "skipped, because", "--report json", "--source-size"] {
