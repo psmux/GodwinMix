@@ -153,6 +153,7 @@ async fn scrape(State(state): State<ObserveState>) -> Response {
     if let Some(frames) = &state.frames {
         metrics::set_multiview_subscribers(frames.receiver_count());
     }
+    metrics::sample_source_queues();
     (
         StatusCode::OK,
         [(header::CONTENT_TYPE, "text/plain; version=0.0.4; charset=utf-8")],

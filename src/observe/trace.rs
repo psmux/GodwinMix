@@ -144,7 +144,7 @@ pub fn incoming(traceparent: Option<&str>, explicit: Option<&str>) -> TraceId {
     explicit
         .and_then(TraceId::parse)
         .or_else(|| traceparent.and_then(TraceId::from_traceparent))
-        .unwrap_or_else(TraceId::new)
+        .unwrap_or_default()
 }
 
 #[cfg(test)]

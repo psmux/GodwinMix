@@ -162,6 +162,27 @@ a `tracing` span carrying `instance`, which is what makes `log.set {instance}`
 reach that source's lines, and it times the build for `--startup-report`. Hold
 it for the scope you want tagged.
 
+## Cross platform
+
+Three places differ between Windows, macOS and Linux, and each has an explicit
+arm plus a fallback that reports "unknown" rather than guessing.
+
+| What | Unix | Windows | Anything else |
+|---|---|---|---|
+| Is stderr a terminal (the log format default) | `isatty` | `GetConsoleMode` | false, so JSON |
+| Free disk under the runtime directory | `statvfs` | `GetDiskFreeSpaceExW` | `None`, a warning |
+| Physical memory (the gallery default) | `/proc/meminfo` on Linux, `sysctlbyname` on macOS | `GlobalMemoryStatusEx` | `None`, a warning |
+
+Everything else is portable by construction. Log rotation is `std::fs::rename`
+and `remove_file` only, with the file handle dropped before the rename because
+Windows will not rename an open file. The runtime directory is a path relative
+to the config, with no home directory, XDG variable or registry lookup. Zip
+entry names use forward slashes, which is what the format requires everywhere,
+and the default bundle name has no colon in it because Windows would refuse it.
+
+The platform arms are checked against all three targets with
+`cargo check --target`; they need no GStreamer, so the check runs anywhere.
+
 ## What is deliberately not here
 
 * Per node metrics and clock offsets. The fields exist in `ClockReport` so the

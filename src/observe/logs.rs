@@ -114,7 +114,7 @@ pub fn set_target_level(target: &str, level: Option<LevelCode>) {
     if let Some(level) = level {
         t.push((target.to_string(), level));
         // Longest first, so the first match in `enabled` is the most specific.
-        t.sort_by(|a, b| b.0.len().cmp(&a.0.len()));
+        t.sort_by_key(|(name, _)| std::cmp::Reverse(name.len()));
     }
     TARGET_COUNT.store(t.len(), Ordering::Relaxed);
 }
@@ -211,12 +211,22 @@ pub fn set_gst_debug(
         GST_RAISED.lock().insert(name.to_string(), deadline);
         applied.push(name.to_string());
     }
-    tracing::info!(
-        instance = instance.unwrap_or("-"),
-        categories,
-        duration_secs,
-        "GStreamer debug raised, and it comes back down on its own"
-    );
+    // No placeholder for a missing instance: an `instance` field with a dash
+    // in it would tag the line as belonging to a plugin called "-", and the
+    // log writer would dutifully open `plugins/-.log`.
+    match instance {
+        Some(instance) => tracing::info!(
+            instance,
+            categories,
+            duration_secs,
+            "GStreamer debug raised, and it comes back down on its own"
+        ),
+        None => tracing::info!(
+            categories,
+            duration_secs,
+            "GStreamer debug raised, and it comes back down on its own"
+        ),
+    }
     let names = applied.clone();
     tokio::spawn(async move {
         tokio::time::sleep(std::time::Duration::from_secs(duration_secs.max(1))).await;
@@ -496,7 +506,8 @@ where
         // An event's own `instance` field beats the span it sits in.
         for (k, v) in &fields {
             if *k == "instance" {
-                tags.instance = Some(v.trim_matches('"').to_string());
+                let name = v.trim_matches('"');
+                tags.instance = (!name.is_empty()).then(|| name.to_string());
             }
         }
 

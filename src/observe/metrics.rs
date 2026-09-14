@@ -430,6 +430,21 @@ pub fn set_multiview_subscribers(n: usize) {
     gauge("gmx_multiview_subscribers", &[]).set(n as f64);
 }
 
+/// How full each source's queues are, read off the pipelines at scrape time.
+///
+/// Reading a queue's level is a property read on a GStreamer object, so this
+/// costs nothing when nobody is scraping, which is the rule. A source whose
+/// queues are filling is the shape of every "it went to slate" report, and
+/// this is the number that shows it before the supervisor acts.
+pub fn sample_source_queues() {
+    for name in crate::observe::introspect::names() {
+        let Some(instance) = name.strip_prefix("input-") else { continue };
+        let Ok(queues) = crate::observe::introspect::queues(&name) else { continue };
+        let buffers: u32 = queues.iter().map(|q| q.buffers).sum();
+        gauge("gmx_source_queue_buffers", &[("instance", instance)]).set(buffers as f64);
+    }
+}
+
 fn source_state_code(s: SourceState) -> f64 {
     match s {
         SourceState::Connecting => 0.0,
@@ -490,6 +505,41 @@ mod tests {
         let text = render();
         assert!(text.contains("gmx_rpc_calls_total{code=\"ok\",method=\"program.take\"}"), "{text}");
         assert!(text.contains("method=\"source.add\\\"odd\""), "{text}");
+    }
+
+    /// The queue gauge is sampled off the real pipelines, so it is tested
+    /// against one.
+    #[test]
+    fn source_queue_buffers_are_sampled_off_the_registered_pipelines() {
+        use gstreamer::prelude::*;
+        gstreamer::init().expect("gstreamer");
+        let pipeline = gstreamer::Pipeline::with_name("input-metrics-queue");
+        let src = gstreamer::ElementFactory::make("videotestsrc")
+            .property("is-live", true)
+            .build()
+            .expect("videotestsrc");
+        let queue = gstreamer::ElementFactory::make("queue")
+            .name("metrics-queue-vq")
+            .build()
+            .expect("queue");
+        let sink = gstreamer::ElementFactory::make("fakesink")
+            .property("sync", false)
+            .build()
+            .expect("fakesink");
+        pipeline.add_many([&src, &queue, &sink]).unwrap();
+        gstreamer::Element::link_many([&src, &queue, &sink]).unwrap();
+        crate::observe::register_pipeline("input-metrics-queue", &pipeline);
+        pipeline.set_state(gstreamer::State::Paused).unwrap();
+
+        sample_source_queues();
+        assert!(
+            render().contains("gmx_source_queue_buffers{instance=\"metrics-queue\"}"),
+            "{}",
+            render()
+        );
+
+        pipeline.set_state(gstreamer::State::Null).unwrap();
+        crate::observe::unregister_pipeline("input-metrics-queue");
     }
 
     #[test]

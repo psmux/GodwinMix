@@ -136,7 +136,14 @@ pub async fn run() -> Result<()> {
             let token = token.or_else(|| config::env_var("TOKEN"));
             return mcp::run(&url, token).await;
         }
-        Some(Command::Observe(cmd)) => return observe::cli::run(cmd).await,
+        Some(Command::Observe(cmd)) => {
+            // These commands print a report to stdout. The mixer's own log on
+            // stderr is noise around it unless the operator asked for it.
+            if std::env::var_os("RUST_LOG").is_none() {
+                observe::logs::set_default_level(observe::logs::LevelCode::WARN);
+            }
+            return observe::cli::run(cmd).await;
+        }
         None => {}
     }
 
@@ -186,14 +193,12 @@ pub async fn run() -> Result<()> {
     let (mut mix, handle, cmd_rx, mut bus_rx) = mixer::Mixer::build(cfg)?;
     mix.persist_runtime_to(Config::runtime_store_path(&config_path));
     drop(build);
-    {
-        let _stage = observe::introspect::stage("mixer start");
-        mix.start().context("starting mixer")?;
-    }
 
     // Logs to files, the session log, and the task that records every event.
-    // After the mixer is built so that the recorder has a broadcast to join,
-    // and before the control server so that nothing it does goes unrecorded.
+    // After `Mixer::build`, because the recorder needs a broadcast to join, and
+    // before `mix.start`, because that is where the configured sources are
+    // built and their lines are exactly the ones somebody debugging a box that
+    // will not come up wants in the file.
     let observe_options = observe::Options {
         config_path: config_path.clone(),
         startup_report: args.startup_report,
@@ -201,6 +206,11 @@ pub async fn run() -> Result<()> {
     match observe::start(&handle, &observe_options) {
         Ok(dir) => info!(runtime_dir = %dir.display(), "logs and the session log are here"),
         Err(e) => warn!(?e, "no runtime directory, so logs stay on stderr only"),
+    }
+
+    {
+        let _stage = observe::introspect::stage("mixer start");
+        mix.start().context("starting mixer")?;
     }
 
     let frames = mix.multiview_sender().map(Arc::new);
