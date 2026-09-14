@@ -306,6 +306,16 @@ commitments below are written down rather than implied.
 **One executable, no interpreter.** The core, the CLI and the MCP server are
 one binary. The only external dependency is the platform's GStreamer.
 
+**A library, not only a framework.** The repository is four crates.
+`godwinmix-protocol` is the wire contract, with serde and schemars underneath
+it and no media stack, so a client library can depend on it and install
+nothing. `godwinmix-core` is the mixing engine with no server and no command
+line attached: `cargo add godwinmix-core` puts the pipeline inside your own
+program, and the example that shows it is built and run in CI.
+`godwinmix-host` will be the plugin host. `godwinmix` is the binary. See
+[the crate map](docs/explanation/architecture.md) and
+[how to embed the engine](docs/how-to/embed-the-engine.md).
+
 **One protocol, no private doors.** The web UI, `gmx ctl`, the MCP server and
 the desktop app all use the public HTTP API. There is no faster internal path
 that a third party cannot use, because a reference implementation that cheats
