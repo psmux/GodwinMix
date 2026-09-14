@@ -215,6 +215,21 @@ pub enum Command {
         position_ms: u64,
         reply: oneshot::Sender<SeekOutcome>,
     },
+    /// Put a filter on a source or on the programme, while live. The insert is
+    /// under a pad block, so the programme loses at most the one frame the
+    /// block holds.
+    AddFilter(Box<crate::config::FilterConfig>, Option<Ack>),
+    /// Change a filter that is already in place. A filter that cannot take the
+    /// change while running says so and nothing is torn down.
+    SetFilter {
+        id: String,
+        params: crate::config::Params,
+        reply: oneshot::Sender<FilterOutcome>,
+    },
+    /// Take a filter out, relinking around it under the same pad block.
+    RemoveFilter(String, Option<Ack>),
+    /// Every filter in place, with where it sits.
+    ListFilters(oneshot::Sender<Vec<FilterStatus>>),
     Status(oneshot::Sender<MixerStatus>),
     /// The configured sources and outputs with their URLs intact. `Status`
     /// masks those, so anything that must match on a URL asks here.
@@ -227,6 +242,29 @@ pub enum Command {
     /// scrubber.
     PositionTick,
     Shutdown,
+}
+
+/// Where one filter sits and what it is, for a listing.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct FilterStatus {
+    pub id: String,
+    #[serde(rename = "type")]
+    pub type_id: String,
+    /// The source it is attached to, or None for a programme filter.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source: Option<SourceId>,
+    pub side: String,
+}
+
+/// What `filter.set` answers with.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum FilterOutcome {
+    /// The change took effect on the running filter.
+    Applied,
+    /// The filter cannot take the change while running, and says why.
+    RestartRequired(String),
+    NoSuchFilter(String),
+    Failed(String),
 }
 
 #[derive(Clone)]
@@ -279,6 +317,38 @@ impl MixerHandle {
         let (tx, rx) = oneshot::channel();
         self.send(Command::Seek { source, position_ms, reply: tx })?;
         rx.await.map_err(|_| anyhow::anyhow!("mixer dropped the seek request"))
+    }
+
+    /// Put a filter on a source or on the programme, live.
+    ///
+    /// The public shape the API agent should wire `filter.add` to. It answers
+    /// once the filter is actually in the pipeline, so a caller that gets `Ok`
+    /// knows the picture has changed.
+    pub async fn add_filter(&self, cfg: crate::config::FilterConfig) -> Result<()> {
+        self.request(|ack| Command::AddFilter(Box::new(cfg), Some(ack))).await
+    }
+
+    /// Change a filter in place. `filter.set`.
+    pub async fn set_filter(
+        &self,
+        id: String,
+        params: crate::config::Params,
+    ) -> Result<FilterOutcome> {
+        let (tx, rx) = oneshot::channel();
+        self.send(Command::SetFilter { id, params, reply: tx })?;
+        rx.await.map_err(|_| anyhow::anyhow!("mixer dropped the filter request"))
+    }
+
+    /// Take a filter out. `filter.remove`.
+    pub async fn remove_filter(&self, id: String) -> Result<()> {
+        self.request(|ack| Command::RemoveFilter(id, Some(ack))).await
+    }
+
+    /// Every filter in place. `filter.list`.
+    pub async fn filters(&self) -> Result<Vec<FilterStatus>> {
+        let (tx, rx) = oneshot::channel();
+        self.send(Command::ListFilters(tx))?;
+        rx.await.map_err(|_| anyhow::anyhow!("mixer dropped the filter listing"))
     }
 
     pub async fn configs(&self) -> Result<RuntimeConfigs> {
@@ -562,6 +632,10 @@ pub struct Mixer {
     /// The branch of a source that is being rebuilt, kept in the programme
     /// pipeline so its last frame stays on air. See `retire_branch`.
     retired: Vec<RetiredBranch>,
+    /// Filters living in the programme pipeline: on the programme itself, and
+    /// on a source's programme side branch. A filter on a source's input side
+    /// lives in that source's own pipeline instead.
+    programme_filters: Vec<crate::plugin::FilterSlot>,
 }
 
 /// What is left of a source whose pipeline has been stopped for a rebuild:
@@ -846,6 +920,7 @@ impl Mixer {
             rebuild_failures: HashMap::new(),
             rebuild_not_before: HashMap::new(),
             retired: Vec::new(),
+            programme_filters: Vec::new(),
         };
         Ok((mixer, handle, rx, bus_rx))
     }
@@ -889,6 +964,18 @@ impl Mixer {
             let id = src.id.clone();
             if let Err(e) = self.begin_add_source(src, None) {
                 error!(source = %id, ?e, "failed to add source");
+            }
+        }
+
+        // Filters on the programme itself. After the sources, because a filter
+        // attached to one of them was put on at build time and this is only the
+        // programme wide ones.
+        for f in self.cfg.filters.clone() {
+            if f.attach.source.is_some() || !f.attach.programme {
+                continue;
+            }
+            if let Err(e) = self.add_programme_filter(&f) {
+                error!(filter = %f.id, ?e, "failed to attach a programme filter");
             }
         }
 
@@ -1018,7 +1105,13 @@ impl Mixer {
         // future, where the compositor's queue held its frames unconsumed,
         // the push into that queue never returned, and every teardown that
         // needed the pad's stream lock afterwards waited on it for good.
-        let aligner = if is_ad || input.superimposed() {
+        // An `alpha` source composites its own layers on this pipeline's clock
+        // and base time, so what it emits is already at the programme's running
+        // time. Shifting that by the programme's age again put a source rebuilt
+        // two minutes in two minutes into the future, where the compositor's
+        // queue held its frames unconsumed and every later teardown waited on
+        // the pad's stream lock for good.
+        let aligner = if is_ad || input.composites_its_own_timeline() {
             None
         } else {
             Some(TimelineAligner::install(
@@ -1031,16 +1124,17 @@ impl Mixer {
             )?)
         };
 
-        // Filters this source was configured with, before it starts, so the
-        // first frame out of it is already keyed.
-        let wanted: Vec<_> = self
+        // Filters this source was configured with on its input side, put on
+        // before it starts, so the first frame out of it is already keyed. The
+        // programme side ones need the branch registered first and go on below.
+        let configured: Vec<_> = self
             .cfg
             .filters
             .iter()
             .filter(|f| f.attach.source.as_deref() == Some(cfg.id.as_str()))
             .cloned()
             .collect();
-        for f in &wanted {
+        for f in configured.iter().filter(|f| f.attach.side == crate::config::FilterAttachSide::Input) {
             if let Err(e) = input.attach_filter(f, &self.canvas, false) {
                 warn!(source = %cfg.id, filter = %f.id, ?e, "could not attach a configured filter");
             }
@@ -1109,9 +1203,209 @@ impl Mixer {
             let _ = self.remove_source(&cfg.id);
             return Err(e);
         }
+        for f in configured
+            .iter()
+            .filter(|f| f.attach.side == crate::config::FilterAttachSide::Programme)
+        {
+            if let Err(e) = self.add_source_programme_filter(&cfg.id, f) {
+                warn!(source = %cfg.id, filter = %f.id, ?e, "could not attach a configured filter");
+            }
+        }
         info!(source = %cfg.id, kind = %self.sources.last().map(|s| s.input.type_id()).unwrap_or_default(), "source added");
         self.broadcast_status();
         Ok(())
+    }
+
+    /// Put a filter where its `attach` says, while the programme runs.
+    ///
+    /// Four insertion points exist and this picks between them: a filter with a
+    /// source goes on that source (its input side by default, its programme
+    /// branch when `side = "programme"`), and one with `programme = true` goes
+    /// on the programme before the tee every consumer reads, so the multiview
+    /// and the encoder both see it.
+    pub fn add_filter(&mut self, cfg: &crate::config::FilterConfig) -> Result<()> {
+        anyhow::ensure!(!cfg.id.trim().is_empty(), "a filter needs an id");
+        if let Some(source) = cfg.attach.source.clone() {
+            let slot = self
+                .sources
+                .iter()
+                .find(|s| s.input.id == source)
+                .with_context(|| format!("no such source {source}"))?;
+            match cfg.attach.side {
+                crate::config::FilterAttachSide::Input => {
+                    slot.input.attach_filter(cfg, &self.canvas, true)?;
+                }
+                crate::config::FilterAttachSide::Programme => {
+                    self.add_source_programme_filter(&source, cfg)?;
+                }
+            }
+            self.broadcast_status();
+            return Ok(());
+        }
+        anyhow::ensure!(
+            cfg.attach.programme,
+            "a filter must say where it goes: attach = {{ source = \"cam1\" }} \
+             or attach = {{ programme = true }}"
+        );
+        self.add_programme_filter(cfg)
+    }
+
+    /// The programme side point for one source: between its video queue and
+    /// its compositor pad, and after the mute on the audio side so the meter
+    /// stays honest. The thumbnail does not see it, which is the difference
+    /// from the input side.
+    fn add_source_programme_filter(
+        &mut self,
+        source: &SourceId,
+        cfg: &crate::config::FilterConfig,
+    ) -> Result<()> {
+        anyhow::ensure!(
+            !self.programme_filters.iter().any(|f| f.id() == cfg.id),
+            "a filter called {} is already in place",
+            cfg.id
+        );
+        let slot = self
+            .sources
+            .iter()
+            .find(|s| &s.input.id == source)
+            .with_context(|| format!("no such source {source}"))?;
+        let filter = crate::plugin::filter::make(&cfg.type_id)?;
+        let (upstream, pad) = if filter.stream() == crate::plugin::filter::Stream::Audio {
+            (slot.branch.amute.clone(), slot.branch.apad.clone())
+        } else {
+            (slot.branch.vq.clone(), slot.branch.vpad.clone())
+        };
+        let mut params = cfg.params.clone();
+        params
+            .entry("id".to_string())
+            .or_insert_with(|| toml::Value::String(format!("pgm-{source}-{}", cfg.id)));
+        let placed = crate::plugin::filter::insert(
+            crate::plugin::Insertion::before_pad(&self.program, &upstream, &pad),
+            crate::plugin::FilterSpec {
+                id: cfg.id.clone(),
+                type_id: cfg.type_id.clone(),
+                side: crate::plugin::FilterSide::SourceProgramme,
+                params,
+            },
+            filter,
+            &self.canvas,
+            true,
+        )?;
+        self.programme_filters.push(placed);
+        self.broadcast_status();
+        Ok(())
+    }
+
+    /// The programme insertion point: between the compositor's capsfilter and
+    /// the tee every consumer reads, so the encoder and the multiview both see
+    /// the filtered picture.
+    fn add_programme_filter(&mut self, cfg: &crate::config::FilterConfig) -> Result<()> {
+        anyhow::ensure!(
+            !self.programme_filters.iter().any(|f| f.id() == cfg.id),
+            "the programme already has a filter called {}",
+            cfg.id
+        );
+        let filter = crate::plugin::filter::make(&cfg.type_id)?;
+        let (up, down) = if filter.stream() == crate::plugin::filter::Stream::Audio {
+            ("pgm-level", "araw-tee")
+        } else {
+            ("vmix-caps", "vraw-tee")
+        };
+        let upstream = self
+            .program
+            .by_name(up)
+            .with_context(|| format!("the programme has no element called {up}"))?;
+        let downstream = self
+            .program
+            .by_name(down)
+            .with_context(|| format!("the programme has no element called {down}"))?;
+        let mut params = cfg.params.clone();
+        params
+            .entry("id".to_string())
+            .or_insert_with(|| toml::Value::String(format!("pgm-{}", cfg.id)));
+        let slot = crate::plugin::filter::insert(
+            crate::plugin::Insertion::between(&self.program, &upstream, &downstream),
+            crate::plugin::FilterSpec {
+                id: cfg.id.clone(),
+                type_id: cfg.type_id.clone(),
+                side: crate::plugin::FilterSide::Programme,
+                params,
+            },
+            filter,
+            &self.canvas,
+            true,
+        )?;
+        self.programme_filters.push(slot);
+        self.broadcast_status();
+        Ok(())
+    }
+
+    /// Change a filter wherever it is.
+    fn set_filter(&mut self, id: &str, params: &crate::config::Params) -> FilterOutcome {
+        let outcome = if let Some(slot) =
+            self.programme_filters.iter_mut().find(|f| f.id() == id)
+        {
+            slot.configure(params)
+        } else {
+            let Some(source) =
+                self.sources.iter().find(|s| s.input.filter_ids().iter().any(|f| f == id))
+            else {
+                return FilterOutcome::NoSuchFilter(format!(
+                    "no filter called {id} on the programme or on any source"
+                ));
+            };
+            source.input.configure_filter(id, params)
+        };
+        match outcome {
+            Ok(crate::plugin::Configure::Applied) => FilterOutcome::Applied,
+            Ok(crate::plugin::Configure::RestartRequired(why)) => {
+                FilterOutcome::RestartRequired(why)
+            }
+            Err(e) => FilterOutcome::Failed(format!("{e:#}")),
+        }
+    }
+
+    /// Take a filter out, wherever it is.
+    fn remove_filter(&mut self, id: &str) -> Result<()> {
+        if let Some(pos) = self.programme_filters.iter().position(|f| f.id() == id) {
+            self.programme_filters.remove(pos).remove()?;
+            self.broadcast_status();
+            return Ok(());
+        }
+        let source = self
+            .sources
+            .iter()
+            .find(|s| s.input.filter_ids().iter().any(|f| f == id))
+            .with_context(|| {
+                format!("no filter called {id} on the programme or on any source")
+            })?;
+        source.input.remove_filter(id)?;
+        self.broadcast_status();
+        Ok(())
+    }
+
+    fn filter_list(&self) -> Vec<FilterStatus> {
+        let mut all: Vec<FilterStatus> = self
+            .programme_filters
+            .iter()
+            .map(|f| FilterStatus {
+                id: f.id().to_string(),
+                type_id: f.spec.type_id.clone(),
+                source: None,
+                side: f.spec.side.as_str().to_string(),
+            })
+            .collect();
+        for slot in &self.sources {
+            for f in slot.input.filters() {
+                all.push(FilterStatus {
+                    id: f.0,
+                    type_id: f.1,
+                    source: Some(slot.input.id.clone()),
+                    side: f.2,
+                });
+            }
+        }
+        all
     }
 
     pub fn remove_source(&mut self, id: &SourceId) -> Result<()> {
@@ -1905,7 +2199,10 @@ impl Mixer {
                 r?;
             }
             Command::RestartSource(id) => {
-                if self.sources.iter().any(|s| s.input.id == id && s.input.superimposed()) {
+                // Which way a source comes back is its own declaration, not a
+                // flag on the core's struct. A kind without `restart-in-place`
+                // is built again from nothing.
+                if self.sources.iter().any(|s| s.input.id == id && !s.input.restarts_in_place()) {
                     self.rebuild_source(&id);
                 } else if let Some(slot) = self.sources.iter_mut().find(|s| s.input.id == id) {
                     slot.stalled_ticks = 0;
@@ -1943,6 +2240,22 @@ impl Mixer {
                 let r = self.remove_output(&id);
                 reply(ack, &r);
                 r?;
+            }
+            Command::AddFilter(cfg, ack) => {
+                let r = self.add_filter(&cfg);
+                reply(ack, &r);
+                r?;
+            }
+            Command::SetFilter { id, params, reply } => {
+                let _ = reply.send(self.set_filter(&id, &params));
+            }
+            Command::RemoveFilter(id, ack) => {
+                let r = self.remove_filter(&id);
+                reply(ack, &r);
+                r?;
+            }
+            Command::ListFilters(reply) => {
+                let _ = reply.send(self.filter_list());
             }
             Command::Status(reply) => {
                 let _ = reply.send(self.status());
@@ -2209,12 +2522,15 @@ impl Mixer {
         let Some(slot) = self.sources.iter().find(|s| s.input.id == id) else {
             return;
         };
-        // A superimposed source is not restarted in place, it is built again
-        // from nothing (see `rebuild_source`), which costs a browser launch, a
-        // profile directory and about ten seconds of the operator's attention.
-        // Doing that every twelve seconds for two hours is what happened on
-        // 2026-09-11 and 2026-09-12, so it gets a policy of its own.
-        if slot.input.superimposed() {
+        // A source that does not declare `restart-in-place` is built again from
+        // nothing (see `rebuild_source`), which for a page costs a browser
+        // launch, a profile directory and about ten seconds of the operator's
+        // attention. Doing that every twelve seconds for two hours is what
+        // happened on 2026-09-11 and 2026-09-12, so it gets a policy of its
+        // own. The decision comes from the capability the kind declared at
+        // `initialize`, so a plugin that can come back in place says so and
+        // gets the cheap path without the core knowing what it is.
+        if !slot.input.restarts_in_place() {
             let now = Instant::now();
             if self.rebuild_not_before.get(&id).is_some_and(|t| *t > now) {
                 return;
@@ -2447,7 +2763,7 @@ impl Mixer {
                 // Asked once and used twice: each of these is a query on the
                 // source's own pipeline, and the snapshot is polled.
                 let at = s.position();
-                SourceStatus {
+                let mut status = SourceStatus {
                     id: s.input.id.clone(),
                     name: s.input.config.display_name().to_string(),
                     uri: safe_uri_label(&s.input.config.uri),
@@ -2457,10 +2773,7 @@ impl Mixer {
                     cell: cells.get(s.input.id.as_str()).copied(),
                     video_idle_ms: s.input.health.video_idle_ms(),
                     audio_idle_ms: s.input.health.audio_idle_ms(),
-                    superimposed: s.input.superimposed(),
-                    // Only a superimposed source has levels, so this is `None`
-                    // for everything else and the UI draws no faders for it.
-                    audio: s.input.levels().map(|l| l.report()),
+                    extra: Default::default(),
                     // These two come off the elements, not off the config, so the
                     // snapshot says what the pipeline is doing even after a gain
                     // was clamped on its way in.
@@ -2472,7 +2785,23 @@ impl Mixer {
                     seekable: s.seekable(),
                     position_ms: at.as_ref().map(|at| at.position_ms),
                     duration_ms: at.and_then(|at| at.duration_ms),
+                };
+                // What only this kind has. The keys are the same ones the JSON
+                // always carried, written from the extras rather than from
+                // fields on the universal shape.
+                if s.input.superimposed() {
+                    status.put_extra("superimposed", true);
                 }
+                // Only a source with separate sounds has levels, so this is
+                // absent for everything else and the UI draws no faders for it.
+                if let Some(levels) = s.input.levels() {
+                    status.put_extra("audio", levels.report());
+                }
+                let filters = s.input.filter_ids();
+                if !filters.is_empty() {
+                    status.put_extra("filters", filters);
+                }
+                status
             })
             .collect();
 
