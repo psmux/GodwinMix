@@ -221,6 +221,43 @@ Overrides the policy outright. All three keys together.
 | `max_delay_ms` | ceiling |
 | `multiplier` | how fast the delay grows |
 
+## `[plugins]`
+
+Two different things share this table, and TOML tells them apart by shape. A
+sub table is a plugin's own settings, handed to the plugin of that name and
+read by nothing else. A plain value is a switch about installing plugins.
+
+```toml
+[plugins]
+allow_unsigned = true
+
+[plugins.ndi]
+discovery_interval_secs = 5
+```
+
+| Key | Default | Meaning |
+|---|---|---|
+| `allow_unsigned` | `true` | whether a plugin nothing signed may be installed. True is what `gmx plugin add ./my-plugin` needs, and it is the whole of the developer path. A mixer running unattended channels sets it false, and then only a signed release installs. |
+| `[plugins.<name>]` | none | that plugin's settings. The core never reads inside one. |
+
+The trust label an install ends up with is in
+[trust and signing](../explanation/trust-and-signing.md).
+
+## `[marketplaces]`
+
+| Key | Default | Meaning |
+|---|---|---|
+| `only` | `[]` | which marketplaces a bare plugin name may be resolved through. Empty means every marketplace added with `gmx marketplace add`. A list pins it, which is how an organisation points its operators at its own listings. |
+
+```toml
+[marketplaces]
+only = ["acme"]
+```
+
+It is a default rather than a lock: an operator can still install from an
+explicit source. Set `[plugins] allow_unsigned = false` beside it for the
+harder version. See [run a marketplace](../how-to/run-a-marketplace.md).
+
 ## Environment variables
 
 | Variable | What it does |
@@ -230,6 +267,11 @@ Overrides the policy outright. All three keys together.
 | `GST_DEBUG` | GStreamer's own logging, 1 to 9. Start at 3 |
 | `GMX_BROWSER_SWITCHES` | extra Chromium switches for the sidecar |
 | `GMX_SIDECAR_LOG` | where the sidecar writes its log |
+| `GODWINMIX_HOME` | where the marketplace list and the installed codec catalogue live. Default `~/.godwinmix` |
+| `GODWINMIX_PLUGINS_DIR` | where plugins are installed. Default `~/.godwinmix/plugins` |
+| `GMX_GITHUB_TOKEN` | a token for the GitHub API, so a CI runner installing plugins is not rate limited. `GITHUB_TOKEN` and `GH_TOKEN` are read too |
+| `GMX_CODEC_CHANNEL` | where `gmx codec update` fetches from. Default is the project's own release channel |
+| `GMX_NO_COSIGN` | set to anything to skip the cosign check even where cosign is installed. For testing the fallback path |
 
 The `LIVEBOXMIX_` spellings of the first two are read for one release and warn.
 See [upgrading from LiveboxMix](../how-to/upgrade-from-liveboxmix.md).
