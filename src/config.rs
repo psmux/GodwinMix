@@ -18,6 +18,8 @@ pub struct Config {
     #[serde(default)]
     pub multiview: MultiviewConfig,
     #[serde(default)]
+    pub snapshot: SnapshotConfig,
+    #[serde(default)]
     pub control: ControlConfig,
     #[serde(default)]
     pub hardware: HardwareConfig,
@@ -82,19 +84,59 @@ impl Default for ProgramConfig {
     }
 }
 
+/// The operator's mosaic.
+///
+/// Every field has a default, so `[multiview]\nenabled = false` on its own is
+/// a valid section: turning a subsystem off must not oblige anybody to write
+/// out the settings of the thing they are turning off.
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct MultiviewConfig {
+    /// False removes the mosaic entirely: no pipeline, no encoder, no
+    /// thumbnail end on any source, and the snapshot routes answer 404. See
+    /// `multiview.rs`. True does not mean it is running; it means a client may
+    /// ask for it.
+    #[serde(default = "yes")]
     pub enabled: bool,
-    /// Size of the whole mosaic, not of one cell.
+    /// Size of the whole mosaic, not of one cell. What a client that does not
+    /// ask for a size gets.
+    #[serde(default = "default_multiview_width")]
     pub width: i32,
+    #[serde(default = "default_multiview_height")]
     pub height: i32,
+    #[serde(default = "default_multiview_fps")]
     pub fps: i32,
     /// JPEG quality, 1 to 100. The mosaic exists so an operator can tell what
     /// is in frame and pick a camera, not to judge picture quality, so this is
     /// deliberately modest. Bandwidth is roughly width * height * fps * q.
+    #[serde(default = "default_jpeg_quality")]
     pub jpeg_quality: u32,
     /// Include a program return cell in the grid.
+    #[serde(default = "yes")]
     pub include_program: bool,
+    /// Seconds to keep the mosaic up after the last subscriber leaves. A
+    /// browser reloading its page comes back inside this and pays nothing;
+    /// zero tears the pipeline down the moment the last client goes.
+    #[serde(default = "default_multiview_linger_secs")]
+    pub linger_secs: u64,
+}
+
+fn yes() -> bool {
+    true
+}
+fn default_multiview_width() -> i32 {
+    960
+}
+fn default_multiview_height() -> i32 {
+    540
+}
+fn default_multiview_fps() -> i32 {
+    8
+}
+fn default_jpeg_quality() -> u32 {
+    60
+}
+fn default_multiview_linger_secs() -> u64 {
+    2
 }
 
 impl Default for MultiviewConfig {
@@ -102,12 +144,73 @@ impl Default for MultiviewConfig {
         // 960x540 at 8 fps and quality 60 costs roughly 2 Mbit/s, which a
         // remote operator on a hotel connection can actually receive.
         Self {
-            enabled: true,
-            width: 960,
-            height: 540,
-            fps: 8,
-            jpeg_quality: 60,
-            include_program: true,
+            enabled: yes(),
+            width: default_multiview_width(),
+            height: default_multiview_height(),
+            fps: default_multiview_fps(),
+            jpeg_quality: default_jpeg_quality(),
+            include_program: yes(),
+            linger_secs: default_multiview_linger_secs(),
+        }
+    }
+}
+
+/// Stills and the motion tracker that reads them.
+///
+/// The tracker decodes a mosaic frame per tick, which is the most expensive
+/// thing the core does on behalf of a client that is not watching, so it runs
+/// only while something is actually asking: a snapshot request, an
+/// `agent.state` read, or a subscriber with agent thresholds. The numbers here
+/// are the ones 09 section 3 commits to.
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct SnapshotConfig {
+    /// False removes the tracker and the snapshot routes entirely. The routes
+    /// then answer 404 naming this switch, and `agent.state` reports
+    /// `motion: null`.
+    #[serde(default = "yes")]
+    pub enabled: bool,
+    /// What a request without `?width=` gets. 320x180 is 84 tokens to a
+    /// vision model against 2,691 for a 1080p frame, and it answers "is
+    /// anybody in the shot" about as well.
+    #[serde(default = "default_snapshot_width")]
+    pub default_width: u32,
+    /// Seconds a client must wait between snapshots unless it passes
+    /// `?force=true`. Zero turns the limit off.
+    #[serde(default = "default_snapshot_min_interval_secs")]
+    pub min_interval_secs: u64,
+    /// Widths above this are refused unless the request passes
+    /// `?allow_large=true`. A 1080p still costs a vision model thirty times
+    /// what a 320 wide one does, so asking for it should be deliberate.
+    #[serde(default = "default_snapshot_max_width")]
+    pub max_width: u32,
+    /// Seconds the tracker keeps following the mosaic after the last request.
+    /// An agent polling every five seconds keeps it up; one that stops gets
+    /// its CPU back.
+    #[serde(default = "default_snapshot_idle_secs")]
+    pub idle_secs: u64,
+}
+
+fn default_snapshot_width() -> u32 {
+    320
+}
+fn default_snapshot_min_interval_secs() -> u64 {
+    5
+}
+fn default_snapshot_max_width() -> u32 {
+    1280
+}
+fn default_snapshot_idle_secs() -> u64 {
+    15
+}
+
+impl Default for SnapshotConfig {
+    fn default() -> Self {
+        Self {
+            enabled: yes(),
+            default_width: default_snapshot_width(),
+            min_interval_secs: default_snapshot_min_interval_secs(),
+            max_width: default_snapshot_max_width(),
+            idle_secs: default_snapshot_idle_secs(),
         }
     }
 }
@@ -677,6 +780,21 @@ impl Config {
             "multiview.jpeg_quality must be between 1 and 100"
         );
         anyhow::ensure!(self.multiview.fps > 0, "multiview.fps must be positive");
+        anyhow::ensure!(
+            self.multiview.width > 0 && self.multiview.height > 0,
+            "multiview dimensions must be positive"
+        );
+        anyhow::ensure!(
+            self.snapshot.default_width >= 16,
+            "snapshot.default_width must be at least 16; 320 is the documented default"
+        );
+        anyhow::ensure!(
+            self.snapshot.max_width >= self.snapshot.default_width,
+            "snapshot.max_width ({}) is below snapshot.default_width ({}), so every \
+             default request would be refused",
+            self.snapshot.max_width,
+            self.snapshot.default_width
+        );
 
         let mut seen = std::collections::HashSet::new();
         for s in &self.sources {
@@ -852,12 +970,42 @@ sidecar = \"/opt/b\"\n").unwrap();
         assert!(missing.stall.hold_last_frame);
     }
 
+    /// Turning a subsystem off is one line. Nobody should have to write out
+    /// the width of a mosaic they have just disabled.
+    #[test]
+    fn the_switches_are_one_line_each() {
+        let cfg: Config =
+            toml::from_str("[multiview]\nenabled = false\n[snapshot]\nenabled = false\n").unwrap();
+        assert!(!cfg.multiview.enabled);
+        assert!(!cfg.snapshot.enabled);
+        assert_eq!(cfg.multiview.width, default_multiview_width());
+        assert_eq!(cfg.multiview.linger_secs, 2);
+        assert_eq!(cfg.snapshot.default_width, 320);
+        assert_eq!(cfg.snapshot.min_interval_secs, 5);
+        assert_eq!(cfg.snapshot.max_width, 1280);
+        cfg.validate().unwrap();
+
+        // Both default to on, so an existing config file is unchanged.
+        let bare: Config = toml::from_str("").unwrap();
+        assert!(bare.multiview.enabled);
+        assert!(bare.snapshot.enabled);
+    }
+
+    #[test]
+    fn a_snapshot_ceiling_below_the_default_is_rejected() {
+        let cfg: Config =
+            toml::from_str("[snapshot]\ndefault_width = 640\nmax_width = 320\n").unwrap();
+        let err = format!("{:#}", cfg.validate().unwrap_err());
+        assert!(err.contains("max_width"), "unhelpful error: {err}");
+    }
+
     #[test]
     fn odd_canvas_is_rejected() {
         let mut cfg = Config {
             canvas: Canvas { width: 1921, height: 1080, fps: 30, sample_rate: 48000, channels: 2 },
             program: Default::default(),
             multiview: Default::default(),
+            snapshot: Default::default(),
             control: Default::default(),
             hardware: Default::default(),
             media: Default::default(),

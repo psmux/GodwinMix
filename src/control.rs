@@ -14,10 +14,11 @@
 //! They exist so that an AI agent can look at the mixer for the price of one
 //! small request rather than a video stream. See `snapshot.rs`.
 
-use crate::config::{OutputConfig, SourceConfig};
+use crate::config::{OutputConfig, SnapshotConfig, SourceConfig};
 use crate::media::{MediaLibrary, MediaListing};
 use crate::mixer::{AudioOutcome, Command, MixerHandle, SeekOutcome};
-use crate::snapshot::{self, Pick, Tracker};
+use crate::multiview::{MultiviewHandle, MultiviewRequest};
+use crate::snapshot::{self, Ask, Pick, Tracker};
 use crate::state::{Event, MixerStatus, SourceState};
 use anyhow::Result;
 use axum::extract::ws::{Message, WebSocket, WebSocketUpgrade};
@@ -42,8 +43,11 @@ const UI: &str = include_str!("../ui/index.html");
 #[derive(Clone)]
 pub struct AppState {
     pub mixer: MixerHandle,
-    /// Mosaic frames. `None` when multiview is disabled.
-    pub frames: Option<Arc<broadcast::Sender<Arc<[u8]>>>>,
+    /// The mosaic. Subscribing through this is what builds it; there is no
+    /// other way to reach the frames. See `multiview.rs`.
+    pub multiview: MultiviewHandle,
+    /// The still and motion limits, `[snapshot]` in the config.
+    pub snapshot: SnapshotConfig,
     /// Ad clips available on this machine.
     pub library: Arc<MediaLibrary>,
     /// Runs file transcodes and remembers their progress.
@@ -879,17 +883,43 @@ async fn agent_state(
     State(app): State<AppState>,
     State(snapshots): State<Arc<Tracker>>,
 ) -> Result<Response, ApiError> {
+    // Reading the state is what asks for motion. An agent polling this keeps
+    // the tracker alive; one that stops gets the CPU back a few seconds later.
+    snapshots.want();
     let status = app.mixer.status().await?;
-    let doc = snapshot::agent_state(&status, snapshots.latest().as_ref());
+    let doc = snapshot::agent_state(&status, snapshots.latest().as_ref(), snapshots.enabled());
     Ok(([(header::CACHE_CONTROL, "no-store")], Json(doc)).into_response())
 }
 
 #[derive(Debug, Deserialize)]
 struct SnapshotQuery {
     /// Downscale to this many pixels across, keeping the aspect. Never
-    /// enlarges. Omit for the cell's own size.
+    /// enlarges. Omit for the `[snapshot] default_width` of 320; `width=0`
+    /// for the cell's own size.
     #[serde(default)]
     width: Option<u32>,
+    /// Ignore the per client rate limit for this one request.
+    #[serde(default)]
+    force: bool,
+    /// Permit a width above `[snapshot] max_width`.
+    #[serde(default)]
+    allow_large: bool,
+}
+
+/// Who is asking, for the snapshot rate limit. The peer address when the
+/// server was started with connect info (always, in production), the bearer
+/// token when there is one and no address, and otherwise one shared bucket.
+fn client_key(req: &Request) -> String {
+    if let Some(peer) = req
+        .extensions()
+        .get::<axum::extract::ConnectInfo<std::net::SocketAddr>>()
+    {
+        return peer.0.ip().to_string();
+    }
+    match req.headers().get(header::AUTHORIZATION).and_then(|v| v.to_str().ok()) {
+        Some(token) => format!("token:{token}"),
+        None => "anonymous".into(),
+    }
 }
 
 /// `sheet.jpg`, `program.jpg` or `{source_id}.jpg`: the newest mosaic frame,
@@ -903,6 +933,7 @@ async fn snapshot_image(
     State(snapshots): State<Arc<Tracker>>,
     Path(name): Path<String>,
     Query(q): Query<SnapshotQuery>,
+    req: Request,
 ) -> Response {
     let plain = |code: StatusCode, msg: String| {
         (code, [(header::CACHE_CONTROL, "no-store")], msg).into_response()
@@ -914,19 +945,30 @@ async fn snapshot_image(
             "no such snapshot; use sheet.jpg, program.jpg or {source_id}.jpg".into(),
         );
     };
-    if !snapshots.enabled() {
-        return plain(
-            StatusCode::NOT_FOUND,
-            "multiview is disabled, so there is no mosaic to snapshot".into(),
-        );
+    if let Some(why) = snapshots.disabled_reason() {
+        return plain(StatusCode::NOT_FOUND, why);
     }
-    let Some(latest) = snapshots.latest() else {
-        return plain(StatusCode::SERVICE_UNAVAILABLE, "no mosaic frame has arrived yet".into());
+    let ask = Ask { width: q.width, force: q.force, allow_large: q.allow_large };
+    let width = match snapshots.resolve(&client_key(&req), &ask) {
+        Ok(w) => w,
+        Err(refusal @ snapshot::Refusal::TooWide { .. }) => {
+            return plain(StatusCode::BAD_REQUEST, refusal.message())
+        }
+        Err(refusal) => return plain(StatusCode::TOO_MANY_REQUESTS, refusal.message()),
+    };
+    // Asking is what starts the tracker and, through it, the mosaic. The first
+    // request after a quiet spell pays for the build; the rest are free.
+    let Some(latest) = snapshots.latest_wanted(Duration::from_secs(3)).await else {
+        return plain(
+            StatusCode::SERVICE_UNAVAILABLE,
+            "no mosaic frame yet: the mosaic is being built for you. Retry in a second."
+                .into(),
+        );
     };
 
     // The whole sheet at its own size is the frame as it came off the
     // encoder, no work at all.
-    if pick == Pick::Sheet && q.width.is_none() {
+    if pick == Pick::Sheet && width.is_none() {
         return jpeg_response(latest.jpeg.to_vec());
     }
     let cell = match &pick {
@@ -948,7 +990,7 @@ async fn snapshot_image(
             Some(c) => snapshot::crop_cell(&mosaic, c),
             None => mosaic,
         };
-        snapshot::encode_jpeg(&snapshot::fit_width(img, q.width))
+        snapshot::encode_jpeg(&snapshot::fit_width(img, width))
     })
     .await;
     match encoded {
@@ -998,7 +1040,11 @@ async fn serve_ws(socket: WebSocket, app: AppState) {
     }
 
     let mut events = app.mixer.subscribe();
-    let mut frames = app.frames.as_ref().map(|f| f.subscribe());
+    // Holding this is what keeps the mosaic up. It goes when the socket does,
+    // and with it, after the linger, the mosaic itself if this was the last
+    // client. A UI that asks for nothing in particular gets the configured
+    // size.
+    let mut frames = app.multiview.subscribe(MultiviewRequest::configured());
 
     loop {
         tokio::select! {
@@ -1022,14 +1068,9 @@ async fn serve_ws(socket: WebSocket, app: AppState) {
                 Err(broadcast::error::RecvError::Closed) => break,
             },
 
-            // `frames` is None when multiview is off, in which case this arm
-            // is disabled and the select just handles events.
-            frame = async {
-                match frames.as_mut() {
-                    Some(f) => f.recv().await,
-                    None => std::future::pending().await,
-                }
-            } => match frame {
+            // With multiview off this never yields, so the select just
+            // handles events and no special case is needed.
+            frame = frames.recv() => match frame {
                 Ok(bytes) => {
                     if tx.send(Message::Binary(bytes.to_vec().into())).await.is_err() {
                         break;
@@ -1050,8 +1091,13 @@ async fn serve_ws(socket: WebSocket, app: AppState) {
 pub async fn serve(bind: &str, state: AppState) -> Result<()> {
     let listener = tokio::net::TcpListener::bind(bind).await?;
     info!(%bind, "control server listening");
-    let snapshots = Tracker::start(state.frames.clone(), state.mixer.clone());
-    axum::serve(listener, router(state, snapshots)).await?;
+    let snapshots =
+        Tracker::new(state.snapshot.clone(), state.multiview.clone(), state.mixer.clone());
+    // Connect info so the snapshot rate limit can tell one client from
+    // another. Nothing else uses it, and a request without it still works.
+    let app = router(state, snapshots)
+        .into_make_service_with_connect_info::<std::net::SocketAddr>();
+    axum::serve(listener, app).await?;
     Ok(())
 }
 

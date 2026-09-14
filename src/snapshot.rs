@@ -11,16 +11,34 @@
 //! The motion score is the part that saves the most. Two consecutive mosaics
 //! are decoded to luma and compared cell by cell, which gives a number per
 //! source for "how much is changing here" at the cost of one JPEG decode per
-//! mosaic frame, in a background task, whether or not anybody asks.
+//! mosaic frame.
+//!
+//! # Nothing runs unless asked
+//!
+//! That decode is the most expensive thing the core does on behalf of a client
+//! that may not be there, so the tracker follows the mosaic only while
+//! something is asking: a snapshot request, an `agent.state` read, or a
+//! subscriber watching agent thresholds. Each of those calls [`Tracker::want`],
+//! which starts the follower if it is not running and keeps it running for
+//! `[snapshot] idle_secs` afterwards. When that expires the follower drops its
+//! multiview subscription (which lets the mosaic go too, if nothing else wants
+//! it) and forgets the frame it was holding, so the tracker costs no CPU and
+//! no memory until the next ask. With `[snapshot] enabled = false` there is no
+//! follower at all and the routes answer 404 naming the switch.
 
+use crate::config::SnapshotConfig;
 use crate::mixer::MixerHandle;
+use crate::multiview::{MultiviewHandle, MultiviewRequest};
 use crate::state::{BackendInfo, CellAssignment, MixerStatus, OutputState, SourceId, SourceState};
 use image::{GrayImage, ImageFormat, RgbImage};
-use parking_lot::RwLock;
+use parking_lot::{Mutex, RwLock};
 use serde::Serialize;
+use std::collections::HashMap;
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Arc;
+use std::time::{Duration, Instant};
 use tokio::sync::broadcast;
-use tracing::{debug, warn};
+use tracing::{debug, info, warn};
 
 /// Quality for the JPEGs this module encodes itself. The mosaic arrives at
 /// the operator's configured quality; cropping and re-encoding at a lower one
@@ -46,65 +64,265 @@ pub struct Latest {
     pub motion: Option<Vec<f64>>,
 }
 
-/// Keeps `Latest` up to date from the mosaic broadcast. One of these lives in
-/// the control server for as long as it runs.
+/// Why a snapshot request cannot be answered, in the words the client sees.
+pub enum Refusal {
+    /// Wider than `[snapshot] max_width` and no `allow_large` on the request.
+    TooWide { asked: u32, max: u32 },
+    /// Inside `[snapshot] min_interval_secs` of this client's last one.
+    TooSoon { retry_after_secs: u64 },
+}
+
+impl Refusal {
+    /// Every error names the next step, because an agent reads this and has to
+    /// decide what to do without asking anybody.
+    pub fn message(&self) -> String {
+        match self {
+            Refusal::TooWide { asked, max } => format!(
+                "a {asked} pixel wide snapshot is above the {max} pixel ceiling in \
+                 [snapshot] max_width. Ask for width={max} or less, or repeat the \
+                 request with allow_large=true if you really want the big one."
+            ),
+            Refusal::TooSoon { retry_after_secs } => format!(
+                "one snapshot per client per [snapshot] min_interval_secs. Wait \
+                 {retry_after_secs}s and ask again, read /api/agent/state for motion \
+                 in the meantime, or repeat the request with force=true."
+            ),
+        }
+    }
+}
+
+/// What a client asked for, before the limits are applied.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct Ask {
+    /// `None` means the configured default (320). `Some(0)` means the cell at
+    /// its own size, which is the old behaviour and still available.
+    pub width: Option<u32>,
+    /// Skip the rate limit.
+    pub force: bool,
+    /// Permit a width above `[snapshot] max_width`.
+    pub allow_large: bool,
+}
+
+/// Keeps `Latest` up to date from the mosaic, but only while something is
+/// asking. One of these lives in the control server for as long as it runs.
 pub struct Tracker {
     latest: RwLock<Option<Latest>>,
-    /// False when multiview is off, in which case there will never be a frame
-    /// and the endpoints say so rather than waiting.
-    enabled: bool,
+    cfg: SnapshotConfig,
+    mv: MultiviewHandle,
+    /// `None` in tests, where there is no mixer to read the layout from.
+    mixer: Option<MixerHandle>,
+    /// Whether a follower task exists. Changed only under `until`.
+    running: AtomicBool,
+    /// When the follower gives up, extended by every ask.
+    until: Mutex<Instant>,
+    /// Last snapshot per client, for the rate limit.
+    last_served: Mutex<HashMap<String, Instant>>,
+    /// How many times the follower has been started. A metric, and what the
+    /// tests assert on to prove it is not running when nobody is asking.
+    starts: AtomicU64,
 }
 
 impl Tracker {
-    /// Start following the mosaic. With `frames` absent the tracker is inert
-    /// and reports multiview as disabled.
-    pub fn start(
-        frames: Option<Arc<broadcast::Sender<Arc<[u8]>>>>,
-        mixer: MixerHandle,
-    ) -> Arc<Self> {
-        let tracker = Arc::new(Self { latest: RwLock::new(None), enabled: frames.is_some() });
-        if let Some(frames) = frames {
-            let t = tracker.clone();
-            tokio::spawn(async move { t.follow(frames.subscribe(), mixer).await });
-        }
-        tracker
+    /// A tracker that will follow the mosaic when somebody asks it to.
+    /// Nothing is started here: `want` does that.
+    pub fn new(cfg: SnapshotConfig, mv: MultiviewHandle, mixer: MixerHandle) -> Arc<Self> {
+        Self::build(cfg, mv, Some(mixer))
     }
 
-    /// A tracker with no frame source, for tests and for a mixer running
-    /// without a mosaic.
+    fn build(cfg: SnapshotConfig, mv: MultiviewHandle, mixer: Option<MixerHandle>) -> Arc<Self> {
+        Arc::new(Self {
+            latest: RwLock::new(None),
+            cfg,
+            mv,
+            mixer,
+            running: AtomicBool::new(false),
+            until: Mutex::new(Instant::now()),
+            last_served: Mutex::new(HashMap::new()),
+            starts: AtomicU64::new(0),
+        })
+    }
+
+    /// A tracker with nothing behind it, for tests.
     #[cfg(test)]
     pub fn disabled() -> Arc<Self> {
-        Arc::new(Self { latest: RwLock::new(None), enabled: false })
+        Self::build(
+            SnapshotConfig { enabled: false, ..Default::default() },
+            MultiviewHandle::detached(
+                crate::config::MultiviewConfig { enabled: false, ..Default::default() },
+                tokio::runtime::Handle::current(),
+            ),
+            None,
+        )
     }
 
+    /// Whether a snapshot could ever be produced. False when either switch is
+    /// off; `disabled_reason` says which.
     pub fn enabled(&self) -> bool {
-        self.enabled
+        self.cfg.enabled && self.mv.enabled()
     }
 
+    /// The 404 text for a switched off snapshot path, naming the switch that
+    /// turned it off and what to do about it.
+    pub fn disabled_reason(&self) -> Option<String> {
+        if !self.cfg.enabled {
+            return Some(
+                "snapshots are switched off by [snapshot] enabled = false in the mixer's \
+                 config. Set it to true and restart to get stills and motion back."
+                    .into(),
+            );
+        }
+        if !self.mv.enabled() {
+            return Some(
+                "stills are cut out of the mosaic, and the mosaic is switched off by \
+                 [multiview] enabled = false in the mixer's config. Set it to true and \
+                 restart, or read /api/agent/state, which works without pictures."
+                    .into(),
+            );
+        }
+        None
+    }
+
+    pub fn cfg(&self) -> &SnapshotConfig {
+        &self.cfg
+    }
+
+    /// How many times the follower has been started since boot.
+    pub fn starts(&self) -> u64 {
+        self.starts.load(Ordering::Relaxed)
+    }
+
+    /// Whether the follower is running right now.
+    pub fn following(&self) -> bool {
+        self.running.load(Ordering::SeqCst)
+    }
+
+    /// The newest frame if one is being held. Does not ask for one: a caller
+    /// that wants the tracker running calls `want` first, or uses
+    /// `latest_wanted`.
     pub fn latest(&self) -> Option<Latest> {
         self.latest.read().clone()
     }
 
-    async fn follow(&self, mut rx: broadcast::Receiver<Arc<[u8]>>, mixer: MixerHandle) {
+    /// Say that something wants motion and stills for the next little while.
+    /// The first ask starts the follower, which takes a multiview subscription
+    /// and so builds the mosaic if it is not up.
+    pub fn want(self: &Arc<Self>) {
+        if !self.enabled() {
+            return;
+        }
+        let idle = Duration::from_secs(self.cfg.idle_secs.max(1));
+        // Both the deadline and the running flag move under this lock, so an
+        // ask that lands while the follower is giving up is never lost.
+        let mut until = self.until.lock();
+        *until = Instant::now() + idle;
+        let was_running = self.running.swap(true, Ordering::SeqCst);
+        drop(until);
+        if !was_running {
+            self.starts.fetch_add(1, Ordering::Relaxed);
+            let me = self.clone();
+            tokio::spawn(me.follow());
+        }
+    }
+
+    /// The newest frame, having said that somebody wants one. Returns as soon
+    /// as there is a frame, or when `wait` runs out: the first request after a
+    /// quiet spell has to wait for the mosaic to be built and to produce a
+    /// frame, which is why this is not simply `latest`.
+    pub async fn latest_wanted(self: &Arc<Self>, wait: Duration) -> Option<Latest> {
+        self.want();
+        let deadline = Instant::now() + wait;
+        loop {
+            if let Some(l) = self.latest() {
+                return Some(l);
+            }
+            if Instant::now() >= deadline || !self.enabled() {
+                return None;
+            }
+            tokio::time::sleep(Duration::from_millis(40)).await;
+        }
+    }
+
+    /// Apply the size and rate limits to a request. `Ok(None)` means the cell
+    /// at its own size.
+    pub fn resolve(&self, client: &str, ask: &Ask) -> Result<Option<u32>, Refusal> {
+        let width = match ask.width {
+            None => Some(self.cfg.default_width),
+            Some(0) => None,
+            Some(w) => Some(w),
+        };
+        if let Some(w) = width {
+            if w > self.cfg.max_width && !ask.allow_large {
+                return Err(Refusal::TooWide { asked: w, max: self.cfg.max_width });
+            }
+        }
+        let interval = Duration::from_secs(self.cfg.min_interval_secs);
+        if interval.is_zero() || ask.force {
+            return Ok(width);
+        }
+        let now = Instant::now();
+        let mut last = self.last_served.lock();
+        if let Some(prev) = last.get(client) {
+            let waited = now.saturating_duration_since(*prev);
+            if waited < interval {
+                let left = interval - waited;
+                return Err(Refusal::TooSoon {
+                    retry_after_secs: left.as_secs().max(1),
+                });
+            }
+        }
+        // A client id is a peer address or a token, so the map is bounded by
+        // the number of clients. Old entries still go, or a long running mixer
+        // would remember every browser that ever connected.
+        if last.len() > 256 {
+            last.retain(|_, t| now.saturating_duration_since(*t) < interval * 4);
+        }
+        last.insert(client.to_string(), now);
+        Ok(width)
+    }
+
+    async fn follow(self: Arc<Self>) {
+        let Some(mixer) = self.mixer.clone() else { return };
+        // The subscription is what holds the mosaic up. Dropping it at the end
+        // of this function is what lets the mosaic go.
+        let mut sub = self.mv.subscribe(MultiviewRequest::configured());
+        info!("snapshot tracker following the mosaic");
         // Luma of the previous frame, kept only for the difference.
         let mut prev: Option<GrayImage> = None;
         loop {
-            let jpeg = match rx.recv().await {
-                Ok(f) => f,
-                Err(broadcast::error::RecvError::Lagged(n)) => {
+            let left = {
+                let until = self.until.lock();
+                until.saturating_duration_since(Instant::now())
+            };
+            if left.is_zero() {
+                // Nobody has asked for a while. Put it down, under the same
+                // lock `want` takes, so an ask arriving now is not lost.
+                let until = self.until.lock();
+                if Instant::now() < *until {
+                    continue;
+                }
+                self.running.store(false, Ordering::SeqCst);
+                drop(until);
+                *self.latest.write() = None;
+                info!("snapshot tracker idle, letting the mosaic go");
+                return;
+            }
+            let jpeg = match tokio::time::timeout(left, sub.recv()).await {
+                Err(_) => continue,
+                Ok(Ok(f)) => f,
+                Ok(Err(broadcast::error::RecvError::Lagged(n))) => {
                     // Falling behind means the decode is slower than the
                     // mosaic. The next frame is still the one to score, only
                     // the difference now spans more than one interval.
                     debug!(skipped = n, "snapshot tracker fell behind on mosaic frames");
                     continue;
                 }
-                Err(broadcast::error::RecvError::Closed) => return,
+                Ok(Err(broadcast::error::RecvError::Closed)) => break,
             };
             let cells = match mixer.status().await {
                 Ok(s) => s.multiview.cells,
                 Err(e) => {
                     warn!(?e, "snapshot tracker could not read the layout");
-                    return;
+                    break;
                 }
             };
 
@@ -141,6 +359,10 @@ impl Tracker {
                 Err(e) => warn!(?e, "snapshot decode task failed"),
             }
         }
+        // Only the error paths get here. Give the flag back so the next ask
+        // starts a fresh follower rather than waiting on a dead one.
+        self.running.store(false, Ordering::SeqCst);
+        *self.latest.write() = None;
     }
 }
 
@@ -290,7 +512,10 @@ pub const PROGRAM_URL: &str = "/api/snapshot/program.jpg";
 pub const SOURCE_URL: &str = "/api/snapshot/{source_id}.jpg";
 
 /// Fold a status snapshot and the latest motion scores into one document.
-pub fn agent_state(status: &MixerStatus, latest: Option<&Latest>) -> AgentState {
+///
+/// `stills` is false when either switch is off, and then the URLs are `null`
+/// rather than three addresses that would all answer 404.
+pub fn agent_state(status: &MixerStatus, latest: Option<&Latest>, stills: bool) -> AgentState {
     // Scores are keyed by the layout the frame was drawn with, not by the
     // `cell` index in `status`, since the two can differ across a relayout.
     let score = |pick: Pick| -> Option<f64> {
@@ -323,7 +548,7 @@ pub fn agent_state(status: &MixerStatus, latest: Option<&Latest>) -> AgentState 
             .map(|o| AgentOutput { id: o.id.clone(), state: o.state, reconnects: o.reconnects })
             .collect(),
         backend: status.backend.clone(),
-        snapshots: status.multiview.enabled.then_some(SnapshotUrls {
+        snapshots: (stills && status.multiview.enabled).then_some(SnapshotUrls {
             sheet: SHEET_URL,
             program: PROGRAM_URL,
             source: SOURCE_URL,
@@ -495,7 +720,7 @@ mod tests {
             ],
             motion: Some(vec![0.0512345, 0.1, 0.0]),
         };
-        let v = serde_json::to_value(agent_state(&status(), Some(&latest))).unwrap();
+        let v = serde_json::to_value(agent_state(&status(), Some(&latest), true)).unwrap();
         assert_eq!(v["program"], "cam1");
         assert_eq!(v["program_motion"], 0.051);
         assert_eq!(v["uptime_secs"], 77);
@@ -534,7 +759,7 @@ mod tests {
     #[test]
     fn motion_is_null_until_it_exists_and_snapshots_null_without_multiview() {
         let mut st = status();
-        let v = serde_json::to_value(agent_state(&st, None)).unwrap();
+        let v = serde_json::to_value(agent_state(&st, None, true)).unwrap();
         assert!(v["program_motion"].is_null());
         assert!(v["sources"][0]["motion"].is_null());
         assert!(v["snapshots"].is_object());
@@ -545,11 +770,11 @@ mod tests {
             cells: vec![cell(1, Some("cam1"), 0, 0, 1, 1)],
             motion: None,
         };
-        let v = serde_json::to_value(agent_state(&st, Some(&latest))).unwrap();
+        let v = serde_json::to_value(agent_state(&st, Some(&latest), true)).unwrap();
         assert!(v["sources"][0]["motion"].is_null());
 
         st.multiview.enabled = false;
-        let v = serde_json::to_value(agent_state(&st, None)).unwrap();
+        let v = serde_json::to_value(agent_state(&st, None, true)).unwrap();
         assert!(v["snapshots"].is_null());
     }
 }

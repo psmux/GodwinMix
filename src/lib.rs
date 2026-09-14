@@ -160,12 +160,13 @@ pub async fn run() -> Result<()> {
         None => info!("control API is open: no token configured"),
     }
     let cfg_media = cfg.media.clone();
+    let cfg_snapshot = cfg.snapshot.clone();
 
     let (mut mix, handle, cmd_rx, mut bus_rx) = mixer::Mixer::build(cfg)?;
     mix.persist_runtime_to(Config::runtime_store_path(&config_path));
     mix.start().context("starting mixer")?;
 
-    let frames = mix.multiview_sender().map(Arc::new);
+    let multiview = mix.multiview_handle();
 
     // Bus messages from every pipeline are funnelled into the same command
     // queue the operator's requests use, so the mixer handles a camera dying
@@ -192,7 +193,8 @@ pub async fn run() -> Result<()> {
     let quit = Arc::new(tokio::sync::Notify::new());
     let state = control::AppState {
         mixer: handle.clone(),
-        frames,
+        multiview,
+        snapshot: cfg_snapshot,
         library,
         converter,
         quit: quit.clone(),
