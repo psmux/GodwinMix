@@ -139,8 +139,8 @@ impl FilterSlot {
             .context("the element above a filter has no src pad")?;
         let (bin, down, up) = (self.bin.clone(), self.downstream.clone(), self.upstream.clone());
         crate::gstutil::with_pad_blocked(&src, BLOCK_TIMEOUT, move || {
-            let _ = up.unlink(&bin);
-            let _ = bin.unlink(&down);
+            up.unlink(&bin);
+            bin.unlink(&down);
             if let Err(e) = up.link(&down) {
                 tracing::warn!(?e, "could not relink around a removed filter");
             }
@@ -184,7 +184,7 @@ pub fn insert(
         // element added to a playing pipeline and linked before it is synced
         // pushes buffers at a bin that is not ready for them.
         crate::gstutil::with_pad_blocked(&src, BLOCK_TIMEOUT, move || {
-            let _ = up.unlink(&down);
+            up.unlink(&down);
             if let Err(e) = up.link(&b).and_then(|_| b.link(&down)) {
                 tracing::warn!(?e, "could not link a filter in");
             }
@@ -192,7 +192,7 @@ pub fn insert(
         .context("inserting a filter while blocked")?;
         bin.sync_state_with_parent().ok();
     } else {
-        let _ = at.upstream.unlink(at.downstream);
+        at.upstream.unlink(at.downstream);
         at.upstream.link(&bin).context("linking a filter to what is above it")?;
         bin.link(at.downstream).context("linking a filter to what is below it")?;
     }

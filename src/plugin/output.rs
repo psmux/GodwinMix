@@ -162,7 +162,10 @@ mod tests {
     #[test]
     fn an_unknown_destination_names_what_the_build_can_send_to() {
         let cfg = OutputConfig::bare("x", "whip://example.com/ingest");
-        let err = resolve_config(&cfg).expect_err("no whip in this build");
+        let err = match resolve_config(&cfg) {
+            Ok(p) => panic!("this build should not send to whip, but {} claimed it", p.manifest.provide_id()),
+            Err(e) => e,
+        };
         let text = format!("{err}");
         assert!(text.contains("rtmp/output"), "{text}");
         assert!(text.contains("srt/output"), "{text}");

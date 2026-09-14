@@ -76,7 +76,7 @@ impl SourceRequest<'_> {
             id: self.cfg.id.clone(),
             cfg: self.cfg.clone(),
             canvas: self.canvas.clone(),
-            backends: self.backends.clone(),
+            backends: *self.backends,
             thumb_fps: self.thumb_fps.max(1),
             browser: self.browser.clone(),
             allow_exec: self.allow_exec,
@@ -196,13 +196,12 @@ mod tests {
 
     #[test]
     fn an_unknown_type_names_what_the_build_has() {
-        let cfg = SourceConfig {
-            id: "x".into(),
-            type_id: Some("ndi/source".into()),
-            uri: "ndi://CAM 1".into(),
-            ..SourceConfig::bare("x", "ndi://CAM 1")
+        let mut cfg = SourceConfig::bare("x", "ndi://CAM 1");
+        cfg.type_id = Some("ndi/source".into());
+        let err = match resolve_config(&cfg) {
+            Ok(p) => panic!("this build has no ndi, but {} claimed it", p.manifest.provide_id()),
+            Err(e) => e,
         };
-        let err = resolve_config(&cfg).expect_err("no ndi in this build");
         let text = format!("{err}");
         assert!(text.contains("ndi/source"), "{text}");
         assert!(text.contains("rtmp/source"), "{text}");
