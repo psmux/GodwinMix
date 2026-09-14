@@ -53,12 +53,23 @@ services:
       # it answers the internet (deploy/README.md).
       - "127.0.0.1:8080:8080"
     volumes:
-      # Your config and the runtime source list the mixer writes beside it.
-      # Leave it out entirely and the entrypoint writes the shipped default.
-      - ./config:/etc/godwinmix
-      # Ad clips and anything else played from a file.
-      - ./media:/var/lib/godwinmix/media
+      # Named volumes rather than bind mounts, so this works from a clone with
+      # no setup: Docker seeds a named volume from the image, which means these
+      # arrive owned by the container's non root user and writable by it. A
+      # bind mount of a directory that does not exist yet is created by the
+      # daemon as root, and the mixer then cannot write its config or its
+      # runtime source list.
+      #
+      # For a real deployment, where you want to edit the config with an
+      # editor, replace these with bind mounts and chown the directories to
+      # uid 10001 first. See deploy/docker/README.md.
+      - config:/etc/godwinmix
+      - media:/var/lib/godwinmix/media
     # A page rendered by WebKit wants more than the 64 MB of shared memory
     # Docker gives a container by default.
     shm_size: 1g
     restart: unless-stopped
+
+volumes:
+  config:
+  media:
