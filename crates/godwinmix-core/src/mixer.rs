@@ -2476,6 +2476,14 @@ impl Mixer {
         // leaving a scene half applied underneath.
         self.program_scene = None;
         self.take_generation.fetch_add(1, Ordering::SeqCst);
+        // Whatever the last take was doing, it is over, exactly as
+        // `take_scene_over` says it. Without this a cut on top of a running
+        // transition wrote nothing at all: every geometry and alpha write in
+        // the apply path asks `driven` first and leaves a pad alone while a
+        // control binding owns it, so the old transition kept ramping while
+        // the API answered with the new source. Settling first leaves each pad
+        // where that transition's curves ended and hands the pads back.
+        self.settle_transition();
         self.apply_visibility(true);
 
         let at = self.running_time().unwrap_or(gst::ClockTime::ZERO);

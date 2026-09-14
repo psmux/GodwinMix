@@ -63,6 +63,37 @@ struct Shared {
     hello_signal: Mutex<Option<mpsc::Sender<()>>>,
 }
 
+/// One call on a running plugin, detached from whatever owns the process.
+///
+/// See [`Sidecar::caller`]. The lifecycle is a snapshot, so a state that
+/// changes between taking this and using it is read as it was; the call itself
+/// still fails cleanly, because the channel is gone once the process is.
+#[derive(Clone)]
+pub struct Caller {
+    shared: Arc<Shared>,
+    life: Lifecycle,
+}
+
+impl Caller {
+    pub fn call_within(&self, method: &str, params: Value, within: Duration) -> Result<Value> {
+        anyhow::ensure!(self.life.may_call(method), "{}", self.life.refusal(method));
+        let rx = self.shared.channel.call(method, params)?;
+        match rx.recv_timeout(within) {
+            Ok(Ok(value)) => Ok(value),
+            Ok(Err(e)) => Err(as_error(&self.shared.instance, method, e)),
+            Err(mpsc::RecvTimeoutError::Timeout) => anyhow::bail!(
+                "the plugin did not answer `{method}` within {} s. It is still running and the \
+                 call was not cancelled; read the state back rather than assuming it failed.",
+                within.as_secs_f64()
+            ),
+            Err(mpsc::RecvTimeoutError::Disconnected) => anyhow::bail!(
+                "the plugin died while answering `{method}`. The supervisor will restart it; \
+                 wait for event/plugin.state."
+            ),
+        }
+    }
+}
+
 /// One running plugin process and its control channel.
 pub struct Sidecar {
     shared: Arc<Shared>,
@@ -264,21 +295,19 @@ impl Sidecar {
 
     /// The same, with a deadline of the caller's choosing.
     pub fn call_within(&self, method: &str, params: Value, within: Duration) -> Result<Value> {
-        anyhow::ensure!(self.life.may_call(method), "{}", self.life.refusal(method));
-        let rx = self.shared.channel.call(method, params)?;
-        match rx.recv_timeout(within) {
-            Ok(Ok(value)) => Ok(value),
-            Ok(Err(e)) => Err(as_error(&self.shared.instance, method, e)),
-            Err(mpsc::RecvTimeoutError::Timeout) => anyhow::bail!(
-                "the plugin did not answer `{method}` within {} s. It is still running and the \
-                 call was not cancelled; read the state back rather than assuming it failed.",
-                within.as_secs_f64()
-            ),
-            Err(mpsc::RecvTimeoutError::Disconnected) => anyhow::bail!(
-                "the plugin died while answering `{method}`. The supervisor will restart it; \
-                 wait for event/plugin.state."
-            ),
-        }
+        self.caller().call_within(method, params, within)
+    }
+
+    /// A handle that can make a call without the sidecar itself.
+    ///
+    /// The point is the lock the sidecar usually sits under. A supervisor that
+    /// holds its instance table while it waits for a plugin to answer makes
+    /// every other plugin's caller wait too, and a take that samples a
+    /// transition plugin is then behind whatever an unrelated plugin is doing.
+    /// Taking one of these, dropping the lock and then calling is how a call
+    /// stops being a queue.
+    pub fn caller(&self) -> Caller {
+        Caller { shared: self.shared.clone(), life: self.life.clone() }
     }
 
     /// Send a notification. Nothing comes back.

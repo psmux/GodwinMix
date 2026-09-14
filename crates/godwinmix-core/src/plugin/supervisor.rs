@@ -331,17 +331,29 @@ impl Supervisor {
         };
         if let Some(provide) = provide {
             let instance = format!("{}-{provide}", plugin.clone().unwrap_or_default());
-            let inner = self.inner.lock();
-            let entry = inner.instances.get(&instance).with_context(|| {
-                format!(
-                    "no instance called `{instance}`. Running now: {}",
-                    inner.instances.keys().cloned().collect::<Vec<_>>().join(", ")
-                )
-            })?;
-            return entry
-                .child
-                .call("tool.call", json!({ "name": tool, "arguments": arguments }));
+            // The handle comes out from under the lock, as in `render`: a tool
+            // call has the protocol's five second ceiling, and holding the
+            // instance table for five seconds holds up every take that samples
+            // a transition plugin.
+            let caller = {
+                let inner = self.inner.lock();
+                let entry = inner.instances.get(&instance).with_context(|| {
+                    format!(
+                        "no instance called `{instance}`. Running now: {}",
+                        inner.instances.keys().cloned().collect::<Vec<_>>().join(", ")
+                    )
+                })?;
+                entry.child.caller().with_context(|| {
+                    format!("`{instance}` is not running, so `{tool}` has nowhere to go")
+                })?
+            };
+            return caller.call_within(
+                "tool.call",
+                json!({ "name": tool, "arguments": arguments }),
+                crate::plugin::host::process::CALL_TIMEOUT,
+            );
         }
+        let chosen = {
         let inner = self.inner.lock();
         // `[[tools]]` are declared once per plugin, not per provide, so every
         // one of a plugin's instances answers to the same list. The service is
@@ -363,7 +375,9 @@ impl Supervisor {
             }
         }
         match found.as_slice() {
-            [one] => one.child.call("tool.call", json!({ "name": tool, "arguments": arguments })),
+            [one] => one.child.caller().with_context(|| {
+                format!("`{}` is not running, so `{tool}` has nowhere to go", one.plugin)
+            })?,
             [] => {
                 let known = self.tool_names_locked(&inner);
                 anyhow::bail!(
@@ -378,6 +392,12 @@ impl Supervisor {
                 many.iter().map(|i| i.plugin.as_str()).collect::<Vec<_>>().join(", ")
             ),
         }
+        };
+        chosen.call_within(
+            "tool.call",
+            json!({ "name": tool, "arguments": arguments }),
+            crate::plugin::host::process::CALL_TIMEOUT,
+        )
     }
 
     fn tool_names_locked(&self, inner: &Inner) -> Vec<String> {
@@ -809,22 +829,32 @@ pub struct Reloaded {
 impl transition::Renderer for Supervisor {
     fn render(&self, plugin: &str, request: &transition::RenderRequest) -> Result<Value> {
         let params = serde_json::to_value(request).context("encoding a render request")?;
-        let inner = self.inner.lock();
-        let entry = inner
-            .instances
-            .values()
-            .find(|i| i.kind == ProvideKind::Transition && i.plugin == plugin)
-            .with_context(|| {
-                format!(
-                    "no transition plugin called `{plugin}` is running. Installed and \
-                     enabled transitions: {}",
-                    match self.transition_names_locked(&inner).join(", ") {
-                        s if s.is_empty() => "none".to_string(),
-                        s => s,
-                    }
-                )
-            })?;
-        entry.child.call_within("render", params, RENDER_DEADLINE)
+        // The handle comes out from under the lock and the call happens
+        // without it. A take samples its transition on the mixer loop, and the
+        // instance table is also held by tools, by discovery and by every
+        // other plugin's calls: holding it here put one take behind whatever
+        // an unrelated plugin happened to be doing.
+        let caller = {
+            let inner = self.inner.lock();
+            let entry = inner
+                .instances
+                .values()
+                .find(|i| i.kind == ProvideKind::Transition && i.plugin == plugin)
+                .with_context(|| {
+                    format!(
+                        "no transition plugin called `{plugin}` is running. Installed and \
+                         enabled transitions: {}",
+                        match self.transition_names_locked(&inner).join(", ") {
+                            s if s.is_empty() => "none".to_string(),
+                            s => s,
+                        }
+                    )
+                })?;
+            entry.child.caller().with_context(|| {
+                format!("the transition plugin `{plugin}` is not running, so `render` has nowhere to go")
+            })?
+        };
+        caller.call_within("render", params, RENDER_DEADLINE)
     }
 }
 
