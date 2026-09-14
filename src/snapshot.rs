@@ -65,6 +65,7 @@ pub struct Latest {
 }
 
 /// Why a snapshot request cannot be answered, in the words the client sees.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Refusal {
     /// Wider than `[snapshot] max_width` and no `allow_large` on the request.
     TooWide { asked: u32, max: u32 },
@@ -776,5 +777,161 @@ mod tests {
         st.multiview.enabled = false;
         let v = serde_json::to_value(agent_state(&st, None, true)).unwrap();
         assert!(v["snapshots"].is_null());
+
+        // And with the mosaic on but stills switched off, the same.
+        st.multiview.enabled = true;
+        let v = serde_json::to_value(agent_state(&st, None, false)).unwrap();
+        assert!(v["snapshots"].is_null());
+    }
+
+    fn tracker_with(cfg: SnapshotConfig) -> Arc<Tracker> {
+        Tracker::build(
+            cfg,
+            MultiviewHandle::detached(
+                crate::config::MultiviewConfig::default(),
+                tokio::runtime::Handle::current(),
+            ),
+            None,
+        )
+    }
+
+    #[tokio::test]
+    async fn the_default_snapshot_is_320_wide_and_a_big_one_needs_saying_so() {
+        let t = tracker_with(SnapshotConfig::default());
+        // Nothing asked for: the documented default, not the cell's own size.
+        assert_eq!(t.resolve("a", &Ask::default()).unwrap(), Some(320));
+        // Zero is how a client says "as it comes".
+        assert_eq!(
+            t.resolve("b", &Ask { width: Some(0), ..Default::default() }).unwrap(),
+            None
+        );
+        assert_eq!(
+            t.resolve("c", &Ask { width: Some(640), ..Default::default() }).unwrap(),
+            Some(640)
+        );
+        // Above the ceiling without the flag, refused, and the message says
+        // both ways out.
+        let err = t
+            .resolve("d", &Ask { width: Some(1920), ..Default::default() })
+            .expect_err("1920 must be refused")
+            .message();
+        assert!(err.contains("1280"), "{err}");
+        assert!(err.contains("allow_large"), "{err}");
+        // With the flag, allowed.
+        assert_eq!(
+            t.resolve("e", &Ask { width: Some(1920), allow_large: true, ..Default::default() })
+                .unwrap(),
+            Some(1920)
+        );
+    }
+
+    #[tokio::test]
+    async fn one_snapshot_per_client_per_interval_unless_forced() {
+        let t = tracker_with(SnapshotConfig::default());
+        assert!(t.resolve("10.0.0.1", &Ask::default()).is_ok());
+        let err = t.resolve("10.0.0.1", &Ask::default()).expect_err("the second is too soon");
+        let msg = err.message();
+        assert!(matches!(err, Refusal::TooSoon { .. }));
+        assert!(msg.contains("force=true"), "{msg}");
+        // Another client is another bucket.
+        assert!(t.resolve("10.0.0.2", &Ask::default()).is_ok());
+        // And force gets through.
+        assert!(t.resolve("10.0.0.1", &Ask { force: true, ..Default::default() }).is_ok());
+
+        // Zero turns the limit off for an operator who does not want it.
+        let t = tracker_with(SnapshotConfig { min_interval_secs: 0, ..Default::default() });
+        assert!(t.resolve("10.0.0.1", &Ask::default()).is_ok());
+        assert!(t.resolve("10.0.0.1", &Ask::default()).is_ok());
+    }
+
+    #[tokio::test]
+    async fn a_switched_off_snapshot_says_which_switch_did_it() {
+        let off = tracker_with(SnapshotConfig { enabled: false, ..Default::default() });
+        let why = off.disabled_reason().expect("must refuse");
+        assert!(why.contains("[snapshot] enabled = false"), "{why}");
+        assert!(!off.enabled());
+
+        let no_mosaic = Tracker::build(
+            SnapshotConfig::default(),
+            MultiviewHandle::detached(
+                crate::config::MultiviewConfig { enabled: false, ..Default::default() },
+                tokio::runtime::Handle::current(),
+            ),
+            None,
+        );
+        let why = no_mosaic.disabled_reason().expect("must refuse");
+        assert!(why.contains("[multiview] enabled = false"), "{why}");
+
+        let on = tracker_with(SnapshotConfig::default());
+        assert!(on.disabled_reason().is_none());
+        assert!(on.enabled());
+    }
+
+    /// Asking a switched off tracker for anything starts nothing at all.
+    #[tokio::test]
+    async fn a_disabled_tracker_never_starts_a_follower() {
+        let t = Tracker::disabled();
+        t.want();
+        assert!(!t.following());
+        assert_eq!(t.starts(), 0);
+        assert!(t.latest_wanted(Duration::from_millis(50)).await.is_none());
+    }
+
+    /// The whole chain, against a real mixer: no tracker and no mosaic until
+    /// something asks, both when it does, and both gone again afterwards.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn the_tracker_and_the_mosaic_come_and_go_with_the_asking() {
+        let _ = gstreamer::init();
+        let mut cfg: crate::config::Config = toml::from_str("").unwrap();
+        cfg.canvas = crate::config::Canvas {
+            width: 320,
+            height: 180,
+            fps: 15,
+            sample_rate: 48000,
+            channels: 2,
+        };
+        cfg.multiview = crate::config::MultiviewConfig {
+            width: 320,
+            height: 180,
+            linger_secs: 1,
+            ..Default::default()
+        };
+        let (mut mix, handle, cmd_rx, _bus_rx) = crate::mixer::Mixer::build(cfg).unwrap();
+        mix.start().unwrap();
+        let mv = mix.multiview_handle();
+        let thread = crate::mixer::spawn(mix, cmd_rx, handle.clone());
+
+        let tracker = Tracker::new(
+            SnapshotConfig { idle_secs: 1, ..Default::default() },
+            mv.clone(),
+            handle.clone(),
+        );
+        assert!(!tracker.following(), "the tracker is running before anybody asked");
+        assert_eq!(mv.live_pipelines(), 0, "a mosaic before anybody asked");
+        assert!(tracker.latest().is_none());
+
+        let latest = tracker
+            .latest_wanted(Duration::from_secs(4))
+            .await
+            .expect("no frame within four seconds of asking");
+        assert!(!latest.jpeg.is_empty());
+        assert!(tracker.following());
+        assert_eq!(mv.live_pipelines(), 1);
+        assert_eq!(tracker.starts(), 1);
+
+        // Stop asking. The tracker gives up after its idle window, and the
+        // mosaic follows it down after the linger.
+        for _ in 0..60 {
+            if !tracker.following() && mv.live_pipelines() == 0 {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(100)).await;
+        }
+        assert!(!tracker.following(), "the tracker kept decoding with nobody asking");
+        assert!(tracker.latest().is_none(), "a frame is still being held");
+        assert_eq!(mv.live_pipelines(), 0, "the mosaic outlived the tracker");
+
+        let _ = handle.send(crate::mixer::Command::Shutdown);
+        tokio::task::spawn_blocking(move || thread.join()).await.unwrap().unwrap();
     }
 }
