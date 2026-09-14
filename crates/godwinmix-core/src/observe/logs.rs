@@ -138,16 +138,10 @@ pub fn set_instance_level(instance: &str, level: Option<LevelCode>) {
 /// Every override in force, for `log.set` with no arguments and for the
 /// support bundle.
 pub fn levels() -> serde_json::Value {
-    let targets: BTreeMap<_, _> = TARGETS
-        .read()
-        .iter()
-        .map(|(k, v)| (k.clone(), v.as_str()))
-        .collect();
-    let instances: BTreeMap<_, _> = INSTANCES
-        .read()
-        .iter()
-        .map(|(k, v)| (k.clone(), v.as_str()))
-        .collect();
+    let targets: BTreeMap<_, _> =
+        TARGETS.read().iter().map(|(k, v)| (k.clone(), v.as_str())).collect();
+    let instances: BTreeMap<_, _> =
+        INSTANCES.read().iter().map(|(k, v)| (k.clone(), v.as_str())).collect();
     serde_json::json!({
         "default": default_level().as_str(),
         "targets": targets,
@@ -204,14 +198,10 @@ pub fn set_gst_debug(
 ) -> anyhow::Result<Vec<String>> {
     let mut applied = Vec::new();
     let deadline = std::time::Instant::now() + std::time::Duration::from_secs(duration_secs.max(1));
-    for part in categories
-        .split(',')
-        .map(str::trim)
-        .filter(|p| !p.is_empty())
-    {
-        let (name, level) = part.rsplit_once(':').ok_or_else(|| {
-            anyhow::anyhow!("'{part}' is not <category>:<level>, as GST_DEBUG is")
-        })?;
+    for part in categories.split(',').map(str::trim).filter(|p| !p.is_empty()) {
+        let (name, level) = part
+            .rsplit_once(':')
+            .ok_or_else(|| anyhow::anyhow!("'{part}' is not <category>:<level>, as GST_DEBUG is"))?;
         let level: u32 = level
             .trim()
             .parse()
@@ -302,18 +292,9 @@ impl Rotating {
         if let Some(dir) = path.parent() {
             std::fs::create_dir_all(dir)?;
         }
-        let file = std::fs::OpenOptions::new()
-            .create(true)
-            .append(true)
-            .open(&path)?;
+        let file = std::fs::OpenOptions::new().create(true).append(true).open(&path)?;
         let size = file.metadata().map(|m| m.len()).unwrap_or(0);
-        Ok(Self {
-            path,
-            file: Some(file),
-            size,
-            max_bytes,
-            generations,
-        })
+        Ok(Self { path, file: Some(file), size, max_bytes, generations })
     }
 
     fn write_line(&mut self, line: &str) {
@@ -341,11 +322,8 @@ impl Rotating {
             let _ = std::fs::rename(gen_path(n), gen_path(n + 1));
         }
         let _ = std::fs::rename(&self.path, gen_path(1));
-        self.file = std::fs::OpenOptions::new()
-            .create(true)
-            .append(true)
-            .open(&self.path)
-            .ok();
+        self.file =
+            std::fs::OpenOptions::new().create(true).append(true).open(&self.path).ok();
         self.size = 0;
     }
 }
@@ -419,12 +397,7 @@ impl ObserveLayer {
     /// Called once the config path is known, which is after the subscriber is
     /// installed, so that the lines logged while reading the config are not
     /// lost to a file that does not exist yet.
-    pub fn attach_files(
-        &self,
-        dir: &Path,
-        max_bytes: u64,
-        generations: u32,
-    ) -> std::io::Result<()> {
+    pub fn attach_files(&self, dir: &Path, max_bytes: u64, generations: u32) -> std::io::Result<()> {
         let core = Rotating::open(dir.join("godwinmix.log"), max_bytes, generations)?;
         let files = Arc::new(Files {
             core: Mutex::new(core),
@@ -439,9 +412,7 @@ impl ObserveLayer {
 
     fn write(&self, tags: &Tags, json: &str, human: &str) {
         (self.sink)(if self.human { human } else { json });
-        let Some(files) = self.files.get() else {
-            return;
-        };
+        let Some(files) = self.files.get() else { return };
         files.core.lock().write_line(json);
         // A plugin author wants their instance's lines on their own, so an
         // instance tagged line is mirrored into `plugins/<instance>.log`. The
@@ -472,9 +443,7 @@ impl ObserveLayer {
 fn instance_file_name_is_safe(id: &str) -> bool {
     !id.is_empty()
         && id.len() <= 64
-        && id
-            .chars()
-            .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_' || c == '.')
+        && id.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_' || c == '.')
         && id != "."
         && id != ".."
 }
@@ -520,9 +489,7 @@ where
         // in a source's build does not have to repeat it.
         if tags.instance.is_none() {
             tags.instance = span.parent().and_then(|p| {
-                p.extensions()
-                    .get::<Tags>()
-                    .and_then(|t: &Tags| t.instance.clone())
+                p.extensions().get::<Tags>().and_then(|t: &Tags| t.instance.clone())
             });
         }
         span.extensions_mut().insert(tags);
@@ -532,10 +499,7 @@ where
         let meta = event.metadata();
         let mut fields = Vec::new();
         let mut message = String::new();
-        event.record(&mut EventVisitor {
-            message: &mut message,
-            fields: &mut fields,
-        });
+        event.record(&mut EventVisitor { message: &mut message, fields: &mut fields });
 
         let mut tags = Tags {
             instance: nearest_instance(&ctx),
@@ -564,11 +528,7 @@ where
     S: Subscriber + for<'a> LookupSpan<'a>,
 {
     let span = ctx.lookup_current()?;
-    span.scope().find_map(|s| {
-        s.extensions()
-            .get::<Tags>()
-            .and_then(|t: &Tags| t.instance.clone())
-    })
+    span.scope().find_map(|s| s.extensions().get::<Tags>().and_then(|t: &Tags| t.instance.clone()))
 }
 
 fn nearest_trace_id<S>(ctx: &Context<'_, S>) -> Option<String>
@@ -576,11 +536,7 @@ where
     S: Subscriber + for<'a> LookupSpan<'a>,
 {
     let span = ctx.lookup_current()?;
-    span.scope().find_map(|s| {
-        s.extensions()
-            .get::<Tags>()
-            .and_then(|t: &Tags| t.trace_id.clone())
-    })
+    span.scope().find_map(|s| s.extensions().get::<Tags>().and_then(|t: &Tags| t.trace_id.clone()))
 }
 
 struct TagVisitor<'a>(&'a mut Tags);
@@ -677,11 +633,7 @@ fn render_json(
     let mut out = String::with_capacity(160);
     out.push('{');
     let _ = write!(out, "\"ts\":\"{}\"", rfc3339(now));
-    let _ = write!(
-        out,
-        ",\"level\":\"{}\"",
-        LevelCode::of(meta.level()).as_str()
-    );
+    let _ = write!(out, ",\"level\":\"{}\"", LevelCode::of(meta.level()).as_str());
     let _ = write!(out, ",\"target\":{}", json_string(meta.target()));
     match &tags.instance {
         Some(i) => {
@@ -714,13 +666,7 @@ fn render_human(
     fields: &[(&'static str, String)],
 ) -> String {
     let mut out = String::with_capacity(120);
-    let _ = write!(
-        out,
-        "{} {:>5} {}",
-        rfc3339(now),
-        LevelCode::of(meta.level()).as_str(),
-        meta.target()
-    );
+    let _ = write!(out, "{} {:>5} {}", rfc3339(now), LevelCode::of(meta.level()).as_str(), meta.target());
     if let Some(i) = &tags.instance {
         let _ = write!(out, " [{i}]");
     }
@@ -822,9 +768,7 @@ pub fn init(options: Options) {
     apply_env_filter(options.env_filter.as_deref());
     let layer = Arc::new(ObserveLayer::new(options.format, options.node));
     let _ = INSTALLED.set(layer.clone());
-    let _ = tracing_subscriber::registry()
-        .with(SharedLayer(layer))
-        .try_init();
+    let _ = tracing_subscriber::registry().with(SharedLayer(layer)).try_init();
 }
 
 /// `Layer` is implemented for the value, and the installed copy is shared with
@@ -1070,15 +1014,9 @@ pub(crate) mod tests {
         drop(f);
         assert!(path.exists());
         for n in 1..=5 {
-            assert!(
-                dir.join(format!("godwinmix.log.{n}")).exists(),
-                "generation {n} missing"
-            );
+            assert!(dir.join(format!("godwinmix.log.{n}")).exists(), "generation {n} missing");
         }
-        assert!(
-            !dir.join("godwinmix.log.6").exists(),
-            "a sixth generation was kept"
-        );
+        assert!(!dir.join("godwinmix.log.6").exists(), "a sixth generation was kept");
         let _ = std::fs::remove_dir_all(&dir);
     }
 
@@ -1105,10 +1043,7 @@ pub(crate) mod tests {
         reset_levels();
         apply_env_filter(Some("warn,godwinmix::observe=trace"));
         assert_eq!(default_level(), LevelCode::WARN);
-        assert_eq!(
-            target_level("godwinmix::observe::logs"),
-            Some(LevelCode::TRACE)
-        );
+        assert_eq!(target_level("godwinmix::observe::logs"), Some(LevelCode::TRACE));
         reset_levels();
     }
 
@@ -1118,4 +1053,5 @@ pub(crate) mod tests {
         assert!(set_gst_debug(None, "rtmp2src", 1).is_err());
         assert!(set_gst_debug(None, "rtmp2src:high", 1).is_err());
     }
+
 }

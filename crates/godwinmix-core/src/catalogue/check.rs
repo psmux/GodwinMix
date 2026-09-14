@@ -116,9 +116,7 @@ impl CodecReport {
             self.frames_out,
         );
         if let (Some(avg), Some(min)) = (self.psnr_db, self.min_psnr_db) {
-            s.push_str(&format!(
-                "  psnr      {avg:.1} dB average, {min:.1} dB worst frame\n"
-            ));
+            s.push_str(&format!("  psnr      {avg:.1} dB average, {min:.1} dB worst frame\n"));
         }
         s.push_str(&format!(
             "  cpu       {:.2} s for {:.0} s of media, {:.2} of one core at real time\n\
@@ -155,14 +153,7 @@ fn today() -> String {
 }
 
 /// Run the round trip for one catalogue entry.
-pub fn test_entry(
-    cat: &Catalogue,
-    id: &str,
-    seconds: f64,
-    width: i32,
-    height: i32,
-    fps: i32,
-) -> Result<CodecReport> {
+pub fn test_entry(cat: &Catalogue, id: &str, seconds: f64, width: i32, height: i32, fps: i32) -> Result<CodecReport> {
     if let Some(e) = cat.video_entry(id) {
         let e = e.clone();
         let Some(encoder) = e.encoder.clone() else {
@@ -192,15 +183,7 @@ pub fn test_entry(
         let Some(encoder) = e.encoder.clone() else {
             bail!("{id} is a decode only entry: there is nothing to encode with");
         };
-        return audio_round_trip(
-            id,
-            &e.codec,
-            &encoder,
-            e.parser.as_deref(),
-            e.decoder.as_deref(),
-            &e.properties,
-            seconds,
-        );
+        return audio_round_trip(id, &e.codec, &encoder, e.parser.as_deref(), e.decoder.as_deref(), &e.properties, seconds);
     }
     if cat.graphics_entry(id).is_some() {
         bail!("{id} is a graphics entry. Force it with [hardware] graphics = \"{id}\" and watch the programme; there is no encode to test.");
@@ -211,10 +194,7 @@ pub fn test_entry(
         .map(|e| e.id())
         .chain(cat.audio.iter().map(|e| e.id()))
         .collect();
-    bail!(
-        "no catalogue entry called {id:?}. Known entries: {}",
-        known.join(", ")
-    )
+    bail!("no catalogue entry called {id:?}. Known entries: {}", known.join(", "))
 }
 
 struct Spec {
@@ -248,19 +228,10 @@ struct Shared {
     filled: Condvar,
 }
 
-fn video_round_trip(
-    spec: &Spec,
-    seconds: f64,
-    width: i32,
-    height: i32,
-    fps: i32,
-) -> Result<CodecReport> {
+fn video_round_trip(spec: &Spec, seconds: f64, width: i32, height: i32, fps: i32) -> Result<CodecReport> {
     let frames = (seconds * fps as f64).round() as i32;
     let shared = Arc::new(Shared {
-        tally: Mutex::new(Tally {
-            psnr_min: f64::INFINITY,
-            ..Default::default()
-        }),
+        tally: Mutex::new(Tally { psnr_min: f64::INFINITY, ..Default::default() }),
         space: Condvar::new(),
         filled: Condvar::new(),
     });
@@ -279,16 +250,8 @@ fn video_round_trip(
     let after = resources();
 
     let t = shared.tally.lock();
-    let avg = if t.compared > 0 {
-        Some(t.psnr_sum / t.compared as f64)
-    } else {
-        None
-    };
-    let min = if t.compared > 0 {
-        Some(t.psnr_min)
-    } else {
-        None
-    };
+    let avg = if t.compared > 0 { Some(t.psnr_sum / t.compared as f64) } else { None };
+    let min = if t.compared > 0 { Some(t.psnr_min) } else { None };
     let cpu = (after.0 - before.0).max(0.0);
     let mut note = match outcome {
         Ok(()) => String::new(),
@@ -301,10 +264,7 @@ fn video_round_trip(
     }
     if ok && t.frames_out * 20 < t.frames_in * 19 {
         ok = false;
-        note = format!(
-            "{} of {} frames came back: this entry is dropping frames",
-            t.frames_out, t.frames_in
-        );
+        note = format!("{} of {} frames came back: this entry is dropping frames", t.frames_out, t.frames_in);
     }
     if ok {
         if let Some(avg) = avg {
@@ -315,10 +275,7 @@ fn video_round_trip(
         }
     }
     if ok && t.mismatched > 0 {
-        note = format!(
-            "{} frames came back at a different size and were not compared",
-            t.mismatched
-        );
+        note = format!("{} frames came back at a different size and were not compared", t.mismatched);
     }
     Ok(CodecReport {
         entry: spec.id.clone(),
@@ -336,11 +293,7 @@ fn video_round_trip(
         psnr_db: avg,
         min_psnr_db: min,
         cpu_secs: cpu,
-        cpu_percent: if seconds > 0.0 {
-            cpu / seconds * 100.0
-        } else {
-            0.0
-        },
+        cpu_percent: if seconds > 0.0 { cpu / seconds * 100.0 } else { 0.0 },
         rss_mb: after.1,
         wall_secs: wall,
         platform: super::select::current_platform(),
@@ -373,11 +326,7 @@ fn build_video_pipeline(
     let enc_q = queue_thread("enc-q")?;
     let enc_conv = make("videoconvert", "enc-conv")?;
     let enc = make(&spec.encoder, "enc")?;
-    let vars = Vars {
-        fps: fps as i64,
-        keyframe_frames: (fps * 2) as i64,
-        ..Default::default()
-    };
+    let vars = Vars { fps: fps as i64, keyframe_frames: (fps * 2) as i64, ..Default::default() };
     apply::apply(&enc, &spec.properties, &vars);
     apply::apply_keyframe(&enc, spec.keyframe.as_ref(), &vars);
 
@@ -386,10 +335,7 @@ fn build_video_pipeline(
         chain.push(make(p, "parse")?);
     }
     let Some(dec) = &spec.decoder else {
-        bail!(
-            "{} has no decoder, so there is nothing to compare against",
-            spec.id
-        );
+        bail!("{} has no decoder, so there is nothing to compare against", spec.id);
     };
     chain.push(make(dec, "dec")?);
     if let Some(d) = &spec.download {
@@ -409,24 +355,21 @@ fn build_video_pipeline(
     head.push(tee.clone());
     let refs: Vec<gst::Element> = vec![ref_q.clone(), ref_sink.clone().upcast()];
 
-    let all: Vec<&gst::Element> = head.iter().chain(refs.iter()).chain(chain.iter()).collect();
-    pipeline
-        .add_many(all)
-        .context("adding codec test elements")?;
+    let all: Vec<&gst::Element> =
+        head.iter().chain(refs.iter()).chain(chain.iter()).collect();
+    pipeline.add_many(all).context("adding codec test elements")?;
     gst::Element::link_many(head.iter().collect::<Vec<_>>()).context("linking the source")?;
-    gst::Element::link_many(std::iter::once(&tee).chain(refs.iter()).collect::<Vec<_>>())
-        .context("linking the reference branch")?;
     gst::Element::link_many(
-        std::iter::once(&tee)
-            .chain(chain.iter())
-            .collect::<Vec<_>>(),
+        std::iter::once(&tee).chain(refs.iter()).collect::<Vec<_>>(),
     )
-    .with_context(|| {
-        format!(
-            "linking {} through {}: this entry's elements do not agree on a format",
-            spec.encoder, dec
-        )
-    })?;
+    .context("linking the reference branch")?;
+    gst::Element::link_many(std::iter::once(&tee).chain(chain.iter()).collect::<Vec<_>>())
+        .with_context(|| {
+            format!(
+                "linking {} through {}: this entry's elements do not agree on a format",
+                spec.encoder, dec
+            )
+        })?;
 
     install_reference_callback(&ref_sink, shared.clone());
     install_output_callback(&out_sink, shared.clone());
@@ -434,12 +377,7 @@ fn build_video_pipeline(
 }
 
 fn appsink(name: &str) -> gst_app::AppSink {
-    gst_app::AppSink::builder()
-        .name(name)
-        .max_buffers(4)
-        .drop(false)
-        .sync(false)
-        .build()
+    gst_app::AppSink::builder().name(name).max_buffers(4).drop(false).sync(false).build()
 }
 
 fn install_reference_callback(sink: &gst_app::AppSink, shared: Arc<Shared>) {
@@ -447,9 +385,7 @@ fn install_reference_callback(sink: &gst_app::AppSink, shared: Arc<Shared>) {
         gst_app::AppSinkCallbacks::builder()
             .new_sample(move |sink| {
                 let sample = sink.pull_sample().map_err(|_| gst::FlowError::Eos)?;
-                let Some(luma) = luma(&sample) else {
-                    return Ok(gst::FlowSuccess::Ok);
-                };
+                let Some(luma) = luma(&sample) else { return Ok(gst::FlowSuccess::Ok) };
                 let mut t = shared.tally.lock();
                 while t.queue.len() >= LOOKAHEAD && !t.abort {
                     if shared.space.wait_for(&mut t, PATIENCE).timed_out() {
@@ -475,9 +411,7 @@ fn install_output_callback(sink: &gst_app::AppSink, shared: Arc<Shared>) {
         gst_app::AppSinkCallbacks::builder()
             .new_sample(move |sink| {
                 let sample = sink.pull_sample().map_err(|_| gst::FlowError::Eos)?;
-                let Some(got) = luma(&sample) else {
-                    return Ok(gst::FlowSuccess::Ok);
-                };
+                let Some(got) = luma(&sample) else { return Ok(gst::FlowSuccess::Ok) };
                 let mut t = shared.tally.lock();
                 while t.queue.is_empty() && !t.abort {
                     if shared.filled.wait_for(&mut t, PATIENCE).timed_out() {
@@ -587,9 +521,7 @@ fn audio_round_trip(
     chain.push(make("audioconvert", "out-conv")?);
     let sink = appsink("out-sink");
     chain.push(sink.clone().upcast());
-    pipeline
-        .add_many(chain.iter().collect::<Vec<_>>())
-        .context("adding audio test elements")?;
+    pipeline.add_many(chain.iter().collect::<Vec<_>>()).context("adding audio test elements")?;
     gst::Element::link_many(chain.iter().collect::<Vec<_>>())
         .with_context(|| format!("linking {encoder} through {decoder}"))?;
 
@@ -635,11 +567,7 @@ fn audio_round_trip(
         psnr_db: None,
         min_psnr_db: None,
         cpu_secs: cpu,
-        cpu_percent: if seconds > 0.0 {
-            cpu / seconds * 100.0
-        } else {
-            0.0
-        },
+        cpu_percent: if seconds > 0.0 { cpu / seconds * 100.0 } else { 0.0 },
         rss_mb: after.1,
         wall_secs: wall,
         platform: super::select::current_platform(),
@@ -651,9 +579,7 @@ fn audio_round_trip(
 
 /// Play until EOS or the first error, whichever comes first.
 fn run_to_eos(pipeline: &gst::Pipeline, patience: Duration) -> Result<()> {
-    pipeline
-        .set_state(gst::State::Playing)
-        .context("starting the test pipeline")?;
+    pipeline.set_state(gst::State::Playing).context("starting the test pipeline")?;
     let bus = pipeline.bus().context("the test pipeline has no bus")?;
     let deadline = Instant::now() + patience;
     loop {
@@ -669,9 +595,7 @@ fn run_to_eos(pipeline: &gst::Pipeline, patience: Duration) -> Result<()> {
             gst::MessageView::Error(e) => {
                 bail!(
                     "{}: {}",
-                    e.src()
-                        .map(|s| s.path_string().to_string())
-                        .unwrap_or_else(|| "pipeline".into()),
+                    e.src().map(|s| s.path_string().to_string()).unwrap_or_else(|| "pipeline".into()),
                     e.error()
                 );
             }
@@ -716,48 +640,28 @@ pub fn doctor_lines(cat: &Catalogue, reg: &dyn Registry) -> Vec<String> {
     let mut out = Vec::new();
     for e in cat.video.iter().filter(|e| !e.disabled) {
         let id = e.id();
-        let missing: Vec<String> = e
-            .needs(Role::Encode)
-            .into_iter()
-            .filter(|n| !reg.has(n))
-            .collect();
+        let missing: Vec<String> =
+            e.needs(Role::Encode).into_iter().filter(|n| !reg.has(n)).collect();
         if e.encoder.is_none() {
-            out.push(decode_only_line(
-                &id,
-                e.decoder.as_deref().unwrap_or("?"),
-                reg,
-            ));
+            out.push(decode_only_line(&id, e.decoder.as_deref().unwrap_or("?"), reg));
             continue;
         }
         if !missing.is_empty() {
-            out.push(format!(
-                "codec {id}: not installed here (missing {})",
-                missing.join(", ")
-            ));
+            out.push(format!("codec {id}: not installed here (missing {})", missing.join(", ")));
             continue;
         }
         out.push(one_second(cat, &id));
     }
     for e in cat.audio.iter().filter(|e| !e.disabled) {
         let id = e.id();
-        let missing: Vec<String> = e
-            .needs(Role::Encode)
-            .into_iter()
-            .filter(|n| !reg.has(n))
-            .collect();
+        let missing: Vec<String> =
+            e.needs(Role::Encode).into_iter().filter(|n| !reg.has(n)).collect();
         if e.encoder.is_none() {
-            out.push(decode_only_line(
-                &id,
-                e.decoder.as_deref().unwrap_or("?"),
-                reg,
-            ));
+            out.push(decode_only_line(&id, e.decoder.as_deref().unwrap_or("?"), reg));
             continue;
         }
         if !missing.is_empty() {
-            out.push(format!(
-                "codec {id}: not installed here (missing {})",
-                missing.join(", ")
-            ));
+            out.push(format!("codec {id}: not installed here (missing {})", missing.join(", ")));
             continue;
         }
         out.push(one_second(cat, &id));
@@ -767,18 +671,9 @@ pub fn doctor_lines(cat: &Catalogue, reg: &dyn Registry) -> Vec<String> {
         let id = e.id();
         let missing: Vec<String> = e.needs().into_iter().filter(|n| !reg.has(n)).collect();
         if !missing.is_empty() {
-            out.push(format!(
-                "graphics {id}: not installed here (missing {})",
-                missing.join(", ")
-            ));
-        } else if e.memory == "system"
-            || e.verified
-                .iter()
-                .any(|v| v.platform == platform || v.platform == "any")
-        {
-            out.push(format!(
-                "graphics {id}: installed and verified for {platform}"
-            ));
+            out.push(format!("graphics {id}: not installed here (missing {})", missing.join(", ")));
+        } else if e.memory == "system" || e.verified.iter().any(|v| v.platform == platform || v.platform == "any") {
+            out.push(format!("graphics {id}: installed and verified for {platform}"));
         } else {
             out.push(format!(
                 "graphics {id}: installed but never tested on {platform}. \
@@ -801,21 +696,13 @@ fn decode_only_line(id: &str, decoder: &str, reg: &dyn Registry) -> String {
 fn one_second(cat: &Catalogue, id: &str) -> String {
     match test_entry(cat, id, 1.0, 640, 360, 30) {
         Ok(r) if r.ok => {
-            let psnr = r
-                .psnr_db
-                .map(|p| format!(", psnr {p:.1} dB"))
-                .unwrap_or_default();
+            let psnr = r.psnr_db.map(|p| format!(", psnr {p:.1} dB")).unwrap_or_default();
             format!(
                 "codec {id}: encodes here ({} frames in 1 s{}, {:.2} of one core at real time)",
-                r.frames_out,
-                psnr,
-                r.cpu_percent / 100.0
+                r.frames_out, psnr, r.cpu_percent / 100.0
             )
         }
-        Ok(r) => format!(
-            "codec {id}: elements load but the encode failed: {}",
-            r.note
-        ),
+        Ok(r) => format!("codec {id}: elements load but the encode failed: {}", r.note),
         Err(e) => format!("codec {id}: could not be tested: {e:#}"),
     }
 }

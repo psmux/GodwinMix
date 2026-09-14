@@ -49,10 +49,7 @@ pub fn make_source(req: SourceRequest<'_>) -> Result<Box<dyn Source>> {
         None => crate::plugin::loader::source_for_uri(&req.cfg.uri)
             .map(|p| p.manifest.provide_id())
             .with_context(|| {
-                format!(
-                    "nothing installed opens `{}`; write `type` to say what it is",
-                    req.cfg.uri
-                )
+                format!("nothing installed opens `{}`; write `type` to say what it is", req.cfg.uri)
             })?,
     };
     let instance = req.cfg.id.clone();

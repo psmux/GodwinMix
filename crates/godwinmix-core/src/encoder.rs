@@ -206,11 +206,7 @@ impl EncoderHandle {
         }
         self.shared.generation.fetch_add(1, Ordering::SeqCst);
         self.shared.settle();
-        Lease {
-            shared: self.shared.clone(),
-            kind: kind.to_string(),
-            id,
-        }
+        Lease { shared: self.shared.clone(), kind: kind.to_string(), id }
     }
 
     /// Whether the encode chain is linked and running.
@@ -318,12 +314,7 @@ impl EncodeChain {
             .and_then(|head| head.static_pad("sink"))
             .and_then(|sink| sink.peer())
             .filter(|peer| peer.parent().as_ref() == Some(tee.upcast_ref()));
-        Self {
-            tag,
-            tee: tee.clone(),
-            chain,
-            pad,
-        }
+        Self { tag, tee: tee.clone(), chain, pad }
     }
 
     pub fn is_attached(&self) -> bool {
@@ -362,9 +353,7 @@ impl EncodeChain {
             .chain
             .first()
             .context("an encode chain with no elements cannot be attached")?;
-        let sink = head
-            .static_pad("sink")
-            .context("the head of the chain has no sink pad")?;
+        let sink = head.static_pad("sink").context("the head of the chain has no sink pad")?;
         for el in &self.chain {
             el.set_locked_state(false);
         }
@@ -372,8 +361,7 @@ impl EncodeChain {
             .tee
             .request_pad_simple("src_%u")
             .context("the raw programme tee refused a pad for the encoder")?;
-        pad.link(&sink)
-            .context("linking the encoder onto the raw programme tee")?;
+        pad.link(&sink).context("linking the encoder onto the raw programme tee")?;
         // Tail first, so every element downstream of the encoder is ready to
         // take a buffer before the encoder can produce one.
         for el in self.chain.iter().rev() {
@@ -434,11 +422,7 @@ pub struct Encoder {
 
 impl Encoder {
     pub fn new(handle: EncoderHandle, video: EncodeChain, audio: EncodeChain) -> Self {
-        Self {
-            handle,
-            video,
-            audio,
-        }
+        Self { handle, video, audio }
     }
 
     pub fn handle(&self) -> EncoderHandle {
@@ -450,15 +434,8 @@ impl Encoder {
     }
 
     /// The states a test reads: the video encoder element and the audio one.
-    pub fn element_states(
-        &self,
-        video: &str,
-        audio: &str,
-    ) -> (Option<gst::State>, Option<gst::State>) {
-        (
-            self.video.element_state(video),
-            self.audio.element_state(audio),
-        )
+    pub fn element_states(&self, video: &str, audio: &str) -> (Option<gst::State>, Option<gst::State>) {
+        (self.video.element_state(video), self.audio.element_state(audio))
     }
 
     /// What `Mixer::build` does once, before the pipeline starts: with
@@ -539,14 +516,8 @@ mod tests {
     #[test]
     fn a_policy_reads_both_spellings_and_nothing_else() {
         assert_eq!(EncoderPolicy::parse("always"), Some(EncoderPolicy::Always));
-        assert_eq!(
-            EncoderPolicy::parse("on-demand"),
-            Some(EncoderPolicy::OnDemand)
-        );
-        assert_eq!(
-            EncoderPolicy::parse("on_demand"),
-            Some(EncoderPolicy::OnDemand)
-        );
+        assert_eq!(EncoderPolicy::parse("on-demand"), Some(EncoderPolicy::OnDemand));
+        assert_eq!(EncoderPolicy::parse("on_demand"), Some(EncoderPolicy::OnDemand));
         assert_eq!(EncoderPolicy::parse("sometimes"), None);
         assert_eq!(EncoderPolicy::default(), EncoderPolicy::OnDemand);
     }
@@ -572,15 +543,9 @@ mod tests {
         drop(a);
         // One consumer left, so the settle asks to attach again rather than
         // to stop.
-        assert!(matches!(
-            seen.lock().last().unwrap(),
-            EncoderDemand::Attach { .. }
-        ));
+        assert!(matches!(seen.lock().last().unwrap(), EncoderDemand::Attach { .. }));
         drop(b);
-        assert!(matches!(
-            seen.lock().last().unwrap(),
-            EncoderDemand::Detach { .. }
-        ));
+        assert!(matches!(seen.lock().last().unwrap(), EncoderDemand::Detach { .. }));
         assert!(!h.wanted());
         assert_eq!(h.stats().consumers.len(), 0);
     }
@@ -595,10 +560,7 @@ mod tests {
         // What the drop would put on the queue.
         drop(a);
         let stale = EncoderDemand::Detach { generation: 2 };
-        assert!(
-            h.accepts(stale),
-            "the generation right after the drop is current"
-        );
+        assert!(h.accepts(stale), "the generation right after the drop is current");
         // A new consumer arrives before the mixer thread gets to it.
         let _b = h.lease("whep");
         assert!(!h.accepts(stale), "a stale detach must be refused");
@@ -629,21 +591,10 @@ mod tests {
         let (mut mix, handle, cmd_rx, _bus_rx) =
             crate::mixer::Mixer::build(mixer_cfg("on-demand")).unwrap();
         mix.start().unwrap();
-        assert!(
-            !mix.encoder_running(),
-            "an idle core is encoding and must not be"
-        );
+        assert!(!mix.encoder_running(), "an idle core is encoding and must not be");
         let (venc, aenc) = mix.encoder_element_states();
-        assert_eq!(
-            venc,
-            Some(gst::State::Null),
-            "the video encoder is not at NULL"
-        );
-        assert_eq!(
-            aenc,
-            Some(gst::State::Null),
-            "the audio encoder is not at NULL"
-        );
+        assert_eq!(venc, Some(gst::State::Null), "the video encoder is not at NULL");
+        assert_eq!(aenc, Some(gst::State::Null), "the audio encoder is not at NULL");
         let enc = mix.encoder_handle();
         assert_eq!(enc.consumers(), 0);
         assert!(!enc.is_running());
@@ -651,15 +602,9 @@ mod tests {
 
         let thread = crate::mixer::spawn(mix, cmd_rx, handle.clone());
         tokio::time::sleep(std::time::Duration::from_millis(400)).await;
-        assert!(
-            !enc.is_running(),
-            "the encoder started with nobody reading it"
-        );
+        assert!(!enc.is_running(), "the encoder started with nobody reading it");
         let _ = handle.send(crate::mixer::Command::Shutdown);
-        tokio::task::spawn_blocking(move || thread.join())
-            .await
-            .unwrap()
-            .unwrap();
+        tokio::task::spawn_blocking(move || thread.join()).await.unwrap().unwrap();
     }
 
     /// And the other half: a consumer starts it, and it stops again when the
@@ -680,10 +625,7 @@ mod tests {
             }
             tokio::time::sleep(std::time::Duration::from_millis(50)).await;
         }
-        assert!(
-            enc.is_running(),
-            "a consumer asked and the encoder never started"
-        );
+        assert!(enc.is_running(), "a consumer asked and the encoder never started");
         assert_eq!(enc.stats().starts, 1);
 
         drop(lease);
@@ -695,10 +637,7 @@ mod tests {
         }
         assert!(!enc.is_running(), "the encoder outlived its last consumer");
         let _ = handle.send(crate::mixer::Command::Shutdown);
-        tokio::task::spawn_blocking(move || thread.join())
-            .await
-            .unwrap()
-            .unwrap();
+        tokio::task::spawn_blocking(move || thread.join()).await.unwrap().unwrap();
     }
 
     /// `always` is the old behaviour, kept working.
@@ -713,10 +652,7 @@ mod tests {
         assert!(enc.is_running());
         let thread = crate::mixer::spawn(mix, cmd_rx, handle.clone());
         let _ = handle.send(crate::mixer::Command::Shutdown);
-        tokio::task::spawn_blocking(move || thread.join())
-            .await
-            .unwrap()
-            .unwrap();
+        tokio::task::spawn_blocking(move || thread.join()).await.unwrap().unwrap();
     }
 
     #[test]
@@ -729,10 +665,7 @@ mod tests {
         let h = EncoderHandle::new(EncoderPolicy::Always, sink);
         let a = h.lease("output");
         drop(a);
-        assert!(
-            seen.lock().is_empty(),
-            "an always-on encoder must ask for nothing"
-        );
+        assert!(seen.lock().is_empty(), "an always-on encoder must ask for nothing");
         assert!(h.wanted(), "and it is always wanted");
     }
 }

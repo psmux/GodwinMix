@@ -37,11 +37,7 @@ pub const MANIFEST: Manifest = Manifest {
     tier: Tier::Core,
 };
 
-pub const PROVIDE: OutputProvide = OutputProvide {
-    manifest: MANIFEST,
-    claims,
-    make: new,
-};
+pub const PROVIDE: OutputProvide = OutputProvide { manifest: MANIFEST, claims, make: new };
 
 fn claims(uri: &str) -> Option<u16> {
     let lower = uri.trim().to_lowercase();
@@ -49,10 +45,7 @@ fn claims(uri: &str) -> Option<u16> {
 }
 
 fn new(cfg: &OutputConfig) -> Result<Box<dyn Output>> {
-    Ok(Box::new(RtmpOutput {
-        uri: cfg.uri.clone(),
-        sink: Mutex::new(None),
-    }))
+    Ok(Box::new(RtmpOutput { uri: cfg.uri.clone(), sink: Mutex::new(None) }))
 }
 
 pub struct RtmpOutput {
@@ -70,10 +63,7 @@ impl Output for RtmpOutput {
         if let Some(u) = hello.params.get("uri").and_then(|v| v.as_str()) {
             self.uri = u.to_string();
         }
-        anyhow::ensure!(
-            !self.uri.trim().is_empty(),
-            "rtmp/output needs an address in params.uri"
-        );
+        anyhow::ensure!(!self.uri.trim().is_empty(), "rtmp/output needs an address in params.uri");
         Ok(Ready {
             manifest: MANIFEST,
             latency_ms: MANIFEST.latency_ms,
@@ -105,9 +95,7 @@ impl Output for RtmpOutput {
         crate::probe::set_bool(&sink, "sync", false);
         crate::probe::set_bool(&sink, "async", false);
 
-        ctx.pipeline
-            .add_many([&mux, &sink])
-            .context("adding the rtmp muxer and sink")?;
+        ctx.pipeline.add_many([&mux, &sink]).context("adding the rtmp muxer and sink")?;
         link_to_mux(video, &mux, &["video"])?;
         link_to_mux(audio, &mux, &["audio"])?;
         mux.link(&sink).context("linking muxer to rtmp sink")?;
@@ -137,17 +125,11 @@ impl Output for RtmpOutput {
 
     fn configure(&mut self, params: &Params) -> Result<Configure> {
         validate(params)?;
-        Ok(Configure::RestartRequired(
-            "an rtmp output takes a new address by reconnecting".into(),
-        ))
+        Ok(Configure::RestartRequired("an rtmp output takes a new address by reconnecting".into()))
     }
 
     fn health(&self) -> Health {
-        Health::of(if self.connected() {
-            PluginState::Running
-        } else {
-            PluginState::Starting
-        })
+        Health::of(if self.connected() { PluginState::Running } else { PluginState::Starting })
     }
 
     fn call(&mut self, method: &str, _params: Value) -> Result<Value> {

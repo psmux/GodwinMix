@@ -17,9 +17,7 @@ use std::path::{Path, PathBuf};
 use anyhow::{Context, Result};
 use serde::Serialize;
 
-use super::manifest::{
-    PluginSpec, Preset, PresetBlock, BUILT_IN_THEMES, GALLERY_MODES, PANELS, SLOTS,
-};
+use super::manifest::{Preset, PresetBlock, PluginSpec, BUILT_IN_THEMES, GALLERY_MODES, PANELS, SLOTS};
 use crate::config::Config;
 use crate::scene::document::{Collection, Scene};
 use crate::scene::{layout, validate};
@@ -111,11 +109,7 @@ pub struct Options {
 
 impl Options {
     pub fn new(config_path: impl Into<PathBuf>) -> Self {
-        Self {
-            config_path: config_path.into(),
-            force: false,
-            keep_sources: false,
-        }
+        Self { config_path: config_path.into(), force: false, keep_sources: false }
     }
 }
 
@@ -217,9 +211,7 @@ fn check_theme(preset: &Preset, block: &PresetBlock) -> Result<()> {
 }
 
 fn check_gallery(block: &PresetBlock) -> Result<()> {
-    let Some(mode) = &block.gallery else {
-        return Ok(());
-    };
+    let Some(mode) = &block.gallery else { return Ok(()) };
     anyhow::ensure!(
         GALLERY_MODES.contains(&mode.as_str()),
         "gallery = {mode:?} is not a tile mode. It is one of {}",
@@ -254,7 +246,11 @@ fn read_layout(preset: &Preset, block: &PresetBlock) -> Result<BTreeMap<String, 
 /// Every scene the preset ships, with its layout bindings filled in from the
 /// preset's own sources. A layout with a binding left over is an error here
 /// rather than a broken scene on a volunteer's Sunday.
-pub fn resolve_scenes(preset: &Preset, block: &PresetBlock, config: &Config) -> Result<Vec<Scene>> {
+pub fn resolve_scenes(
+    preset: &Preset,
+    block: &PresetBlock,
+    config: &Config,
+) -> Result<Vec<Scene>> {
     let mut out = Vec::new();
     for (file, text) in preset.json_files(&block.scenes)? {
         let doc = Collection::from_json(&text)
@@ -288,10 +284,7 @@ fn bindings(config: &Config, doc: &Collection) -> layout::Values {
         return values;
     }
     let mut ids = config.sources.iter().map(|s| s.id.clone()).cycle();
-    let properties = doc
-        .params
-        .get("properties")
-        .and_then(serde_json::Value::as_object);
+    let properties = doc.params.get("properties").and_then(serde_json::Value::as_object);
     for (key, schema) in properties.into_iter().flatten() {
         match schema.get("x-gmx-kind").and_then(serde_json::Value::as_str) {
             Some("source") => {
@@ -316,13 +309,10 @@ fn read_current(path: &Path) -> Result<toml::Table> {
     if !real.exists() {
         return Ok(toml::Table::new());
     }
-    let text =
-        std::fs::read_to_string(&real).with_context(|| format!("reading {}", real.display()))?;
+    let text = std::fs::read_to_string(&real)
+        .with_context(|| format!("reading {}", real.display()))?;
     toml::from_str(&text).with_context(|| {
-        format!(
-            "{} is not valid TOML, so there is nothing to merge into",
-            real.display()
-        )
+        format!("{} is not valid TOML, so there is nothing to merge into", real.display())
     })
 }
 
@@ -339,11 +329,8 @@ fn needed_plugins(block: &PresetBlock) -> Vec<PluginNeed> {
         .map(|spec| {
             let parsed = PluginSpec::parse(spec);
             let prefix = format!("{}/", parsed.name);
-            let provides: Vec<String> = built_in
-                .iter()
-                .filter(|p| p.starts_with(&prefix))
-                .cloned()
-                .collect();
+            let provides: Vec<String> =
+                built_in.iter().filter(|p| p.starts_with(&prefix)).cloned().collect();
             PluginNeed {
                 spec: spec.clone(),
                 installed: !provides.is_empty(),
@@ -366,9 +353,7 @@ fn additions(
         .and_then(toml::Value::as_array)
         .map(|a| a.iter().filter_map(|v| field(v, "id")).collect())
         .unwrap_or_default();
-    let Some(list) = from_preset.and_then(toml::Value::as_array) else {
-        return Vec::new();
-    };
+    let Some(list) = from_preset.and_then(toml::Value::as_array) else { return Vec::new() };
     list.iter()
         .filter_map(|entry| {
             let id = field(entry, "id")?;
@@ -416,11 +401,7 @@ fn walk(
         if prefix.is_empty() && matches!(key.as_str(), "sources" | "outputs") {
             continue;
         }
-        let path = if prefix.is_empty() {
-            key.clone()
-        } else {
-            format!("{prefix}.{key}")
-        };
+        let path = if prefix.is_empty() { key.clone() } else { format!("{prefix}.{key}") };
         let here = current.get(key);
         match (value, here) {
             (toml::Value::Table(sub), Some(toml::Value::Table(mine))) => {
@@ -438,11 +419,7 @@ fn walk(
                 key: path,
                 from: Some(short(mine)),
                 to: short(value),
-                action: if force {
-                    Action::Override
-                } else {
-                    Action::Keep
-                },
+                action: if force { Action::Override } else { Action::Keep },
             }),
         }
     }
@@ -481,11 +458,7 @@ fn todo(plan: &Plan, config_text: &str) -> Vec<String> {
         }
     }
     if plan.config.iter().any(|c| c.action == Action::Keep) {
-        let kept = plan
-            .config
-            .iter()
-            .filter(|c| c.action == Action::Keep)
-            .count();
+        let kept = plan.config.iter().filter(|c| c.action == Action::Keep).count();
         out.push(format!(
             "{kept} key(s) you already set were left alone. `--force` takes the preset's \
              values instead"
@@ -553,9 +526,7 @@ impl Plan {
         out.push(format!("  theme    {}", self.theme));
         out.push(format!(
             "  gallery  {}",
-            self.gallery
-                .clone()
-                .unwrap_or_else(|| "whatever this machine can afford".into())
+            self.gallery.clone().unwrap_or_else(|| "whatever this machine can afford".into())
         ));
         if !self.todo.is_empty() {
             out.push(String::new());
@@ -629,21 +600,11 @@ mod tests {
     fn the_church_preset_names_the_camera_plugin_as_missing_and_nothing_else() {
         let plan = plan_for("church", Path::new("/nowhere/godwinmix.toml"));
         let missing: Vec<&str> = plan.missing().iter().map(|p| p.name.as_str()).collect();
-        assert!(
-            missing.contains(&"camera"),
-            "the camera plugin is what is missing: {missing:?}"
-        );
+        assert!(missing.contains(&"camera"), "the camera plugin is what is missing: {missing:?}");
         for name in ["browser", "rtmp", "file"] {
-            assert!(
-                !missing.contains(&name),
-                "{name} is built in, so it is not missing"
-            );
+            assert!(!missing.contains(&name), "{name} is built in, so it is not missing");
         }
-        assert!(
-            plan.todo.iter().any(|t| t.contains("camera")),
-            "{:?}",
-            plan.todo
-        );
+        assert!(plan.todo.iter().any(|t| t.contains("camera")), "{:?}", plan.todo);
     }
 
     #[test]
@@ -667,11 +628,8 @@ mod tests {
         let mut options = Options::new(&path);
         options.force = true;
         let forced = build(&preset, &options).unwrap();
-        let change = forced
-            .config
-            .iter()
-            .find(|c| c.key == "program.video_bitrate_kbps")
-            .unwrap();
+        let change =
+            forced.config.iter().find(|c| c.key == "program.video_bitrate_kbps").unwrap();
         assert_eq!(change.action, Action::Override);
         std::fs::remove_dir_all(&dir).ok();
     }
@@ -704,10 +662,6 @@ mod tests {
         let text = plan.report().join("\n");
         assert!(text.contains("MISSING"), "{text}");
         assert!(text.contains("gmx plugin add camera"), "{text}");
-        assert!(
-            plan.report().len() < 80,
-            "the plan is {} lines",
-            plan.report().len()
-        );
+        assert!(plan.report().len() < 80, "the plan is {} lines", plan.report().len());
     }
 }

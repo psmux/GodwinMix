@@ -65,18 +65,8 @@ pub fn run(preset: &Preset, plan: &Plan) -> Result<Applied> {
         wrote,
         backup,
         ui,
-        sources: plan
-            .sources
-            .iter()
-            .filter(|s| !s.already_there)
-            .map(|s| s.id.clone())
-            .collect(),
-        outputs: plan
-            .outputs
-            .iter()
-            .filter(|o| !o.already_there)
-            .map(|o| o.id.clone())
-            .collect(),
+        sources: plan.sources.iter().filter(|s| !s.already_there).map(|s| s.id.clone()).collect(),
+        outputs: plan.outputs.iter().filter(|o| !o.already_there).map(|o| o.id.clone()).collect(),
         todo: plan.todo.clone(),
         steps: plan.steps.clone(),
     })
@@ -97,8 +87,8 @@ fn write_config(plan: &Plan, preset_config: &str) -> Result<Option<PathBuf>> {
             .with_context(|| format!("writing {}", path.display()))?;
         return Ok(None);
     }
-    let original =
-        std::fs::read_to_string(&path).with_context(|| format!("reading {}", path.display()))?;
+    let original = std::fs::read_to_string(&path)
+        .with_context(|| format!("reading {}", path.display()))?;
     let mut current: toml::Table = toml::from_str(&original)
         .with_context(|| format!("{} is not valid TOML", path.display()))?;
     let preset_table: toml::Table =
@@ -111,7 +101,8 @@ fn write_config(plan: &Plan, preset_config: &str) -> Result<Option<PathBuf>> {
     }
 
     let backup = path.with_extension("toml.bak");
-    std::fs::write(&backup, &original).with_context(|| format!("writing {}", backup.display()))?;
+    std::fs::write(&backup, &original)
+        .with_context(|| format!("writing {}", backup.display()))?;
     let body = format!(
         "# Merged by `gmx preset apply {}`. The file as it was before is in {}.\n\
          # Comments from your own file are in that copy: this one is rewritten from\n\
@@ -144,9 +135,7 @@ fn merge(current: &mut toml::Table, preset: &toml::Table, force: bool) {
 
 /// Append the preset's entries whose id is not already in the operator's list.
 fn append_by_id(current: &mut toml::Table, preset: &toml::Table, key: &str) {
-    let Some(incoming) = preset.get(key).and_then(toml::Value::as_array) else {
-        return;
-    };
+    let Some(incoming) = preset.get(key).and_then(toml::Value::as_array) else { return };
     let mut list = current
         .get(key)
         .and_then(toml::Value::as_array)
@@ -157,9 +146,7 @@ fn append_by_id(current: &mut toml::Table, preset: &toml::Table, key: &str) {
         .filter_map(|v| v.get("id")?.as_str().map(str::to_string))
         .collect();
     for entry in incoming {
-        let Some(id) = entry.get("id").and_then(toml::Value::as_str) else {
-            continue;
-        };
+        let Some(id) = entry.get("id").and_then(toml::Value::as_str) else { continue };
         if have.iter().any(|h| h == id) {
             continue;
         }
@@ -218,10 +205,7 @@ fn write_ui(config_path: &Path, ui: &UiDefaults) -> Result<PathBuf> {
             .with_context(|| format!("{} is not valid TOML", path.display()))?,
         None => toml::Table::new(),
     };
-    table.insert(
-        "ui".into(),
-        toml::Value::try_from(ui).context("writing the [ui] section")?,
-    );
+    table.insert("ui".into(), toml::Value::try_from(ui).context("writing the [ui] section")?);
     let body = format!(
         "# Sources and outputs managed from the GodwinMix UI or API, and the\n\
          # surface defaults a preset chose. These lists take precedence over the\n\
@@ -253,10 +237,7 @@ impl Applied {
             out.push(format!("  wrote    {}", path.display()));
         }
         if let Some(backup) = &self.backup {
-            out.push(format!(
-                "  kept     {} (your file as it was)",
-                backup.display()
-            ));
+            out.push(format!("  kept     {} (your file as it was)", backup.display()));
         }
         if !self.todo.is_empty() {
             out.push(String::new());
@@ -292,11 +273,8 @@ mod tests {
 
     fn work(tag: &str) -> PathBuf {
         let _ = gstreamer::init();
-        let dir = std::env::temp_dir().join(format!(
-            "gmx-apply-{tag}-{}-{:?}",
-            std::process::id(),
-            std::thread::current().id()
-        ));
+        let dir = std::env::temp_dir()
+            .join(format!("gmx-apply-{tag}-{}-{:?}", std::process::id(), std::thread::current().id()));
         std::fs::remove_dir_all(&dir).ok();
         std::fs::create_dir_all(&dir).unwrap();
         dir
@@ -310,28 +288,20 @@ mod tests {
 
         assert!(config.exists());
         let text = std::fs::read_to_string(&config).unwrap();
-        assert!(
-            text.contains("# The church preset"),
-            "the preset's comments came with it"
-        );
+        assert!(text.contains("# The church preset"), "the preset's comments came with it");
         let loaded = Config::load(&config).unwrap();
         assert!(loaded.sources.iter().any(|s| s.id == "cam-wide"));
         assert!(loaded.outputs.iter().any(|o| o.id == "youtube"));
 
         assert!(plan.scenes_path.exists());
-        let scenes =
-            Collection::from_json(&std::fs::read_to_string(&plan.scenes_path).unwrap()).unwrap();
+        let scenes = Collection::from_json(&std::fs::read_to_string(&plan.scenes_path).unwrap()).unwrap();
         assert_eq!(scenes.scenes.len(), plan.scenes.len());
 
         let store = Config::runtime_store_path(&config);
         let text = std::fs::read_to_string(&store).unwrap();
         assert!(text.contains("[ui]"), "{text}");
         assert_eq!(applied.ui.preset.as_deref(), Some("church"));
-        assert_eq!(
-            applied.ui.gallery.as_deref(),
-            Some("icon"),
-            "the church preset ships icon mode"
-        );
+        assert_eq!(applied.ui.gallery.as_deref(), Some("icon"), "the church preset ships icon mode");
         std::fs::remove_dir_all(&dir).ok();
     }
 
@@ -347,18 +317,9 @@ mod tests {
 
         let (_, applied) = apply_named("church", &Options::new(&config)).unwrap();
         let loaded = Config::load(&config).unwrap();
-        assert_eq!(
-            loaded.program.video_bitrate_kbps, 1500,
-            "the operator's value won"
-        );
-        assert!(
-            loaded.sources.iter().any(|s| s.id == "mine"),
-            "their own source is still there"
-        );
-        assert!(
-            loaded.sources.iter().any(|s| s.id == "cam-wide"),
-            "and the preset's was appended"
-        );
+        assert_eq!(loaded.program.video_bitrate_kbps, 1500, "the operator's value won");
+        assert!(loaded.sources.iter().any(|s| s.id == "mine"), "their own source is still there");
+        assert!(loaded.sources.iter().any(|s| s.id == "cam-wide"), "and the preset's was appended");
         assert!(applied.backup.is_some());
         let backup = std::fs::read_to_string(applied.backup.unwrap()).unwrap();
         assert!(backup.contains("1500"));
@@ -385,11 +346,7 @@ mod tests {
     fn keep_sources_leaves_the_operators_list_alone() {
         let dir = work("keep");
         let config = dir.join("godwinmix.toml");
-        std::fs::write(
-            &config,
-            "[[sources]]\nid = \"mine\"\nuri = \"rtmp://localhost/live/a\"\n",
-        )
-        .unwrap();
+        std::fs::write(&config, "[[sources]]\nid = \"mine\"\nuri = \"rtmp://localhost/live/a\"\n").unwrap();
         let mut options = Options::new(&config);
         options.keep_sources = true;
         apply_named("church", &options).unwrap();

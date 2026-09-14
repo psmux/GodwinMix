@@ -76,10 +76,7 @@ pub struct OperatorSilence {
 impl Default for OperatorSilence {
     fn default() -> Self {
         // Alert, because a programme that keeps running is the safe state.
-        Self {
-            after_secs: 120,
-            action: SilenceAction::Alert,
-        }
+        Self { after_secs: 120, action: SilenceAction::Alert }
     }
 }
 
@@ -161,9 +158,7 @@ impl SafetyConfig {
             max_takes_per_minute: self.max_takes_per_minute,
             flash_guard: self.flash_guard,
         };
-        let Some(over) = token.safety.as_ref() else {
-            return mine;
-        };
+        let Some(over) = token.safety.as_ref() else { return mine };
         if token.agent {
             return tighten(mine, over);
         }
@@ -180,14 +175,10 @@ impl SafetyConfig {
 /// An agent's override, taking only the half of it that makes the rule harder.
 fn tighten(mine: Limits, over: &TokenSafety) -> Limits {
     Limits {
-        min_hold_ms: over
-            .min_hold_ms
-            .map_or(mine.min_hold_ms, |v| v.max(mine.min_hold_ms)),
+        min_hold_ms: over.min_hold_ms.map_or(mine.min_hold_ms, |v| v.max(mine.min_hold_ms)),
         max_takes_per_minute: over
             .max_takes_per_minute
-            .map_or(mine.max_takes_per_minute, |v| {
-                v.min(mine.max_takes_per_minute)
-            }),
+            .map_or(mine.max_takes_per_minute, |v| v.min(mine.max_takes_per_minute)),
         flash_guard: mine.flash_guard || over.flash_guard.unwrap_or(false),
     }
 }
@@ -231,11 +222,7 @@ struct State {
 
 impl Guard {
     pub fn new(cfg: SafetyConfig, fps: u32) -> Arc<Self> {
-        Arc::new(Self {
-            cfg,
-            fps,
-            state: Mutex::new(State::default()),
-        })
+        Arc::new(Self { cfg, fps, state: Mutex::new(State::default()) })
     }
 
     pub fn config(&self) -> &SafetyConfig {
@@ -244,11 +231,7 @@ impl Guard {
 
     /// The flash separation at this core's frame rate.
     pub fn flash_separation_ms(&self) -> u64 {
-        if self.fps >= 50 {
-            FLASH_SEPARATION_MS_60HZ
-        } else {
-            FLASH_SEPARATION_MS
-        }
+        if self.fps >= 50 { FLASH_SEPARATION_MS_60HZ } else { FLASH_SEPARATION_MS }
     }
 
     /// May this token take now? The whole policy, in one call.
@@ -497,9 +480,7 @@ pub fn is_flash(before: &[u8], after: &[u8]) -> bool {
     let stepped = before
         .iter()
         .zip(after)
-        .filter(|(a, b)| {
-            (luminance_cd_m2(**a) - luminance_cd_m2(**b)).abs() >= FLASH_LUMINANCE_CD_M2
-        })
+        .filter(|(a, b)| (luminance_cd_m2(**a) - luminance_cd_m2(**b)).abs() >= FLASH_LUMINANCE_CD_M2)
         .count();
     (stepped as f64 / before.len() as f64) > FLASH_AREA_FRACTION
 }
@@ -514,12 +495,7 @@ mod tests {
     }
 
     fn agent(over: TokenSafety) -> Token {
-        Token {
-            id: "studio-agent".into(),
-            agent: true,
-            safety: Some(over),
-            ..Token::open()
-        }
+        Token { id: "studio-agent".into(), agent: true, safety: Some(over), ..Token::open() }
     }
 
     fn guard(cfg: SafetyConfig) -> Arc<Guard> {
@@ -527,39 +503,25 @@ mod tests {
     }
 
     fn fast() -> SafetyConfig {
-        SafetyConfig {
-            min_hold_ms: 1_000,
-            flash_guard: false,
-            ..SafetyConfig::default()
-        }
+        SafetyConfig { min_hold_ms: 1_000, flash_guard: false, ..SafetyConfig::default() }
     }
 
     /// The acceptance line from 07 Phase 1: a second take inside the hold is
     /// refused, and the refusal carries the time left rather than "no".
     #[test]
     fn a_second_take_inside_the_hold_is_refused_with_the_time_left() {
-        let g = guard(SafetyConfig {
-            flash_guard: false,
-            ..SafetyConfig::default()
-        });
+        let g = guard(SafetyConfig { flash_guard: false, ..SafetyConfig::default() });
         let t0 = Instant::now();
-        assert!(
-            g.check_at(&human(), t0).is_ok(),
-            "the first take is always allowed"
-        );
+        assert!(g.check_at(&human(), t0).is_ok(), "the first take is always allowed");
         g.record_at("desk", t0);
 
-        let refusal = g
-            .check_at(&human(), t0 + Duration::from_millis(1_200))
-            .unwrap_err();
+        let refusal = g.check_at(&human(), t0 + Duration::from_millis(1_200)).unwrap_err();
         assert_eq!(refusal.rule, "min_hold");
         assert_eq!(refusal.retry_after_ms, 6_800);
         assert!(refusal.message.contains("6800 ms"), "{}", refusal.message);
 
         // And it lets go on its own once the hold is served.
-        assert!(g
-            .check_at(&human(), t0 + Duration::from_millis(8_001))
-            .is_ok());
+        assert!(g.check_at(&human(), t0 + Duration::from_millis(8_001)).is_ok());
     }
 
     #[test]
@@ -578,22 +540,14 @@ mod tests {
         assert!(refusal.message.contains("12"), "{}", refusal.message);
 
         // A minute after the first one, there is room again.
-        assert!(g
-            .check_at(&human(), t0 + Duration::from_millis(61_000))
-            .is_ok());
+        assert!(g.check_at(&human(), t0 + Duration::from_millis(61_000)).is_ok());
     }
 
     #[test]
     fn the_flash_guard_holds_a_cut_to_the_separation_the_standard_names() {
-        let g = guard(SafetyConfig {
-            min_hold_ms: 0,
-            ..SafetyConfig::default()
-        });
+        let g = guard(SafetyConfig { min_hold_ms: 0, ..SafetyConfig::default() });
         assert_eq!(g.flash_separation_ms(), 360);
-        assert_eq!(
-            Guard::new(SafetyConfig::default(), 60).flash_separation_ms(),
-            334
-        );
+        assert_eq!(Guard::new(SafetyConfig::default(), 60).flash_separation_ms(), 334);
 
         g.set_luma_observed(true);
         g.note_flash();
@@ -605,10 +559,7 @@ mod tests {
 
     #[test]
     fn three_flashes_in_a_second_is_the_most_the_standard_allows() {
-        let g = guard(SafetyConfig {
-            min_hold_ms: 0,
-            ..SafetyConfig::default()
-        });
+        let g = guard(SafetyConfig { min_hold_ms: 0, ..SafetyConfig::default() });
         let t0 = Instant::now();
         {
             let mut state = g.state.lock();
@@ -619,42 +570,25 @@ mod tests {
         }
         // Past the separation from the last of them, but still three inside
         // the second.
-        let refusal = g
-            .check_at(&human(), t0 + Duration::from_millis(600))
-            .unwrap_err();
+        let refusal = g.check_at(&human(), t0 + Duration::from_millis(600)).unwrap_err();
         assert_eq!(refusal.rule, "flash_guard");
-        assert!(
-            refusal.message.contains("three") || refusal.message.contains('3'),
-            "{}",
-            refusal.message
-        );
+        assert!(refusal.message.contains("three") || refusal.message.contains('3'), "{}", refusal.message);
         // Once the first has aged out of the second, there is room again.
-        assert!(g
-            .check_at(&human(), t0 + Duration::from_millis(1_050))
-            .is_ok());
+        assert!(g.check_at(&human(), t0 + Duration::from_millis(1_050)).is_ok());
     }
 
     /// Without telemetry the core cannot tell a flash from a dissolve, so it
     /// assumes the stricter thing rather than turning the rule off.
     #[test]
     fn without_luminance_every_cut_is_treated_as_a_possible_flash() {
-        let g = guard(SafetyConfig {
-            min_hold_ms: 0,
-            ..SafetyConfig::default()
-        });
+        let g = guard(SafetyConfig { min_hold_ms: 0, ..SafetyConfig::default() });
         g.record("desk");
         assert_eq!(g.check(&human()).unwrap_err().rule, "flash_guard");
 
-        let g = guard(SafetyConfig {
-            min_hold_ms: 0,
-            ..SafetyConfig::default()
-        });
+        let g = guard(SafetyConfig { min_hold_ms: 0, ..SafetyConfig::default() });
         g.set_luma_observed(true);
         g.record("desk");
-        assert!(
-            g.check(&human()).is_ok(),
-            "with probes on, an ordinary cut is not a flash"
-        );
+        assert!(g.check(&human()).is_ok(), "with probes on, an ordinary cut is not a flash");
     }
 
     /// A human surface may raise the limits per token; an agent's token may
@@ -668,21 +602,14 @@ mod tests {
             max_takes_per_minute: Some(120),
             flash_guard: Some(false),
         };
-        let vision_mixer = Token {
-            id: "desk".into(),
-            safety: Some(looser),
-            ..Token::open()
-        };
+        let vision_mixer = Token { id: "desk".into(), safety: Some(looser), ..Token::open() };
         let limits = cfg.for_token(&vision_mixer);
         assert_eq!(limits.min_hold_ms, 500);
         assert_eq!(limits.max_takes_per_minute, 120);
         assert!(!limits.flash_guard);
 
         let limits = cfg.for_token(&agent(looser));
-        assert_eq!(
-            limits.min_hold_ms, 8_000,
-            "an agent cannot shorten the hold"
-        );
+        assert_eq!(limits.min_hold_ms, 8_000, "an agent cannot shorten the hold");
         assert_eq!(limits.max_takes_per_minute, 12);
         assert!(limits.flash_guard, "and cannot turn the flash guard off");
 
@@ -705,10 +632,7 @@ mod tests {
     /// flash guard still apply to it.
     #[test]
     fn revert_is_not_held_by_the_minimum_hold_but_is_by_the_other_rules() {
-        let g = guard(SafetyConfig {
-            flash_guard: false,
-            ..SafetyConfig::default()
-        });
+        let g = guard(SafetyConfig { flash_guard: false, ..SafetyConfig::default() });
         g.record("desk");
         assert_eq!(g.check(&human()).unwrap_err().rule, "min_hold");
         assert!(g.check_revert(&human()).is_ok());
@@ -717,10 +641,7 @@ mod tests {
         assert_eq!(g.check(&human()).unwrap_err().rule, "min_hold");
 
         // The flash guard reaches revert too.
-        let g = guard(SafetyConfig {
-            min_hold_ms: 0,
-            ..SafetyConfig::default()
-        });
+        let g = guard(SafetyConfig { min_hold_ms: 0, ..SafetyConfig::default() });
         g.set_luma_observed(true);
         g.note_flash();
         assert_eq!(g.check_revert(&human()).unwrap_err().rule, "flash_guard");
@@ -731,10 +652,7 @@ mod tests {
         let cfg = SafetyConfig {
             min_hold_ms: 0,
             flash_guard: false,
-            on_operator_silence: OperatorSilence {
-                after_secs: 0,
-                action: SilenceAction::Hold,
-            },
+            on_operator_silence: OperatorSilence { after_secs: 0, action: SilenceAction::Hold },
             ..SafetyConfig::default()
         };
         let g = guard(cfg);
@@ -746,11 +664,7 @@ mod tests {
         g.arm_silence(true);
         let refusal = g.check(&human()).unwrap_err();
         assert_eq!(refusal.rule, "operator_silence");
-        assert!(
-            refusal.message.contains("studio-agent"),
-            "{}",
-            refusal.message
-        );
+        assert!(refusal.message.contains("studio-agent"), "{}", refusal.message);
         // Any call at all releases it.
         g.note_call("someone-else");
         assert!(g.check(&human()).is_ok());
@@ -765,15 +679,9 @@ mod tests {
             SilenceAction::parse("fallback:cam-wide"),
             Ok(SilenceAction::Fallback("cam-wide".into()))
         );
-        assert_eq!(
-            SilenceAction::Fallback("cam-wide".into()).as_str(),
-            "fallback:cam-wide"
-        );
+        assert_eq!(SilenceAction::Fallback("cam-wide".into()).as_str(), "fallback:cam-wide");
         let e = SilenceAction::parse("slat").unwrap_err();
-        assert!(
-            e.contains("slate"),
-            "the message has to name what would have worked: {e}"
-        );
+        assert!(e.contains("slate"), "the message has to name what would have worked: {e}");
         assert!(SilenceAction::parse("fallback:").is_err());
     }
 
@@ -791,14 +699,8 @@ mod tests {
         )
         .unwrap();
         assert_eq!(cfg.min_hold_ms, 2_000);
-        assert_eq!(
-            cfg.max_takes_per_minute, 12,
-            "an unwritten key keeps its default"
-        );
-        assert_eq!(
-            cfg.on_operator_silence.action,
-            SilenceAction::Fallback("cam1".into())
-        );
+        assert_eq!(cfg.max_takes_per_minute, 12, "an unwritten key keeps its default");
+        assert_eq!(cfg.on_operator_silence.action, SilenceAction::Fallback("cam1".into()));
         let text = toml::to_string(&cfg).unwrap();
         assert_eq!(toml::from_str::<SafetyConfig>(&text).unwrap(), cfg);
     }
@@ -809,18 +711,12 @@ mod tests {
     fn a_flash_is_a_luminance_step_over_a_quarter_of_the_picture() {
         assert_eq!(luminance_cd_m2(16), 0.0);
         assert!((luminance_cd_m2(235) - 100.0).abs() < 1e-9);
-        assert!(
-            luminance_cd_m2(0) == 0.0,
-            "below black clamps rather than going negative"
-        );
+        assert!(luminance_cd_m2(0) == 0.0, "below black clamps rather than going negative");
 
         let black = vec![16u8; 100];
         let white = vec![235u8; 100];
         assert!(is_flash(&black, &white));
-        assert!(
-            is_flash(&white, &black),
-            "it is the size of the step, not its direction"
-        );
+        assert!(is_flash(&white, &black), "it is the size of the step, not its direction");
 
         // A quarter of the frame is not more than a quarter.
         let mut quarter = black.clone();

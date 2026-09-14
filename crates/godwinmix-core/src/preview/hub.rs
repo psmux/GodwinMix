@@ -26,25 +26,16 @@ pub enum PreviewDemand {
         reply: oneshot::Sender<Result<broadcast::Receiver<Frame>, String>>,
     },
     /// One client has gone. The branch goes when the last one does.
-    CloseAudio {
-        key: String,
-    },
+    CloseAudio { key: String },
     /// Open a local raw preview socket, or join one that exists.
-    OpenLocal {
-        target: String,
-        reply: oneshot::Sender<Result<String, String>>,
-    },
-    CloseLocal {
-        target: String,
-    },
+    OpenLocal { target: String, reply: oneshot::Sender<Result<String, String>> },
+    CloseLocal { target: String },
 }
 
 impl std::fmt::Debug for PreviewDemand {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::OpenAudio {
-                target, request, ..
-            } => {
+            Self::OpenAudio { target, request, .. } => {
                 write!(f, "OpenAudio({target}, {})", request.kind())
             }
             Self::CloseAudio { key } => write!(f, "CloseAudio({key})"),
@@ -66,19 +57,13 @@ pub struct PreviewHandle {
 
 impl PreviewHandle {
     pub fn new(clients: Arc<StreamClients>, demand: DemandSink) -> Self {
-        Self {
-            clients,
-            demand: Some(demand),
-        }
+        Self { clients, demand: Some(demand) }
     }
 
     /// A handle attached to nothing: it counts clients and refuses to open
     /// anything. For tests and for a core with no mixer thread.
     pub fn detached() -> Self {
-        Self {
-            clients: StreamClients::new(),
-            demand: None,
-        }
+        Self { clients: StreamClients::new(), demand: None }
     }
 
     pub fn clients(&self) -> Arc<StreamClients> {
@@ -125,10 +110,7 @@ impl PreviewHandle {
             return Err("this core has no mixer, so there is nothing to preview".into());
         };
         let (tx, rx) = oneshot::channel();
-        sink(PreviewDemand::OpenLocal {
-            target: target.to_string(),
-            reply: tx,
-        });
+        sink(PreviewDemand::OpenLocal { target: target.to_string(), reply: tx });
         let path = rx
             .await
             .map_err(|_| "the mixer did not answer a preview.open request".to_string())??;
@@ -167,9 +149,7 @@ impl AudioStream {
 impl Drop for AudioStream {
     fn drop(&mut self) {
         if let Some(sink) = &self.demand {
-            sink(PreviewDemand::CloseAudio {
-                key: self.key.clone(),
-            });
+            sink(PreviewDemand::CloseAudio { key: self.key.clone() });
         }
     }
 }
@@ -184,9 +164,7 @@ pub struct LocalStream {
 impl Drop for LocalStream {
     fn drop(&mut self) {
         if let Some(sink) = &self.demand {
-            sink(PreviewDemand::CloseLocal {
-                target: self.target.clone(),
-            });
+            sink(PreviewDemand::CloseLocal { target: self.target.clone() });
         }
     }
 }
@@ -203,11 +181,7 @@ mod tests {
             Err(e) => e,
         };
         assert!(e.contains("no mixer"), "{e}");
-        assert_eq!(
-            h.clients().total(),
-            0,
-            "a refusal must not leave a client counted"
-        );
+        assert_eq!(h.clients().total(), 0, "a refusal must not leave a client counted");
     }
 
     #[tokio::test]
@@ -236,10 +210,6 @@ mod tests {
         assert!(stream.key().starts_with("program/pcm/"));
         drop(stream);
         assert_eq!(h.clients().count("pcm"), 0);
-        assert!(
-            seen.lock().iter().any(|s| s.starts_with("CloseAudio")),
-            "{:?}",
-            seen.lock()
-        );
+        assert!(seen.lock().iter().any(|s| s.starts_with("CloseAudio")), "{:?}", seen.lock());
     }
 }

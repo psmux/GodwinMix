@@ -45,20 +45,11 @@ pub struct SidecarOutput {
 
 impl SidecarOutput {
     pub fn new(spec: SidecarSpec) -> Self {
-        Self {
-            spec,
-            child: None,
-            media: None,
-            id: String::new(),
-            started: false,
-        }
+        Self { spec, child: None, media: None, id: String::new(), started: false }
     }
 
     pub fn instance_state(&self) -> InstanceState {
-        self.child
-            .as_ref()
-            .map(Sidecar::state)
-            .unwrap_or(InstanceState::Stopped)
+        self.child.as_ref().map(Sidecar::state).unwrap_or(InstanceState::Stopped)
     }
 
     pub fn pid(&self) -> Option<u32> {
@@ -108,11 +99,7 @@ fn make_fifo(path: &str) -> Result<()> {
     // 0o600: the plugin runs as the core does, and nothing else on the machine
     // has any business reading the programme.
     let made = unsafe { libc::mkfifo(c.as_ptr(), 0o600) };
-    anyhow::ensure!(
-        made == 0,
-        "could not make the FIFO at {path}: {}",
-        std::io::Error::last_os_error()
-    );
+    anyhow::ensure!(made == 0, "could not make the FIFO at {path}: {}", std::io::Error::last_os_error());
     Ok(())
 }
 
@@ -162,17 +149,11 @@ impl Output for SidecarOutput {
         crate::probe::set_bool(&sink, "buffer-mode", false);
         crate::probe::set_bool(&sink, "async", false);
         crate::probe::set_bool(&sink, "sync", false);
-        ctx.pipeline
-            .add_many([&mux, &sink])
-            .context("adding the plugin output")?;
+        ctx.pipeline.add_many([&mux, &sink]).context("adding the plugin output")?;
         gst::Element::link(&mux, &sink).context("linking the plugin muxer to its FIFO")?;
-        video
-            .link(&mux)
-            .context("linking the programme video to the plugin")?;
+        video.link(&mux).context("linking the programme video to the plugin")?;
         if self.spec.manifest.media.audio != StreamMode::None {
-            audio
-                .link(&mux)
-                .context("linking the programme audio to the plugin")?;
+            audio.link(&mux).context("linking the programme audio to the plugin")?;
         }
         for element in [&mux, &sink] {
             element.sync_state_with_parent().ok();
@@ -197,20 +178,13 @@ impl Output for SidecarOutput {
         // What the plugin says, not what the pipe says: a sink that accepts
         // buffers says nothing about whether the far end answered.
         self.started
-            && matches!(
-                self.instance_state(),
-                InstanceState::Running | InstanceState::Ready
-            )
+            && matches!(self.instance_state(), InstanceState::Running | InstanceState::Ready)
     }
 
     fn configure(&mut self, params: &Params) -> Result<Configure> {
         let child = self.child.as_ref().context("the plugin is not running")?;
         let answer = child.call("configure", json!({ "params": params_json(params) }))?;
-        if answer
-            .get("applied")
-            .and_then(Value::as_bool)
-            .unwrap_or(false)
-        {
+        if answer.get("applied").and_then(Value::as_bool).unwrap_or(false) {
             return Ok(Configure::Applied);
         }
         Ok(Configure::RestartRequired(
@@ -226,12 +200,7 @@ impl Output for SidecarOutput {
         let Some(child) = self.child.as_ref() else {
             return Health::of(PluginState::Stopped);
         };
-        if !self
-            .spec
-            .manifest
-            .capabilities
-            .has(crate::plugin::Capability::Health)
-        {
+        if !self.spec.manifest.capabilities.has(crate::plugin::Capability::Health) {
             return Health::of(state_of(child.state()));
         }
         match child.health() {
@@ -259,11 +228,7 @@ impl Output for SidecarOutput {
                 let child = self.child.as_ref().context("the plugin is not running")?;
                 child.call(method, params)
             }
-            other => Err(unknown_method(
-                &self.spec.manifest,
-                other,
-                &["keyframe", "tool.call"],
-            )),
+            other => Err(unknown_method(&self.spec.manifest, other, &["keyframe", "tool.call"])),
         }
     }
 }

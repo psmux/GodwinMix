@@ -14,7 +14,9 @@ use crate::config::Params;
 use crate::input::attach_exec_stdout;
 use crate::plugin::kinds::{assemble, BuildCtx, Ingest, KindParts, Wiring};
 use crate::plugin::source::{unknown_method, Source};
-use crate::plugin::{Configure, Health, Hello, Manifest, MediaEnds, PluginState, Ready};
+use crate::plugin::{
+    Configure, Health, Hello, Manifest, MediaEnds, PluginState, Ready,
+};
 use anyhow::{Context, Result};
 use godwinmix_host::launch::{Launch, LaunchCtx};
 use godwinmix_protocol::plugin::manifest::Manifest as PluginManifest;
@@ -72,10 +74,7 @@ impl SidecarSource {
     /// What the plugin's own process is doing, for `plugin.list` and the
     /// supervisor.
     pub fn instance_state(&self) -> InstanceState {
-        self.child
-            .as_ref()
-            .map(Sidecar::state)
-            .unwrap_or(InstanceState::Stopped)
+        self.child.as_ref().map(Sidecar::state).unwrap_or(InstanceState::Stopped)
     }
 
     pub fn pid(&self) -> Option<u32> {
@@ -164,9 +163,7 @@ impl SidecarSource {
         );
         match outcome {
             Ok(negotiated) => {
-                self.latency_ms = negotiated
-                    .latency_ms
-                    .unwrap_or(self.spec.manifest.latency_ms);
+                self.latency_ms = negotiated.latency_ms.unwrap_or(self.spec.manifest.latency_ms);
             }
             Err(e) => {
                 // The handshake is the one place a plugin is killed rather
@@ -199,10 +196,7 @@ impl SidecarSource {
     fn call_start(&mut self) -> Result<()> {
         let (transport, media) = {
             let child = self.child.as_ref().context("the plugin is not running")?;
-            (
-                child.transport().unwrap_or(Transport::Container),
-                child.media_address().to_string(),
-            )
+            (child.transport().unwrap_or(Transport::Container), child.media_address().to_string())
         };
         let params = json!({
             "canvas": canvas_of(&self.build.canvas),
@@ -251,17 +245,12 @@ impl SidecarSource {
                 }
                 let decode = transport::decoder(&id)?;
                 Ok((
-                    Ingest::default()
-                        .with([src.clone(), decode.clone()])
-                        .livesync(false),
+                    Ingest::default().with([src.clone(), decode.clone()]).livesync(false),
                     Wire::Container { src, decode },
                 ))
             }
             socket => {
-                let media = self
-                    .media
-                    .as_ref()
-                    .context("a socket transport with no address")?;
+                let media = self.media.as_ref().context("a socket transport with no address")?;
                 let declared = self.spec.manifest.media;
                 // Each stream is built only if the plugin declared it. An
                 // audio only source binds no video socket, and a video branch
@@ -295,14 +284,8 @@ impl SidecarSource {
 
 /// What has to be linked once everything is in one pipeline.
 enum Wire {
-    Container {
-        src: gst::Element,
-        decode: gst::Element,
-    },
-    Socket {
-        video: Option<Vec<gst::Element>>,
-        audio: Option<Vec<gst::Element>>,
-    },
+    Container { src: gst::Element, decode: gst::Element },
+    Socket { video: Option<Vec<gst::Element>>, audio: Option<Vec<gst::Element>> },
 }
 
 impl Source for SidecarSource {
@@ -330,8 +313,7 @@ impl Source for SidecarSource {
         let (ingest, wire) = self.ingest()?;
         let ends = assemble(&self.build, thumb, ingest, |w: &Wiring| match &wire {
             Wire::Container { src, decode } => {
-                gst::Element::link(src, decode)
-                    .context("linking the plugin's pipe to decodebin")?;
+                gst::Element::link(src, decode).context("linking the plugin's pipe to decodebin")?;
                 w.route(decode, w.norm.video_entry(), w.norm.audio_entry());
                 Ok(KindParts::default())
             }
@@ -340,19 +322,15 @@ impl Source for SidecarSource {
                     gst::Element::link_many(video.iter().collect::<Vec<_>>().as_slice())
                         .context("linking the plugin's video socket")?;
                     let last = video.last().context("an empty video chain")?;
-                    last.link(&w.norm.video_entry())
-                        .context("linking the plugin's video")?;
-                    w.has_video
-                        .store(true, std::sync::atomic::Ordering::Relaxed);
+                    last.link(&w.norm.video_entry()).context("linking the plugin's video")?;
+                    w.has_video.store(true, std::sync::atomic::Ordering::Relaxed);
                 }
                 if let Some(audio) = audio {
                     gst::Element::link_many(audio.iter().collect::<Vec<_>>().as_slice())
                         .context("linking the plugin's audio socket")?;
                     let last = audio.last().context("an empty audio chain")?;
-                    last.link(&w.norm.audio_entry())
-                        .context("linking the plugin's audio")?;
-                    w.has_audio
-                        .store(true, std::sync::atomic::Ordering::Relaxed);
+                    last.link(&w.norm.audio_entry()).context("linking the plugin's audio")?;
+                    w.has_audio.store(true, std::sync::atomic::Ordering::Relaxed);
                 }
                 Ok(KindParts::default())
             }
@@ -401,11 +379,7 @@ impl Source for SidecarSource {
              first, or call plugin.reload.",
         )?;
         let answer = child.call("configure", json!({ "params": params_json(params) }))?;
-        if answer
-            .get("applied")
-            .and_then(Value::as_bool)
-            .unwrap_or(false)
-        {
+        if answer.get("applied").and_then(Value::as_bool).unwrap_or(false) {
             return Ok(Configure::Applied);
         }
         let reason = answer
@@ -424,12 +398,7 @@ impl Source for SidecarSource {
         // alone, which is what the supervisor was doing before plugins
         // existed. Asking one that never answers would cost a timeout a
         // second, every second.
-        if !self
-            .spec
-            .manifest
-            .capabilities
-            .has(crate::plugin::Capability::Health)
-        {
+        if !self.spec.manifest.capabilities.has(crate::plugin::Capability::Health) {
             return Health::of(state_of(child.state()));
         }
         match child.health() {
@@ -469,14 +438,7 @@ impl Source for SidecarSource {
             other => Err(unknown_method(
                 &self.spec.manifest,
                 other,
-                &[
-                    "restart",
-                    "seek",
-                    "position",
-                    "keyframe",
-                    "audio.set",
-                    "tool.call",
-                ],
+                &["restart", "seek", "position", "keyframe", "audio.set", "tool.call"],
             )),
         }
     }
@@ -515,10 +477,7 @@ pub fn canvas_of(canvas: &CanvasCaps) -> Canvas {
 /// A TOML params table as the JSON a plugin reads.
 pub fn params_json(params: &Params) -> Value {
     serde_json::to_value(params).unwrap_or_else(|e| {
-        warn!(
-            ?e,
-            "a params table would not convert to JSON; sending an empty one"
-        );
+        warn!(?e, "a params table would not convert to JSON; sending an empty one");
         json!({})
     })
 }
@@ -555,10 +514,7 @@ mod tests {
     #[test]
     fn a_params_table_becomes_the_object_a_plugin_reads() {
         let mut params = Params::new();
-        params.insert(
-            "timezone".into(),
-            toml::Value::String("Europe/London".into()),
-        );
+        params.insert("timezone".into(), toml::Value::String("Europe/London".into()));
         params.insert("size".into(), toml::Value::Integer(48));
         let json = params_json(&params);
         assert_eq!(json["timezone"], "Europe/London");

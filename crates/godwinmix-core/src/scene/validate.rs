@@ -81,21 +81,9 @@ pub fn scene(scene: &Scene, canvas: &Canvas) -> Vec<Finding> {
 
     for p in &placed {
         if p.rect.intersect(&canvas_rect).is_none() {
-            out.push(off_canvas(
-                scene,
-                p,
-                "scene.off_canvas",
-                Severity::Warning,
-                "is entirely off the canvas",
-            ));
+            out.push(off_canvas(scene, p, "scene.off_canvas", Severity::Warning, "is entirely off the canvas"));
         } else if !p.rect.inside(&canvas_rect) && !canvas_rect.inside(&p.rect) {
-            out.push(off_canvas(
-                scene,
-                p,
-                "scene.off_canvas_partly",
-                Severity::Info,
-                "hangs over the edge of the canvas",
-            ));
+            out.push(off_canvas(scene, p, "scene.off_canvas_partly", Severity::Info, "hangs over the edge of the canvas"));
         }
         // A background is meant to run to the edges. Anything that covers the
         // whole safe area is one, so only items inside the canvas and smaller
@@ -169,14 +157,8 @@ fn overlaps(
             if over.opacity < 1.0 || over.item.blend != super::document::Blend::Normal {
                 continue;
             }
-            let Some(shared) = under.rect.intersect(&over.rect) else {
-                continue;
-            };
-            let visible = under
-                .rect
-                .intersect(canvas)
-                .map(|r| r.area())
-                .unwrap_or(0.0);
+            let Some(shared) = under.rect.intersect(&over.rect) else { continue };
+            let visible = under.rect.intersect(canvas).map(|r| r.area()).unwrap_or(0.0);
             if visible <= 0.0 || shared.area() + 1.0 < visible {
                 continue;
             }
@@ -254,9 +236,7 @@ mod tests {
     use crate::scene::geometry::Rect;
 
     fn item_at(x: f64, y: f64, w: f64, h: f64) -> Item {
-        let mut item = Item::new(Content::Source {
-            source: "cam".into(),
-        });
+        let mut item = Item::new(Content::Source { source: "cam".into() });
         item.transform.position = Vec2::new(x, y);
         item.transform.frame = Some(Frame::new(w, h));
         item
@@ -290,14 +270,8 @@ mod tests {
 
     #[test]
     fn an_item_hanging_over_the_edge_is_a_note_not_a_warning() {
-        let found = scene(
-            &scene_of(vec![item_at(1800.0, 0.0, 400.0, 200.0)]),
-            &Canvas::default(),
-        );
-        let edge = found
-            .iter()
-            .find(|f| f.code == "scene.off_canvas_partly")
-            .expect("a note");
+        let found = scene(&scene_of(vec![item_at(1800.0, 0.0, 400.0, 200.0)]), &Canvas::default());
+        let edge = found.iter().find(|f| f.code == "scene.off_canvas_partly").expect("a note");
         assert_eq!(edge.severity, Severity::Info);
     }
 
@@ -308,10 +282,7 @@ mod tests {
         let mut over = item_at(0.0, 0.0, 1920.0, 1080.0);
         over.name = Some("background".into());
         let found = scene(&scene_of(vec![under, over]), &Canvas::default());
-        let hidden = found
-            .iter()
-            .find(|f| f.code == "scene.hidden")
-            .expect("a hidden finding");
+        let hidden = found.iter().find(|f| f.code == "scene.hidden").expect("a hidden finding");
         assert!(hidden.message.contains("forgotten"), "{}", hidden.message);
         assert!(hidden.message.contains("background"), "{}", hidden.message);
         assert_eq!(hidden.items.len(), 2);
@@ -323,10 +294,7 @@ mod tests {
         let mut over = item_at(0.0, 0.0, 1920.0, 1080.0);
         over.opacity = 0.5;
         let found = scene(&scene_of(vec![under, over]), &Canvas::default());
-        assert!(
-            !found.iter().any(|f| f.code == "scene.hidden"),
-            "{found:#?}"
-        );
+        assert!(!found.iter().any(|f| f.code == "scene.hidden"), "{found:#?}");
     }
 
     #[test]
@@ -360,10 +328,7 @@ mod tests {
 
     #[test]
     fn a_full_canvas_background_does_not_breach_a_safe_area() {
-        let found = scene(
-            &scene_of(vec![item_at(0.0, 0.0, 1920.0, 1080.0)]),
-            &Canvas::default(),
-        );
+        let found = scene(&scene_of(vec![item_at(0.0, 0.0, 1920.0, 1080.0)]), &Canvas::default());
         assert!(found.is_empty(), "{found:#?}");
     }
 
@@ -375,10 +340,7 @@ mod tests {
         b.id = a.id;
         doc.scenes.push(scene_of(vec![a, b]));
         let found = collection(&doc);
-        let dup = found
-            .iter()
-            .find(|f| f.code == "scene.duplicate_id")
-            .expect("a duplicate");
+        let dup = found.iter().find(|f| f.code == "scene.duplicate_id").expect("a duplicate");
         assert_eq!(dup.severity, Severity::Error);
         assert!(has_errors(&found));
         assert!(summary(&found).unwrap().contains("error"));
@@ -388,16 +350,10 @@ mod tests {
     fn a_group_is_validated_through_its_children_not_as_a_box() {
         let mut child = item_at(3000.0, 0.0, 100.0, 100.0);
         child.name = Some("child".into());
-        let mut group = Item::new(Content::Children {
-            children: vec![child],
-        });
+        let mut group = Item::new(Content::Children { children: vec![child] });
         group.name = Some("group".into());
         let found = scene(&scene_of(vec![group]), &Canvas::default());
         assert_eq!(found.len(), 1);
-        assert!(
-            found[0].message.starts_with("group / child"),
-            "{}",
-            found[0].message
-        );
+        assert!(found[0].message.starts_with("group / child"), "{}", found[0].message);
     }
 }
