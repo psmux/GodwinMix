@@ -44,7 +44,7 @@ async function connect(wanted) {
   say(wanted.mode === "local" ? "Starting the mixer on this computer." : `Reaching ${wanted.address}.`, true);
   try {
     const core = await invoke("connect_core", { wanted });
-    say(`${core.label} ${core.version}. Opening.`, true);
+    say(`Connected to ${core.label}: ${core.name} ${core.version}. Opening.`, true);
     window.location.replace(core.url);
   } catch (e) {
     fail(String(e));
