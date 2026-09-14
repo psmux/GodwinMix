@@ -142,10 +142,17 @@ impl SidecarService {
     /// that cannot describe a wipe quickly is not one a take waits five
     /// seconds for.
     pub fn call_within(&self, method: &str, params: Value, within: Duration) -> Result<Value> {
-        self.child
-            .as_ref()
+        self.caller()
             .with_context(|| format!("`{}` is not running, so `{method}` has nowhere to go", self.instance))?
             .call_within(method, params, within)
+    }
+
+    /// A handle that makes one call without this service.
+    ///
+    /// For a caller that holds a lock over the table this service lives in.
+    /// Take the handle, drop the lock, then call: see `Sidecar::caller`.
+    pub fn caller(&self) -> Option<super::Caller> {
+        self.child.as_ref().map(super::Sidecar::caller)
     }
 
     /// What the plugin is called, for an error and for `plugin.reload`.
