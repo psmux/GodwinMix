@@ -183,13 +183,13 @@ fn query_pairs(query: &str) -> Vec<(String, Value)> {
     query
         .split('&')
         .filter(|p| !p.is_empty())
-        .filter_map(|pair| {
+        .map(|pair| {
             let (key, raw) = pair.split_once('=').unwrap_or((pair, ""));
             let value = serde_json::from_str::<Value>(&decode(raw))
                 .ok()
                 .filter(|v| v.is_number() || v.is_boolean())
                 .unwrap_or_else(|| Value::String(decode(raw)));
-            Some((decode(key), value))
+            (decode(key), value)
         })
         .collect()
 }

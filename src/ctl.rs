@@ -1,14 +1,27 @@
 //! `godwinmix ctl`: drive a running mixer from the command line.
 //!
-//! The daemon is controlled entirely over HTTP, so this is a thin client rather
-//! than a second control path. Everything it does can equally be done with curl
-//! against the same endpoints; it exists so that scripting the mixer does not
-//! require hand-assembling JSON.
+//! A thin client over `/api/v1` rather than a second control path. Every
+//! command builds one of the request types from `crate::api` and reads the
+//! answer back into an api type, so nothing here assembles a body by hand and
+//! the CLI cannot drift from the protocol the UI and an agent use.
+//!
+//! The paths are not written down either: `api::method::rest_transform` turns
+//! a method name into its route, which is the same function the server builds
+//! its router from.
 
+use crate::api::method::rest_transform;
+use crate::api::types::{MixerStatus, OutputStatus, SourceStatus};
+use crate::api::{
+    AddOutputRequest, AddSourceRequest, AdBreakRequest, CoreInfo, GoLiveRequest, GoLiveResult,
+    ProgramState, TakeRecord, TakeRequest,
+};
+use crate::media::MediaListing;
 use anyhow::{bail, Context, Result};
 use clap::Subcommand;
 use reqwest::header::{HeaderMap, HeaderValue, AUTHORIZATION};
-use serde_json::json;
+use serde::de::DeserializeOwned;
+use serde::Serialize;
+use serde_json::Value;
 
 #[derive(Subcommand, Debug)]
 pub enum Ctl {
@@ -25,6 +38,15 @@ pub enum Ctl {
         #[arg(long)]
         at: Option<u64>,
     },
+    /// Take back to the shot that was on air before this one.
+    Revert,
+    /// What has been on air, newest first, and who put it there.
+    History {
+        #[arg(long, default_value_t = 20)]
+        limit: u32,
+    },
+    /// Version, api level, features and limits of the mixer you are talking to.
+    Info,
     /// List, add and remove sources.
     #[command(subcommand)]
     Source(SourceCmd),
@@ -90,6 +112,9 @@ pub enum SourceCmd {
     },
     Remove {
         id: String,
+        /// Say what it would do and change nothing.
+        #[arg(long)]
+        dry_run: bool,
     },
 }
 
@@ -105,6 +130,9 @@ pub enum OutputCmd {
     },
     Remove {
         id: String,
+        /// Say what it would do and change nothing.
+        #[arg(long)]
+        dry_run: bool,
     },
     /// Force a reconnect.
     Reconnect {
@@ -116,104 +144,65 @@ pub async fn run(base: &str, token: Option<&str>, cmd: Ctl) -> Result<()> {
     let api = Api::new(base, token)?;
     let api = &api;
     match cmd {
-        Ctl::Status { json } => {
-            let body: serde_json::Value = get(api, "/api/status").await?;
-            if json {
-                println!("{}", serde_json::to_string_pretty(&body)?);
-            } else {
-                print_status(&body);
-            }
-        }
+        Ctl::Status { json } => status(api, json).await?,
         Ctl::Take { source, at } => {
-            post(api, "/api/take", json!({ "source": source, "at_running_time_ms": at })).await?;
-            println!("on program: {}", source.as_deref().unwrap_or("black"));
+            let req = TakeRequest { source, scene: None, at_running_time_ms: at };
+            let state: ProgramState = api.call("program.take", None, &req).await?;
+            println!("on program: {}", state.program.as_deref().unwrap_or("black"));
         }
-        Ctl::Source(SourceCmd::List) => {
-            let body: serde_json::Value = get(api, "/api/status").await?;
-            for s in body["sources"].as_array().into_iter().flatten() {
+        Ctl::Revert => {
+            let state: ProgramState = api.call("program.revert", None, &()).await?;
+            println!("on program: {}", state.program.as_deref().unwrap_or("black"));
+        }
+        Ctl::History { limit } => {
+            let takes: Vec<TakeRecord> =
+                api.get("program.history", None, &[("limit", limit.to_string())]).await?;
+            for t in takes {
                 println!(
-                    "{:<10} {:<10} {}{}",
-                    s["id"].as_str().unwrap_or(""),
-                    s["state"].as_str().unwrap_or(""),
-                    s["uri"].as_str().unwrap_or(""),
-                    superimposed_mark(s)
+                    "{:>10} ms  {:<12} by {}",
+                    t.at_running_time_ms,
+                    t.source.as_deref().unwrap_or("black"),
+                    t.by
                 );
             }
         }
-        Ctl::Source(SourceCmd::Add { id, uri, name, web, superimpose }) => {
-            let id = (id != "-").then_some(id);
-            let kind = web.then_some("web");
-            let body =
-                json!({ "id": id, "uri": uri, "name": name, "kind": kind, "superimpose": superimpose });
-            post(api, "/api/sources", body).await?;
-            println!("added source {}", id.as_deref().unwrap_or("(id derived from the URL)"));
-        }
-        Ctl::Source(SourceCmd::Remove { id }) => {
-            delete(api, &format!("/api/sources/{id}")).await?;
-            println!("removed source {id}");
-        }
-        Ctl::Output(OutputCmd::List) => {
-            let body: serde_json::Value = get(api, "/api/outputs").await?;
-            for o in body.as_array().into_iter().flatten() {
-                println!(
-                    "{:<12} {:<13} {} reconnects, {:.1}s buffered",
-                    o["id"].as_str().unwrap_or(""),
-                    o["state"].as_str().unwrap_or(""),
-                    o["reconnects"].as_u64().unwrap_or(0),
-                    o["queue_secs"].as_f64().unwrap_or(0.0)
-                );
-            }
-        }
-        Ctl::Output(OutputCmd::Add { id, uri, policy }) => {
-            post(api, "/api/outputs", json!({ "id": id, "uri": uri, "policy": policy })).await?;
-            println!("added output {id}");
-        }
-        Ctl::Output(OutputCmd::Remove { id }) => {
-            delete(api, &format!("/api/outputs/{id}")).await?;
-            println!("removed output {id}");
-        }
-        Ctl::Output(OutputCmd::Reconnect { id }) => {
-            post(api, &format!("/api/outputs/{id}/reconnect"), json!({})).await?;
-            println!("reconnecting output {id}");
-        }
+        Ctl::Info => info(api).await?,
+        Ctl::Source(cmd) => source(api, cmd).await?,
+        Ctl::Output(cmd) => output(api, cmd).await?,
         Ctl::Ad { uri, at, return_to } => {
-            post(
-                api,
-                "/api/adbreak",
-                json!({ "uri": uri, "at_running_time_ms": at, "return_to": return_to }),
-            )
-            .await?;
+            let req = AdBreakRequest { uri: uri.clone(), at_running_time_ms: at, return_to };
+            let _: Value = api.call("adbreak.start", None, &req).await?;
             println!("ad break: {uri}");
         }
         Ctl::EndAd => {
-            post(api, "/api/adbreak/end", json!({})).await?;
+            let _: Value = api.call("adbreak.end", None, &()).await?;
             println!("ad break ended");
         }
         Ctl::Golive { url, rtmp, superimpose, id } => {
-            let body = json!({ "url": url, "rtmp": rtmp, "superimpose": superimpose, "id": id });
-            let reply: serde_json::Value = post_json(api, "/api/golive", body).await?;
+            let req = GoLiveRequest { url, rtmp, superimpose: Some(superimpose), id };
+            let reply: GoLiveResult = api.call("program.golive", None, &req).await?;
             println!(
-                "source {} is {}; it goes on programme as soon as it is live{}",
-                reply["source"].as_str().unwrap_or("?"),
-                reply["state"].as_str().unwrap_or("connecting"),
-                match reply["output"].as_str() {
+                "source {} is {:?}; it goes on programme as soon as it is live{}",
+                reply.source,
+                reply.state,
+                match &reply.output {
                     Some(o) => format!(", sending to output {o}"),
                     None => String::new(),
                 }
             );
         }
         Ctl::Media => {
-            let body: serde_json::Value = get(api, "/api/media").await?;
-            if let Some(err) = body["error"].as_str() {
-                bail!("{}: {err}", body["dir"].as_str().unwrap_or("library"));
+            let listing: MediaListing = api.get("media.list", None, &[]).await?;
+            if let Some(err) = listing.error {
+                bail!("{}: {err}", listing.dir);
             }
-            for i in body["items"].as_array().into_iter().flatten() {
-                let secs = i["duration_ms"].as_u64().map(|m| m as f64 / 1000.0);
+            for i in listing.items {
+                let secs = i.duration_ms.map(|m| m as f64 / 1000.0);
                 println!(
                     "{:<28} {:>7} {}",
-                    i["name"].as_str().unwrap_or(""),
+                    i.name,
                     secs.map(|s| format!("{s:.1}s")).unwrap_or_else(|| "?".into()),
-                    if i["has_audio"].as_bool().unwrap_or(false) { "" } else { "(no audio)" }
+                    if i.has_audio { "" } else { "(no audio)" }
                 );
             }
         }
@@ -221,46 +210,143 @@ pub async fn run(base: &str, token: Option<&str>, cmd: Ctl) -> Result<()> {
     Ok(())
 }
 
-/// The only feedback an operator gets that the handover really happened.
-/// `--superimpose auto` falls back quietly, so a page that could not give up
-/// its media looks exactly like one that never asked, and the difference is
-/// about a core of CPU.
-fn superimposed_mark(s: &serde_json::Value) -> &'static str {
-    if s["superimposed"].as_bool().unwrap_or(false) { "  (superimposed)" } else { "" }
-}
-
-fn print_status(b: &serde_json::Value) {
-    println!("program : {}", b["program"].as_str().unwrap_or("black"));
-    if let Some(ad) = b["ad"].as_object() {
-        let state = if ad["on_air"].as_bool().unwrap_or(false) { "on air" } else { "armed" };
-        println!("ad      : {state} ({})", ad["uri"].as_str().unwrap_or(""));
+async fn status(api: &Api, json: bool) -> Result<()> {
+    if json {
+        let raw: Value = api.get("core.status", None, &[]).await?;
+        println!("{}", serde_json::to_string_pretty(&raw)?);
+        return Ok(());
+    }
+    let s: MixerStatus = api.get("core.status", None, &[]).await?;
+    println!("program : {}", s.program.as_deref().unwrap_or("black"));
+    if let Some(ad) = &s.ad {
+        println!("ad      : {} ({})", if ad.on_air { "on air" } else { "armed" }, ad.uri);
     }
     println!(
         "backend : {} ({})",
-        b["backend"]["video_encoder"].as_str().unwrap_or(""),
-        if b["backend"]["hardware_accelerated"].as_bool().unwrap_or(false) {
-            "hardware"
-        } else {
-            "software"
-        }
+        s.backend.video_encoder,
+        if s.backend.hardware_accelerated { "hardware" } else { "software" }
     );
-    for s in b["sources"].as_array().into_iter().flatten() {
-        println!(
-            "source  : {:<10} {:<10} {}{}",
-            s["id"].as_str().unwrap_or(""),
-            s["state"].as_str().unwrap_or(""),
-            s["uri"].as_str().unwrap_or(""),
-            superimposed_mark(s)
-        );
+    for src in &s.sources {
+        println!("source  : {}", source_line(src));
     }
-    for o in b["outputs"].as_array().into_iter().flatten() {
+    for o in &s.outputs {
         println!(
             "output  : {:<10} {:<13} {} reconnects",
-            o["id"].as_str().unwrap_or(""),
-            o["state"].as_str().unwrap_or(""),
-            o["reconnects"].as_u64().unwrap_or(0)
+            o.id,
+            format!("{:?}", o.state).to_lowercase(),
+            o.reconnects
         );
     }
+    Ok(())
+}
+
+async fn info(api: &Api) -> Result<()> {
+    let info: CoreInfo = api.get("core.info", None, &[]).await?;
+    println!("core     : {} {}", info.core, info.version);
+    println!("api      : level {} (compatible from {})", info.api_level, info.api_compatible);
+    println!("canvas   : {}x{} at {} fps", info.canvas.width, info.canvas.height, info.canvas.fps);
+    println!("features : {}", info.features.join(", "));
+    if let Some(t) = info.token {
+        println!("token    : {} ({}), confirm {}", t.id, t.scopes.join("+"), t.confirm);
+    }
+    if info.rehearsal {
+        println!("rehearsal: this core refuses output.add");
+    }
+    Ok(())
+}
+
+async fn source(api: &Api, cmd: SourceCmd) -> Result<()> {
+    match cmd {
+        SourceCmd::List => {
+            let sources: Vec<SourceStatus> = api.get("source.list", None, &[]).await?;
+            for s in &sources {
+                println!("{}", source_line(s));
+            }
+        }
+        SourceCmd::Add { id, uri, name, web, superimpose } => {
+            let req = AddSourceRequest {
+                id: (id != "-").then_some(id),
+                name,
+                uri,
+                kind: web.then(|| "web".to_string()),
+                superimpose: Some(superimpose),
+                params: Default::default(),
+            };
+            // The whole record comes back, so the id it actually got is in the
+            // answer and nobody has to diff the status to find out.
+            let added: SourceStatus = api.call("source.add", None, &req).await?;
+            println!("added source {} ({:?})", added.id, added.state);
+        }
+        SourceCmd::Remove { id, dry_run } => {
+            let body: Value = api.call_with("source.remove", Some(&id), &(), dry_run).await?;
+            if dry_run {
+                for line in body["diff"].as_array().into_iter().flatten() {
+                    println!("would {}", line.as_str().unwrap_or_default());
+                }
+            } else {
+                println!("removed source {id}");
+            }
+        }
+    }
+    Ok(())
+}
+
+async fn output(api: &Api, cmd: OutputCmd) -> Result<()> {
+    match cmd {
+        OutputCmd::List => {
+            let outputs: Vec<OutputStatus> = api.get("output.list", None, &[]).await?;
+            for o in &outputs {
+                println!(
+                    "{:<12} {:<13} {} reconnects, {:.1}s buffered",
+                    o.id,
+                    format!("{:?}", o.state).to_lowercase(),
+                    o.reconnects,
+                    o.queue_secs
+                );
+            }
+        }
+        OutputCmd::Add { id, uri, policy } => {
+            let req = AddOutputRequest {
+                id: id.clone(),
+                uri,
+                policy: Some(policy),
+                params: Default::default(),
+            };
+            let added: OutputStatus = api.call("output.add", None, &req).await?;
+            println!("added output {} to {}", added.id, added.uri_host);
+        }
+        OutputCmd::Remove { id, dry_run } => {
+            let body: Value = api.call_with("output.remove", Some(&id), &(), dry_run).await?;
+            if dry_run {
+                for line in body["diff"].as_array().into_iter().flatten() {
+                    println!("would {}", line.as_str().unwrap_or_default());
+                }
+            } else {
+                println!("removed output {id}");
+            }
+        }
+        OutputCmd::Reconnect { id } => {
+            let _: OutputStatus = api.call("output.reconnect", Some(&id), &()).await?;
+            println!("reconnecting output {id}");
+        }
+    }
+    Ok(())
+}
+
+/// One source, the way an operator reads it.
+///
+/// The superimposed mark is the only feedback that the handover really
+/// happened: `--superimpose auto` falls back quietly, so a page that could not
+/// give up its media looks exactly like one that never asked, and the
+/// difference is about a core of CPU.
+fn source_line(s: &SourceStatus) -> String {
+    format!(
+        "{:<10} {:<10} {}{}",
+        s.id,
+        format!("{:?}", s.state).to_lowercase(),
+        s.uri,
+        if s.superimposed { "  (superimposed)" } else { "" }
+    )
 }
 
 /// Where the mixer is and how to be let in. The token, when there is one,
@@ -286,48 +372,212 @@ impl Api {
         Ok(Self { base: base.trim_end_matches('/').to_string(), client })
     }
 
-    fn url(&self, path: &str) -> String {
-        format!("{}{path}", self.base)
+    /// The route one method sits at, with the id filled in.
+    ///
+    /// The same transform the server builds its router from, so a path is
+    /// never written twice.
+    fn route(&self, method: &str, id: Option<&str>) -> Result<(reqwest::Method, String)> {
+        let rest = rest_transform(method)
+            .with_context(|| format!("{method} has no REST route"))?;
+        let path = match id {
+            Some(id) => rest.path.replace("{id}", &urlencode(id)),
+            None => rest.path.clone(),
+        };
+        let verb = reqwest::Method::from_bytes(rest.http.as_bytes())
+            .with_context(|| format!("{} is not an HTTP method", rest.http))?;
+        Ok((verb, format!("{}{path}", self.base)))
+    }
+
+    /// A read, with query parameters.
+    async fn get<T: DeserializeOwned>(
+        &self,
+        method: &str,
+        id: Option<&str>,
+        query: &[(&str, String)],
+    ) -> Result<T> {
+        let (verb, url) = self.route(method, id)?;
+        let r = self
+            .client
+            .request(verb, &url)
+            .query(query)
+            .send()
+            .await
+            .with_context(|| format!("calling {method} at {url}"))?;
+        read(method, r).await
+    }
+
+    async fn call<Req: Serialize, T: DeserializeOwned>(
+        &self,
+        method: &str,
+        id: Option<&str>,
+        req: &Req,
+    ) -> Result<T> {
+        self.call_with(method, id, req, false).await
+    }
+
+    async fn call_with<Req: Serialize, T: DeserializeOwned>(
+        &self,
+        method: &str,
+        id: Option<&str>,
+        req: &Req,
+        dry_run: bool,
+    ) -> Result<T> {
+        let (verb, url) = self.route(method, id)?;
+        let mut body = serde_json::to_value(req).unwrap_or(Value::Null);
+        if !body.is_object() {
+            body = Value::Object(Default::default());
+        }
+        if dry_run {
+            if let Some(map) = body.as_object_mut() {
+                map.insert("dry_run".into(), Value::Bool(true));
+            }
+        }
+        let r = self
+            .client
+            .request(verb, &url)
+            .json(&body)
+            .send()
+            .await
+            .with_context(|| format!("calling {method} at {url}"))?;
+        read(method, r).await
     }
 }
 
-async fn get<T: serde::de::DeserializeOwned>(api: &Api, path: &str) -> Result<T> {
-    let url = api.url(path);
-    let r = api.client.get(&url).send().await.with_context(|| format!("GET {url}"))?;
-    check(r).await?.json().await.context("decoding response")
+/// Percent encode an id for a path segment. Ids are slugs, so this is a guard
+/// rather than a general encoder.
+fn urlencode(id: &str) -> String {
+    id.bytes()
+        .map(|b| match b {
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => {
+                (b as char).to_string()
+            }
+            other => format!("%{other:02X}"),
+        })
+        .collect()
 }
 
-async fn post(api: &Api, path: &str, body: serde_json::Value) -> Result<()> {
-    let url = api.url(path);
-    let r = api.client.post(&url).json(&body).send().await.with_context(|| format!("POST {url}"))?;
-    check(r).await?;
-    Ok(())
-}
-
-/// A POST whose answer is worth reading.
-async fn post_json<T: serde::de::DeserializeOwned>(
-    api: &Api,
-    path: &str,
-    body: serde_json::Value,
-) -> Result<T> {
-    let url = api.url(path);
-    let r = api.client.post(&url).json(&body).send().await.with_context(|| format!("POST {url}"))?;
-    check(r).await?.json().await.context("decoding response")
-}
-
-async fn delete(api: &Api, path: &str) -> Result<()> {
-    let url = api.url(path);
-    let r = api.client.delete(&url).send().await.with_context(|| format!("DELETE {url}"))?;
-    check(r).await?;
-    Ok(())
-}
-
-/// Surface the mixer's own reason for refusing, rather than a status code.
-async fn check(r: reqwest::Response) -> Result<reqwest::Response> {
-    if r.status().is_success() {
-        return Ok(r);
-    }
+/// Surface the mixer's own reason for refusing.
+///
+/// `/api/v1` has one error shape, so the message is read out of it rather than
+/// guessed at from a status code. The message names the current state and the
+/// next step, which is exactly what a person at a terminal needs.
+async fn read<T: DeserializeOwned>(method: &str, r: reqwest::Response) -> Result<T> {
     let status = r.status();
-    let body = r.text().await.unwrap_or_default();
-    bail!("{status}: {}", body.trim());
+    let text = r.text().await.unwrap_or_default();
+    if !status.is_success() {
+        bail!("{method}: {}", refusal_message(&text));
+    }
+    if text.trim().is_empty() {
+        return serde_json::from_str("null").context("decoding an empty response");
+    }
+    serde_json::from_str(&text).with_context(|| format!("decoding the answer to {method}"))
+}
+
+/// The sentence out of a refusal.
+///
+/// `/api/v1` has one error shape, so the message is read out of it rather than
+/// guessed at from a status code. A legacy route answers plain text, and that
+/// falls through unchanged.
+fn refusal_message(text: &str) -> String {
+    serde_json::from_str::<Value>(text)
+        .ok()
+        .and_then(|v| v["error"]["message"].as_str().map(String::from))
+        .unwrap_or_else(|| text.trim().to_string())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn api() -> Api {
+        Api::new("http://mixer:8080/", None).unwrap()
+    }
+
+    /// The CLI does not carry a path table of its own. Every command resolves
+    /// through the same transform the server's router is built from, so a
+    /// renamed method cannot leave the CLI pointing at a dead URL.
+    #[test]
+    fn every_command_resolves_through_the_shared_transform() {
+        let api = api();
+        let at = |method: &str, id: Option<&str>| {
+            let (verb, url) = api.route(method, id).unwrap();
+            format!("{verb} {url}")
+        };
+        assert_eq!(at("core.status", None), "GET http://mixer:8080/api/v1/core/status");
+        assert_eq!(at("program.take", None), "POST http://mixer:8080/api/v1/program/take");
+        assert_eq!(at("program.revert", None), "POST http://mixer:8080/api/v1/program/revert");
+        assert_eq!(at("source.list", None), "GET http://mixer:8080/api/v1/sources");
+        assert_eq!(at("source.add", None), "POST http://mixer:8080/api/v1/sources");
+        assert_eq!(
+            at("source.remove", Some("cam1")),
+            "DELETE http://mixer:8080/api/v1/sources/cam1"
+        );
+        assert_eq!(
+            at("output.reconnect", Some("yt")),
+            "POST http://mixer:8080/api/v1/outputs/yt/reconnect"
+        );
+        assert_eq!(at("media.list", None), "GET http://mixer:8080/api/v1/media");
+        // A trailing slash on the base must not double up.
+        assert!(!at("core.info", None).contains("//api"));
+    }
+
+    /// Bodies are built from the api request types, so the JSON the CLI sends
+    /// is the JSON the schema describes.
+    #[test]
+    fn bodies_come_from_the_api_types() {
+        let take = TakeRequest {
+            source: Some("cam1".into()),
+            scene: None,
+            at_running_time_ms: Some(1500),
+        };
+        let v = serde_json::to_value(&take).unwrap();
+        assert_eq!(v["source"], "cam1");
+        assert_eq!(v["at_running_time_ms"], 1500);
+        // Omitted rather than null, so the server's defaults apply.
+        assert!(v.get("scene").is_none());
+
+        let add = AddSourceRequest {
+            id: None,
+            name: Some("Camera 2".into()),
+            uri: "rtmp://h/l/k".into(),
+            kind: Some("web".into()),
+            superimpose: Some("auto".into()),
+            params: Default::default(),
+        };
+        let v = serde_json::to_value(&add).unwrap();
+        assert!(v.get("id").is_none(), "a derived id is an absent key, not a null");
+        assert_eq!(v["kind"], "web");
+        assert_eq!(v["superimpose"], "auto");
+    }
+
+    #[test]
+    fn an_id_with_awkward_characters_cannot_change_the_route() {
+        assert_eq!(urlencode("cam-1"), "cam-1");
+        assert_eq!(urlencode("../status"), "..%2Fstatus");
+        assert_eq!(urlencode("a b"), "a%20b");
+        assert_eq!(urlencode("clip.mp4"), "clip.mp4");
+    }
+
+    /// A refusal is read out of the one error shape, so the operator sees the
+    /// mixer's own sentence and not an HTTP status code.
+    #[test]
+    fn a_refusal_shows_the_mixers_own_message() {
+        let body = serde_json::json!({
+            "error": {
+                "code": -32004,
+                "message": "there is no source 'cam9'. The sources: cam1, cam2. Use one of those.",
+                "data": { "valid": ["cam1", "cam2"], "retryable": false }
+            },
+            "trace_id": "0af7651916cd43dd8448eb211c80319c"
+        });
+        let message = refusal_message(&serde_json::to_string(&body).unwrap());
+        assert!(message.contains("cam9"), "{message}");
+        assert!(message.contains("cam1, cam2"), "{message}");
+
+        // A legacy route answers plain text, and that has to survive too, or a
+        // CLI pointed at an older mixer prints nothing useful.
+        assert_eq!(refusal_message("  no such source cam9  "), "no such source cam9");
+        // So does a body that is JSON but not an error envelope.
+        assert_eq!(refusal_message("{\"ok\":true}"), "{\"ok\":true}");
+    }
 }

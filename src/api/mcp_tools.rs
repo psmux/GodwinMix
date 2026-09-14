@@ -99,10 +99,8 @@ pub fn all_tools<C>(registry: &Registry<C>) -> Vec<Value> {
 /// Ordered by profile then by method name, so two runs of the same build give
 /// byte identical output and a client's prompt cache survives a reconnect.
 pub fn tools<C>(registry: &Registry<C>, profile: Profile) -> Vec<Value> {
-    let wanted = |tier: Tier| match (profile, tier) {
-        (_, Tier::Minimal) => true,
-        (Profile::Standard, Tier::Standard) => true,
-        _ => false,
+    let wanted = |tier: Tier| {
+        matches!((profile, tier), (_, Tier::Minimal) | (Profile::Standard, Tier::Standard))
     };
     let hot_names: Vec<&str> = registry
         .iter()

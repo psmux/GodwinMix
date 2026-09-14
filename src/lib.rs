@@ -111,7 +111,32 @@ enum Command {
         /// Bearer token for a mixer whose API requires one.
         #[arg(long, env = "GODWINMIX_TOKEN")]
         token: Option<String>,
+        /// How many tools to put in front of the agent.
+        ///
+        /// `standard` is twelve hot tools, about 4,000 tokens. `minimal` is
+        /// five, for a model with a small context; everything else is still
+        /// callable by name and findable with `search_tools`.
+        #[arg(long, env = "GODWINMIX_MCP_PROFILE", default_value = "standard")]
+        profile: McpProfile,
     },
+}
+
+/// Which MCP tool surface a client is shown. The same two names the
+/// `[[tokens]]` table uses, so a token's `profile` and this flag mean the
+/// same thing.
+#[derive(Copy, Clone, Debug, clap::ValueEnum)]
+enum McpProfile {
+    Standard,
+    Minimal,
+}
+
+impl From<McpProfile> for api::scope::Profile {
+    fn from(p: McpProfile) -> Self {
+        match p {
+            McpProfile::Standard => Self::Standard,
+            McpProfile::Minimal => Self::Minimal,
+        }
+    }
 }
 
 /// Parse the command line and do what it says. Both binaries call this.
@@ -137,10 +162,10 @@ pub async fn run() -> Result<()> {
             let token = token.or_else(|| config::env_var("TOKEN"));
             return ctl::run(&url, token.as_deref(), cmd).await;
         }
-        Some(Command::Mcp { url, token }) => {
+        Some(Command::Mcp { url, token, profile }) => {
             let url = url.or_else(|| config::env_var("URL")).unwrap_or_else(|| DEFAULT_URL.into());
             let token = token.or_else(|| config::env_var("TOKEN"));
-            return mcp::run(&url, token).await;
+            return mcp::run(&url, token, profile.into()).await;
         }
         None => {}
     }

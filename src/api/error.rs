@@ -173,7 +173,7 @@ impl RpcError {
             format!(
                 "there is no {kind} '{id}'. {} {}: {}. Use one of those.",
                 if valid.len() == 1 { "The only" } else { "The" },
-                if valid.len() == 1 { format!("{kind}") } else { format!("{kind}s") },
+                if valid.len() == 1 { kind.to_string() } else { format!("{kind}s") },
                 valid.join(", ")
             )
         };

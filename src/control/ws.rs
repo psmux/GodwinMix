@@ -260,10 +260,10 @@ impl Connection {
                 self.sources = status.sources.iter().map(|s| s.id.clone()).collect();
             }
             Event::Took { source, .. } => self.program = source.clone(),
-            Event::SourceStateChanged { source, .. } => {
-                if !self.sources.iter().any(|s| s == source) {
-                    self.sources.push(source.clone());
-                }
+            Event::SourceStateChanged { source, .. }
+                if !self.sources.iter().any(|s| s == source) =>
+            {
+                self.sources.push(source.clone());
             }
             _ => {}
         }
