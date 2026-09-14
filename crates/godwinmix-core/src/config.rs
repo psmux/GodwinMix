@@ -33,6 +33,11 @@ pub struct Config {
     pub media: MediaConfig,
     #[serde(default)]
     pub security: SecurityConfig,
+    /// The rules that stand in front of every take: the minimum hold, the
+    /// rate limit, the flash guard and the operator watchdog. See
+    /// `crate::safety` and `docs/reference/safety.md`.
+    #[serde(default)]
+    pub safety: crate::safety::SafetyConfig,
     #[serde(default)]
     pub browser: BrowserConfig,
     #[serde(default)]
@@ -129,6 +134,14 @@ pub struct TokenConfig {
     pub rehearsal: bool,
     #[serde(default)]
     pub profile: godwinmix_protocol::scope::Profile,
+    /// This credential belongs to an unattended agent. Its `safety` override
+    /// may then only make the core's limits harder, never easier.
+    #[serde(default)]
+    pub agent: bool,
+    /// `safety = { min_hold_ms = 2000 }` and the like, overriding `[safety]`
+    /// for this token alone.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub safety: Option<godwinmix_protocol::scope::TokenSafety>,
 }
 
 /// A token that names no scopes can read. Anything more has to be asked for,
@@ -1080,6 +1093,8 @@ impl Config {
                 confirm: t.confirm,
                 rehearsal: t.rehearsal,
                 profile: t.profile,
+                agent: t.agent,
+                safety: t.safety,
             })
             .collect();
         if let Some(secret) = self.token() {
@@ -1540,6 +1555,7 @@ sidecar = \"/opt/b\"\n").unwrap();
             codecs: Default::default(),
             media: Default::default(),
             security: Default::default(),
+            safety: Default::default(),
             browser: Default::default(),
             stall: Default::default(),
             sources: vec![],

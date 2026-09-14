@@ -905,6 +905,9 @@ impl Mixer {
         // encoder and the multiview split apart, so it is where the frame
         // counter and the interval histogram go. See `observe::metrics`.
         crate::observe::attach_programme(&program, &vraw_tee);
+        // And the telemetry probes, which read a subsampled luma grid off the
+        // same frames and cost one atomic load while nobody is subscribed.
+        crate::telemetry::attach(&vraw_tee);
 
         let venc = make(&sel.video_encode.element, "venc")?;
         crate::catalogue::apply::apply(&venc, &sel.video_encode.properties, &vars);
@@ -3422,6 +3425,7 @@ mod tests {
             codecs: Default::default(),
             media: Default::default(),
             security: Default::default(),
+            safety: Default::default(),
             browser: Default::default(),
             stall: Default::default(),
             sources: vec![],
@@ -3456,6 +3460,7 @@ mod tests {
             codecs: Default::default(),
             media: Default::default(),
             security: Default::default(),
+            safety: Default::default(),
             browser: Default::default(),
             stall: Default::default(),
             sources: vec![],
