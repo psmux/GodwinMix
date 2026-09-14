@@ -786,6 +786,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "gio"
+version = "0.21.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c5ff48bf600c68b476e61dc6b7c762f2f4eb91deef66583ba8bb815c30b5811a"
+dependencies = [
+ "futures-channel",
+ "futures-core",
+ "futures-io",
+ "futures-util",
+ "gio-sys",
+ "glib",
+ "libc",
+ "pin-project-lite",
+ "smallvec",
+]
+
+[[package]]
 name = "gio-sys"
 version = "0.21.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1038,6 +1055,7 @@ name = "godwinmix-core"
 version = "0.2.0"
 dependencies = [
  "anyhow",
+ "futures-util",
  "getrandom 0.3.4",
  "glib",
  "godwinmix-host",
@@ -1046,16 +1064,23 @@ dependencies = [
  "gstreamer-app",
  "gstreamer-audio",
  "gstreamer-controller",
+ "gstreamer-net",
  "gstreamer-pbutils",
  "gstreamer-video",
  "image",
  "libc",
  "parking_lot",
+ "rcgen",
+ "ring",
+ "rustls",
+ "rustls-pki-types",
  "schemars",
  "serde",
  "serde_json",
  "shell-words",
  "tokio",
+ "tokio-rustls",
+ "tokio-tungstenite 0.29.0",
  "toml 0.9.12+spec-1.1.0",
  "tracing",
  "tracing-subscriber",
@@ -1245,6 +1270,31 @@ dependencies = [
  "gstreamer-sys",
  "libc",
  "pkg-config",
+ "system-deps",
+]
+
+[[package]]
+name = "gstreamer-net"
+version = "0.24.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b24028ee09340d60e349dfa4c9d9d69112eaf93a3267a2c6cb180f8b39fb6c86"
+dependencies = [
+ "gio",
+ "glib",
+ "gstreamer",
+ "gstreamer-net-sys",
+]
+
+[[package]]
+name = "gstreamer-net-sys"
+version = "0.24.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "735f8b95e019c9831c42124fbe38a29f52639853ee19fbc94c9485ba971d3181"
+dependencies = [
+ "gio-sys",
+ "glib-sys",
+ "gstreamer-sys",
+ "libc",
  "system-deps",
 ]
 
@@ -2059,6 +2109,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2ee67f1008b1ba2321834326597b8e186293b049a023cdef258527550b9935b4"
 
 [[package]]
+name = "pem"
+version = "3.0.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1d30c53c26bc5b31a98cd02d20f25a7c8567146caf63ed593a9d87b2775291be"
+dependencies = [
+ "base64",
+ "serde_core",
+]
+
+[[package]]
 name = "percent-encoding"
 version = "2.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2488,6 +2548,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "rcgen"
+version = "0.13.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "75e669e5202259b5314d1ea5397316ad400819437857b90861765f24c4cf80a2"
+dependencies = [
+ "pem",
+ "ring",
+ "rustls-pki-types",
+ "time",
+ "yasna",
+]
+
+[[package]]
 name = "redox_syscall"
 version = "0.5.18"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2658,6 +2731,7 @@ version = "0.23.44"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6725596c3f2c3a0aef021139e145d4eafe314a6623e4680ca83852b2c67ab2ba"
 dependencies = [
+ "log",
  "once_cell",
  "ring",
  "rustls-pki-types",
@@ -3986,6 +4060,15 @@ name = "writeable"
 version = "0.6.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3ad82d2a33cdc9674dc7465672f271e096168fcdbe0f799d9e6db8c5892679dc"
+
+[[package]]
+name = "yasna"
+version = "0.5.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e17bb3549cc1321ae1296b9cdc2698e2b6cb1992adfa19a8c72e5b7a738f44cd"
+dependencies = [
+ "time",
+]
 
 [[package]]
 name = "yoke"
