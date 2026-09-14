@@ -95,9 +95,22 @@ export class Client {
     }
   }
 
-  /** Render at flush only. Returns an unsubscribe function. */
+  /**
+   * Render at flush. Returns an unsubscribe function.
+   *
+   * The callback is also run once, straight away, with whatever state is
+   * already known. A panel mounted mid session (a plugin's, or one the
+   * operator just added to a slot) would otherwise sit blank until the next
+   * event, which on a quiet mixer can be a long time.
+   */
   onRender(fn) {
-    return this.store.subscribe(fn);
+    const off = this.store.subscribe(fn);
+    try {
+      fn(this.store.state);
+    } catch (e) {
+      console.error("panel threw on its first render", e);
+    }
+    return off;
   }
 
   // ---------------------------------------------------------------- calls
