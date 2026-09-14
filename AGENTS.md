@@ -46,8 +46,10 @@ cargo test -p godwinmix-sdk --features gst   # and the GStreamer backed half
 | `crates/godwinmix-core/` | the mixing engine as a library: pipeline, sources, outputs, filters, scenes, caps, the codec catalogue |
 | `crates/godwinmix-host/` | the tier 2 sidecar host: spawning plugins, the core side of the handshake. Mostly empty today |
 | `crates/godwinmix-sdk/` | what a Rust plugin author depends on: the manifest, the JSON lines loop, pacing, the media writers |
+| `crates/godwinmix-wasm/` | the tier W host: wasmtime with the component model, behind the binary's `wasm` feature. Optional, off by default |
+| `crates/godwinmix-sdk-wasm/` | what a WebAssembly plugin author depends on. Outside the workspace: built for `wasm32-wasip2` only, by `dev/build-wasm.sh` |
 | `crates/godwinmix/` | the binaries (`godwinmix` and `gmx`), the control server, the CLI, the MCP server |
-| `templates/` | five plugin templates, one per language, each a working source plugin |
+| `templates/` | six plugin templates, one per language. Five are source plugins; `wasm/` is a sandboxed service |
 | `examples/` | `zero-dep-source.py`, a whole plugin in Python with no imports outside the standard library |
 | `skills/` | the `godwinmix-operate` and `godwinmix-develop` skills, installed by `gmx skill install` |
 | `docs/` | tutorials, how to guides, reference, explanation. Four kinds, kept apart |

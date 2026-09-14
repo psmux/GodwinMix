@@ -15,6 +15,10 @@
 set -eu
 
 root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+# `wasm` is not in the default list: this script drives a template as a source
+# plugin, with a real handshake and a Matroska cluster read back off its
+# stdout, and a tier W template is a service with no media at all. Its own
+# `check` script and `gmx plugin test` are what cover it.
 templates=${*:-rust python node go shell}
 python=${GMX_PYTHON:-python3}
 work=$(mktemp -d)
@@ -31,6 +35,7 @@ fill() {
     # The placeholder set. Keep this in step with templates/README.md.
     sed -e "s/{{name}}/$name/g" \
         -e "s/{{name_snake}}/my_cam/g" \
+        -e "s/{{kind}}/source/g" \
         -e "s/{{description}}/A source that shows a test picture./g" \
         -e "s/{{author}}/A Person/g" \
         -e "s/{{license}}/MIT/g" \
