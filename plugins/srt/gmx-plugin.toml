@@ -38,6 +38,10 @@ skill = "skills/source/SKILL.md"
 [provides.designer]
 icon = "designer/icon.svg"
 
+# `gmx plugin add ./plugins/srt` runs this when bin/gmx-srt is not there.
+# The command runs in the directory you named, not in the installed copy:
+# this plugin is a workspace member and its dependencies are path
+# dependencies two levels up, so the copy is not a tree cargo can build.
 [build]
-command = "cargo build --release -p gmx-srt"
+command = "sh build"
 output = "bin/gmx-srt"

@@ -105,6 +105,57 @@ jobs:
           path: bench/results/
           retention-days: 90
 
+  soak:
+    name: soak
+    runs-on: ubuntu-latest
+    # An hour of soak, plus the release build in front of it. The build is
+    # cached most nights and is not, the night after a dependency moves.
+    timeout-minutes: 100
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+
+      - name: GStreamer
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev \
+            libgstreamer-plugins-bad1.0-dev gstreamer1.0-plugins-base gstreamer1.0-plugins-good \
+            gstreamer1.0-plugins-bad gstreamer1.0-plugins-ugly gstreamer1.0-libav gstreamer1.0-tools
+
+      # An hour of the same round over and over: a source added and removed, a
+      # take between two scenes with a transition, an MJPEG stream and a PCM
+      # stream opened and closed, a plugin installed and removed. It fails on a
+      # programme stall over 34 ms, on resident memory 10 percent above the
+      # warm up sample, or on descriptors or threads that climb. The script
+      # builds in release itself, so there is no Build step here.
+      - name: dev/soak.sh --minutes 60
+        env:
+          LIBGL_ALWAYS_SOFTWARE: "1"
+          GST_GL_DISABLED: "1"
+        run: |
+          set -o pipefail
+          dev/soak.sh --minutes 60 --machine ci-linux 2>&1 | tee soak.log
+
+      # The summary table and the phase table, not the record. An hour at a
+      # round every five seconds is seven hundred samples, and the record
+      # carrying all of them goes to the artifact where something can read it.
+      - name: The numbers
+        if: always()
+        run: |
+          {
+            echo '```'
+            tail -40 soak.log || echo "the soak wrote nothing"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: soak-results
+          path: bench/results/
+          retention-days: 90
+
   corpus:
     name: session corpus
     runs-on: ubuntu-latest

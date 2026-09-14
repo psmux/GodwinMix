@@ -257,7 +257,7 @@ async fn add(call: Call, params: Value) -> Result<Value, RpcError> {
     // A source the mixer does not have draws nothing, so it is refused here
     // with the ids that would have worked.
     if let Content::Source { source } = &content {
-        let known = call.source_ids().await;
+        let known = call.source_ids().await?;
         if !known.contains(source) {
             return Err(RpcError::not_found("source", source, &known));
         }

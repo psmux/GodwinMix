@@ -17,6 +17,10 @@ process = "per-instance"
 [run]
 bin = { "linux-x86_64" = "bin/gmx-file-record", "linux-aarch64" = "bin/gmx-file-record", "linux-armv7" = "bin/gmx-file-record", "macos-aarch64" = "bin/gmx-file-record", "macos-x86_64" = "bin/gmx-file-record" }
 
+# `gmx plugin add ./plugins/file-record` runs this when bin/gmx-file-record is not there.
+# The command runs in the directory you named, not in the installed copy:
+# this plugin is a workspace member and its dependencies are path
+# dependencies two levels up, so the copy is not a tree cargo can build.
 [build]
 command = "sh build"
 output = "bin/gmx-file-record"

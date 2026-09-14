@@ -76,23 +76,23 @@ pub const Z_RETIRED_TOP: u32 = 99;
 pub const Z_LIVE: u32 = 1000;
 
 /// How long to wait for a slot's tee pad to reach an idle point on a cache
-/// miss.
+/// miss. The figure the filters and the proxy swaps already use.
 ///
-/// Half a second, where the filters and the proxy swaps use five, and the
-/// difference is where this wait happens. An IDLE probe fires inline the
-/// moment the pad is not pushing, so a healthy source of any frame rate
-/// answers immediately; the only way to wait at all is a push that has not
-/// come back, which means the thing downstream of that source is stuck. This
-/// wait is on the mixer loop, in the middle of a take, so five seconds of it
-/// is five seconds of the mixer answering nothing.
+/// Five seconds looks far too long for something that happens on the mixer
+/// loop, and it was tried at half a second. That made everything worse, which
+/// is worth recording here so nobody tries it again. A bind that gives up
+/// leaves the slot unbound; the visibility tick reapplies the whole scene
+/// twice a second; the next apply tries the same bind again. A short deadline
+/// turns one slow pad into half a second of the mixer loop every half second,
+/// for ever. Measured over fourteen add and remove cycles against a running
+/// programme, removing one `videotestsrc` went from a worst case of 300 ms at
+/// five seconds to a worst case of 5.4 s at half a second, and in a soak it
+/// ran away to 74 s.
 ///
-/// The trade is worth naming. A source whose push really does take longer than
-/// this loses its item from the scene, with a warning, and the compositor goes
-/// on drawing everything else. That is the safe failure: a scene with a hole
-/// in it beats a mixer that has stopped. Fifteen frames at 30 fps is already
-/// far longer than any push on a working pipeline, including a 4K decode on a
-/// Pi.
-const BLOCK_TIMEOUT: Duration = Duration::from_millis(500);
+/// The right fix is not a shorter deadline. It is to prepare and retire a
+/// branch off the mixer loop and keep only the relink inside the blocked
+/// interval, which is a larger change than a constant.
+const BLOCK_TIMEOUT: Duration = Duration::from_secs(5);
 
 /// Whether the source behind a placement is heard.
 ///

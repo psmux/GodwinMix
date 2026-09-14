@@ -20,6 +20,10 @@ id = "wipe"
 capabilities = ["health"]
 settings = "schemas/wipe.json"
 
+# `gmx plugin add ./plugins/wipe` runs this when bin/gmx-wipe is not there.
+# The command runs in the directory you named, not in the installed copy:
+# this plugin is a workspace member and its dependencies are path
+# dependencies two levels up, so the copy is not a tree cargo can build.
 [build]
-command = "cargo build --release -p gmx-wipe"
+command = "sh build"
 output = "bin/gmx-wipe"

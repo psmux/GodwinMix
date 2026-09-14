@@ -253,7 +253,7 @@ async fn create_from(call: Call, params: Value) -> Result<Value, RpcError> {
     }
     // A source the mixer does not have would be a scene that draws nothing, so
     // it is refused here with the ids that would have worked.
-    let known = call.source_ids().await;
+    let known = call.source_ids().await?;
     if let Some(missing) = req.sources.iter().find(|s| !known.contains(s)) {
         return Err(RpcError::not_found("source", missing, &known));
     }
