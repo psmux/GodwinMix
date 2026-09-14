@@ -9,7 +9,7 @@
 use crate::caps::CanvasCaps;
 use crate::mixer::slots::{Placement, PlacementAudio};
 use crate::scene::document::{
-    Align, Audio, Collection, Content, Fit, Item, Override, Scene, Transform,
+    Align, Audio, Collection, Content, Fit, Item, Override, Scene,
 };
 use crate::scene::geometry;
 use crate::scene::id::Id;
