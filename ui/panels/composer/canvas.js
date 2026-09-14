@@ -127,7 +127,7 @@ export class ComposerCanvas {
       this.pendingFrame = null;
       if (!this.ctx) this.resize();
       if (!this.ctx) return;
-      this.timings.measure("redraw", () => this.paintNow());
+      this.paintNow();
     });
   }
 
@@ -300,7 +300,9 @@ export class ComposerCanvas {
       const seq = this.prediction.predict(id, out.props);
       this.send(id, out.props, seq);
     }
-    this.paintNow();
+    // Measured here and not in the animation frame: this is the redraw the
+    // hand is waiting for, and it is the number 07 Phase 3 asks about.
+    this.timings.measure("redraw", () => this.paintNow());
   }
 
   /**
