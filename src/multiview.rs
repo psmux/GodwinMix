@@ -112,6 +112,26 @@ pub enum Demand {
 
 type DemandSink = Arc<dyn Fn(Demand) + Send + Sync>;
 
+/// What the mosaic is doing, for `/metrics` and for anybody who wants to know
+/// without holding a subscription. `gmx_multiview_subscribers` is
+/// [`MultiviewStats::subscribers`] and `gmx_multiview_fps` is
+/// [`MultiviewStats::fps`]; both are zero when no mosaic is running, which is
+/// the honest answer rather than a stale last value.
+#[derive(Debug, Clone, Copy, Default, PartialEq)]
+pub struct MultiviewStats {
+    /// Whether a client is allowed to ask at all, `[multiview] enabled`.
+    pub enabled: bool,
+    /// Whether a pipeline exists right now.
+    pub built: bool,
+    pub subscribers: u64,
+    /// Frames per second over the life of the current pipeline.
+    pub fps: f64,
+    pub width: i32,
+    pub height: i32,
+    /// Frames published since the current pipeline was built.
+    pub frames: u64,
+}
+
 struct Shared {
     cfg: MultiviewConfig,
     /// Stable across rebuilds, so a client holding a receiver keeps it when
@@ -282,6 +302,22 @@ impl MultiviewHandle {
 
     pub fn shape(&self) -> Option<MultiviewShape> {
         *self.shared.shape.lock()
+    }
+
+    /// One read for everything a metrics endpoint wants, so `/metrics` takes a
+    /// snapshot rather than four separate atomics that could disagree with
+    /// each other between lines.
+    pub fn stats(&self) -> MultiviewStats {
+        let shape = self.shape();
+        MultiviewStats {
+            enabled: self.enabled(),
+            built: self.is_built(),
+            subscribers: self.subscribers(),
+            fps: self.fps(),
+            width: shape.map(|s| s.width).unwrap_or(0),
+            height: shape.map(|s| s.height).unwrap_or(0),
+            frames: self.shared.frames_out.load(Ordering::Relaxed),
+        }
     }
 
     /// Ask for the mosaic and hold it up for as long as the returned guard
@@ -961,6 +997,12 @@ mod tests {
         assert!(mv.is_built());
         assert!(mv.wants_thumbs());
         assert!(mv.fps() > 0.0, "the fps metric never moved");
+        // What /metrics will read, in one snapshot.
+        let stats = mv.stats();
+        assert!(stats.enabled && stats.built);
+        assert_eq!(stats.subscribers, 1);
+        assert_eq!((stats.width, stats.height), (320, 180));
+        assert!(stats.frames > 0 && stats.fps > 0.0);
 
         drop(sub);
         assert_eq!(mv.subscribers(), 0);
@@ -976,6 +1018,9 @@ mod tests {
         }
         assert_eq!(mv.live_pipelines(), 0, "the mosaic outlived its last subscriber");
         assert!(!mv.is_built());
+        // And the metrics go to zero rather than keeping the last value.
+        let stats = mv.stats();
+        assert_eq!((stats.subscribers, stats.fps, stats.built), (0, 0.0, false));
 
         let _ = handle.send(crate::mixer::Command::Shutdown);
         tokio::task::spawn_blocking(move || thread.join()).await.unwrap().unwrap();
