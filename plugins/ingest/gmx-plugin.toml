@@ -1,0 +1,81 @@
+# ingest: GodwinMix as a server.
+#
+# Everywhere else the mixer dials out. Here it waits, and a phone, an OBS on the
+# other laptop, a hardware encoder in the rack or a guest in a browser dials in.
+#
+# The SRT listener is not here. `srt/source` is one already, and `listener` is
+# its default mode; duplicating it would mean two places to fix a bug. The RTSP
+# server is not here either, and docs/how-to/receive-a-phone-or-obs-stream.md
+# says what it would cost.
+#
+# Note on the core as it stands: a `device` provide is parsed and then registers
+# nothing (crates/godwinmix-core/src/plugin/loader.rs interns only sources),
+# nothing calls `discover`, a plugin's `event` notification reaches a ring
+# buffer with no reader, and `tool.call` is not a registered method. So
+# ingest/discover and the add_publishers tool are written to the contract and
+# dormant. ingest/rtmp, which owns its own port, works today and is the path the
+# how to page leads with. src/device.rs names the four gaps precisely.
+
+[plugin]
+name = "ingest"
+version = "0.1.0"
+api = 1
+description = "GodwinMix as a server: an RTMP listener written in Rust so a phone or an OBS can publish straight to the mixer, a WHIP endpoint a browser can publish to with nothing but a URL, and a device provide that reports every publisher as a source ready to add."
+license = "Apache-2.0"
+authors = ["GodwinMix"]
+repository = "https://github.com/psmux/godwinmix"
+platforms = ["linux-x86_64", "linux-aarch64", "macos-aarch64", "macos-x86_64", "windows-x86_64"]
+placements = ["sidecar", "node"]
+process = "per-instance"
+
+[run]
+bin = { "linux-x86_64" = "bin/gmx-ingest", "linux-aarch64" = "bin/gmx-ingest", "macos-aarch64" = "bin/gmx-ingest", "macos-x86_64" = "bin/gmx-ingest", "windows-x86_64" = "bin/gmx-ingest.exe" }
+
+[[provides]]
+kind = "source"
+id = "rtmp"
+# No uri_schemes: rtmp:// belongs to the built in rtmp/source, which dials out.
+# This one listens, and there is no URL that means "listen here".
+media = { video = "container", audio = "container", alpha = false, thumb = true }
+transports = ["container"]
+capabilities = ["restart-in-place", "health"]
+latency_ms = 0
+settings = "schemas/rtmp.json"
+skill = "skills/rtmp/SKILL.md"
+
+[provides.designer]
+icon = "designer/icon.svg"
+
+[[provides]]
+kind = "source"
+id = "whip"
+media = { video = "container", audio = "container", alpha = false, thumb = true }
+transports = ["container"]
+capabilities = ["restart-in-place", "health", "latency-report"]
+latency_ms = 100
+settings = "schemas/whip.json"
+skill = "skills/whip/SKILL.md"
+
+[[provides]]
+kind = "device"
+id = "discover"
+# RTMP publishers announce themselves by connecting, so there is nothing to
+# browse for: the listener is the discovery. The key is declared because the
+# manifest requires one and because a later mDNS announcement of the ingest
+# address would go here.
+discovery = { mdns = ["_rtmp._tcp"] }
+settings = "schemas/discover.json"
+skill = "skills/discover/SKILL.md"
+
+[[tools]]
+name = "add_publishers"
+description = "Make the mixer's sources match whoever is publishing RTMP to it right now: add an ingest/rtmp source for each new publisher and remove the ones this tool added whose publisher has gone. Use after a guest connects, or on a timer, when the operator wants publishers to appear by themselves. Example: add_publishers {\"dry_run\": true} answers {add: [\"live-phone\"], remove: [], publishers: [\"live-phone\"]} and changes nothing."
+input = "schemas/tools/add_publishers.json"
+output = "schemas/tools/add_publishers.out.json"
+annotations = { readOnlyHint = false, destructiveHint = false, idempotentHint = true, openWorldHint = true }
+user_invocable = true
+model_invocable = true
+
+[build]
+command = "cargo build --release -p gmx-ingest"
+output = "bin/gmx-ingest"
