@@ -6,7 +6,7 @@
 use anyhow::{Context, Result};
 use gstreamer as gst;
 use gstreamer::prelude::*;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU8, Ordering};
 use std::sync::mpsc::sync_channel;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
@@ -77,6 +77,55 @@ pub fn queue_level_secs(q: &gst::Element) -> f64 {
     q.property::<u64>("current-level-time") as f64 / 1e9
 }
 
+/// What happened to a timed out `with_pad_blocked`.
+///
+/// The distinction is the whole point of the type. A pad that never went idle
+/// means nothing ran and nothing changed, so the caller can refuse the request
+/// and leave the pipeline exactly as it found it. A closure that started and
+/// has not come back means the pipeline is mid relink and the caller must not
+/// assume either shape.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BlockTimeout {
+    /// The pad never reached an idle point. The work was cancelled before it
+    /// could run and the pipeline is untouched.
+    Cancelled,
+    /// The work had already begun when the wait ran out. It will finish on the
+    /// streaming thread; the pipeline is in neither the old shape nor the new.
+    AlreadyRunning,
+}
+
+impl std::fmt::Display for BlockTimeout {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Cancelled => write!(
+                f,
+                "the pad never reached an idle point, so the change was cancelled and \
+                 nothing in the pipeline was touched. Try again"
+            ),
+            Self::AlreadyRunning => write!(
+                f,
+                "the change had already started on the streaming thread when the wait ran \
+                 out. Read the pipeline back before deciding what to do"
+            ),
+        }
+    }
+}
+
+impl std::error::Error for BlockTimeout {}
+
+/// Probe states. The closure and the caller race for `IDLE`: whoever wins
+/// decides whether the work runs at all.
+const BLOCK_IDLE: u8 = 0;
+const BLOCK_RUNNING: u8 = 1;
+const BLOCK_DONE: u8 = 2;
+const BLOCK_CANCELLED: u8 = 3;
+
+/// How long to keep waiting once the closure is known to have started.
+///
+/// A relink that has begun cannot be abandoned: the pad's peer may already be
+/// gone. Waiting a little longer is the only thing that can end well.
+const BLOCK_GRACE: Duration = Duration::from_secs(2);
+
 /// Run `f` while `pad` is blocked, then unblock.
 ///
 /// This is the standard GStreamer idiom for relinking a live pipeline: install
@@ -84,26 +133,63 @@ pub fn queue_level_secs(q: &gst::Element) -> f64 {
 /// in flight, and remove the probe to resume. The work must happen inside the
 /// callback. Unblocking a pad whose peer has been removed makes the upstream
 /// queue fail with `not-linked`, which is why relinking cannot be deferred.
+///
+/// The probe id is kept. Without it a timed out call left the probe installed,
+/// and a pad that went idle a minute later ran the closure and rewired the
+/// pipeline long after the caller had been told the change failed and had moved
+/// on. The caller's request is cancelled here, under the same atomic the
+/// closure checks, so a late probe finds the work already claimed and does
+/// nothing.
 pub fn with_pad_blocked<F>(pad: &gst::Pad, timeout: Duration, f: F) -> Result<()>
 where
     F: FnOnce() + Send + 'static,
 {
     let (tx, rx) = sync_channel::<()>(1);
     let cell = Mutex::new(Some(f));
+    let state = Arc::new(AtomicU8::new(BLOCK_IDLE));
+    let claim = state.clone();
 
     // A `None` return is not a failure. It means the pad was already idle, so
     // the callback ran inline on this thread and removed itself before
     // `add_probe` returned. Either way the channel tells us the work is done.
-    let _ = pad.add_probe(gst::PadProbeType::IDLE, move |_pad, _info| {
-        if let Some(f) = cell.lock().expect("probe mutex poisoned").take() {
-            f();
+    let id = pad.add_probe(gst::PadProbeType::IDLE, move |_pad, _info| {
+        // Whoever claims IDLE owns the work. A caller that gave up has already
+        // written CANCELLED here, so this leaves without touching anything.
+        if claim
+            .compare_exchange(BLOCK_IDLE, BLOCK_RUNNING, Ordering::SeqCst, Ordering::SeqCst)
+            .is_ok()
+        {
+            if let Some(f) = cell.lock().expect("probe mutex poisoned").take() {
+                f();
+            }
+            claim.store(BLOCK_DONE, Ordering::SeqCst);
             let _ = tx.send(());
         }
         gst::PadProbeReturn::Remove
     });
 
-    rx.recv_timeout(timeout)
-        .context("timed out waiting for pad to reach an idle point")
+    if rx.recv_timeout(timeout).is_ok() {
+        return Ok(());
+    }
+
+    if state
+        .compare_exchange(BLOCK_IDLE, BLOCK_CANCELLED, Ordering::SeqCst, Ordering::SeqCst)
+        .is_ok()
+    {
+        if let Some(id) = id {
+            pad.remove_probe(id);
+        }
+        return Err(BlockTimeout::Cancelled)
+            .with_context(|| format!("blocking {} to change the pipeline", pad.name()));
+    }
+
+    // The closure is on the streaming thread with the pad's peer possibly
+    // already unlinked. Give it the grace period before saying so.
+    if rx.recv_timeout(BLOCK_GRACE).is_ok() {
+        return Ok(());
+    }
+    Err(BlockTimeout::AlreadyRunning)
+        .with_context(|| format!("blocking {} to change the pipeline", pad.name()))
 }
 
 /// Ask the encoder upstream of `pad` for an immediate keyframe.
@@ -723,6 +809,92 @@ mod tests {
             .unwrap();
         }
         assert_eq!(count.load(std::sync::atomic::Ordering::SeqCst), 5);
+    }
+
+    /// A pad that never goes idle used to leave the probe installed, so the
+    /// closure ran whenever the pipeline happened to quieten down: minutes
+    /// later, long after the caller had been told the change failed. The work
+    /// is cancelled and the probe taken off, and a pad that goes idle
+    /// afterwards changes nothing.
+    #[test]
+    fn a_timed_out_block_cancels_the_work_instead_of_running_it_later() {
+        init();
+        use std::sync::atomic::AtomicBool;
+        // A real pipeline whose sink is stuck inside a push. A src pad in the
+        // middle of `gst_pad_push` never reaches an idle point, which is the
+        // shape of a busy programme without having to build one.
+        let pipeline = gst::Pipeline::with_name("busy");
+        let src = make("videotestsrc", "busy-src").unwrap();
+        src.set_property("is-live", false);
+        let q = queue_time("q", 1.0, false).unwrap();
+        let sink = make("fakesink", "busy-sink").unwrap();
+        sink.set_property("sync", false);
+        pipeline.add_many([&src, &q, &sink]).unwrap();
+        gst::Element::link_many([&src, &q, &sink]).unwrap();
+
+        let stuck = std::sync::Arc::new(AtomicBool::new(false));
+        let release = std::sync::Arc::new(AtomicBool::new(false));
+        let (s, r) = (stuck.clone(), release.clone());
+        sink.static_pad("sink")
+            .unwrap()
+            .add_probe(gst::PadProbeType::BUFFER, move |_p, _i| {
+                s.store(true, std::sync::atomic::Ordering::SeqCst);
+                while !r.load(std::sync::atomic::Ordering::SeqCst) {
+                    std::thread::sleep(Duration::from_millis(5));
+                }
+                gst::PadProbeReturn::Ok
+            })
+            .unwrap();
+        pipeline.set_state(gst::State::Playing).unwrap();
+        for _ in 0..200 {
+            if stuck.load(std::sync::atomic::Ordering::SeqCst) {
+                break;
+            }
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        assert!(stuck.load(std::sync::atomic::Ordering::SeqCst), "the sink never took a buffer");
+
+        let pad = q.static_pad("src").unwrap();
+        let ran = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let r = ran.clone();
+        let err = with_pad_blocked(&pad, Duration::from_millis(200), move || {
+            r.store(true, std::sync::atomic::Ordering::SeqCst);
+        })
+        .expect_err("a pad that never goes idle must not report success");
+        let timeout = err
+            .downcast_ref::<BlockTimeout>()
+            .copied()
+            .expect("the failure says which kind of timeout it was");
+        assert_eq!(timeout, BlockTimeout::Cancelled, "nothing ran, so nothing changed");
+        assert!(!ran.load(std::sync::atomic::Ordering::SeqCst));
+
+        // Let the pipeline run again. A cancelled closure must stay cancelled,
+        // however idle the pad becomes afterwards.
+        release.store(true, std::sync::atomic::Ordering::SeqCst);
+        std::thread::sleep(Duration::from_millis(300));
+        assert!(
+            !ran.load(std::sync::atomic::Ordering::SeqCst),
+            "the abandoned closure ran after the caller gave up"
+        );
+
+        // And the pad is clean: the next caller still gets its work done.
+        let after = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let a = after.clone();
+        with_pad_blocked(&pad, Duration::from_secs(5), move || {
+            a.store(true, std::sync::atomic::Ordering::SeqCst);
+        })
+        .expect("the pad should still be usable after a cancelled block");
+        assert!(after.load(std::sync::atomic::Ordering::SeqCst));
+        let _ = pipeline.set_state(gst::State::Null);
+    }
+
+    #[test]
+    fn the_two_timeouts_say_different_things() {
+        assert_ne!(
+            BlockTimeout::Cancelled.to_string(),
+            BlockTimeout::AlreadyRunning.to_string()
+        );
+        assert!(BlockTimeout::Cancelled.to_string().contains("nothing in the pipeline was touched"));
     }
 
     fn video_caps(colorimetry: Option<&str>, height: i32) -> gst::Caps {
