@@ -1011,7 +1011,7 @@ async fn serve_ws(socket: WebSocket, app: AppState) {
 
             ev = events.recv() => match ev {
                 Ok(ev) => {
-                    let Ok(json) = serde_json::to_string(&ev) else { continue };
+                    let Ok(json) = serde_json::to_string(&ev.event) else { continue };
                     if tx.send(Message::Text(json.into())).await.is_err() {
                         break;
                     }

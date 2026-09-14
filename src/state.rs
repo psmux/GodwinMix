@@ -1,257 +1,68 @@
-//! Observable state shared between the mixer and the control plane.
+//! The event bus and the liveness tracking behind it.
 //!
-//! Everything here is plain data that serialises to JSON. The UI is driven
-//! entirely by `MixerStatus` snapshots plus an `Event` stream, so a browser
-//! that reconnects mid-broadcast can rebuild its whole view from one snapshot.
+//! The data types that used to live here (`MixerStatus`, `Event`, every status
+//! record) moved to `crate::api::types`, so that one module is the single
+//! source of truth for the wire format and can carry `schemars` derives. They
+//! are re-exported here unchanged, so `crate::state::MixerStatus` still
+//! resolves and no caller had to be rewritten.
+//!
+//! What stays is the machinery: the broadcast bus that stamps a sequence
+//! number on every event, and `SourceHealth`, which is read off a streaming
+//! thread and must never block.
 
-use serde::{Deserialize, Serialize};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::Instant;
+use tokio::sync::broadcast;
 
-pub type SourceId = String;
-pub type OutputId = String;
+pub use crate::api::types::*;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "lowercase")]
-pub enum SourceState {
-    /// Pipeline is up but no media has arrived yet.
-    Connecting,
-    /// Buffers arriving within the stall timeout.
-    Live,
-    /// Was live, then went quiet. Its program pad is held at alpha 0 so the
-    /// slate shows through rather than a frozen frame.
-    Stalled,
-    /// The input pipeline errored. A retry is scheduled.
-    Failed,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "lowercase")]
-pub enum OutputState {
-    Connecting,
-    Live,
-    Reconnecting,
-    Failed,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct SourceStatus {
-    pub id: SourceId,
-    pub name: String,
-    pub uri: String,
-    pub state: SourceState,
-    pub has_video: bool,
-    pub has_audio: bool,
-    /// Index into the multiview grid, or None while the source has no cell.
-    pub cell: Option<u32>,
-    /// Milliseconds since the last video buffer, or None if none has arrived.
-    pub video_idle_ms: Option<u64>,
-    /// Same for audio. `None` here while `has_audio` is true means the source
-    /// advertised an audio track that never produced a decoded sample.
-    pub audio_idle_ms: Option<u64>,
-    /// True when this website source is running with its media decoded outside
-    /// the browser and the page drawn over it. False covers both a source that
-    /// never asked for it and one that asked and could not get it, because the
-    /// page turned out to have no address worth handing over.
-    #[serde(default)]
-    pub superimposed: bool,
-    /// Where this source's sounds sit against each other. `None` for anything
-    /// but a superimposed source, because everything else arrives already
-    /// mixed and there is nothing to balance. Absent rather than null in the
-    /// JSON, so a snapshot written by an older build still parses.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub audio: Option<SourceAudio>,
-    /// The operator's fader for this source, 0.0 silent through 1.0 unity to a
-    /// ceiling of 10.0. Read back off the volume element rather than remembered,
-    /// so what the UI shows is what the pipeline is doing.
-    #[serde(default = "unity_gain")]
-    pub gain: f64,
-    /// Muted by the operator. Held apart from the fader so that unmuting returns
-    /// the source to where it was rather than to unity.
-    #[serde(default)]
-    pub muted: bool,
-    /// True when this source can be scrubbed. A file can be. A camera, an RTMP
-    /// feed or a page cannot, and asking one to is a mistake worth refusing
-    /// rather than quietly doing nothing.
-    #[serde(default)]
-    pub seekable: bool,
-    /// Where this source has got to, and how long it runs, in milliseconds.
-    /// `None` on anything not seekable, and on a seekable source whose duration
-    /// the demuxer has not worked out yet.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub position_ms: Option<u64>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub duration_ms: Option<u64>,
-}
-
-/// A fader that has never been moved sits at unity. Spelled out as a serde
-/// default so a snapshot written before the fader existed parses as a desk with
-/// every fader up, which is where those sources actually were.
-pub fn unity_gain() -> f64 {
-    1.0
-}
-
-/// The gains a superimposed source is currently running with.
+/// One event with the sequence number it was published under.
 ///
-/// 1.0 is unity, 0.0 is silent, and the ceiling is 10.0. Reported rather than
-/// remembered: these are read back off the volume elements, so what the UI
-/// shows is what the pipeline is doing, including any clamping.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct SourceAudio {
-    /// The page's own sound, which is the commentary and whatever the page
-    /// plays itself.
-    pub page: f64,
-    /// One per video the mixer decodes underneath, in the order the page
-    /// handed them over.
-    pub media: Vec<f64>,
+/// Every subscriber sees the same number for the same event, which is what
+/// lets a client say "I have everything up to 4821" and lets the core answer
+/// `event/resync {from_seq}` when it cannot.
+#[derive(Debug, Clone)]
+pub struct Envelope {
+    pub seq: u64,
+    pub event: Event,
 }
 
-/// What a source's audio controls read back as, which is what the audio
-/// endpoint answers with.
+/// The append only event stream.
 ///
-/// Wider than `SourceAudio` because the fader and the mute apply to every
-/// source, while the page and media balance belongs only to a superimposed one.
-/// Every number here is read off the elements after the request landed, so a
-/// request whose gain was clamped answers with the gain that took effect.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct SourceAudioState {
-    pub gain: f64,
-    pub muted: bool,
-    /// Absent on anything but a superimposed source, which is the only kind
-    /// with separate sounds to balance.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub page: Option<f64>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub media: Option<Vec<f64>>,
+/// A `tokio::broadcast` under a counter. The counter is bumped by the sender,
+/// once per event, so the sequence is a property of the stream rather than of
+/// any one reader. Sending never blocks and never fails when nobody is
+/// listening, which matters because most of the call sites are on the mixer
+/// thread and a slow UI must not be able to stall a take.
+#[derive(Debug, Clone)]
+pub struct EventBus {
+    tx: broadcast::Sender<Envelope>,
+    seq: Arc<AtomicU64>,
 }
 
-/// Where a seekable source has got to, which is what the seek endpoint answers
-/// with.
-///
-/// Both numbers are read back off the pipeline after the seek has landed, not
-/// taken from the request. A seek snaps to a key unit, so the frame an operator
-/// asked for and the frame they got are rarely the same millisecond, and a
-/// scrubber drawn from the request would sit a little away from the picture.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct SourcePositionState {
-    pub position_ms: u64,
-    /// Absent while the demuxer has not worked the duration out yet.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub duration_ms: Option<u64>,
-}
+impl EventBus {
+    pub fn new(capacity: usize) -> Self {
+        let (tx, _) = broadcast::channel(capacity);
+        Self { tx, seq: Arc::new(AtomicU64::new(0)) }
+    }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct OutputStatus {
-    pub id: OutputId,
-    pub uri_host: String,
-    pub state: OutputState,
-    pub reconnects: u32,
-    /// Seconds of encoded data waiting in the pre-muxer queue. A number that
-    /// climbs and stays high means the destination cannot keep up.
-    pub queue_secs: f64,
-}
+    /// Publish one event. The returned count is how many receivers took it,
+    /// kept so that call sites reading `let _ = bus.send(..)` still compile.
+    pub fn send(&self, event: Event) -> Result<usize, broadcast::error::SendError<Envelope>> {
+        let seq = self.seq.fetch_add(1, Ordering::Relaxed) + 1;
+        self.tx.send(Envelope { seq, event })
+    }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct MultiviewStatus {
-    pub enabled: bool,
-    pub width: i32,
-    pub height: i32,
-    pub cols: u32,
-    pub rows: u32,
-    /// Cell index to source id, in reading order. Cell 0 is the program return
-    /// when it is enabled.
-    pub cells: Vec<CellAssignment>,
-    /// Frame rate of the mosaic, so the UI can size its own expectations.
-    pub fps: i32,
-}
+    pub fn subscribe(&self) -> broadcast::Receiver<Envelope> {
+        self.tx.subscribe()
+    }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct CellAssignment {
-    pub index: u32,
-    /// None means this cell is the program return.
-    pub source: Option<SourceId>,
-    pub x: i32,
-    pub y: i32,
-    pub w: i32,
-    pub h: i32,
-}
-
-/// An ad break, either armed for a future cue or currently on air.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct AdStatus {
-    pub uri: String,
-    /// Source to return to when the ad ends. None returns to the slate.
-    pub return_to: Option<SourceId>,
-    /// False while it is prerolled and waiting for its cue.
-    pub on_air: bool,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct MixerStatus {
-    /// Source currently on program, or None while the slate is showing.
-    pub program: Option<SourceId>,
-    pub sources: Vec<SourceStatus>,
-    pub outputs: Vec<OutputStatus>,
-    pub multiview: MultiviewStatus,
-    pub uptime_secs: u64,
-    /// Program pipeline running time. Cues are scheduled against this, not
-    /// against wall clock, so a client can place a break on a known frame.
-    pub running_time_ms: u64,
-    pub backend: BackendInfo,
-    /// Present while an ad break is armed or running.
-    pub ad: Option<AdStatus>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct BackendInfo {
-    pub video_decoder: String,
-    pub video_encoder: String,
-    pub audio_decoder: String,
-    pub audio_encoder: String,
-    pub hardware_accelerated: bool,
-}
-
-/// Pushed to every connected UI as it happens.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(tag = "type", rename_all = "snake_case")]
-pub enum Event {
-    /// A full snapshot. Sent on connect and after any structural change.
-    Status(Box<MixerStatus>),
-    /// The program source changed. Carries the running time the cut landed on
-    /// so the UI can show how close a scheduled take was to its mark.
-    Took { source: Option<SourceId>, at_running_time_ms: u64 },
-    SourceStateChanged { source: SourceId, state: SourceState },
-    OutputStateChanged { output: OutputId, state: OutputState, reconnects: u32 },
-    /// An ad break started or ended.
-    AdBreakChanged { ad: Option<AdStatus> },
-    /// Peak level per channel, in dBFS, from the program bus. The mosaic
-    /// carries no audio, so this is how an operator confirms that what is
-    /// going out actually has sound on it.
-    AudioLevel { peak_db: Vec<f64> },
-    /// Peak level per channel for one source, in dBFS, measured after the
-    /// operator's fader and before the mute. The mosaic carries no audio, so
-    /// this is what puts a meter beside each picture.
-    SourceAudioLevel { source: SourceId, peak_db: Vec<f64> },
-    /// How far through a seekable source has got. Sent a few times a second for
-    /// those sources only, because a camera has no position to report and a
-    /// scrubber updated twice a minute is worse than no scrubber.
-    SourcePosition { source: SourceId, position_ms: u64, duration_ms: Option<u64> },
-    /// Something went wrong that the operator should see.
-    Alert { severity: Severity, message: String },
-    /// A file in the media library changed: uploaded, deleted, or its
-    /// conversion moved on. The UI refetches `/api/media` rather than being
-    /// sent the whole item, because the listing is the one place a converted
-    /// copy gets folded onto its original.
-    MediaChanged { name: String, conversion: Option<crate::convert::ConversionState> },
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "lowercase")]
-pub enum Severity {
-    Info,
-    Warning,
-    Error,
+    /// The sequence number of the last event published. A snapshot taken now
+    /// is current as of this number.
+    pub fn seq(&self) -> u64 {
+        self.seq.load(Ordering::Relaxed)
+    }
 }
 
 /// Liveness tracking for one source.
@@ -326,19 +137,6 @@ impl SourceHealth {
     }
 }
 
-/// Strip credentials out of an RTMP URI before it goes anywhere near the UI.
-/// Stream keys live in the path of most CDN ingest URLs and must not be shown.
-pub fn safe_uri_label(uri: &str) -> String {
-    match uri.split_once("://") {
-        Some((scheme, rest)) => {
-            let hostport = rest.split('/').next().unwrap_or(rest);
-            let host = hostport.rsplit('@').next().unwrap_or(hostport);
-            format!("{scheme}://{host}/…")
-        }
-        None => "…".to_string(),
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -363,6 +161,33 @@ mod tests {
         assert!(h.is_stalled(0.0));
         h.reset();
         assert!(!h.is_stalled(0.0));
+    }
+
+    /// Every subscriber must see the same number for the same event, and the
+    /// numbers must not repeat. A client that trusts `seq` to spot a gap gets
+    /// nothing out of a counter that is per reader.
+    #[tokio::test]
+    async fn every_subscriber_sees_the_same_sequence() {
+        let bus = EventBus::new(16);
+        let mut a = bus.subscribe();
+        let mut b = bus.subscribe();
+        assert_eq!(bus.seq(), 0);
+        bus.send(Event::Took { source: Some("cam1".into()), at_running_time_ms: 10 }).unwrap();
+        bus.send(Event::Took { source: None, at_running_time_ms: 20 }).unwrap();
+        assert_eq!(bus.seq(), 2);
+        for rx in [&mut a, &mut b] {
+            assert_eq!(rx.recv().await.unwrap().seq, 1);
+            assert_eq!(rx.recv().await.unwrap().seq, 2);
+        }
+    }
+
+    /// Nobody listening is the normal case for a headless mixer, and it must
+    /// not cost the caller anything or stop the counter moving.
+    #[test]
+    fn sending_into_an_empty_room_still_advances_the_sequence() {
+        let bus = EventBus::new(4);
+        assert!(bus.send(Event::AudioLevel { peak_db: vec![-6.0] }).is_err());
+        assert_eq!(bus.seq(), 1);
     }
 
     /// The browser parses these shapes by hand, so lock them here. Serde
@@ -390,6 +215,7 @@ mod tests {
                 seekable: false,
                 position_ms: None,
                 duration_ms: None,
+                extra: Extra::new(),
             }],
             outputs: vec![],
             multiview: MultiviewStatus {
@@ -538,6 +364,8 @@ mod tests {
         assert!(!s.seekable);
         assert_eq!(s.position_ms, None);
         assert_eq!(s.duration_ms, None);
+        // And nothing the older build wrote is mistaken for plugin data.
+        assert!(s.extra.is_empty());
     }
 
     /// A camera carries no position at all, and a clip carries both numbers.
@@ -562,6 +390,7 @@ mod tests {
             seekable: false,
             position_ms: None,
             duration_ms: None,
+            extra: Extra::new(),
         };
         let v = serde_json::to_value(&camera).unwrap();
         // Written even when false: the UI branches on it, and `undefined`
@@ -652,6 +481,7 @@ mod tests {
             seekable: false,
             position_ms: None,
             duration_ms: None,
+            extra: Extra::new(),
         };
         let v = serde_json::to_value(&camera).unwrap();
         assert!(v.get("audio").is_none(), "a camera must not carry a balance");
@@ -670,18 +500,5 @@ mod tests {
         // Round trip, because the CLI and the MCP server parse this back.
         let back: SourceStatus = serde_json::from_value(v).unwrap();
         assert_eq!(back.audio, Some(SourceAudio { page: 0.25, media: vec![1.0] }));
-    }
-
-    #[test]
-    fn stream_keys_never_reach_the_ui() {
-        assert_eq!(
-            safe_uri_label("rtmp://a.rtmp.youtube.com/live2/abcd-secret-key"),
-            "rtmp://a.rtmp.youtube.com/…"
-        );
-        assert_eq!(
-            safe_uri_label("rtmp://user:password@ingest.example.com/app/key"),
-            "rtmp://ingest.example.com/…"
-        );
-        assert_eq!(safe_uri_label("garbage"), "…");
     }
 }

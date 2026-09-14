@@ -451,6 +451,7 @@ mod tests {
             seekable: false,
             position_ms: None,
             duration_ms: None,
+            extra: Default::default(),
         };
         MixerStatus {
             program: Some("cam1".into()),
@@ -461,6 +462,7 @@ mod tests {
                 state: OutputState::Live,
                 reconnects: 2,
                 queue_secs: 0.1,
+                extra: Default::default(),
             }],
             multiview: MultiviewStatus {
                 enabled: true,

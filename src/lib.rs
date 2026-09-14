@@ -12,6 +12,7 @@
 //! `gmx`, because the short name is what an operator types and neither should
 //! be a copy of the other. `run` below is what both call.
 
+pub mod api;
 pub mod caps;
 pub mod config;
 pub mod convert;

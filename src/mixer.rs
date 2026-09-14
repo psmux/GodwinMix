@@ -234,7 +234,7 @@ pub enum Command {
 #[derive(Clone)]
 pub struct MixerHandle {
     tx: mpsc::UnboundedSender<Command>,
-    events: broadcast::Sender<Event>,
+    events: EventBus,
 }
 
 impl MixerHandle {
@@ -289,8 +289,14 @@ impl MixerHandle {
         rx.await.map_err(|_| anyhow::anyhow!("mixer dropped the configs request"))
     }
 
-    pub fn subscribe(&self) -> broadcast::Receiver<Event> {
+    pub fn subscribe(&self) -> broadcast::Receiver<Envelope> {
         self.events.subscribe()
+    }
+
+    /// The sequence number of the last event published, so a caller taking a
+    /// status snapshot can say which point in the stream it is current as of.
+    pub fn event_seq(&self) -> u64 {
+        self.events.seq()
     }
 
     /// Push an event to every connected UI without going through the command
@@ -558,7 +564,7 @@ pub struct Mixer {
     source_attempts: HashMap<SourceId, u32>,
 
     handle: MixerHandle,
-    events: broadcast::Sender<Event>,
+    events: EventBus,
     /// The mixer runs on a plain OS thread, because GStreamer state changes
     /// block and must never sit on a Tokio worker. That thread has no runtime
     /// context of its own, so `tokio::spawn` from it panics. Delayed work
@@ -671,7 +677,7 @@ impl Mixer {
 
         let (tx, rx) = mpsc::unbounded_channel();
         let (bus_tx, bus_rx) = mpsc::unbounded_channel();
-        let (events, _) = broadcast::channel(256);
+        let events = EventBus::new(256);
         let handle = MixerHandle { tx, events: events.clone() };
 
         let program = gst::Pipeline::with_name("program");
@@ -2539,6 +2545,9 @@ impl Mixer {
                     seekable: s.seekable(),
                     position_ms: at.as_ref().map(|at| at.position_ms),
                     duration_ms: at.and_then(|at| at.duration_ms),
+                    // Per kind data, for a source built by a plugin rather
+                    // than by the core. Nothing the core builds has any.
+                    extra: Default::default(),
                 }
             })
             .collect();
