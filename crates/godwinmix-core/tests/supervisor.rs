@@ -174,11 +174,16 @@ fn discover_asks_every_device_and_merges_the_answers() {
 
 /// The roadmap's acceptance line, with the fixture standing in for a phone:
 /// something that turns up becomes a live source, and quickly.
+// The lock is a plain `std::sync::Mutex` and this test awaits, so it is taken
+// on a blocking thread and given back before the first await: the registry is
+// process wide and only the setup touches it.
 #[tokio::test(flavor = "multi_thread")]
 async fn a_device_publisher_becomes_a_live_source_within_five_seconds() {
-    let _lock = exclusive();
     let _ = gstreamer::init();
-    let dir = install("adopt");
+    let dir = {
+        let _lock = exclusive();
+        install("adopt")
+    };
 
     // A real mixer on its own thread, exactly as the binary runs one.
     let mut cfg: godwinmix_core::config::Config = toml::from_str(

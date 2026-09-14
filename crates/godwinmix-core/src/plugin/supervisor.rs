@@ -353,7 +353,7 @@ impl Supervisor {
             if !plugin.as_deref().is_none_or(|p| instance.plugin == p) {
                 continue;
             }
-            if !instance.child.tools().iter().any(|t| *t == tool) {
+            if !instance.child.tools().contains(&tool) {
                 continue;
             }
             match found.iter().position(|i| i.plugin == instance.plugin) {
