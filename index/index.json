@@ -1,0 +1,209 @@
+{
+  "name": "godwinmix-plugins",
+  "title": "GodwinMix community plugins",
+  "description": "The community index. Every entry here was built and run through the conformance harness by this repository's CI, and every asset it points at was signed by it.",
+  "owner": "psmux",
+  "version": 1,
+  "signing": {
+    "identity_regexp": "^https://github\\.com/psmux/godwinmix-plugins/\\.github/workflows/listing\\.yml@refs/heads/main$",
+    "oidc_issuer": "https://token.actions.githubusercontent.com"
+  },
+  "cores": [
+    {
+      "version": "0.2.0",
+      "api": 1,
+      "compatible": 1
+    },
+    {
+      "version": "0.1.0",
+      "api": 1,
+      "compatible": 1
+    }
+  ],
+  "plugins": [
+    {
+      "name": "clock",
+      "source": "psmux/gmx-clock",
+      "description": "A source that draws the current time, large, on a solid background.",
+      "tier": "bronze",
+      "kinds": [
+        "source"
+      ],
+      "license": "MIT",
+      "repository": "https://github.com/psmux/gmx-clock",
+      "homepage": "https://github.com/psmux/gmx-clock#readme",
+      "added": "2026-02-11",
+      "skill": "SKILL.md",
+      "badge": "https://psmux.github.io/godwinmix-plugins/badges/clock.json",
+      "policy": {
+        "network": [],
+        "secrets": [],
+        "telemetry": "none"
+      },
+      "versions": [
+        {
+          "version": "0.1.0",
+          "api": 1,
+          "platforms": [
+            "linux-x86_64"
+          ],
+          "signed": true,
+          "harness": [
+            "linux-x86_64: 8/8"
+          ]
+        },
+        {
+          "version": "0.2.0",
+          "api": 1,
+          "platforms": [
+            "linux-x86_64",
+            "macos-aarch64",
+            "windows-x86_64"
+          ],
+          "signed": true,
+          "harness": [
+            "linux-x86_64: 8/8",
+            "macos-aarch64: 8/8"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "ndi",
+      "source": "psmux/gmx-ndi",
+      "description": "NDI in and out: a source for every sender on the segment, an output that publishes the programme, and discovery over mDNS.",
+      "tier": "silver",
+      "kinds": [
+        "source",
+        "output",
+        "device"
+      ],
+      "license": "Apache-2.0",
+      "repository": "https://github.com/psmux/gmx-ndi",
+      "homepage": "https://github.com/psmux/gmx-ndi#readme",
+      "added": "2026-01-20",
+      "skill": "SKILL.md",
+      "badge": "https://psmux.github.io/godwinmix-plugins/badges/ndi.json",
+      "policy": {
+        "network": [
+          "mDNS discovery on the local segment",
+          "NDI video and audio to and from named senders on the local segment"
+        ],
+        "secrets": [],
+        "telemetry": "none"
+      },
+      "versions": [
+        {
+          "version": "1.2.0",
+          "api": 1,
+          "platforms": [
+            "linux-x86_64",
+            "linux-aarch64",
+            "macos-aarch64",
+            "windows-x86_64"
+          ],
+          "signed": true,
+          "harness": [
+            "linux-x86_64: 8/8",
+            "linux-aarch64: 8/8",
+            "macos-aarch64: 8/8",
+            "windows-x86_64: 8/8"
+          ]
+        },
+        {
+          "version": "1.3.1",
+          "api": 1,
+          "platforms": [
+            "linux-x86_64",
+            "linux-aarch64",
+            "macos-aarch64",
+            "macos-x86_64",
+            "windows-x86_64"
+          ],
+          "signed": true,
+          "harness": [
+            "linux-x86_64: 8/8",
+            "linux-aarch64: 8/8",
+            "macos-aarch64: 8/8",
+            "macos-x86_64: 8/8",
+            "windows-x86_64: 8/8"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "titler",
+      "source": "psmux/gmx-titler",
+      "description": "Lower thirds and full frame titles as OGraf graphics, with a panel that cues them and a tool an agent can call.",
+      "tier": "gold",
+      "kinds": [
+        "graphic",
+        "panel"
+      ],
+      "license": "MIT",
+      "repository": "https://github.com/psmux/gmx-titler",
+      "homepage": "https://github.com/psmux/gmx-titler#readme",
+      "added": "2025-11-04",
+      "skill": "SKILL.md",
+      "badge": "https://psmux.github.io/godwinmix-plugins/badges/titler.json",
+      "official": true,
+      "maintainers": [
+        "psmux",
+        "GodwinMix"
+      ],
+      "evals": "tests/evals",
+      "docs_reviewed": "2026-07-30",
+      "policy": {
+        "network": [
+          "fetches the graphic templates named in its settings, over https, when a show loads"
+        ],
+        "secrets": [
+          "TITLER_TEMPLATE_TOKEN, optional, sent only to the template host in the settings"
+        ],
+        "telemetry": "none"
+      },
+      "versions": [
+        {
+          "version": "2.0.0",
+          "api": 1,
+          "platforms": [
+            "linux-x86_64",
+            "linux-aarch64",
+            "macos-aarch64",
+            "macos-x86_64",
+            "windows-x86_64"
+          ],
+          "signed": true,
+          "harness": [
+            "linux-x86_64: 8/8",
+            "linux-aarch64: 8/8",
+            "macos-aarch64: 8/8",
+            "macos-x86_64: 8/8",
+            "windows-x86_64: 8/8"
+          ]
+        },
+        {
+          "version": "2.1.0",
+          "api": 1,
+          "platforms": [
+            "linux-x86_64",
+            "linux-aarch64",
+            "linux-armv7",
+            "macos-aarch64",
+            "macos-x86_64",
+            "windows-x86_64"
+          ],
+          "signed": true,
+          "harness": [
+            "linux-x86_64: 8/8",
+            "linux-aarch64: 8/8",
+            "linux-armv7: 8/8",
+            "macos-aarch64: 8/8",
+            "macos-x86_64: 8/8",
+            "windows-x86_64: 8/8"
+          ]
+        }
+      ]
+    }
+  ]
+}
