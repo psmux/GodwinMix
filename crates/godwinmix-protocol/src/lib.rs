@@ -12,20 +12,24 @@
 //! protocol drift; one description cannot.
 //!
 //! ```text
-//!   src/api/types.rs      status and event records
-//!   src/api/requests.rs   request and result bodies
-//!   src/api/error.rs      the code table, one error shape
-//!   src/api/method.rs     the method table and the REST transform
-//!   src/api/protocol.rs   protocol.json, protocol.md, core.api
-//!   src/api/openapi.rs    openapi.json for the REST layer
-//!   src/api/rpc.rs        JSON-RPC framing, subscriptions, frame headers
-//!   src/api/scope.rs      tokens, scopes, confirmation, rehearsal
-//!   src/api/idempotency.rs  the 24 hour replay cache
-//!   src/api/trace.rs      one trace id per call
-//!   src/api/mcp_tools.rs  the tool list, generated, in two profiles
+//!   types.rs        status and event records
+//!   requests.rs     request and result bodies
+//!   error.rs        the code table, one error shape
+//!   method.rs       the method table and the REST transform
+//!   protocol.rs     protocol.json, protocol.md, core.api
+//!   openapi.rs      openapi.json for the REST layer
+//!   rpc.rs          JSON-RPC framing, subscriptions, frame headers
+//!   scope.rs        tokens, scopes, confirmation, rehearsal
+//!   idempotency.rs  the 24 hour replay cache
+//!   trace.rs        one trace id per call
+//!   mcp_tools.rs    the tool list, generated, in two profiles
 //! ```
 //!
-//! See `src/api/README.md` for how another module adds a method.
+//! Nothing here knows about GStreamer or about a server. The engine
+//! (`godwinmix-core`) and the binary (`godwinmix`) both depend on this crate,
+//! and so does anything outside the repository that speaks the protocol.
+//!
+//! See `README.md` beside this file for how another module adds a method.
 
 pub mod error;
 pub mod idempotency;

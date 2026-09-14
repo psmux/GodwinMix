@@ -11,8 +11,8 @@
 //! function of the profile, so adding a source or a plugin never changes it
 //! and the client's prompt cache stays valid.
 
-use crate::api::method::{Registry, Tier};
-use crate::api::scope::Profile;
+use crate::method::{Registry, Tier};
+use crate::scope::Profile;
 use schemars::generate::SchemaSettings;
 use serde_json::{json, Map, Value};
 

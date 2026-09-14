@@ -5,7 +5,7 @@
 //! show can hand an agent a token that may take but may not remove, and a
 //! rehearsal token that a live core refuses outright.
 
-use crate::api::error::{ErrorCode, RpcError};
+use crate::error::{ErrorCode, RpcError};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -106,8 +106,8 @@ impl Token {
         self.scopes.iter().map(|s| s.as_str().to_string()).collect()
     }
 
-    pub fn info(&self) -> crate::api::types::TokenInfo {
-        crate::api::types::TokenInfo {
+    pub fn info(&self) -> crate::types::TokenInfo {
+        crate::types::TokenInfo {
             id: self.id.clone(),
             scopes: self.scope_names(),
             confirm: match self.confirm {

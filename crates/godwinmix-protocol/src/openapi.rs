@@ -9,9 +9,9 @@
 //! Schema proper, which is what `schemars` produces. `$defs` become
 //! `components/schemas` and every `$ref` is rewritten to match.
 
-use crate::api::error::ErrorCode;
-use crate::api::method::Registry;
-use crate::api::{API_COMPATIBLE, API_LEVEL};
+use crate::error::ErrorCode;
+use crate::method::Registry;
+use crate::{API_COMPATIBLE, API_LEVEL};
 use schemars::generate::SchemaSettings;
 use serde_json::{json, Map, Value};
 
@@ -40,7 +40,7 @@ pub fn openapi<C>(registry: &Registry<C>) -> Value {
             "version": format!("{API_LEVEL}"),
             "summary": "The REST layer of the GodwinMix control protocol.",
             "description": format!(
-                "Generated from the method table in src/api/. api_level {API_LEVEL}, \
+                "Generated from the method table in crates/godwinmix-protocol/. api_level {API_LEVEL}, \
                  compatible from {API_COMPATIBLE}. The same methods are reachable over \
                  JSON-RPC on the /rpc WebSocket; see protocol.md. The paths here come from \
                  the noun.verb transform rule, so `source.list` is `GET /api/v1/sources` \
@@ -71,8 +71,8 @@ pub fn openapi<C>(registry: &Registry<C>) -> Value {
 }
 
 fn operation<C>(
-    m: &crate::api::method::MethodDef<C>,
-    rest: &crate::api::method::Rest,
+    m: &crate::method::MethodDef<C>,
+    rest: &crate::method::Rest,
     params: &Value,
     result: &Value,
 ) -> Value {
@@ -120,7 +120,7 @@ fn operation<C>(
     Value::Object(op)
 }
 
-fn description<C>(m: &crate::api::method::MethodDef<C>) -> String {
+fn description<C>(m: &crate::method::MethodDef<C>) -> String {
     let mut text = format!("JSON-RPC method `{}`. Needs the `{}` scope.", m.name, m.scope.as_str());
     if m.destructive {
         text.push_str(

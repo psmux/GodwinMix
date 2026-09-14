@@ -7,10 +7,10 @@
 //! step.
 //!
 //! Another module adds methods by calling `Registry::register`. See
-//! `src/api/README.md`.
+//! `README.md` in this crate.
 
-use crate::api::error::RpcError;
-use crate::api::scope::Scope;
+use crate::error::RpcError;
+use crate::scope::Scope;
 use schemars::{JsonSchema, SchemaGenerator};
 use serde_json::{json, Value};
 use std::collections::BTreeMap;

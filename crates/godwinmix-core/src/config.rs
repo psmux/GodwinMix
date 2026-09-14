@@ -122,20 +122,20 @@ pub struct TokenConfig {
     pub id: String,
     pub secret: String,
     #[serde(default = "default_scopes")]
-    pub scopes: Vec<crate::api::scope::Scope>,
+    pub scopes: Vec<godwinmix_protocol::scope::Scope>,
     #[serde(default)]
-    pub confirm: crate::api::scope::ConfirmPolicy,
+    pub confirm: godwinmix_protocol::scope::ConfirmPolicy,
     #[serde(default)]
     pub rehearsal: bool,
     #[serde(default)]
-    pub profile: crate::api::scope::Profile,
+    pub profile: godwinmix_protocol::scope::Profile,
 }
 
 /// A token that names no scopes can read. Anything more has to be asked for,
 /// because the cost of a token that quietly carries `admin` is the whole
 /// point of having the table.
-fn default_scopes() -> Vec<crate::api::scope::Scope> {
-    vec![crate::api::scope::Scope::Read]
+fn default_scopes() -> Vec<godwinmix_protocol::scope::Scope> {
+    vec![godwinmix_protocol::scope::Scope::Read]
 }
 
 /// The fixed raw format that every branch of the graph must produce.
@@ -1068,12 +1068,12 @@ impl Config {
     /// Every credential in force: the `[[tokens]]` table, plus the single
     /// bearer token when one is set. A deployment with neither leaves the
     /// control port open, which is how it has always worked.
-    pub fn tokens(&self, rehearsal_core: bool) -> crate::api::scope::Tokens {
-        let mut entries: Vec<crate::api::scope::Token> = self
+    pub fn tokens(&self, rehearsal_core: bool) -> godwinmix_protocol::scope::Tokens {
+        let mut entries: Vec<godwinmix_protocol::scope::Token> = self
             .tokens
             .iter()
             .filter(|t| !t.secret.trim().is_empty())
-            .map(|t| crate::api::scope::Token {
+            .map(|t| godwinmix_protocol::scope::Token {
                 id: t.id.clone(),
                 secret: t.secret.trim().to_string(),
                 scopes: t.scopes.clone(),
@@ -1083,9 +1083,9 @@ impl Config {
             })
             .collect();
         if let Some(secret) = self.token() {
-            entries.push(crate::api::scope::Token::legacy(&secret));
+            entries.push(godwinmix_protocol::scope::Token::legacy(&secret));
         }
-        crate::api::scope::Tokens::new(entries, rehearsal_core)
+        godwinmix_protocol::scope::Tokens::new(entries, rehearsal_core)
     }
 
     pub fn load(path: &Path) -> Result<Self> {
@@ -1397,7 +1397,7 @@ sidecar = \"/opt/b\"\n").unwrap();
     /// thing anyone does with this program fails.
     #[test]
     fn the_example_config_parses_and_validates() {
-        let cfg: Config = toml::from_str(include_str!("../godwinmix.example.toml"))
+        let cfg: Config = toml::from_str(include_str!("../../../godwinmix.example.toml"))
             .expect("the example config parses");
         cfg.validate().expect("the example config validates");
     }

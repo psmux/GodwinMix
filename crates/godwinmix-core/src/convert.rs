@@ -19,7 +19,7 @@ use gstreamer::prelude::*;
 use gstreamer_pbutils::prelude::*;
 use gstreamer_pbutils::{Discoverer, DiscovererInfo};
 use parking_lot::Mutex;
-use serde::{Deserialize, Serialize};
+
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -27,26 +27,7 @@ use tracing::{info, warn};
 
 use crate::gstutil::make;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
-#[serde(rename_all = "snake_case")]
-pub enum ConversionPhase {
-    Running,
-    Done,
-    Failed,
-}
-
-/// One conversion, in flight or remembered after it finished.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, schemars::JsonSchema)]
-pub struct ConversionState {
-    pub state: ConversionPhase,
-    /// 0.0 to 1.0, position over duration, both read off the pipeline.
-    pub progress: f64,
-    /// Set only on `failed`, shown to the operator verbatim: "no AAC encoder
-    /// available" is worth more than "conversion failed".
-    pub error: Option<String>,
-    /// The `.web.mp4` name, on `done`.
-    pub output: Option<String>,
-}
+pub use godwinmix_protocol::types::{ConversionPhase, ConversionState};
 
 /// The verdict on a file: whether it needs converting, and why if it does.
 pub struct WebSafety {

@@ -561,8 +561,29 @@ dependencies = [
  "base64",
  "clap",
  "futures-util",
+ "godwinmix-core",
+ "godwinmix-protocol",
+ "gstreamer",
+ "libc",
+ "parking_lot",
+ "reqwest",
+ "schemars",
+ "serde",
+ "serde_json",
+ "tokio",
+ "toml 0.9.12+spec-1.1.0",
+ "tower-http",
+ "tracing",
+]
+
+[[package]]
+name = "godwinmix-core"
+version = "0.2.0"
+dependencies = [
+ "anyhow",
  "getrandom 0.3.4",
  "glib",
+ "godwinmix-protocol",
  "gstreamer",
  "gstreamer-app",
  "gstreamer-audio",
@@ -571,17 +592,32 @@ dependencies = [
  "image",
  "libc",
  "parking_lot",
- "reqwest",
  "schemars",
  "serde",
  "serde_json",
  "shell-words",
- "thiserror",
  "tokio",
  "toml 0.9.12+spec-1.1.0",
- "tower-http",
  "tracing",
  "tracing-subscriber",
+]
+
+[[package]]
+name = "godwinmix-host"
+version = "0.2.0"
+dependencies = [
+ "godwinmix-protocol",
+]
+
+[[package]]
+name = "godwinmix-protocol"
+version = "0.2.0"
+dependencies = [
+ "parking_lot",
+ "schemars",
+ "serde",
+ "serde_json",
+ "tracing",
 ]
 
 [[package]]

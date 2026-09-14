@@ -330,7 +330,12 @@ impl Rotating {
 
 // --- the layer ---------------------------------------------------------------
 
-#[derive(Clone, Copy, PartialEq, Eq, Debug, Default, clap::ValueEnum)]
+/// How a log line is written.
+///
+/// The `--log-format` flag in the binary is a `clap::ValueEnum` over the same
+/// three names. It converts into this, so an embedded engine does not carry a
+/// command line parser to say that it wants JSON.
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
 pub enum Format {
     /// Human form when stderr is a terminal, JSON when it is not.
     #[default]

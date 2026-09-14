@@ -3,7 +3,7 @@
 //! These moved out of `state.rs` so that one module is the single source of
 //! truth for the wire format. `state.rs` re-exports all of them, so existing
 //! `crate::state::MixerStatus` paths keep working; new code should say
-//! `crate::api::MixerStatus`.
+//! `crate::MixerStatus`.
 //!
 //! Every type derives `JsonSchema` as well as `Serialize` and `Deserialize`,
 //! which is what lets `core.api` and `protocol.json` be generated rather than
@@ -291,7 +291,7 @@ pub enum Event {
     /// conversion moved on. The UI refetches the media listing rather than
     /// being sent the whole item, because the listing is the one place a
     /// converted copy gets folded onto its original.
-    MediaChanged { name: String, conversion: Option<crate::convert::ConversionState> },
+    MediaChanged { name: String, conversion: Option<ConversionState> },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
@@ -403,6 +403,31 @@ pub fn safe_uri_label(uri: &str) -> String {
         }
         None => "…".to_string(),
     }
+}
+
+/// Where a media file's conversion to a web safe copy has got to.
+///
+/// Carried on `event/media.changed`, so it is part of the wire contract even
+/// though the conversion itself is the engine's business.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum ConversionPhase {
+    Running,
+    Done,
+    Failed,
+}
+
+/// One conversion, in flight or remembered after it finished.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, schemars::JsonSchema)]
+pub struct ConversionState {
+    pub state: ConversionPhase,
+    /// 0.0 to 1.0, position over duration, both read off the pipeline.
+    pub progress: f64,
+    /// Set only on `failed`, shown to the operator verbatim: "no AAC encoder
+    /// available" is worth more than "conversion failed".
+    pub error: Option<String>,
+    /// The `.web.mp4` name, on `done`.
+    pub output: Option<String>,
 }
 
 #[cfg(test)]

@@ -9,9 +9,9 @@
 //! behind is told `event/resync` rather than being left with a hole it cannot
 //! see.
 
-use crate::api::error::{ErrorCode, RpcError};
-use crate::api::requests::{Ext, Meters};
-use crate::api::types::Event;
+use crate::error::{ErrorCode, RpcError};
+use crate::requests::{Ext, Meters};
+use crate::types::Event;
 use serde_json::{json, Map, Value};
 
 /// One parsed request off the wire.
@@ -297,7 +297,7 @@ pub fn read_frame_header(bytes: &[u8]) -> Option<(u32, u32, u64)> {
 /// Derived rather than counted so two connections that joined at different
 /// moments agree about which layout a frame belongs to, with no shared state
 /// between them.
-pub fn layout_id(cells: &[crate::api::types::CellAssignment]) -> u32 {
+pub fn layout_id(cells: &[crate::types::CellAssignment]) -> u32 {
     // FNV-1a over the cell geometry. Small, stable across runs, and no crate.
     let mut hash: u32 = 0x811c_9dc5;
     let mut eat = |byte: u8| {
@@ -321,7 +321,7 @@ pub fn layout_id(cells: &[crate::api::types::CellAssignment]) -> u32 {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::api::types::{CellAssignment, Severity, SourceState};
+    use crate::types::{CellAssignment, Severity, SourceState};
 
     #[test]
     fn a_request_and_a_notification_are_told_apart_by_the_id() {

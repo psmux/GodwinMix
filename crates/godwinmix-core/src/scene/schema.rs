@@ -49,7 +49,7 @@ mod tests {
     /// The committed file, read from the source tree rather than the working
     /// directory, so the test passes wherever cargo is run from.
     fn committed() -> std::path::PathBuf {
-        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join(PATH)
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..").join(PATH)
     }
 
     #[test]
