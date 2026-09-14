@@ -203,6 +203,18 @@ mod tests {
     }
 
     #[test]
+    fn every_preset_readme_is_short_enough_for_somebody_in_a_hurry() {
+        // 09 section 1: four hours, a service on Sunday, no time to read
+        // anything else. 300 words is about a screen and a half.
+        for name in NAMES {
+            let text = std::fs::read_to_string(preset_dir(name).join("README.md")).unwrap();
+            let words = text.split_whitespace().count();
+            assert!(words <= 310, "{name}'s README is {words} words; the ceiling is 300");
+            assert!(words > 120, "{name}'s README is {words} words, which answers nothing");
+        }
+    }
+
+    #[test]
     fn the_presets_readme_explains_how_to_copy_one() {
         let text = std::fs::read_to_string(directory().join("README.md")).unwrap();
         assert!(text.contains("cp -r presets/"), "no copy instruction");
