@@ -218,7 +218,30 @@ pub struct Manifest {
     pub tier: Tier,
 }
 
+/// One kind, as a picker or a listing wants it.
+///
+/// Taken off the manifest and nothing else, so it costs no pipeline and can
+/// be printed by `--api-info` on a machine with no GStreamer installed.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct KindInfo {
+    /// The plugin qualified id, which is what goes in `type`.
+    pub id: String,
+    pub description: &'static str,
+    /// URI schemes a bare address is matched against. Empty on a kind that
+    /// has to be named outright.
+    pub schemes: &'static [&'static str],
+}
+
 impl Manifest {
+    /// What a picker shows for this provide.
+    pub fn describe(&self) -> KindInfo {
+        KindInfo {
+            id: self.provide_id(),
+            description: self.description,
+            schemes: self.uri_schemes,
+        }
+    }
+
     /// The plugin qualified id an operator writes in `type`.
     pub fn provide_id(&self) -> String {
         format!("{}/{}", self.plugin, self.id)

@@ -333,8 +333,25 @@ pub fn descriptor<C>(registry: &Registry<C>) -> Value {
             .map(|(http, path, note)| json!({ "method": http, "path": path, "note": note }))
             .collect::<Vec<_>>(),
         "ext": ext_entries(),
+        "kinds": kinds(),
         "errors": error_entries(),
         "$defs": defs,
+    })
+}
+
+/// What this build can be asked to make: every source, output and filter
+/// type id, with what the plugin behind it says it is.
+///
+/// The picker in the UI reads this so that a build with an extra kind offers
+/// it without the page being redeployed, and a build without one does not
+/// offer a tile that would be refused. Static data off the plugin registries:
+/// no pipeline is touched, which is why `--api-info` can print it on a
+/// machine with no GStreamer.
+fn kinds() -> Value {
+    json!({
+        "source": crate::plugin::source::described(),
+        "output": crate::plugin::output::described(),
+        "filter": crate::plugin::filter::described(),
     })
 }
 

@@ -33,12 +33,14 @@ pub mod cli;
 pub mod doctor;
 pub mod introspect;
 pub mod logs;
+pub mod methods;
 pub mod metrics;
 pub mod routes;
 pub mod session;
 pub mod trace;
 
 pub use introspect::{register_pipeline, startup_report, unregister_pipeline, PROGRAMME};
+pub use methods::register;
 pub use routes::{router, ObserveState};
 pub use session::session;
 pub use trace::{current_trace_id, with_trace_id, TraceId};

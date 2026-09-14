@@ -274,7 +274,28 @@ pub fn rest_transform(method: &str) -> Option<Rest> {
     };
     // A read is a GET so that a browser address bar and a `<img>` tag reach
     // it; everything else is a POST.
-    let http = if matches!(verb, "get" | "list" | "info" | "api" | "state" | "history" | "status" | "describe" | "stats") {
+    let http = if matches!(
+        verb,
+        "get"
+            | "list"
+            | "info"
+            | "api"
+            | "state"
+            | "history"
+            | "status"
+            | "describe"
+            | "stats"
+            // The observability reads. Every one of them answers a question
+            // and changes nothing, so a browser address bar reaches them.
+            | "levels"
+            | "dot"
+            | "latency"
+            | "queues"
+            | "clock"
+            | "doctor"
+            | "startup_report"
+            | "session_log"
+    ) {
         "GET"
     } else {
         "POST"
@@ -309,6 +330,16 @@ mod tests {
         assert_eq!(at("core.status"), "GET /api/v1/core/status");
         assert_eq!(at("agent.state"), "GET /api/v1/agent/state");
         assert_eq!(at("adbreak.start"), "POST /api/v1/adbreak/start");
+        // The observability methods. A read is a GET, changing a log level is
+        // not, and both sit where `src/observe/routes.rs` already answers.
+        assert_eq!(at("log.set"), "POST /api/v1/log/set");
+        assert_eq!(at("log.gst"), "POST /api/v1/log/gst");
+        assert_eq!(at("log.levels"), "GET /api/v1/log/levels");
+        assert_eq!(at("pipeline.dot"), "GET /api/v1/pipeline/dot");
+        assert_eq!(at("pipeline.list"), "GET /api/v1/pipeline/list");
+        assert_eq!(at("core.doctor"), "GET /api/v1/core/doctor");
+        assert_eq!(at("core.startup_report"), "GET /api/v1/core/startup_report");
+        assert_eq!(at("core.session_log"), "GET /api/v1/core/session_log");
         // Uncountable nouns keep their spelling.
         assert_eq!(at("media.list"), "GET /api/v1/media");
         assert_eq!(at("codec.list"), "GET /api/v1/codecs");

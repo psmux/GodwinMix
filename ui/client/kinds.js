@@ -1,10 +1,8 @@
 // What you can add, and what it needs.
 //
-// The picker reads its tiles from the server, `core.api` or `plugin.describe`.
-// Until a core has either, this table stands in, holding exactly what today's
-// server accepts, so the picker is honest on an old mixer and one code path
-// serves both. Icons are inline SVG path data rather than files: a picker that
-// costs one request per tile stutters on a Pi.
+// The core says which kinds exist (`core.api` `kinds`); this table says how
+// each one looks and what its form asks for. Icons are inline SVG path data
+// rather than files: a picker that costs one request per tile stutters on a Pi.
 
 export const ICONS = {
   camera: "M4 7h3l2-2h6l2 2h3v11H4V7zm8 3a3.5 3.5 0 100 7 3.5 3.5 0 000-7z",
@@ -26,6 +24,7 @@ export const ICONS = {
 export const SOURCE_KINDS = [
   {
     id: "file",
+    provides: ["file/source"],
     title: "Video file",
     group: "Files and pages",
     icon: "file",
@@ -43,6 +42,7 @@ export const SOURCE_KINDS = [
   },
   {
     id: "page",
+    provides: ["browser/source", "layered/source"],
     title: "Web page",
     group: "Files and pages",
     icon: "page",
@@ -67,6 +67,7 @@ export const SOURCE_KINDS = [
   },
   {
     id: "stream",
+    provides: ["rtmp/source", "hls/source"],
     title: "Incoming stream",
     group: "Streams and servers",
     icon: "stream",
@@ -84,6 +85,7 @@ export const SOURCE_KINDS = [
   },
   {
     id: "exec",
+    provides: ["exec/source"],
     title: "Command",
     group: "Everything else",
     icon: "exec",
@@ -109,6 +111,7 @@ export const SOURCE_KINDS = [
 export const OUTPUT_KINDS = [
   {
     id: "rtmp",
+    provides: ["rtmp/output"],
     title: "RTMP destination",
     group: "Streams and servers",
     icon: "output",
@@ -173,19 +176,14 @@ export function grouped(kinds) {
 }
 
 /**
- * The catalogue for the picker.
- *
- * Asks the core first. A core that publishes `core.api` names every `source.add`
- * kind and its schema; a core with plugins answers `plugin.describe`. Neither
- * exists yet, so this almost always falls through to the table above, and the
- * fallthrough is the point: the picker works on the mixer people are running
- * today and improves on its own when the core grows.
+ * The catalogue for the picker. `core.api` `kinds` says what this build has;
+ * the table above says how each one looks, matched by `provides`.
  */
 export async function loadKinds(client, what) {
   const builtIn = what === "output" ? OUTPUT_KINDS : SOURCE_KINDS;
   try {
     const api = await client.call("core.api", {});
-    const kinds = extractKinds(api, what);
+    const kinds = extractKinds(api, what, builtIn);
     if (kinds.length) return kinds;
   } catch {
     /* no core.api on this mixer */
@@ -215,16 +213,18 @@ export async function loadKinds(client, what) {
   return builtIn;
 }
 
-function extractKinds(api, what) {
-  const table = (api && api.kinds && api.kinds[what]) || [];
-  return table.map((k) => ({
-    id: k.id,
-    title: k.title || k.id,
-    group: k.group || "Everything else",
-    icon: k.icon || "stream",
-    description: k.description || "",
-    plugin: k.plugin || "built in",
-    schema: k.schema || { type: "object", properties: {} },
-    build: (v) => Object.assign({ kind: k.id }, v),
-  }));
+/**
+ * Keep the tiles this build can actually make, in table order.
+ *
+ * The core's `kinds` is a listing, not a form: it says a kind exists and what
+ * it claims, not what to ask an operator for. So it is used to drop tiles this
+ * build cannot serve, and the table still draws the ones that are left. A kind
+ * with no tile (`test/source`, `srt/output`) is not offered yet; it needs its
+ * own fields, not a generic address box.
+ */
+function extractKinds(api, what, builtIn) {
+  const reported = (api && api.kinds && api.kinds[what]) || [];
+  if (!reported.length) return [];
+  const have = new Set(reported.map((k) => k.id));
+  return builtIn.filter((t) => !t.provides || t.provides.some((id) => have.has(id)));
 }

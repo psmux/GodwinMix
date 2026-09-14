@@ -111,6 +111,45 @@
         ],
         "type": "object"
       },
+      "AddFilterRequest": {
+        "description": "`filter.add`.",
+        "properties": {
+          "id": {
+            "description": "The name this filter answers to afterwards. A slug, and yours to pick.",
+            "type": "string"
+          },
+          "params": {
+            "additionalProperties": true,
+            "description": "The filter's own settings. What goes in here is the filter's business,\nnot the core's.",
+            "type": "object"
+          },
+          "programme": {
+            "description": "Filter the programme rather than one source.",
+            "type": "boolean"
+          },
+          "side": {
+            "default": "input",
+            "description": "`input` puts it before the proxy boundary, where the thumbnail sees it\ntoo; `programme` puts it on this source's programme branch only.",
+            "type": "string"
+          },
+          "source": {
+            "description": "The source to hang it on. Leave it out and set `programme` to filter\neverything that goes out.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "type": {
+            "description": "A filter type id, as `plugin.list` and `core.api` `kinds` report them.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "type"
+        ],
+        "type": "object"
+      },
       "AddOutputRequest": {
         "additionalProperties": true,
         "description": "`output.add`. The id and the URL are the whole of it for an RTMP\ndestination; anything else a kind understands rides in `params`.",
@@ -418,6 +457,70 @@
         ],
         "type": "object"
       },
+      "FilterIdRequest": {
+        "description": "`filter.remove`, and anything else that names one filter.",
+        "properties": {
+          "id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "type": "object"
+      },
+      "FilterListing": {
+        "properties": {
+          "filters": {
+            "items": {
+              "$ref": "#/components/schemas/FilterRecord"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "filters"
+        ],
+        "type": "object"
+      },
+      "FilterRecord": {
+        "description": "One filter as the core reports it.",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "side": {
+            "type": "string"
+          },
+          "source": {
+            "description": "Absent on a programme filter.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "type": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "type",
+          "side"
+        ],
+        "type": "object"
+      },
+      "FilterRemoved": {
+        "properties": {
+          "removed": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "removed"
+        ],
+        "type": "object"
+      },
       "GoLiveRequest": {
         "description": "`program.golive`: add the page, add the destination, take the page.",
         "properties": {
@@ -544,6 +647,81 @@
           "max_call_secs",
           "max_idempotency_key_bytes",
           "event_queue"
+        ],
+        "type": "object"
+      },
+      "LogGstRequest": {
+        "description": "`log.gst`.",
+        "properties": {
+          "categories": {
+            "description": "`GST_DEBUG` spelling: `rtmp2src:6,rtpjitterbuffer:5`.",
+            "type": "string"
+          },
+          "duration_secs": {
+            "default": 60,
+            "description": "How long before it goes back down. A minute by default, which is long\nenough to reproduce a fault and short enough that a forgotten firehose\nstops on its own.",
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "instance": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "categories"
+        ],
+        "type": "object"
+      },
+      "LogGstResult": {
+        "description": "What `log.gst` answers with.",
+        "properties": {
+          "categories": {
+            "description": "The categories actually raised, which is what the caller asked for\nwith anything GStreamer does not know dropped.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "duration_secs": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "categories",
+          "duration_secs"
+        ],
+        "type": "object"
+      },
+      "LogSetRequest": {
+        "description": "`log.set`. Name an instance or a target, not both.",
+        "properties": {
+          "instance": {
+            "description": "A plugin instance: a source or an output id. Its lines carry the id,\nso raising this one raises only that camera.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "level": {
+            "description": "`off`, `error`, `warn`, `info`, `debug`, `trace`, or `default` to stop\noverriding this one.",
+            "type": "string"
+          },
+          "target": {
+            "description": "A module path prefix such as `godwinmix::mixer`. The longest match\nwins, so a more specific override still beats a broader one.",
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "level"
         ],
         "type": "object"
       },
@@ -846,6 +1024,33 @@
         ],
         "type": "object"
       },
+      "PipelineDot": {
+        "description": "What `pipeline.dot` answers with on `/rpc`. The REST route serves the same\ngraph as `text/vnd.graphviz`, so `gmx dot | dot -Tsvg` needs no unwrapping.",
+        "properties": {
+          "dot": {
+            "description": "The graph itself, in the dot language.",
+            "type": "string"
+          },
+          "pipeline": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "pipeline",
+          "dot"
+        ],
+        "type": "object"
+      },
+      "PipelineRequest": {
+        "description": "Which pipeline to look at. A source id, an output id, `programme` or\n`multiview`. `pipeline.list` says what is running.",
+        "properties": {
+          "name": {
+            "default": "programme",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
       "ProgramState": {
         "description": "What `program.get` answers with, and what `program.take` returns so that no\nfollow up read is needed.",
         "properties": {
@@ -905,15 +1110,54 @@
         ],
         "type": "object"
       },
+      "SessionLogRequest": {
+        "description": "`core.session_log`.",
+        "properties": {
+          "secs": {
+            "default": 3600,
+            "description": "How far back to read, in seconds. An hour by default, a day at most.",
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "SetFilterRequest": {
+        "description": "`filter.set`.",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "params": {
+            "additionalProperties": true,
+            "default": {},
+            "description": "The settings to apply. Only the keys named are changed.",
+            "type": "object"
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "type": "object"
+      },
       "SnapshotRequest": {
         "description": "`snapshot.get` on `/rpc` and through MCP. The REST route serves the same\nbytes raw, because an `<img>` tag cannot read base64 out of JSON.",
         "properties": {
+          "allow_large": {
+            "description": "Permit a width above the `[snapshot] max_width` ceiling.",
+            "type": "boolean"
+          },
+          "force": {
+            "description": "Ignore the per client rate limit for this one request.",
+            "type": "boolean"
+          },
           "id": {
             "description": "\"sheet\", \"program\", or a source id. A `.jpg` on the end is accepted.",
             "type": "string"
           },
           "width": {
-            "description": "Scale down to this many pixels across, keeping the aspect. Never\nenlarges. Omit for the cell's own size.",
+            "description": "Scale down to this many pixels across, keeping the aspect. Never\nenlarges. Omit for the `[snapshot] default_width` of 320, which is\nenough to see who is in shot; `width: 0` for the cell's own size.",
             "format": "uint32",
             "minimum": 0,
             "type": [
@@ -924,29 +1168,6 @@
         },
         "required": [
           "id"
-        ],
-        "type": "object"
-      },
-      "SourceAudio": {
-        "description": "The gains a superimposed source is currently running with.\n\n1.0 is unity, 0.0 is silent, and the ceiling is 10.0. Reported rather than\nremembered: these are read back off the volume elements, so what the UI\nshows is what the pipeline is doing, including any clamping.",
-        "properties": {
-          "media": {
-            "description": "One per video the mixer decodes underneath, in the order the page\nhanded them over.",
-            "items": {
-              "format": "double",
-              "type": "number"
-            },
-            "type": "array"
-          },
-          "page": {
-            "description": "The page's own sound, which is the commentary and whatever the page\nplays itself.",
-            "format": "double",
-            "type": "number"
-          }
-        },
-        "required": [
-          "page",
-          "media"
         ],
         "type": "object"
       },
@@ -1035,17 +1256,6 @@
       "SourceStatus": {
         "additionalProperties": true,
         "properties": {
-          "audio": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/SourceAudio"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "description": "Where this source's sounds sit against each other. `None` for anything\nbut a superimposed source, because everything else arrives already\nmixed and there is nothing to balance. Absent rather than null in the\nJSON, so a snapshot written by an older build still parses."
-          },
           "audio_idle_ms": {
             "description": "Same for audio. `None` here while `has_audio` is true means the source\nadvertised an audio track that never produced a decoded sample.",
             "format": "uint64",
@@ -1111,11 +1321,6 @@
           },
           "state": {
             "$ref": "#/components/schemas/SourceState"
-          },
-          "superimposed": {
-            "default": false,
-            "description": "True when this website source is running with its media decoded outside\nthe browser and the page drawn over it. False covers both a source that\nnever asked for it and one that asked and could not get it, because the\npage turned out to have no address worth handing over.",
-            "type": "boolean"
           },
           "uri": {
             "type": "string"
@@ -1381,7 +1586,7 @@
             "$ref": "#/components/responses/Error"
           }
         },
-        "summary": "The codecs and elements this machine can use. The catalogue proper is not built yet; this reports the backends actually selected.",
+        "summary": "Every codec and element in the catalogue, which of them this machine actually has, and what it would pick.",
         "tags": [
           "codec"
         ],
@@ -1418,6 +1623,34 @@
         "x-scope": "read"
       }
     },
+    "/api/v1/core/doctor": {
+      "get": {
+        "description": "JSON-RPC method `core.doctor`. Needs the `read` scope.",
+        "operationId": "core.doctor",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "The environment checks: GStreamer, the elements, the config, the disk and the ports. The same list `gmx doctor` prints.",
+        "tags": [
+          "core"
+        ],
+        "x-destructive": false,
+        "x-idempotent": true,
+        "x-scope": "read"
+      }
+    },
     "/api/v1/core/info": {
       "get": {
         "description": "JSON-RPC method `core.info`. Needs the `read` scope.",
@@ -1444,6 +1677,34 @@
         "x-destructive": false,
         "x-idempotent": true,
         "x-scope": "read"
+      }
+    },
+    "/api/v1/core/session_log": {
+      "get": {
+        "description": "JSON-RPC method `core.session_log`. Needs the `admin` scope. Accepts `idempotency_key`, honoured for 24 hours.",
+        "operationId": "core.session_log",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "The append only record of everything that happened, back as far as you ask.",
+        "tags": [
+          "core"
+        ],
+        "x-destructive": false,
+        "x-idempotent": true,
+        "x-scope": "admin"
       }
     },
     "/api/v1/core/shutdown": {
@@ -1486,6 +1747,34 @@
         "x-scope": "admin"
       }
     },
+    "/api/v1/core/startup_report": {
+      "get": {
+        "description": "JSON-RPC method `core.startup_report`. Needs the `read` scope.",
+        "operationId": "core.startup_report",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "How long each stage of the start took, and what was over the 250 ms mark.",
+        "tags": [
+          "core"
+        ],
+        "x-destructive": false,
+        "x-idempotent": true,
+        "x-scope": "read"
+      }
+    },
     "/api/v1/core/status": {
       "get": {
         "description": "JSON-RPC method `core.status`. Needs the `read` scope.",
@@ -1512,6 +1801,272 @@
         "x-destructive": false,
         "x-idempotent": true,
         "x-scope": "read"
+      }
+    },
+    "/api/v1/filters": {
+      "get": {
+        "description": "JSON-RPC method `filter.list`. Needs the `read` scope.",
+        "operationId": "filter.list",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FilterListing"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Every filter in place, with what it is and where it sits.",
+        "tags": [
+          "filter"
+        ],
+        "x-destructive": false,
+        "x-idempotent": true,
+        "x-scope": "read"
+      },
+      "post": {
+        "description": "JSON-RPC method `filter.add`. Needs the `operate` scope. Accepts `idempotency_key`, honoured for 24 hours.",
+        "operationId": "filter.add",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AddFilterRequest"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FilterRecord"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Hang a filter on one source or on the programme, live.",
+        "tags": [
+          "filter"
+        ],
+        "x-destructive": false,
+        "x-idempotent": true,
+        "x-scope": "operate"
+      }
+    },
+    "/api/v1/filters/{id}": {
+      "delete": {
+        "description": "JSON-RPC method `filter.remove`. Needs the `operate` scope. Destructive: accepts `dry_run: true`, and on a token whose policy is `confirm = required` it is refused once with -32020 and a confirm token. Accepts `idempotency_key`, honoured for 24 hours.",
+        "operationId": "filter.remove",
+        "parameters": [
+          {
+            "description": "The id, as listed by the matching list call.",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FilterIdRequest"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FilterRemoved"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Take a filter out of the pipeline.",
+        "tags": [
+          "filter"
+        ],
+        "x-destructive": true,
+        "x-idempotent": true,
+        "x-scope": "operate"
+      }
+    },
+    "/api/v1/filters/{id}/set": {
+      "post": {
+        "description": "JSON-RPC method `filter.set`. Needs the `operate` scope. Accepts `idempotency_key`, honoured for 24 hours.",
+        "operationId": "filter.set",
+        "parameters": [
+          {
+            "description": "The id, as listed by the matching list call.",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetFilterRequest"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FilterRecord"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Change a filter's settings in place. A filter that cannot take the change while running says so rather than being restarted behind your back.",
+        "tags": [
+          "filter"
+        ],
+        "x-destructive": false,
+        "x-idempotent": true,
+        "x-scope": "operate"
+      }
+    },
+    "/api/v1/log/gst": {
+      "post": {
+        "description": "JSON-RPC method `log.gst`. Needs the `admin` scope. Accepts `idempotency_key`, honoured for 24 hours.",
+        "operationId": "log.gst",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LogGstRequest"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LogGstResult"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Raise GStreamer's own debug categories for a while, then let them fall back on their own.",
+        "tags": [
+          "log"
+        ],
+        "x-destructive": false,
+        "x-idempotent": true,
+        "x-scope": "admin"
+      }
+    },
+    "/api/v1/log/levels": {
+      "get": {
+        "description": "JSON-RPC method `log.levels`. Needs the `read` scope.",
+        "operationId": "log.levels",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Every log level override in force, and the GStreamer categories still raised.",
+        "tags": [
+          "log"
+        ],
+        "x-destructive": false,
+        "x-idempotent": true,
+        "x-scope": "read"
+      }
+    },
+    "/api/v1/log/set": {
+      "post": {
+        "description": "JSON-RPC method `log.set`. Needs the `admin` scope. Accepts `idempotency_key`, honoured for 24 hours.",
+        "operationId": "log.set",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LogSetRequest"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Change one instance's or one module's log level while the mixer runs.",
+        "tags": [
+          "log"
+        ],
+        "x-destructive": false,
+        "x-idempotent": true,
+        "x-scope": "admin"
       }
     },
     "/api/v1/media": {
@@ -1880,6 +2435,146 @@
         "x-destructive": false,
         "x-idempotent": true,
         "x-scope": "operate"
+      }
+    },
+    "/api/v1/pipeline/clock": {
+      "get": {
+        "description": "JSON-RPC method `pipeline.clock`. Needs the `read` scope.",
+        "operationId": "pipeline.clock",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "The clock every pipeline is running against, and how far each one has got.",
+        "tags": [
+          "pipeline"
+        ],
+        "x-destructive": false,
+        "x-idempotent": true,
+        "x-scope": "read"
+      }
+    },
+    "/api/v1/pipeline/dot": {
+      "get": {
+        "description": "JSON-RPC method `pipeline.dot`. Needs the `read` scope.",
+        "operationId": "pipeline.dot",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PipelineDot"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "One pipeline as a graphviz graph: every element, every pad and the caps negotiated between them.",
+        "tags": [
+          "pipeline"
+        ],
+        "x-destructive": false,
+        "x-idempotent": true,
+        "x-scope": "read"
+      }
+    },
+    "/api/v1/pipeline/latency": {
+      "get": {
+        "description": "JSON-RPC method `pipeline.latency`. Needs the `read` scope.",
+        "operationId": "pipeline.latency",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "How much delay one pipeline is carrying, and which stage put it there.",
+        "tags": [
+          "pipeline"
+        ],
+        "x-destructive": false,
+        "x-idempotent": true,
+        "x-scope": "read"
+      }
+    },
+    "/api/v1/pipeline/list": {
+      "get": {
+        "description": "JSON-RPC method `pipeline.list`. Needs the `read` scope.",
+        "operationId": "pipeline.list",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Every pipeline running right now, by the name the other pipeline methods accept.",
+        "tags": [
+          "pipeline"
+        ],
+        "x-destructive": false,
+        "x-idempotent": true,
+        "x-scope": "read"
+      }
+    },
+    "/api/v1/pipeline/queues": {
+      "get": {
+        "description": "JSON-RPC method `pipeline.queues`. Needs the `read` scope.",
+        "operationId": "pipeline.queues",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Every queue in one pipeline with how full it is, fullest first. A queue that stays full is where the trouble is.",
+        "tags": [
+          "pipeline"
+        ],
+        "x-destructive": false,
+        "x-idempotent": true,
+        "x-scope": "read"
       }
     },
     "/api/v1/program": {

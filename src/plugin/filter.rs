@@ -311,6 +311,11 @@ pub fn available() -> Vec<String> {
     vec![super::filters::chroma::MANIFEST.provide_id()]
 }
 
+/// Every filter kind this build carries.
+pub fn described() -> Vec<super::KindInfo> {
+    vec![super::filters::chroma::MANIFEST.describe()]
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
