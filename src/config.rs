@@ -39,6 +39,61 @@ pub struct Config {
     pub sources: Vec<SourceConfig>,
     #[serde(default)]
     pub outputs: Vec<OutputConfig>,
+    /// Filters attached at startup. Each one names a built in or plugin
+    /// provided filter and where it goes.
+    #[serde(default)]
+    pub filters: Vec<FilterConfig>,
+    /// Settings belonging to a plugin, one table per plugin name. The core
+    /// never reads inside these; it hands `[plugins.ndi]` to the plugin called
+    /// `ndi` and nothing else sees it.
+    #[serde(default)]
+    pub plugins: std::collections::BTreeMap<String, Params>,
+    /// Every other top level table. Without this a plugin's section was
+    /// silently dropped, which is the closed schema the audit named.
+    #[serde(flatten, default)]
+    pub extra: std::collections::BTreeMap<String, toml::Value>,
+}
+
+/// A plugin's own settings, as written in `params = { .. }` or in
+/// `[plugins.<name>]`. A TOML table, uninterpreted by the core.
+pub type Params = toml::Table;
+
+/// Where a filter goes. Either on one source, on the input or the programme
+/// side of the proxy boundary, or on the programme itself.
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct FilterConfig {
+    pub id: String,
+    #[serde(rename = "type")]
+    pub type_id: String,
+    #[serde(default)]
+    pub attach: FilterAttach,
+    #[serde(default)]
+    pub params: Params,
+}
+
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
+pub struct FilterAttach {
+    /// The source this filter belongs to, when it belongs to one.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source: Option<String>,
+    /// `input` puts it before the proxy boundary, where it also reaches the
+    /// thumbnail; `programme` puts it on this source's programme branch only.
+    #[serde(default)]
+    pub side: FilterAttachSide,
+    /// Set instead of `source` to filter the whole programme.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub programme: bool,
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum FilterAttachSide {
+    /// Between the source's canvas capsfilter and its tee: the programme and
+    /// the thumbnail both see it.
+    #[default]
+    Input,
+    /// Between this source's programme queue and the compositor pad.
+    Programme,
 }
 
 /// The fixed raw format that every branch of the graph must produce.
@@ -240,6 +295,15 @@ impl RtmpClient {
     /// Element to fall back to, if this setting permits a fallback at all.
     pub fn fallback_element(self) -> Option<&'static str> {
         matches!(self, Self::Auto).then_some(Self::LIBRTMP_ELEMENT)
+    }
+
+    /// How this setting is spelled in `params.client`.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Auto => "auto",
+            Self::Rtmp2 => Self::RTMP2_ELEMENT,
+            Self::Librtmp => Self::LIBRTMP_ELEMENT,
+        }
     }
 }
 
@@ -493,7 +557,18 @@ pub struct SourceConfig {
     pub id: String,
     #[serde(default)]
     pub name: Option<String>,
+    /// The plugin qualified provide id: `file/source`, `rtmp/source`,
+    /// `browser/source` and so on. Absent means "work it out from the URI",
+    /// which is what every config written before this said.
+    #[serde(rename = "type", default, skip_serializing_if = "Option::is_none")]
+    pub type_id: Option<String>,
+    /// Still accepted, and still how most sources are written. It is resolved
+    /// to a `type` by scheme and rank and kept in `params.uri`.
+    #[serde(default)]
     pub uri: String,
+    /// What this source's kind makes of it. The core does not read inside.
+    #[serde(default, skip_serializing_if = "Params::is_empty")]
+    pub params: Params,
     /// Seconds without a buffer before the source is treated as dead and its
     /// program pad is faded to the slate.
     #[serde(default = "default_stall_timeout")]
@@ -515,6 +590,10 @@ pub struct SourceConfig {
     /// after a restart returns the source to the level it had.
     #[serde(default)]
     pub muted: bool,
+    /// Every key the core does not know. They reach the source's kind through
+    /// `effective_params` rather than being dropped on the floor.
+    #[serde(flatten, default)]
+    pub extra: std::collections::BTreeMap<String, toml::Value>,
 }
 
 fn default_stall_timeout() -> f64 {
@@ -524,6 +603,103 @@ fn default_stall_timeout() -> f64 {
 impl SourceConfig {
     pub fn display_name(&self) -> &str {
         self.name.as_deref().unwrap_or(&self.id)
+    }
+
+    /// What to show an operator as this source's address.
+    ///
+    /// Most sources have a `uri` and that is it. One written as `type` plus
+    /// `params` may have its address inside the params, and one that has no
+    /// address at all (a capture card, a test pattern) has only its kind to
+    /// show. An empty string masked to an ellipsis told the operator nothing.
+    pub fn display_uri(&self) -> String {
+        if !self.uri.trim().is_empty() {
+            return self.uri.clone();
+        }
+        if let Some(u) = self.params.get("uri").and_then(|v| v.as_str()) {
+            return u.to_string();
+        }
+        self.type_id.clone().unwrap_or_default()
+    }
+
+    /// A source with nothing but an id and an address, for a caller building
+    /// one by hand.
+    pub fn bare(id: &str, uri: &str) -> Self {
+        Self {
+            id: id.to_string(),
+            name: None,
+            type_id: None,
+            uri: uri.to_string(),
+            params: Params::new(),
+            stall_timeout_secs: default_stall_timeout(),
+            rtmp_client: RtmpClient::default(),
+            superimpose: Superimpose::default(),
+            gain: crate::state::unity_gain(),
+            muted: false,
+            extra: Default::default(),
+        }
+    }
+
+    /// The params the kind actually receives: what was written in `params`,
+    /// plus the legacy fields the migration table maps in, plus anything the
+    /// core did not recognise.
+    ///
+    /// Every mapped field warns once, naming the key to write instead, so an
+    /// operator who reads their logs can move over before the old names go.
+    pub fn effective_params(&self) -> Params {
+        let mut out = self.params.clone();
+        // `uri` is not a migration, it is the ordinary way to write a source,
+        // so it is carried without a warning.
+        if !self.uri.trim().is_empty() && !out.contains_key("uri") {
+            out.insert("uri".into(), toml::Value::String(self.uri.clone()));
+        }
+        // The migration table from the plugin architecture, one row per line.
+        // Each mapped field warns once, naming the key to write instead.
+        let mapped: [(&str, &str, Option<toml::Value>); 2] = [
+            (
+                "rtmp_client",
+                "client",
+                (self.rtmp_client != RtmpClient::default())
+                    .then(|| toml::Value::String(self.rtmp_client.as_str().into())),
+            ),
+            (
+                "superimpose",
+                "superimpose",
+                (self.superimpose != Superimpose::default())
+                    .then(|| toml::Value::String("auto".into())),
+            ),
+        ];
+        for (from, key, value) in mapped {
+            let Some(value) = value else { continue };
+            if out.contains_key(key) {
+                continue;
+            }
+            tracing::warn!(
+                source = %self.id,
+                "`{from}` on a source is now `params.{key}`; the old key will not be read after this release"
+            );
+            out.insert(key.to_string(), value);
+        }
+        for (k, v) in &self.extra {
+            out.entry(k.clone()).or_insert_with(|| v.clone());
+        }
+        out
+    }
+
+    /// Check `params` against the kind this source resolves to. A bad param
+    /// names the field and what it accepts, rather than failing at build time
+    /// inside GStreamer.
+    pub fn validate_params(&self) -> anyhow::Result<()> {
+        let provide = crate::plugin::source::resolve_config(self)?;
+        let params = self.effective_params();
+        match provide.manifest.plugin {
+            "rtmp" => crate::plugin::kinds::rtmp::validate(&params),
+            "hls" => crate::plugin::kinds::live::validate(&params),
+            "file" => crate::plugin::kinds::file::validate(&params),
+            "exec" => crate::plugin::kinds::exec::validate(&params),
+            "browser" => crate::plugin::kinds::browser::validate(&params),
+            "layered" => crate::plugin::kinds::layered::validate(&params),
+            _ => Ok(()),
+        }
     }
 }
 
@@ -544,7 +720,15 @@ pub enum OutputPolicy {
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct OutputConfig {
     pub id: String,
+    /// The plugin qualified provide id: `rtmp/output`, `srt/output`. Absent
+    /// means "work it out from the URI".
+    #[serde(rename = "type", default, skip_serializing_if = "Option::is_none")]
+    pub type_id: Option<String>,
+    #[serde(default)]
     pub uri: String,
+    /// What this output's kind makes of it.
+    #[serde(default, skip_serializing_if = "Params::is_empty")]
+    pub params: Params,
     #[serde(default)]
     pub policy: OutputPolicy,
     /// Overrides the policy preset when present.
@@ -554,6 +738,9 @@ pub struct OutputConfig {
     /// makes a short network hiccup invisible to the viewer.
     #[serde(default = "default_queue_secs")]
     pub queue_secs: f64,
+    /// Every key the core does not know, handed to the output's kind.
+    #[serde(flatten, default)]
+    pub extra: std::collections::BTreeMap<String, toml::Value>,
 }
 
 fn default_queue_secs() -> f64 {
@@ -563,6 +750,32 @@ fn default_queue_secs() -> f64 {
 impl OutputConfig {
     pub fn reconnect_policy(&self) -> ReconnectConfig {
         self.reconnect.unwrap_or_else(|| ReconnectConfig::preset(self.policy))
+    }
+
+    /// An output with nothing but an id and an address.
+    pub fn bare(id: &str, uri: &str) -> Self {
+        Self {
+            id: id.to_string(),
+            type_id: None,
+            uri: uri.to_string(),
+            params: Params::new(),
+            policy: OutputPolicy::default(),
+            reconnect: None,
+            queue_secs: default_queue_secs(),
+            extra: Default::default(),
+        }
+    }
+
+    /// The params the output's kind receives, with `uri` carried in.
+    pub fn effective_params(&self) -> Params {
+        let mut out = self.params.clone();
+        if !self.uri.trim().is_empty() && !out.contains_key("uri") {
+            out.insert("uri".into(), toml::Value::String(self.uri.clone()));
+        }
+        for (k, v) in &self.extra {
+            out.entry(k.clone()).or_insert_with(|| v.clone());
+        }
+        out
     }
 }
 
@@ -723,6 +936,41 @@ impl Config {
             "multiview.jpeg_quality must be between 1 and 100"
         );
         anyhow::ensure!(self.multiview.fps > 0, "multiview.fps must be positive");
+        // Per kind validation of `params`. A bad param names the field and the
+        // values it accepts, at startup, rather than failing somewhere inside
+        // GStreamer once the show has begun.
+        for s in &self.sources {
+            s.validate_params()
+                .with_context(|| format!("source {}", s.id))?;
+        }
+        for o in &self.outputs {
+            let provide = crate::plugin::output::resolve_config(o)
+                .with_context(|| format!("output {}", o.id))?;
+            let params = o.effective_params();
+            let checked = match provide.manifest.plugin {
+                "rtmp" => crate::plugin::outputs::rtmp::validate(&params),
+                "srt" => crate::plugin::outputs::srt::validate(&params),
+                _ => Ok(()),
+            };
+            checked.with_context(|| format!("output {}", o.id))?;
+        }
+        for f in &self.filters {
+            anyhow::ensure!(
+                f.attach.source.is_some() || f.attach.programme,
+                "filter {} must say where it goes: attach = {{ source = \"cam1\" }} \
+                 or attach = {{ programme = true }}",
+                f.id
+            );
+            anyhow::ensure!(
+                !(f.attach.source.is_some() && f.attach.programme),
+                "filter {} names a source and the programme; it can only go on one",
+                f.id
+            );
+            if f.type_id == crate::plugin::filters::chroma::MANIFEST.provide_id() {
+                crate::plugin::filters::chroma::validate(&f.params)
+                    .with_context(|| format!("filter {}", f.id))?;
+            }
+        }
 
         let mut seen = std::collections::HashSet::new();
         for s in &self.sources {
@@ -898,6 +1146,142 @@ sidecar = \"/opt/b\"\n").unwrap();
         assert!(missing.stall.hold_last_frame);
     }
 
+    /// The example config is what a new operator starts from and what
+    /// `--example-config` prints. It has to parse and validate, or the first
+    /// thing anyone does with this program fails.
+    #[test]
+    fn the_example_config_parses_and_validates() {
+        let cfg: Config = toml::from_str(include_str!("../godwinmix.example.toml"))
+            .expect("the example config parses");
+        cfg.validate().expect("the example config validates");
+    }
+
+    #[test]
+    fn a_plugins_table_and_an_unknown_section_both_survive_the_load() {
+        let cfg: Config = toml::from_str(
+            r#"
+            [plugins.ndi]
+            discovery_interval_secs = 5
+
+            [something_no_core_version_knows]
+            a = 1
+            "#,
+        )
+        .expect("unknown sections are kept, not refused");
+        assert_eq!(
+            cfg.plugins["ndi"]["discovery_interval_secs"].as_integer(),
+            Some(5),
+            "a plugin's own settings must reach it"
+        );
+        assert!(
+            cfg.extra.contains_key("something_no_core_version_knows"),
+            "an unknown top level table must not be dropped on the floor"
+        );
+    }
+
+    #[test]
+    fn the_old_field_names_are_carried_into_params() {
+        let cfg: Config = toml::from_str(
+            r#"
+            [[sources]]
+            id = "cam1"
+            uri = "rtmp://host/live/cam1"
+            rtmp_client = "librtmp"
+
+            [[sources]]
+            id = "page"
+            uri = "web+https://example.com/score"
+            superimpose = "auto"
+            "#,
+        )
+        .unwrap();
+        let cam = cfg.sources[0].effective_params();
+        assert_eq!(cam["uri"].as_str(), Some("rtmp://host/live/cam1"));
+        assert_eq!(cam["client"].as_str(), Some("rtmpsrc"));
+        let page = cfg.sources[1].effective_params();
+        assert_eq!(page["superimpose"].as_str(), Some("auto"));
+    }
+
+    #[test]
+    fn a_source_can_be_written_as_a_type_and_params_with_no_uri_field() {
+        let cfg: Config = toml::from_str(
+            r#"
+            [[sources]]
+            id = "bars"
+            type = "test/source"
+            params = { uri = "test://smpte" }
+            "#,
+        )
+        .unwrap();
+        let src = &cfg.sources[0];
+        assert_eq!(src.type_id.as_deref(), Some("test/source"));
+        assert_eq!(src.effective_params()["uri"].as_str(), Some("test://smpte"));
+        cfg.validate().expect("test/source takes these params");
+    }
+
+    #[test]
+    fn an_unknown_key_on_a_source_reaches_the_kind_rather_than_vanishing() {
+        let cfg: Config = toml::from_str(
+            r#"
+            [[sources]]
+            id = "cam1"
+            uri = "rtmp://host/live/cam1"
+            something_a_plugin_knows = "yes"
+            "#,
+        )
+        .unwrap();
+        assert_eq!(
+            cfg.sources[0].effective_params()["something_a_plugin_knows"].as_str(),
+            Some("yes")
+        );
+    }
+
+    #[test]
+    fn a_filter_has_to_say_where_it_goes() {
+        let cfg: Config = toml::from_str(
+            r#"
+            [[filters]]
+            id = "key"
+            type = "chroma/filter"
+            attach = { programme = true }
+            params = { method = "green" }
+            "#,
+        )
+        .unwrap();
+        assert_eq!(cfg.filters[0].type_id, "chroma/filter");
+        assert!(cfg.filters[0].attach.programme);
+        cfg.validate().expect("a programme filter with good params is accepted");
+
+        let nowhere: Config = toml::from_str(
+            r#"
+            [[filters]]
+            id = "key"
+            type = "chroma/filter"
+            "#,
+        )
+        .unwrap();
+        let err = nowhere.validate().expect_err("a filter with no attachment is refused");
+        assert!(format!("{err:#}").contains("where it goes"), "{err:#}");
+    }
+
+    #[test]
+    fn a_bad_param_names_the_field_and_what_it_takes() {
+        let cfg: Config = toml::from_str(
+            r#"
+            [[filters]]
+            id = "key"
+            type = "chroma/filter"
+            attach = { programme = true }
+            params = { method = "puce" }
+            "#,
+        )
+        .unwrap();
+        let err = cfg.validate().expect_err("puce is not a keying method");
+        let text = format!("{err:#}");
+        assert!(text.contains("params.method"), "{text}");
+        assert!(text.contains("green"), "{text}");
+    }
+
     #[test]
     fn odd_canvas_is_rejected() {
         let mut cfg = Config {
@@ -913,6 +1297,9 @@ sidecar = \"/opt/b\"\n").unwrap();
             stall: Default::default(),
             sources: vec![],
             outputs: vec![],
+            filters: vec![],
+            plugins: Default::default(),
+            extra: Default::default(),
         };
         assert!(cfg.validate().is_err());
         cfg.canvas.width = 1920;

@@ -28,7 +28,7 @@
 use crate::caps::CanvasCaps;
 use crate::config::{Config, OutputConfig, SourceConfig};
 use crate::gstutil::{self, make, BusEvent};
-use crate::input::{MediaReport, InputPipeline, SourceKind};
+use crate::input::{InputPipeline, MediaReport};
 use crate::multiview::Multiview;
 use crate::output::OutputSlot;
 use crate::probe::Backends;
@@ -163,9 +163,7 @@ fn needs_superimposed(page: Option<f64>, media: &[Option<f64>]) -> bool {
 /// nothing may take this apart again by splitting on one: `pgm-alevel-cam-1`
 /// read that way names `cam`, which is a different source that may well exist.
 /// Attribution compares whole names instead.
-fn meter_name(id: &str) -> String {
-    format!("pgm-alevel-{id}")
-}
+use crate::plugin::branch::{BranchCtx, ProgrammeBranch};
 
 pub enum Command {
     /// Put a source on program. `None` cuts to the slate.
@@ -217,6 +215,21 @@ pub enum Command {
         position_ms: u64,
         reply: oneshot::Sender<SeekOutcome>,
     },
+    /// Put a filter on a source or on the programme, while live. The insert is
+    /// under a pad block, so the programme loses at most the one frame the
+    /// block holds.
+    AddFilter(Box<crate::config::FilterConfig>, Option<Ack>),
+    /// Change a filter that is already in place. A filter that cannot take the
+    /// change while running says so and nothing is torn down.
+    SetFilter {
+        id: String,
+        params: crate::config::Params,
+        reply: oneshot::Sender<FilterOutcome>,
+    },
+    /// Take a filter out, relinking around it under the same pad block.
+    RemoveFilter(String, Option<Ack>),
+    /// Every filter in place, with where it sits.
+    ListFilters(oneshot::Sender<Vec<FilterStatus>>),
     Status(oneshot::Sender<MixerStatus>),
     /// The configured sources and outputs with their URLs intact. `Status`
     /// masks those, so anything that must match on a URL asks here.
@@ -229,6 +242,29 @@ pub enum Command {
     /// scrubber.
     PositionTick,
     Shutdown,
+}
+
+/// Where one filter sits and what it is, for a listing.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct FilterStatus {
+    pub id: String,
+    #[serde(rename = "type")]
+    pub type_id: String,
+    /// The source it is attached to, or None for a programme filter.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source: Option<SourceId>,
+    pub side: String,
+}
+
+/// What `filter.set` answers with.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum FilterOutcome {
+    /// The change took effect on the running filter.
+    Applied,
+    /// The filter cannot take the change while running, and says why.
+    RestartRequired(String),
+    NoSuchFilter(String),
+    Failed(String),
 }
 
 #[derive(Clone)]
@@ -283,6 +319,38 @@ impl MixerHandle {
         rx.await.map_err(|_| anyhow::anyhow!("mixer dropped the seek request"))
     }
 
+    /// Put a filter on a source or on the programme, live.
+    ///
+    /// The public shape the API agent should wire `filter.add` to. It answers
+    /// once the filter is actually in the pipeline, so a caller that gets `Ok`
+    /// knows the picture has changed.
+    pub async fn add_filter(&self, cfg: crate::config::FilterConfig) -> Result<()> {
+        self.request(|ack| Command::AddFilter(Box::new(cfg), Some(ack))).await
+    }
+
+    /// Change a filter in place. `filter.set`.
+    pub async fn set_filter(
+        &self,
+        id: String,
+        params: crate::config::Params,
+    ) -> Result<FilterOutcome> {
+        let (tx, rx) = oneshot::channel();
+        self.send(Command::SetFilter { id, params, reply: tx })?;
+        rx.await.map_err(|_| anyhow::anyhow!("mixer dropped the filter request"))
+    }
+
+    /// Take a filter out. `filter.remove`.
+    pub async fn remove_filter(&self, id: String) -> Result<()> {
+        self.request(|ack| Command::RemoveFilter(id, Some(ack))).await
+    }
+
+    /// Every filter in place. `filter.list`.
+    pub async fn filters(&self) -> Result<Vec<FilterStatus>> {
+        let (tx, rx) = oneshot::channel();
+        self.send(Command::ListFilters(tx))?;
+        rx.await.map_err(|_| anyhow::anyhow!("mixer dropped the filter listing"))
+    }
+
     pub async fn configs(&self) -> Result<RuntimeConfigs> {
         let (tx, rx) = oneshot::channel();
         self.send(Command::Configs(tx))?;
@@ -305,23 +373,10 @@ impl MixerHandle {
 
 struct SourceSlot {
     input: InputPipeline,
-    /// Compositor and audiomixer pads in the program pipeline.
-    vpad: gst::Pad,
-    apad: gst::Pad,
-    branch: Vec<gst::Element>,
-    /// The operator's fader, `pgm-again-{id}`. Also in `branch`, which is what
-    /// adds it to the pipeline and takes it out again; this is a second handle
-    /// on the same element so the control path does not have to index into a
-    /// list to find it.
-    again: gst::Element,
-    /// The operator's mute, `pgm-amute-{id}`. Muted through its `mute` property
-    /// rather than by zeroing its volume, so the two controls never overwrite
-    /// each other's value.
-    amute: gst::Element,
-    /// The name of this source's `level` element. Level messages carry only the
-    /// name of the element that posted them, so this is how one is attributed
-    /// back to this source.
-    meter: String,
+    /// This source's side of the proxy boundary: the proxysrcs, the queues,
+    /// the fader, the meter, the mute and the two mixer pads. See
+    /// `ProgrammeBranch`.
+    branch: ProgrammeBranch,
     /// Ticks spent stalled, used to decide when to rebuild the pipeline.
     stalled_ticks: u32,
     /// Whether the first picture out of this source has been written down
@@ -338,35 +393,21 @@ struct SourceSlot {
     _watch: gstutil::BusWatch,
 }
 
-/// The loudest a fader can be set to. Matches the ceiling the control plane
-/// clamps to, so a request that arrives from somewhere else cannot push a
-/// volume element past what the API would have allowed.
-const MAX_SOURCE_GAIN: f64 = 10.0;
-
 impl SourceSlot {
-    /// Where the fader is now, read off the element. A NaN would have silenced
-    /// the element for good, which is why the setter refuses one.
     fn gain(&self) -> f64 {
-        self.again.property::<f64>("volume")
+        self.branch.gain()
     }
 
     fn set_gain(&self, gain: f64) {
-        if gain.is_nan() {
-            // A volume element set to NaN goes silent permanently and logs
-            // nothing. The control plane already refuses this; belt and braces
-            // for any other caller.
-            warn!(source = %self.input.id, "ignoring a fader value that is not a number");
-            return;
-        }
-        self.again.set_property("volume", gain.clamp(0.0, MAX_SOURCE_GAIN));
+        self.branch.set_gain(gain)
     }
 
     fn muted(&self) -> bool {
-        self.amute.property::<bool>("mute")
+        self.branch.muted()
     }
 
     fn set_muted(&self, muted: bool) {
-        self.amute.set_property("mute", muted);
+        self.branch.set_muted(muted)
     }
 
     /// Can an operator scrub this source?
@@ -591,6 +632,10 @@ pub struct Mixer {
     /// The branch of a source that is being rebuilt, kept in the programme
     /// pipeline so its last frame stays on air. See `retire_branch`.
     retired: Vec<RetiredBranch>,
+    /// Filters living in the programme pipeline: on the programme itself, and
+    /// on a source's programme side branch. A filter on a source's input side
+    /// lives in that source's own pipeline instead.
+    programme_filters: Vec<crate::plugin::FilterSlot>,
 }
 
 /// What is left of a source whose pipeline has been stopped for a rebuild:
@@ -1030,6 +1075,7 @@ impl Mixer {
             rebuild_failures: HashMap::new(),
             rebuild_not_before: HashMap::new(),
             retired: Vec::new(),
+            programme_filters: Vec::new(),
         };
         Ok((mixer, handle, rx, bus_rx))
     }
@@ -1045,7 +1091,7 @@ impl Mixer {
             let mv = Multiview::build(&self.cfg.multiview, &self.pgm_video_proxy)
                 .context("building multiview")?;
             self.watches
-                .push(gstutil::watch_bus(mv.pipeline(), "multiview", self.bus_tx.clone())?);
+                .push(gstutil::watch_bus(mv.pipeline(), gstutil::BusOwner::Multiview, self.bus_tx.clone())?);
             self.multiview = Some(mv);
         }
 
@@ -1063,7 +1109,7 @@ impl Mixer {
         }
 
         self.watches
-            .push(gstutil::watch_bus(&self.program, "program", self.bus_tx.clone())?);
+            .push(gstutil::watch_bus(&self.program, gstutil::BusOwner::Programme, self.bus_tx.clone())?);
         self.program.set_state(gst::State::Playing).context("starting program pipeline")?;
         if let Some(mv) = &self.multiview {
             mv.start().context("starting multiview")?;
@@ -1073,6 +1119,18 @@ impl Mixer {
             let id = src.id.clone();
             if let Err(e) = self.begin_add_source(src, None) {
                 error!(source = %id, ?e, "failed to add source");
+            }
+        }
+
+        // Filters on the programme itself. After the sources, because a filter
+        // attached to one of them was put on at build time and this is only the
+        // programme wide ones.
+        for f in self.cfg.filters.clone() {
+            if f.attach.source.is_some() || !f.attach.programme {
+                continue;
+            }
+            if let Err(e) = self.add_programme_filter(&f) {
+                error!(filter = %f.id, ?e, "failed to attach a programme filter");
             }
         }
 
@@ -1136,10 +1194,25 @@ impl Mixer {
     pub fn add_source(&mut self, cfg: &SourceConfig, overlay: Option<MediaReport>) -> Result<()> {
         anyhow::ensure!(cfg.id != AD_ID, "{AD_ID} is reserved for ad breaks");
         anyhow::ensure!(!cfg.id.trim().is_empty(), "a source needs an id");
-        anyhow::ensure!(!cfg.uri.trim().is_empty(), "a source needs a uri");
-        let kind = SourceKind::detect(&cfg.uri);
-        info!(source = %cfg.id, uri = %cfg.uri, ?kind, superimposed = overlay.is_some(), "adding source");
-        self.add_source_kind(cfg, kind, true, overlay)?;
+        // A bare URI is still the ordinary way to write a source, but it is no
+        // longer the only one: a source written as `type` plus `params` may
+        // have no address at all (a capture card, a test pattern, an NDI name).
+        // What it does need is a kind that can be resolved, and the resolver's
+        // error names what this build has.
+        anyhow::ensure!(
+            !cfg.uri.trim().is_empty() || cfg.type_id.is_some(),
+            "a source needs a uri, or a type saying what kind it is"
+        );
+        let provide = crate::plugin::source::resolve_config(cfg)?;
+        cfg.validate_params()?;
+        info!(
+            source = %cfg.id,
+            uri = %safe_uri_label(&cfg.display_uri()),
+            kind = %provide.manifest.provide_id(),
+            superimposed = overlay.is_some(),
+            "adding source"
+        );
+        self.add_source_kind(cfg, true, overlay)?;
         self.persist_runtime();
         Ok(())
     }
@@ -1147,7 +1220,6 @@ impl Mixer {
     fn add_source_kind(
         &mut self,
         cfg: &SourceConfig,
-        kind: SourceKind,
         in_multiview: bool,
         overlay: Option<MediaReport>,
     ) -> Result<()> {
@@ -1155,83 +1227,38 @@ impl Mixer {
             anyhow::bail!("source {} already exists", cfg.id);
         }
         let is_ad = cfg.id == AD_ID;
+        // The thumbnail end is built only when there is a mosaic to put it in.
+        // Nothing runs unless asked, and a source nobody is looking at should
+        // not be scaling a picture for nobody. It can be attached later on a
+        // running source without a rebuild; see `attach_thumb_end`.
+        let wants_thumb = in_multiview && self.multiview.is_some();
         let input = InputPipeline::build_kind(
             cfg,
             &self.canvas,
             &self.backends,
             self.cfg.multiview.fps.max(1),
             self.origin,
-            kind,
             self.cfg.security.allow_exec_sources,
             &self.cfg.browser,
             overlay,
+            wants_thumb,
         )?;
 
-        let id = &cfg.id;
-        let vsrc = make("proxysrc", &format!("pgm-vsrc-{id}"))?;
-        vsrc.set_property("proxysink", &input.video_proxy);
-        let vq = gstutil::queue_thread(&format!("pgm-vq-{id}"))?;
-        let asrc = make("proxysrc", &format!("pgm-asrc-{id}"))?;
-        asrc.set_property("proxysink", &input.audio_proxy);
-        let aq = gstutil::queue_thread(&format!("pgm-aq-{id}"))?;
-        // The programme's latency must not depend on the state of a source's
-        // own pipeline. See `answer_latency_here`.
-        gstutil::answer_latency_here(&vsrc)?;
-        gstutil::answer_latency_here(&asrc)?;
-
-        // The operator's desk for this source: a fader, a meter, and a mute, in
-        // that order, and the order is the whole point.
-        //
-        // The fader is ahead of the meter so that pulling it down visibly pulls
-        // the meter down with it. A meter that ignored the fader sitting next to
-        // it would read as broken, and an operator would stop trusting either.
-        //
-        // The mute is behind the meter so that a muted source still shows its
-        // signal. That is what lets someone confirm a camera has sound on it
-        // before cutting to it, which is the whole reason the meter is there.
-        //
-        // The audiomixer sink pad's own `volume` is left out of this. Takes and
-        // transitions fade that pad (see `ramp_volumes`), and two things writing
-        // one property fight: whichever wrote last wins, so an operator's fader
-        // would be undone by the next take, or the take's fade would be undone
-        // mid-ramp by a fader.
-        //
-        // No `audioconvert` ahead of the fader. The input pipeline ends its audio
-        // branch at a capsfilter on the canvas format, so what arrives through
-        // the proxy is already raw audio the way the audiomixer wants it, and
-        // both `volume` and `level` take that as it is.
-        let again = make("volume", &format!("pgm-again-{id}"))?;
-        again.set_property("volume", cfg.gain.clamp(0.0, MAX_SOURCE_GAIN));
-        let alevel = make("level", &meter_name(id))?;
-        crate::probe::set_bool(&alevel, "post-messages", true);
-        crate::probe::set_int(&alevel, "interval", 100_000_000);
-        let amute = make("volume", &format!("pgm-amute-{id}"))?;
-        amute.set_property("mute", cfg.muted);
-
-        // Appended rather than inserted, so the indices the rest of this
-        // function uses for the video and audio queues still mean what they did.
-        let branch = vec![vsrc, vq, asrc, aq, again.clone(), alevel, amute.clone()];
-        self.program.add_many(&branch).context("adding source branch")?;
-        gst::Element::link_many([&branch[0], &branch[1]]).context("linking source video")?;
-        gst::Element::link_many([&branch[2], &branch[3], &branch[4], &branch[5], &branch[6]])
-            .context("linking source audio")?;
-
-        let vpad = self.vmix.request_pad_simple("sink_%u").context("compositor refused a pad")?;
-        vpad.set_property("zorder", 1u32);
-        // New sources arrive invisible and silent. Nothing reaches program
-        // until an operator asks for it.
-        vpad.set_property("alpha", 0.0f64);
-        vpad.set_property("xpos", 0i32);
-        vpad.set_property("ypos", 0i32);
-        vpad.set_property("width", self.canvas.width);
-        vpad.set_property("height", self.canvas.height);
-        vpad.set_property_from_str("sizing-policy", "keep-aspect-ratio");
-        branch[1].static_pad("src").unwrap().link(&vpad).context("linking video into mixer")?;
-
-        let apad = self.amix.request_pad_simple("sink_%u").context("mixer refused a pad")?;
-        apad.set_property("volume", 0.0f64);
-        // The mute is the last thing before the mixer, so it is what links in.
-        branch[6].static_pad("src").unwrap().link(&apad).context("linking audio into mixer")?;
+        // The operator's desk for this source, built once and handed over. See
+        // `ProgrammeBranch`: the mixer no longer knows what is in it.
+        let branch = ProgrammeBranch::build(
+            &BranchCtx {
+                program: &self.program,
+                vmix: &self.vmix,
+                amix: &self.amix,
+                canvas: &self.canvas,
+            },
+            &cfg.id,
+            &input.video_proxy,
+            &input.audio_proxy,
+            cfg.gain,
+            cfg.muted,
+        )?;
 
         // Map this source's timeline onto the programme's. Installed before
         // the branch is set running: the segment event travels as soon as data
@@ -1248,51 +1275,53 @@ impl Mixer {
         // future, where the compositor's queue held its frames unconsumed,
         // the push into that queue never returned, and every teardown that
         // needed the pad's stream lock afterwards waited on it for good.
-        let aligner = if is_ad || input.superimposed() {
+        // An `alpha` source composites its own layers on this pipeline's clock
+        // and base time, so what it emits is already at the programme's running
+        // time. Shifting that by the programme's age again put a source rebuilt
+        // two minutes in two minutes into the future, where the compositor's
+        // queue held its frames unconsumed and every later teardown waited on
+        // the pad's stream lock for good.
+        let aligner = if is_ad || input.composites_its_own_timeline() {
             None
         } else {
             Some(TimelineAligner::install(
                 &self.program,
-                &branch[1],
-                &branch[3],
-                &vpad,
-                &apad,
+                &branch.vq,
+                &branch.aq,
+                &branch.vpad,
+                &branch.apad,
                 &cfg.id,
             )?)
         };
 
-        for el in &branch {
-            el.sync_state_with_parent().ok();
+        // Filters this source was configured with on its input side, put on
+        // before it starts, so the first frame out of it is already keyed. The
+        // programme side ones need the branch registered first and go on below.
+        let configured = self.configured_filters(&cfg.id);
+        for f in configured.iter().filter(|f| f.attach.side == crate::config::FilterAttachSide::Input)
+        {
+            if let Err(e) = input.attach_filter(f, &self.canvas, false) {
+                warn!(source = %cfg.id, filter = %f.id, ?e, "could not attach a configured filter");
+            }
         }
+
+        branch.sync_state();
 
         // An ad gets no mosaic tile. It would reshuffle the grid under the
         // operator mid-break, and the program return cell already shows it.
         if in_multiview {
-            if let Some(mv) = &mut self.multiview {
-                mv.add_tile(Some(cfg.id.clone()), &input.thumb_proxy)
-                    .context("adding multiview tile")?;
+            if let (Some(mv), Some(thumb)) = (&mut self.multiview, input.thumb_proxy()) {
+                mv.add_tile(Some(cfg.id.clone()), &thumb).context("adding multiview tile")?;
             }
         }
 
-        let watch =
-            gstutil::watch_bus(&input.pipeline, format!("input-{}", cfg.id), self.bus_tx.clone())
-                .context("watching input bus")?;
-        // Put every source pipeline on the program's clock and base time.
-        //
-        // Separate pipelines otherwise each pick their own, so running times
-        // are not comparable across the proxy boundary. Live RTMP inputs get
-        // away with it because their timing comes from arrival, but a file's
-        // timestamps start at zero, and a compositor judging them against a
-        // programme that has been up for minutes sees them as ancient history.
-        if let Some(clock) = self.program.clock() {
-            input.pipeline.use_clock(Some(&clock));
-            // start-time NONE stops the pipeline resetting base time when it
-            // changes state, which would undo the line below.
-            input.pipeline.set_start_time(gst::ClockTime::NONE);
-            if let Some(base) = self.program.base_time() {
-                input.pipeline.set_base_time(base);
-            }
-        }
+        let watch = gstutil::watch_bus(
+            &input.pipeline,
+            gstutil::BusOwner::Source(cfg.id.clone()),
+            self.bus_tx.clone(),
+        )
+        .context("watching input bus")?;
+        self.adopt_clock(&input.pipeline);
 
         // Register the slot before starting, so that a failure to start can be
         // cleaned up by the ordinary removal path rather than leaking pads and
@@ -1300,12 +1329,7 @@ impl Mixer {
         // kept posting its errors.
         self.sources.push(SourceSlot {
             input,
-            vpad,
-            apad,
             branch,
-            again,
-            amute,
-            meter: meter_name(&cfg.id),
             stalled_ticks: 0,
             first_reported: false,
             silent_ticks: 0,
@@ -1329,9 +1353,237 @@ impl Mixer {
             let _ = self.remove_source(&cfg.id);
             return Err(e);
         }
-        info!(source = %cfg.id, "source added");
+        for f in configured
+            .iter()
+            .filter(|f| f.attach.side == crate::config::FilterAttachSide::Programme)
+        {
+            if let Err(e) = self.add_source_programme_filter(&cfg.id, f) {
+                warn!(source = %cfg.id, filter = %f.id, ?e, "could not attach a configured filter");
+            }
+        }
+        info!(source = %cfg.id, kind = %self.sources.last().map(|s| s.input.type_id()).unwrap_or_default(), "source added");
         self.broadcast_status();
         Ok(())
+    }
+
+    /// Put a filter where its `attach` says, while the programme runs.
+    ///
+    /// Four insertion points exist and this picks between them: a filter with a
+    /// source goes on that source (its input side by default, its programme
+    /// branch when `side = "programme"`), and one with `programme = true` goes
+    /// on the programme before the tee every consumer reads, so the multiview
+    /// and the encoder both see it.
+    pub fn add_filter(&mut self, cfg: &crate::config::FilterConfig) -> Result<()> {
+        anyhow::ensure!(!cfg.id.trim().is_empty(), "a filter needs an id");
+        if let Some(source) = cfg.attach.source.clone() {
+            let slot = self
+                .sources
+                .iter()
+                .find(|s| s.input.id == source)
+                .with_context(|| format!("no such source {source}"))?;
+            match cfg.attach.side {
+                crate::config::FilterAttachSide::Input => {
+                    slot.input.attach_filter(cfg, &self.canvas, true)?;
+                }
+                crate::config::FilterAttachSide::Programme => {
+                    self.add_source_programme_filter(&source, cfg)?;
+                }
+            }
+            self.broadcast_status();
+            return Ok(());
+        }
+        anyhow::ensure!(
+            cfg.attach.programme,
+            "a filter must say where it goes: attach = {{ source = \"cam1\" }} \
+             or attach = {{ programme = true }}"
+        );
+        self.add_programme_filter(cfg)
+    }
+
+    /// The programme side point for one source: between its video queue and
+    /// its compositor pad, and after the mute on the audio side so the meter
+    /// stays honest. The thumbnail does not see it, which is the difference
+    /// from the input side.
+    fn add_source_programme_filter(
+        &mut self,
+        source: &SourceId,
+        cfg: &crate::config::FilterConfig,
+    ) -> Result<()> {
+        anyhow::ensure!(
+            !self.programme_filters.iter().any(|f| f.id() == cfg.id),
+            "a filter called {} is already in place",
+            cfg.id
+        );
+        let slot = self
+            .sources
+            .iter()
+            .find(|s| &s.input.id == source)
+            .with_context(|| format!("no such source {source}"))?;
+        let filter = crate::plugin::filter::make(&cfg.type_id)?;
+        let (upstream, pad) = if filter.stream() == crate::plugin::filter::Stream::Audio {
+            (slot.branch.amute.clone(), slot.branch.apad.clone())
+        } else {
+            (slot.branch.vq.clone(), slot.branch.vpad.clone())
+        };
+        let mut params = cfg.params.clone();
+        params
+            .entry("id".to_string())
+            .or_insert_with(|| toml::Value::String(format!("pgm-{source}-{}", cfg.id)));
+        let placed = crate::plugin::filter::insert(
+            crate::plugin::Insertion::before_pad(&self.program, &upstream, &pad),
+            crate::plugin::FilterSpec {
+                id: cfg.id.clone(),
+                type_id: cfg.type_id.clone(),
+                side: crate::plugin::FilterSide::SourceProgramme,
+                params,
+            },
+            filter,
+            &self.canvas,
+            true,
+        )?;
+        self.programme_filters.push(placed);
+        self.broadcast_status();
+        Ok(())
+    }
+
+    /// The programme insertion point: between the compositor's capsfilter and
+    /// the tee every consumer reads, so the encoder and the multiview both see
+    /// the filtered picture.
+    fn add_programme_filter(&mut self, cfg: &crate::config::FilterConfig) -> Result<()> {
+        anyhow::ensure!(
+            !self.programme_filters.iter().any(|f| f.id() == cfg.id),
+            "the programme already has a filter called {}",
+            cfg.id
+        );
+        let filter = crate::plugin::filter::make(&cfg.type_id)?;
+        let (up, down) = if filter.stream() == crate::plugin::filter::Stream::Audio {
+            ("pgm-level", "araw-tee")
+        } else {
+            ("vmix-caps", "vraw-tee")
+        };
+        let upstream = self
+            .program
+            .by_name(up)
+            .with_context(|| format!("the programme has no element called {up}"))?;
+        let downstream = self
+            .program
+            .by_name(down)
+            .with_context(|| format!("the programme has no element called {down}"))?;
+        let mut params = cfg.params.clone();
+        params
+            .entry("id".to_string())
+            .or_insert_with(|| toml::Value::String(format!("pgm-{}", cfg.id)));
+        let slot = crate::plugin::filter::insert(
+            crate::plugin::Insertion::between(&self.program, &upstream, &downstream),
+            crate::plugin::FilterSpec {
+                id: cfg.id.clone(),
+                type_id: cfg.type_id.clone(),
+                side: crate::plugin::FilterSide::Programme,
+                params,
+            },
+            filter,
+            &self.canvas,
+            true,
+        )?;
+        self.programme_filters.push(slot);
+        self.broadcast_status();
+        Ok(())
+    }
+
+    /// Change a filter wherever it is.
+    fn set_filter(&mut self, id: &str, params: &crate::config::Params) -> FilterOutcome {
+        let outcome = if let Some(slot) =
+            self.programme_filters.iter_mut().find(|f| f.id() == id)
+        {
+            slot.configure(params)
+        } else {
+            let Some(source) =
+                self.sources.iter().find(|s| s.input.filter_ids().iter().any(|f| f == id))
+            else {
+                return FilterOutcome::NoSuchFilter(format!(
+                    "no filter called {id} on the programme or on any source"
+                ));
+            };
+            source.input.configure_filter(id, params)
+        };
+        match outcome {
+            Ok(crate::plugin::Configure::Applied) => FilterOutcome::Applied,
+            Ok(crate::plugin::Configure::RestartRequired(why)) => {
+                FilterOutcome::RestartRequired(why)
+            }
+            Err(e) => FilterOutcome::Failed(format!("{e:#}")),
+        }
+    }
+
+    /// Take a filter out, wherever it is.
+    fn remove_filter(&mut self, id: &str) -> Result<()> {
+        if let Some(pos) = self.programme_filters.iter().position(|f| f.id() == id) {
+            self.programme_filters.remove(pos).remove()?;
+            self.broadcast_status();
+            return Ok(());
+        }
+        let source = self
+            .sources
+            .iter()
+            .find(|s| s.input.filter_ids().iter().any(|f| f == id))
+            .with_context(|| {
+                format!("no filter called {id} on the programme or on any source")
+            })?;
+        source.input.remove_filter(id)?;
+        self.broadcast_status();
+        Ok(())
+    }
+
+    fn filter_list(&self) -> Vec<FilterStatus> {
+        let mut all: Vec<FilterStatus> = self
+            .programme_filters
+            .iter()
+            .map(|f| FilterStatus {
+                id: f.id().to_string(),
+                type_id: f.spec.type_id.clone(),
+                source: None,
+                side: f.spec.side.as_str().to_string(),
+            })
+            .collect();
+        for slot in &self.sources {
+            for f in slot.input.filters() {
+                all.push(FilterStatus {
+                    id: f.0,
+                    type_id: f.1,
+                    source: Some(slot.input.id.clone()),
+                    side: f.2,
+                });
+            }
+        }
+        all
+    }
+
+    /// Put a source pipeline on the programme's clock and base time.
+    ///
+    /// Separate pipelines otherwise each pick their own, so running times are
+    /// not comparable across the proxy boundary. Live RTMP inputs get away with
+    /// it because their timing comes from arrival, but a file's timestamps
+    /// start at zero, and a compositor judging them against a programme that
+    /// has been up for minutes sees them as ancient history.
+    fn adopt_clock(&self, pipeline: &gst::Pipeline) {
+        let Some(clock) = self.program.clock() else { return };
+        pipeline.use_clock(Some(&clock));
+        // start-time NONE stops the pipeline resetting base time when it
+        // changes state, which would undo the line below.
+        pipeline.set_start_time(gst::ClockTime::NONE);
+        if let Some(base) = self.program.base_time() {
+            pipeline.set_base_time(base);
+        }
+    }
+
+    /// The configured filters that name one source.
+    fn configured_filters(&self, id: &SourceId) -> Vec<crate::config::FilterConfig> {
+        self.cfg
+            .filters
+            .iter()
+            .filter(|f| f.attach.source.as_deref() == Some(id.as_str()))
+            .cloned()
+            .collect()
     }
 
     pub fn remove_source(&mut self, id: &SourceId) -> Result<()> {
@@ -1478,23 +1730,23 @@ impl Mixer {
         // Under the programme layer and over the slate, so whatever is taken
         // next draws straight over it, and silent: the pipeline behind it has
         // stopped and there is nothing left to hear.
-        slot.vpad.set_property("zorder", 1u32);
-        slot.vpad.set_property("alpha", 1.0f64);
-        slot.apad.set_property("volume", 0.0f64);
+        slot.branch.vpad.set_property("zorder", 1u32);
+        slot.branch.vpad.set_property("alpha", 1.0f64);
+        slot.branch.apad.set_property("volume", 0.0f64);
         // A meter keeps the name of the source it was built for, and the
         // replacement builds one with the same name. Silenced here so that the
         // two cannot both be read as the new source's level.
-        for el in &slot.branch {
-            if el.name() == slot.meter.as_str() {
+        for el in &slot.branch.elements {
+            if el.name() == slot.branch.meter.as_str() {
                 crate::probe::set_bool(el, "post-messages", false);
             }
         }
         info!(source = %id, "source stopped, its last frame held on the programme");
         self.retired.push(RetiredBranch {
             id: id.clone(),
-            vpad: slot.vpad,
-            apad: slot.apad,
-            branch: slot.branch,
+            vpad: slot.branch.vpad,
+            apad: slot.branch.apad,
+            branch: slot.branch.elements,
             until: Instant::now() + FREEZE_HOLD,
         });
         self.broadcast_status();
@@ -1608,8 +1860,8 @@ impl Mixer {
             q.map(|q| (q.property::<u32>("current-level-buffers"), q.property::<u64>("current-level-time") / 1_000_000))
                 .unwrap_or((0, 0))
         };
-        let (vq_buffers, vq_time_ms) = level(slot.branch.get(1));
-        let (aq_buffers, aq_time_ms) = level(slot.branch.get(3));
+        let (vq_buffers, vq_time_ms) = level(Some(&slot.branch.vq));
+        let (aq_buffers, aq_time_ms) = level(Some(&slot.branch.aq));
         SourceTimeline {
             program_running_ms: now.mseconds(),
             video_running_ms: video.map(|t| t.mseconds()),
@@ -1693,12 +1945,12 @@ impl Mixer {
         if let Some(mv) = &mut self.multiview {
             mv.remove_tile(id).ok();
         }
-        for el in &slot.branch {
+        for el in &slot.branch.elements {
             let _ = el.set_state(gst::State::Null);
             let _ = self.program.remove(el);
         }
-        self.vmix.release_request_pad(&slot.vpad);
-        self.amix.release_request_pad(&slot.apad);
+        self.vmix.release_request_pad(&slot.branch.vpad);
+        self.amix.release_request_pad(&slot.branch.apad);
         // Everything this module keeps under the source's id goes with it. The
         // ids are reused: a director alternates two of them, one per match, so
         // a restart delay or a rebuild count left behind from the last source
@@ -1895,9 +2147,9 @@ impl Mixer {
             let healthy = matches!(slot.input.observed_state(), SourceState::Live);
             let on = is_program && healthy;
 
-            slot.vpad.set_property("alpha", if on { 1.0f64 } else { 0.0f64 });
-            slot.vpad.set_property("zorder", if is_program { 2u32 } else { 1u32 });
-            targets.push((slot.apad.clone(), if on { 1.0f64 } else { 0.0f64 }));
+            slot.branch.vpad.set_property("alpha", if on { 1.0f64 } else { 0.0f64 });
+            slot.branch.vpad.set_property("zorder", if is_program { 2u32 } else { 1u32 });
+            targets.push((slot.branch.apad.clone(), if on { 1.0f64 } else { 0.0f64 }));
         }
 
         if ramp_audio && self.cfg.program.audio_ramp_ms > 0 {
@@ -1966,21 +2218,17 @@ impl Mixer {
             );
         }
 
-        let cfg = SourceConfig {
-            id: AD_ID.to_string(),
-            name: Some("Ad break".into()),
-            uri: crate::input::to_uri(&uri),
-            stall_timeout_secs: f64::MAX, // An ad ends with EOS, never a stall.
-            rtmp_client: Default::default(),
-            superimpose: Default::default(), // An ad is a file, never a page.
-            // An ad goes out at the level the file was made at. There is no
-            // operator fader for it: it is not in the source list, so nothing
-            // draws one, and a break that went out silent because the last
-            // source's fader happened to be down would be worse than useless.
-            gain: crate::state::unity_gain(),
-            muted: false,
-        };
-        if let Err(e) = self.add_source_kind(&cfg, SourceKind::File, false, None) {
+        // An ad goes out at the level the file was made at. There is no
+        // operator fader for it: it is not in the source list, so nothing draws
+        // one, and a break that went out silent because the last source's fader
+        // happened to be down would be worse than useless.
+        let mut cfg = SourceConfig::bare(AD_ID, &crate::input::to_uri(&uri));
+        cfg.name = Some("Ad break".into());
+        // An ad is a file, always, whatever the address looks like: it ends
+        // with EOS and that is how the break knows to return.
+        cfg.type_id = Some(crate::plugin::kinds::file::MANIFEST.provide_id());
+        cfg.stall_timeout_secs = f64::MAX; // An ad ends with EOS, never a stall.
+        if let Err(e) = self.add_source_kind(&cfg, false, None) {
             let _ = self.events.send(Event::Alert {
                 severity: Severity::Error,
                 message: format!("ad break could not start: {e:#}"),
@@ -2018,8 +2266,8 @@ impl Mixer {
         // this the mixer would judge them against the current running time,
         // find them minutes stale, and stall while it worked out what to do.
         // The same offset goes on both pads so the ad stays in lip sync.
-        slot.vpad.set_offset(cue.nseconds() as i64);
-        slot.apad.set_offset(cue.nseconds() as i64);
+        slot.branch.vpad.set_offset(cue.nseconds() as i64);
+        slot.branch.apad.set_offset(cue.nseconds() as i64);
         debug!(cue_ms = cue.mseconds(), "rebasing the ad onto programme time");
 
         // The file's own duration, known now that it has prerolled.
@@ -2129,7 +2377,10 @@ impl Mixer {
                 r?;
             }
             Command::RestartSource(id) => {
-                if self.sources.iter().any(|s| s.input.id == id && s.input.superimposed()) {
+                // Which way a source comes back is its own declaration, not a
+                // flag on the core's struct. A kind without `restart-in-place`
+                // is built again from nothing.
+                if self.sources.iter().any(|s| s.input.id == id && !s.input.restarts_in_place()) {
                     self.rebuild_source(&id);
                 } else if let Some(slot) = self.sources.iter_mut().find(|s| s.input.id == id) {
                     slot.stalled_ticks = 0;
@@ -2168,6 +2419,22 @@ impl Mixer {
                 reply(ack, &r);
                 r?;
             }
+            Command::AddFilter(cfg, ack) => {
+                let r = self.add_filter(&cfg);
+                reply(ack, &r);
+                r?;
+            }
+            Command::SetFilter { id, params, reply } => {
+                let _ = reply.send(self.set_filter(&id, &params));
+            }
+            Command::RemoveFilter(id, ack) => {
+                let r = self.remove_filter(&id);
+                reply(ack, &r);
+                r?;
+            }
+            Command::ListFilters(reply) => {
+                let _ = reply.send(self.filter_list());
+            }
             Command::Status(reply) => {
                 let _ = reply.send(self.status());
             }
@@ -2200,8 +2467,10 @@ impl Mixer {
                     return;
                 }
 
-                // A source failing is contained in its own pipeline.
-                if let Some(id) = pipeline.strip_prefix("input-") {
+                // A source failing is contained in its own pipeline. Who posted
+                // this is declared when the watcher is installed, not read back
+                // out of a name.
+                if let Some(id) = pipeline.source() {
                     let id = id.to_string();
                     if let Some(slot) = self.sources.iter().find(|s| s.input.id == id) {
                         slot.input.mark_failed();
@@ -2234,7 +2503,7 @@ impl Mixer {
                 // would attribute `pgm-alevel-cam-1` to a source called `cam`.
                 if src == "pgm-level" {
                     let _ = self.events.send(Event::AudioLevel { peak_db });
-                } else if let Some(slot) = self.sources.iter().find(|s| s.meter == src) {
+                } else if let Some(slot) = self.sources.iter().find(|s| s.branch.owns_meter(&src)) {
                     let _ = self.events.send(Event::SourceAudioLevel {
                         source: slot.input.id.clone(),
                         peak_db,
@@ -2246,7 +2515,7 @@ impl Mixer {
                 // message would bury everything else.
             }
             BusEvent::Eos { pipeline } => {
-                if pipeline == format!("input-{AD_ID}") {
+                if pipeline.source() == Some(AD_ID) {
                     // When the return is already armed from the file's
                     // duration, let it fire: EOS arrives while the tail of the
                     // ad is still in flight, and acting on it truncates the ad.
@@ -2260,7 +2529,7 @@ impl Mixer {
                     return;
                 }
                 warn!(%pipeline, "end of stream");
-                if let Some(id) = pipeline.strip_prefix("input-") {
+                if let Some(id) = pipeline.source() {
                     // A source that ends is also worth a timeline line: the
                     // question is the same one, where its last buffers sat.
                     let id = id.to_string();
@@ -2431,12 +2700,15 @@ impl Mixer {
         let Some(slot) = self.sources.iter().find(|s| s.input.id == id) else {
             return;
         };
-        // A superimposed source is not restarted in place, it is built again
-        // from nothing (see `rebuild_source`), which costs a browser launch, a
-        // profile directory and about ten seconds of the operator's attention.
-        // Doing that every twelve seconds for two hours is what happened on
-        // 2026-09-11 and 2026-09-12, so it gets a policy of its own.
-        if slot.input.superimposed() {
+        // A source that does not declare `restart-in-place` is built again from
+        // nothing (see `rebuild_source`), which for a page costs a browser
+        // launch, a profile directory and about ten seconds of the operator's
+        // attention. Doing that every twelve seconds for two hours is what
+        // happened on 2026-09-11 and 2026-09-12, so it gets a policy of its
+        // own. The decision comes from the capability the kind declared at
+        // `initialize`, so a plugin that can come back in place says so and
+        // gets the cheap path without the core knowing what it is.
+        if !slot.input.restarts_in_place() {
             let now = Instant::now();
             if self.rebuild_not_before.get(&id).is_some_and(|t| *t > now) {
                 return;
@@ -2669,20 +2941,17 @@ impl Mixer {
                 // Asked once and used twice: each of these is a query on the
                 // source's own pipeline, and the snapshot is polled.
                 let at = s.position();
-                SourceStatus {
+                let mut status = SourceStatus {
                     id: s.input.id.clone(),
                     name: s.input.config.display_name().to_string(),
-                    uri: safe_uri_label(&s.input.config.uri),
+                    uri: safe_uri_label(&s.input.config.display_uri()),
                     state: s.input.observed_state(),
                     has_video: s.input.has_video(),
                     has_audio: s.input.has_audio(),
                     cell: cells.get(s.input.id.as_str()).copied(),
                     video_idle_ms: s.input.health.video_idle_ms(),
                     audio_idle_ms: s.input.health.audio_idle_ms(),
-                    superimposed: s.input.superimposed(),
-                    // Only a superimposed source has levels, so this is `None`
-                    // for everything else and the UI draws no faders for it.
-                    audio: s.input.levels().map(|l| l.report()),
+                    extra: Default::default(),
                     // These two come off the elements, not off the config, so the
                     // snapshot says what the pipeline is doing even after a gain
                     // was clamped on its way in.
@@ -2694,7 +2963,23 @@ impl Mixer {
                     seekable: s.seekable(),
                     position_ms: at.as_ref().map(|at| at.position_ms),
                     duration_ms: at.and_then(|at| at.duration_ms),
+                };
+                // What only this kind has. The keys are the same ones the JSON
+                // always carried, written from the extras rather than from
+                // fields on the universal shape.
+                if s.input.superimposed() {
+                    status.put_extra("superimposed", true);
                 }
+                // Only a source with separate sounds has levels, so this is
+                // absent for everything else and the UI draws no faders for it.
+                if let Some(levels) = s.input.levels() {
+                    status.put_extra("audio", levels.report());
+                }
+                let filters = s.input.filter_ids();
+                if !filters.is_empty() {
+                    status.put_extra("filters", filters);
+                }
+                status
             })
             .collect();
 
@@ -2832,6 +3117,7 @@ pub fn spawn(
 
 #[cfg(test)]
 mod tests {
+    use crate::plugin::branch::meter_name;
     use super::*;
 
     /// The mixer runs on a plain OS thread with no Tokio context. Arming a
@@ -2992,6 +3278,9 @@ mod tests {
             stall: Default::default(),
             sources: vec![],
             outputs: vec![],
+            filters: vec![],
+            plugins: Default::default(),
+            extra: Default::default(),
         })
         .err()
         .expect("must refuse to build without a runtime");
@@ -3021,6 +3310,9 @@ mod tests {
             stall: Default::default(),
             sources: vec![],
             outputs: vec![],
+            filters: vec![],
+            plugins: Default::default(),
+            extra: Default::default(),
         };
         cfg.multiview.enabled = false;
         cfg.hardware.graphics = graphics;
