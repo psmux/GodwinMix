@@ -2244,23 +2244,25 @@ mod tests {
         std::fs::read_dir(dir).map(|d| d.count()).unwrap_or(0)
     }
 
-    /// The lowest descriptor count seen over a few seconds of sampling.
+    /// The lowest descriptor count seen while waiting for it to come down to
+    /// `target`, for at most `window`.
     ///
     /// The count is process wide and the suite runs beside these tests,
     /// holding pipelines and sockets of its own for seconds at a time. A leak
-    /// keeps the floor up for good; a neighbour's descriptors go away when
-    /// it finishes, and this waits for that.
-    fn fd_floor() -> usize {
+    /// keeps the count up for good, so waiting on a target it can never
+    /// reach fails the test; a neighbour's descriptors go away when it
+    /// finishes, and this waits for that instead of blaming the code under
+    /// test for them.
+    fn fd_floor(target: usize, window: Duration) -> usize {
         let mut floor = usize::MAX;
         let start = std::time::Instant::now();
-        while start.elapsed() < Duration::from_secs(6) {
+        loop {
             floor = floor.min(open_fds());
-            if floor <= 40 {
-                break;
+            if floor <= target || start.elapsed() >= window {
+                return floor;
             }
             std::thread::sleep(Duration::from_millis(150));
         }
-        floor
     }
 
     /// A source that comes and goes must leave nothing open.
@@ -2300,10 +2302,10 @@ mod tests {
             input.stop();
             drop(input);
             if i == 4 {
-                baseline = fd_floor();
+                baseline = fd_floor(0, Duration::from_secs(2));
             }
         }
-        let after = fd_floor();
+        let after = fd_floor(baseline + 2, Duration::from_secs(20));
         assert!(
             after <= baseline + 2,
             "fifteen builds added {} descriptors ({baseline} to {after})",
@@ -2469,10 +2471,10 @@ mod tests {
         for i in 0..12 {
             assert!(probe_page_media(&"s".to_string(), &spec, Duration::from_secs(5)).is_some());
             if i == 2 {
-                baseline = fd_floor();
+                baseline = fd_floor(0, Duration::from_secs(2));
             }
         }
-        let after = fd_floor();
+        let after = fd_floor(baseline + 2, Duration::from_secs(20));
         assert!(
             after <= baseline + 2,
             "nine probes added {} descriptors ({baseline} to {after})",
