@@ -59,8 +59,9 @@ do yourself:
 * It signs every asset with sigstore, keyless, tied to the CI's own identity.
   You need no signing key, no certificate, and no Apple developer account.
 * It publishes the assets and their `.sigstore.json` bundles as release assets
-  on your repository, through a bot, or on the index's own release if you would
-  rather it did not push to yours.
+  on the index repository rather than on yours. That is not a preference: the
+  signing identity in `index.json` names the index's own workflow, and a core
+  verifying against it has to find the assets where that workflow put them.
 * It writes the badge for your README and updates the public compatibility
   dashboard.
 

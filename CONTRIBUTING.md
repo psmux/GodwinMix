@@ -129,7 +129,9 @@ request descriptions.
 * No slogan openers, no taglines, no "not X but Y" constructions, no bolded
   lead ins on every bullet, no sets of three used for rhythm.
 * Avoid the words: leverage, seamless, robust, cutting edge, delve, elevate,
-  unlock, harness, landscape, journey, transformative, testament.
+  unlock, harness, landscape, journey, transformative, testament. The one
+  exception is "harness" as a noun: the conformance harness is a thing with a
+  name, and `gmx plugin test` runs it. As a verb it is still out.
 * Comments say why, not what. The code already says what.
 
 ## Pull requests
