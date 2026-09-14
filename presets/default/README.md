@@ -23,16 +23,3 @@ A machine on the same network as your cameras or encoders, and one RTMP address 
 **The destination says reconnecting.** Usually the address or the stream key is wrong, or the far end is refusing you. The alerts panel carries the reason the server gave.
 
 **Nothing is on air.** Usually press a camera tile. The slate is what goes out until you do.
-
-
-## What is in this directory
-
-| File | What it is |
-|---|---|
-| `gmx-plugin.toml` | the manifest: the plugins this preset needs, and where its config, layout and scenes are |
-| `config/godwinmix.toml` | the mixer's configuration, with every line you have to change near the top |
-| `config/layout.json` | which panels go in which slot of the web UI |
-| `scenes/` | the scene documents this preset uses, one file each |
-| `README.md` | this page |
-
-Copy this whole directory to make your own. `presets/README.md` says how.
