@@ -36,8 +36,8 @@ fn inline(value: Value) -> Value {
 /// The event table from 03 section 6, as far as this build implements it.
 ///
 /// Events the plan names but that nothing raises yet (`scene.*`,
-/// `plugin.state`, `hook.blocked`) are deliberately absent: publishing a
-/// schema for something that never arrives teaches a client to wait for it.
+/// `plugin.state`) are deliberately absent: publishing a schema for something
+/// that never arrives teaches a client to wait for it.
 pub fn events() -> Vec<EventDef> {
     let mut all = state_events();
     all.extend(stream_events());
@@ -154,6 +154,27 @@ fn state_events() -> Vec<EventDef> {
                     "type": "object",
                     "properties": { "ui": schema_of::<types::UiDefaults>(g) }
                 })
+            },
+        },
+        EventDef {
+            name: "hook.blocked",
+            since: "1",
+            summary: "A hook did not get its say: it did not answer inside its timeout, or \
+                      the thing behind it could not be reached. Whatever the hook was \
+                      attached to went ahead anyway, which is the rule that keeps a slow \
+                      hook off the frame path. See 03 section 8.",
+            ext: None,
+            legacy: None,
+            payload: |_| {
+                inline(json!({
+                    "type": "object",
+                    "properties": {
+                        "hook": { "type": "string", "description": "The hook name, for example take.before." },
+                        "plugin": { "type": "string", "description": "The plugin that owns it, or the URL or command when it came from [[hooks]] in the config." },
+                        "reason": { "type": "string", "description": "What went wrong and what to do about it." }
+                    },
+                    "required": ["hook", "plugin", "reason"]
+                }))
             },
         },
         EventDef {

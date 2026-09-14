@@ -396,6 +396,7 @@ async fn add(call: Call, params: Value) -> Result<Value, RpcError> {
     // of every method that might take longer than five seconds: a client's own
     // timeout then never leaves the work in an unknown state.
     let source = path.clone();
+    let hooks = call.app.hooks.clone();
     Ok(super::tasks::spawn_task(
         &call.app.tasks,
         "plugin.add",
@@ -405,9 +406,43 @@ async fn add(call: Call, params: Value) -> Result<Value, RpcError> {
                 .await
                 .map_err(|e| format!("the install task did not finish: {e}"))?
                 .map_err(|e| format!("{e:#}"))?;
+            // The hook call site: take on whatever the new plugin asked for,
+            // and tell everyone else it arrived.
+            plugin_arrived(&hooks, &installed);
             serde_json::to_value(record(&installed)).map_err(|e| e.to_string())
         },
     ))
+}
+
+/// A plugin has just landed: register its hooks, then say so.
+///
+/// `plugin.loaded` and `plugin.failed` are the two halves of the same moment,
+/// and `plugin.state` carries the lifecycle enum for anything that wants one
+/// name for both.
+fn plugin_arrived(hooks: &std::sync::Arc<crate::control::hooks::Hooks>, installed: &loader::Installed) {
+    use godwinmix_core::hooks::name;
+    let name_of = installed.name().to_string();
+    match &installed.problem {
+        None => {
+            hooks.register_plugin(&name_of, &installed.manifest.hooks);
+            let version = installed.version().to_string();
+            let provides = installed.provides.clone();
+            hooks.fire(name::PLUGIN_LOADED, || {
+                serde_json::json!({ "plugin": name_of, "version": version, "provides": provides })
+            });
+        }
+        Some(problem) => {
+            let problem = problem.clone();
+            hooks.fire(name::PLUGIN_FAILED, || {
+                serde_json::json!({ "plugin": name_of, "reason": problem })
+            });
+        }
+    }
+    let state = if installed.problem.is_none() { "ready" } else { "failed" };
+    let named = installed.name().to_string();
+    hooks.fire(godwinmix_core::hooks::name::PLUGIN_STATE, || {
+        serde_json::json!({ "plugin": named, "state": state })
+    });
 }
 
 async fn remove(call: Call, params: Value) -> Result<Value, RpcError> {
@@ -427,6 +462,12 @@ async fn remove(call: Call, params: Value) -> Result<Value, RpcError> {
     }
     let gone = loader::uninstall(&req.id)
         .map_err(|e| RpcError::new(ErrorCode::NotInState, format!("{e:#}")))?;
+    // The hook call site: everything it registered goes with it, then the
+    // rest of the world is told.
+    call.app.hooks.unregister_plugin(gone.name());
+    call.app.hooks.fire(godwinmix_core::hooks::name::PLUGIN_STATE, || {
+        serde_json::json!({ "plugin": gone.name(), "state": "stopped", "detail": "removed" })
+    });
     body(PluginRemoved {
         removed: gone.name().to_string(),
         provides: gone.provides,

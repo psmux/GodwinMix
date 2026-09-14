@@ -42,6 +42,11 @@ pub struct Config {
     pub browser: BrowserConfig,
     #[serde(default)]
     pub stall: StallConfig,
+    /// Hooks with no plugin behind them: a URL to POST to or a command to
+    /// run, one `[[hooks]]` block each. A plugin's own hooks come from its
+    /// manifest. See `crate::hooks` and `docs/how-to/hooks.md`.
+    #[serde(default)]
+    pub hooks: Vec<crate::hooks::HookConfig>,
     #[serde(default)]
     pub sources: Vec<SourceConfig>,
     #[serde(default)]

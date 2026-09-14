@@ -6,6 +6,7 @@ use godwinmix_protocol::method::{schema_of, MethodDef, Registry, Tier};
 use godwinmix_protocol::requests::*;
 use godwinmix_protocol::scope::Scope;
 use crate::control::call::Call;
+use godwinmix_core::hooks;
 use godwinmix_core::mixer::Command;
 use serde_json::Value;
 
@@ -148,7 +149,7 @@ async fn revert(call: Call, _params: Value) -> Result<Value, RpcError> {
     // minimum hold. The whole point of it is to undo a take that turned out
     // wrong, and a revert that has to wait eight seconds is not one.
     call.app.safety.check_revert(&call.token).map_err(|r| call.safety_error(r))?;
-    cut(&call, previous, None).await
+    cut_with(&call, previous, None, true).await
 }
 
 /// The one place a take is asked for, so that the history is claimed and the
@@ -158,15 +159,63 @@ async fn cut(
     source: Option<String>,
     at_running_time_ms: Option<u64>,
 ) -> Result<Value, RpcError> {
+    cut_with(call, source, at_running_time_ms, false).await
+}
+
+/// The same, told whether this is a revert, because a `take.before` hook is
+/// usually written to let an undo through.
+async fn cut_with(
+    call: &Call,
+    source: Option<String>,
+    at_running_time_ms: Option<u64>,
+    revert: bool,
+) -> Result<Value, RpcError> {
+    // The hook call site. Everything about it is in `control/hooks/`: it runs
+    // off the mixer thread, it is bounded by the hook's own `timeout_ms`, and
+    // a hook that does not answer in time is skipped rather than waited for.
+    // The take has not reached the pipeline yet, so a slow hook here delays a
+    // decision and never a frame.
+    let refusal = {
+        let by = call.token.id.clone();
+        let for_hook = source.clone();
+        call.app
+            .hooks
+            .take_before(|| {
+                hooks::take_payload(for_hook.as_deref(), at_running_time_ms, &by, revert)
+            })
+            .await
+    };
+    if let Some(reason) = refusal {
+        return Err(RpcError::new(
+            ErrorCode::Safety,
+            format!(
+                "a take.before hook refused this take: {reason}. The programme is unchanged.                  Take a different source, or turn the hook off in the config."
+            ),
+        )
+        .with("hook", "take.before")
+        .with("source", source.clone()));
+    }
     call.app.history.expect(&call.token.id);
     call.app
         .mixer
-        .request(|ack| Command::Take { source, at_running_time_ms, ack: Some(ack) })
+        .request(|ack| Command::Take {
+            source: source.clone(),
+            at_running_time_ms,
+            ack: Some(ack),
+        })
         .await
         .map_err(|e| call.mixer_error(e))?;
     // Only once the mixer has taken it: a cut the pipeline refused must not
     // start the hold on the next one.
     call.app.safety.record(&call.token.id);
+    // The second hook call site. Nothing waits on it.
+    {
+        let by = call.token.id.clone();
+        let took = source.clone();
+        call.app.hooks.fire(hooks::name::TAKE_AFTER, || {
+            hooks::take_payload(took.as_deref(), at_running_time_ms, &by, revert)
+        });
+    }
     body(state(call).await?)
 }
 
