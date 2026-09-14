@@ -40,7 +40,7 @@ const EXAMPLE_CONFIG: &str = include_str!("../../../godwinmix.example.toml");
 pub const DEFAULT_URL: &str = "http://127.0.0.1:8080";
 
 #[derive(Parser, Debug)]
-#[command(name = "godwinmix", about = "Live RTMP video mixer with hot source switching")]
+#[command(name = "godwinmix", version, about = "A plugin first live video mixer: headless core, web UI, desktop app, MCP for agents")]
 struct Args {
     /// Path to the TOML configuration file.
     #[arg(short, long, default_value = "godwinmix.toml")]
