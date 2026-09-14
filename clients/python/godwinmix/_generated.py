@@ -56,6 +56,30 @@ class AddFilterRequest(TypedDict, total=False):
     type: str
     # A filter type id, as `plugin.list` and `core.api` `kinds` report them.
 
+class AddItemFilterRequest(TypedDict, total=False):
+    """`scene.item.filter.add`."""
+
+    draft: Optional[str]
+    item: str
+    name: Optional[str]
+    params: Dict[str, Any]
+    scene: str
+    type: str
+    # A filter type id, as `plugin.list` reports them.
+
+class AddItemRequest(TypedDict, total=False):
+    """`scene.item.add`."""
+
+    content: Any
+    # What the item shows: `{"source": "cam1"}`, `{"ref": "<scene id>"}` or `{"graphic": "plugin/id"}`.
+    draft: Optional[str]
+    # A draft id from `scene.edit.begin`, to change a working copy instead of the live document.
+    name: Optional[str]
+    # What to call it. Left out, a source item is named after its source, because a model reasons about words.
+    scene: str
+    transform: Any
+    # Where it goes. Left out, the next free cell of a grid over what is already there, so a drop on a scene never needs a dialog.
+
 class AddOutputRequest(TypedDict, total=False):
     """`output.add`. The id and the URL are the whole of it for an RTMP destination; anything else a kind understands rides in `params`."""
 
@@ -71,6 +95,11 @@ class AddPluginRequest(TypedDict, total=False):
 
     source: str
     # A local directory with `gmx-plugin.toml` at its root. Git, an index and a signed release are Phase 5; this takes a path.
+
+class AddSceneRequest(TypedDict, total=False):
+    color: Optional[str]
+    # A colour for every client, the tally and the Stream Deck to agree on.
+    name: str
 
 class AddSourceRequest(TypedDict, total=False):
     """`source.add`."""
@@ -91,6 +120,23 @@ AgentExt = Union[bool, Dict[str, Any]]
 
 class AgentStateRequest(TypedDict, total=False):
     response_format: ResponseFormat
+
+# The nine alignment keywords, used to place content inside its frame.
+Align = Literal['top-left', 'top-center', 'top-right', 'center-left', 'center', 'center-right', 'bottom-left', 'bottom-center', 'bottom-right']
+
+class ApplyLayoutRequest(TypedDict, total=False):
+    """`scene.apply_layout`."""
+
+    duration_ms: Optional[int]
+    # How long the change takes, in milliseconds. 0 is a cut.
+    easing: Optional[str]
+    layout: str
+    # A layout name from `scene.layout.list`.
+    name: Optional[str]
+    scene: Optional[str]
+    # The scene to apply it to. Left out, a new one is made. Applying onto an existing scene keeps the item ids, so an animated layout change is a property ramp rather than a cut.
+    values: Dict[str, Any]
+    # The layout's parameters by name: its source slots and its numbers.
 
 class ApplyRequest(TypedDict, total=False):
     dry_run: bool
@@ -116,6 +162,9 @@ class ApplyResult(TypedDict, total=False):
     plan: Any
     # The whole plan, as JSON. The same object `preset.list` rows point at.
 
+# Whether the item's source is heard. A source is audible when any live item of it says so, which is OBS's behaviour and changes no pad topology.
+Audio = Literal['follow', 'always', 'never']
+
 class AudioSetParams(TypedDict, total=False):
     """`source.audio.set` takes an id as well as the levels: the id comes off the path on REST and out of the params on `/rpc`, and both land in one object."""
 
@@ -136,6 +185,27 @@ class BackendInfo(TypedDict, total=False):
     hardware_accelerated: bool
     video_decoder: str
     video_encoder: str
+
+class BindRequest(TypedDict, total=False):
+    """`scene.item.bind`."""
+
+    draft: Optional[str]
+    item: str
+    param: str
+    # An expression over the collection's params and `W`, `H`. An empty string takes the binding off.
+    prop: str
+    # A geometry path such as `frame.w` or `position.x`.
+    scene: str
+
+# OBS's blend enum, so an import carries across unchanged.
+Blend = Literal['normal', 'add', 'screen', 'multiply', 'lighten', 'darken', 'subtract']
+
+class Canvas(TypedDict, total=False):
+    """The output raster. One per collection in this release; 11 section 1 leaves room for several."""
+
+    fps: int
+    height: int
+    width: int
 
 class CanvasInfo(TypedDict, total=False):
     """The canvas every source is scaled onto and every output leaves by."""
@@ -186,6 +256,55 @@ class CoreInfo(TypedDict, total=False):
     version: str
     # The build's own version, as in Cargo.toml.
 
+class CreateFromRequest(TypedDict, total=False):
+    layout: Optional[str]
+    # A layout name from `scene.layout.list`. Left out, the number of sources picks one.
+    name: Optional[str]
+    sources: List[str]
+    # Source ids, in the order they should be laid out.
+
+class Crop(TypedDict, total=False):
+    """How much of the content's own pixels to trim, normalised 0 to 1 so it survives a canvas change. vMix and CasparCG do this; OBS crops in pixels, which is why an OBS collection moved from 1080p to 720p loses its crops."""
+
+    bottom: float
+    left: float
+    right: float
+    top: float
+
+class DraftRecord(TypedDict, total=False):
+    """`scene.edit.begin`."""
+
+    draft: str
+    # Pass this as `draft` on any `scene.item.*` call to edit the copy.
+    live: bool
+    # True when the client asked to edit on air.
+    scene: str
+    # The scene it was taken from.
+    view: Union[SceneView, None]
+    # The scene as it stands, so the client has something to draw at once.
+
+class DraftRequest(TypedDict, total=False):
+    """`scene.edit.apply` and `discard`."""
+
+    draft: str
+
+class DuplicateSceneRequest(TypedDict, total=False):
+    name: Optional[str]
+    # What to call the copy. A name already in use gets a number after it.
+    scene: str
+
+class EditBeginRequest(TypedDict, total=False):
+    """`scene.edit.begin`."""
+
+    live: bool
+    # True to edit the scene that is on air as you go. The default is off air: the draft is applied on the next take or on an explicit apply.
+    scene: str
+
+class ExportRequest(TypedDict, total=False):
+    collection: Optional[str]
+    format: Optional[str]
+    # `json` in this build. `zip`, with the assets, is Phase 5.
+
 class Ext(TypedDict, total=False):
     """The `ext` table from 03 section 6. Every key is off by default. A terminal UI takes meters and tally and declines multiview; a Stream Deck takes tally only; an agent takes nothing."""
 
@@ -203,6 +322,15 @@ class Ext(TypedDict, total=False):
     # `event/tally`.
     telemetry: Union[TelemetryExt, None]
     # `event/telemetry`: a line of numbers per tick, at 1 to 10 per second. This is what turns the probes on; nothing measures until it is here.
+
+class Filter(TypedDict, total=False):
+    """One filter in an item's chain."""
+
+    enabled: bool
+    name: Optional[str]
+    params: Any
+    type: str
+    # The plugin qualified provide id, for example `chroma/filter`.
 
 class FilterIdRequest(TypedDict, total=False):
     """`filter.remove`, and anything else that names one filter."""
@@ -224,11 +352,56 @@ class FilterRecord(TypedDict, total=False):
 class FilterRemoved(TypedDict, total=False):
     removed: str
 
+class Finding(TypedDict, total=False):
+    """One thing the validator found."""
+
+    code: str
+    # A stable machine readable code, so a client can filter or translate.
+    detail: Any
+    # The numbers behind the message, for a client that draws them.
+    items: List[Id]
+    # The items involved, in the order the message names them.
+    message: str
+    # One sentence naming the state and the next step.
+    scene: Union[Id, None]
+    # The scene it is in, when it is about one.
+    severity: Severity
+
+# How content fills its frame. SVG's vocabulary, which replaces OBS's seven bounds types and maps onto `sizing-policy` on a `glvideomixer` pad.
+Fit = Literal['none', 'contain', 'cover', 'stretch', 'fit-width', 'fit-height', 'max']
+
+# Content on the wire. The same four shapes as the tree, except that a group names no children: they are records whose parent is the group.
+FlatContent = Dict[str, Any]
+
 class Flush(TypedDict, total=False):
     """`event/flush`: the end of a batch. A client renders here and not before."""
 
     seq: int
     # The sequence number of the last event in the batch.
+
+class Frame(TypedDict, total=False):
+    """The rectangle an item is fitted into."""
+
+    h: float
+    w: float
+
+class Geometry(TypedDict, total=False):
+    """One item's derived box."""
+
+    height: float
+    item: Id
+    opacity: float
+    # The item's own opacity multiplied by every group's above it.
+    path: str
+    # The names from the top item down, so a message can say `corner / pulpit` rather than an id.
+    source: Optional[str]
+    # Present for an item whose content is a source.
+    source_height: float
+    source_width: float
+    # The canvas, which is what the document knows about a source's own size until the mixer says otherwise. Named so a client that does know can tell the two apart.
+    width: float
+    x: float
+    y: float
 
 class GoLiveRequest(TypedDict, total=False):
     """`program.golive`: add the page, add the destination, take the page."""
@@ -252,16 +425,47 @@ class GoLiveResult(TypedDict, total=False):
     state: SourceState
     # Where the source is now. It goes to programme as soon as it is live.
 
+class GroupSourcesRequest(TypedDict, total=False):
+    """`source.group`."""
+
+    name: Optional[str]
+    # The tray folder to put them in. Null takes them out of the one they are in.
+    sources: List[str]
+
 class HistoryRequest(TypedDict, total=False):
     """`program.history`."""
 
     limit: Optional[int]
     # How many takes to return, newest first. At most 100.
 
+class HistoryStep(TypedDict, total=False):
+    """`scene.undo` and `scene.redo`."""
+
+    patch: Patch
+    redo: int
+    undo: int
+    # How many steps are still on each stack, so a UI greys out a button.
+
+# A UUID in the hyphenated form. Minted ids are version 7 (time ordered); ids derived from a layout are version 8.
+Id = str
+
 class IdRequest(TypedDict, total=False):
     """An id on its own: `source.get`, `source.remove`, `output.remove`, `output.reconnect`, `media.remove`."""
 
     id: str
+
+class ImportObsRequest(TypedDict, total=False):
+    path: str
+    # The collection JSON exported from OBS (Scene Collection, Export), as a path on the machine the core is running on.
+
+class ImportReport(TypedDict, total=False):
+    items: int
+    scenes: List[str]
+    # The scenes that were added, by the names they ended up with.
+    skipped: List[str]
+    # What could not be brought across, and why, one line each.
+    sources: List[str]
+    # The sources the collection needs, which have to be added separately.
 
 class InstanceRecord(TypedDict, total=False):
     """One running instance and its cost."""
@@ -277,6 +481,99 @@ class InstanceRecord(TypedDict, total=False):
     restarts: int
     rss_bytes: Optional[int]
     state: str
+
+class ItemFilterRequest(TypedDict, total=False):
+    """`scene.item.filter.set` and `remove`."""
+
+    draft: Optional[str]
+    enabled: Optional[bool]
+    # Turn a filter off without taking it out.
+    filter: str
+    # The filter's name, or its position in the item's chain from 0.
+    item: str
+    params: Dict[str, Any]
+    scene: str
+
+class ItemProps(TypedDict, total=False):
+    """An item's props, which is an `Item` with the children lifted out into their own records."""
+
+    audio: Audio
+    bind: Dict[str, Any]
+    blend: Blend
+    content: FlatContent
+    crop: Crop
+    filters: List[Filter]
+    locked: bool
+    name: Optional[str]
+    opacity: float
+    transform: Transform
+    visible: bool
+
+class ItemRequest(TypedDict, total=False):
+    """Anything that names one item."""
+
+    draft: Optional[str]
+    item: str
+    # The item's name or its id.
+    scene: str
+
+class ItemsRequest(TypedDict, total=False):
+    """`scene.item.align`, `distribute`, `fit_to_canvas`, `cover_canvas`, `arrange_grid`, `match_size`, `group`."""
+
+    axis: Optional[str]
+    # `distribute`: horizontal or vertical.
+    cols: Optional[int]
+    # `arrange_grid`: how many columns.
+    draft: Optional[str]
+    duration_ms: Optional[int]
+    easing: Optional[str]
+    edge: Optional[str]
+    # `align`: left, right, top, bottom, center-x, center-y.
+    items: List[str]
+    # Item names or ids.
+    name: Optional[str]
+    # `group`: what to call the group.
+    scene: str
+    to: Optional[str]
+    # `match_size`: the item to match.
+
+class Layout(TypedDict, total=False):
+    """A scene's geometry, for copying onto another one."""
+
+    canvas: Canvas
+    items: List[LayoutItem]
+    scene: str
+    # The scene it came from, for a message.
+
+class LayoutClipboardRequest(TypedDict, total=False):
+    """`scene.layout.copy` and `paste`."""
+
+    layout: Any
+    # What `scene.layout.copy` answered with.
+    match: Optional[str]
+    # `name` matches item names first and falls back to slot order; `order` uses slot order alone.
+    scene: str
+
+class LayoutInfo(TypedDict, total=False):
+    description: str
+    # What the layout calls its own scene, which is the nearest thing it has to a description.
+    name: str
+    params: Any
+    # The whole JSON Schema, so a client renders an inspector from it.
+    sources: List[str]
+    # The parameters that take a source id, in the order sources are poured into them.
+
+class LayoutItem(TypedDict, total=False):
+    """One item's geometry: everything about where it sits and nothing about what it shows."""
+
+    crop: Crop
+    name: Optional[str]
+    opacity: float
+    transform: Transform
+    visible: bool
+
+class LayoutListing(TypedDict, total=False):
+    layouts: List[LayoutInfo]
 
 class Limits(TypedDict, total=False):
     """The ceilings a client should plan against rather than discover by being refused."""
@@ -317,6 +614,12 @@ class LogSetRequest(TypedDict, total=False):
     # `off`, `error`, `warn`, `info`, `debug`, `trace`, or `default` to stop overriding this one.
     target: Optional[str]
     # A module path prefix such as `godwinmix::mixer`. The longest match wins, so a more specific override still beats a broader one.
+
+class MarkRequest(TypedDict, total=False):
+    """`scene.history.mark`."""
+
+    label: Optional[str]
+    # What to call the group of changes that follows. Omit it to end the group, so the next change is its own undo step.
 
 class MediaItem(TypedDict, total=False):
     audio_codec: Optional[str]
@@ -364,11 +667,21 @@ class MixerStatus(TypedDict, total=False):
     multiview: MultiviewStatus
     outputs: List[OutputStatus]
     program: Optional[str]
-    # Source currently on program, or None while the slate is showing.
+    # Source currently on program, or None while the slate is showing. A scene of one full canvas item reports that item's source here too, so anything written against this before scenes existed still reads.
     running_time_ms: int
     # Program pipeline running time. Cues are scheduled against this, not against wall clock, so a client can place a break on a known frame.
+    scene: Optional[str]
+    # The scene on air, when one was taken by name.
     sources: List[SourceStatus]
     uptime_secs: int
+
+class MoveItemRequest(TypedDict, total=False):
+    """`scene.item.move` and `scene.item.copy`."""
+
+    item: str
+    scene: str
+    to_scene: str
+    # The scene it is going to.
 
 # `ext.multiview`. Accepts `false` to mean off, or an object.
 MultiviewExt = Union[bool, Dict[str, Any]]
@@ -408,6 +721,36 @@ class OutputStatus(TypedDict, total=False):
     reconnects: int
     state: OutputState
     uri_host: str
+
+class Override(TypedDict, total=False):
+    """A sparse change to one item of a referenced scene."""
+
+    crop: Union[Crop, None]
+    opacity: Optional[float]
+    params: Any
+    transform: Union[Transform, None]
+    visible: Optional[bool]
+
+class ParamsRequest(TypedDict, total=False):
+    """`scene.params.set`."""
+
+    scene: Optional[str]
+    values: Dict[str, Any]
+
+class Patch(TypedDict, total=False):
+    """What changed in one transaction."""
+
+    added: List[Record]
+    label: Optional[str]
+    # What the client called this change, for a label in an undo menu.
+    removed: List[Id]
+    scope: str
+    # `document` today. `presence` (who is looking at what) is the other scope 11 section 4 names and is not implemented.
+    seq: int
+    # Monotonic, per core. A client that sees a gap asks for a fresh snapshot rather than guessing.
+    source_client: Optional[str]
+    # Whoever asked for the change, so a client can suppress the echo of its own edits and not fight its own optimistic drawing.
+    updated: List[Update]
 
 class PipelineDot(TypedDict, total=False):
     """What `pipeline.dot` answers with on `/rpc`. The REST route serves the same graph as `text/vnd.graphviz`, so `gmx dot | dot -Tsvg` needs no unwrapping."""
@@ -496,11 +839,22 @@ class PreviewClosed(TypedDict, total=False):
 # `ext.preview`. Either `"full"`, `false`, or an object.
 PreviewExt = Union[str, bool, Dict[str, Any]]
 
+class PreviewFrameRequest(TypedDict, total=False):
+    """`scene.preview.frame`."""
+
+    width: Optional[int]
+
 class PreviewOpenRequest(TypedDict, total=False):
     """`preview.open {target}`."""
 
     target: str
     # `program`, or a source id.
+
+class PreviewRequest(TypedDict, total=False):
+    """`scene.preview.set`."""
+
+    scene: Optional[str]
+    # The scene to arm. Null or omitted disarms.
 
 class PreviewSocket(TypedDict, total=False):
     """What `preview.open` answers with."""
@@ -516,12 +870,41 @@ class ProgramState(TypedDict, total=False):
 
     ad: Union[AdStatus, None]
     # Present while an ad break is armed or on air.
+    preview: Optional[str]
+    # The scene armed for the next `program.take` with no argument.
     previous: Optional[str]
     # The previous source, which is what `program.revert` would take back to.
     program: Optional[str]
-    # Source on air, or null for the slate.
+    # Source on air, or null for the slate. A scene of one full canvas item reports that item's source here too, so anything written against this before scenes existed still reads.
     running_time_ms: int
     # Programme pipeline running time, in milliseconds.
+    scene: Optional[str]
+    # The scene on air, when one was taken by name.
+
+class Record(TypedDict, total=False):
+    """One scene or one item."""
+
+    id: Id
+    order: str
+    # A fractional key. Siblings sort by it; see `order.rs`.
+    parent: Union[Id, None]
+    # The scene this item is in, or the group item it is a child of. Absent for a scene, which hangs off the document itself.
+
+class RenameSceneRequest(TypedDict, total=False):
+    color: Optional[str]
+    name: Optional[str]
+    scene: str
+
+class ReorderRequest(TypedDict, total=False):
+    """`scene.item.reorder`."""
+
+    after: Optional[str]
+    # Put it in front of this one. With neither, it goes to the front.
+    before: Optional[str]
+    # Put it behind this one.
+    draft: Optional[str]
+    item: str
+    scene: str
 
 ResponseFormat = Literal['concise', 'detailed']
 
@@ -538,6 +921,47 @@ class SaveRequest(TypedDict, total=False):
     # The new preset's name. A slug: lower case letters, digits and hyphens.
     out: Optional[str]
     # Where to write it. Defaults to `~/.godwinmix/presets/<name>`.
+
+class SceneListing(TypedDict, total=False):
+    """`scene.list`."""
+
+    scenes: List[SceneSummary]
+
+class SceneRemoved(TypedDict, total=False):
+    removed: str
+
+class SceneRequest(TypedDict, total=False):
+    """Anything that names one scene."""
+
+    scene: str
+    # The scene's name or its id.
+
+class SceneSummary(TypedDict, total=False):
+    """What `scene.list` answers with per scene."""
+
+    armed: bool
+    # True for the armed scene, which is the preview.
+    color: Optional[str]
+    id: Id
+    items: int
+    # How many items, groups counted with their children.
+    name: str
+    sources: List[str]
+    # Every source the scene draws, so a picker can grey out one whose sources are missing without reading the whole document.
+
+class SceneView(TypedDict, total=False):
+    """One scene as a command answers with it."""
+
+    canvas: Canvas
+    color: Optional[str]
+    findings: List[Finding]
+    # What `scene.validate` would say about it, so a client shows a warning without asking again.
+    geometry: List[Geometry]
+    # Where each item actually lands, after groups are flattened and references resolved. Bottom of the stack first, which is the order the compositor takes them in.
+    id: Id
+    name: str
+    records: List[Record]
+    # The scene's own record and one per item, parents before children.
 
 class SeekParams(TypedDict, total=False):
     """`source.seek`."""
@@ -560,6 +984,21 @@ class SetFilterRequest(TypedDict, total=False):
     params: Dict[str, Any]
     # The settings to apply. Only the keys named are changed.
 
+class SetItemRequest(TypedDict, total=False):
+    """`scene.item.set`: a state assignment. Only the keys named move."""
+
+    draft: Optional[str]
+    duration_ms: Optional[int]
+    # How long to take getting there, in milliseconds. 0 is a cut.
+    easing: Optional[str]
+    # `linear` or `ease`. Only meaningful with a duration.
+    item: str
+    props: Dict[str, Any]
+    # Any of `name`, `transform`, `crop`, `opacity`, `blend`, `visible`, `locked`, `audio`, `content`. A key left out is left alone.
+    scene: str
+    seq: Optional[int]
+    # A client's own sequence number, echoed on the patch so a drag can discard the echoes of moves it has already drawn past.
+
 class SetSettingsRequest(TypedDict, total=False):
     """`plugin.settings.set`."""
 
@@ -567,7 +1006,17 @@ class SetSettingsRequest(TypedDict, total=False):
     settings: Dict[str, Any]
     # Only the keys named are changed.
 
-Severity = Union[Literal['info', 'warning', 'error'], Literal['critical']]
+class SetSourceMetaRequest(TypedDict, total=False):
+    """`source.set`."""
+
+    color: Optional[str]
+    name: Optional[str]
+    source: str
+
+# How much the reader should care.
+Severity = Literal['error', 'warning', 'info']
+
+Severity2 = Union[Literal['info', 'warning', 'error'], Literal['critical']]
 
 class Snapshot(TypedDict, total=False):
     """`event/snapshot`: the full state, and where in the stream it sits."""
@@ -667,9 +1116,11 @@ class TakeRequest(TypedDict, total=False):
     at_running_time_ms: Optional[int]
     # Programme running time to land the cut on, in milliseconds. Omit for immediate. Read the current running time from `core.info` or a status snapshot first.
     scene: Optional[str]
-    # The scene to take, once scenes exist (11). Today a scene name is read as a one item scene, which is to say as a source id, and `source` wins when both are given.
+    # The scene to take, by name or by id. `source` wins when both are given; with neither, the armed scene goes on air.
     source: Optional[str]
-    # Id of the source to put on air. Null or omitted cuts to the slate.
+    # Id of the source to put on air.
+    transition: Optional[str]
+    # `cut` in this build.
 
 class Tally(TypedDict, total=False):
     """`event/tally`."""
@@ -714,6 +1165,21 @@ class TokenInfo(TypedDict, total=False):
     rehearsal: bool
     scopes: List[str]
 
+class Transform(TypedDict, total=False):
+    """Where an item sits and how it is sized."""
+
+    align: Align
+    anchor: Vec2
+    # Normalised 0 to 1 within the item's own box: (0,0) top left, (0.5,0.5) centre, (1,1) bottom right.
+    fit: Fit
+    frame: Union[Frame, None]
+    # The rectangle the content is fitted into, in canvas pixels. Absent means the content's own size, scaled.
+    position: Vec2
+    # Canvas pixels, of the item's anchor point.
+    rotation: float
+    # Degrees, clockwise, about the anchor.
+    scale: Vec2
+
 class UiDefaults(TypedDict, total=False):
     """What a surface starts with: the layout, the theme and the gallery mode. Chosen by a preset (`preset.apply`), carried in `core.info` and pushed as `event/ui.changed`. None of it changes what the core does. It exists so the first page a volunteer sees is the one their preset chose rather than the one the last person to use this browser chose. 05 section 3b is where the four gallery modes are defined."""
 
@@ -726,12 +1192,38 @@ class UiDefaults(TypedDict, total=False):
     theme: Optional[str]
     # A theme id the surface resolves, for example `dark` or `calm`.
 
+class Update(TypedDict, total=False):
+    """One record as it was and as it is."""
+
+    after: Record
+    before: Record
+
+class ValidateRequest(TypedDict, total=False):
+    scene: Optional[str]
+    # Leave it out to check the whole collection.
+
+class Validation(TypedDict, total=False):
+    """`scene.validate`."""
+
+    findings: List[Finding]
+    ok: bool
+    # True when there is nothing to fix.
+
+class Vec2(TypedDict, total=False):
+    """A point or a pair of factors."""
+
+    x: float
+    y: float
+
 class ProgramTookEvent(TypedDict, total=False):
     at_running_time_ms: int
     duration_ms: int
     scene: Optional[str]
     source: Optional[str]
     transition: str
+
+class PreviewChangedEvent(TypedDict, total=False):
+    scene: Optional[str]
 
 class SourceStateEvent(TypedDict, total=False):
     detail: Optional[str]
@@ -760,7 +1252,7 @@ class MediaChangedEvent(TypedDict, total=False):
 
 class AlertEvent(TypedDict, total=False):
     message: str
-    severity: Severity
+    severity: Severity2
 
 class TelemetryEvent(TypedDict, total=False):
     black: float
@@ -830,14 +1322,61 @@ METHODS = (
     {"name": "program.golive", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/program/golive"), "summary": 'One call to put a web page on air: add the page, add the destination, and take the page as soon as it renders.'},
     {"name": "program.history", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/program/history"), "summary": 'The last hundred takes, newest first, with the token that asked for each.'},
     {"name": "program.revert", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/program/revert"), "summary": 'Take back to the shot before this one.'},
-    {"name": "program.take", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/program/take"), "summary": 'Put a source on programme. The cut is instant and the outgoing stream is not disturbed.'},
+    {"name": "program.take", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/program/take"), "summary": 'Put a scene or a source on programme. The cut is instant and the outgoing stream is not disturbed.'},
+    {"name": "scene.add", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/scenes"), "summary": 'Make an empty scene, or one built from a set of sources.'},
+    {"name": "scene.apply_layout", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/scenes/apply_layout"), "summary": 'Apply a layout, making a scene or reshaping one that exists. Applying onto an existing scene keeps the item ids, so the change is a ramp and not a cut.'},
+    {"name": "scene.create_from", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/scenes/create_from"), "summary": 'A scene from a set of sources, laid out by the built in layout for that count (full, two-box, three-box, quad, then a grid) or by a named one.'},
+    {"name": "scene.duplicate", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/scenes/{id}/duplicate"), "summary": 'A copy of a scene with new ids throughout, so editing the copy cannot touch the original.'},
+    {"name": "scene.edit.apply", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/scenes/edit/apply"), "summary": 'Write a draft back into the live document.'},
+    {"name": "scene.edit.begin", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/scenes/edit/begin"), "summary": 'Take a working copy of a scene. Editing is off air by default: the draft is written back on the next take of that scene, or when you apply it.'},
+    {"name": "scene.edit.discard", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/scenes/edit/discard"), "summary": 'Throw a draft away. The live document is untouched.'},
+    {"name": "scene.export", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/scenes/export"), "summary": 'The whole collection as JSON. The zip bundle with assets is Phase 5.'},
+    {"name": "scene.get", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/scenes/{id}"), "summary": 'One scene: its records and where every item actually lands on the canvas.'},
+    {"name": "scene.history.mark", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/scenes/history/mark"), "summary": 'Group the changes that follow into one undo step, until the next mark. This is what makes a drag of forty moves one Ctrl+Z.'},
+    {"name": "scene.import.obs", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/scenes/import/obs"), "summary": 'Read an OBS Studio scene collection and add its scenes to this one.'},
+    {"name": "scene.item.add", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/scenes/item/add"), "summary": "Put something on a scene's canvas. With no transform it lands in the next free cell, so a drop never needs a dialog."},
+    {"name": "scene.item.align", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/scenes/item/align"), "summary": 'Line items up on an edge: left, right, top, bottom, center-x or center-y.'},
+    {"name": "scene.item.arrange_grid", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/scenes/item/arrange_grid"), "summary": 'Lay items out in a grid of `cols` columns.'},
+    {"name": "scene.item.bind", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/scenes/item/bind"), "summary": "Bind a geometry property to an expression over the collection's parameters, so changing a number moves everything that follows it."},
+    {"name": "scene.item.copy", "scope": "operate", "mutating": True, "destructive": False, "rest": ("GET", "/api/v1/scenes/item/copy"), "summary": 'Copy an item into another scene. The copy keeps the transform and the filters and gets a new id.'},
+    {"name": "scene.item.cover_canvas", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/scenes/item/cover_canvas"), "summary": 'Put items over the whole canvas, filling it and letting the overflow go.'},
+    {"name": "scene.item.distribute", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/scenes/item/distribute"), "summary": 'Space items evenly between the two on the ends, horizontally or vertically.'},
+    {"name": "scene.item.filter.add", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/scenes/item/filter/add"), "summary": 'Hang a filter on one item, so a camera keyed in one scene is not keyed in all of them.'},
+    {"name": "scene.item.filter.remove", "scope": "operate", "mutating": True, "destructive": True, "rest": ("POST", "/api/v1/scenes/item/filter/remove"), "summary": 'Take a filter off an item.'},
+    {"name": "scene.item.filter.set", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/scenes/item/filter/set"), "summary": "Change one of an item's filters, or turn it off without taking it out."},
+    {"name": "scene.item.fit_to_canvas", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/scenes/item/fit_to_canvas"), "summary": 'Put items over the whole canvas, keeping their aspect ratio inside it.'},
+    {"name": "scene.item.group", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/scenes/item/group"), "summary": 'Put items into a group. The picture does not change.'},
+    {"name": "scene.item.match_size", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/scenes/item/match_size"), "summary": 'Make items the same size as another one.'},
+    {"name": "scene.item.move", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/scenes/item/move"), "summary": 'Move an item to another scene, keeping its transform and filters.'},
+    {"name": "scene.item.remove", "scope": "operate", "mutating": True, "destructive": True, "rest": ("POST", "/api/v1/scenes/item/remove"), "summary": 'Take an item off a scene.'},
+    {"name": "scene.item.reorder", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/scenes/item/reorder"), "summary": 'Move an item up or down the stack, between two named neighbours.'},
+    {"name": "scene.item.set", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/scenes/item/set"), "summary": "Assign an item's properties. Only the keys named move; the rest are left alone, so calling it twice with the same body changes nothing the second time."},
+    {"name": "scene.item.ungroup", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/scenes/item/ungroup"), "summary": 'Take a group apart, leaving every child exactly where it looked.'},
+    {"name": "scene.layout.copy", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/scenes/layout/copy"), "summary": "Read one scene's geometry, to paste onto another."},
+    {"name": "scene.layout.list", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/scenes/layout/list"), "summary": 'The layouts that ship with the core, with the parameters each one takes.'},
+    {"name": "scene.layout.paste", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/scenes/layout/paste"), "summary": "Put one scene's geometry onto another's items, matched by name first and slot order second. Items that match nothing are left alone."},
+    {"name": "scene.list", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/scenes"), "summary": 'Every scene in the collection, with how many items it has, the sources it draws and whether it is armed.'},
+    {"name": "scene.params.get", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/scenes/params/get"), "summary": "The collection's typed parameters, readable without their values, so a client discovers what is fillable before filling it."},
+    {"name": "scene.params.set", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/scenes/params/set"), "summary": "Set the collection's parameter values. A `{{name}}` in a string property follows them."},
+    {"name": "scene.preview.frame", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/scenes/preview/frame"), "summary": 'A still of the armed scene as base64 JPEG, the floor every client has.'},
+    {"name": "scene.preview.set", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/scenes/preview/set"), "summary": 'Arm a scene. The armed scene is the preview, and program.take with no argument takes it.'},
+    {"name": "scene.redo", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/scenes/redo"), "summary": 'Put back what undo took away.'},
+    {"name": "scene.remove", "scope": "operate", "mutating": True, "destructive": True, "rest": ("DELETE", "/api/v1/scenes/{id}"), "summary": 'Delete a scene. What is on air is not touched.'},
+    {"name": "scene.rename", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/scenes/{id}/rename"), "summary": "Change a scene's name, its colour, or both. Names and colours live on the document, so every client, the tally and an agent see the same ones."},
+    {"name": "scene.transaction.abort", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/scenes/transaction/abort"), "summary": 'Throw the batch away. The document goes back to where it was when the batch opened.'},
+    {"name": "scene.transaction.begin", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/scenes/transaction/begin"), "summary": 'Start a batch. Everything until the commit applies on one frame or not at all, and undoes in one step.'},
+    {"name": "scene.transaction.commit", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/scenes/transaction/commit"), "summary": 'Apply the batch.'},
+    {"name": "scene.undo", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/scenes/undo"), "summary": 'Undo the last change. A drag marked with scene.history.mark undoes as one step.'},
+    {"name": "scene.validate", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/scenes/validate"), "summary": 'Overlaps, items off the canvas, safe area breaches and missing sources: what to fix before saying a scene is done.'},
     {"name": "snapshot.get", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/snapshot/{id}"), "summary": 'One JPEG: the whole contact sheet, the programme, or one source cut out of the mosaic.'},
     {"name": "source.add", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/sources"), "summary": 'Add a source while the mixer runs. Answers with the id it got and the whole source record.'},
     {"name": "source.audio.set", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/sources/{id}/audio"), "summary": "Move a source's audio: the fader, the mute, and for a superimposed page the balance between its own sound and the videos under it."},
     {"name": "source.get", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/sources/{id}"), "summary": 'One source. Refused with the ids that exist when there is no such source.'},
+    {"name": "source.group", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/sources/{id}/group"), "summary": 'Put sources in a tray folder. A tag for finding things, not a group on the canvas.'},
     {"name": "source.list", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/sources"), "summary": 'Every source, with its state, whether it has video and audio, and its fader.'},
     {"name": "source.remove", "scope": "operate", "mutating": True, "destructive": True, "rest": ("DELETE", "/api/v1/sources/{id}"), "summary": 'Remove a source. If it is on programme the mixer cuts to the slate first.'},
     {"name": "source.seek", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/sources/{id}/seek"), "summary": 'Move a seekable source to a position. Answers with where it actually landed.'},
+    {"name": "source.set", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/sources/{id}/set"), "summary": 'Name and colour a source. Both live on the scene document, so every client, the tally and an agent see the same ones.'},
     {"name": "task.cancel", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/task/cancel"), "summary": 'Ask a piece of long running work to stop. Cooperative: the answer says the request landed, not that the work has stopped yet.'},
     {"name": "task.get", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/task"), "summary": 'How a piece of long running work is getting on, and its answer once it has one.'},
     {"name": "task.list", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/task/list"), "summary": 'Every background job this core knows about, newest first.'},
@@ -846,6 +1385,7 @@ METHODS = (
 EVENT_NAMES = (
     "snapshot",
     "program.took",
+    "preview.changed",
     "source.state",
     "source.position",
     "output.state",
@@ -1414,8 +1954,9 @@ class GeneratedMethods:
         at_running_time_ms: Optional[int] = None,
         scene: Optional[str] = None,
         source: Optional[str] = None,
+        transition: Optional[str] = None,
     ) -> ProgramState:
-        """Put a source on programme. The cut is instant and the outgoing stream is not disturbed."""
+        """Put a scene or a source on programme. The cut is instant and the outgoing stream is not disturbed."""
         params: Dict[str, Any] = {}
         if at_running_time_ms is not None:
             params["at_running_time_ms"] = at_running_time_ms
@@ -1423,7 +1964,767 @@ class GeneratedMethods:
             params["scene"] = scene
         if source is not None:
             params["source"] = source
+        if transition is not None:
+            params["transition"] = transition
         return await self._call("program.take", params)
+
+    async def scene_add(
+        self,
+        name: str,
+        *,
+        color: Optional[str] = None,
+    ) -> SceneView:
+        """Make an empty scene, or one built from a set of sources."""
+        params: Dict[str, Any] = {}
+        params["name"] = name
+        if color is not None:
+            params["color"] = color
+        return await self._call("scene.add", params)
+
+    async def scene_apply_layout(
+        self,
+        layout: str,
+        *,
+        duration_ms: Optional[int] = None,
+        easing: Optional[str] = None,
+        name: Optional[str] = None,
+        scene: Optional[str] = None,
+        values: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        """Apply a layout, making a scene or reshaping one that exists. Applying onto an existing scene keeps the item ids, so the change is a ramp and not a cut."""
+        params: Dict[str, Any] = {}
+        params["layout"] = layout
+        if duration_ms is not None:
+            params["duration_ms"] = duration_ms
+        if easing is not None:
+            params["easing"] = easing
+        if name is not None:
+            params["name"] = name
+        if scene is not None:
+            params["scene"] = scene
+        if values is not None:
+            params["values"] = values
+        return await self._call("scene.apply_layout", params)
+
+    async def scene_create_from(
+        self,
+        sources: List[str],
+        *,
+        layout: Optional[str] = None,
+        name: Optional[str] = None,
+    ) -> SceneView:
+        """A scene from a set of sources, laid out by the built in layout for that count (full, two-box, three-box, quad, then a grid) or by a named one."""
+        params: Dict[str, Any] = {}
+        params["sources"] = sources
+        if layout is not None:
+            params["layout"] = layout
+        if name is not None:
+            params["name"] = name
+        return await self._call("scene.create_from", params)
+
+    async def scene_duplicate(
+        self,
+        scene: str,
+        *,
+        name: Optional[str] = None,
+    ) -> SceneView:
+        """A copy of a scene with new ids throughout, so editing the copy cannot touch the original."""
+        params: Dict[str, Any] = {}
+        params["scene"] = scene
+        if name is not None:
+            params["name"] = name
+        return await self._call("scene.duplicate", params)
+
+    async def scene_edit_apply(
+        self,
+        draft: str,
+    ) -> Dict[str, Any]:
+        """Write a draft back into the live document."""
+        params: Dict[str, Any] = {}
+        params["draft"] = draft
+        return await self._call("scene.edit.apply", params)
+
+    async def scene_edit_begin(
+        self,
+        scene: str,
+        *,
+        live: Optional[bool] = None,
+    ) -> DraftRecord:
+        """Take a working copy of a scene. Editing is off air by default: the draft is written back on the next take of that scene, or when you apply it."""
+        params: Dict[str, Any] = {}
+        params["scene"] = scene
+        if live is not None:
+            params["live"] = live
+        return await self._call("scene.edit.begin", params)
+
+    async def scene_edit_discard(
+        self,
+        draft: str,
+    ) -> Dict[str, Any]:
+        """Throw a draft away. The live document is untouched."""
+        params: Dict[str, Any] = {}
+        params["draft"] = draft
+        return await self._call("scene.edit.discard", params)
+
+    async def scene_export(
+        self,
+        *,
+        collection: Optional[str] = None,
+        format: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """The whole collection as JSON. The zip bundle with assets is Phase 5."""
+        params: Dict[str, Any] = {}
+        if collection is not None:
+            params["collection"] = collection
+        if format is not None:
+            params["format"] = format
+        return await self._call("scene.export", params)
+
+    async def scene_get(
+        self,
+        scene: str,
+    ) -> SceneView:
+        """One scene: its records and where every item actually lands on the canvas."""
+        params: Dict[str, Any] = {}
+        params["scene"] = scene
+        return await self._call("scene.get", params)
+
+    async def scene_history_mark(
+        self,
+        *,
+        label: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Group the changes that follow into one undo step, until the next mark. This is what makes a drag of forty moves one Ctrl+Z."""
+        params: Dict[str, Any] = {}
+        if label is not None:
+            params["label"] = label
+        return await self._call("scene.history.mark", params)
+
+    async def scene_import_obs(
+        self,
+        path: str,
+    ) -> ImportReport:
+        """Read an OBS Studio scene collection and add its scenes to this one."""
+        params: Dict[str, Any] = {}
+        params["path"] = path
+        return await self._call("scene.import.obs", params)
+
+    async def scene_item_add(
+        self,
+        content: Any,
+        scene: str,
+        *,
+        draft: Optional[str] = None,
+        name: Optional[str] = None,
+        transform: Any = None,
+    ) -> Dict[str, Any]:
+        """Put something on a scene's canvas. With no transform it lands in the next free cell, so a drop never needs a dialog."""
+        params: Dict[str, Any] = {}
+        params["content"] = content
+        params["scene"] = scene
+        if draft is not None:
+            params["draft"] = draft
+        if name is not None:
+            params["name"] = name
+        if transform is not None:
+            params["transform"] = transform
+        return await self._call("scene.item.add", params)
+
+    async def scene_item_align(
+        self,
+        items: List[str],
+        scene: str,
+        *,
+        axis: Optional[str] = None,
+        cols: Optional[int] = None,
+        draft: Optional[str] = None,
+        duration_ms: Optional[int] = None,
+        easing: Optional[str] = None,
+        edge: Optional[str] = None,
+        name: Optional[str] = None,
+        to: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Line items up on an edge: left, right, top, bottom, center-x or center-y."""
+        params: Dict[str, Any] = {}
+        params["items"] = items
+        params["scene"] = scene
+        if axis is not None:
+            params["axis"] = axis
+        if cols is not None:
+            params["cols"] = cols
+        if draft is not None:
+            params["draft"] = draft
+        if duration_ms is not None:
+            params["duration_ms"] = duration_ms
+        if easing is not None:
+            params["easing"] = easing
+        if edge is not None:
+            params["edge"] = edge
+        if name is not None:
+            params["name"] = name
+        if to is not None:
+            params["to"] = to
+        return await self._call("scene.item.align", params)
+
+    async def scene_item_arrange_grid(
+        self,
+        items: List[str],
+        scene: str,
+        *,
+        axis: Optional[str] = None,
+        cols: Optional[int] = None,
+        draft: Optional[str] = None,
+        duration_ms: Optional[int] = None,
+        easing: Optional[str] = None,
+        edge: Optional[str] = None,
+        name: Optional[str] = None,
+        to: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Lay items out in a grid of `cols` columns."""
+        params: Dict[str, Any] = {}
+        params["items"] = items
+        params["scene"] = scene
+        if axis is not None:
+            params["axis"] = axis
+        if cols is not None:
+            params["cols"] = cols
+        if draft is not None:
+            params["draft"] = draft
+        if duration_ms is not None:
+            params["duration_ms"] = duration_ms
+        if easing is not None:
+            params["easing"] = easing
+        if edge is not None:
+            params["edge"] = edge
+        if name is not None:
+            params["name"] = name
+        if to is not None:
+            params["to"] = to
+        return await self._call("scene.item.arrange_grid", params)
+
+    async def scene_item_bind(
+        self,
+        item: str,
+        param: str,
+        prop: str,
+        scene: str,
+        *,
+        draft: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Bind a geometry property to an expression over the collection's parameters, so changing a number moves everything that follows it."""
+        params: Dict[str, Any] = {}
+        params["item"] = item
+        params["param"] = param
+        params["prop"] = prop
+        params["scene"] = scene
+        if draft is not None:
+            params["draft"] = draft
+        return await self._call("scene.item.bind", params)
+
+    async def scene_item_copy(
+        self,
+        item: str,
+        scene: str,
+        to_scene: str,
+    ) -> Dict[str, Any]:
+        """Copy an item into another scene. The copy keeps the transform and the filters and gets a new id."""
+        params: Dict[str, Any] = {}
+        params["item"] = item
+        params["scene"] = scene
+        params["to_scene"] = to_scene
+        return await self._call("scene.item.copy", params)
+
+    async def scene_item_cover_canvas(
+        self,
+        items: List[str],
+        scene: str,
+        *,
+        axis: Optional[str] = None,
+        cols: Optional[int] = None,
+        draft: Optional[str] = None,
+        duration_ms: Optional[int] = None,
+        easing: Optional[str] = None,
+        edge: Optional[str] = None,
+        name: Optional[str] = None,
+        to: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Put items over the whole canvas, filling it and letting the overflow go."""
+        params: Dict[str, Any] = {}
+        params["items"] = items
+        params["scene"] = scene
+        if axis is not None:
+            params["axis"] = axis
+        if cols is not None:
+            params["cols"] = cols
+        if draft is not None:
+            params["draft"] = draft
+        if duration_ms is not None:
+            params["duration_ms"] = duration_ms
+        if easing is not None:
+            params["easing"] = easing
+        if edge is not None:
+            params["edge"] = edge
+        if name is not None:
+            params["name"] = name
+        if to is not None:
+            params["to"] = to
+        return await self._call("scene.item.cover_canvas", params)
+
+    async def scene_item_distribute(
+        self,
+        items: List[str],
+        scene: str,
+        *,
+        axis: Optional[str] = None,
+        cols: Optional[int] = None,
+        draft: Optional[str] = None,
+        duration_ms: Optional[int] = None,
+        easing: Optional[str] = None,
+        edge: Optional[str] = None,
+        name: Optional[str] = None,
+        to: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Space items evenly between the two on the ends, horizontally or vertically."""
+        params: Dict[str, Any] = {}
+        params["items"] = items
+        params["scene"] = scene
+        if axis is not None:
+            params["axis"] = axis
+        if cols is not None:
+            params["cols"] = cols
+        if draft is not None:
+            params["draft"] = draft
+        if duration_ms is not None:
+            params["duration_ms"] = duration_ms
+        if easing is not None:
+            params["easing"] = easing
+        if edge is not None:
+            params["edge"] = edge
+        if name is not None:
+            params["name"] = name
+        if to is not None:
+            params["to"] = to
+        return await self._call("scene.item.distribute", params)
+
+    async def scene_item_filter_add(
+        self,
+        item: str,
+        scene: str,
+        type: str,
+        *,
+        draft: Optional[str] = None,
+        name: Optional[str] = None,
+        params: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        """Hang a filter on one item, so a camera keyed in one scene is not keyed in all of them."""
+        params: Dict[str, Any] = {}
+        params["item"] = item
+        params["scene"] = scene
+        params["type"] = type
+        if draft is not None:
+            params["draft"] = draft
+        if name is not None:
+            params["name"] = name
+        if params is not None:
+            params["params"] = params
+        return await self._call("scene.item.filter.add", params)
+
+    async def scene_item_filter_remove(
+        self,
+        filter: str,
+        item: str,
+        scene: str,
+        *,
+        draft: Optional[str] = None,
+        enabled: Optional[bool] = None,
+        params: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        """Take a filter off an item."""
+        params: Dict[str, Any] = {}
+        params["filter"] = filter
+        params["item"] = item
+        params["scene"] = scene
+        if draft is not None:
+            params["draft"] = draft
+        if enabled is not None:
+            params["enabled"] = enabled
+        if params is not None:
+            params["params"] = params
+        return await self._call("scene.item.filter.remove", params)
+
+    async def scene_item_filter_set(
+        self,
+        filter: str,
+        item: str,
+        scene: str,
+        *,
+        draft: Optional[str] = None,
+        enabled: Optional[bool] = None,
+        params: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        """Change one of an item's filters, or turn it off without taking it out."""
+        params: Dict[str, Any] = {}
+        params["filter"] = filter
+        params["item"] = item
+        params["scene"] = scene
+        if draft is not None:
+            params["draft"] = draft
+        if enabled is not None:
+            params["enabled"] = enabled
+        if params is not None:
+            params["params"] = params
+        return await self._call("scene.item.filter.set", params)
+
+    async def scene_item_fit_to_canvas(
+        self,
+        items: List[str],
+        scene: str,
+        *,
+        axis: Optional[str] = None,
+        cols: Optional[int] = None,
+        draft: Optional[str] = None,
+        duration_ms: Optional[int] = None,
+        easing: Optional[str] = None,
+        edge: Optional[str] = None,
+        name: Optional[str] = None,
+        to: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Put items over the whole canvas, keeping their aspect ratio inside it."""
+        params: Dict[str, Any] = {}
+        params["items"] = items
+        params["scene"] = scene
+        if axis is not None:
+            params["axis"] = axis
+        if cols is not None:
+            params["cols"] = cols
+        if draft is not None:
+            params["draft"] = draft
+        if duration_ms is not None:
+            params["duration_ms"] = duration_ms
+        if easing is not None:
+            params["easing"] = easing
+        if edge is not None:
+            params["edge"] = edge
+        if name is not None:
+            params["name"] = name
+        if to is not None:
+            params["to"] = to
+        return await self._call("scene.item.fit_to_canvas", params)
+
+    async def scene_item_group(
+        self,
+        items: List[str],
+        scene: str,
+        *,
+        axis: Optional[str] = None,
+        cols: Optional[int] = None,
+        draft: Optional[str] = None,
+        duration_ms: Optional[int] = None,
+        easing: Optional[str] = None,
+        edge: Optional[str] = None,
+        name: Optional[str] = None,
+        to: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Put items into a group. The picture does not change."""
+        params: Dict[str, Any] = {}
+        params["items"] = items
+        params["scene"] = scene
+        if axis is not None:
+            params["axis"] = axis
+        if cols is not None:
+            params["cols"] = cols
+        if draft is not None:
+            params["draft"] = draft
+        if duration_ms is not None:
+            params["duration_ms"] = duration_ms
+        if easing is not None:
+            params["easing"] = easing
+        if edge is not None:
+            params["edge"] = edge
+        if name is not None:
+            params["name"] = name
+        if to is not None:
+            params["to"] = to
+        return await self._call("scene.item.group", params)
+
+    async def scene_item_match_size(
+        self,
+        items: List[str],
+        scene: str,
+        *,
+        axis: Optional[str] = None,
+        cols: Optional[int] = None,
+        draft: Optional[str] = None,
+        duration_ms: Optional[int] = None,
+        easing: Optional[str] = None,
+        edge: Optional[str] = None,
+        name: Optional[str] = None,
+        to: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Make items the same size as another one."""
+        params: Dict[str, Any] = {}
+        params["items"] = items
+        params["scene"] = scene
+        if axis is not None:
+            params["axis"] = axis
+        if cols is not None:
+            params["cols"] = cols
+        if draft is not None:
+            params["draft"] = draft
+        if duration_ms is not None:
+            params["duration_ms"] = duration_ms
+        if easing is not None:
+            params["easing"] = easing
+        if edge is not None:
+            params["edge"] = edge
+        if name is not None:
+            params["name"] = name
+        if to is not None:
+            params["to"] = to
+        return await self._call("scene.item.match_size", params)
+
+    async def scene_item_move(
+        self,
+        item: str,
+        scene: str,
+        to_scene: str,
+    ) -> Dict[str, Any]:
+        """Move an item to another scene, keeping its transform and filters."""
+        params: Dict[str, Any] = {}
+        params["item"] = item
+        params["scene"] = scene
+        params["to_scene"] = to_scene
+        return await self._call("scene.item.move", params)
+
+    async def scene_item_remove(
+        self,
+        item: str,
+        scene: str,
+        *,
+        draft: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Take an item off a scene."""
+        params: Dict[str, Any] = {}
+        params["item"] = item
+        params["scene"] = scene
+        if draft is not None:
+            params["draft"] = draft
+        return await self._call("scene.item.remove", params)
+
+    async def scene_item_reorder(
+        self,
+        item: str,
+        scene: str,
+        *,
+        after: Optional[str] = None,
+        before: Optional[str] = None,
+        draft: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Move an item up or down the stack, between two named neighbours."""
+        params: Dict[str, Any] = {}
+        params["item"] = item
+        params["scene"] = scene
+        if after is not None:
+            params["after"] = after
+        if before is not None:
+            params["before"] = before
+        if draft is not None:
+            params["draft"] = draft
+        return await self._call("scene.item.reorder", params)
+
+    async def scene_item_set(
+        self,
+        item: str,
+        props: Dict[str, Any],
+        scene: str,
+        *,
+        draft: Optional[str] = None,
+        duration_ms: Optional[int] = None,
+        easing: Optional[str] = None,
+        seq: Optional[int] = None,
+    ) -> Dict[str, Any]:
+        """Assign an item's properties. Only the keys named move; the rest are left alone, so calling it twice with the same body changes nothing the second time."""
+        params: Dict[str, Any] = {}
+        params["item"] = item
+        params["props"] = props
+        params["scene"] = scene
+        if draft is not None:
+            params["draft"] = draft
+        if duration_ms is not None:
+            params["duration_ms"] = duration_ms
+        if easing is not None:
+            params["easing"] = easing
+        if seq is not None:
+            params["seq"] = seq
+        return await self._call("scene.item.set", params)
+
+    async def scene_item_ungroup(
+        self,
+        item: str,
+        scene: str,
+        *,
+        draft: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Take a group apart, leaving every child exactly where it looked."""
+        params: Dict[str, Any] = {}
+        params["item"] = item
+        params["scene"] = scene
+        if draft is not None:
+            params["draft"] = draft
+        return await self._call("scene.item.ungroup", params)
+
+    async def scene_layout_copy(
+        self,
+        scene: str,
+    ) -> Layout:
+        """Read one scene's geometry, to paste onto another."""
+        params: Dict[str, Any] = {}
+        params["scene"] = scene
+        return await self._call("scene.layout.copy", params)
+
+    async def scene_layout_list(
+        self,
+    ) -> LayoutListing:
+        """The layouts that ship with the core, with the parameters each one takes."""
+        params: Dict[str, Any] = {}
+        return await self._call("scene.layout.list", params)
+
+    async def scene_layout_paste(
+        self,
+        scene: str,
+        *,
+        layout: Any = None,
+        match: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Put one scene's geometry onto another's items, matched by name first and slot order second. Items that match nothing are left alone."""
+        params: Dict[str, Any] = {}
+        params["scene"] = scene
+        if layout is not None:
+            params["layout"] = layout
+        if match is not None:
+            params["match"] = match
+        return await self._call("scene.layout.paste", params)
+
+    async def scene_list(
+        self,
+    ) -> SceneListing:
+        """Every scene in the collection, with how many items it has, the sources it draws and whether it is armed."""
+        params: Dict[str, Any] = {}
+        return await self._call("scene.list", params)
+
+    async def scene_params_get(
+        self,
+    ) -> Dict[str, Any]:
+        """The collection's typed parameters, readable without their values, so a client discovers what is fillable before filling it."""
+        params: Dict[str, Any] = {}
+        return await self._call("scene.params.get", params)
+
+    async def scene_params_set(
+        self,
+        *,
+        scene: Optional[str] = None,
+        values: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        """Set the collection's parameter values. A `{{name}}` in a string property follows them."""
+        params: Dict[str, Any] = {}
+        if scene is not None:
+            params["scene"] = scene
+        if values is not None:
+            params["values"] = values
+        return await self._call("scene.params.set", params)
+
+    async def scene_preview_frame(
+        self,
+        *,
+        width: Optional[int] = None,
+    ) -> Dict[str, Any]:
+        """A still of the armed scene as base64 JPEG, the floor every client has."""
+        params: Dict[str, Any] = {}
+        if width is not None:
+            params["width"] = width
+        return await self._call("scene.preview.frame", params)
+
+    async def scene_preview_set(
+        self,
+        *,
+        scene: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Arm a scene. The armed scene is the preview, and program.take with no argument takes it."""
+        params: Dict[str, Any] = {}
+        if scene is not None:
+            params["scene"] = scene
+        return await self._call("scene.preview.set", params)
+
+    async def scene_redo(
+        self,
+    ) -> HistoryStep:
+        """Put back what undo took away."""
+        params: Dict[str, Any] = {}
+        return await self._call("scene.redo", params)
+
+    async def scene_remove(
+        self,
+        scene: str,
+    ) -> SceneRemoved:
+        """Delete a scene. What is on air is not touched."""
+        params: Dict[str, Any] = {}
+        params["scene"] = scene
+        return await self._call("scene.remove", params)
+
+    async def scene_rename(
+        self,
+        scene: str,
+        *,
+        color: Optional[str] = None,
+        name: Optional[str] = None,
+    ) -> SceneView:
+        """Change a scene's name, its colour, or both. Names and colours live on the document, so every client, the tally and an agent see the same ones."""
+        params: Dict[str, Any] = {}
+        params["scene"] = scene
+        if color is not None:
+            params["color"] = color
+        if name is not None:
+            params["name"] = name
+        return await self._call("scene.rename", params)
+
+    async def scene_transaction_abort(
+        self,
+    ) -> Dict[str, Any]:
+        """Throw the batch away. The document goes back to where it was when the batch opened."""
+        params: Dict[str, Any] = {}
+        return await self._call("scene.transaction.abort", params)
+
+    async def scene_transaction_begin(
+        self,
+    ) -> Dict[str, Any]:
+        """Start a batch. Everything until the commit applies on one frame or not at all, and undoes in one step."""
+        params: Dict[str, Any] = {}
+        return await self._call("scene.transaction.begin", params)
+
+    async def scene_transaction_commit(
+        self,
+    ) -> Dict[str, Any]:
+        """Apply the batch."""
+        params: Dict[str, Any] = {}
+        return await self._call("scene.transaction.commit", params)
+
+    async def scene_undo(
+        self,
+    ) -> HistoryStep:
+        """Undo the last change. A drag marked with scene.history.mark undoes as one step."""
+        params: Dict[str, Any] = {}
+        return await self._call("scene.undo", params)
+
+    async def scene_validate(
+        self,
+        *,
+        scene: Optional[str] = None,
+    ) -> Validation:
+        """Overlaps, items off the canvas, safe area breaches and missing sources: what to fix before saying a scene is done."""
+        params: Dict[str, Any] = {}
+        if scene is not None:
+            params["scene"] = scene
+        return await self._call("scene.validate", params)
 
     async def snapshot_get(
         self,
@@ -1499,6 +2800,19 @@ class GeneratedMethods:
         params["id"] = id
         return await self._call("source.get", params)
 
+    async def source_group(
+        self,
+        sources: List[str],
+        *,
+        name: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Put sources in a tray folder. A tag for finding things, not a group on the canvas."""
+        params: Dict[str, Any] = {}
+        params["sources"] = sources
+        if name is not None:
+            params["name"] = name
+        return await self._call("source.group", params)
+
     async def source_list(
         self,
     ) -> List[SourceStatus]:
@@ -1525,6 +2839,22 @@ class GeneratedMethods:
         params["id"] = id
         params["position_ms"] = position_ms
         return await self._call("source.seek", params)
+
+    async def source_set(
+        self,
+        source: str,
+        *,
+        color: Optional[str] = None,
+        name: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Name and colour a source. Both live on the scene document, so every client, the tally and an agent see the same ones."""
+        params: Dict[str, Any] = {}
+        params["source"] = source
+        if color is not None:
+            params["color"] = color
+        if name is not None:
+            params["name"] = name
+        return await self._call("source.set", params)
 
     async def task_cancel(
         self,

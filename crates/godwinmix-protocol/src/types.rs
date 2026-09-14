@@ -233,8 +233,13 @@ pub struct AdStatus {
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 pub struct MixerStatus {
-    /// Source currently on program, or None while the slate is showing.
+    /// Source currently on program, or None while the slate is showing. A
+    /// scene of one full canvas item reports that item's source here too, so
+    /// anything written against this before scenes existed still reads.
     pub program: Option<SourceId>,
+    /// The scene on air, when one was taken by name.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub scene: Option<String>,
     pub sources: Vec<SourceStatus>,
     pub outputs: Vec<OutputStatus>,
     pub multiview: MultiviewStatus,
@@ -268,7 +273,17 @@ pub enum Event {
     Status(Box<MixerStatus>),
     /// The program source changed. Carries the running time the cut landed on
     /// so the UI can show how close a scheduled take was to its mark.
-    Took { source: Option<SourceId>, at_running_time_ms: u64 },
+    Took {
+        source: Option<SourceId>,
+        /// The scene that was taken, when a scene was named. A bare source id
+        /// is shorthand for a one item full canvas scene and leaves this out.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        scene: Option<String>,
+        at_running_time_ms: u64,
+    },
+    /// The armed scene changed, or was cleared. Nothing is composited for a
+    /// preview until a client asks for one, so this costs a message.
+    PreviewChanged { scene: Option<String> },
     SourceStateChanged { source: SourceId, state: SourceState },
     OutputStateChanged { output: OutputId, state: OutputState, reconnects: u32 },
     /// An ad break started or ended.

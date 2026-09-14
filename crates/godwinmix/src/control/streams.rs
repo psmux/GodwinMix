@@ -137,7 +137,7 @@ async fn mjpeg_stream(
     // the mosaic is released the moment the client goes: axum drops the body
     // when the connection ends, and that drops both.
     let state = MjpegState {
-        pick: target.pick(),
+        pick: target.pick_in(Some(&ctx.app.scenes)),
         width,
         subscription: ctx.app.multiview.subscribe(mosaic),
         _counted: ctx.app.preview.count("mjpeg"),

@@ -382,3 +382,56 @@ by `id` to break a tie. A key never ends in the lowest digit, because `"1"` and
 `"10"` would otherwise be the same number with nothing between them.
 
 `gmx scene schema --flat` prints the schema for this shape.
+
+## What the live core adds
+
+A document read by a running core behaves in three ways the file alone does not
+say.
+
+**The running canvas wins.** A collection authored at 1080p and opened on a core
+running 720p is the ordinary case, not an error: the `canvas` block is replaced
+by the one the core is on, and layout presets resolve against that. Geometry
+written as literal pixels is not rescaled, which is why `fit` and a `frame` are
+worth using over bare positions.
+
+**Not every item reaches the compositor.** An item whose content is a `graphic`
+is skipped: the graphics host is a later release, and a placement with nothing
+behind it would be a black rectangle over the picture. An item naming a source
+this core does not have is skipped too, and `program.take` refuses the scene
+before it goes on air rather than putting a composition with holes in it on the
+programme. `scene.validate` reports both.
+
+**Three of the seven fits share a policy.** The compositor pad has `none`,
+`keep-aspect-ratio` and `scale`. `contain` and `max` become
+`keep-aspect-ratio`; `stretch`, `cover`, `fit-width` and `fit-height` become
+`scale`, with the item's own crop taking the overflow. The document keeps the
+distinction, so a GPU compositor that has more policies, or a client drawing its
+own preview, still has all seven.
+
+Rotation is the other narrowing: `videoflip` turns by quarters, so a `rotation`
+between the right angles is rounded to the nearest one on this path. The
+document keeps the number.
+
+## `sources`: names, colours and tray folders
+
+```json
+"sources": {
+  "cam-wide": { "name": "Wide", "color": "#2f6f4f", "group": "cameras" }
+}
+```
+
+Not a source list: the mixer owns those, and this block only says what this
+collection calls them. It is where `source.set` and `source.group` write, and it
+is why every client, the tally and an agent show the same label for a camera.
+`group` is a tray folder, a tag for finding things, and has nothing to do with a
+group on the canvas.
+
+An entry for a source the core does not have is kept rather than pruned: a
+collection moved between machines should not forget what the cameras were
+called because one of them was not plugged in that day.
+
+## Where it lives
+
+Beside the runtime store, as `<stem>.scenes.json`, written through a temporary
+file and a rename every time something changes. A file that will not parse is a
+loud failure and never a silent new document: somebody's show is in it.

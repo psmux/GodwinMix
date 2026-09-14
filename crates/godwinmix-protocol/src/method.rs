@@ -232,6 +232,39 @@ impl<C> Registry<C> {
 const COLLECTIONS: &[&str] =
     &["source", "output", "filter", "media", "plugin", "node", "scene", "codec"];
 
+/// Methods on a collection that are about the collection and not about one of
+/// its members, so they carry no `{id}`.
+///
+/// `source.audio.set` is something done to one source and is
+/// `/api/v1/sources/{id}/audio`. `scene.transaction.begin` is a batch over the
+/// whole document and `scene.undo` undoes whatever happened last, wherever it
+/// happened: neither has a member to name, and routing them under `{id}` would
+/// invent one. Listed rather than guessed, so the rule stays one rule and this
+/// is the exception it names.
+const COLLECTION_LEVEL: &[&str] = &[
+    "scene.transaction",
+    "scene.history",
+    "scene.edit",
+    "scene.layout",
+    "scene.params",
+    "scene.preview",
+    "scene.import",
+    "scene.item",
+    "scene.undo",
+    "scene.redo",
+    "scene.create_from",
+    "scene.apply_layout",
+    "scene.validate",
+    "scene.export",
+];
+
+/// True when a method is about the collection rather than one of its members.
+fn collection_level(method: &str) -> bool {
+    COLLECTION_LEVEL.iter().any(|prefix| {
+        method == *prefix || method.strip_prefix(prefix).is_some_and(|rest| rest.starts_with('.'))
+    })
+}
+
 /// The plural a collection noun takes in a path.
 fn plural(noun: &str) -> String {
     match noun {
@@ -255,6 +288,16 @@ pub fn rest_transform(method: &str) -> Option<Rest> {
     let middle = &parts[1..parts.len() - 1];
     if COLLECTIONS.contains(&noun) {
         let base = format!("/api/v1/{}", plural(noun));
+        if collection_level(method) {
+            // No `{id}`: there is no member to name. A read that answers a
+            // question is a GET so a browser reaches it; the rest are POSTs.
+            let http = if matches!(verb, "get" | "list" | "copy" | "frame" | "export" | "validate") {
+                "GET"
+            } else {
+                "POST"
+            };
+            return Some(Rest { http, path: format!("{base}/{}", parts[1..].join("/")) });
+        }
         return Some(match (verb, middle.is_empty()) {
             ("list", true) => Rest { http: "GET", path: base },
             ("add", true) => Rest { http: "POST", path: base },

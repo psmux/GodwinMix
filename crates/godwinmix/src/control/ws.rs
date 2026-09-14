@@ -406,12 +406,22 @@ impl Connection {
 
     /// Which sources the armed scene shows.
     ///
-    /// Empty until the scene server lands: there is no armed scene to read, so
-    /// nothing is on preview. Written as its own function so that the day
-    /// `preview_layout()` exists, one body changes and tally, the layout and
-    /// `/mjpeg/preview` all follow.
+    /// The one body `event/tally`, `event/multiview.layout` and
+    /// `/mjpeg/preview` all read, so a scene armed with `scene.preview.set`
+    /// reaches every one of them at once. Empty when nothing is armed, which
+    /// is a fact about the show and not an error.
     fn preview_sources(&self) -> Vec<String> {
-        Vec::new()
+        let Some(layout) = self.ctx.app.scenes.preview_layout(1920, 1080) else {
+            return Vec::new();
+        };
+        let mut sources: Vec<String> = layout
+            .cells
+            .into_iter()
+            .filter(|c| c.alpha > 0.0)
+            .map(|c| c.source)
+            .collect();
+        sources.dedup();
+        sources
     }
 
     /// Keep enough of the state to derive tally without asking the mixer.
@@ -436,11 +446,10 @@ impl Connection {
         if !self.sub.as_ref().is_some_and(|s| s.wants("tally")) {
             return Ok(());
         }
-        // The armed scene's sources are `preview`. They come from the scene
-        // server's `preview_layout()`; with no scene server, and so no armed
-        // scene, nothing is on preview and every source is `program` or `off`.
-        // A client reading this cannot tell the two apart and does not need to:
-        // `event/multiview.layout` says whether a preview exists.
+        // The armed scene's sources are `preview`, read off the scene server's
+        // `preview_layout()`. With nothing armed, every source is `program` or
+        // `off`; a client that needs to tell "nothing armed" from "armed and
+        // empty" reads `preview_empty` on `event/multiview.layout`.
         let previewing = self.preview_sources();
         let mut sources = Map::new();
         for id in &self.sources {

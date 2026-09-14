@@ -86,6 +86,10 @@ impl Core {
                 library,
                 converter,
                 quit: Arc::new(tokio::sync::Notify::new()),
+                // In memory: a live test writes no scene collection to disk.
+                scenes: godwinmix_core::scene::server::SceneServer::in_memory(
+                    godwinmix_core::caps::CanvasCaps::new(&cfg.canvas),
+                ),
             },
             rehearsal,
         );

@@ -94,6 +94,9 @@ pub struct AppState {
     pub confirmations: Arc<Confirmations>,
     pub idempotency: Arc<idempotency::Cache>,
     pub history: Arc<History>,
+    /// The scene collection and everything true about it. See
+    /// `godwinmix_core::scene::server`.
+    pub scenes: Arc<godwinmix_core::scene::server::SceneServer>,
     /// The last audio peak per source, for `agent.state` detailed.
     pub peaks: Arc<history::Peaks>,
     /// The rules that stand in front of every take: the minimum hold, the rate
@@ -127,12 +130,16 @@ pub struct Engine {
     pub library: Arc<MediaLibrary>,
     pub converter: Arc<godwinmix_core::convert::Converter>,
     pub quit: Arc<tokio::sync::Notify>,
+    /// The scene collection and everything true about it. See
+    /// `godwinmix_core::scene::server`.
+    pub scenes: Arc<godwinmix_core::scene::server::SceneServer>,
 }
 
 impl AppState {
     /// Everything the control plane holds, worked out from the config once.
     pub fn new(cfg: &Config, engine: Engine, rehearsal: bool) -> Self {
-        let Engine { mixer, multiview, preview, encoder, library, converter, quit } = engine;
+        let Engine { mixer, multiview, preview, encoder, library, converter, quit, scenes } =
+            engine;
         let tokens = cfg.tokens(rehearsal);
         let safety =
             godwinmix_core::safety::Guard::new(cfg.safety.clone(), cfg.canvas.fps.max(1) as u32);
@@ -167,6 +174,7 @@ impl AppState {
             confirmations: Confirmations::new(),
             idempotency: idempotency::Cache::new(),
             history: Arc::new(History::new()),
+            scenes,
             peaks: Arc::new(history::Peaks::new()),
             safety,
             tasks: godwinmix_core::tasks::Tasks::new(),
@@ -1299,7 +1307,7 @@ fn spawn_history(app: AppState) {
         loop {
             match events.recv().await {
                 Ok(envelope) => match envelope.event {
-                    Event::Took { source, at_running_time_ms } => {
+                    Event::Took { source, at_running_time_ms, .. } => {
                         app.history.record_event(source, at_running_time_ms, envelope.seq);
                     }
                     // Ten a second and nothing kept them, so an agent could

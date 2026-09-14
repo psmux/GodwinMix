@@ -186,16 +186,21 @@ pub fn event_name_and_payload(event: &Event) -> Option<(&'static str, Value)> {
     let payload = |v: Value| v;
     Some(match event {
         Event::Status(_) => return None,
-        Event::Took { source, at_running_time_ms } => (
+        Event::Took { source, scene, at_running_time_ms } => (
             "program.took",
             payload(json!({
                 "source": source,
-                "scene": source,
+                // A bare source id is shorthand for a one item full canvas
+                // scene, so a client reading `scene` gets an answer either way.
+                "scene": scene.clone().or_else(|| source.clone()),
                 "transition": "cut",
                 "duration_ms": 0,
                 "at_running_time_ms": at_running_time_ms,
             })),
         ),
+        Event::PreviewChanged { scene } => {
+            ("preview.changed", payload(json!({ "scene": scene })))
+        }
         Event::SourceStateChanged { source, state } => (
             "source.state",
             payload(json!({ "source": source, "state": state, "detail": Value::Null })),
@@ -431,7 +436,10 @@ mod tests {
     #[test]
     fn legacy_events_are_renamed_onto_the_published_table() {
         let name = |e: Event| event_name_and_payload(&e).map(|(n, _)| n);
-        assert_eq!(name(Event::Took { source: None, at_running_time_ms: 1 }), Some("program.took"));
+        assert_eq!(
+            name(Event::Took { source: None, scene: None, at_running_time_ms: 1 }),
+            Some("program.took")
+        );
         assert_eq!(
             name(Event::SourceStateChanged { source: "cam1".into(), state: SourceState::Live }),
             Some("source.state")
@@ -448,7 +456,11 @@ mod tests {
         );
 
         let (_, payload) =
-            event_name_and_payload(&Event::Took { source: Some("cam1".into()), at_running_time_ms: 42 })
+            event_name_and_payload(&Event::Took {
+                source: Some("cam1".into()),
+                scene: None,
+                at_running_time_ms: 42,
+            })
                 .unwrap();
         assert_eq!(payload["source"], "cam1");
         assert_eq!(payload["at_running_time_ms"], 42);
@@ -463,7 +475,7 @@ mod tests {
             source: "cam1".into(),
             peak_db: vec![-12.0]
         }));
-        assert!(!batch.absorb(&Event::Took { source: None, at_running_time_ms: 0 }));
+        assert!(!batch.absorb(&Event::Took { source: None, scene: None, at_running_time_ms: 0 }));
         let m = batch.take().unwrap();
         assert_eq!(m.program, vec![-6.0, -6.5]);
         assert_eq!(m.sources["cam1"][0], -12.0);

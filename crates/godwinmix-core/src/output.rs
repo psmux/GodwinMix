@@ -71,7 +71,7 @@ pub struct OutputSlot {
     /// pipeline also silences it; a watcher that outlived its pipeline would
     /// report the pipeline's dying error as a fresh failure.
     pipeline: Mutex<Option<Live>>,
-    bus_tx: mpsc::UnboundedSender<BusEvent>,
+    bus_tx: mpsc::Sender<BusEvent>,
     generation: AtomicU32,
     reconnects: AtomicU32,
     /// Whether the RTMP handshake has actually completed, refreshed from the
@@ -100,7 +100,7 @@ impl OutputSlot {
         video_tee: &gst::Element,
         audio_tee: &gst::Element,
         cfg: &OutputConfig,
-        bus_tx: mpsc::UnboundedSender<BusEvent>,
+        bus_tx: mpsc::Sender<BusEvent>,
     ) -> Result<Arc<Self>> {
         let id = &cfg.id;
         // As in `InputPipeline::build_kind`: the instance tag on every line
@@ -515,14 +515,14 @@ mod tests {
         let _ = gst::init();
     }
 
-    fn harness() -> (gst::Pipeline, gst::Element, gst::Element, mpsc::UnboundedSender<BusEvent>) {
+    fn harness() -> (gst::Pipeline, gst::Element, gst::Element, mpsc::Sender<BusEvent>) {
         let pipeline = gst::Pipeline::with_name("test-program");
         let vtee = make("tee", "vtee").unwrap();
         vtee.set_property("allow-not-linked", true);
         let atee = make("tee", "atee").unwrap();
         atee.set_property("allow-not-linked", true);
         pipeline.add_many([&vtee, &atee]).unwrap();
-        let (tx, rx) = mpsc::unbounded_channel();
+        let (tx, rx) = mpsc::channel(crate::mixer::BUS_QUEUE);
         std::mem::forget(rx);
         (pipeline, vtee, atee, tx)
     }

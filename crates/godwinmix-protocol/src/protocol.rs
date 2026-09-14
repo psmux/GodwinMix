@@ -78,6 +78,20 @@ fn state_events() -> Vec<EventDef> {
             },
         },
         EventDef {
+            name: "preview.changed",
+            since: "1",
+            summary: "A scene was armed, or the arming was cleared. The armed scene is the \
+                      preview, and program.take with no argument takes it.",
+            ext: None,
+            legacy: None,
+            payload: |_| {
+                inline(json!({
+                    "type": "object",
+                    "properties": { "scene": { "type": ["string", "null"] } }
+                }))
+            },
+        },
+        EventDef {
             name: "source.state",
             since: "1",
             summary: "A source moved between connecting, live, stalled and failed.",

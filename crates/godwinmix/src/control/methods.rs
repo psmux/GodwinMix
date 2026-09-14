@@ -26,6 +26,7 @@ mod preview;
 mod plugins;
 pub mod presets;
 mod program;
+mod scenes;
 mod sources;
 mod tasks;
 
@@ -59,6 +60,7 @@ pub fn registry() -> Registry<Call> {
     tasks::register(&mut reg);
     agent::register(&mut reg);
     filters::register(&mut reg);
+    scenes::register(&mut reg);
     preview::register(&mut reg);
     plugins::register(&mut reg);
     presets::register(&mut reg);

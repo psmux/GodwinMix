@@ -21,7 +21,7 @@ use clap::Subcommand;
 use reqwest::header::{HeaderMap, HeaderValue, AUTHORIZATION};
 use serde::de::DeserializeOwned;
 use serde::Serialize;
-use serde_json::Value;
+use serde_json::{json, Value};
 
 #[derive(Subcommand, Debug)]
 pub enum Ctl {
@@ -31,9 +31,14 @@ pub enum Ctl {
         #[arg(long)]
         json: bool,
     },
-    /// Put a source on program. Omit the id to cut to black.
+    /// Put a scene or a source on program. With no name, the armed scene goes
+    /// on air; with nothing armed either, the programme cuts to black.
     Take {
-        source: Option<String>,
+        /// A source id or a scene name. Sources are looked at first.
+        name: Option<String>,
+        /// Read the name as a scene even when a source shares it.
+        #[arg(long)]
+        scene: bool,
         /// Land the cut on this program running time, in milliseconds.
         #[arg(long)]
         at: Option<u64>,
@@ -53,6 +58,9 @@ pub enum Ctl {
     /// List, add and remove RTMP destinations.
     #[command(subcommand)]
     Output(OutputCmd),
+    /// Build and drive scenes on a running mixer.
+    #[command(subcommand)]
+    Scene(SceneCmd),
     /// Interrupt the programme with a clip, then rejoin live.
     Ad {
         /// Path or URI of the clip.
@@ -125,6 +133,120 @@ pub enum SourceCmd {
     },
 }
 
+/// `gmx ctl scene ...`: the scene server from a command line.
+///
+/// Everything here is one `scene.*` call, and every one of them takes a name
+/// as readily as an id, so an operator types what they see on the tile.
+#[derive(Subcommand, Debug)]
+pub enum SceneCmd {
+    /// Every scene, with its items, its sources and whether it is armed.
+    List,
+    /// One scene: every item and the box it lands in.
+    Get {
+        scene: String,
+        /// Print the raw JSON instead of a summary.
+        #[arg(long)]
+        json: bool,
+    },
+    /// Make a scene from a set of sources, laid out by how many there are.
+    New {
+        /// What to call it.
+        name: String,
+        /// The sources to put in it.
+        sources: Vec<String>,
+        /// A layout name instead of the one the count would pick.
+        #[arg(long)]
+        layout: Option<String>,
+    },
+    /// Put something on a scene.
+    Add {
+        scene: String,
+        /// A source id.
+        source: String,
+        /// What to call the item. Defaults to the source's id.
+        #[arg(long)]
+        name: Option<String>,
+    },
+    /// Move or resize an item: --at X,Y and --size WxH.
+    Set {
+        scene: String,
+        item: String,
+        /// Position in canvas pixels, as X,Y.
+        #[arg(long)]
+        at: Option<String>,
+        /// Size in canvas pixels, as WxH.
+        #[arg(long)]
+        size: Option<String>,
+        /// 0 to 1.
+        #[arg(long)]
+        opacity: Option<f64>,
+        /// How long the move takes, in milliseconds. 0 is a cut.
+        #[arg(long)]
+        duration: Option<u64>,
+    },
+    /// Apply a layout, making a scene or reshaping one.
+    Layout {
+        /// A layout name. Use --list to see them.
+        #[arg(required_unless_present = "list")]
+        layout: Option<String>,
+        /// a=cam1,b=cam2,inset=0.4
+        #[arg(long, default_value = "")]
+        values: String,
+        /// Reshape this scene instead of making a new one, which keeps the
+        /// item ids so the change is a move and not a cut.
+        #[arg(long)]
+        scene: Option<String>,
+        /// How long the change takes, in milliseconds.
+        #[arg(long)]
+        duration: Option<u64>,
+        /// List the layouts this core has and what each one takes.
+        #[arg(long)]
+        list: bool,
+    },
+    /// Arm a scene, so `take` with no name puts it on air.
+    Arm {
+        /// Leave it out to disarm.
+        scene: Option<String>,
+    },
+    /// Line items up on an edge: left, right, top, bottom, center-x, center-y.
+    Align {
+        scene: String,
+        edge: String,
+        items: Vec<String>,
+    },
+    /// Lay items out in a grid.
+    Grid {
+        scene: String,
+        #[arg(long, default_value_t = 2)]
+        cols: usize,
+        items: Vec<String>,
+    },
+    /// Undo the last change.
+    Undo,
+    /// Put back what undo took away.
+    Redo,
+    /// Report overlaps, items off the canvas and safe area breaches.
+    Check {
+        /// Leave it out to check every scene.
+        scene: Option<String>,
+    },
+    /// Delete a scene.
+    Remove {
+        scene: String,
+        /// Say what it would do and change nothing.
+        #[arg(long)]
+        dry_run: bool,
+    },
+    /// Copy one scene's geometry onto another's items, matched by name.
+    CopyLayout {
+        from: String,
+        to: String,
+        /// "name" or "order".
+        #[arg(long, default_value = "name")]
+        r#match: String,
+    },
+}
+
 #[derive(Subcommand, Debug)]
 pub enum OutputCmd {
     List,
@@ -152,14 +274,18 @@ pub async fn run(base: &str, token: Option<&str>, cmd: Ctl) -> Result<()> {
     let api = &api;
     match cmd {
         Ctl::Status { json } => status(api, json).await?,
-        Ctl::Take { source, at } => {
-            let req = TakeRequest { source, scene: None, at_running_time_ms: at };
+        Ctl::Take { name, scene, at } => {
+            let req = if scene {
+                TakeRequest { source: None, scene: name, transition: None, at_running_time_ms: at }
+            } else {
+                TakeRequest { source: name, scene: None, transition: None, at_running_time_ms: at }
+            };
             let state: ProgramState = api.call("program.take", None, &req).await?;
-            println!("on program: {}", state.program.as_deref().unwrap_or("black"));
+            println!("on program: {}", on_air(&state));
         }
         Ctl::Revert => {
             let state: ProgramState = api.call("program.revert", None, &()).await?;
-            println!("on program: {}", state.program.as_deref().unwrap_or("black"));
+            println!("on program: {}", on_air(&state));
         }
         Ctl::History { limit } => {
             let takes: Vec<TakeRecord> =
@@ -176,6 +302,7 @@ pub async fn run(base: &str, token: Option<&str>, cmd: Ctl) -> Result<()> {
         Ctl::Info => info(api).await?,
         Ctl::Source(cmd) => source(api, cmd).await?,
         Ctl::Output(cmd) => output(api, cmd).await?,
+        Ctl::Scene(cmd) => scene(api, cmd).await?,
         Ctl::Ad { uri, at, return_to } => {
             let req = AdBreakRequest { uri: uri.clone(), at_running_time_ms: at, return_to };
             let _: Value = api.call("adbreak.start", None, &req).await?;
@@ -357,6 +484,16 @@ async fn output(api: &Api, cmd: OutputCmd) -> Result<()> {
     Ok(())
 }
 
+/// What is on air, in the words an operator uses for it.
+fn on_air(state: &ProgramState) -> String {
+    match (&state.scene, &state.program) {
+        (Some(scene), Some(source)) => format!("{scene} (the source {source})"),
+        (Some(scene), None) => scene.clone(),
+        (None, Some(source)) => source.clone(),
+        (None, None) => "black".into(),
+    }
+}
+
 /// One source, the way an operator reads it.
 ///
 /// The superimposed mark is the only feedback that the handover really
@@ -511,6 +648,260 @@ fn refusal_message(text: &str) -> String {
         .unwrap_or_else(|| text.trim().to_string())
 }
 
+// ---------------------------------------------------------------------------
+// `gmx ctl scene ...`
+//
+// A thin client like the rest of this file: each arm builds one request and
+// prints what came back. Nothing here decides anything about a scene; the
+// scene server does, and an error it sends already names the next step.
+// ---------------------------------------------------------------------------
+
+async fn scene(api: &Api, cmd: SceneCmd) -> Result<()> {
+    match cmd {
+        SceneCmd::List => {
+            let listing: Value = api.get("scene.list", None, &[]).await?;
+            for s in listing["scenes"].as_array().into_iter().flatten() {
+                println!(
+                    "{:<24} {:>2} item(s)  {}{}",
+                    s["name"].as_str().unwrap_or("?"),
+                    s["items"].as_u64().unwrap_or(0),
+                    sources_of(s),
+                    if s["armed"].as_bool().unwrap_or(false) { "  (armed)" } else { "" }
+                );
+            }
+        }
+        SceneCmd::Get { scene, json } => {
+            let view: Value = api.get("scene.get", None, &[("scene", scene)]).await?;
+            if json {
+                println!("{}", serde_json::to_string_pretty(&view)?);
+                return Ok(());
+            }
+            print_scene(&view);
+        }
+        SceneCmd::New { name, sources, layout } => {
+            let view: Value = api
+                .call(
+                    "scene.create_from",
+                    None,
+                    &json!({ "sources": sources, "layout": layout, "name": name }),
+                )
+                .await?;
+            print_scene(&view);
+        }
+        SceneCmd::Add { scene, source, name } => {
+            let view: Value = api
+                .call(
+                    "scene.item.add",
+                    None,
+                    &json!({ "scene": scene, "content": { "source": source }, "name": name }),
+                )
+                .await?;
+            print_scene(&view);
+        }
+        SceneCmd::Set { scene, item, at, size, opacity, duration } => {
+            let mut transform = serde_json::Map::new();
+            if let Some(at) = at {
+                let (x, y) = pair(&at, ',')?;
+                transform.insert("position".into(), json!({ "x": x, "y": y }));
+            }
+            if let Some(size) = size {
+                let (w, h) = pair(&size, 'x')?;
+                transform.insert("frame".into(), json!({ "w": w, "h": h }));
+            }
+            let mut props = serde_json::Map::new();
+            if !transform.is_empty() {
+                props.insert("transform".into(), Value::Object(transform));
+            }
+            if let Some(o) = opacity {
+                props.insert("opacity".into(), json!(o));
+            }
+            if props.is_empty() {
+                bail!("nothing to set. Use --at X,Y, --size WxH or --opacity 0..1");
+            }
+            let view: Value = api
+                .call(
+                    "scene.item.set",
+                    None,
+                    &json!({ "scene": scene, "item": item, "props": props, "duration_ms": duration }),
+                )
+                .await?;
+            print_scene(&view);
+        }
+        SceneCmd::Layout { layout, values, scene, duration, list } => {
+            if list {
+                let listing: Value = api.get("scene.layout.list", None, &[]).await?;
+                for l in listing["layouts"].as_array().into_iter().flatten() {
+                    println!(
+                        "{:<16} sources: {}",
+                        l["name"].as_str().unwrap_or("?"),
+                        l["sources"]
+                            .as_array()
+                            .map(|a| a
+                                .iter()
+                                .filter_map(|v| v.as_str())
+                                .collect::<Vec<_>>()
+                                .join(", "))
+                            .unwrap_or_default()
+                    );
+                }
+                return Ok(());
+            }
+            let view: Value = api
+                .call(
+                    "scene.apply_layout",
+                    None,
+                    &json!({
+                        "layout": layout,
+                        "values": parse_values(&values)?,
+                        "scene": scene,
+                        "duration_ms": duration,
+                    }),
+                )
+                .await?;
+            print_scene(&view);
+        }
+        SceneCmd::Arm { scene } => {
+            let answer: Value = api.call("scene.preview.set", None, &json!({ "scene": scene })).await?;
+            match answer["preview"]["name"].as_str() {
+                Some(name) => println!("armed: {name}"),
+                None => println!("preview cleared"),
+            }
+        }
+        SceneCmd::Align { scene, edge, items } => {
+            let view: Value = api
+                .call("scene.item.align", None, &json!({ "scene": scene, "items": items, "edge": edge }))
+                .await?;
+            print_scene(&view);
+        }
+        SceneCmd::Grid { scene, cols, items } => {
+            let view: Value = api
+                .call(
+                    "scene.item.arrange_grid",
+                    None,
+                    &json!({ "scene": scene, "items": items, "cols": cols }),
+                )
+                .await?;
+            print_scene(&view);
+        }
+        SceneCmd::Undo | SceneCmd::Redo => {
+            let method = if matches!(cmd, SceneCmd::Undo) { "scene.undo" } else { "scene.redo" };
+            let step: Value = api.call(method, None, &()).await?;
+            println!(
+                "{}: {} record(s) changed, {} step(s) left to undo",
+                method.trim_start_matches("scene."),
+                step["patch"]["updated"].as_array().map(|a| a.len()).unwrap_or(0)
+                    + step["patch"]["added"].as_array().map(|a| a.len()).unwrap_or(0)
+                    + step["patch"]["removed"].as_array().map(|a| a.len()).unwrap_or(0),
+                step["undo"].as_u64().unwrap_or(0)
+            );
+        }
+        SceneCmd::Check { scene } => {
+            let query: Vec<(&str, String)> =
+                scene.into_iter().map(|s| ("scene", s)).collect();
+            let report: Value = api.get("scene.validate", None, &query).await?;
+            let findings = report["findings"].as_array().cloned().unwrap_or_default();
+            if findings.is_empty() {
+                println!("nothing to fix");
+            }
+            for f in findings {
+                println!(
+                    "{:<8} {:<22} {}",
+                    f["severity"].as_str().unwrap_or("?"),
+                    f["code"].as_str().unwrap_or("?"),
+                    f["message"].as_str().unwrap_or("")
+                );
+            }
+        }
+        SceneCmd::Remove { scene, dry_run } => {
+            let body: Value = api
+                .call_with("scene.remove", None, &json!({ "scene": scene }), dry_run)
+                .await?;
+            if dry_run {
+                for line in body["diff"].as_array().into_iter().flatten() {
+                    println!("would {}", line.as_str().unwrap_or_default());
+                }
+            } else {
+                println!("removed scene {}", body["removed"].as_str().unwrap_or(&scene));
+            }
+        }
+        SceneCmd::CopyLayout { from, to, r#match } => {
+            let layout: Value = api.get("scene.layout.copy", None, &[("scene", from)]).await?;
+            let view: Value = api
+                .call(
+                    "scene.layout.paste",
+                    None,
+                    &json!({ "scene": to, "layout": layout, "match": r#match }),
+                )
+                .await?;
+            print_scene(&view);
+        }
+    }
+    Ok(())
+}
+
+/// A scene, the way an operator reads it: the name, then one line per item
+/// saying what it shows and where it is.
+fn print_scene(view: &Value) {
+    println!(
+        "{} ({}x{})",
+        view["name"].as_str().unwrap_or("?"),
+        view["canvas"]["width"].as_u64().unwrap_or(0),
+        view["canvas"]["height"].as_u64().unwrap_or(0)
+    );
+    for g in view["geometry"].as_array().into_iter().flatten() {
+        println!(
+            "  {:<20} {:<10} {:>5},{:<5} {:>5}x{:<5} alpha {:.2}",
+            g["path"].as_str().unwrap_or("?"),
+            g["source"].as_str().unwrap_or(""),
+            g["x"].as_f64().unwrap_or(0.0).round(),
+            g["y"].as_f64().unwrap_or(0.0).round(),
+            g["width"].as_f64().unwrap_or(0.0).round(),
+            g["height"].as_f64().unwrap_or(0.0).round(),
+            g["opacity"].as_f64().unwrap_or(1.0)
+        );
+    }
+    for f in view["findings"].as_array().into_iter().flatten() {
+        println!("  ! {} {}", f["code"].as_str().unwrap_or("?"), f["message"].as_str().unwrap_or(""));
+    }
+}
+
+fn sources_of(scene: &Value) -> String {
+    scene["sources"]
+        .as_array()
+        .map(|a| a.iter().filter_map(|v| v.as_str()).collect::<Vec<_>>().join(", "))
+        .unwrap_or_default()
+}
+
+/// `a=cam1,b=cam2,inset=0.4` into a JSON object, with numbers as numbers.
+fn parse_values(text: &str) -> Result<serde_json::Map<String, Value>> {
+    let mut out = serde_json::Map::new();
+    for pair in text.split(',').map(str::trim).filter(|p| !p.is_empty()) {
+        let (key, value) = pair.split_once('=').with_context(|| {
+            format!("{pair:?} is not a value. Write them as name=value, separated by commas, for example a=cam1,b=cam2,inset=0.4")
+        })?;
+        let value = value.trim();
+        let parsed = match value.parse::<f64>() {
+            Ok(n) => json!(n),
+            Err(_) => json!(value),
+        };
+        out.insert(key.trim().to_string(), parsed);
+    }
+    Ok(out)
+}
+
+/// `1920x1080` or `96,880` into two numbers.
+fn pair(text: &str, sep: char) -> Result<(f64, f64)> {
+    let (a, b) = text.split_once(sep).with_context(|| {
+        format!("{text:?} is not two numbers. Write it as A{sep}B, for example 960{sep}540")
+    })?;
+    let read = |v: &str| {
+        v.trim()
+            .parse::<f64>()
+            .with_context(|| format!("{v:?} is not a number"))
+    };
+    Ok((read(a)?, read(b)?))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -554,6 +945,7 @@ mod tests {
         let take = TakeRequest {
             source: Some("cam1".into()),
             scene: None,
+            transition: None,
             at_running_time_ms: Some(1500),
         };
         let v = serde_json::to_value(&take).unwrap();

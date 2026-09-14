@@ -93,6 +93,12 @@ text = re.sub(r'(?m)^# token = .*$', f'token = "{token}"', text)
 # both have to let go before it comes down.
 text = re.sub(r'(?m)^linger_secs = .*$', 'linger_secs = 2', text)
 text = re.sub(r'(?m)^idle_secs = .*$', 'idle_secs = 2', text)
+# No minimum hold. The script takes half a dozen times in as many seconds,
+# which is exactly what the shipped eight second hold exists to refuse. The
+# hold itself has its own tests; what is being checked here is that a take
+# works at all, and that a scene take goes through the same door as a source
+# take.
+text = re.sub(r'(?m)^min_hold_ms = .*$', 'min_hold_ms = 0', text)
 # Plugins under the work directory, not the user's own. The plugin steps
 # install into this and check it is empty again afterwards.
 text = re.sub(
@@ -251,6 +257,121 @@ fi
 
 step "and the log says the mosaic was torn down"
 if grep -qi "multiview\|mosaic" "$LOG"; then ok; else bad "nothing in the log about the mosaic"; fi
+
+# --- scenes -----------------------------------------------------------------
+#
+# Two test sources into one scene, on air, reshaped by a layout, and undone.
+# Everything here is `gmx ctl scene`, which is the same `scene.*` calls the web
+# designer and an agent make.
+
+step "a second test source to build a scene from"
+curl -fsS -X POST "$BASE/api/v1/sources" "${AUTH[@]}" \
+    -H 'content-type: application/json' \
+    -d '{"id":"ball","uri":"test://ball","name":"Smoke ball"}' >"$WORK/second.log" 2>&1
+if grep -q '"ball"' "$WORK/second.log"; then ok; else bad "$(cat "$WORK/second.log")"; fi
+
+export GODWINMIX_URL="$BASE" GODWINMIX_TOKEN="$TOKEN"
+
+step "gmx ctl scene new makes a two box from two sources"
+"$GMX" ctl scene new "smoke two" bars ball >"$WORK/scene-new.log" 2>&1
+if grep -q "bars" "$WORK/scene-new.log" && grep -q "ball" "$WORK/scene-new.log"; then
+    ok
+else
+    bad "$(tr '\n' '; ' <"$WORK/scene-new.log")"
+fi
+
+step "nothing in the scene is off the canvas or invisible"
+# A two box does reach outside the action safe box, and saying so is `info`.
+# What must not be there is a warning or an error: an item off the canvas, one
+# hidden behind another, or a reference that leads nowhere.
+CHECK="$("$GMX" ctl scene check "smoke two" 2>&1)"
+if grep -qE "^(warning|error)" <<<"$CHECK"; then
+    bad "$(tr '\n' '; ' <<<"$CHECK")"
+else
+    ok
+fi
+
+step "gmx ctl take --scene puts the scene on air"
+"$GMX" ctl take --scene "smoke two" >"$WORK/scene-take.log" 2>&1
+if grep -q "smoke two" "$WORK/scene-take.log"; then
+    ok
+else
+    bad "$(tr '\n' '; ' <"$WORK/scene-take.log")"
+fi
+
+step "the programme reports the scene it is on"
+if curl -fsS "$BASE/api/v1/program" "${AUTH[@]}" | grep -q '"scene":"smoke two"'; then
+    ok
+else
+    bad "$(curl -fsS "$BASE/api/v1/program" "${AUTH[@]}")"
+fi
+
+# Measured across the take and not over the whole run: the first interval of a
+# pipeline that has just started is always long, and what is being asserted is
+# that a take costs nothing, not that start up is instant.
+interval_counts() {
+    curl -fsS "$BASE/metrics" | awk '
+        /^gmx_programme_frame_interval_ms_bucket\{le="100"\}/ { inside = $2 }
+        /^gmx_programme_frame_interval_ms_count/ { total = $2 }
+        END { print inside, total }'
+}
+
+step "taking a scene and taking it again costs no frame"
+read -r INSIDE_BEFORE TOTAL_BEFORE < <(interval_counts)
+"$GMX" ctl take --scene "smoke two" >/dev/null 2>&1
+sleep 0.5
+"$GMX" ctl take bars >/dev/null 2>&1
+sleep 0.5
+"$GMX" ctl take --scene "smoke two" >/dev/null 2>&1
+sleep 1
+read -r INSIDE_AFTER TOTAL_AFTER < <(interval_counts)
+FRAMES=$((TOTAL_AFTER - TOTAL_BEFORE))
+LATE=$(( (TOTAL_AFTER - TOTAL_BEFORE) - (INSIDE_AFTER - INSIDE_BEFORE) ))
+if [[ "$FRAMES" -gt 10 && "$LATE" == "0" ]]; then
+    ok
+else
+    bad "$LATE of $FRAMES frames arrived more than 100 ms after the one before"
+fi
+
+step "applying a layout reshapes the scene in place"
+"$GMX" ctl scene layout pip-bottom-right --values "a=bars,b=ball" \
+    --scene "smoke two" --duration 300 >"$WORK/scene-layout.log" 2>&1
+if grep -q "smoke two" "$WORK/scene-layout.log"; then
+    ok
+else
+    bad "$(tr '\n' '; ' <"$WORK/scene-layout.log")"
+fi
+
+step "and undo puts the two box back exactly"
+BEFORE="$("$GMX" ctl scene get "smoke two" 2>&1 | tail -n +2)"
+"$GMX" ctl scene undo >"$WORK/scene-undo.log" 2>&1
+AFTER="$("$GMX" ctl scene get "smoke two" 2>&1 | tail -n +2)"
+if grep -q "step" "$WORK/scene-undo.log" && [[ "$BEFORE" != "$AFTER" ]]; then
+    ok
+else
+    bad "undo changed nothing: $(tr '\n' '; ' <"$WORK/scene-undo.log")"
+fi
+
+step "arming a scene makes it the preview"
+"$GMX" ctl scene arm "smoke two" >"$WORK/scene-arm.log" 2>&1
+if curl -fsS "$BASE/api/v1/scenes" "${AUTH[@]}" | grep -q '"armed":true'; then
+    ok
+else
+    bad "$(cat "$WORK/scene-arm.log")"
+fi
+
+step "the scene collection was written beside the runtime store"
+if compgen -G "$WORK/*.scenes.json" >/dev/null && grep -q "smoke two" "$WORK"/*.scenes.json; then
+    ok
+else
+    bad "no scene collection in $WORK"
+fi
+
+step "a source take still works and still reports the source"
+"$GMX" ctl take bars >"$WORK/scene-back.log" 2>&1
+if grep -q "bars" "$WORK/scene-back.log"; then ok; else bad "$(cat "$WORK/scene-back.log")"; fi
+
+unset GODWINMIX_URL GODWINMIX_TOKEN
 
 # --- presets ----------------------------------------------------------------
 #
