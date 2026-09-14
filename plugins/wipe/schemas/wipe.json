@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "wipe",
+  "type": "object",
+  "properties": {
+    "direction": {
+      "type": "string",
+      "enum": ["left", "right", "up", "down"],
+      "default": "left",
+      "description": "Which way the incoming scene travels. `left` means it enters from the right edge and moves left, which is what a viewer reads as a left wipe.",
+      "examples": ["left", "up"]
+    },
+    "push": {
+      "type": "boolean",
+      "default": true,
+      "description": "Push the outgoing scene out of the way as the incoming one arrives. With false the incoming scene slides over a scene that stays where it is.",
+      "examples": [true, false]
+    }
+  },
+  "additionalProperties": false
+}

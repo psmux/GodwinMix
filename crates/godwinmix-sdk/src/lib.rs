@@ -122,7 +122,8 @@ pub mod prelude {
     pub use crate::runtime;
     pub use crate::wire::{
         codes, AudioSet, AudioState, Candidate, Canvas, Configure, Health, HealthState,
-        InitializeResult, LogLevel, Position, Ready, RpcError, StartParams, StartResult, Transport,
+        InitializeResult, LogLevel, Position, Ready, Render, RpcError, StartParams, StartResult,
+        ToolResult, Transport,
     };
 }
 

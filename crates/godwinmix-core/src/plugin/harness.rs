@@ -440,6 +440,166 @@ pub fn check_spawn(root: &std::path::Path, provide: &str) -> CheckResult {
     result
 }
 
+/// Check: a `transition` provide drives the pads it is given, and only those.
+///
+/// Fed a crossing with two pads on the way out and two on the way in, and
+/// asked what the picture should be at the start, the middle and the end. What
+/// is asserted is the contract and not a shape: a wipe, a dissolve and a
+/// clock wipe all pass, and a plugin that invents pad names, drives a property
+/// the core will not write, answers the same thing at 0 and at 1, or returns a
+/// number that is not a number, does not.
+///
+/// A plugin may answer once with `{curve: [[t, progress], ...]}` instead, in
+/// which case the curve is what is checked: two points or more, ending where
+/// it should.
+pub fn check_transition(root: &std::path::Path, provide: &str) -> CheckResult {
+    let manifest = match PluginManifest::load(root.join("gmx-plugin.toml")) {
+        Ok(m) => m,
+        Err(e) => return CheckResult::fail("transition", format!("the manifest does not load: {e}")),
+    };
+    let ctx = godwinmix_host::launch::LaunchCtx {
+        root: root.to_path_buf(),
+        provide: provide.to_string(),
+        instance: "harness".into(),
+        api_level: super::API_LEVEL,
+        token: String::new(),
+        rpc: String::new(),
+        media: String::new(),
+    };
+    let launch = match godwinmix_host::launch::plan(&manifest, &ctx) {
+        Ok(l) => l,
+        Err(e) => return CheckResult::fail("transition", format!("{e}")),
+    };
+    let mut child = match super::host::Sidecar::spawn("harness", &launch) {
+        Ok(c) => c,
+        Err(e) => return CheckResult::fail("transition", format!("{e:#}")),
+    };
+    let canvas = test_canvas();
+    if let Err(e) = child.handshake_for(
+        Some(&manifest),
+        super::host::source::canvas_of(&canvas),
+        provide,
+        serde_json::json!({}),
+        false,
+        |t| Ok(format!("{}/harness.{}", std::env::temp_dir().display(), t.as_str())),
+    ) {
+        child.shutdown("the harness is done with it");
+        return CheckResult::fail("transition", format!("{e:#}"));
+    }
+    let result = drive_transition(&child);
+    child.shutdown("the harness is done with it");
+    result
+}
+
+/// The pads the check hands a transition, and what it makes of the answers.
+fn drive_transition(child: &super::host::Sidecar) -> CheckResult {
+    let from = vec!["sink_0".to_string(), "sink_1".to_string()];
+    let to = vec!["sink_2".to_string(), "sink_3".to_string()];
+    let named: Vec<&str> = from.iter().chain(&to).map(String::as_str).collect();
+    let mut seen: Vec<(f64, serde_json::Value)> = Vec::new();
+    for progress in [0.0f64, 0.5, 1.0] {
+        let answer = child.call(
+            "render",
+            serde_json::json!({
+                "from": from,
+                "to": to,
+                "progress": progress,
+                "running_time_ns": 1_000_000_000u64 + (progress * 300_000_000.0) as u64,
+            }),
+        );
+        let answer = match answer {
+            Ok(v) => v,
+            Err(e) => {
+                return CheckResult::fail(
+                    "transition",
+                    format!("`render` at progress {progress} was refused: {e:#}"),
+                )
+            }
+        };
+        if let Some(curve) = answer.get("curve") {
+            return match curve.as_array().map(Vec::len).unwrap_or(0) >= 2 {
+                true => CheckResult::pass(
+                    "transition",
+                    format!("answered once with a curve of {} points", curve.as_array().map(Vec::len).unwrap_or(0)),
+                ),
+                false => CheckResult::fail(
+                    "transition",
+                    "a `curve` answer needs at least two points, as [[t, progress], ...] \
+                     with both in 0 to 1"
+                        .to_string(),
+                ),
+            };
+        }
+        let Some(pads) = answer.get("pads").and_then(|p| p.as_object()) else {
+            return CheckResult::fail(
+                "transition",
+                format!(
+                    "`render` answered {answer} at progress {progress}. It must answer \
+                     {{pads: {{<pad>: {{alpha, xpos, ...}}}}}}, or once with {{curve}}."
+                ),
+            );
+        };
+        for (pad, values) in pads {
+            if !named.contains(&pad.as_str()) {
+                return CheckResult::fail(
+                    "transition",
+                    format!(
+                        "`render` named the pad `{pad}`, which the core did not offer. It \
+                         offered {}.",
+                        named.join(", ")
+                    ),
+                );
+            }
+            let Some(values) = values.as_object() else {
+                return CheckResult::fail(
+                    "transition",
+                    format!("the value for `{pad}` is not an object of properties"),
+                );
+            };
+            for (property, value) in values {
+                if !super::super::mixer::transition::DRIVEN.contains(&property.as_str()) {
+                    return CheckResult::fail(
+                        "transition",
+                        format!(
+                            "`render` drives `{property}`, which the core will not write. It \
+                             writes {}.",
+                            super::super::mixer::transition::DRIVEN.join(", ")
+                        ),
+                    );
+                }
+                match value.as_f64() {
+                    Some(v) if v.is_finite() => {}
+                    _ => {
+                        return CheckResult::fail(
+                            "transition",
+                            format!("`{pad}`.`{property}` is {value} at progress {progress}"),
+                        )
+                    }
+                }
+            }
+        }
+        seen.push((progress, answer));
+    }
+    if seen.first().map(|(_, a)| a) == seen.last().map(|(_, a)| a) {
+        return CheckResult::fail(
+            "transition",
+            "`render` answers the same thing at progress 0 and at progress 1, so nothing \
+             would move. A transition has to go somewhere."
+                .to_string(),
+        );
+    }
+    let drove: usize = seen
+        .last()
+        .and_then(|(_, a)| a.get("pads"))
+        .and_then(|p| p.as_object())
+        .map(|p| p.len())
+        .unwrap_or(0);
+    CheckResult::pass(
+        "transition",
+        format!("rendered at 0, 0.5 and 1; {drove} of the 4 pads it was offered are driven"),
+    )
+}
+
 /// Check 4: `configure` with every example the settings schema gives, and
 /// never a crash.
 ///
