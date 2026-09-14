@@ -232,7 +232,8 @@ class ScenesPanel extends HTMLElement {
     if (!summary) return;
     try {
       const { openComposer } = await import("../composer/composer.js");
-      await openComposer({ client: this.client, scenes: this.scenes, scene: summary.id });
+      // Kept so the panel can close it, and so the DOM harness can drive it.
+      this.composer = await openComposer({ client: this.client, scenes: this.scenes, scene: summary.id });
     } catch (e) {
       errorToast(e, "Composer");
     }

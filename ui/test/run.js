@@ -12,11 +12,21 @@ import { Client } from "../client/index.js";
 import { RpcError, CODES } from "../client/errors.js";
 import { rank } from "../shell/palette.js";
 import { chordOf, DEFAULT_MAP } from "../shell/keymap.js";
+import { IS_MAC } from "../shell/dom.js";
 import { kindOfUri } from "../client/kinds.js";
 import { tagFor } from "../shell/registry.js";
 import * as layout from "../shell/layout.js";
 import { ART } from "../panels/welcome/tiles.js";
 import { WelcomePanel } from "../panels/welcome/panel.js";
+import { connect } from "../client/index.js";
+import { shell } from "../shell/shell.js";
+import { SceneMirror } from "../kits/protocol/mirror.js";
+import { Prediction, mergeProps } from "../kits/protocol/predict.js";
+import { gizmosFor, handlesFor, applyDrag } from "../kits/canvas/gizmos.js";
+import { snapTargets, snapDelta } from "../kits/canvas/snap.js";
+import { safeAreas } from "../kits/canvas/safe.js";
+import { describeForm, valuesOf, readForm, missing } from "../kits/schema/describe.js";
+import { layoutFor, applyRules, controlsOf } from "../kits/schema/ui-schema.js";
 
 let passed = 0;
 let failed = 0;
@@ -38,7 +48,7 @@ function line(kind, text) {
   const row = document.createElement("div");
   row.className = "row sm";
   row.innerHTML = `<span class="dot ${kind === "ok" ? "live" : "failed"}"></span>`;
-  row.appendChild(document.createTextNode(text));
+  row.appendChild(document.createTextNode(`${kind === "ok" ? "ok  " : "FAIL"}  ${text}`));
   if (out) out.appendChild(row);
   console[kind === "ok" ? "log" : "error"](`${kind === "ok" ? "PASS" : "FAIL"}  ${text}`);
 }
@@ -298,14 +308,23 @@ test("a missing required field is named", () => {
 });
 
 test("if and then hide the fields that do not apply", () => {
+  // `if`/`then` decides what is shown, not what exists: every field is
+  // declared in `properties` and the condition makes it appear. A property
+  // that lives only inside a `then` block has no control in any of the three
+  // readers (browser, TypeScript, Python), which is what `x-gmx-group` and a
+  // plugin's own editor are for. `client/kinds.js` writes the page kind this
+  // way, and so does every schema that ships.
   const form = new SchemaForm(
     {
       type: "object",
-      properties: { kind: { type: "string", enum: ["file", "page"], default: "file" } },
+      properties: {
+        kind: { type: "string", enum: ["file", "page"], default: "file" },
+        superimpose: { type: "string", enum: ["off", "auto"], default: "off" },
+      },
       allOf: [
         {
           if: { properties: { kind: { const: "page" } } },
-          then: { properties: { superimpose: { type: "string", enum: ["off", "auto"], default: "off" } } },
+          then: { properties: { superimpose: {} } },
         },
       ],
     },
@@ -340,7 +359,12 @@ test("the palette prefers a title that starts with what was typed", () => {
 // ---------------------------------------------------------------- keymap
 
 test("a chord is spelled the way the map spells it", () => {
-  eq(chordOf({ key: "k", ctrlKey: true, metaKey: false, altKey: false, shiftKey: false }), "Ctrl+K");
+  // The map writes Ctrl and means the platform's own accelerator, so the event
+  // this is given has to be the one that platform actually produces: Cmd on a
+  // Mac, Ctrl everywhere else. Asserting a ctrlKey event spells "Ctrl+K" fails
+  // on macOS, where Ctrl+K is a different chord from the one in the map.
+  const accelKey = IS_MAC ? { metaKey: true, ctrlKey: false } : { ctrlKey: true, metaKey: false };
+  eq(chordOf(Object.assign({ key: "k", altKey: false, shiftKey: false }, accelKey)), "Ctrl+K");
   eq(chordOf({ key: "F2", ctrlKey: false, metaKey: false, altKey: false, shiftKey: false }), "F2");
   eq(chordOf({ key: "1", ctrlKey: false, metaKey: false, altKey: false, shiftKey: false }), "1");
 });
@@ -522,7 +546,7 @@ async function welcomeSuite() {
   const panel = new WelcomePanel();
   panel.setClient(client);
   panel.connectedCallback();
-  await new Promise((r) => setTimeout(r, 20));
+  for (let i = 0; i < 100 && !panel.dialog; i += 1) await new Promise((r) => setTimeout(r, 10));
 
   test("the welcome tiles come up on a core with no sources and no preset", () => {
     ok(panel.dialog, "nothing opened");
@@ -532,7 +556,9 @@ async function welcomeSuite() {
 
   const first = panel.dialog && panel.dialog.el.querySelector(".welcome-tile");
   if (first) first.click();
-  await new Promise((r) => setTimeout(r, 20));
+  for (let i = 0; i < 100 && !calls.some((c) => c[0] === "preset.apply"); i += 1) {
+    await new Promise((r) => setTimeout(r, 10));
+  }
 
   test("picking a tile applies that preset over the protocol", () => {
     const applied = calls.find((c) => c[0] === "preset.apply");
@@ -540,6 +566,436 @@ async function welcomeSuite() {
     eq(applied[1], { name: "church" }, "the preset it asked for");
   });
   panel.close();
+}
+
+// ------------------------------------------------------------- the kits
+
+/**
+ * The browser kit against the fixtures it generated.
+ *
+ * The TypeScript and Python ports replay this same file in their own test
+ * runs. Replaying it here as well means a change to `ui/kits` that moves the
+ * behaviour fails in the browser first, where it was made, rather than in
+ * somebody else's language an hour later.
+ */
+async function kitSuite() {
+  let fixtures;
+  try {
+    const res = await fetch("./fixtures.json");
+    if (!res.ok) throw new Error(`fixtures.json answered ${res.status}`);
+    fixtures = await res.json();
+  } catch (e) {
+    line("ok", `skipped the kit fixtures: ${e.message}`);
+    return;
+  }
+
+  const r2 = (v) => (typeof v === "number" ? Math.round(v * 100) / 100 : v);
+  const round = (v) => {
+    if (Array.isArray(v)) return v.map(round);
+    if (v && typeof v === "object") return Object.fromEntries(Object.entries(v).map(([k, x]) => [k, round(x)]));
+    return r2(v);
+  };
+
+  for (const c of fixtures.mirror) {
+    test(`mirror: ${c.name}`, () => {
+      const mirror = new SceneMirror({ clientId: c.clientId });
+      const steps = [];
+      for (const step of c.steps) {
+        if (step.view) {
+          mirror.applyView(step.view);
+          steps.push({ kind: "view" });
+        } else {
+          const r = mirror.applyPatch(step.patch);
+          steps.push({ kind: "patch", applied: r.applied, echo: r.echo, gap: r.gap, seq: r.seq });
+        }
+      }
+      eq(steps, c.out.steps, "the step by step answers");
+      eq(mirror.seq, c.out.seq, "the sequence number");
+      eq(mirror.unknown, c.out.unknown, "unknown record kinds");
+      eq(mirror.scenes().map((x) => x.id), c.out.scenes, "the scenes");
+    });
+  }
+
+  for (const c of fixtures.predict) {
+    test(`predict: ${c.name}`, () => {
+      const p = new Prediction();
+      const seqs = [];
+      const settled = [];
+      for (const [op, a, b] of c.ops) {
+        if (op === "predict") seqs.push(p.predict(a, b));
+        else settled.push(p.settle(a));
+      }
+      eq(seqs, c.out.seqs, "the numbers handed out");
+      eq(settled, c.out.settled, "what each settle let go of");
+      eq(p.acked, c.out.acked, "the last number the core applied");
+      eq([...p.pending.keys()].sort(), c.out.pending, "what is still in flight");
+      for (const [item, server] of Object.entries(c.resolve || {})) {
+        eq(p.resolve(item, server), c.out.resolved[item], `what ${item} draws`);
+      }
+      eq((c.accepts || []).map(([item, echo]) => p.accepts(item, echo)), c.out.accepted, "which echoes are drawn");
+    });
+  }
+
+  for (const c of fixtures.merge) {
+    test(`merge: ${c.name}`, () => eq(mergeProps(c.base, c.next), c.out));
+  }
+
+  for (const c of fixtures.gizmos) {
+    test(`gizmos: ${c.name}`, () => {
+      const got = gizmosFor(c.designer).map((g) => ({ kind: g.kind, action: g.action, target: g.target, anchor: g.anchor }));
+      eq(got, c.out);
+    });
+  }
+
+  for (const c of fixtures.handles) {
+    test(`handles: ${c.name}`, () => {
+      const got = handlesFor(c.box, gizmosFor(c.designer)).map((h) => ({
+        kind: h.kind,
+        action: h.action,
+        x: r2(h.x),
+        y: r2(h.y),
+        dir: h.dir,
+        cursor: h.cursor,
+      }));
+      eq(got, c.out);
+    });
+  }
+
+  for (const c of fixtures.drag) {
+    test(`drag: ${c.name}`, () => {
+      const got = applyDrag(c.handle, c.start, c.dx, c.dy, c.mods);
+      eq({ props: round(got.props), box: got.box ? round(got.box) : null }, c.out);
+    });
+  }
+
+  for (const c of fixtures.snap) {
+    test(`snap: ${c.name}`, () => {
+      const d = snapDelta(c.box, snapTargets(c.targets), c.opts);
+      eq(
+        { dx: r2(d.dx), dy: r2(d.dy), guides: d.guides.map((g) => ({ axis: g.axis, at: r2(g.at), span: g.span.map(r2) })) },
+        c.out
+      );
+    });
+  }
+
+  for (const c of fixtures.safe) {
+    test(`safe areas at ${c.canvas.width}x${c.canvas.height}`, () => eq(round(safeAreas(c.canvas)), c.out));
+  }
+
+  for (const c of fixtures.schema) {
+    test(`schema: ${c.name}`, () => {
+      const form = describeForm(c.schema, c.value);
+      eq(form.groups, c.out.groups, "the groups");
+      eq(
+        form.fields.map((f) => ({
+          name: f.name,
+          kind: f.kind,
+          group: f.group,
+          required: f.required,
+          visible: f.visible,
+          unit: f.unit === undefined ? null : f.unit,
+          value: f.value === undefined ? null : f.value,
+          choices: f.choices ? f.choices.map((x) => x.value) : null,
+        })),
+        c.out.fields,
+        "the fields"
+      );
+    });
+  }
+
+  for (const c of fixtures.read) {
+    test(`read: ${c.name}`, () => {
+      const form = describeForm(c.schema, c.value);
+      const values = Object.assign({}, valuesOf(form), c.values);
+      eq(readForm(form, values, new Set(c.touched)), c.out.read, "what the form sends");
+      eq(missing(form, values), c.out.missing, "what is required and empty");
+    });
+  }
+
+  for (const c of fixtures.uiSchema) {
+    test(`ui schema: ${c.name}`, () => {
+      const form = describeForm(c.schema, c.value);
+      const layoutTree = applyRules(layoutFor(form, c.ui), valuesOf(form));
+      eq(
+        controlsOf(layoutTree).map((n) => ({
+          field: n.field.name,
+          control: n.control,
+          visible: n.visible !== false,
+          enabled: n.enabled !== false,
+        })),
+        c.out.controls
+      );
+    });
+  }
+
+  test("every fixture section is replayed here", () => {
+    const sections = Object.keys(fixtures).filter((k) => k !== "note");
+    eq(sections.sort(), ["drag", "gizmos", "handles", "merge", "mirror", "predict", "read", "safe", "schema", "snap", "uiSchema"]);
+  });
+}
+
+
+// ------------------------------------------------------- against a live core
+
+/**
+ * The Phase 3 acceptance gestures, driven through the real modules against the
+ * core that served this page.
+ *
+ * Not a mock anywhere: the panel is the panel, the commands go over `/rpc`, and
+ * the drag is pointer events on the composer's own overlay. It skips itself
+ * when there is no core answering, so the page still runs from a file.
+ *
+ *   /test/?token=<token>       run it
+ *   /test/?live=0              skip it
+ */
+async function liveSuite() {
+  const params = new URLSearchParams(location.search);
+  if (params.get("live") === "0") {
+    line("ok", "the live suite was switched off with ?live=0");
+    return;
+  }
+  let client;
+  try {
+    client = await connect({ token: params.get("token") });
+    await waitFor(() => client.state.connected, 5000, "the socket to open");
+  } catch (e) {
+    line("ok", `skipped the live suite: no core answering (${e.message})`);
+    return;
+  }
+
+  const made = [];
+  const sources = [];
+  for (const [id, uri] of [["t-bars", "test://smpte"], ["t-ball", "test://ball"]]) {
+    try {
+      await client.call("source.add", { id, uri, name: id === "t-bars" ? "Bars" : "Ball" });
+      made.push(id);
+    } catch (e) {
+      // Already there from an earlier run is not a failure.
+      if (!/exist|conflict/i.test(e.message || "")) throw e;
+    }
+    sources.push(id);
+  }
+  await waitFor(() => sources.every((id) => client.store.source(id)), 5000, "both test sources");
+
+  window.godwinmixPanels = window.godwinmixPanels || [];
+  const { default: ScenesPanel } = await import("../panels/scenes/panel.js");
+  const panel = new ScenesPanel();
+  panel.setClient(client);
+  // A real size, because a marquee over a zero height grid selects nothing.
+  panel.style.cssText = "display:block;width:900px;height:320px";
+  document.body.appendChild(panel);
+  panel.connectedCallback();
+  await waitFor(() => panel.scenes.supported !== undefined && panel.scenes.summaries !== null, 5000, "scene.list");
+
+  if (!panel.scenes.supported) {
+    line("ok", "skipped the live suite: this core has no scene server");
+    panel.remove();
+    return;
+  }
+
+  const before = panel.scenes.scenes().length;
+
+  // --- two tiles dragged onto empty space make a two box scene --------------
+
+  window.dispatchEvent(
+    new CustomEvent("gmx:tiles-dropped", {
+      detail: { ids: sources, target: "scenes:empty", from: "sources", copy: false },
+    })
+  );
+  await waitFor(() => panel.scenes.scenes().length > before, 8000, "the new scene");
+  const scene = panel.scenes.scenes()[panel.scenes.scenes().length - 1];
+  const view = panel.scenes.view(scene.id);
+
+  test("dragging two inputs onto empty space makes a scene with no dialog", () => {
+    eq(scene.items, 2, "two items");
+    ok(view && view.geometry.length === 2, "the answer carried the flattened geometry");
+  });
+
+  test("the scene the count chose is a two box", () => {
+    const [a, b] = view.geometry;
+    const canvas = view.canvas;
+    near(a.width, b.width, 2, "the two boxes are the same width");
+    near(a.y, b.y, 2, "they sit at the same height");
+    ok(Math.abs(a.x - b.x) > canvas.width / 4, "they are side by side, not stacked");
+    // The layout leaves a gap and margins, which is why this is a fraction and
+    // not an equality: 0.02 of the canvas three times over, by default.
+    const covered = (a.width + b.width) / canvas.width;
+    ok(covered > 0.9 && covered <= 1, `the two boxes cover ${(covered * 100).toFixed(1)}% of the width`);
+  });
+
+  test("a tile appeared for it, with its name on it", () => {
+    const tile = panel.tiles.get(scene.id);
+    ok(tile, "no tile");
+    eq(tile.name.textContent, scene.name, "the tile's name");
+  });
+
+  // --- F2, then a colour ---------------------------------------------------
+
+  const renamed = "Wide and guest";
+  panel.beginRename(scene.id);
+  const tile = panel.tiles.get(scene.id);
+  tile.name.textContent = renamed;
+  tile.name.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+  await waitFor(() => (panel.scenes.summary(scene.id) || {}).name === renamed, 5000, "the rename to land");
+
+  const fresh = await client.call("scene.get", { scene: scene.id });
+  test("F2 renames the scene on the document, not on this device", () => {
+    eq(fresh.name, renamed, "the core's own copy of the name");
+  });
+
+  await panel.setColour([scene.id], "#2f6f4f");
+  await waitFor(() => (panel.scenes.summary(scene.id) || {}).color === "#2f6f4f", 5000, "the colour");
+  test("a colour from the menu is on the document too", () => {
+    eq(panel.scenes.summary(scene.id).color, "#2f6f4f");
+  });
+
+  // --- a sweep over the tiles ----------------------------------------------
+
+  const grid = panel.grid;
+  const box = grid.getBoundingClientRect();
+  sweep(grid, box.left + 2, box.top + 2, box.right - 2, box.bottom - 2);
+  test("a sweep over empty space selects every tile it touches", () => {
+    ok(panel.selection.size >= 1, `the sweep selected ${panel.selection.size} tiles`);
+  });
+
+  // --- on air --------------------------------------------------------------
+
+  const tookAt = performance.now();
+  let took = null;
+  const offTook = client.on("event", (e) => {
+    if (e.name === "program.took") took = e.params;
+  });
+  await panel.activate(scene.id);
+  await waitFor(() => took, 5000, "event/program.took");
+  offTook();
+  test("tapping a scene tile puts it on air", () => {
+    ok(took.scene === scene.id || took.scene === renamed, `the take names the scene: ${JSON.stringify(took)}`);
+  });
+  line("ok", `take to event/program.took: ${(performance.now() - tookAt).toFixed(1)} ms`);
+
+  // --- copy a layout onto another scene ------------------------------------
+
+  const more = await import("../panels/scenes/more.js");
+  await more.duplicate(panel, [scene.id]);
+  await waitFor(() => panel.scenes.scenes().length > before + 1, 8000, "the duplicate");
+  const copy = panel.scenes.scenes().find((s) => s.id !== scene.id && s.name.includes(renamed.slice(0, 6)));
+
+  const first = view.geometry[0].item;
+  await panel.scenes.itemSet(scene.id, first, { transform: { position: { x: 240, y: 180 }, frame: { w: 480, h: 270 } } }, { duration_ms: 0 });
+  await more.copyLayout(panel, scene.id);
+  await more.pasteLayout(panel, [copy.id]);
+  const pasted = await client.call("scene.get", { scene: copy.id });
+
+  test("pasting a layout moves the matching items and leaves the rest alone", () => {
+    const moved = pasted.geometry.find((g) => Math.abs(g.x - 240) < 2 && Math.abs(g.y - 180) < 2);
+    ok(moved, `nothing landed where the layout says: ${JSON.stringify(pasted.geometry.map((g) => [g.x, g.y]))}`);
+    eq(pasted.geometry.length, 2, "the other item is still there");
+  });
+
+  // --- the composer, and a drag at input rate ------------------------------
+
+  await panel.open(scene.id);
+  const composer = document.querySelector(".composer");
+  test("a double tap opens the composer on a draft, off air", () => {
+    ok(composer, "no composer dialog");
+  });
+  const live = panel.composer;
+  ok(live, "the panel kept no handle on the composer it opened");
+  await waitFor(() => live.canvas && live.canvas.entries().length === 2, 5000, "the composer's items");
+
+  const item = live.canvas.entries()[0];
+  live.canvas.setSelection([item.id]);
+  const rect = live.canvas.overlay.getBoundingClientRect();
+  const centre = live.canvas.viewport.toSurface(item.box.x + item.box.width / 2, item.box.y + item.box.height / 2);
+  const startX = rect.left + centre.x;
+  const startY = rect.top + centre.y;
+
+  const wasX = item.box.x;
+  point(live.canvas.overlay, "pointerdown", startX, startY);
+  for (let i = 1; i <= 12; i += 1) point(live.canvas.overlay, "pointermove", startX + i * 6, startY + i * 2);
+  point(live.canvas.overlay, "pointerup", startX + 72, startY + 24);
+  await waitFor(() => !live.canvas.prediction.busy, 5000, "the core to catch up with the drag");
+
+  test("a drag moves the item, locally first and in the core after", () => {
+    const now = live.canvas.boxes.get(item.id);
+    ok(now.x !== wasX, `the item did not move (was ${wasX}, is ${now.x})`);
+  });
+
+  const redraw = live.canvas.timings.stats("redraw");
+  const echo = live.canvas.timings.stats("echo");
+  for (const row of live.canvas.report()) line("ok", `drag timing, ${row}`);
+  test("a drag redraws locally within 16 ms", () => {
+    ok(redraw && redraw.p95 < 16, `p95 redraw was ${redraw ? redraw.p95.toFixed(2) : "not measured"} ms`);
+  });
+  test("the core's echo arrives under 25 ms on this host", () => {
+    ok(echo && echo.p95 < 25, `p95 echo was ${echo ? echo.p95.toFixed(2) : "not measured"} ms`);
+  });
+
+  // --- Apply, then undo ----------------------------------------------------
+
+  await live.apply();
+  const applied = await client.call("scene.get", { scene: scene.id });
+  test("Apply writes the draft back to the scene", () => {
+    ok(applied.geometry.some((g) => Math.abs(g.x - wasX) > 1), "the move reached the scene");
+  });
+
+  // --- Delete, with the undo the toast offers ------------------------------
+
+  const count = panel.scenes.scenes().length;
+  await panel.remove([copy.id]);
+  await waitFor(() => panel.scenes.scenes().length === count - 1, 8000, "the scene to go");
+  test("Delete removes a scene", () => {
+    eq(panel.scenes.summary(copy.id), null, "it is gone");
+  });
+
+  await shell.undo.undo();
+  await panel.scenes.refresh();
+  test("Ctrl+Z is the core's own history, so the scene comes back", () => {
+    ok(panel.scenes.scenes().length === count, `there are ${panel.scenes.scenes().length} scenes, expected ${count}`);
+  });
+
+  // --- tidy up -------------------------------------------------------------
+
+  for (const id of panel.scenes.scenes().filter((s) => s.name.includes(renamed.slice(0, 6))).map((s) => s.id)) {
+    await client.call("scene.remove", { scene: id }).catch(() => {});
+  }
+  for (const id of made) await client.call("source.remove", { source: id }).catch(() => {});
+  panel.remove();
+  client.close();
+}
+
+/** A synthetic pointer event that the page's own handlers cannot tell apart. */
+function point(node, type, x, y) {
+  node.dispatchEvent(
+    new PointerEvent(type, { clientX: x, clientY: y, pointerId: 1, isPrimary: true, button: 0, buttons: type === "pointerup" ? 0 : 1, bubbles: true })
+  );
+}
+
+/** Press on empty space, drag, release: the marquee. */
+function sweep(node, x0, y0, x1, y1) {
+  point(node, "pointerdown", x0, y0);
+  point(node, "pointermove", x0 + 8, y0 + 8);
+  point(node, "pointermove", x1, y1);
+  point(node, "pointerup", x1, y1);
+}
+
+/** Wait for something to become true, or say what it was waiting for. */
+function waitFor(predicate, ms, what) {
+  const started = Date.now();
+  return new Promise((resolve, reject) => {
+    const tick = () => {
+      let done = false;
+      try {
+        done = predicate();
+      } catch {
+        done = false;
+      }
+      if (done) return resolve(true);
+      if (Date.now() - started > ms) return reject(new Error(`timed out after ${ms} ms waiting for ${what || "something"}`));
+      setTimeout(tick, 25);
+    };
+    tick();
+  });
 }
 
 // ---------------------------------------------------------------- summary
@@ -562,6 +1018,18 @@ legacySuite()
   .catch((e) => {
     failed += 1;
     line("fail", "the welcome suite threw: " + e.message);
+    console.error(e);
+  })
+  .then(kitSuite)
+  .catch((e) => {
+    failed += 1;
+    line("fail", "the kit suite threw: " + e.message);
+    console.error(e);
+  })
+  .then(liveSuite)
+  .catch((e) => {
+    failed += 1;
+    line("fail", "the live suite threw: " + e.message);
     console.error(e);
   })
   .then(summarise);
