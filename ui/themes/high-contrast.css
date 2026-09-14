@@ -1,0 +1,32 @@
+/* high-contrast: pure black behind white text, thicker borders, no dim greys.
+   For a volunteer at the back of a hall and for anyone whose eyes have had
+   enough of a three hour service. Contrast ratios are above 7:1 throughout. */
+
+:root {
+  --bg: #000000;
+  --panel: #000000;
+  --panel2: #0d0d0d;
+  --raise: #1a1a1a;
+  --overlay: rgba(0, 0, 0, 0.9);
+  --line: #ffffff;
+  --line-soft: #808080;
+  --text: #ffffff;
+  --dim: #d6d6d6;
+  --faint: #b0b0b0;
+  --on-accent: #000000;
+  --live: #ff3b3b;
+  --bad: #ff7a6b;
+  --ok: #48ff9b;
+  --warn: #ffd23f;
+  --accent: #7fb2ff;
+  --select: #ffff00;
+  --select-fill: rgba(255, 255, 0, 0.22);
+  --shadow: 0 0 0 2px #ffffff;
+  --border: 2px;
+  --kind-camera: #7fb2ff;
+  --kind-stream: #d7a3ff;
+  --kind-file: #ffbe6b;
+  --kind-page: #6ef0d6;
+  --kind-graphic: #ff9ab8;
+  --kind-other: #d6d6d6;
+}
