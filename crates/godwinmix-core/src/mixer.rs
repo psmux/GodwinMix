@@ -29,7 +29,7 @@ use crate::caps::CanvasCaps;
 use crate::config::{Config, OutputConfig, SourceConfig};
 use crate::gstutil::{self, make, BusEvent};
 use crate::input::{InputPipeline, MediaReport};
-use crate::multiview::{Demand, Multiview, MultiviewHandle};
+use crate::multiview::{Demand, DemandAt, Multiview, MultiviewHandle};
 use crate::output::OutputSlot;
 use crate::probe::Backends;
 use crate::state::*;
@@ -242,9 +242,10 @@ pub enum Command {
     /// scrubber.
     PositionTick,
     /// Build or tear down the mosaic. Sent by `MultiviewHandle` when the first
-    /// client subscribes or the last one leaves, never by the API. See
-    /// `multiview.rs`.
-    Multiview(Demand),
+    /// client subscribes or the last one leaves, never by the API. Carries the
+    /// subscriber generation it was decided at, so one that has been overtaken
+    /// is refused rather than applied. See `multiview.rs`.
+    Multiview(DemandAt),
     /// Start or stop the programme encode chain. Sent by `EncoderHandle` when
     /// the first consumer arrives or the last one leaves, never by the API.
     /// See `encoder.rs`.
@@ -3172,8 +3173,27 @@ impl Mixer {
     /// Build or destroy the mosaic because the subscriber count changed.
     /// Everything that decides *whether* lives in `multiview.rs`; this is only
     /// the part that has to happen on the mixer thread.
-    fn multiview_demand(&mut self, d: Demand) -> Result<()> {
-        match d {
+    fn multiview_demand(&mut self, at: DemandAt) -> Result<()> {
+        // A subscriber that arrived after this was decided has bumped the
+        // generation and put its own demand on the queue behind this one. It
+        // decides, not this. Without the check a client arriving between the
+        // emptiness test and the delivery would watch the mosaic it had just
+        // asked for be taken away.
+        if !self.mv.accepts(at) {
+            debug!("stale multiview demand refused, a newer one is behind it");
+            // The count may have gone up while a teardown was in flight, so
+            // reconcile against what is wanted now rather than doing nothing.
+            if let Some(shape) = self.mv.wanted() {
+                if !self.multiview.as_ref().is_some_and(|mv| mv.shape() == shape) {
+                    return self.multiview_demand(DemandAt {
+                        demand: Demand::Build(shape),
+                        generation: self.mv.generation(),
+                    });
+                }
+            }
+            return Ok(());
+        }
+        match at.demand {
             Demand::Build(shape) => {
                 if self.multiview.as_ref().is_some_and(|mv| mv.shape() == shape) {
                     return Ok(());
@@ -3208,7 +3228,15 @@ impl Mixer {
                 self.mv.mark_built(Some(shape));
                 info!(?shape, "multiview built for a subscriber");
             }
-            Demand::Teardown => self.drop_mosaic(),
+            Demand::Teardown => {
+                // Decided on another thread, checked again here: this is the
+                // one place where the count and the pipeline are both in hand.
+                if self.mv.wanted().is_some() {
+                    debug!("a subscriber arrived before the teardown landed, keeping the mosaic");
+                    return Ok(());
+                }
+                self.drop_mosaic()
+            }
         }
         Ok(())
     }
@@ -3564,6 +3592,11 @@ mod tests {
         };
         cfg.multiview.enabled = false;
         cfg.hardware.graphics = graphics;
+        // These tests are about whether the encode chain encodes at all, and
+        // they read the encoder tee without holding a lease on it. Pin the
+        // encoder on, which is the policy this question belongs to; the
+        // on-demand path has its own tests in `encoder.rs`.
+        cfg.program.encoder = "always".into();
         cfg
     }
 
