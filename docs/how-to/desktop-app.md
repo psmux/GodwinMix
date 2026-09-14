@@ -13,8 +13,13 @@ compiled into the shell.
 * Building it: [Building](#building)
 * What the first launch creates: [First launch](#first-launch)
 * Driving a mixer on another machine: [Connecting to a server](#connecting-to-a-server)
-* Windows and GStreamer: [GStreamer on Windows](#gstreamer-on-windows)
+* The bundled media stack: [The GStreamer inside the app](#the-gstreamer-inside-the-app)
 * Updates: [Updates](#updates)
+
+Installing a release rather than building one is
+[Windows](install-on-windows.md), [macOS](install-on-macos.md) and
+[Linux](install-on-linux.md). What differs between the three, and why, is
+[Cross platform](../explanation/cross-platform.md).
 
 ## Building
 
@@ -39,7 +44,19 @@ These files are build output, not source, and `tauri-app/binaries/.gitignore`
 keeps them out of the repository. CI builds the mixer for each platform and
 copies it here before the next step.
 
-**2. Bundle.**
+**2. Put a GStreamer where the bundler looks for it**, if this build is going
+to run on a machine that has none:
+
+```sh
+dev/bundle-gstreamer.sh
+```
+
+That writes `tauri-app/gstreamer/<platform>/` and `tauri.conf.json` carries it
+into the bundle. Skipping this step is fine for a developer build: the app
+then uses the GStreamer on the machine, which is what the Linux `.deb` does on
+purpose. See [The GStreamer inside the app](#the-gstreamer-inside-the-app).
+
+**3. Bundle.**
 
 ```sh
 cd tauri-app
@@ -54,16 +71,19 @@ What comes out, per platform:
 | Windows | `.msi` (WiX), `.exe` (NSIS, per machine install) | `tauri-app/target/release/bundle/msi/`, `.../nsis/` |
 | Linux | `.deb`, `.AppImage` | `tauri-app/target/release/bundle/deb/`, `.../appimage/` |
 
-Measured on an Apple M4 Pro, version 0.2.0, with no GStreamer bundled:
+Measured on an Apple M4 Pro, version 0.2.0:
 
 | Artefact | Size |
 |---|---|
-| `GodwinMix.app` | 17 MB (8.8 MB shell, 8.2 MB mixer) |
-| `GodwinMix_0.2.0_aarch64.dmg` | 7.2 MB |
+| `GodwinMix.app`, no GStreamer | 17 MB (8.8 MB shell, 8.2 MB mixer) |
+| `GodwinMix_0.2.0_aarch64.dmg`, no GStreamer | 7.2 MB |
+| `GodwinMix.app`, GStreamer inside it | 108 MB (8.8 MB shell, 14 MB mixer, 85 MB GStreamer) |
 
-The budget for a Windows installer with GStreamer inside it is 150 MB
-(09-builders). The shell and the mixer together are 17 MB of that, which
-leaves the media stack about 130 MB to fit in.
+The mixer grew from 8.2 MB to 14 MB between those two measurements, for
+reasons that have nothing to do with this page. The number that matters is the
+85 MB: the budget for a Windows installer with GStreamer inside it is 150 MB,
+the shell and the mixer are about 23 MB of that, and the trimmer refuses to
+finish over 130 MB.
 
 Build one kind at a time with `--bundles app`, `--bundles dmg`, `--bundles
 msi`, and so on. The `.dmg` step asks Finder to arrange the disk image window,
@@ -189,17 +209,101 @@ and no signing key is enabled in this build. Before the first signed release:
 
 Until then the app is updated by downloading a new one.
 
-## GStreamer on Windows
+## The GStreamer inside the app
 
-This is the one platform where the media stack cannot be left to the machine.
-GStreamer's own Windows runtime installer is 527 MB, it is a separate download,
-and asking a volunteer with four hours to install it before the app will start
-is the same as telling them to use something else. OBS ships 160 MB with
+This is the one thing the app cannot leave to the machine. GStreamer's own
+Windows runtime installer is 527 MB, it is a separate download, and asking a
+volunteer with four hours before a service to install it before the app will
+start is the same as telling them to use something else. OBS ships 160 MB with
 everything inside it, and the budget here is 150 MB total.
 
-**What the shell already does.** Before it starts the mixer, the shell looks
-for a `gstreamer` directory in the app's resources. If it is there, the mixer
-is started with:
+So the app carries a trimmed GStreamer, and the trimming is done by a script
+rather than by hand.
+
+### Building one
+
+```sh
+dev/bundle-gstreamer.sh                    # macOS and Linux
+dev\bundle-gstreamer.ps1                   # Windows
+```
+
+Each fetches or finds the official runtime for the platform, trims it, writes
+the result to `tauri-app/gstreamer/<platform>/`, prints the size, and refuses
+to finish if the tree is over budget. Then it asks the trimmed tree for
+`compositor`, `rtmp2sink`, `srtsink` and a software H.264 encoder, out of its
+own registry with the system GStreamer shut out, because a tree of the right
+size that does not load is worse than no tree at all.
+
+Options worth knowing:
+
+| Option | What it does |
+|---|---|
+| `--from <prefix>` / `-From` | trim a GStreamer already on the machine instead of downloading one |
+| `--version 1.28.7` / `-Version` | download that release |
+| `--budget-mb 130` / `-BudgetMb` | what the tree may weigh; the default is 130 |
+| `--exclude-gpl` / `-ExcludeGpl` | leave out x264 and x265, so the build can go out under Apache 2.0 |
+
+Where the runtime comes from, per platform: the official `.pkg` on macOS
+(`pkgutil --expand-full`, nothing installed), the MSVC runtime MSI on Windows
+(`msiexec /a`, an administrative unpack, no elevation and no registry), and
+the distribution's own packages on Linux, because that is what an AppImage
+should carry.
+
+### What decides what travels
+
+`codecs.toml`. The shared trimmer, `dev/gst_trim.py`, asks `gst-inspect` which
+plugin each element the catalogue can select lives in, and keeps those. On top
+of that it keeps the elements the pipelines build by name (a list in the
+script, with the `grep` that produced it in the comment above it) and the
+capture and hardware plugins for the platform. A codec added to the catalogue
+travels without anybody editing the bundler.
+
+The libraries are not a list at all. Every kept plugin and every kept binary is
+read for its dynamic imports, and the closure of that is what gets copied. A
+plugin that quietly grew a dependency brings it along; a library nothing
+references is dropped. The readers are `otool -L` on macOS, `objdump -p` on
+Linux, and a small PE import table walk on Windows, so no Visual Studio is
+needed to measure an installer.
+
+Left out: every development file (headers, `.lib`, `.pc`), the MinGW tree, the
+Python and Perl bindings, `gst-devtools`, the editing services, and every
+plugin for a format no entry in the catalogue can select.
+
+On macOS the tree is made relocatable as the last step. Each file's recorded
+library paths are rewritten to `@loader_path` and then the file is signed
+again with an ad hoc signature, because editing a Mach-O breaks its signature
+and Apple silicon refuses to load a library that claims to be signed and is
+not. That is what lets the same tree work inside `/Applications` without any
+`DYLD_LIBRARY_PATH`.
+
+### Measured
+
+Homebrew GStreamer 1.28.7 on an Apple M4 Pro, trimmed:
+
+| | Plugins | Libraries | Size |
+|---|---|---|---|
+| the source prefix | 277 | everything in the cellar | 163 MB of plugins alone |
+| the trimmed tree | 55 | 81 | 84.3 MB |
+
+Against the 130 MB the 150 MB installer budget leaves once the shell and the
+mixer have had their share.
+
+### How the app finds it
+
+`tauri.conf.json` lists it under `bundle.resources`:
+
+```json
+"resources": { "gstreamer": "gstreamer" }
+```
+
+and the shell looks for `resource_dir()/gstreamer/<platform>` first and
+`resource_dir()/gstreamer` after it. A directory with no plugins in it does
+not count as a runtime, which is what lets the repository keep
+`tauri-app/gstreamer/` with only a `.gitignore` in it: a build with no bundled
+runtime falls back to the GStreamer on the machine, which is how a developer
+build works and how the Linux `.deb` is meant to work.
+
+With a runtime found, the mixer is started with:
 
 | Variable | Set to |
 |---|---|
@@ -210,45 +314,48 @@ is started with:
 | `DYLD_LIBRARY_PATH` or `LD_LIBRARY_PATH` | `gstreamer/lib`, on macOS and Linux |
 | `GST_REGISTRY` | the plugin cache, in the application data directory, because the app's own directory is read only once it is installed |
 
-With no such directory, none of this is set and the mixer uses the GStreamer on
-the machine, which is what happens on macOS and Linux today. So dropping a
-trimmed runtime into `tauri-app/gstreamer/` and adding one line to
-`tauri.conf.json` is the whole of the remaining work. No code changes.
+### Proving it is the one that loads
 
-**What to put in it.** From the MSVC runtime MSI (not the development one,
-which is the larger half of the 527 MB, and not MinGW):
+`--headless-check` does this before it starts the mixer. It runs the bundled
+`gst-inspect-1.0`, in exactly the environment the mixer will be started in,
+and asks where `compositor`, the software H.264 encoder, `rtmp2sink` and
+`srtsink` each came from. Each answer has to be a file inside the bundle:
 
-| Take | Why |
-|---|---|
-| `gstreamer-1.0`, `glib-2.0`, `gobject`, `gio`, `orc` core DLLs | nothing runs without them |
-| `gstcoreelements`, `gsttypefindfunctions`, `gstapp` | queues, tees, capsfilters, appsrc and appsink |
-| base: `gstvideoconvertscale`, `gstaudioconvert`, `gstaudioresample`, `gstcompositor`, `gstaudiomixer`, `gstplayback`, `gsttcp`, `gstvideotestsrc`, `gstaudiotestsrc` | the canvas, the mix and the slate |
-| good: `gstisomp4`, `gstmatroska`, `gstflv`, `gstrtp`, `gstrtsp`, `gstudp`, `gstjpeg`, `gstautodetect` | containers and the multiview mosaic |
-| bad: `gstrtmp2`, `gstsrt`, `gstmpegtsmux`, `gstfdkaac` if it is there, `gstwebrtc` and `gstdtls` when WHEP is on | RTMP out is `rtmp2sink`; SRT is `srtsink` |
-| libav: `gstlibav` and the FFmpeg DLLs it needs | the AAC encoder and the decoders with no better native option |
-| Media Foundation and D3D11: `gstmediafoundation`, `gstd3d11` | hardware encode and decode on Windows, which is the point of being on Windows |
-| `gst-plugin-scanner.exe` | the registry cannot be built without it |
-
-Leave out: every `-devel` file (headers, `.lib`, `.pc`), the Python and Perl
-bindings, `gst-devtools`, the editing services, the examples, the MinGW tree,
-and every plugin for a format the codec catalogue does not name. The rule for
-deciding is the codec catalogue, `codecs.toml`: if no entry can select an
-element from a plugin, that plugin does not travel.
-
-Then, in `tauri.conf.json`:
-
-```json
-"bundle": {
-  "resources": { "gstreamer/": "gstreamer/" }
-}
+```
+bundled GStreamer in /Applications/GodwinMix.app/Contents/Resources/gstreamer/macos
+  compositor from .../lib/gstreamer-1.0/libgstcompositor.dylib
+  rtmp2sink from .../lib/gstreamer-1.0/libgstrtmp2.dylib
+  srtsink from .../lib/gstreamer-1.0/libgstsrt.dylib
+  x264enc from .../lib/gstreamer-1.0/libgstx264.dylib
+the bundled runtime answered for every element, and none came from a system install
 ```
 
-and the shell finds it at `resource_dir()/gstreamer` on every platform.
+An element that answered out of `/opt/homebrew` or `C:\Program Files\gstreamer`
+fails the check by name, which is the failure that would otherwise only show
+up on a machine with no GStreamer on it. A build with no bundled runtime skips
+the section entirely and checks only the mixer.
 
-Two numbers have to be measured before this is called done: the size of the
-trimmed tree, against the 130 MB the shell and the mixer leave of the 150 MB
-budget, and the time from a cold start to `control server listening` with the
-registry cache empty, which is the slowest thing a first launch does.
+### Licences
+
+`gst-inspect` reports each plugin's licence and the trimmer prints the
+copyleft ones it kept:
+
+```
+copyleft plugins in this tree: x264 x265
+```
+
+An installer carrying x264 is a GPL installer. `--exclude-gpl` drops them, and
+the catalogue falls back to openh264, which is exactly what its `license`
+field is for. Whoever cuts a release decides; the script makes sure nobody
+decides by accident.
+
+### What CI does with all this
+
+`.github/workflows/platforms.yml` builds a trimmed runtime, bundles the app
+with it, runs `--headless-check` and measures the installer, on all three
+runners, on every push. A Windows installer over 150 MB fails the job.
+`.github/workflows/release.yml` does the same before it publishes, so an
+installer without a media stack inside it cannot be released.
 
 ## When it does not start
 

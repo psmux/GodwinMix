@@ -54,7 +54,7 @@ video mixer will start. So the installer carries a trimmed copy:
 |---|---|
 | the desktop shell | 9 MB |
 | the mixer itself | 8 MB |
-| GStreamer, trimmed to what the codec catalogue and the pipelines name | 80 to 110 MB |
+| GStreamer, trimmed to what the codec catalogue and the pipelines name | 85 to 110 MB |
 
 The budget for the whole installer is 150 MB, measured on every push by the
 `platforms` job in CI, which fails if it is exceeded. OBS Studio, for

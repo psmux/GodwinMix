@@ -23,6 +23,9 @@ Start here if you have never run it.
 
 ## How to
 
+* [Install on Windows](how-to/install-on-windows.md),
+  [macOS](how-to/install-on-macos.md),
+  [Linux](how-to/install-on-linux.md)
 * [Run it on a headless server](how-to/headless-server.md)
 * [Put it behind a reverse proxy with TLS](how-to/reverse-proxy.md)
 * [Run it on a Raspberry Pi](how-to/raspberry-pi.md)
@@ -70,6 +73,7 @@ Start here if you have never run it.
 * [Why the UI is a client](explanation/why-the-ui-is-a-client.md)
 * [Footprint budgets and the reference machines](explanation/footprint-budgets.md)
 * [The crate map](explanation/architecture.md)
+* [Cross platform: what is gated where, and why](explanation/cross-platform.md)
 
 ## For AI agents
 
