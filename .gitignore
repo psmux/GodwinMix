@@ -26,7 +26,7 @@ auto.key
 .DS_Store
 dev/linux-x86/out/
 
-# The client crate builds standalone, with its own target directory.
+# A crate built on its own, outside the workspace, puts its target here.
 crates/*/target/
 clients/typescript/node_modules/
 clients/typescript/dist/
