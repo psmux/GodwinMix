@@ -16,7 +16,7 @@ Start here if you have never run it.
 
 * [Your first stream in five minutes, with Docker](tutorials/first-stream-docker.md)
 * [Your first stream with the desktop app](tutorials/first-stream-desktop.md)
-* [Your first plugin](tutorials/your-first-plugin.md) (planned; the page says what is missing)
+* [Your first plugin](tutorials/your-first-plugin.md)
 
 ## How to
 
@@ -31,6 +31,7 @@ Start here if you have never run it.
 * [Upgrade from LiveboxMix](how-to/upgrade-from-liveboxmix.md)
 * [Run the smoke test](how-to/smoke-test.md)
 * [Embed the engine in your own program](how-to/embed-the-engine.md)
+* [Write a source plugin in Rust](how-to/write-a-source-plugin.md)
 
 ## Reference
 
@@ -41,6 +42,8 @@ Start here if you have never run it.
 * [Sources](reference/sources.md)
 * [Web page sources](reference/web-page-sources.md)
 * [The generated protocol reference](reference/protocol.md)
+* [The plugin manifest](reference/plugin-manifest.md)
+* [The plugin protocol](reference/plugin-protocol.md)
 
 ## Explanation
 
