@@ -1205,6 +1205,17 @@ impl RunningTime {
     }
 }
 
+/// The background tasks the control plane needs whatever door a call arrives
+/// by: the take history, the audio peaks, and the operator watchdog.
+///
+/// Public because an embedder and the integration tests build an `AppState`
+/// without `serve`, and a core whose history is empty answers `program.revert`
+/// with "nothing to go back to" however many takes it has had.
+pub fn spawn_background(app: AppState) {
+    spawn_history(app.clone());
+    spawn_operator_watchdog(app);
+}
+
 /// Write every take down, whoever made it.
 fn spawn_history(app: AppState) {
     tokio::spawn(async move {
@@ -1293,8 +1304,7 @@ pub async fn serve(bind: &str, state: AppState) -> Result<()> {
     info!(%bind, "control server listening");
     let snapshots =
         Tracker::new(state.snapshot.clone(), state.multiview.clone(), state.mixer.clone());
-    spawn_history(state.clone());
-    spawn_operator_watchdog(state.clone());
+    spawn_background(state.clone());
     let observe = crate::observe::router(observe_state(&state));
     // Connect info so the snapshot rate limit can tell one client from
     // another. Nothing else uses it, and a request without it still works.
