@@ -1,0 +1,16 @@
+{
+  "header": [
+    "header"
+  ],
+  "main": [
+    "scenes"
+  ],
+  "sidebar": [
+    "sources",
+    "media"
+  ],
+  "footer": [
+    "alerts",
+    "outputs"
+  ]
+}

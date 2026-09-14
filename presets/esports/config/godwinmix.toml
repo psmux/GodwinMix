@@ -1,0 +1,84 @@
+# The esports preset: four player feeds, a caster, an overlay page and
+# replays. The player feeds come off a second machine, so the mixer's own box
+# only composites and encodes.
+
+[canvas]
+width = 1920
+height = 1080
+fps = 60
+sample_rate = 48000
+channels = 2
+
+[program]
+video_bitrate_kbps = 8000
+audio_bitrate_kbps = 192
+keyframe_interval_secs = 2
+audio_ramp_ms = 120
+
+[multiview]
+enabled = true
+width = 1280
+height = 720
+fps = 10
+jpeg_quality = 65
+include_program = true
+
+[media]
+dir = "media"
+
+[control]
+bind = "0.0.0.0:8080"
+# token = "change-me"
+
+[hardware]
+decode = "auto"
+encode = "auto"
+
+[[sources]]
+id = "p1"
+name = "Player 1"
+type = "ndi/source"
+uri = "ndi://PC-1 (Game)"
+params = { name = "PC-1 (Game)" }
+
+[[sources]]
+id = "p2"
+name = "Player 2"
+type = "ndi/source"
+uri = "ndi://PC-2 (Game)"
+params = { name = "PC-2 (Game)" }
+
+[[sources]]
+id = "p3"
+name = "Player 3"
+type = "ndi/source"
+uri = "ndi://PC-3 (Game)"
+params = { name = "PC-3 (Game)" }
+
+[[sources]]
+id = "p4"
+name = "Player 4"
+type = "ndi/source"
+uri = "ndi://PC-4 (Game)"
+params = { name = "PC-4 (Game)" }
+
+[[sources]]
+id = "caster"
+name = "Caster"
+type = "ndi/source"
+uri = "ndi://CASTER (Cam)"
+params = { name = "CASTER (Cam)" }
+
+[[sources]]
+id = "overlay"
+name = "Overlay"
+type = "browser/source"
+uri = "web+http://127.0.0.1:8000/overlay"
+params = { url = "http://127.0.0.1:8000/overlay", superimpose = "off" }
+
+[[outputs]]
+id = "twitch"
+type = "rtmp/output"
+uri = "rtmp://live.twitch.tv/app/YOUR-STREAM-KEY"
+policy = "cdn"
+queue_secs = 6.0

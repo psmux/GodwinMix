@@ -1,0 +1,22 @@
+[plugin]
+name = "default"
+version = "1.0.0"
+api = 1
+description = "Two RTMP cameras in, one RTMP destination out, a media library and the multiview. What GodwinMix does out of the box."
+license = "Apache-2.0"
+authors = ["The GodwinMix authors"]
+repository = "https://github.com/psmux/GodwinMix"
+platforms = ["linux-x86_64", "linux-aarch64", "macos-aarch64", "macos-x86_64", "windows-x86_64"]
+placements = ["core"]
+
+[[provides]]
+kind = "preset"
+id = "default"
+
+[provides.preset]
+plugins = ["rtmp@^1"]
+config = "config/godwinmix.toml"
+layout = "config/layout.json"
+surface = "web"
+theme = "slate"
+scenes = "scenes"

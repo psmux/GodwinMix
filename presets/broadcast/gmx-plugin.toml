@@ -1,0 +1,22 @@
+[plugin]
+name = "broadcast"
+version = "1.0.0"
+api = 1
+description = "A contribution feed: SRT in and SRT out, hardware tally over TSL, a Companion surface, and nodes joined with mTLS."
+license = "Apache-2.0"
+authors = ["The GodwinMix authors"]
+repository = "https://github.com/psmux/GodwinMix"
+platforms = ["linux-x86_64", "linux-aarch64", "macos-aarch64", "macos-x86_64", "windows-x86_64"]
+placements = ["core"]
+
+[[provides]]
+kind = "preset"
+id = "broadcast"
+
+[provides.preset]
+plugins = ["srt@^1", "ndi@^1", "tally@^1", "companion@^1"]
+config = "config/godwinmix.toml"
+layout = "config/layout.json"
+surface = "web"
+theme = "broadcast"
+scenes = "scenes"

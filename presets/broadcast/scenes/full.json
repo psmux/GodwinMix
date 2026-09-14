@@ -1,0 +1,67 @@
+{
+  "schemaVersion": 1,
+  "id": "0199c000-0000-703e-8000-c0ffee00003e",
+  "name": "full",
+  "canvas": {
+    "width": 1920,
+    "height": 1080,
+    "fps": 30
+  },
+  "params": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "required": [
+      "a"
+    ],
+    "properties": {
+      "a": {
+        "type": "string",
+        "default": "",
+        "title": "Source",
+        "x-gmx-kind": "source"
+      }
+    }
+  },
+  "scenes": [
+    {
+      "id": "0199c000-0000-703f-8000-c0ffee00003f",
+      "name": "Full screen",
+      "items": [
+        {
+          "id": "0199c000-0000-7040-8000-c0ffee000040",
+          "name": "main",
+          "content": {
+            "source": "{{a}}"
+          },
+          "transform": {
+            "position": {
+              "x": 0,
+              "y": 0
+            },
+            "rotation": 0,
+            "scale": {
+              "x": 1,
+              "y": 1
+            },
+            "anchor": {
+              "x": 0,
+              "y": 0
+            },
+            "frame": {
+              "w": 0,
+              "h": 0
+            },
+            "fit": "cover",
+            "align": "center"
+          },
+          "bind": {
+            "position.x": "0",
+            "position.y": "0",
+            "frame.w": "W",
+            "frame.h": "H"
+          }
+        }
+      ]
+    }
+  ]
+}
