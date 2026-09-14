@@ -28,7 +28,7 @@
 use crate::caps::CanvasCaps;
 use crate::config::{Config, OutputConfig, SourceConfig};
 use crate::gstutil::{self, make, BusEvent};
-use crate::input::{MediaReport, InputPipeline, SourceKind};
+use crate::input::{InputPipeline, MediaReport};
 use crate::multiview::Multiview;
 use crate::output::OutputSlot;
 use crate::probe::Backends;
@@ -1039,9 +1039,24 @@ impl Mixer {
     pub fn add_source(&mut self, cfg: &SourceConfig, overlay: Option<MediaReport>) -> Result<()> {
         anyhow::ensure!(cfg.id != AD_ID, "{AD_ID} is reserved for ad breaks");
         anyhow::ensure!(!cfg.id.trim().is_empty(), "a source needs an id");
-        anyhow::ensure!(!cfg.uri.trim().is_empty(), "a source needs a uri");
-        let kind = SourceKind::detect(&cfg.uri);
-        info!(source = %cfg.id, uri = %cfg.uri, ?kind, superimposed = overlay.is_some(), "adding source");
+        // A bare URI is still the ordinary way to write a source, but it is no
+        // longer the only one: a source written as `type` plus `params` may
+        // have no address at all (a capture card, a test pattern, an NDI name).
+        // What it does need is a kind that can be resolved, and the resolver's
+        // error names what this build has.
+        anyhow::ensure!(
+            !cfg.uri.trim().is_empty() || cfg.type_id.is_some(),
+            "a source needs a uri, or a type saying what kind it is"
+        );
+        let provide = crate::plugin::source::resolve_config(cfg)?;
+        cfg.validate_params()?;
+        info!(
+            source = %cfg.id,
+            uri = %safe_uri_label(&cfg.display_uri()),
+            kind = %provide.manifest.provide_id(),
+            superimposed = overlay.is_some(),
+            "adding source"
+        );
         self.add_source_kind(cfg, true, overlay)?;
         self.persist_runtime();
         Ok(())
@@ -2774,7 +2789,7 @@ impl Mixer {
                 let mut status = SourceStatus {
                     id: s.input.id.clone(),
                     name: s.input.config.display_name().to_string(),
-                    uri: safe_uri_label(&s.input.config.uri),
+                    uri: safe_uri_label(&s.input.config.display_uri()),
                     state: s.input.observed_state(),
                     has_video: s.input.has_video(),
                     has_audio: s.input.has_audio(),

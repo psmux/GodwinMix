@@ -559,6 +559,22 @@ impl SourceConfig {
         self.name.as_deref().unwrap_or(&self.id)
     }
 
+    /// What to show an operator as this source's address.
+    ///
+    /// Most sources have a `uri` and that is it. One written as `type` plus
+    /// `params` may have its address inside the params, and one that has no
+    /// address at all (a capture card, a test pattern) has only its kind to
+    /// show. An empty string masked to an ellipsis told the operator nothing.
+    pub fn display_uri(&self) -> String {
+        if !self.uri.trim().is_empty() {
+            return self.uri.clone();
+        }
+        if let Some(u) = self.params.get("uri").and_then(|v| v.as_str()) {
+            return u.to_string();
+        }
+        self.type_id.clone().unwrap_or_default()
+    }
+
     /// A source with nothing but an id and an address, for a caller building
     /// one by hand.
     pub fn bare(id: &str, uri: &str) -> Self {

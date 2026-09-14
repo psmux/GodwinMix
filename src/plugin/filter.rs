@@ -405,14 +405,10 @@ mod tests {
         )
         .expect("a chroma key goes in live");
 
-        std::thread::sleep(std::time::Duration::from_millis(500));
-        let during = intervals.seen.load(Ordering::Relaxed);
-        assert!(during > before, "frames stopped arriving once the key was in");
+        let during = wait_past(&intervals, before, "once the key was in");
 
         slot.remove().expect("and comes out again");
-        std::thread::sleep(std::time::Duration::from_millis(500));
-        let after = intervals.seen.load(Ordering::Relaxed);
-        assert!(after > during, "frames stopped arriving once the key came out");
+        wait_past(&intervals, during, "once the key came out");
 
         let largest = intervals.largest.load(Ordering::Relaxed);
         let _ = pipeline.set_state(gst::State::Null);
@@ -424,6 +420,27 @@ mod tests {
             "largest gap was {largest} ns, more than two frames ({} ns)",
             frame * 2
         );
+    }
+
+    /// Wait for the frame count to move past `mark`, with a generous deadline.
+    ///
+    /// A fixed sleep was flaky: the whole suite runs in parallel on whatever
+    /// cores are free, and half a second of a loaded machine is not half a
+    /// second of frames. What is being asserted is that frames keep coming, not
+    /// how fast the machine is.
+    fn wait_past(intervals: &Arc<Intervals>, mark: u64, when: &str) -> u64 {
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+        loop {
+            let now = intervals.seen.load(Ordering::Relaxed);
+            if now > mark + 5 {
+                return now;
+            }
+            assert!(
+                std::time::Instant::now() < deadline,
+                "frames stopped arriving {when} ({now} seen, was {mark})"
+            );
+            std::thread::sleep(std::time::Duration::from_millis(50));
+        }
     }
 
     #[test]
