@@ -75,6 +75,43 @@ pub struct AddFilterRequest {
     pub r#type: String,
 }
 
+/// `scene.item.filter.add`.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct AddItemFilterRequest {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub draft: Option<String>,
+    pub item: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+    pub params: BTreeMap<String, Value>,
+    pub scene: String,
+    /// A filter type id, as `plugin.list` reports them.
+    #[serde(rename = "type")]
+    pub r#type: String,
+}
+
+/// `scene.item.add`.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct AddItemRequest {
+    /// What the item shows: `{"source": "cam1"}`, `{"ref": "<scene id>"}` or
+    /// `{"graphic": "plugin/id"}`.
+    pub content: Value,
+    /// A draft id from `scene.edit.begin`, to change a working copy instead of
+    /// the live document.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub draft: Option<String>,
+    /// What to call it. Left out, a source item is named after its source,
+    /// because a model reasons about words.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+    pub scene: String,
+    /// Where it goes. Left out, the next free cell of a grid over what is
+    /// already there, so a drop on a scene never needs a dialog.
+    pub transform: Value,
+}
+
 /// `output.add`. The id and the URL are the whole of it for an RTMP
 /// destination; anything else a kind understands rides in `params`.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
@@ -100,6 +137,15 @@ pub struct AddPluginRequest {
     /// A local directory with `gmx-plugin.toml` at its root. Git, an index and
     /// a signed release are Phase 5; this takes a path.
     pub source: String,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct AddSceneRequest {
+    /// A colour for every client, the tally and the Stream Deck to agree on.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub color: Option<String>,
+    pub name: String,
 }
 
 /// `source.add`.
@@ -141,6 +187,33 @@ pub struct AgentStateRequest {
     pub response_format: Option<ResponseFormat>,
 }
 
+/// The nine alignment keywords, used to place content inside its frame.
+pub type Align = String;
+/// The values api_level 1 knows for [`Align`].
+pub const ALIGN_VALUES: &[&str] = &["top-left", "top-center", "top-right", "center-left", "center", "center-right", "bottom-left", "bottom-center", "bottom-right"];
+
+/// `scene.apply_layout`.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct ApplyLayoutRequest {
+    /// How long the change takes, in milliseconds. 0 is a cut.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub duration_ms: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub easing: Option<String>,
+    /// A layout name from `scene.layout.list`.
+    pub layout: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+    /// The scene to apply it to. Left out, a new one is made. Applying onto an
+    /// existing scene keeps the item ids, so an animated layout change is a
+    /// property ramp rather than a cut.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub scene: Option<String>,
+    /// The layout's parameters by name: its source slots and its numbers.
+    pub values: BTreeMap<String, Value>,
+}
+
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct ApplyRequest {
@@ -172,6 +245,12 @@ pub struct ApplyResult {
     /// The whole plan, as JSON. The same object `preset.list` rows point at.
     pub plan: Value,
 }
+
+/// Whether the item's source is heard. A source is audible when any live item
+/// of it says so, which is OBS's behaviour and changes no pad topology.
+pub type Audio = String;
+/// The values api_level 1 knows for [`Audio`].
+pub const AUDIO_VALUES: &[&str] = &["follow", "always", "never"];
 
 /// `source.audio.set` takes an id as well as the levels: the id comes off the
 /// path on REST and out of the params on `/rpc`, and both land in one object.
@@ -205,6 +284,36 @@ pub struct BackendInfo {
     pub hardware_accelerated: bool,
     pub video_decoder: String,
     pub video_encoder: String,
+}
+
+/// `scene.item.bind`.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct BindRequest {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub draft: Option<String>,
+    pub item: String,
+    /// An expression over the collection's params and `W`, `H`. An empty
+    /// string takes the binding off.
+    pub param: String,
+    /// A geometry path such as `frame.w` or `position.x`.
+    pub prop: String,
+    pub scene: String,
+}
+
+/// OBS's blend enum, so an import carries across unchanged.
+pub type Blend = String;
+/// The values api_level 1 knows for [`Blend`].
+pub const BLEND_VALUES: &[&str] = &["normal", "add", "screen", "multiply", "lighten", "darken", "subtract"];
+
+/// The output raster. One per collection in this release; 11 section 1 leaves
+/// room for several.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct Canvas {
+    pub fps: u32,
+    pub height: u32,
+    pub width: u32,
 }
 
 /// The canvas every source is scaled onto and every output leaves by.
@@ -277,6 +386,83 @@ pub struct CoreInfo {
     pub version: String,
 }
 
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct CreateFromRequest {
+    /// A layout name from `scene.layout.list`. Left out, the number of sources
+    /// picks one.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub layout: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+    /// Source ids, in the order they should be laid out.
+    pub sources: Vec<String>,
+}
+
+/// How much of the content's own pixels to trim, normalised 0 to 1 so it
+/// survives a canvas change. vMix and CasparCG do this; OBS crops in pixels,
+/// which is why an OBS collection moved from 1080p to 720p loses its crops.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct Crop {
+    pub bottom: f64,
+    pub left: f64,
+    pub right: f64,
+    pub top: f64,
+}
+
+/// `scene.edit.begin`.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct DraftRecord {
+    /// Pass this as `draft` on any `scene.item.*` call to edit the copy.
+    pub draft: String,
+    /// True when the client asked to edit on air.
+    pub live: bool,
+    /// The scene it was taken from.
+    pub scene: String,
+    /// The scene as it stands, so the client has something to draw at once.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub view: Option<SceneView>,
+}
+
+/// `scene.edit.apply` and `discard`.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct DraftRequest {
+    pub draft: String,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct DuplicateSceneRequest {
+    /// What to call the copy. A name already in use gets a number after it.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+    pub scene: String,
+}
+
+/// `scene.edit.begin`.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct EditBeginRequest {
+    /// True to edit the scene that is on air as you go. The default is off
+    /// air: the draft is applied on the next take or on an explicit apply.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub live: Option<bool>,
+    pub scene: String,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct ExportRequest {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub collection: Option<String>,
+    /// `json` in this build. `zip`, with the assets, is Phase 5.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub format: Option<String>,
+}
+
 /// The `ext` table from 03 section 6.
 ///
 /// Every key is off by default. A terminal UI takes meters and tally and
@@ -315,6 +501,20 @@ pub struct Ext {
     pub extra: BTreeMap<String, Value>,
 }
 
+/// One filter in an item's chain.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct Filter {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub enabled: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+    pub params: Value,
+    /// The plugin qualified provide id, for example `chroma/filter`.
+    #[serde(rename = "type")]
+    pub r#type: String,
+}
+
 /// `filter.remove`, and anything else that names one filter.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
@@ -347,12 +547,72 @@ pub struct FilterRemoved {
     pub removed: String,
 }
 
+/// One thing the validator found.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct Finding {
+    /// A stable machine readable code, so a client can filter or translate.
+    pub code: String,
+    /// The numbers behind the message, for a client that draws them.
+    pub detail: Value,
+    /// The items involved, in the order the message names them.
+    pub items: Vec<Id>,
+    /// One sentence naming the state and the next step.
+    pub message: String,
+    /// The scene it is in, when it is about one.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub scene: Option<Id>,
+    pub severity: Severity,
+}
+
+/// How content fills its frame. SVG's vocabulary, which replaces OBS's seven
+/// bounds types and maps onto `sizing-policy` on a `glvideomixer` pad.
+pub type Fit = String;
+/// The values api_level 1 knows for [`Fit`].
+pub const FIT_VALUES: &[&str] = &["none", "contain", "cover", "stretch", "fit-width", "fit-height", "max"];
+
+/// Content on the wire. The same four shapes as the tree, except that a group
+/// names no children: they are records whose parent is the group.
+pub type FlatContent = Value;
+
 /// `event/flush`: the end of a batch. A client renders here and not before.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Flush {
     /// The sequence number of the last event in the batch.
     pub seq: u64,
+}
+
+/// The rectangle an item is fitted into.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct Frame {
+    pub h: f64,
+    pub w: f64,
+}
+
+/// One item's derived box.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct Geometry {
+    pub height: f64,
+    pub item: Id,
+    /// The item's own opacity multiplied by every group's above it.
+    pub opacity: f64,
+    /// The names from the top item down, so a message can say
+    /// `corner / pulpit` rather than an id.
+    pub path: String,
+    /// Present for an item whose content is a source.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub source: Option<String>,
+    pub source_height: f64,
+    /// The canvas, which is what the document knows about a source's own size
+    /// until the mixer says otherwise. Named so a client that does know can
+    /// tell the two apart.
+    pub source_width: f64,
+    pub width: f64,
+    pub x: f64,
+    pub y: f64,
 }
 
 /// `program.golive`: add the page, add the destination, take the page.
@@ -386,6 +646,17 @@ pub struct GoLiveResult {
     pub state: SourceState,
 }
 
+/// `source.group`.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct GroupSourcesRequest {
+    /// The tray folder to put them in. Null takes them out of the one they
+    /// are in.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+    pub sources: Vec<String>,
+}
+
 /// `program.history`.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
@@ -395,12 +666,45 @@ pub struct HistoryRequest {
     pub limit: Option<u32>,
 }
 
+/// `scene.undo` and `scene.redo`.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct HistoryStep {
+    pub patch: Patch,
+    pub redo: i64,
+    /// How many steps are still on each stack, so a UI greys out a button.
+    pub undo: i64,
+}
+
+/// A UUID in the hyphenated form. Minted ids are version 7 (time ordered); ids derived from a layout are version 8.
+pub type Id = String;
+
 /// An id on its own: `source.get`, `source.remove`, `output.remove`,
 /// `output.reconnect`, `media.remove`.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct IdRequest {
     pub id: String,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct ImportObsRequest {
+    /// The collection JSON exported from OBS (Scene Collection, Export), as a
+    /// path on the machine the core is running on.
+    pub path: String,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct ImportReport {
+    pub items: i64,
+    /// The scenes that were added, by the names they ended up with.
+    pub scenes: Vec<String>,
+    /// What could not be brought across, and why, one line each.
+    pub skipped: Vec<String>,
+    /// The sources the collection needs, which have to be added separately.
+    pub sources: Vec<String>,
 }
 
 /// One running instance and its cost.
@@ -424,6 +728,140 @@ pub struct InstanceRecord {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub rss_bytes: Option<u64>,
     pub state: String,
+}
+
+/// `scene.item.filter.set` and `remove`.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct ItemFilterRequest {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub draft: Option<String>,
+    /// Turn a filter off without taking it out.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub enabled: Option<bool>,
+    /// The filter's name, or its position in the item's chain from 0.
+    pub filter: String,
+    pub item: String,
+    pub params: BTreeMap<String, Value>,
+    pub scene: String,
+}
+
+/// An item's props, which is an `Item` with the children lifted out into their
+/// own records.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct ItemProps {
+    pub audio: Audio,
+    pub bind: BTreeMap<String, Value>,
+    pub blend: Blend,
+    pub content: FlatContent,
+    pub crop: Crop,
+    pub filters: Vec<Filter>,
+    pub locked: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+    pub opacity: f64,
+    pub transform: Transform,
+    pub visible: bool,
+}
+
+/// Anything that names one item.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct ItemRequest {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub draft: Option<String>,
+    /// The item's name or its id.
+    pub item: String,
+    pub scene: String,
+}
+
+/// `scene.item.align`, `distribute`, `fit_to_canvas`, `cover_canvas`,
+/// `arrange_grid`, `match_size`, `group`.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct ItemsRequest {
+    /// `distribute`: horizontal or vertical.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub axis: Option<String>,
+    /// `arrange_grid`: how many columns.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cols: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub draft: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub duration_ms: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub easing: Option<String>,
+    /// `align`: left, right, top, bottom, center-x, center-y.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub edge: Option<String>,
+    /// Item names or ids.
+    pub items: Vec<String>,
+    /// `group`: what to call the group.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+    pub scene: String,
+    /// `match_size`: the item to match.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub to: Option<String>,
+}
+
+/// A scene's geometry, for copying onto another one.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct Layout {
+    pub canvas: Canvas,
+    pub items: Vec<LayoutItem>,
+    /// The scene it came from, for a message.
+    pub scene: String,
+}
+
+/// `scene.layout.copy` and `paste`.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct LayoutClipboardRequest {
+    /// What `scene.layout.copy` answered with.
+    pub layout: Value,
+    /// `name` matches item names first and falls back to slot order; `order`
+    /// uses slot order alone.
+    #[serde(rename = "match")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub r#match: Option<String>,
+    pub scene: String,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct LayoutInfo {
+    /// What the layout calls its own scene, which is the nearest thing it has
+    /// to a description.
+    pub description: String,
+    pub name: String,
+    /// The whole JSON Schema, so a client renders an inspector from it.
+    pub params: Value,
+    /// The parameters that take a source id, in the order sources are poured
+    /// into them.
+    pub sources: Vec<String>,
+}
+
+/// One item's geometry: everything about where it sits and nothing about what
+/// it shows.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct LayoutItem {
+    pub crop: Crop,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+    pub opacity: f64,
+    pub transform: Transform,
+    pub visible: bool,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct LayoutListing {
+    pub layouts: Vec<LayoutInfo>,
 }
 
 /// The ceilings a client should plan against rather than discover by being
@@ -486,6 +924,16 @@ pub struct LogSetRequest {
     /// wins, so a more specific override still beats a broader one.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub target: Option<String>,
+}
+
+/// `scene.history.mark`.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct MarkRequest {
+    /// What to call the group of changes that follows. Omit it to end the
+    /// group, so the next change is its own undo step.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub label: Option<String>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
@@ -565,14 +1013,29 @@ pub struct MixerStatus {
     pub backend: BackendInfo,
     pub multiview: MultiviewStatus,
     pub outputs: Vec<OutputStatus>,
-    /// Source currently on program, or None while the slate is showing.
+    /// Source currently on program, or None while the slate is showing. A
+    /// scene of one full canvas item reports that item's source here too, so
+    /// anything written against this before scenes existed still reads.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub program: Option<String>,
     /// Program pipeline running time. Cues are scheduled against this, not
     /// against wall clock, so a client can place a break on a known frame.
     pub running_time_ms: u64,
+    /// The scene on air, when one was taken by name.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub scene: Option<String>,
     pub sources: Vec<SourceStatus>,
     pub uptime_secs: u64,
+}
+
+/// `scene.item.move` and `scene.item.copy`.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct MoveItemRequest {
+    pub item: String,
+    pub scene: String,
+    /// The scene it is going to.
+    pub to_scene: String,
 }
 
 /// `ext.multiview`. Accepts `false` to mean off, or an object.
@@ -633,6 +1096,52 @@ pub struct OutputStatus {
     /// Anything this build does not know a name for.
     #[serde(flatten)]
     pub extra: BTreeMap<String, Value>,
+}
+
+/// A sparse change to one item of a referenced scene.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct Override {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub crop: Option<Crop>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub opacity: Option<f64>,
+    pub params: Value,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub transform: Option<Transform>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub visible: Option<bool>,
+}
+
+/// `scene.params.set`.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct ParamsRequest {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub scene: Option<String>,
+    pub values: BTreeMap<String, Value>,
+}
+
+/// What changed in one transaction.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct Patch {
+    pub added: Vec<Record>,
+    /// What the client called this change, for a label in an undo menu.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub label: Option<String>,
+    pub removed: Vec<Id>,
+    /// `document` today. `presence` (who is looking at what) is the other
+    /// scope 11 section 4 names and is not implemented.
+    pub scope: String,
+    /// Monotonic, per core. A client that sees a gap asks for a fresh
+    /// snapshot rather than guessing.
+    pub seq: u64,
+    /// Whoever asked for the change, so a client can suppress the echo of its
+    /// own edits and not fight its own optimistic drawing.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub source_client: Option<String>,
+    pub updated: Vec<Update>,
 }
 
 /// What `pipeline.dot` answers with on `/rpc`. The REST route serves the same
@@ -757,12 +1266,29 @@ pub struct PreviewClosed {
 /// `ext.preview`. Either `"full"`, `false`, or an object.
 pub type PreviewExt = Value;
 
+/// `scene.preview.frame`.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct PreviewFrameRequest {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub width: Option<u32>,
+}
+
 /// `preview.open {target}`.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct PreviewOpenRequest {
     /// `program`, or a source id.
     pub target: String,
+}
+
+/// `scene.preview.set`.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct PreviewRequest {
+    /// The scene to arm. Null or omitted disarms.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub scene: Option<String>,
 }
 
 /// What `preview.open` answers with.
@@ -786,14 +1312,61 @@ pub struct ProgramState {
     /// Present while an ad break is armed or on air.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub ad: Option<AdStatus>,
+    /// The scene armed for the next `program.take` with no argument.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub preview: Option<String>,
     /// The previous source, which is what `program.revert` would take back to.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub previous: Option<String>,
-    /// Source on air, or null for the slate.
+    /// Source on air, or null for the slate. A scene of one full canvas item
+    /// reports that item's source here too, so anything written against this
+    /// before scenes existed still reads.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub program: Option<String>,
     /// Programme pipeline running time, in milliseconds.
     pub running_time_ms: u64,
+    /// The scene on air, when one was taken by name.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub scene: Option<String>,
+}
+
+/// One scene or one item.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct Record {
+    pub id: Id,
+    /// A fractional key. Siblings sort by it; see `order.rs`.
+    pub order: String,
+    /// The scene this item is in, or the group item it is a child of. Absent
+    /// for a scene, which hangs off the document itself.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub parent: Option<Id>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct RenameSceneRequest {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub color: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+    pub scene: String,
+}
+
+/// `scene.item.reorder`.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct ReorderRequest {
+    /// Put it in front of this one. With neither, it goes to the front.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub after: Option<String>,
+    /// Put it behind this one.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub before: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub draft: Option<String>,
+    pub item: String,
+    pub scene: String,
 }
 
 pub type ResponseFormat = String;
@@ -819,6 +1392,64 @@ pub struct SaveRequest {
     /// Where to write it. Defaults to `~/.godwinmix/presets/<name>`.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub out: Option<String>,
+}
+
+/// `scene.list`.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct SceneListing {
+    pub scenes: Vec<SceneSummary>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct SceneRemoved {
+    pub removed: String,
+}
+
+/// Anything that names one scene.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct SceneRequest {
+    /// The scene's name or its id.
+    pub scene: String,
+}
+
+/// What `scene.list` answers with per scene.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct SceneSummary {
+    /// True for the armed scene, which is the preview.
+    pub armed: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub color: Option<String>,
+    pub id: Id,
+    /// How many items, groups counted with their children.
+    pub items: i64,
+    pub name: String,
+    /// Every source the scene draws, so a picker can grey out one whose
+    /// sources are missing without reading the whole document.
+    pub sources: Vec<String>,
+}
+
+/// One scene as a command answers with it.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct SceneView {
+    pub canvas: Canvas,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub color: Option<String>,
+    /// What `scene.validate` would say about it, so a client shows a warning
+    /// without asking again.
+    pub findings: Vec<Finding>,
+    /// Where each item actually lands, after groups are flattened and
+    /// references resolved. Bottom of the stack first, which is the order the
+    /// compositor takes them in.
+    pub geometry: Vec<Geometry>,
+    pub id: Id,
+    pub name: String,
+    /// The scene's own record and one per item, parents before children.
+    pub records: Vec<Record>,
 }
 
 /// `source.seek`.
@@ -850,6 +1481,29 @@ pub struct SetFilterRequest {
     pub params: BTreeMap<String, Value>,
 }
 
+/// `scene.item.set`: a state assignment. Only the keys named move.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct SetItemRequest {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub draft: Option<String>,
+    /// How long to take getting there, in milliseconds. 0 is a cut.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub duration_ms: Option<u64>,
+    /// `linear` or `ease`. Only meaningful with a duration.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub easing: Option<String>,
+    pub item: String,
+    /// Any of `name`, `transform`, `crop`, `opacity`, `blend`, `visible`,
+    /// `locked`, `audio`, `content`. A key left out is left alone.
+    pub props: BTreeMap<String, Value>,
+    pub scene: String,
+    /// A client's own sequence number, echoed on the patch so a drag can
+    /// discard the echoes of moves it has already drawn past.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub seq: Option<u64>,
+}
+
 /// `plugin.settings.set`.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
@@ -859,9 +1513,25 @@ pub struct SetSettingsRequest {
     pub settings: BTreeMap<String, Value>,
 }
 
+/// `source.set`.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct SetSourceMetaRequest {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub color: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+    pub source: String,
+}
+
+/// How much the reader should care.
 pub type Severity = String;
 /// The values api_level 1 knows for [`Severity`].
-pub const SEVERITY_VALUES: &[&str] = &["critical", "info", "warning", "error"];
+pub const SEVERITY_VALUES: &[&str] = &["error", "warning", "info"];
+
+pub type Severity2 = String;
+/// The values api_level 1 knows for [`Severity2`].
+pub const SEVERITY2_VALUES: &[&str] = &["critical", "info", "warning", "error"];
 
 /// `event/snapshot`: the full state, and where in the stream it sits.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
@@ -1032,14 +1702,16 @@ pub struct TakeRequest {
     /// snapshot first.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub at_running_time_ms: Option<u64>,
-    /// The scene to take, once scenes exist (11). Today a scene name is read
-    /// as a one item scene, which is to say as a source id, and `source` wins
-    /// when both are given.
+    /// The scene to take, by name or by id. `source` wins when both are
+    /// given; with neither, the armed scene goes on air.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub scene: Option<String>,
-    /// Id of the source to put on air. Null or omitted cuts to the slate.
+    /// Id of the source to put on air.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub source: Option<String>,
+    /// `cut` in this build.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub transition: Option<String>,
 }
 
 /// `event/tally`.
@@ -1104,6 +1776,32 @@ pub struct TokenInfo {
     pub scopes: Vec<String>,
 }
 
+/// Where an item sits and how it is sized.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct Transform {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub align: Option<Align>,
+    /// Normalised 0 to 1 within the item's own box: (0,0) top left, (0.5,0.5)
+    /// centre, (1,1) bottom right.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub anchor: Option<Vec2>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub fit: Option<Fit>,
+    /// The rectangle the content is fitted into, in canvas pixels. Absent
+    /// means the content's own size, scaled.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub frame: Option<Frame>,
+    /// Canvas pixels, of the item's anchor point.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub position: Option<Vec2>,
+    /// Degrees, clockwise, about the anchor.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub rotation: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub scale: Option<Vec2>,
+}
+
 /// What a surface starts with: the layout, the theme and the gallery mode.
 ///
 /// Chosen by a preset (`preset.apply`), carried in `core.info` and pushed as
@@ -1128,6 +1826,41 @@ pub struct UiDefaults {
     pub theme: Option<String>,
 }
 
+/// One record as it was and as it is.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct Update {
+    pub after: Record,
+    pub before: Record,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct ValidateRequest {
+    /// Leave it out to check the whole collection.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub scene: Option<String>,
+}
+
+/// `scene.validate`.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct Validation {
+    pub findings: Vec<Finding>,
+    /// True when there is nothing to fix.
+    pub ok: bool,
+}
+
+/// A point or a pair of factors.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct Vec2 {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub x: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub y: Option<f64>,
+}
+
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct ProgramTookEvent {
@@ -1141,6 +1874,13 @@ pub struct ProgramTookEvent {
     pub source: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub transition: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct PreviewChangedEvent {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub scene: Option<String>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
@@ -1204,7 +1944,7 @@ pub struct AlertEvent {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub message: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub severity: Option<Severity>,
+    pub severity: Option<Severity2>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
@@ -1238,7 +1978,7 @@ pub struct MethodInfo {
     pub rest: Option<(&'static str, &'static str)>,
 }
 
-pub const METHODS: [MethodInfo; 63] = [
+pub const METHODS: [MethodInfo; 110] = [
     MethodInfo { name: "adbreak.end", summary: "Cut a running ad short, or disarm one that is scheduled.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/adbreak/end")) },
     MethodInfo { name: "adbreak.start", summary: "Interrupt the programme with a clip, then rejoin live when it ends.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/adbreak/start")) },
     MethodInfo { name: "agent.state", summary: "The compact document written for agents: the programme, each source's state and a motion score saying how much its picture is changing.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/agent/state")) },
@@ -1291,22 +2031,70 @@ pub const METHODS: [MethodInfo; 63] = [
     MethodInfo { name: "program.golive", summary: "One call to put a web page on air: add the page, add the destination, and take the page as soon as it renders.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/program/golive")) },
     MethodInfo { name: "program.history", summary: "The last hundred takes, newest first, with the token that asked for each.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/program/history")) },
     MethodInfo { name: "program.revert", summary: "Take back to the shot before this one.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/program/revert")) },
-    MethodInfo { name: "program.take", summary: "Put a source on programme. The cut is instant and the outgoing stream is not disturbed.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/program/take")) },
+    MethodInfo { name: "program.take", summary: "Put a scene or a source on programme. The cut is instant and the outgoing stream is not disturbed.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/program/take")) },
+    MethodInfo { name: "scene.add", summary: "Make an empty scene, or one built from a set of sources.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/scenes")) },
+    MethodInfo { name: "scene.apply_layout", summary: "Apply a layout, making a scene or reshaping one that exists. Applying onto an existing scene keeps the item ids, so the change is a ramp and not a cut.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/scenes/apply_layout")) },
+    MethodInfo { name: "scene.create_from", summary: "A scene from a set of sources, laid out by the built in layout for that count (full, two-box, three-box, quad, then a grid) or by a named one.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/scenes/create_from")) },
+    MethodInfo { name: "scene.duplicate", summary: "A copy of a scene with new ids throughout, so editing the copy cannot touch the original.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/scenes/{id}/duplicate")) },
+    MethodInfo { name: "scene.edit.apply", summary: "Write a draft back into the live document.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/scenes/edit/apply")) },
+    MethodInfo { name: "scene.edit.begin", summary: "Take a working copy of a scene. Editing is off air by default: the draft is written back on the next take of that scene, or when you apply it.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/scenes/edit/begin")) },
+    MethodInfo { name: "scene.edit.discard", summary: "Throw a draft away. The live document is untouched.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/scenes/edit/discard")) },
+    MethodInfo { name: "scene.export", summary: "The whole collection as JSON. The zip bundle with assets is Phase 5.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/scenes/export")) },
+    MethodInfo { name: "scene.get", summary: "One scene: its records and where every item actually lands on the canvas.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/scenes/{id}")) },
+    MethodInfo { name: "scene.history.mark", summary: "Group the changes that follow into one undo step, until the next mark. This is what makes a drag of forty moves one Ctrl+Z.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/scenes/history/mark")) },
+    MethodInfo { name: "scene.import.obs", summary: "Read an OBS Studio scene collection and add its scenes to this one.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/scenes/import/obs")) },
+    MethodInfo { name: "scene.item.add", summary: "Put something on a scene's canvas. With no transform it lands in the next free cell, so a drop never needs a dialog.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/scenes/item/add")) },
+    MethodInfo { name: "scene.item.align", summary: "Line items up on an edge: left, right, top, bottom, center-x or center-y.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/scenes/item/align")) },
+    MethodInfo { name: "scene.item.arrange_grid", summary: "Lay items out in a grid of `cols` columns.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/scenes/item/arrange_grid")) },
+    MethodInfo { name: "scene.item.bind", summary: "Bind a geometry property to an expression over the collection's parameters, so changing a number moves everything that follows it.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/scenes/item/bind")) },
+    MethodInfo { name: "scene.item.copy", summary: "Copy an item into another scene. The copy keeps the transform and the filters and gets a new id.", scope: "operate", mutating: true, destructive: false, rest: Some(("GET", "/api/v1/scenes/item/copy")) },
+    MethodInfo { name: "scene.item.cover_canvas", summary: "Put items over the whole canvas, filling it and letting the overflow go.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/scenes/item/cover_canvas")) },
+    MethodInfo { name: "scene.item.distribute", summary: "Space items evenly between the two on the ends, horizontally or vertically.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/scenes/item/distribute")) },
+    MethodInfo { name: "scene.item.filter.add", summary: "Hang a filter on one item, so a camera keyed in one scene is not keyed in all of them.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/scenes/item/filter/add")) },
+    MethodInfo { name: "scene.item.filter.remove", summary: "Take a filter off an item.", scope: "operate", mutating: true, destructive: true, rest: Some(("POST", "/api/v1/scenes/item/filter/remove")) },
+    MethodInfo { name: "scene.item.filter.set", summary: "Change one of an item's filters, or turn it off without taking it out.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/scenes/item/filter/set")) },
+    MethodInfo { name: "scene.item.fit_to_canvas", summary: "Put items over the whole canvas, keeping their aspect ratio inside it.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/scenes/item/fit_to_canvas")) },
+    MethodInfo { name: "scene.item.group", summary: "Put items into a group. The picture does not change.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/scenes/item/group")) },
+    MethodInfo { name: "scene.item.match_size", summary: "Make items the same size as another one.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/scenes/item/match_size")) },
+    MethodInfo { name: "scene.item.move", summary: "Move an item to another scene, keeping its transform and filters.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/scenes/item/move")) },
+    MethodInfo { name: "scene.item.remove", summary: "Take an item off a scene.", scope: "operate", mutating: true, destructive: true, rest: Some(("POST", "/api/v1/scenes/item/remove")) },
+    MethodInfo { name: "scene.item.reorder", summary: "Move an item up or down the stack, between two named neighbours.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/scenes/item/reorder")) },
+    MethodInfo { name: "scene.item.set", summary: "Assign an item's properties. Only the keys named move; the rest are left alone, so calling it twice with the same body changes nothing the second time.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/scenes/item/set")) },
+    MethodInfo { name: "scene.item.ungroup", summary: "Take a group apart, leaving every child exactly where it looked.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/scenes/item/ungroup")) },
+    MethodInfo { name: "scene.layout.copy", summary: "Read one scene's geometry, to paste onto another.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/scenes/layout/copy")) },
+    MethodInfo { name: "scene.layout.list", summary: "The layouts that ship with the core, with the parameters each one takes.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/scenes/layout/list")) },
+    MethodInfo { name: "scene.layout.paste", summary: "Put one scene's geometry onto another's items, matched by name first and slot order second. Items that match nothing are left alone.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/scenes/layout/paste")) },
+    MethodInfo { name: "scene.list", summary: "Every scene in the collection, with how many items it has, the sources it draws and whether it is armed.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/scenes")) },
+    MethodInfo { name: "scene.params.get", summary: "The collection's typed parameters, readable without their values, so a client discovers what is fillable before filling it.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/scenes/params/get")) },
+    MethodInfo { name: "scene.params.set", summary: "Set the collection's parameter values. A `{{name}}` in a string property follows them.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/scenes/params/set")) },
+    MethodInfo { name: "scene.preview.frame", summary: "A still of the armed scene as base64 JPEG, the floor every client has.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/scenes/preview/frame")) },
+    MethodInfo { name: "scene.preview.set", summary: "Arm a scene. The armed scene is the preview, and program.take with no argument takes it.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/scenes/preview/set")) },
+    MethodInfo { name: "scene.redo", summary: "Put back what undo took away.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/scenes/redo")) },
+    MethodInfo { name: "scene.remove", summary: "Delete a scene. What is on air is not touched.", scope: "operate", mutating: true, destructive: true, rest: Some(("DELETE", "/api/v1/scenes/{id}")) },
+    MethodInfo { name: "scene.rename", summary: "Change a scene's name, its colour, or both. Names and colours live on the document, so every client, the tally and an agent see the same ones.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/scenes/{id}/rename")) },
+    MethodInfo { name: "scene.transaction.abort", summary: "Throw the batch away. The document goes back to where it was when the batch opened.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/scenes/transaction/abort")) },
+    MethodInfo { name: "scene.transaction.begin", summary: "Start a batch. Everything until the commit applies on one frame or not at all, and undoes in one step.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/scenes/transaction/begin")) },
+    MethodInfo { name: "scene.transaction.commit", summary: "Apply the batch.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/scenes/transaction/commit")) },
+    MethodInfo { name: "scene.undo", summary: "Undo the last change. A drag marked with scene.history.mark undoes as one step.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/scenes/undo")) },
+    MethodInfo { name: "scene.validate", summary: "Overlaps, items off the canvas, safe area breaches and missing sources: what to fix before saying a scene is done.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/scenes/validate")) },
     MethodInfo { name: "snapshot.get", summary: "One JPEG: the whole contact sheet, the programme, or one source cut out of the mosaic.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/snapshot/{id}")) },
     MethodInfo { name: "source.add", summary: "Add a source while the mixer runs. Answers with the id it got and the whole source record.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/sources")) },
     MethodInfo { name: "source.audio.set", summary: "Move a source's audio: the fader, the mute, and for a superimposed page the balance between its own sound and the videos under it.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/sources/{id}/audio")) },
     MethodInfo { name: "source.get", summary: "One source. Refused with the ids that exist when there is no such source.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/sources/{id}")) },
+    MethodInfo { name: "source.group", summary: "Put sources in a tray folder. A tag for finding things, not a group on the canvas.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/sources/{id}/group")) },
     MethodInfo { name: "source.list", summary: "Every source, with its state, whether it has video and audio, and its fader.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/sources")) },
     MethodInfo { name: "source.remove", summary: "Remove a source. If it is on programme the mixer cuts to the slate first.", scope: "operate", mutating: true, destructive: true, rest: Some(("DELETE", "/api/v1/sources/{id}")) },
     MethodInfo { name: "source.seek", summary: "Move a seekable source to a position. Answers with where it actually landed.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/sources/{id}/seek")) },
+    MethodInfo { name: "source.set", summary: "Name and colour a source. Both live on the scene document, so every client, the tally and an agent see the same ones.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/sources/{id}/set")) },
     MethodInfo { name: "task.cancel", summary: "Ask a piece of long running work to stop. Cooperative: the answer says the request landed, not that the work has stopped yet.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/task/cancel")) },
     MethodInfo { name: "task.get", summary: "How a piece of long running work is getting on, and its answer once it has one.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/task")) },
     MethodInfo { name: "task.list", summary: "Every background job this core knows about, newest first.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/task/list")) },
 ];
 
-pub const EVENT_NAMES: [&str; 17] = [
+pub const EVENT_NAMES: [&str; 18] = [
     "snapshot",
     "program.took",
+    "preview.changed",
     "source.state",
     "source.position",
     "output.state",
@@ -1345,6 +2133,8 @@ pub enum Event {
     Snapshot(Snapshot),
     /// The programme changed. Carries the running time the cut landed on, so a client can see how close a scheduled take was to its mark.
     ProgramTook(ProgramTookEvent),
+    /// A scene was armed, or the arming was cleared. The armed scene is the preview, and program.take with no argument takes it.
+    PreviewChanged(PreviewChangedEvent),
     /// A source moved between connecting, live, stalled and failed.
     SourceState(SourceStateEvent),
     /// How far through a seekable source has got, a few times a second. Never sent for a camera, which has no position to report.
@@ -1391,6 +2181,10 @@ impl Event {
             },
             "program.took" => match serde_json::from_value(params.clone()) {
                 Ok(payload) => Event::ProgramTook(payload),
+                Err(_) => Event::Other { name: pattern.to_string(), params },
+            },
+            "preview.changed" => match serde_json::from_value(params.clone()) {
+                Ok(payload) => Event::PreviewChanged(payload),
                 Err(_) => Event::Other { name: pattern.to_string(), params },
             },
             "source.state" => match serde_json::from_value(params.clone()) {
@@ -1458,6 +2252,7 @@ impl Event {
         match self {
             Event::Snapshot(_) => "snapshot",
             Event::ProgramTook(_) => "program.took",
+            Event::PreviewChanged(_) => "preview.changed",
             Event::SourceState(_) => "source.state",
             Event::SourcePosition(_) => "source.position",
             Event::OutputState(_) => "output.state",
@@ -1741,9 +2536,234 @@ impl Client {
         self.call("program.revert", &serde_json::json!({})).await
     }
 
-    /// Put a source on programme. The cut is instant and the outgoing stream is not disturbed.
+    /// Put a scene or a source on programme. The cut is instant and the outgoing stream is not disturbed.
     pub async fn program_take(&self, params: &TakeRequest) -> Result<ProgramState> {
         self.call("program.take", params).await
+    }
+
+    /// Make an empty scene, or one built from a set of sources.
+    pub async fn scene_add(&self, params: &AddSceneRequest) -> Result<SceneView> {
+        self.call("scene.add", params).await
+    }
+
+    /// Apply a layout, making a scene or reshaping one that exists. Applying onto an existing scene keeps the item ids, so the change is a ramp and not a cut.
+    pub async fn scene_apply_layout(&self, params: &ApplyLayoutRequest) -> Result<BTreeMap<String, Value>> {
+        self.call("scene.apply_layout", params).await
+    }
+
+    /// A scene from a set of sources, laid out by the built in layout for that count (full, two-box, three-box, quad, then a grid) or by a named one.
+    pub async fn scene_create_from(&self, params: &CreateFromRequest) -> Result<SceneView> {
+        self.call("scene.create_from", params).await
+    }
+
+    /// A copy of a scene with new ids throughout, so editing the copy cannot touch the original.
+    pub async fn scene_duplicate(&self, params: &DuplicateSceneRequest) -> Result<SceneView> {
+        self.call("scene.duplicate", params).await
+    }
+
+    /// Write a draft back into the live document.
+    pub async fn scene_edit_apply(&self, params: &DraftRequest) -> Result<BTreeMap<String, Value>> {
+        self.call("scene.edit.apply", params).await
+    }
+
+    /// Take a working copy of a scene. Editing is off air by default: the draft is written back on the next take of that scene, or when you apply it.
+    pub async fn scene_edit_begin(&self, params: &EditBeginRequest) -> Result<DraftRecord> {
+        self.call("scene.edit.begin", params).await
+    }
+
+    /// Throw a draft away. The live document is untouched.
+    pub async fn scene_edit_discard(&self, params: &DraftRequest) -> Result<BTreeMap<String, Value>> {
+        self.call("scene.edit.discard", params).await
+    }
+
+    /// The whole collection as JSON. The zip bundle with assets is Phase 5.
+    pub async fn scene_export(&self, params: &ExportRequest) -> Result<BTreeMap<String, Value>> {
+        self.call("scene.export", params).await
+    }
+
+    /// One scene: its records and where every item actually lands on the canvas.
+    pub async fn scene_get(&self, params: &SceneRequest) -> Result<SceneView> {
+        self.call("scene.get", params).await
+    }
+
+    /// Group the changes that follow into one undo step, until the next mark. This is what makes a drag of forty moves one Ctrl+Z.
+    pub async fn scene_history_mark(&self, params: &MarkRequest) -> Result<BTreeMap<String, Value>> {
+        self.call("scene.history.mark", params).await
+    }
+
+    /// Read an OBS Studio scene collection and add its scenes to this one.
+    pub async fn scene_import_obs(&self, params: &ImportObsRequest) -> Result<ImportReport> {
+        self.call("scene.import.obs", params).await
+    }
+
+    /// Put something on a scene's canvas. With no transform it lands in the next free cell, so a drop never needs a dialog.
+    pub async fn scene_item_add(&self, params: &AddItemRequest) -> Result<BTreeMap<String, Value>> {
+        self.call("scene.item.add", params).await
+    }
+
+    /// Line items up on an edge: left, right, top, bottom, center-x or center-y.
+    pub async fn scene_item_align(&self, params: &ItemsRequest) -> Result<BTreeMap<String, Value>> {
+        self.call("scene.item.align", params).await
+    }
+
+    /// Lay items out in a grid of `cols` columns.
+    pub async fn scene_item_arrange_grid(&self, params: &ItemsRequest) -> Result<BTreeMap<String, Value>> {
+        self.call("scene.item.arrange_grid", params).await
+    }
+
+    /// Bind a geometry property to an expression over the collection's parameters, so changing a number moves everything that follows it.
+    pub async fn scene_item_bind(&self, params: &BindRequest) -> Result<BTreeMap<String, Value>> {
+        self.call("scene.item.bind", params).await
+    }
+
+    /// Copy an item into another scene. The copy keeps the transform and the filters and gets a new id.
+    pub async fn scene_item_copy(&self, params: &MoveItemRequest) -> Result<BTreeMap<String, Value>> {
+        self.call("scene.item.copy", params).await
+    }
+
+    /// Put items over the whole canvas, filling it and letting the overflow go.
+    pub async fn scene_item_cover_canvas(&self, params: &ItemsRequest) -> Result<BTreeMap<String, Value>> {
+        self.call("scene.item.cover_canvas", params).await
+    }
+
+    /// Space items evenly between the two on the ends, horizontally or vertically.
+    pub async fn scene_item_distribute(&self, params: &ItemsRequest) -> Result<BTreeMap<String, Value>> {
+        self.call("scene.item.distribute", params).await
+    }
+
+    /// Hang a filter on one item, so a camera keyed in one scene is not keyed in all of them.
+    pub async fn scene_item_filter_add(&self, params: &AddItemFilterRequest) -> Result<BTreeMap<String, Value>> {
+        self.call("scene.item.filter.add", params).await
+    }
+
+    /// Take a filter off an item.
+    pub async fn scene_item_filter_remove(&self, params: &ItemFilterRequest) -> Result<BTreeMap<String, Value>> {
+        self.call("scene.item.filter.remove", params).await
+    }
+
+    /// Change one of an item's filters, or turn it off without taking it out.
+    pub async fn scene_item_filter_set(&self, params: &ItemFilterRequest) -> Result<BTreeMap<String, Value>> {
+        self.call("scene.item.filter.set", params).await
+    }
+
+    /// Put items over the whole canvas, keeping their aspect ratio inside it.
+    pub async fn scene_item_fit_to_canvas(&self, params: &ItemsRequest) -> Result<BTreeMap<String, Value>> {
+        self.call("scene.item.fit_to_canvas", params).await
+    }
+
+    /// Put items into a group. The picture does not change.
+    pub async fn scene_item_group(&self, params: &ItemsRequest) -> Result<BTreeMap<String, Value>> {
+        self.call("scene.item.group", params).await
+    }
+
+    /// Make items the same size as another one.
+    pub async fn scene_item_match_size(&self, params: &ItemsRequest) -> Result<BTreeMap<String, Value>> {
+        self.call("scene.item.match_size", params).await
+    }
+
+    /// Move an item to another scene, keeping its transform and filters.
+    pub async fn scene_item_move(&self, params: &MoveItemRequest) -> Result<BTreeMap<String, Value>> {
+        self.call("scene.item.move", params).await
+    }
+
+    /// Take an item off a scene.
+    pub async fn scene_item_remove(&self, params: &ItemRequest) -> Result<BTreeMap<String, Value>> {
+        self.call("scene.item.remove", params).await
+    }
+
+    /// Move an item up or down the stack, between two named neighbours.
+    pub async fn scene_item_reorder(&self, params: &ReorderRequest) -> Result<BTreeMap<String, Value>> {
+        self.call("scene.item.reorder", params).await
+    }
+
+    /// Assign an item's properties. Only the keys named move; the rest are left alone, so calling it twice with the same body changes nothing the second time.
+    pub async fn scene_item_set(&self, params: &SetItemRequest) -> Result<BTreeMap<String, Value>> {
+        self.call("scene.item.set", params).await
+    }
+
+    /// Take a group apart, leaving every child exactly where it looked.
+    pub async fn scene_item_ungroup(&self, params: &ItemRequest) -> Result<BTreeMap<String, Value>> {
+        self.call("scene.item.ungroup", params).await
+    }
+
+    /// Read one scene's geometry, to paste onto another.
+    pub async fn scene_layout_copy(&self, params: &SceneRequest) -> Result<Layout> {
+        self.call("scene.layout.copy", params).await
+    }
+
+    /// The layouts that ship with the core, with the parameters each one takes.
+    pub async fn scene_layout_list(&self) -> Result<LayoutListing> {
+        self.call("scene.layout.list", &serde_json::json!({})).await
+    }
+
+    /// Put one scene's geometry onto another's items, matched by name first and slot order second. Items that match nothing are left alone.
+    pub async fn scene_layout_paste(&self, params: &LayoutClipboardRequest) -> Result<BTreeMap<String, Value>> {
+        self.call("scene.layout.paste", params).await
+    }
+
+    /// Every scene in the collection, with how many items it has, the sources it draws and whether it is armed.
+    pub async fn scene_list(&self) -> Result<SceneListing> {
+        self.call("scene.list", &serde_json::json!({})).await
+    }
+
+    /// The collection's typed parameters, readable without their values, so a client discovers what is fillable before filling it.
+    pub async fn scene_params_get(&self) -> Result<BTreeMap<String, Value>> {
+        self.call("scene.params.get", &serde_json::json!({})).await
+    }
+
+    /// Set the collection's parameter values. A `{{name}}` in a string property follows them.
+    pub async fn scene_params_set(&self, params: &ParamsRequest) -> Result<BTreeMap<String, Value>> {
+        self.call("scene.params.set", params).await
+    }
+
+    /// A still of the armed scene as base64 JPEG, the floor every client has.
+    pub async fn scene_preview_frame(&self, params: &PreviewFrameRequest) -> Result<BTreeMap<String, Value>> {
+        self.call("scene.preview.frame", params).await
+    }
+
+    /// Arm a scene. The armed scene is the preview, and program.take with no argument takes it.
+    pub async fn scene_preview_set(&self, params: &PreviewRequest) -> Result<BTreeMap<String, Value>> {
+        self.call("scene.preview.set", params).await
+    }
+
+    /// Put back what undo took away.
+    pub async fn scene_redo(&self) -> Result<HistoryStep> {
+        self.call("scene.redo", &serde_json::json!({})).await
+    }
+
+    /// Delete a scene. What is on air is not touched.
+    pub async fn scene_remove(&self, params: &SceneRequest) -> Result<SceneRemoved> {
+        self.call("scene.remove", params).await
+    }
+
+    /// Change a scene's name, its colour, or both. Names and colours live on the document, so every client, the tally and an agent see the same ones.
+    pub async fn scene_rename(&self, params: &RenameSceneRequest) -> Result<SceneView> {
+        self.call("scene.rename", params).await
+    }
+
+    /// Throw the batch away. The document goes back to where it was when the batch opened.
+    pub async fn scene_transaction_abort(&self) -> Result<BTreeMap<String, Value>> {
+        self.call("scene.transaction.abort", &serde_json::json!({})).await
+    }
+
+    /// Start a batch. Everything until the commit applies on one frame or not at all, and undoes in one step.
+    pub async fn scene_transaction_begin(&self) -> Result<BTreeMap<String, Value>> {
+        self.call("scene.transaction.begin", &serde_json::json!({})).await
+    }
+
+    /// Apply the batch.
+    pub async fn scene_transaction_commit(&self) -> Result<BTreeMap<String, Value>> {
+        self.call("scene.transaction.commit", &serde_json::json!({})).await
+    }
+
+    /// Undo the last change. A drag marked with scene.history.mark undoes as one step.
+    pub async fn scene_undo(&self) -> Result<HistoryStep> {
+        self.call("scene.undo", &serde_json::json!({})).await
+    }
+
+    /// Overlaps, items off the canvas, safe area breaches and missing sources: what to fix before saying a scene is done.
+    pub async fn scene_validate(&self, params: &ValidateRequest) -> Result<Validation> {
+        self.call("scene.validate", params).await
     }
 
     /// One JPEG: the whole contact sheet, the programme, or one source cut out of the mosaic.
@@ -1766,6 +2786,11 @@ impl Client {
         self.call("source.get", params).await
     }
 
+    /// Put sources in a tray folder. A tag for finding things, not a group on the canvas.
+    pub async fn source_group(&self, params: &GroupSourcesRequest) -> Result<BTreeMap<String, Value>> {
+        self.call("source.group", params).await
+    }
+
     /// Every source, with its state, whether it has video and audio, and its fader.
     pub async fn source_list(&self) -> Result<Vec<SourceStatus>> {
         self.call("source.list", &serde_json::json!({})).await
@@ -1779,6 +2804,11 @@ impl Client {
     /// Move a seekable source to a position. Answers with where it actually landed.
     pub async fn source_seek(&self, params: &SeekParams) -> Result<SourcePositionState> {
         self.call("source.seek", params).await
+    }
+
+    /// Name and colour a source. Both live on the scene document, so every client, the tally and an agent see the same ones.
+    pub async fn source_set(&self, params: &SetSourceMetaRequest) -> Result<BTreeMap<String, Value>> {
+        self.call("source.set", params).await
     }
 
     /// Ask a piece of long running work to stop. Cooperative: the answer says the request landed, not that the work has stopped yet.

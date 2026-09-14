@@ -150,6 +150,76 @@
         ],
         "type": "object"
       },
+      "AddItemFilterRequest": {
+        "description": "`scene.item.filter.add`.",
+        "properties": {
+          "draft": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "item": {
+            "type": "string"
+          },
+          "name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "params": {
+            "additionalProperties": true,
+            "type": "object"
+          },
+          "scene": {
+            "type": "string"
+          },
+          "type": {
+            "description": "A filter type id, as `plugin.list` reports them.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "scene",
+          "item",
+          "type"
+        ],
+        "type": "object"
+      },
+      "AddItemRequest": {
+        "description": "`scene.item.add`.",
+        "properties": {
+          "content": {
+            "description": "What the item shows: `{\"source\": \"cam1\"}`, `{\"ref\": \"<scene id>\"}` or\n`{\"graphic\": \"plugin/id\"}`."
+          },
+          "draft": {
+            "description": "A draft id from `scene.edit.begin`, to change a working copy instead of\nthe live document.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "name": {
+            "description": "What to call it. Left out, a source item is named after its source,\nbecause a model reasons about words.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "scene": {
+            "type": "string"
+          },
+          "transform": {
+            "description": "Where it goes. Left out, the next free cell of a grid over what is\nalready there, so a drop on a scene never needs a dialog."
+          }
+        },
+        "required": [
+          "scene",
+          "content"
+        ],
+        "type": "object"
+      },
       "AddOutputRequest": {
         "additionalProperties": true,
         "description": "`output.add`. The id and the URL are the whole of it for an RTMP\ndestination; anything else a kind understands rides in `params`.",
@@ -186,6 +256,24 @@
         },
         "required": [
           "source"
+        ],
+        "type": "object"
+      },
+      "AddSceneRequest": {
+        "properties": {
+          "color": {
+            "description": "A colour for every client, the tally and the Stream Deck to agree on.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name"
         ],
         "type": "object"
       },
@@ -238,6 +326,68 @@
             "default": "concise"
           }
         },
+        "type": "object"
+      },
+      "Align": {
+        "description": "The nine alignment keywords, used to place content inside its frame.",
+        "enum": [
+          "top-left",
+          "top-center",
+          "top-right",
+          "center-left",
+          "center",
+          "center-right",
+          "bottom-left",
+          "bottom-center",
+          "bottom-right"
+        ],
+        "type": "string"
+      },
+      "ApplyLayoutRequest": {
+        "description": "`scene.apply_layout`.",
+        "properties": {
+          "duration_ms": {
+            "description": "How long the change takes, in milliseconds. 0 is a cut.",
+            "format": "uint64",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "easing": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "layout": {
+            "description": "A layout name from `scene.layout.list`.",
+            "type": "string"
+          },
+          "name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "scene": {
+            "description": "The scene to apply it to. Left out, a new one is made. Applying onto an\nexisting scene keeps the item ids, so an animated layout change is a\nproperty ramp rather than a cut.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "values": {
+            "additionalProperties": true,
+            "default": {},
+            "description": "The layout's parameters by name: its source slots and its numbers.",
+            "type": "object"
+          }
+        },
+        "required": [
+          "layout"
+        ],
         "type": "object"
       },
       "ApplyRequest": {
@@ -302,6 +452,26 @@
           "needs_restart"
         ],
         "type": "object"
+      },
+      "Audio": {
+        "description": "Whether the item's source is heard. A source is audible when any live item\nof it says so, which is OBS's behaviour and changes no pad topology.",
+        "oneOf": [
+          {
+            "const": "follow",
+            "description": "Heard while the item is visible on programme.",
+            "type": "string"
+          },
+          {
+            "const": "always",
+            "description": "Heard whether the item is visible or not.",
+            "type": "string"
+          },
+          {
+            "const": "never",
+            "description": "Never heard.",
+            "type": "string"
+          }
+        ]
       },
       "AudioSetParams": {
         "description": "`source.audio.set` takes an id as well as the levels: the id comes off the\npath on REST and out of the params on `/rpc`, and both land in one object.",
@@ -374,6 +544,78 @@
           "audio_decoder",
           "audio_encoder",
           "hardware_accelerated"
+        ],
+        "type": "object"
+      },
+      "BindRequest": {
+        "description": "`scene.item.bind`.",
+        "properties": {
+          "draft": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "item": {
+            "type": "string"
+          },
+          "param": {
+            "description": "An expression over the collection's params and `W`, `H`. An empty\nstring takes the binding off.",
+            "type": "string"
+          },
+          "prop": {
+            "description": "A geometry path such as `frame.w` or `position.x`.",
+            "type": "string"
+          },
+          "scene": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "scene",
+          "item",
+          "prop",
+          "param"
+        ],
+        "type": "object"
+      },
+      "Blend": {
+        "description": "OBS's blend enum, so an import carries across unchanged.",
+        "enum": [
+          "normal",
+          "add",
+          "screen",
+          "multiply",
+          "lighten",
+          "darken",
+          "subtract"
+        ],
+        "type": "string"
+      },
+      "Canvas": {
+        "additionalProperties": false,
+        "description": "The output raster. One per collection in this release; 11 section 1 leaves\nroom for several.",
+        "properties": {
+          "fps": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "height": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "width": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "width",
+          "height",
+          "fps"
         ],
         "type": "object"
       },
@@ -553,6 +795,188 @@
         ],
         "type": "object"
       },
+      "CreateFromRequest": {
+        "properties": {
+          "layout": {
+            "description": "A layout name from `scene.layout.list`. Left out, the number of sources\npicks one.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "sources": {
+            "description": "Source ids, in the order they should be laid out.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "sources"
+        ],
+        "type": "object"
+      },
+      "Crop": {
+        "additionalProperties": false,
+        "description": "How much of the content's own pixels to trim, normalised 0 to 1 so it\nsurvives a canvas change. vMix and CasparCG do this; OBS crops in pixels,\nwhich is why an OBS collection moved from 1080p to 720p loses its crops.",
+        "properties": {
+          "bottom": {
+            "format": "double",
+            "type": "number"
+          },
+          "left": {
+            "format": "double",
+            "type": "number"
+          },
+          "right": {
+            "format": "double",
+            "type": "number"
+          },
+          "top": {
+            "format": "double",
+            "type": "number"
+          }
+        },
+        "required": [
+          "left",
+          "top",
+          "right",
+          "bottom"
+        ],
+        "type": "object"
+      },
+      "DraftRecord": {
+        "description": "`scene.edit.begin`.",
+        "properties": {
+          "draft": {
+            "description": "Pass this as `draft` on any `scene.item.*` call to edit the copy.",
+            "type": "string"
+          },
+          "live": {
+            "description": "True when the client asked to edit on air.",
+            "type": "boolean"
+          },
+          "scene": {
+            "description": "The scene it was taken from.",
+            "type": "string"
+          },
+          "view": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SceneView"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The scene as it stands, so the client has something to draw at once."
+          }
+        },
+        "required": [
+          "draft",
+          "scene",
+          "live"
+        ],
+        "type": "object"
+      },
+      "DraftRequest": {
+        "description": "`scene.edit.apply` and `discard`.",
+        "properties": {
+          "draft": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "draft"
+        ],
+        "type": "object"
+      },
+      "DuplicateSceneRequest": {
+        "properties": {
+          "name": {
+            "description": "What to call the copy. A name already in use gets a number after it.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "scene": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "scene"
+        ],
+        "type": "object"
+      },
+      "EditBeginRequest": {
+        "description": "`scene.edit.begin`.",
+        "properties": {
+          "live": {
+            "description": "True to edit the scene that is on air as you go. The default is off\nair: the draft is applied on the next take or on an explicit apply.",
+            "type": "boolean"
+          },
+          "scene": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "scene"
+        ],
+        "type": "object"
+      },
+      "ExportRequest": {
+        "properties": {
+          "collection": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "format": {
+            "description": "`json` in this build. `zip`, with the assets, is Phase 5.",
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "type": "object"
+      },
+      "Filter": {
+        "additionalProperties": false,
+        "description": "One filter in an item's chain.",
+        "properties": {
+          "enabled": {
+            "default": true,
+            "type": "boolean"
+          },
+          "name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "params": {
+            "default": null
+          },
+          "type": {
+            "description": "The plugin qualified provide id, for example `chroma/filter`.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type"
+        ],
+        "type": "object"
+      },
       "FilterIdRequest": {
         "description": "`filter.remove`, and anything else that names one filter.",
         "properties": {
@@ -617,6 +1041,244 @@
         ],
         "type": "object"
       },
+      "Finding": {
+        "description": "One thing the validator found.",
+        "properties": {
+          "code": {
+            "description": "A stable machine readable code, so a client can filter or translate.",
+            "type": "string"
+          },
+          "detail": {
+            "description": "The numbers behind the message, for a client that draws them."
+          },
+          "items": {
+            "description": "The items involved, in the order the message names them.",
+            "items": {
+              "$ref": "#/components/schemas/Id"
+            },
+            "type": "array"
+          },
+          "message": {
+            "description": "One sentence naming the state and the next step.",
+            "type": "string"
+          },
+          "scene": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Id"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The scene it is in, when it is about one."
+          },
+          "severity": {
+            "$ref": "#/components/schemas/Severity"
+          }
+        },
+        "required": [
+          "severity",
+          "code",
+          "message"
+        ],
+        "type": "object"
+      },
+      "Fit": {
+        "description": "How content fills its frame. SVG's vocabulary, which replaces OBS's seven\nbounds types and maps onto `sizing-policy` on a `glvideomixer` pad.",
+        "oneOf": [
+          {
+            "const": "none",
+            "description": "The content's own size, scaled by `scale`. The frame is ignored.",
+            "type": "string"
+          },
+          {
+            "const": "contain",
+            "description": "Fit inside the frame, keeping the aspect ratio.",
+            "type": "string"
+          },
+          {
+            "const": "cover",
+            "description": "Fill the frame, keeping the aspect ratio, cropping the overflow.",
+            "type": "string"
+          },
+          {
+            "const": "stretch",
+            "description": "Fill the frame exactly, distorting the aspect ratio.",
+            "type": "string"
+          },
+          {
+            "const": "fit-width",
+            "description": "Scale so the width matches; the height falls where it falls.",
+            "type": "string"
+          },
+          {
+            "const": "fit-height",
+            "description": "Scale so the height matches; the width falls where it falls.",
+            "type": "string"
+          },
+          {
+            "const": "max",
+            "description": "Like `contain`, but never scale up past the content's own size.",
+            "type": "string"
+          }
+        ]
+      },
+      "FlatContent": {
+        "description": "Content on the wire. The same four shapes as the tree, except that a group\nnames no children: they are records whose parent is the group.",
+        "oneOf": [
+          {
+            "properties": {
+              "source": {
+                "type": "string"
+              },
+              "type": {
+                "const": "source",
+                "type": "string"
+              }
+            },
+            "required": [
+              "type",
+              "source"
+            ],
+            "type": "object"
+          },
+          {
+            "properties": {
+              "overrides": {
+                "additionalProperties": false,
+                "patternProperties": {
+                  "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$": {
+                    "$ref": "#/components/schemas/Override"
+                  }
+                },
+                "type": "object"
+              },
+              "ref": {
+                "$ref": "#/components/schemas/Id"
+              },
+              "type": {
+                "const": "ref",
+                "type": "string"
+              }
+            },
+            "required": [
+              "type",
+              "ref"
+            ],
+            "type": "object"
+          },
+          {
+            "properties": {
+              "graphic": {
+                "type": "string"
+              },
+              "params": true,
+              "type": {
+                "const": "graphic",
+                "type": "string"
+              }
+            },
+            "required": [
+              "type",
+              "graphic"
+            ],
+            "type": "object"
+          },
+          {
+            "properties": {
+              "type": {
+                "const": "group",
+                "type": "string"
+              }
+            },
+            "required": [
+              "type"
+            ],
+            "type": "object"
+          }
+        ]
+      },
+      "Frame": {
+        "additionalProperties": false,
+        "description": "The rectangle an item is fitted into.",
+        "properties": {
+          "h": {
+            "format": "double",
+            "type": "number"
+          },
+          "w": {
+            "format": "double",
+            "type": "number"
+          }
+        },
+        "required": [
+          "w",
+          "h"
+        ],
+        "type": "object"
+      },
+      "Geometry": {
+        "description": "One item's derived box.",
+        "properties": {
+          "height": {
+            "format": "double",
+            "type": "number"
+          },
+          "item": {
+            "$ref": "#/components/schemas/Id"
+          },
+          "opacity": {
+            "description": "The item's own opacity multiplied by every group's above it.",
+            "format": "double",
+            "type": "number"
+          },
+          "path": {
+            "description": "The names from the top item down, so a message can say\n`corner / pulpit` rather than an id.",
+            "type": "string"
+          },
+          "source": {
+            "description": "Present for an item whose content is a source.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "source_height": {
+            "format": "double",
+            "type": "number"
+          },
+          "source_width": {
+            "description": "The canvas, which is what the document knows about a source's own size\nuntil the mixer says otherwise. Named so a client that does know can\ntell the two apart.",
+            "format": "double",
+            "type": "number"
+          },
+          "width": {
+            "format": "double",
+            "type": "number"
+          },
+          "x": {
+            "format": "double",
+            "type": "number"
+          },
+          "y": {
+            "format": "double",
+            "type": "number"
+          }
+        },
+        "required": [
+          "item",
+          "path",
+          "x",
+          "y",
+          "width",
+          "height",
+          "opacity",
+          "source_width",
+          "source_height"
+        ],
+        "type": "object"
+      },
       "GoLiveRequest": {
         "description": "`program.golive`: add the page, add the destination, take the page.",
         "properties": {
@@ -676,6 +1338,28 @@
         ],
         "type": "object"
       },
+      "GroupSourcesRequest": {
+        "description": "`source.group`.",
+        "properties": {
+          "name": {
+            "description": "The tray folder to put them in. Null takes them out of the one they\nare in.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "sources": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "sources"
+        ],
+        "type": "object"
+      },
       "HistoryRequest": {
         "description": "`program.history`.",
         "properties": {
@@ -692,6 +1376,36 @@
         },
         "type": "object"
       },
+      "HistoryStep": {
+        "description": "`scene.undo` and `scene.redo`.",
+        "properties": {
+          "patch": {
+            "$ref": "#/components/schemas/Patch"
+          },
+          "redo": {
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "undo": {
+            "description": "How many steps are still on each stack, so a UI greys out a button.",
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "patch",
+          "undo",
+          "redo"
+        ],
+        "type": "object"
+      },
+      "Id": {
+        "description": "A UUID in the hyphenated form. Minted ids are version 7 (time ordered); ids derived from a layout are version 8.",
+        "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+        "type": "string"
+      },
       "IdRequest": {
         "description": "An id on its own: `source.get`, `source.remove`, `output.remove`,\n`output.reconnect`, `media.remove`.",
         "properties": {
@@ -701,6 +1415,55 @@
         },
         "required": [
           "id"
+        ],
+        "type": "object"
+      },
+      "ImportObsRequest": {
+        "properties": {
+          "path": {
+            "description": "The collection JSON exported from OBS (Scene Collection, Export), as a\npath on the machine the core is running on.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "path"
+        ],
+        "type": "object"
+      },
+      "ImportReport": {
+        "properties": {
+          "items": {
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "scenes": {
+            "description": "The scenes that were added, by the names they ended up with.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "skipped": {
+            "description": "What could not be brought across, and why, one line each.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "sources": {
+            "description": "The sources the collection needs, which have to be added separately.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "scenes",
+          "items",
+          "skipped",
+          "sources"
         ],
         "type": "object"
       },
@@ -769,6 +1532,322 @@
           "state",
           "buffers_dropped",
           "restarts"
+        ],
+        "type": "object"
+      },
+      "ItemFilterRequest": {
+        "description": "`scene.item.filter.set` and `remove`.",
+        "properties": {
+          "draft": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "enabled": {
+            "description": "Turn a filter off without taking it out.",
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "filter": {
+            "description": "The filter's name, or its position in the item's chain from 0.",
+            "type": "string"
+          },
+          "item": {
+            "type": "string"
+          },
+          "params": {
+            "additionalProperties": true,
+            "type": "object"
+          },
+          "scene": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "scene",
+          "item",
+          "filter"
+        ],
+        "type": "object"
+      },
+      "ItemProps": {
+        "description": "An item's props, which is an `Item` with the children lifted out into their\nown records.",
+        "properties": {
+          "audio": {
+            "$ref": "#/components/schemas/Audio"
+          },
+          "bind": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object"
+          },
+          "blend": {
+            "$ref": "#/components/schemas/Blend"
+          },
+          "content": {
+            "$ref": "#/components/schemas/FlatContent"
+          },
+          "crop": {
+            "$ref": "#/components/schemas/Crop"
+          },
+          "filters": {
+            "items": {
+              "$ref": "#/components/schemas/Filter"
+            },
+            "type": "array"
+          },
+          "locked": {
+            "type": "boolean"
+          },
+          "name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "opacity": {
+            "format": "double",
+            "type": "number"
+          },
+          "transform": {
+            "$ref": "#/components/schemas/Transform"
+          },
+          "visible": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "content",
+          "transform",
+          "crop",
+          "opacity",
+          "blend",
+          "visible",
+          "locked",
+          "audio"
+        ],
+        "type": "object"
+      },
+      "ItemRequest": {
+        "description": "Anything that names one item.",
+        "properties": {
+          "draft": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "item": {
+            "description": "The item's name or its id.",
+            "type": "string"
+          },
+          "scene": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "scene",
+          "item"
+        ],
+        "type": "object"
+      },
+      "ItemsRequest": {
+        "description": "`scene.item.align`, `distribute`, `fit_to_canvas`, `cover_canvas`,\n`arrange_grid`, `match_size`, `group`.",
+        "properties": {
+          "axis": {
+            "description": "`distribute`: horizontal or vertical.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "cols": {
+            "description": "`arrange_grid`: how many columns.",
+            "format": "uint",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "draft": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "duration_ms": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "easing": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "edge": {
+            "description": "`align`: left, right, top, bottom, center-x, center-y.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "items": {
+            "description": "Item names or ids.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "name": {
+            "description": "`group`: what to call the group.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "scene": {
+            "type": "string"
+          },
+          "to": {
+            "description": "`match_size`: the item to match.",
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "scene",
+          "items"
+        ],
+        "type": "object"
+      },
+      "Layout": {
+        "description": "A scene's geometry, for copying onto another one.",
+        "properties": {
+          "canvas": {
+            "$ref": "#/components/schemas/Canvas"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/LayoutItem"
+            },
+            "type": "array"
+          },
+          "scene": {
+            "description": "The scene it came from, for a message.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "scene",
+          "canvas",
+          "items"
+        ],
+        "type": "object"
+      },
+      "LayoutClipboardRequest": {
+        "description": "`scene.layout.copy` and `paste`.",
+        "properties": {
+          "layout": {
+            "description": "What `scene.layout.copy` answered with."
+          },
+          "match": {
+            "description": "`name` matches item names first and falls back to slot order; `order`\nuses slot order alone.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "scene": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "scene"
+        ],
+        "type": "object"
+      },
+      "LayoutInfo": {
+        "properties": {
+          "description": {
+            "description": "What the layout calls its own scene, which is the nearest thing it has\nto a description.",
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "params": {
+            "description": "The whole JSON Schema, so a client renders an inspector from it."
+          },
+          "sources": {
+            "description": "The parameters that take a source id, in the order sources are poured\ninto them.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "name",
+          "description",
+          "sources",
+          "params"
+        ],
+        "type": "object"
+      },
+      "LayoutItem": {
+        "description": "One item's geometry: everything about where it sits and nothing about what\nit shows.",
+        "properties": {
+          "crop": {
+            "$ref": "#/components/schemas/Crop"
+          },
+          "name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "opacity": {
+            "format": "double",
+            "type": "number"
+          },
+          "transform": {
+            "$ref": "#/components/schemas/Transform"
+          },
+          "visible": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "transform",
+          "crop",
+          "opacity",
+          "visible"
+        ],
+        "type": "object"
+      },
+      "LayoutListing": {
+        "properties": {
+          "layouts": {
+            "items": {
+              "$ref": "#/components/schemas/LayoutInfo"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "layouts"
         ],
         "type": "object"
       },
@@ -887,6 +1966,19 @@
         "required": [
           "level"
         ],
+        "type": "object"
+      },
+      "MarkRequest": {
+        "description": "`scene.history.mark`.",
+        "properties": {
+          "label": {
+            "description": "What to call the group of changes that follows. Omit it to end the\ngroup, so the next change is its own undo step.",
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
         "type": "object"
       },
       "MediaItem": {
@@ -1053,7 +2145,7 @@
             "type": "array"
           },
           "program": {
-            "description": "Source currently on program, or None while the slate is showing.",
+            "description": "Source currently on program, or None while the slate is showing. A\nscene of one full canvas item reports that item's source here too, so\nanything written against this before scenes existed still reads.",
             "type": [
               "string",
               "null"
@@ -1064,6 +2156,13 @@
             "format": "uint64",
             "minimum": 0,
             "type": "integer"
+          },
+          "scene": {
+            "description": "The scene on air, when one was taken by name.",
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "sources": {
             "items": {
@@ -1084,6 +2183,27 @@
           "uptime_secs",
           "running_time_ms",
           "backend"
+        ],
+        "type": "object"
+      },
+      "MoveItemRequest": {
+        "description": "`scene.item.move` and `scene.item.copy`.",
+        "properties": {
+          "item": {
+            "type": "string"
+          },
+          "scene": {
+            "type": "string"
+          },
+          "to_scene": {
+            "description": "The scene it is going to.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "scene",
+          "item",
+          "to_scene"
         ],
         "type": "object"
       },
@@ -1185,6 +2305,116 @@
           "state",
           "reconnects",
           "queue_secs"
+        ],
+        "type": "object"
+      },
+      "Override": {
+        "additionalProperties": false,
+        "description": "A sparse change to one item of a referenced scene.",
+        "properties": {
+          "crop": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Crop"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "opacity": {
+            "format": "double",
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "params": true,
+          "transform": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Transform"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "visible": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          }
+        },
+        "type": "object"
+      },
+      "ParamsRequest": {
+        "description": "`scene.params.set`.",
+        "properties": {
+          "scene": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "values": {
+            "additionalProperties": true,
+            "default": {},
+            "type": "object"
+          }
+        },
+        "type": "object"
+      },
+      "Patch": {
+        "description": "What changed in one transaction.",
+        "properties": {
+          "added": {
+            "items": {
+              "$ref": "#/components/schemas/Record"
+            },
+            "type": "array"
+          },
+          "label": {
+            "description": "What the client called this change, for a label in an undo menu.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "removed": {
+            "items": {
+              "$ref": "#/components/schemas/Id"
+            },
+            "type": "array"
+          },
+          "scope": {
+            "description": "`document` today. `presence` (who is looking at what) is the other\nscope 11 section 4 names and is not implemented.",
+            "type": "string"
+          },
+          "seq": {
+            "description": "Monotonic, per core. A client that sees a gap asks for a fresh\nsnapshot rather than guessing.",
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "source_client": {
+            "description": "Whoever asked for the change, so a client can suppress the echo of its\nown edits and not fight its own optimistic drawing.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "updated": {
+            "items": {
+              "$ref": "#/components/schemas/Update"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "seq",
+          "scope"
         ],
         "type": "object"
       },
@@ -1460,6 +2690,20 @@
         ],
         "type": "object"
       },
+      "PreviewFrameRequest": {
+        "description": "`scene.preview.frame`.",
+        "properties": {
+          "width": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          }
+        },
+        "type": "object"
+      },
       "PreviewOpenRequest": {
         "description": "`preview.open {target}`.",
         "properties": {
@@ -1471,6 +2715,19 @@
         "required": [
           "target"
         ],
+        "type": "object"
+      },
+      "PreviewRequest": {
+        "description": "`scene.preview.set`.",
+        "properties": {
+          "scene": {
+            "description": "The scene to arm. Null or omitted disarms.",
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
         "type": "object"
       },
       "PreviewSocket": {
@@ -1509,6 +2766,13 @@
             ],
             "description": "Present while an ad break is armed or on air."
           },
+          "preview": {
+            "description": "The scene armed for the next `program.take` with no argument.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
           "previous": {
             "description": "The previous source, which is what `program.revert` would take back to.",
             "type": [
@@ -1517,7 +2781,7 @@
             ]
           },
           "program": {
-            "description": "Source on air, or null for the slate.",
+            "description": "Source on air, or null for the slate. A scene of one full canvas item\nreports that item's source here too, so anything written against this\nbefore scenes existed still reads.",
             "type": [
               "string",
               "null"
@@ -1528,10 +2792,141 @@
             "format": "uint64",
             "minimum": 0,
             "type": "integer"
+          },
+          "scene": {
+            "description": "The scene on air, when one was taken by name.",
+            "type": [
+              "string",
+              "null"
+            ]
           }
         },
         "required": [
           "running_time_ms"
+        ],
+        "type": "object"
+      },
+      "Record": {
+        "description": "One scene or one item.",
+        "oneOf": [
+          {
+            "properties": {
+              "color": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "kind": {
+                "const": "scene",
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "kind",
+              "name"
+            ],
+            "type": "object"
+          },
+          {
+            "$ref": "#/components/schemas/ItemProps",
+            "properties": {
+              "kind": {
+                "const": "item",
+                "type": "string"
+              }
+            },
+            "required": [
+              "kind"
+            ],
+            "type": "object"
+          }
+        ],
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/Id"
+          },
+          "order": {
+            "description": "A fractional key. Siblings sort by it; see `order.rs`.",
+            "type": "string"
+          },
+          "parent": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Id"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The scene this item is in, or the group item it is a child of. Absent\nfor a scene, which hangs off the document itself."
+          }
+        },
+        "required": [
+          "id",
+          "order"
+        ],
+        "type": "object"
+      },
+      "RenameSceneRequest": {
+        "properties": {
+          "color": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "scene": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "scene"
+        ],
+        "type": "object"
+      },
+      "ReorderRequest": {
+        "description": "`scene.item.reorder`.",
+        "properties": {
+          "after": {
+            "description": "Put it in front of this one. With neither, it goes to the front.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "before": {
+            "description": "Put it behind this one.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "draft": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "item": {
+            "type": "string"
+          },
+          "scene": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "scene",
+          "item"
         ],
         "type": "object"
       },
@@ -1559,6 +2954,136 @@
         },
         "required": [
           "name"
+        ],
+        "type": "object"
+      },
+      "SceneListing": {
+        "description": "`scene.list`.",
+        "properties": {
+          "scenes": {
+            "items": {
+              "$ref": "#/components/schemas/SceneSummary"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "scenes"
+        ],
+        "type": "object"
+      },
+      "SceneRemoved": {
+        "properties": {
+          "removed": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "removed"
+        ],
+        "type": "object"
+      },
+      "SceneRequest": {
+        "description": "Anything that names one scene.",
+        "properties": {
+          "scene": {
+            "description": "The scene's name or its id.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "scene"
+        ],
+        "type": "object"
+      },
+      "SceneSummary": {
+        "description": "What `scene.list` answers with per scene.",
+        "properties": {
+          "armed": {
+            "description": "True for the armed scene, which is the preview.",
+            "type": "boolean"
+          },
+          "color": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "id": {
+            "$ref": "#/components/schemas/Id"
+          },
+          "items": {
+            "description": "How many items, groups counted with their children.",
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "name": {
+            "type": "string"
+          },
+          "sources": {
+            "description": "Every source the scene draws, so a picker can grey out one whose\nsources are missing without reading the whole document.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "items",
+          "sources",
+          "armed"
+        ],
+        "type": "object"
+      },
+      "SceneView": {
+        "description": "One scene as a command answers with it.",
+        "properties": {
+          "canvas": {
+            "$ref": "#/components/schemas/Canvas"
+          },
+          "color": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "findings": {
+            "description": "What `scene.validate` would say about it, so a client shows a warning\nwithout asking again.",
+            "items": {
+              "$ref": "#/components/schemas/Finding"
+            },
+            "type": "array"
+          },
+          "geometry": {
+            "description": "Where each item actually lands, after groups are flattened and\nreferences resolved. Bottom of the stack first, which is the order the\ncompositor takes them in.",
+            "items": {
+              "$ref": "#/components/schemas/Geometry"
+            },
+            "type": "array"
+          },
+          "id": {
+            "$ref": "#/components/schemas/Id"
+          },
+          "name": {
+            "type": "string"
+          },
+          "records": {
+            "description": "The scene's own record and one per item, parents before children.",
+            "items": {
+              "$ref": "#/components/schemas/Record"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "canvas",
+          "records",
+          "geometry"
         ],
         "type": "object"
       },
@@ -1612,6 +3137,59 @@
         ],
         "type": "object"
       },
+      "SetItemRequest": {
+        "description": "`scene.item.set`: a state assignment. Only the keys named move.",
+        "properties": {
+          "draft": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "duration_ms": {
+            "description": "How long to take getting there, in milliseconds. 0 is a cut.",
+            "format": "uint64",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "easing": {
+            "description": "`linear` or `ease`. Only meaningful with a duration.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "item": {
+            "type": "string"
+          },
+          "props": {
+            "additionalProperties": true,
+            "description": "Any of `name`, `transform`, `crop`, `opacity`, `blend`, `visible`,\n`locked`, `audio`, `content`. A key left out is left alone.",
+            "type": "object"
+          },
+          "scene": {
+            "type": "string"
+          },
+          "seq": {
+            "description": "A client's own sequence number, echoed on the patch so a drag can\ndiscard the echoes of moves it has already drawn past.",
+            "format": "uint64",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "scene",
+          "item",
+          "props"
+        ],
+        "type": "object"
+      },
       "SetSettingsRequest": {
         "description": "`plugin.settings.set`.",
         "properties": {
@@ -1629,6 +3207,50 @@
           "id"
         ],
         "type": "object"
+      },
+      "SetSourceMetaRequest": {
+        "description": "`source.set`.",
+        "properties": {
+          "color": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "source": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "source"
+        ],
+        "type": "object"
+      },
+      "Severity": {
+        "description": "How much the reader should care.",
+        "oneOf": [
+          {
+            "const": "error",
+            "description": "The scene will not composite as written.",
+            "type": "string"
+          },
+          {
+            "const": "warning",
+            "description": "It will composite, and it is probably not what was meant.",
+            "type": "string"
+          },
+          {
+            "const": "info",
+            "description": "Worth knowing before going to air.",
+            "type": "string"
+          }
+        ]
       },
       "SnapshotRequest": {
         "description": "`snapshot.get` on `/rpc` and through MCP. The REST route serves the same\nbytes raw, because an `<img>` tag cannot read base64 out of JSON.",
@@ -1895,14 +3517,21 @@
             ]
           },
           "scene": {
-            "description": "The scene to take, once scenes exist (11). Today a scene name is read\nas a one item scene, which is to say as a source id, and `source` wins\nwhen both are given.",
+            "description": "The scene to take, by name or by id. `source` wins when both are\ngiven; with neither, the armed scene goes on air.",
             "type": [
               "string",
               "null"
             ]
           },
           "source": {
-            "description": "Id of the source to put on air. Null or omitted cuts to the slate.",
+            "description": "Id of the source to put on air.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "transition": {
+            "description": "`cut` in this build.",
             "type": [
               "string",
               "null"
@@ -2019,6 +3648,61 @@
         ],
         "type": "object"
       },
+      "Transform": {
+        "additionalProperties": false,
+        "description": "Where an item sits and how it is sized.",
+        "properties": {
+          "align": {
+            "$ref": "#/components/schemas/Align",
+            "default": "center"
+          },
+          "anchor": {
+            "$ref": "#/components/schemas/Vec2",
+            "default": {
+              "x": 0.0,
+              "y": 0.0
+            },
+            "description": "Normalised 0 to 1 within the item's own box: (0,0) top left, (0.5,0.5)\ncentre, (1,1) bottom right."
+          },
+          "fit": {
+            "$ref": "#/components/schemas/Fit",
+            "default": "none"
+          },
+          "frame": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Frame"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The rectangle the content is fitted into, in canvas pixels. Absent\nmeans the content's own size, scaled."
+          },
+          "position": {
+            "$ref": "#/components/schemas/Vec2",
+            "default": {
+              "x": 0.0,
+              "y": 0.0
+            },
+            "description": "Canvas pixels, of the item's anchor point."
+          },
+          "rotation": {
+            "default": 0.0,
+            "description": "Degrees, clockwise, about the anchor.",
+            "format": "double",
+            "type": "number"
+          },
+          "scale": {
+            "$ref": "#/components/schemas/Vec2",
+            "default": {
+              "x": 1.0,
+              "y": 1.0
+            }
+          }
+        },
+        "type": "object"
+      },
       "UiDefaults": {
         "description": "What a surface starts with: the layout, the theme and the gallery mode.\n\nChosen by a preset (`preset.apply`), carried in `core.info` and pushed as\n`event/ui.changed`. None of it changes what the core does. It exists so the\nfirst page a volunteer sees is the one their preset chose rather than the\none the last person to use this browser chose. 05 section 3b is where the\nfour gallery modes are defined.",
         "properties": {
@@ -2052,6 +3736,71 @@
               "string",
               "null"
             ]
+          }
+        },
+        "type": "object"
+      },
+      "Update": {
+        "description": "One record as it was and as it is.",
+        "properties": {
+          "after": {
+            "$ref": "#/components/schemas/Record"
+          },
+          "before": {
+            "$ref": "#/components/schemas/Record"
+          }
+        },
+        "required": [
+          "before",
+          "after"
+        ],
+        "type": "object"
+      },
+      "ValidateRequest": {
+        "properties": {
+          "scene": {
+            "description": "Leave it out to check the whole collection.",
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "type": "object"
+      },
+      "Validation": {
+        "description": "`scene.validate`.",
+        "properties": {
+          "findings": {
+            "items": {
+              "$ref": "#/components/schemas/Finding"
+            },
+            "type": "array"
+          },
+          "ok": {
+            "description": "True when there is nothing to fix.",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "ok",
+          "findings"
+        ],
+        "type": "object"
+      },
+      "Vec2": {
+        "additionalProperties": false,
+        "description": "A point or a pair of factors.",
+        "properties": {
+          "x": {
+            "default": 0.0,
+            "format": "double",
+            "type": "number"
+          },
+          "y": {
+            "default": 0.0,
+            "format": "double",
+            "type": "number"
           }
         },
         "type": "object"
@@ -3984,9 +5733,1679 @@
             "$ref": "#/components/responses/Error"
           }
         },
-        "summary": "Put a source on programme. The cut is instant and the outgoing stream is not disturbed.",
+        "summary": "Put a scene or a source on programme. The cut is instant and the outgoing stream is not disturbed.",
         "tags": [
           "program"
+        ],
+        "x-destructive": false,
+        "x-idempotent": true,
+        "x-scope": "operate"
+      }
+    },
+    "/api/v1/scenes": {
+      "get": {
+        "description": "JSON-RPC method `scene.list`. Needs the `read` scope.",
+        "operationId": "scene.list",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SceneListing"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Every scene in the collection, with how many items it has, the sources it draws and whether it is armed.",
+        "tags": [
+          "scene"
+        ],
+        "x-destructive": false,
+        "x-idempotent": true,
+        "x-scope": "read"
+      },
+      "post": {
+        "description": "JSON-RPC method `scene.add`. Needs the `operate` scope. Accepts `idempotency_key`, honoured for 24 hours.",
+        "operationId": "scene.add",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AddSceneRequest"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SceneView"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Make an empty scene, or one built from a set of sources.",
+        "tags": [
+          "scene"
+        ],
+        "x-destructive": false,
+        "x-idempotent": true,
+        "x-scope": "operate"
+      }
+    },
+    "/api/v1/scenes/apply_layout": {
+      "post": {
+        "description": "JSON-RPC method `scene.apply_layout`. Needs the `operate` scope. Accepts `idempotency_key`, honoured for 24 hours.",
+        "operationId": "scene.apply_layout",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ApplyLayoutRequest"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Apply a layout, making a scene or reshaping one that exists. Applying onto an existing scene keeps the item ids, so the change is a ramp and not a cut.",
+        "tags": [
+          "scene"
+        ],
+        "x-destructive": false,
+        "x-idempotent": true,
+        "x-scope": "operate"
+      }
+    },
+    "/api/v1/scenes/create_from": {
+      "post": {
+        "description": "JSON-RPC method `scene.create_from`. Needs the `operate` scope. Accepts `idempotency_key`, honoured for 24 hours.",
+        "operationId": "scene.create_from",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateFromRequest"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SceneView"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "A scene from a set of sources, laid out by the built in layout for that count (full, two-box, three-box, quad, then a grid) or by a named one.",
+        "tags": [
+          "scene"
+        ],
+        "x-destructive": false,
+        "x-idempotent": true,
+        "x-scope": "operate"
+      }
+    },
+    "/api/v1/scenes/edit/apply": {
+      "post": {
+        "description": "JSON-RPC method `scene.edit.apply`. Needs the `operate` scope. Accepts `idempotency_key`, honoured for 24 hours.",
+        "operationId": "scene.edit.apply",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DraftRequest"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Write a draft back into the live document.",
+        "tags": [
+          "scene"
+        ],
+        "x-destructive": false,
+        "x-idempotent": true,
+        "x-scope": "operate"
+      }
+    },
+    "/api/v1/scenes/edit/begin": {
+      "post": {
+        "description": "JSON-RPC method `scene.edit.begin`. Needs the `operate` scope. Accepts `idempotency_key`, honoured for 24 hours.",
+        "operationId": "scene.edit.begin",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EditBeginRequest"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DraftRecord"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Take a working copy of a scene. Editing is off air by default: the draft is written back on the next take of that scene, or when you apply it.",
+        "tags": [
+          "scene"
+        ],
+        "x-destructive": false,
+        "x-idempotent": true,
+        "x-scope": "operate"
+      }
+    },
+    "/api/v1/scenes/edit/discard": {
+      "post": {
+        "description": "JSON-RPC method `scene.edit.discard`. Needs the `operate` scope. Accepts `idempotency_key`, honoured for 24 hours.",
+        "operationId": "scene.edit.discard",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DraftRequest"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Throw a draft away. The live document is untouched.",
+        "tags": [
+          "scene"
+        ],
+        "x-destructive": false,
+        "x-idempotent": true,
+        "x-scope": "operate"
+      }
+    },
+    "/api/v1/scenes/export": {
+      "get": {
+        "description": "JSON-RPC method `scene.export`. Needs the `read` scope.",
+        "operationId": "scene.export",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "The whole collection as JSON. The zip bundle with assets is Phase 5.",
+        "tags": [
+          "scene"
+        ],
+        "x-destructive": false,
+        "x-idempotent": true,
+        "x-scope": "read"
+      }
+    },
+    "/api/v1/scenes/history/mark": {
+      "post": {
+        "description": "JSON-RPC method `scene.history.mark`. Needs the `operate` scope. Accepts `idempotency_key`, honoured for 24 hours.",
+        "operationId": "scene.history.mark",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MarkRequest"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Group the changes that follow into one undo step, until the next mark. This is what makes a drag of forty moves one Ctrl+Z.",
+        "tags": [
+          "scene"
+        ],
+        "x-destructive": false,
+        "x-idempotent": true,
+        "x-scope": "operate"
+      }
+    },
+    "/api/v1/scenes/import/obs": {
+      "post": {
+        "description": "JSON-RPC method `scene.import.obs`. Needs the `operate` scope. Accepts `idempotency_key`, honoured for 24 hours.",
+        "operationId": "scene.import.obs",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ImportObsRequest"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImportReport"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Read an OBS Studio scene collection and add its scenes to this one.",
+        "tags": [
+          "scene"
+        ],
+        "x-destructive": false,
+        "x-idempotent": true,
+        "x-scope": "operate"
+      }
+    },
+    "/api/v1/scenes/item/add": {
+      "post": {
+        "description": "JSON-RPC method `scene.item.add`. Needs the `operate` scope. Accepts `idempotency_key`, honoured for 24 hours.",
+        "operationId": "scene.item.add",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AddItemRequest"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Put something on a scene's canvas. With no transform it lands in the next free cell, so a drop never needs a dialog.",
+        "tags": [
+          "scene"
+        ],
+        "x-destructive": false,
+        "x-idempotent": true,
+        "x-scope": "operate"
+      }
+    },
+    "/api/v1/scenes/item/align": {
+      "post": {
+        "description": "JSON-RPC method `scene.item.align`. Needs the `operate` scope. Accepts `idempotency_key`, honoured for 24 hours.",
+        "operationId": "scene.item.align",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ItemsRequest"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Line items up on an edge: left, right, top, bottom, center-x or center-y.",
+        "tags": [
+          "scene"
+        ],
+        "x-destructive": false,
+        "x-idempotent": true,
+        "x-scope": "operate"
+      }
+    },
+    "/api/v1/scenes/item/arrange_grid": {
+      "post": {
+        "description": "JSON-RPC method `scene.item.arrange_grid`. Needs the `operate` scope. Accepts `idempotency_key`, honoured for 24 hours.",
+        "operationId": "scene.item.arrange_grid",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ItemsRequest"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Lay items out in a grid of `cols` columns.",
+        "tags": [
+          "scene"
+        ],
+        "x-destructive": false,
+        "x-idempotent": true,
+        "x-scope": "operate"
+      }
+    },
+    "/api/v1/scenes/item/bind": {
+      "post": {
+        "description": "JSON-RPC method `scene.item.bind`. Needs the `operate` scope. Accepts `idempotency_key`, honoured for 24 hours.",
+        "operationId": "scene.item.bind",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BindRequest"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Bind a geometry property to an expression over the collection's parameters, so changing a number moves everything that follows it.",
+        "tags": [
+          "scene"
+        ],
+        "x-destructive": false,
+        "x-idempotent": true,
+        "x-scope": "operate"
+      }
+    },
+    "/api/v1/scenes/item/copy": {
+      "get": {
+        "description": "JSON-RPC method `scene.item.copy`. Needs the `operate` scope. Accepts `idempotency_key`, honoured for 24 hours.",
+        "operationId": "scene.item.copy",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Copy an item into another scene. The copy keeps the transform and the filters and gets a new id.",
+        "tags": [
+          "scene"
+        ],
+        "x-destructive": false,
+        "x-idempotent": true,
+        "x-scope": "operate"
+      }
+    },
+    "/api/v1/scenes/item/cover_canvas": {
+      "post": {
+        "description": "JSON-RPC method `scene.item.cover_canvas`. Needs the `operate` scope. Accepts `idempotency_key`, honoured for 24 hours.",
+        "operationId": "scene.item.cover_canvas",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ItemsRequest"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Put items over the whole canvas, filling it and letting the overflow go.",
+        "tags": [
+          "scene"
+        ],
+        "x-destructive": false,
+        "x-idempotent": true,
+        "x-scope": "operate"
+      }
+    },
+    "/api/v1/scenes/item/distribute": {
+      "post": {
+        "description": "JSON-RPC method `scene.item.distribute`. Needs the `operate` scope. Accepts `idempotency_key`, honoured for 24 hours.",
+        "operationId": "scene.item.distribute",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ItemsRequest"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Space items evenly between the two on the ends, horizontally or vertically.",
+        "tags": [
+          "scene"
+        ],
+        "x-destructive": false,
+        "x-idempotent": true,
+        "x-scope": "operate"
+      }
+    },
+    "/api/v1/scenes/item/filter/add": {
+      "post": {
+        "description": "JSON-RPC method `scene.item.filter.add`. Needs the `operate` scope. Accepts `idempotency_key`, honoured for 24 hours.",
+        "operationId": "scene.item.filter.add",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AddItemFilterRequest"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Hang a filter on one item, so a camera keyed in one scene is not keyed in all of them.",
+        "tags": [
+          "scene"
+        ],
+        "x-destructive": false,
+        "x-idempotent": true,
+        "x-scope": "operate"
+      }
+    },
+    "/api/v1/scenes/item/filter/remove": {
+      "post": {
+        "description": "JSON-RPC method `scene.item.filter.remove`. Needs the `operate` scope. Destructive: accepts `dry_run: true`, and on a token whose policy is `confirm = required` it is refused once with -32020 and a confirm token. Accepts `idempotency_key`, honoured for 24 hours.",
+        "operationId": "scene.item.filter.remove",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ItemFilterRequest"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Take a filter off an item.",
+        "tags": [
+          "scene"
+        ],
+        "x-destructive": true,
+        "x-idempotent": true,
+        "x-scope": "operate"
+      }
+    },
+    "/api/v1/scenes/item/filter/set": {
+      "post": {
+        "description": "JSON-RPC method `scene.item.filter.set`. Needs the `operate` scope. Accepts `idempotency_key`, honoured for 24 hours.",
+        "operationId": "scene.item.filter.set",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ItemFilterRequest"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Change one of an item's filters, or turn it off without taking it out.",
+        "tags": [
+          "scene"
+        ],
+        "x-destructive": false,
+        "x-idempotent": true,
+        "x-scope": "operate"
+      }
+    },
+    "/api/v1/scenes/item/fit_to_canvas": {
+      "post": {
+        "description": "JSON-RPC method `scene.item.fit_to_canvas`. Needs the `operate` scope. Accepts `idempotency_key`, honoured for 24 hours.",
+        "operationId": "scene.item.fit_to_canvas",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ItemsRequest"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Put items over the whole canvas, keeping their aspect ratio inside it.",
+        "tags": [
+          "scene"
+        ],
+        "x-destructive": false,
+        "x-idempotent": true,
+        "x-scope": "operate"
+      }
+    },
+    "/api/v1/scenes/item/group": {
+      "post": {
+        "description": "JSON-RPC method `scene.item.group`. Needs the `operate` scope. Accepts `idempotency_key`, honoured for 24 hours.",
+        "operationId": "scene.item.group",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ItemsRequest"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Put items into a group. The picture does not change.",
+        "tags": [
+          "scene"
+        ],
+        "x-destructive": false,
+        "x-idempotent": true,
+        "x-scope": "operate"
+      }
+    },
+    "/api/v1/scenes/item/match_size": {
+      "post": {
+        "description": "JSON-RPC method `scene.item.match_size`. Needs the `operate` scope. Accepts `idempotency_key`, honoured for 24 hours.",
+        "operationId": "scene.item.match_size",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ItemsRequest"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Make items the same size as another one.",
+        "tags": [
+          "scene"
+        ],
+        "x-destructive": false,
+        "x-idempotent": true,
+        "x-scope": "operate"
+      }
+    },
+    "/api/v1/scenes/item/move": {
+      "post": {
+        "description": "JSON-RPC method `scene.item.move`. Needs the `operate` scope. Accepts `idempotency_key`, honoured for 24 hours.",
+        "operationId": "scene.item.move",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MoveItemRequest"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Move an item to another scene, keeping its transform and filters.",
+        "tags": [
+          "scene"
+        ],
+        "x-destructive": false,
+        "x-idempotent": true,
+        "x-scope": "operate"
+      }
+    },
+    "/api/v1/scenes/item/remove": {
+      "post": {
+        "description": "JSON-RPC method `scene.item.remove`. Needs the `operate` scope. Destructive: accepts `dry_run: true`, and on a token whose policy is `confirm = required` it is refused once with -32020 and a confirm token. Accepts `idempotency_key`, honoured for 24 hours.",
+        "operationId": "scene.item.remove",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ItemRequest"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Take an item off a scene.",
+        "tags": [
+          "scene"
+        ],
+        "x-destructive": true,
+        "x-idempotent": true,
+        "x-scope": "operate"
+      }
+    },
+    "/api/v1/scenes/item/reorder": {
+      "post": {
+        "description": "JSON-RPC method `scene.item.reorder`. Needs the `operate` scope. Accepts `idempotency_key`, honoured for 24 hours.",
+        "operationId": "scene.item.reorder",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReorderRequest"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Move an item up or down the stack, between two named neighbours.",
+        "tags": [
+          "scene"
+        ],
+        "x-destructive": false,
+        "x-idempotent": true,
+        "x-scope": "operate"
+      }
+    },
+    "/api/v1/scenes/item/set": {
+      "post": {
+        "description": "JSON-RPC method `scene.item.set`. Needs the `operate` scope. Accepts `idempotency_key`, honoured for 24 hours.",
+        "operationId": "scene.item.set",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetItemRequest"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Assign an item's properties. Only the keys named move; the rest are left alone, so calling it twice with the same body changes nothing the second time.",
+        "tags": [
+          "scene"
+        ],
+        "x-destructive": false,
+        "x-idempotent": true,
+        "x-scope": "operate"
+      }
+    },
+    "/api/v1/scenes/item/ungroup": {
+      "post": {
+        "description": "JSON-RPC method `scene.item.ungroup`. Needs the `operate` scope. Accepts `idempotency_key`, honoured for 24 hours.",
+        "operationId": "scene.item.ungroup",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ItemRequest"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Take a group apart, leaving every child exactly where it looked.",
+        "tags": [
+          "scene"
+        ],
+        "x-destructive": false,
+        "x-idempotent": true,
+        "x-scope": "operate"
+      }
+    },
+    "/api/v1/scenes/layout/copy": {
+      "get": {
+        "description": "JSON-RPC method `scene.layout.copy`. Needs the `read` scope.",
+        "operationId": "scene.layout.copy",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Layout"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Read one scene's geometry, to paste onto another.",
+        "tags": [
+          "scene"
+        ],
+        "x-destructive": false,
+        "x-idempotent": true,
+        "x-scope": "read"
+      }
+    },
+    "/api/v1/scenes/layout/list": {
+      "get": {
+        "description": "JSON-RPC method `scene.layout.list`. Needs the `read` scope.",
+        "operationId": "scene.layout.list",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LayoutListing"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "The layouts that ship with the core, with the parameters each one takes.",
+        "tags": [
+          "scene"
+        ],
+        "x-destructive": false,
+        "x-idempotent": true,
+        "x-scope": "read"
+      }
+    },
+    "/api/v1/scenes/layout/paste": {
+      "post": {
+        "description": "JSON-RPC method `scene.layout.paste`. Needs the `operate` scope. Accepts `idempotency_key`, honoured for 24 hours.",
+        "operationId": "scene.layout.paste",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LayoutClipboardRequest"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Put one scene's geometry onto another's items, matched by name first and slot order second. Items that match nothing are left alone.",
+        "tags": [
+          "scene"
+        ],
+        "x-destructive": false,
+        "x-idempotent": true,
+        "x-scope": "operate"
+      }
+    },
+    "/api/v1/scenes/params/get": {
+      "get": {
+        "description": "JSON-RPC method `scene.params.get`. Needs the `read` scope.",
+        "operationId": "scene.params.get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "The collection's typed parameters, readable without their values, so a client discovers what is fillable before filling it.",
+        "tags": [
+          "scene"
+        ],
+        "x-destructive": false,
+        "x-idempotent": true,
+        "x-scope": "read"
+      }
+    },
+    "/api/v1/scenes/params/set": {
+      "post": {
+        "description": "JSON-RPC method `scene.params.set`. Needs the `operate` scope. Accepts `idempotency_key`, honoured for 24 hours.",
+        "operationId": "scene.params.set",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ParamsRequest"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Set the collection's parameter values. A `{{name}}` in a string property follows them.",
+        "tags": [
+          "scene"
+        ],
+        "x-destructive": false,
+        "x-idempotent": true,
+        "x-scope": "operate"
+      }
+    },
+    "/api/v1/scenes/preview/frame": {
+      "get": {
+        "description": "JSON-RPC method `scene.preview.frame`. Needs the `read` scope.",
+        "operationId": "scene.preview.frame",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "A still of the armed scene as base64 JPEG, the floor every client has.",
+        "tags": [
+          "scene"
+        ],
+        "x-destructive": false,
+        "x-idempotent": true,
+        "x-scope": "read"
+      }
+    },
+    "/api/v1/scenes/preview/set": {
+      "post": {
+        "description": "JSON-RPC method `scene.preview.set`. Needs the `operate` scope. Accepts `idempotency_key`, honoured for 24 hours.",
+        "operationId": "scene.preview.set",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PreviewRequest"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Arm a scene. The armed scene is the preview, and program.take with no argument takes it.",
+        "tags": [
+          "scene"
+        ],
+        "x-destructive": false,
+        "x-idempotent": true,
+        "x-scope": "operate"
+      }
+    },
+    "/api/v1/scenes/redo": {
+      "post": {
+        "description": "JSON-RPC method `scene.redo`. Needs the `operate` scope. Accepts `idempotency_key`, honoured for 24 hours.",
+        "operationId": "scene.redo",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {},
+                "type": "object"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HistoryStep"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Put back what undo took away.",
+        "tags": [
+          "scene"
+        ],
+        "x-destructive": false,
+        "x-idempotent": true,
+        "x-scope": "operate"
+      }
+    },
+    "/api/v1/scenes/transaction/abort": {
+      "post": {
+        "description": "JSON-RPC method `scene.transaction.abort`. Needs the `operate` scope. Accepts `idempotency_key`, honoured for 24 hours.",
+        "operationId": "scene.transaction.abort",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {},
+                "type": "object"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Throw the batch away. The document goes back to where it was when the batch opened.",
+        "tags": [
+          "scene"
+        ],
+        "x-destructive": false,
+        "x-idempotent": true,
+        "x-scope": "operate"
+      }
+    },
+    "/api/v1/scenes/transaction/begin": {
+      "post": {
+        "description": "JSON-RPC method `scene.transaction.begin`. Needs the `operate` scope. Accepts `idempotency_key`, honoured for 24 hours.",
+        "operationId": "scene.transaction.begin",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {},
+                "type": "object"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Start a batch. Everything until the commit applies on one frame or not at all, and undoes in one step.",
+        "tags": [
+          "scene"
+        ],
+        "x-destructive": false,
+        "x-idempotent": true,
+        "x-scope": "operate"
+      }
+    },
+    "/api/v1/scenes/transaction/commit": {
+      "post": {
+        "description": "JSON-RPC method `scene.transaction.commit`. Needs the `operate` scope. Accepts `idempotency_key`, honoured for 24 hours.",
+        "operationId": "scene.transaction.commit",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {},
+                "type": "object"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Apply the batch.",
+        "tags": [
+          "scene"
+        ],
+        "x-destructive": false,
+        "x-idempotent": true,
+        "x-scope": "operate"
+      }
+    },
+    "/api/v1/scenes/undo": {
+      "post": {
+        "description": "JSON-RPC method `scene.undo`. Needs the `operate` scope. Accepts `idempotency_key`, honoured for 24 hours.",
+        "operationId": "scene.undo",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {},
+                "type": "object"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HistoryStep"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Undo the last change. A drag marked with scene.history.mark undoes as one step.",
+        "tags": [
+          "scene"
+        ],
+        "x-destructive": false,
+        "x-idempotent": true,
+        "x-scope": "operate"
+      }
+    },
+    "/api/v1/scenes/validate": {
+      "get": {
+        "description": "JSON-RPC method `scene.validate`. Needs the `read` scope.",
+        "operationId": "scene.validate",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Validation"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Overlaps, items off the canvas, safe area breaches and missing sources: what to fix before saying a scene is done.",
+        "tags": [
+          "scene"
+        ],
+        "x-destructive": false,
+        "x-idempotent": true,
+        "x-scope": "read"
+      }
+    },
+    "/api/v1/scenes/{id}": {
+      "delete": {
+        "description": "JSON-RPC method `scene.remove`. Needs the `operate` scope. Destructive: accepts `dry_run: true`, and on a token whose policy is `confirm = required` it is refused once with -32020 and a confirm token. Accepts `idempotency_key`, honoured for 24 hours.",
+        "operationId": "scene.remove",
+        "parameters": [
+          {
+            "description": "The id, as listed by the matching list call.",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SceneRequest"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SceneRemoved"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Delete a scene. What is on air is not touched.",
+        "tags": [
+          "scene"
+        ],
+        "x-destructive": true,
+        "x-idempotent": true,
+        "x-scope": "operate"
+      },
+      "get": {
+        "description": "JSON-RPC method `scene.get`. Needs the `read` scope.",
+        "operationId": "scene.get",
+        "parameters": [
+          {
+            "description": "The id, as listed by the matching list call.",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SceneView"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "One scene: its records and where every item actually lands on the canvas.",
+        "tags": [
+          "scene"
+        ],
+        "x-destructive": false,
+        "x-idempotent": true,
+        "x-scope": "read"
+      }
+    },
+    "/api/v1/scenes/{id}/duplicate": {
+      "post": {
+        "description": "JSON-RPC method `scene.duplicate`. Needs the `operate` scope. Accepts `idempotency_key`, honoured for 24 hours.",
+        "operationId": "scene.duplicate",
+        "parameters": [
+          {
+            "description": "The id, as listed by the matching list call.",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DuplicateSceneRequest"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SceneView"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "A copy of a scene with new ids throughout, so editing the copy cannot touch the original.",
+        "tags": [
+          "scene"
+        ],
+        "x-destructive": false,
+        "x-idempotent": true,
+        "x-scope": "operate"
+      }
+    },
+    "/api/v1/scenes/{id}/rename": {
+      "post": {
+        "description": "JSON-RPC method `scene.rename`. Needs the `operate` scope. Accepts `idempotency_key`, honoured for 24 hours.",
+        "operationId": "scene.rename",
+        "parameters": [
+          {
+            "description": "The id, as listed by the matching list call.",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RenameSceneRequest"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SceneView"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Change a scene's name, its colour, or both. Names and colours live on the document, so every client, the tally and an agent see the same ones.",
+        "tags": [
+          "scene"
         ],
         "x-destructive": false,
         "x-idempotent": true,
@@ -4234,6 +7653,55 @@
         "x-scope": "operate"
       }
     },
+    "/api/v1/sources/{id}/group": {
+      "post": {
+        "description": "JSON-RPC method `source.group`. Needs the `operate` scope. Accepts `idempotency_key`, honoured for 24 hours.",
+        "operationId": "source.group",
+        "parameters": [
+          {
+            "description": "The id, as listed by the matching list call.",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GroupSourcesRequest"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Put sources in a tray folder. A tag for finding things, not a group on the canvas.",
+        "tags": [
+          "source"
+        ],
+        "x-destructive": false,
+        "x-idempotent": true,
+        "x-scope": "operate"
+      }
+    },
     "/api/v1/sources/{id}/seek": {
       "post": {
         "description": "JSON-RPC method `source.seek`. Needs the `operate` scope. Accepts `idempotency_key`, honoured for 24 hours.",
@@ -4275,6 +7743,55 @@
           }
         },
         "summary": "Move a seekable source to a position. Answers with where it actually landed.",
+        "tags": [
+          "source"
+        ],
+        "x-destructive": false,
+        "x-idempotent": true,
+        "x-scope": "operate"
+      }
+    },
+    "/api/v1/sources/{id}/set": {
+      "post": {
+        "description": "JSON-RPC method `source.set`. Needs the `operate` scope. Accepts `idempotency_key`, honoured for 24 hours.",
+        "operationId": "source.set",
+        "parameters": [
+          {
+            "description": "The id, as listed by the matching list call.",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetSourceMetaRequest"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Name and colour a source. Both live on the scene document, so every client, the tally and an agent see the same ones.",
         "tags": [
           "source"
         ],

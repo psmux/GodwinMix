@@ -93,6 +93,65 @@ const AD_LEAD_IN: gst::ClockTime = gst::ClockTime::from_mseconds(500);
 /// whoever clicked the button.
 pub type Ack = oneshot::Sender<Result<(), String>>;
 
+/// How many commands may be waiting for the mixer thread.
+///
+/// The queue was unbounded, which is a memory leak wearing a helpful face: a
+/// client in a loop, or a plugin posting bus messages faster than they can be
+/// read, grows it without limit and the work still only happens at the rate
+/// one thread can do it. Bounded, a caller is told to come back rather than
+/// being quietly enqueued behind a thousand others. Deep enough that a burst
+/// from a UI redraw or a scene apply never touches it; shallow enough that
+/// what is in it can still be worked through in well under a second.
+pub const COMMAND_QUEUE: usize = 256;
+
+/// How many bus messages may be waiting. Larger than the command queue
+/// because several pipelines post onto it and a `level` element alone posts
+/// ten a second per source.
+pub const BUS_QUEUE: usize = 512;
+
+/// What a refused caller is told to wait. Two ticks of the supervisor, which
+/// is long enough for a full queue to have drained on any machine that is not
+/// already in trouble.
+const BUSY_RETRY_MS: u64 = 1000;
+
+/// What to tell a caller when the mixer's queue is full.
+///
+/// Its own type so the control plane can answer -32001 with `retry_after_ms`
+/// rather than turning a full queue into a generic failure.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Busy {
+    /// How long to wait before trying again, in milliseconds.
+    pub retry_after_ms: u64,
+    /// How deep the queue is, so the message can say what was full.
+    pub queue: usize,
+}
+
+impl std::fmt::Display for Busy {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "the mixer already has {} commands waiting and will not take another. \
+             Nothing was changed. Try again in {} ms",
+            self.queue, self.retry_after_ms
+        )
+    }
+}
+
+impl std::error::Error for Busy {}
+
+/// One tick's worth of the mixer's own housekeeping, so two timers that fire
+/// while the mixer is busy do not both queue.
+///
+/// A supervisor tick is worth doing once, not once per timer fire. Without
+/// this, a mixer held up by a slow state change came back to a queue of
+/// identical ticks and did the same work over and over before reaching the
+/// command an operator was waiting on.
+#[derive(Debug, Default)]
+struct Coalesced {
+    tick: AtomicBool,
+    position: AtomicBool,
+}
+
 fn reply(ack: Option<Ack>, outcome: &Result<()>) {
     if let Some(tx) = ack {
         let _ = tx.send(outcome.as_ref().map(|_| ()).map_err(|e| format!("{e:#}")));
@@ -152,6 +211,15 @@ pub enum SeekOutcome {
 /// inside a layered source's own pipeline. Keeping the two apart is what lets
 /// an operator pull a camera down without being told the camera is not a
 /// website.
+/// Is this source heard, given what the scene on air says about it?
+///
+/// A source is audible when any live item of it says `follow` and is visible,
+/// or says `always`. One pad per source, whatever the answer, so this decides a
+/// volume and never a topology.
+fn audible(placements: &[Placement], id: &SourceId) -> bool {
+    placements.iter().any(|p| &p.source == id && p.heard())
+}
+
 fn needs_superimposed(page: Option<f64>, media: &[Option<f64>]) -> bool {
     page.is_some() || media.iter().any(|m| m.is_some())
 }
@@ -163,13 +231,28 @@ fn needs_superimposed(page: Option<f64>, media: &[Option<f64>]) -> bool {
 /// nothing may take this apart again by splitting on one: `pgm-alevel-cam-1`
 /// read that way names `cam`, which is a different source that may well exist.
 /// Attribution compares whole names instead.
-use crate::plugin::branch::{BranchCtx, ProgrammeBranch};
+use crate::plugin::branch::{BranchCtx, ProgrammeBranch, VideoPads};
+
+pub mod slots;
+pub use slots::{Placement, SlotPool};
 
 pub enum Command {
     /// Put a source on program. `None` cuts to the slate.
     Take {
         source: Option<SourceId>,
         at_running_time_ms: Option<u64>,
+        ack: Option<Ack>,
+    },
+    /// Put a whole scene on programme: several sources at once, each with its
+    /// own place on the canvas. Flattened by the scene server before it gets
+    /// here, so nothing in the mixer knows what a group or a reference is.
+    TakeScene {
+        scene: Box<ProgramScene>,
+        at_running_time_ms: Option<u64>,
+        /// How long to take getting there. 0 or absent is a cut, which is
+        /// what a take is. A duration is what a geometry command asks for
+        /// when it reshapes a scene that is already on air.
+        duration_ms: Option<u64>,
         ack: Option<Ack>,
     },
     /// Interrupt the programme with an ad, then return to live.
@@ -281,13 +364,47 @@ pub enum FilterOutcome {
 
 #[derive(Clone)]
 pub struct MixerHandle {
-    tx: mpsc::UnboundedSender<Command>,
+    tx: mpsc::Sender<Command>,
     events: EventBus,
+    coalesced: Arc<Coalesced>,
 }
 
 impl MixerHandle {
+    /// Queue a command. Never blocks: this is called from GStreamer clock
+    /// callbacks and from the bus thread as well as from the control plane,
+    /// and none of those may wait on the mixer thread.
     pub fn send(&self, cmd: Command) -> Result<()> {
-        self.tx.send(cmd).map_err(|_| anyhow::anyhow!("mixer is not running"))
+        match self.tx.try_send(cmd) {
+            Ok(()) => Ok(()),
+            Err(mpsc::error::TrySendError::Closed(_)) => {
+                Err(anyhow::anyhow!("mixer is not running"))
+            }
+            Err(mpsc::error::TrySendError::Full(cmd)) => {
+                let label = Mixer::label(&cmd);
+                warn!(command = label, "the mixer queue is full; the command was refused");
+                Err(Busy { retry_after_ms: BUSY_RETRY_MS, queue: COMMAND_QUEUE }.into())
+            }
+        }
+    }
+
+    /// Ask for a supervisor tick, unless one is already waiting.
+    fn tick(&self) -> Result<()> {
+        if self.coalesced.tick.swap(true, Ordering::SeqCst) {
+            return Ok(());
+        }
+        self.send(Command::Tick).inspect_err(|_| {
+            self.coalesced.tick.store(false, Ordering::SeqCst);
+        })
+    }
+
+    /// Ask for a position report, unless one is already waiting.
+    fn position_tick(&self) -> Result<()> {
+        if self.coalesced.position.swap(true, Ordering::SeqCst) {
+            return Ok(());
+        }
+        self.send(Command::PositionTick).inspect_err(|_| {
+            self.coalesced.position.store(false, Ordering::SeqCst);
+        })
     }
 
     /// Send a command and wait for the mixer to accept or reject it.
@@ -495,9 +612,9 @@ pub struct TimelineAligner {
     /// Shared by both branches so they get an identical shift.
     offset: Mutex<Option<i64>>,
     applied: AtomicBool,
-    /// The pads the shift is applied to, held so that `place_at` is the one
-    /// place that writes an offset and can be exercised without a pipeline.
-    vpad: gst::Pad,
+    /// Every compositor pad drawing this source, shared with the branch so a
+    /// slot bound later gets the offset it missed.
+    vpads: Arc<VideoPads>,
     apad: gst::Pad,
 }
 
@@ -506,7 +623,7 @@ impl TimelineAligner {
         program: &gst::Pipeline,
         video_queue: &gst::Element,
         audio_queue: &gst::Element,
-        vpad: &gst::Pad,
+        vpads: Arc<VideoPads>,
         apad: &gst::Pad,
         id: &str,
     ) -> Result<Arc<Self>> {
@@ -514,7 +631,7 @@ impl TimelineAligner {
             id: id.to_string(),
             offset: Mutex::new(None),
             applied: AtomicBool::new(false),
-            vpad: vpad.clone(),
+            vpads,
             apad: apad.clone(),
         });
         let clock = program.clock();
@@ -574,7 +691,7 @@ impl TimelineAligner {
                 }
             }
         };
-        self.vpad.set_offset(offset);
+        self.vpads.set_offset(offset);
         self.apad.set_offset(offset);
         self.applied.store(true, Ordering::Relaxed);
         offset
@@ -602,7 +719,6 @@ pub struct Mixer {
     origin: Instant,
 
     program: gst::Pipeline,
-    vmix: gst::Element,
     amix: gst::Element,
     venc_tee: gst::Element,
     aenc_tee: gst::Element,
@@ -612,6 +728,12 @@ pub struct Mixer {
     vraw_tee: gst::Element,
     araw_tee: gst::Element,
     pgm_video_proxy: gst::Element,
+    /// The programme's return branch to the mosaic: queue, download, rate,
+    /// scale, caps, proxysink. In the pipeline from the start, linked to
+    /// `vraw_tee` only while something reads it.
+    return_chain: Vec<gst::Element>,
+    /// The tee pad the return branch is on, while it is attached.
+    return_pad: Option<gst::Pad>,
 
     sources: Vec<SourceSlot>,
     outputs: Vec<Arc<OutputSlot>>,
@@ -661,7 +783,7 @@ pub struct Mixer {
     /// Every pipeline we create gets a bus watcher feeding this. Held here so
     /// that a source added mid-broadcast is supervised exactly like one from
     /// the config file.
-    bus_tx: mpsc::UnboundedSender<BusEvent>,
+    bus_tx: mpsc::Sender<BusEvent>,
     /// Watches for the program and multiview pipelines, which live as long as
     /// the mixer does. Source watches live on their slots so that removing a
     /// source silences it. Held so they keep running.
@@ -689,6 +811,24 @@ pub struct Mixer {
     /// on a source's programme side branch. A filter on a source's input side
     /// lives in that source's own pipeline instead.
     programme_filters: Vec<crate::plugin::FilterSlot>,
+    /// The compositor's slots: where a scene's items are actually drawn. See
+    /// `mixer::slots`.
+    pool: SlotPool,
+    /// The scene on air, flattened. `None` is the one item scene a bare source
+    /// id means, or the slate when nothing is on.
+    program_scene: Option<ProgramScene>,
+    /// Set for the one call to `apply_visibility` that follows a geometry
+    /// command with a duration, so the pads are eased rather than jumped.
+    ramp: Option<Duration>,
+}
+
+/// A scene as the compositor has it: a name to report and the placements that
+/// were applied. The document itself lives in the scene server; nothing here
+/// knows what a group or a reference is.
+#[derive(Debug, Clone, PartialEq)]
+pub struct ProgramScene {
+    pub name: String,
+    pub placements: Vec<Placement>,
 }
 
 /// What is left of a source whose pipeline has been stopped for a rebuild:
@@ -704,7 +844,9 @@ pub struct Mixer {
 /// picture to copy, no code path that only runs during a fault.
 struct RetiredBranch {
     id: SourceId,
-    vpad: gst::Pad,
+    /// The slots held with this source's last frame, put back in the pool
+    /// when the hold ends.
+    slots: Vec<usize>,
     apad: gst::Pad,
     branch: Vec<gst::Element>,
     /// Dropped whether or not the rebuild ever finishes. A source that never
@@ -895,12 +1037,7 @@ impl Mixer {
     #[allow(clippy::type_complexity)]
     pub fn build(
         cfg: Config,
-    ) -> Result<(
-        Self,
-        MixerHandle,
-        mpsc::UnboundedReceiver<Command>,
-        mpsc::UnboundedReceiver<BusEvent>,
-    )> {
+    ) -> Result<(Self, MixerHandle, mpsc::Receiver<Command>, mpsc::Receiver<BusEvent>)> {
         let canvas = CanvasCaps::new(&cfg.canvas);
         // What this machine will encode with, and what it will composite on,
         // comes from the catalogue rather than from names written here. That
@@ -918,10 +1055,11 @@ impl Mixer {
              thread has none of its own and uses this handle to schedule retries",
         )?;
 
-        let (tx, rx) = mpsc::unbounded_channel();
-        let (bus_tx, bus_rx) = mpsc::unbounded_channel();
+        let (tx, rx) = mpsc::channel(COMMAND_QUEUE);
+        let (bus_tx, bus_rx) = mpsc::channel(BUS_QUEUE);
         let events = EventBus::new(256);
-        let handle = MixerHandle { tx, events: events.clone() };
+        let handle =
+            MixerHandle { tx, events: events.clone(), coalesced: Arc::new(Coalesced::default()) };
 
         let program = gst::Pipeline::with_name("program");
 
@@ -988,6 +1126,14 @@ impl Mixer {
         // Raw program video for the multiview's return cell. It leaves the
         // same tee, so on a GPU entry it is the one branch that comes back to
         // system memory.
+        //
+        // Built here and linked to the tee only when something is going to
+        // read it (`attach_programme_return`). Linked from the start, with a
+        // queue that blocked when full, it was a second consumer of every
+        // programme frame that nobody was consuming: the queue filled, and a
+        // full non leaky queue on a tee branch pushes back on the tee, which
+        // is the encoder's own path. Bounded and leaky, so even attached it
+        // drops its own frames rather than anyone else's.
         let pgm_video_proxy = make("proxysink", "pgm-v-proxy")?;
         let mut rchain: Vec<gst::Element> = vec![gstutil::queue_preview("pgm-v-q")?];
         rchain.extend(download_bridge(gfx, "pgm-v")?);
@@ -1073,7 +1219,9 @@ impl Mixer {
 
         gst::Element::link_many([&vmix, &vmix_caps, &vraw_tee]).context("linking video mixer")?;
         link_from(&vraw_tee, &vchain).context("linking video encoder")?;
-        link_from(&vraw_tee, &rchain).context("linking program return video")?;
+        // Linked to each other but not to the tee. See `attach_programme_return`.
+        gst::Element::link_many(rchain.iter().collect::<Vec<_>>())
+            .context("linking program return video")?;
 
         gst::Element::link_many([&amix, &amix_caps, &level, &araw_tee])
             .context("linking audio mixer")?;
@@ -1111,6 +1259,11 @@ impl Mixer {
                 let _ = h.send(Command::Multiview(d));
             })
         });
+
+        // The slots every scene is drawn in. Built before the pipeline runs,
+        // so the eight the pool starts with cost one pad request each and
+        // never another. See `mixer::slots`.
+        let pool = SlotPool::build(&program, &vmix).context("building the compositor slots")?;
 
         // --- encoder lifecycle: the whole of it, in one block ---------------
         //
@@ -1152,13 +1305,14 @@ impl Mixer {
             backends,
             origin: Instant::now(),
             program,
-            vmix,
             amix,
             venc_tee,
             aenc_tee,
             vraw_tee: vraw_tee.clone(),
             araw_tee: araw_tee.clone(),
             pgm_video_proxy,
+            return_chain: rchain,
+            return_pad: None,
             sources: Vec::new(),
             outputs: Vec::new(),
             multiview: None,
@@ -1191,6 +1345,9 @@ impl Mixer {
             rebuild_not_before: HashMap::new(),
             retired: Vec::new(),
             programme_filters: Vec::new(),
+            pool,
+            program_scene: None,
+            ramp: None,
         };
         Ok((mixer, handle, rx, bus_rx))
     }
@@ -1358,18 +1515,21 @@ impl Mixer {
         // The operator's desk for this source, built once and handed over. See
         // `ProgrammeBranch`: the mixer no longer knows what is in it.
         let branch = ProgrammeBranch::build(
-            &BranchCtx {
-                program: &self.program,
-                vmix: &self.vmix,
-                amix: &self.amix,
-                canvas: &self.canvas,
-            },
+            &BranchCtx { program: &self.program, amix: &self.amix, canvas: &self.canvas },
             &cfg.id,
             &input.video_proxy,
             &input.audio_proxy,
             cfg.gain,
             cfg.muted,
         )?;
+
+        // One slot, now, while this source has not produced a frame yet.
+        //
+        // Binding here rather than at take time is what keeps a take free: by
+        // the time anybody asks for this source the slot is already linked, so
+        // the take is property writes and nothing else. Doing it later would
+        // make the first take of every source a relink.
+        self.pool.reserve(&branch).context("reserving a compositor slot for the source")?;
 
         // Map this source's timeline onto the programme's. Installed before
         // the branch is set running: the segment event travels as soon as data
@@ -1399,7 +1559,7 @@ impl Mixer {
                 &self.program,
                 &branch.vq,
                 &branch.aq,
-                &branch.vpad,
+                branch.pads.clone(),
                 &branch.apad,
                 &cfg.id,
             )?)
@@ -1531,17 +1691,30 @@ impl Mixer {
             .find(|s| &s.input.id == source)
             .with_context(|| format!("no such source {source}"))?;
         let filter = crate::plugin::filter::make(&cfg.type_id)?;
-        let (upstream, pad) = if filter.stream() == crate::plugin::filter::Stream::Audio {
-            (slot.branch.amute.clone(), slot.branch.apad.clone())
+        // Audio ends at the mixer's request pad; video now ends at this
+        // source's own tee, which every slot showing it hangs off. A filter
+        // here is therefore on the source as the scene sees it, however many
+        // places it is drawn in.
+        let down = if filter.stream() == crate::plugin::filter::Stream::Audio {
+            crate::plugin::filter::Downstream::Pad(slot.branch.apad.clone())
         } else {
-            (slot.branch.vq.clone(), slot.branch.vpad.clone())
+            crate::plugin::filter::Downstream::Element(slot.branch.vtee.clone())
+        };
+        let upstream = if filter.stream() == crate::plugin::filter::Stream::Audio {
+            slot.branch.amute.clone()
+        } else {
+            slot.branch.vq.clone()
         };
         let mut params = cfg.params.clone();
         params
             .entry("id".to_string())
             .or_insert_with(|| toml::Value::String(format!("pgm-{source}-{}", cfg.id)));
         let placed = crate::plugin::filter::insert(
-            crate::plugin::Insertion::before_pad(&self.program, &upstream, &pad),
+            crate::plugin::filter::Insertion {
+                pipeline: &self.program,
+                upstream: &upstream,
+                downstream: down,
+            },
             crate::plugin::FilterSpec {
                 id: cfg.id.clone(),
                 type_id: cfg.type_id.clone(),
@@ -1838,11 +2011,10 @@ impl Mixer {
             mv.remove_tile(id).ok();
         }
         slot.input.stop();
-        // Under the programme layer and over the slate, so whatever is taken
-        // next draws straight over it, and silent: the pipeline behind it has
+        // Under the live band and over the slate, so whatever is taken next
+        // draws straight over it, and silent: the pipeline behind it has
         // stopped and there is nothing left to hear.
-        slot.branch.vpad.set_property("zorder", 1u32);
-        slot.branch.vpad.set_property("alpha", 1.0f64);
+        let held = self.pool.retire(id);
         slot.branch.apad.set_property("volume", 0.0f64);
         // A meter keeps the name of the source it was built for, and the
         // replacement builds one with the same name. Silenced here so that the
@@ -1855,7 +2027,7 @@ impl Mixer {
         info!(source = %id, "source stopped, its last frame held on the programme");
         self.retired.push(RetiredBranch {
             id: id.clone(),
-            vpad: slot.branch.vpad,
+            slots: held,
             apad: slot.branch.apad,
             branch: slot.branch.elements,
             until: Instant::now() + FREEZE_HOLD,
@@ -1881,11 +2053,14 @@ impl Mixer {
             }
         }
         for (r, stale) in expired {
+            // The slots first: unbinding them takes the tee pads back before
+            // the tee itself leaves the pipeline.
+            self.pool.release(&r.slots);
+            self.pool.drop_source(&r.id);
             for el in &r.branch {
                 let _ = el.set_state(gst::State::Null);
                 let _ = self.program.remove(el);
             }
-            self.vmix.release_request_pad(&r.vpad);
             self.amix.release_request_pad(&r.apad);
             debug!(source = %r.id, stale, "released the held branch of a rebuilt source");
             // Held as long as it was worth holding and the source never came
@@ -2056,11 +2231,14 @@ impl Mixer {
         if let Some(mv) = &mut self.multiview {
             mv.remove_tile(id).ok();
         }
+        // The slots this source was drawn in go back to the pool before its
+        // tee leaves the pipeline, or they would be left holding a pad of an
+        // element that is gone.
+        self.pool.drop_source(id);
         for el in &slot.branch.elements {
             let _ = el.set_state(gst::State::Null);
             let _ = self.program.remove(el);
         }
-        self.vmix.release_request_pad(&slot.branch.vpad);
         self.amix.release_request_pad(&slot.branch.apad);
         // Everything this module keeps under the source's id goes with it. The
         // ids are reused: a director alternates two of them, one per match, so
@@ -2211,6 +2389,10 @@ impl Mixer {
         }
 
         self.program_source = source.clone();
+        // A bare source id is shorthand for a one item full canvas scene, so
+        // taking one puts the compositor back on that shorthand rather than
+        // leaving a scene half applied underneath.
+        self.program_scene = None;
         self.take_generation.fetch_add(1, Ordering::SeqCst);
         self.apply_visibility(true);
 
@@ -2218,6 +2400,7 @@ impl Mixer {
         info!(source = ?source, at_ms = at.mseconds(), "took source to program");
         let _ = self.events.send(Event::Took {
             source,
+            scene: None,
             at_running_time_ms: at.mseconds(),
         });
         self.broadcast_status();
@@ -2257,20 +2440,159 @@ impl Mixer {
         Ok(id)
     }
 
+    /// Put a whole scene on programme.
+    ///
+    /// The scene arrives already flattened: groups multiplied into their
+    /// children, references resolved, invisible items dropped, bottom of the
+    /// stack first. Applying it is binding and property writes, so it is the
+    /// same cut a bare source id gets and the encoder cannot tell the two
+    /// apart.
+    pub fn take_scene(&mut self, scene: ProgramScene, at_running_time_ms: Option<u64>) -> Result<()> {
+        self.take_scene_over(scene, at_running_time_ms, None)
+    }
+
+    /// The same, easing into place over `duration_ms` rather than cutting.
+    ///
+    /// A duration only means anything when the pads are already drawing these
+    /// items, which is what keeping the item ids across a layout change buys:
+    /// the item that was the inset is the item that becomes full screen, so
+    /// the change is a property ramp on the pad it already has. A scene coming
+    /// from somewhere else is a cut whatever the duration says, because there
+    /// is nothing on those pads to ramp from.
+    pub fn take_scene_over(
+        &mut self,
+        scene: ProgramScene,
+        at_running_time_ms: Option<u64>,
+        duration_ms: Option<u64>,
+    ) -> Result<()> {
+        if let Some(ms) = at_running_time_ms {
+            return self.schedule_scene_take(scene, ms, duration_ms);
+        }
+        let ramp = duration_ms.filter(|ms| *ms > 0).map(Duration::from_millis);
+        let name = scene.name.clone();
+        // A one item full canvas scene is a source take, and saying so keeps
+        // the programme state, the tally and `program.revert` reading the same
+        // as they did before scenes existed.
+        self.program_source = self.shorthand_source(&scene);
+        self.program_scene = Some(scene);
+        self.take_generation.fetch_add(1, Ordering::SeqCst);
+        self.ramp = ramp;
+        self.apply_visibility(true);
+        self.ramp = None;
+
+        let at = self.running_time().unwrap_or(gst::ClockTime::ZERO);
+        info!(scene = %name, at_ms = at.mseconds(), "took scene to program");
+        let _ = self.events.send(Event::Took {
+            source: self.program_source.clone(),
+            scene: Some(name),
+            at_running_time_ms: at.mseconds(),
+        });
+        self.broadcast_status();
+        Ok(())
+    }
+
+    /// The source id a scene is shorthand for, when it is one full canvas item
+    /// of one source and nothing else.
+    fn shorthand_source(&self, scene: &ProgramScene) -> Option<SourceId> {
+        let [only] = scene.placements.as_slice() else { return None };
+        let full = only.xpos == 0
+            && only.ypos == 0
+            && only.width == self.canvas.width
+            && only.height == self.canvas.height
+            && only.alpha >= 1.0;
+        full.then(|| only.source.clone())
+    }
+
+    fn schedule_scene_take(
+        &mut self,
+        scene: ProgramScene,
+        at_ms: u64,
+        duration_ms: Option<u64>,
+    ) -> Result<()> {
+        if let Some(prev) = self.pending_take.take() {
+            prev.unschedule();
+        }
+        let id = self.schedule_command(
+            Command::TakeScene {
+                scene: Box::new(scene),
+                at_running_time_ms: None,
+                duration_ms,
+                ack: None,
+            },
+            at_ms,
+        )?;
+        self.pending_take = Some(id);
+        info!(at_ms, "scene take scheduled on the pipeline clock");
+        Ok(())
+    }
+
+    /// What the compositor should be drawing right now, in z order.
+    ///
+    /// One function, whether the programme is a scene or the one item shorthand
+    /// a bare source id means, so the watchdog and a take go through the same
+    /// arithmetic. A source that is not live contributes nothing, which is what
+    /// fades a stalled camera to the slate and brings it back on its own.
+    fn current_placements(&self) -> Vec<Placement> {
+        let live = |id: &SourceId| {
+            self.sources
+                .iter()
+                .any(|s| &s.input.id == id && matches!(s.input.observed_state(), SourceState::Live))
+        };
+        match &self.program_scene {
+            Some(scene) => {
+                scene.placements.iter().filter(|p| live(&p.source)).cloned().collect()
+            }
+            None => self
+                .program_source
+                .iter()
+                .filter(|id| live(id))
+                .map(|id| Placement::full_canvas(id.clone(), &self.canvas))
+                .collect(),
+        }
+    }
+
     /// Recompute every pad's alpha and volume from current state.
     ///
     /// Declarative on purpose. The watchdog calls this on every tick, so a
     /// source that stalls while live fades to the slate and comes back on its
     /// own when buffers resume, with no separate code path.
-    fn apply_visibility(&self, ramp_audio: bool) {
+    fn apply_visibility(&mut self, ramp_audio: bool) {
+        let placements = self.current_placements();
+        let over = self.ramp;
+        let branches: Vec<(&SourceId, &ProgrammeBranch)> =
+            self.sources.iter().map(|s| (&s.input.id, &s.branch)).collect();
+        let applied = match over {
+            Some(_) => self.pool.apply_ramped(&placements, &branches),
+            None => self.pool.apply(&placements, &branches),
+        };
+        match applied {
+            Ok(applied) => {
+                if !applied.missing.is_empty() {
+                    warn!(
+                        missing = ?applied.missing,
+                        "the scene names sources this mixer does not have; they were skipped"
+                    );
+                }
+                if let Some(over) = over {
+                    ramp_pads(applied.ramps, over, self.take_generation.clone());
+                }
+            }
+            Err(e) => {
+                // The compositor is still drawing whatever it was drawing. An
+                // apply that could not bind a slot is a refused change, not a
+                // black frame.
+                error!(?e, "could not apply the scene to the compositor");
+            }
+        }
+
+        // Audio follows video per item: a source is heard when any live item
+        // of it says `follow` and is visible, or says `always`. This is OBS's
+        // behaviour and it changes no pad topology, because there is still one
+        // audiomixer pad per source however many places it is drawn in.
         let mut targets = Vec::new();
         for slot in &self.sources {
-            let is_program = self.program_source.as_ref() == Some(&slot.input.id);
             let healthy = matches!(slot.input.observed_state(), SourceState::Live);
-            let on = is_program && healthy;
-
-            slot.branch.vpad.set_property("alpha", if on { 1.0f64 } else { 0.0f64 });
-            slot.branch.vpad.set_property("zorder", if is_program { 2u32 } else { 1u32 });
+            let on = healthy && audible(&placements, &slot.input.id);
             targets.push((slot.branch.apad.clone(), if on { 1.0f64 } else { 0.0f64 }));
         }
 
@@ -2388,7 +2710,7 @@ impl Mixer {
         // this the mixer would judge them against the current running time,
         // find them minutes stale, and stall while it worked out what to do.
         // The same offset goes on both pads so the ad stays in lip sync.
-        slot.branch.vpad.set_offset(cue.nseconds() as i64);
+        slot.branch.pads.set_offset(cue.nseconds() as i64);
         slot.branch.apad.set_offset(cue.nseconds() as i64);
         debug!(cue_ms = cue.mseconds(), "rebasing the ad onto programme time");
 
@@ -2460,7 +2782,7 @@ impl Mixer {
     /// log.
     pub fn label(cmd: &Command) -> &'static str {
         match cmd {
-            Command::Take { .. } => "program.take",
+            Command::Take { .. } | Command::TakeScene { .. } => "program.take",
             Command::AdBreak { .. } => "adbreak.start",
             Command::EndAdBreak(_) => "adbreak.end",
             Command::AddSource(..) | Command::AddSourceProbed(..) => "source.add",
@@ -2510,6 +2832,11 @@ impl Mixer {
                     reply(ack, &r);
                     r?;
                 }
+            }
+            Command::TakeScene { scene, at_running_time_ms, duration_ms, ack } => {
+                let r = self.take_scene_over(*scene, at_running_time_ms, duration_ms);
+                reply(ack, &r);
+                r?;
             }
             Command::AdBreak { uri, at_running_time_ms, return_to, ack } => {
                 let r = self.start_ad_break(uri, at_running_time_ms, return_to);
@@ -2605,8 +2932,16 @@ impl Mixer {
                 let _ = reply.send(self.runtime_configs());
             }
             Command::Bus(ev) => self.on_bus(ev),
-            Command::Tick => self.tick(),
-            Command::PositionTick => self.position_tick(),
+            Command::Tick => {
+                // Cleared before the work, so a tick that fires while this one
+                // is running still queues the next.
+                self.handle.coalesced.tick.store(false, Ordering::SeqCst);
+                self.tick()
+            }
+            Command::PositionTick => {
+                self.handle.coalesced.position.store(false, Ordering::SeqCst);
+                self.position_tick()
+            }
             Command::Shutdown => return Ok(false),
         }
         Ok(true)
@@ -3147,6 +3482,7 @@ impl Mixer {
             .collect();
 
         MixerStatus {
+            scene: self.program_scene.as_ref().map(|s| s.name.clone()),
             program: self.program_source.clone(),
             sources,
             outputs: self.outputs.iter().map(|o| o.status()).collect(),
@@ -3188,6 +3524,51 @@ impl Mixer {
     /// mixer uses this.
     pub fn program_pipeline(&self) -> &gst::Pipeline {
         &self.program
+    }
+
+    /// Put the programme's return branch on the raw tee, because something is
+    /// now going to read it.
+    ///
+    /// Nothing runs unless asked. With no mosaic and no subscriber this branch
+    /// is in the pipeline but linked to nothing, which costs a few idle
+    /// elements and not one frame of work. The tee has `allow-not-linked`, so
+    /// an unrequested pad is not a fault.
+    fn attach_programme_return(&mut self) -> Result<()> {
+        if self.return_pad.is_some() {
+            return Ok(());
+        }
+        let head = self.return_chain.first().context("the return branch has no head")?;
+        let sink = head.static_pad("sink").context("the return branch head has no sink pad")?;
+        // States first, on this thread, while the branch is still fed by
+        // nothing. A state change on a streaming thread is what stalls an
+        // encoder, and the mixer thread is not one.
+        for el in &self.return_chain {
+            el.sync_state_with_parent().context("starting the programme return branch")?;
+        }
+        let pad = self
+            .vraw_tee
+            .request_pad_simple("src_%u")
+            .context("the raw programme tee refused a pad for the return branch")?;
+        pad.link(&sink).context("linking the programme return branch to the raw tee")?;
+        self.return_pad = Some(pad);
+        debug!("programme return branch attached for the mosaic");
+        Ok(())
+    }
+
+    /// Take the return branch back off the tee, so the programme fans out to
+    /// the encoder alone again.
+    fn detach_programme_return(&mut self) {
+        let Some(pad) = self.return_pad.take() else { return };
+        if let Some(peer) = pad.peer() {
+            let _ = pad.unlink(&peer);
+        }
+        if let Some(tee) = pad.parent_element() {
+            tee.release_request_pad(&pad);
+        }
+        for el in &self.return_chain {
+            let _ = el.set_state(gst::State::Null);
+        }
+        debug!("programme return branch detached: nothing is reading it");
     }
 
     /// The encoder's demand counter, for `/metrics` and for anything outside
@@ -3285,6 +3666,13 @@ impl Mixer {
                 mv.start().context("starting multiview")?;
                 self.multiview = Some(mv);
                 self.mv.mark_built(Some(shape));
+                // Last, once the mosaic is running. The branch ends at a
+                // `proxysink`, and a proxysink pushing into a `proxysrc` whose
+                // pipeline has not started yet has nowhere to put the buffer:
+                // it waits, holding the tee branch, and the mosaic's return
+                // cell never fills.
+                self.attach_programme_return()
+                    .context("attaching the programme return branch for the mosaic")?;
                 info!(?shape, "multiview built for a subscriber");
             }
             Demand::Teardown => {
@@ -3294,6 +3682,7 @@ impl Mixer {
                     debug!("a subscriber arrived before the teardown landed, keeping the mosaic");
                     return Ok(());
                 }
+                self.detach_programme_return();
                 self.drop_mosaic()
             }
         }
@@ -3462,6 +3851,8 @@ impl Mixer {
             slot.input.stop();
         }
         self.drop_mosaic();
+        self.detach_programme_return();
+        self.pool.teardown();
         self.audio_taps.clear();
         #[cfg(unix)]
         self.local_previews.clear();
@@ -3469,6 +3860,76 @@ impl Mixer {
         self.encoder.shutdown();
         let _ = self.program.set_state(gst::State::Null);
     }
+}
+
+/// A mixer that goes out of scope without `shutdown` still takes its pipeline
+/// down.
+///
+/// GStreamer disposes an element that is still in PLAYING with a critical
+/// warning and, with several pipelines in one process, sometimes with a
+/// segmentation fault. The ordinary path is `spawn`'s loop calling `shutdown`;
+/// this is for every other path, including a test that fails an assertion
+/// halfway.
+impl Drop for Mixer {
+    fn drop(&mut self) {
+        let _ = self.program.set_state(gst::State::Null);
+    }
+}
+
+/// Ease a set of compositor pads from where they are to where a scene wants
+/// them.
+///
+/// The same shape as `ramp_volumes` below, and for the same reason: a ramp
+/// cannot run on the mixer thread, which has commands to answer, and it must
+/// not run on a streaming thread, which is carrying the programme. A thread
+/// that writes properties and checks a generation is what this codebase
+/// already does for a take's audio fade.
+///
+/// Properties, not control bindings. `GstInterpolationControlSource` sampled
+/// by the aggregator is the accurate way and is what transitions will want;
+/// it needs a crate this build does not carry, and at 60 steps a second the
+/// difference is not visible. The step is written down so the swap is a swap.
+fn ramp_pads(ramps: Vec<slots::Ramp>, over: Duration, generation: Arc<AtomicU64>) {
+    let moving: Vec<slots::Ramp> = ramps.into_iter().filter(|r| r.from != r.to).collect();
+    if moving.is_empty() {
+        return;
+    }
+    let mine = generation.load(Ordering::SeqCst);
+    std::thread::Builder::new()
+        .name("scene-ramp".into())
+        .spawn(move || {
+            let start = Instant::now();
+            loop {
+                // A newer take owns the pads now. Stopping here rather than
+                // finishing leaves them where that take put them.
+                if generation.load(Ordering::SeqCst) != mine {
+                    return;
+                }
+                let elapsed = start.elapsed();
+                if elapsed >= over {
+                    break;
+                }
+                let t = ease(elapsed.as_secs_f64() / over.as_secs_f64());
+                for r in &moving {
+                    r.from.lerp(&r.to, t).write(&r.pad);
+                }
+                std::thread::sleep(Duration::from_millis(16));
+            }
+            if generation.load(Ordering::SeqCst) == mine {
+                for r in &moving {
+                    r.from.lerp(&r.to, 1.0).write(&r.pad);
+                }
+            }
+        })
+        .map(|_| ())
+        .unwrap_or_else(|e| warn!(?e, "could not start the scene ramp; the change was a cut"));
+}
+
+/// Smooth at both ends. The one easing this build has; `easing` on the wire
+/// accepts `linear` and `ease` and anything else is refused by the command.
+fn ease(t: f64) -> f64 {
+    let t = t.clamp(0.0, 1.0);
+    t * t * (3.0 - 2.0 * t)
 }
 
 /// Fade a set of audiomixer pads to their targets.
@@ -3510,7 +3971,7 @@ fn ramp_volumes(targets: Vec<(gst::Pad, f64)>, duration: Duration, generation: A
 /// must not run on a Tokio worker.
 pub fn spawn(
     mut mixer: Mixer,
-    mut rx: mpsc::UnboundedReceiver<Command>,
+    mut rx: mpsc::Receiver<Command>,
     handle: MixerHandle,
 ) -> std::thread::JoinHandle<()> {
     let ticker = handle.clone();
@@ -3518,8 +3979,12 @@ pub fn spawn(
         let mut interval = tokio::time::interval(TICK);
         loop {
             interval.tick().await;
-            if ticker.send(Command::Tick).is_err() {
-                return;
+            // Coalesced: a mixer held up by a slow state change comes back to
+            // one tick, not to however many fired while it was busy.
+            if let Err(e) = ticker.tick() {
+                if e.downcast_ref::<Busy>().is_none() {
+                    return;
+                }
             }
         }
     });
@@ -3532,8 +3997,10 @@ pub fn spawn(
         let mut interval = tokio::time::interval(POSITION_TICK);
         loop {
             interval.tick().await;
-            if positions.send(Command::PositionTick).is_err() {
-                return;
+            if let Err(e) = positions.position_tick() {
+                if e.downcast_ref::<Busy>().is_none() {
+                    return;
+                }
             }
         }
     });
@@ -3678,11 +4145,16 @@ mod tests {
         let _ = gst::init();
         let vpad = gst::Pad::builder(gst::PadDirection::Sink).name("vsink").build();
         let apad = gst::Pad::builder(gst::PadDirection::Sink).name("asink").build();
+        // One source can be drawn in several places, so the aligner writes
+        // through the set of pads rather than one, and a pad bound later picks
+        // up the offset it missed.
+        let vpads = VideoPads::new();
+        vpads.attach(&vpad);
         let aligner = TimelineAligner {
             id: "clip1".into(),
             offset: Mutex::new(None),
             applied: AtomicBool::new(false),
-            vpad: vpad.clone(),
+            vpads: vpads.clone(),
             apad: apad.clone(),
         };
         assert_eq!(aligner.offset(), None, "nothing is placed before a segment arrives");
@@ -3726,6 +4198,12 @@ mod tests {
         // cost lip sync either.
         assert_eq!(aligner.place_at(after_seek + 12_000_000, "video"), second);
         assert_eq!(apad.offset(), second);
+
+        // A second placement of the same source, bound after the offset was
+        // worked out, gets it rather than starting at zero.
+        let twice = gst::Pad::builder(gst::PadDirection::Sink).name("vsink2").build();
+        vpads.attach(&twice);
+        assert_eq!(twice.offset(), second, "a slot bound later must share the source's timeline");
     }
 
     #[test]
@@ -3926,6 +4404,612 @@ mod tests {
         assert!(status.sources.is_empty(), "a status read still works");
     }
 
+    // -- the slot pool -------------------------------------------------
+
+    /// A mixer with a handful of `test://` sources, running, ready to be
+    /// asked for scenes. Nothing here is a double: the sources are real
+    /// pipelines producing real frames into the real compositor.
+    async fn with_sources(ids: &[&str]) -> Mixer {
+        let _ = gst::init();
+        let (mut mix, _handle, _cmds, _bus) =
+            Mixer::build(programme_config(crate::config::Accel::Software)).expect("mixer builds");
+        mix.start().expect("the programme starts");
+        for (i, id) in ids.iter().enumerate() {
+            let pattern = ["smpte", "ball", "snow", "red", "green", "blue", "checkers-1", "bar"]
+                [i % 8];
+            let cfg: SourceConfig = toml::from_str(&format!(
+                "id = \"{id}\"\nuri = \"test://{pattern}\"\n"
+            ))
+            .expect("a two line source config");
+            mix.add_source(&cfg, None).unwrap_or_else(|e| panic!("adding {id}: {e:#}"));
+        }
+        // Long enough for every source to deliver a frame and be judged live.
+        for _ in 0..100 {
+            if ids.iter().all(|id| {
+                mix.sources
+                    .iter()
+                    .any(|s| &s.input.id == id && matches!(s.input.observed_state(), SourceState::Live))
+            }) {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(50)).await;
+        }
+        mix
+    }
+
+    fn scene(name: &str, placements: Vec<Placement>) -> ProgramScene {
+        ProgramScene { name: name.into(), placements }
+    }
+
+    fn box_at(canvas: &CanvasCaps, source: &str, x: i32, y: i32) -> Placement {
+        Placement {
+            xpos: x,
+            ypos: y,
+            width: canvas.width / 2,
+            height: canvas.height / 2,
+            ..Placement::full_canvas(source.into(), canvas)
+        }
+    }
+
+    /// The property the whole design turns on: a source is bound to a slot
+    /// when it is added, so taking it is property writes and nothing else.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn taking_a_source_relinks_nothing() {
+        let mut mix = with_sources(&["cam1", "cam2"]).await;
+        assert_eq!(mix.pool.misses(), 0, "adding sources should not have relinked anything");
+        assert_eq!(mix.pool.slots_of(&"cam1".to_string()).len(), 1);
+
+        mix.take(Some("cam1".into()), None).expect("taking a source");
+        assert_eq!(mix.pool.misses(), 0, "a take must not relink the graph");
+        assert_eq!(mix.pool.visible(), 1, "exactly one pad is drawn for a one item scene");
+
+        mix.take(Some("cam2".into()), None).expect("taking the other source");
+        assert_eq!(mix.pool.misses(), 0);
+        assert_eq!(mix.pool.visible(), 1);
+        mix.shutdown();
+    }
+
+    /// `program.take {source}` is shorthand for a one item full canvas scene,
+    /// and the acceptance says the two must be bit identical. Compared where
+    /// it matters: the pad properties the compositor actually reads.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn a_source_take_and_a_one_item_scene_write_the_same_pad() {
+        let mut mix = with_sources(&["cam1"]).await;
+        let read = |mix: &Mixer| -> Vec<(u32, f64, i32, i32, i32, i32)> {
+            mix.pool
+                .slots()
+                .iter()
+                .filter(|s| s.pad.property::<f64>("alpha") > 0.0)
+                .map(|s| {
+                    (
+                        s.pad.property::<u32>("zorder"),
+                        s.pad.property::<f64>("alpha"),
+                        s.pad.property::<i32>("xpos"),
+                        s.pad.property::<i32>("ypos"),
+                        s.pad.property::<i32>("width"),
+                        s.pad.property::<i32>("height"),
+                    )
+                })
+                .collect()
+        };
+
+        mix.take(Some("cam1".into()), None).expect("the shorthand take");
+        let shorthand = read(&mix);
+
+        mix.take(None, None).expect("back to the slate");
+        let canvas = mix.canvas.clone();
+        mix.take_scene(scene("wide", vec![Placement::full_canvas("cam1".into(), &canvas)]), None)
+        .expect("the same thing written out as a scene");
+        assert_eq!(read(&mix), shorthand, "a one item scene must land exactly where the shorthand did");
+
+        // And it reports itself as the source, so the tally, the history and
+        // program.revert read the same as they did before scenes existed.
+        assert_eq!(mix.status().program.as_deref(), Some("cam1"));
+        assert_eq!(mix.status().scene.as_deref(), Some("wide"));
+        assert_eq!(mix.pool.misses(), 0);
+        mix.shutdown();
+    }
+
+    /// A take between two eight item scenes is the acceptance case. Nothing
+    /// may be relinked, because everything is already bound.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn a_take_between_two_eight_item_scenes_binds_nothing() {
+        let ids: Vec<String> = (1..=8).map(|i| format!("cam{i}")).collect();
+        let refs: Vec<&str> = ids.iter().map(String::as_str).collect();
+        let mut mix = with_sources(&refs).await;
+        assert_eq!(mix.pool.len(), slots::INITIAL_SLOTS);
+
+        let canvas = mix.canvas.clone();
+        let grid = |offset: i32| {
+            scene(
+                "grid",
+                ids.iter()
+                    .enumerate()
+                    .map(|(i, id)| {
+                        box_at(&canvas, id, (i as i32 % 4) * 80 + offset, (i as i32 / 4) * 90)
+                    })
+                    .collect(),
+            )
+        };
+        mix.take_scene(grid(0), None).expect("the first eight item scene");
+        assert_eq!(mix.pool.visible(), 8);
+        let before = mix.pool.misses();
+        mix.take_scene(grid(10), None).expect("the second eight item scene");
+        assert_eq!(mix.pool.misses(), before, "a take between two full scenes relinked the graph");
+        assert_eq!(mix.pool.visible(), 8);
+        mix.shutdown();
+    }
+
+    /// The same source twice on one canvas: the wide shot and a cut out of it.
+    /// That is one cache miss, and only the first time.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn a_source_placed_twice_costs_one_relink_and_then_none() {
+        let mut mix = with_sources(&["cam1"]).await;
+        let canvas = mix.canvas.clone();
+        let twice = || {
+            scene(
+                "double",
+                vec![
+                    Placement::full_canvas("cam1".into(), &canvas),
+                    Placement {
+                        xpos: 10,
+                        ypos: 10,
+                        width: 100,
+                        height: 60,
+                        ..Placement::full_canvas("cam1".into(), &canvas)
+                    },
+                ],
+            )
+        };
+        mix.take_scene(twice(), None).expect("one source in two places");
+        assert_eq!(mix.pool.slots_of(&"cam1".to_string()).len(), 2);
+        assert_eq!(mix.pool.visible(), 2);
+        let after_first = mix.pool.misses();
+
+        mix.take(None, None).expect("to the slate");
+        mix.take_scene(twice(), None).expect("and back again");
+        assert_eq!(mix.pool.misses(), after_first, "the second apply relinked what was already bound");
+        mix.shutdown();
+    }
+
+    /// A scene wider than the pool grows it, once, and keeps the slots.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn a_scene_wider_than_the_pool_grows_it() {
+        let mut mix = with_sources(&["cam1"]).await;
+        let canvas = mix.canvas.clone();
+        let wide = |n: usize| {
+            scene(
+                "wall",
+                (0..n)
+                    .map(|i| Placement {
+                        xpos: i as i32 * 5,
+                        width: 60,
+                        height: 40,
+                        ..Placement::full_canvas("cam1".into(), &canvas)
+                    })
+                    .collect(),
+            )
+        };
+        mix.take_scene(wide(12), None).expect("twelve places for one source");
+        assert!(mix.pool.len() >= 12, "the pool did not grow: {}", mix.pool.len());
+        assert_eq!(mix.pool.visible(), 12);
+        let grown = mix.pool.len();
+        mix.take_scene(wide(12), None).expect("the same again");
+        assert_eq!(mix.pool.len(), grown, "the pool grew twice for the same scene");
+        mix.shutdown();
+    }
+
+    /// A scene naming a source this mixer does not have draws what it can and
+    /// says what it could not, rather than going to black.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn a_scene_with_a_missing_source_draws_the_rest() {
+        let mut mix = with_sources(&["cam1"]).await;
+        let canvas = mix.canvas.clone();
+        mix.take_scene(
+            scene(
+                "half",
+                vec![
+                    Placement::full_canvas("cam1".into(), &canvas),
+                    Placement::full_canvas("nope".into(), &canvas),
+                ],
+            ),
+            None,
+        )
+        .expect("the scene applies");
+        assert_eq!(mix.pool.visible(), 1, "the source that exists is still drawn");
+        mix.shutdown();
+    }
+
+    /// The z bands: the slate underneath everything, the live items above, and
+    /// a rebuilt source's frozen frame in between.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn z_is_banded_so_the_slate_and_the_freeze_frame_still_work() {
+        let mut mix = with_sources(&["cam1", "cam2"]).await;
+        let canvas = mix.canvas.clone();
+        mix.take_scene(
+            scene("two", vec![box_at(&canvas, "cam1", 0, 0), box_at(&canvas, "cam2", 100, 0)]),
+            None,
+        )
+        .expect("two items");
+        let live: Vec<u32> = mix
+            .pool
+            .slots()
+            .iter()
+            .filter(|s| s.pad.property::<f64>("alpha") > 0.0)
+            .map(|s| s.pad.property::<u32>("zorder"))
+            .collect();
+        assert!(live.iter().all(|z| *z >= slots::Z_LIVE), "a live item is below the live band: {live:?}");
+        assert_eq!(live.len(), 2);
+
+        // cam1 goes away for a rebuild. Its slot drops into the retired band,
+        // keeps its last frame, and stays out of the pool.
+        mix.retire_branch(&"cam1".to_string()).expect("retiring a source");
+        let retired: Vec<u32> = mix
+            .pool
+            .slots()
+            .iter()
+            .filter(|s| s.pad.property::<f64>("alpha") > 0.0)
+            .map(|s| s.pad.property::<u32>("zorder"))
+            .collect();
+        assert!(
+            retired.iter().any(|z| (slots::Z_RETIRED..=slots::Z_RETIRED_TOP).contains(z)),
+            "the frozen frame is not in the retired band: {retired:?}"
+        );
+        mix.shutdown();
+    }
+
+    /// Sixteen hidden slots must cost what no compositor costs. A pad at alpha
+    /// 0 is skipped before any conversion, which is the measurement 11 section
+    /// 3 rests on; this asserts the mixer actually leaves them at zero rather
+    /// than trusting that it does.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn hidden_slots_are_at_alpha_zero_and_stay_there() {
+        let mut mix = with_sources(&["cam1"]).await;
+        // Grow past sixteen, then show one item.
+        let canvas = mix.canvas.clone();
+        let wide: Vec<Placement> = (0..16)
+            .map(|i| Placement {
+                xpos: i * 5,
+                width: 40,
+                height: 30,
+                ..Placement::full_canvas("cam1".into(), &canvas)
+            })
+            .collect();
+        mix.take_scene(scene("wall", wide), None).expect("sixteen places");
+        assert!(mix.pool.len() >= 16);
+
+        mix.take(Some("cam1".into()), None).expect("back to one item");
+        assert_eq!(mix.pool.visible(), 1, "fifteen slots are still being blended");
+        // And a supervisor tick does not quietly bring them back.
+        mix.tick();
+        assert_eq!(mix.pool.visible(), 1);
+        mix.shutdown();
+    }
+
+    /// Audio follows the item flags: a source is heard when any live item of
+    /// it says `follow` and is visible, or says `always`, and nothing else.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn audio_follows_the_item_and_not_the_pad_count() {
+        let mut mix = with_sources(&["cam1", "cam2"]).await;
+        let canvas = mix.canvas.clone();
+        let volume = |mix: &Mixer, id: &str| {
+            mix.sources
+                .iter()
+                .find(|s| s.input.id == id)
+                .map(|s| s.branch.apad.property::<f64>("volume"))
+                .expect("the source is there")
+        };
+
+        let mut quiet = box_at(&canvas, "cam2", 100, 0);
+        quiet.audio = slots::PlacementAudio::Never;
+        mix.take_scene(scene("two", vec![box_at(&canvas, "cam1", 0, 0), quiet]), None)
+            .expect("two items, one of them silent");
+        // No ramp: the fade is a thread and this asserts where it ends up.
+        mix.cfg.program.audio_ramp_ms = 0;
+        mix.apply_visibility(false);
+        assert_eq!(volume(&mix, "cam1"), 1.0, "a visible follow item is heard");
+        assert_eq!(volume(&mix, "cam2"), 0.0, "a `never` item is not heard however visible");
+
+        // An `always` item is heard while invisible, which is what a music bed
+        // under another camera is.
+        let mut bed = box_at(&canvas, "cam2", 100, 0);
+        bed.alpha = 0.0;
+        bed.audio = slots::PlacementAudio::Always;
+        mix.take_scene(scene("bed", vec![box_at(&canvas, "cam1", 0, 0), bed]), None)
+            .expect("a hidden bed");
+        mix.apply_visibility(false);
+        assert_eq!(volume(&mix, "cam2"), 1.0, "an `always` item is heard while hidden");
+
+        // And a source in no scene at all is silent.
+        mix.take(Some("cam1".into()), None).expect("one item");
+        mix.apply_visibility(false);
+        assert_eq!(volume(&mix, "cam2"), 0.0);
+        mix.shutdown();
+    }
+
+    /// The largest gap between consecutive programme frames, in nanoseconds.
+    ///
+    /// The README's verification method, done inside the process: a frame that
+    /// never arrived shows as an interval of two frame durations, so a maximum
+    /// of one frame means nothing was lost. Watched on the encoder's own sink
+    /// pad, which is the last place a gap could still be hidden.
+    #[derive(Default)]
+    struct Gaps {
+        last: AtomicU64,
+        largest: AtomicU64,
+        seen: AtomicU64,
+    }
+
+    impl Gaps {
+        fn watch(self: &Arc<Self>, pad: &gst::Pad) {
+            let me = self.clone();
+            pad.add_probe(gst::PadProbeType::BUFFER, move |_p, info| {
+                if let Some(gst::PadProbeData::Buffer(b)) = &info.data {
+                    if let Some(pts) = b.pts() {
+                        let last = me.last.swap(pts.nseconds(), Ordering::Relaxed);
+                        if last > 0 {
+                            me.largest.fetch_max(pts.nseconds().saturating_sub(last), Ordering::Relaxed);
+                        }
+                        me.seen.fetch_add(1, Ordering::Relaxed);
+                    }
+                }
+                gst::PadProbeReturn::Ok
+            });
+        }
+
+        async fn wait_for(&self, frames: u64) {
+            let mark = self.seen.load(Ordering::Relaxed) + frames;
+            for _ in 0..600 {
+                if self.seen.load(Ordering::Relaxed) >= mark {
+                    return;
+                }
+                tokio::time::sleep(Duration::from_millis(20)).await;
+            }
+            panic!("the programme stopped producing frames");
+        }
+    }
+
+    /// The other acceptance line: an animated layout change moves the inset in
+    /// rather than cutting to it, and costs no frame.
+    ///
+    /// `pip-bottom-right` applied twice onto the same scene, with a different
+    /// inset each time. `layout::apply_into` keeps the item ids, so the second
+    /// apply lands on the pads the first one is already drawing and the change
+    /// is a property ramp. What is asserted is that the pads actually moved
+    /// through the middle (a cut would jump) and that the picture never
+    /// stopped.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn an_animated_layout_change_moves_the_inset_in_without_a_gap() {
+        let mut mix = with_sources(&["a", "b"]).await;
+        let canvas = mix.canvas.clone();
+        let document_canvas = crate::scene::Canvas {
+            width: canvas.width as u32,
+            height: canvas.height as u32,
+            fps: 30,
+        };
+        let preset = crate::scene::layout::builtin("pip-bottom-right")
+            .expect("the layout ships with the core");
+        let scene_id = crate::scene::id::Id::new();
+
+        let resolve = |inset: f64| {
+            let values: crate::scene::layout::Values = [
+                ("a".to_string(), serde_json::Value::from("a")),
+                ("b".to_string(), serde_json::Value::from("b")),
+                ("inset".to_string(), serde_json::Value::from(inset)),
+            ]
+            .into_iter()
+            .collect();
+            let resolved = crate::scene::layout::apply_into(
+                &preset,
+                &values,
+                document_canvas,
+                scene_id,
+                Some("pip"),
+            )
+            .expect("the layout resolves");
+            let mut doc = crate::scene::Collection::new("show", document_canvas);
+            doc.scenes.push(resolved);
+            let placements = crate::scene::server::compose::placements(
+                &doc,
+                &doc.scenes[0],
+                &canvas,
+            );
+            (doc.scenes[0].items.iter().map(|i| i.id).collect::<Vec<_>>(), placements)
+        };
+
+        let (small_ids, small) = resolve(0.20);
+        let (big_ids, big) = resolve(0.45);
+        assert_eq!(small_ids, big_ids, "the layout has to keep its item ids across applies");
+        assert_eq!(small.len(), 2);
+
+        let gaps = Arc::new(Gaps::default());
+        gaps.watch(&mix.venc_tee.static_pad("sink").expect("the encoder tee has a sink pad"));
+
+        mix.take_scene(scene("pip", small.clone()), None).expect("the small inset");
+        gaps.wait_for(10).await;
+        let before = mix.pool.slots().iter().map(|s| s.pad.property::<i32>("width")).max();
+        gaps.largest.store(0, Ordering::Relaxed);
+
+        // The same scene, a bigger inset, over 300 ms.
+        mix.take_scene_over(scene("pip", big.clone()), None, Some(300))
+            .expect("the animated change");
+
+        // Halfway through, the inset must be between the two sizes: a cut
+        // would already be at the target.
+        tokio::time::sleep(Duration::from_millis(150)).await;
+        let target = big.iter().map(|p| p.width).min().expect("two items");
+        let start = small.iter().map(|p| p.width).min().expect("two items");
+        let midway = mix
+            .pool
+            .slots()
+            .iter()
+            .filter(|s| s.pad.property::<f64>("alpha") > 0.0)
+            .map(|s| s.pad.property::<i32>("width"))
+            .min()
+            .expect("something is on air");
+        assert!(
+            midway > start && midway < target,
+            "the inset was at {midway} halfway through a move from {start} to {target}: that is a cut, not a ramp"
+        );
+
+        // And it arrives.
+        tokio::time::sleep(Duration::from_millis(400)).await;
+        let landed = mix
+            .pool
+            .slots()
+            .iter()
+            .filter(|s| s.pad.property::<f64>("alpha") > 0.0)
+            .map(|s| s.pad.property::<i32>("width"))
+            .min()
+            .expect("something is on air");
+        assert_eq!(landed, target, "the ramp did not finish where the scene says");
+
+        gaps.wait_for(5).await;
+        let largest = gaps.largest.load(Ordering::Relaxed);
+        let frame = canvas.frame_duration().nseconds();
+        println!(
+            "animated layout: inset {start} to {target} over 300 ms, largest interval {:.1} ms, one frame is {:.1} ms",
+            largest as f64 / 1e6,
+            frame as f64 / 1e6
+        );
+        assert!(
+            largest <= frame * 2,
+            "largest interval was {largest} ns during the move, more than two frames"
+        );
+        assert_eq!(mix.pool.misses(), 0, "an animated layout change relinked the graph");
+        let _ = before;
+        mix.shutdown();
+    }
+
+    /// The acceptance measurement: a take between two eight item scenes must
+    /// not cost a frame.
+    ///
+    /// Eight `test://` sources, two scenes of eight items each, and the gap
+    /// measured on the encoder's sink pad across ten takes back and forth.
+    /// Ignored by default because it builds nine pipelines and runs for a few
+    /// seconds; run it with `cargo test -p godwinmix-core -- --ignored
+    /// gapless`.
+    #[tokio::test(flavor = "multi_thread")]
+    #[ignore = "builds nine pipelines and runs for several seconds"]
+    async fn gapless_take_between_two_eight_item_scenes() {
+        let ids: Vec<String> = (1..=8).map(|i| format!("cam{i}")).collect();
+        let refs: Vec<&str> = ids.iter().map(String::as_str).collect();
+        let mut mix = with_sources(&refs).await;
+        let canvas = mix.canvas.clone();
+        let frame = canvas.frame_duration().nseconds();
+
+        let gaps = Arc::new(Gaps::default());
+        gaps.watch(&mix.venc_tee.static_pad("sink").expect("the encoder tee has a sink pad"));
+        gaps.wait_for(15).await;
+
+        let grid = |offset: i32| {
+            scene(
+                "grid",
+                ids.iter()
+                    .enumerate()
+                    .map(|(i, id)| {
+                        box_at(&canvas, id, (i as i32 % 4) * 70 + offset, (i as i32 / 4) * 80)
+                    })
+                    .collect(),
+            )
+        };
+        mix.take_scene(grid(0), None).expect("the first scene");
+        gaps.wait_for(10).await;
+        // Measured from here, so the first build is not in the figure.
+        gaps.largest.store(0, Ordering::Relaxed);
+
+        for i in 0..10 {
+            mix.take_scene(grid(if i % 2 == 0 { 20 } else { 0 }), None).expect("a take");
+            gaps.wait_for(6).await;
+        }
+        let largest = gaps.largest.load(Ordering::Relaxed);
+        println!(
+            "gapless: ten takes between two eight item scenes, largest interval {:.1} ms, one frame is {:.1} ms, {} relinks",
+            largest as f64 / 1e6,
+            frame as f64 / 1e6,
+            mix.pool.misses()
+        );
+        assert_eq!(mix.pool.misses(), 0, "a take between two scenes relinked the graph");
+        assert!(
+            largest <= frame * 2,
+            "largest interval was {largest} ns, more than two frames ({} ns)",
+            frame * 2
+        );
+        mix.shutdown();
+    }
+
+    /// The other acceptance measurement: sixteen hidden slots cost within 2
+    /// percent of no compositor at all.
+    ///
+    /// Compared honestly: the same programme, the same source, the same run
+    /// length, with and without the sixteen slots grown and hidden. What is
+    /// timed is the process's own CPU, because that is the number the budget
+    /// is written in. Ignored by default; run it with `cargo test -p
+    /// godwinmix-core -- --ignored hidden_slots`.
+    #[tokio::test(flavor = "multi_thread")]
+    #[ignore = "a CPU measurement that takes about twenty seconds"]
+    async fn hidden_slots_cost_within_two_percent_of_no_compositor() {
+        let sample = || async {
+            let start = cpu_seconds();
+            let at = Instant::now();
+            tokio::time::sleep(Duration::from_secs(8)).await;
+            let secs = at.elapsed().as_secs_f64();
+            (cpu_seconds() - start) / secs
+        };
+
+        let mut mix = with_sources(&["cam1"]).await;
+        let canvas = mix.canvas.clone();
+        mix.take(Some("cam1".into()), None).expect("one source on programme");
+        // Settle, then measure the baseline: eight slots, one of them drawn.
+        tokio::time::sleep(Duration::from_secs(2)).await;
+        let base = sample().await;
+
+        // Grow to sixteen, then hide them all again. The slots stay, bound and
+        // fed, at alpha 0: the case the budget is about.
+        let wall: Vec<Placement> = (0..16)
+            .map(|i| Placement {
+                xpos: i * 5,
+                width: 40,
+                height: 30,
+                ..Placement::full_canvas("cam1".into(), &canvas)
+            })
+            .collect();
+        mix.take_scene(scene("wall", wall), None).expect("sixteen places");
+        mix.take(Some("cam1".into()), None).expect("back to one");
+        assert!(mix.pool.len() >= 16);
+        assert_eq!(mix.pool.visible(), 1);
+        tokio::time::sleep(Duration::from_secs(2)).await;
+        let hidden = sample().await;
+
+        let extra = if base > 0.0 { (hidden - base) / base * 100.0 } else { 0.0 };
+        println!(
+            "hidden slots: baseline {base:.4} cores, with {} slots {hidden:.4} cores, {extra:+.2} percent",
+            mix.pool.len()
+        );
+        assert!(extra < 2.0, "sixteen hidden slots cost {extra:.2} percent, over the 2 percent budget");
+        mix.shutdown();
+    }
+
+    /// This process's CPU time so far, in seconds. `getrusage` rather than a
+    /// crate: it is two lines and it is on every platform this runs on.
+    #[cfg(unix)]
+    fn cpu_seconds() -> f64 {
+        // SAFETY: `getrusage` writes into a struct we own and reads nothing else.
+        unsafe {
+            let mut usage: libc::rusage = std::mem::zeroed();
+            if libc::getrusage(libc::RUSAGE_SELF, &mut usage) != 0 {
+                return 0.0;
+            }
+            let secs = |t: libc::timeval| t.tv_sec as f64 + t.tv_usec as f64 / 1e6;
+            secs(usage.ru_utime) + secs(usage.ru_stime)
+        }
+    }
+
+    #[cfg(not(unix))]
+    fn cpu_seconds() -> f64 {
+        0.0
+    }
+
     /// Every command has a name, so the alert after a panic can say which one
     /// it was rather than "something".
     #[test]
@@ -3942,5 +5026,114 @@ mod tests {
             let label = Mixer::label(&cmd);
             assert!(!label.is_empty() && !label.contains("cam1"), "{label}");
         }
+    }
+
+    /// A handle whose mixer thread is not running, so the queue fills and
+    /// stays full. The receiver is kept alive: dropping it would make every
+    /// send report a closed channel instead of a full one.
+    fn parked_handle() -> (MixerHandle, mpsc::Receiver<Command>) {
+        let (tx, rx) = mpsc::channel(COMMAND_QUEUE);
+        let handle = MixerHandle {
+            tx,
+            events: EventBus::new(8),
+            coalesced: Arc::new(Coalesced::default()),
+        };
+        (handle, rx)
+    }
+
+    /// The command queue was unbounded, so a client in a loop grew it without
+    /// limit and the work still only happened at the rate one thread could do
+    /// it. Full, the caller is told to come back and told when.
+    #[test]
+    fn a_full_command_queue_refuses_with_a_time_to_wait() {
+        let (handle, _rx) = parked_handle();
+        for i in 0..COMMAND_QUEUE {
+            handle
+                .send(Command::Take { source: None, at_running_time_ms: None, ack: None })
+                .unwrap_or_else(|e| panic!("command {i} of the queue's own depth was refused: {e}"));
+        }
+        let err = handle
+            .send(Command::Take { source: None, at_running_time_ms: None, ack: None })
+            .expect_err("the queue is full and the next command must be refused");
+        let busy = err.downcast_ref::<Busy>().expect("a full queue answers with Busy");
+        assert_eq!(busy.queue, COMMAND_QUEUE);
+        assert!(busy.retry_after_ms > 0, "a refusal has to say how long to wait");
+        assert!(
+            busy.to_string().contains("Nothing was changed"),
+            "the message must say the mixer is unchanged: {busy}"
+        );
+    }
+
+    /// Nothing runs unless asked. The programme's return branch to the mosaic
+    /// used to be linked to the raw tee from the first frame, with a queue
+    /// that blocked when full, so with no mosaic it was a second consumer of
+    /// every frame that nobody read and a backpressure path onto the encoder's
+    /// own tee. It goes on when the mosaic does and comes off with it.
+    #[tokio::test]
+    async fn the_programme_return_branch_is_only_on_the_tee_while_the_mosaic_is() {
+        let _ = gst::init();
+        let mut cfg = programme_config(crate::config::Accel::Software);
+        cfg.multiview.enabled = true;
+        let (mut mix, _handle, _cmd_rx, _bus_rx) = Mixer::build(cfg).expect("the mixer builds");
+        assert!(mix.return_pad.is_none(), "the return branch was linked before anything read it");
+
+        let q = mix.return_chain.first().expect("the return branch has a queue").clone();
+        // 2 is GST_QUEUE_LEAK_DOWNSTREAM: a branch nobody reads drops its own
+        // frames instead of pushing back on the tee the encoder is also on.
+        assert_eq!(
+            q.property_value("leaky").transform::<i32>().unwrap().get::<i32>().unwrap(),
+            2,
+            "the branch queue must leak downstream"
+        );
+        assert!(
+            q.static_pad("sink").and_then(|p| p.peer()).is_none(),
+            "the return branch is linked to the tee with nothing reading it"
+        );
+
+        mix.start().expect("the programme starts");
+        mix.multiview_demand(crate::multiview::DemandAt {
+            demand: Demand::Build(crate::multiview::MultiviewShape {
+                fps: 5,
+                width: 320,
+                height: 180,
+            }),
+            generation: 0,
+        })
+        .expect("a subscriber builds the mosaic");
+        assert!(mix.return_pad.is_some(), "the mosaic was built without the programme return");
+        assert!(q.static_pad("sink").and_then(|p| p.peer()).is_some());
+
+        mix.multiview_demand(crate::multiview::DemandAt {
+            demand: Demand::Teardown,
+            generation: 0,
+        })
+        .expect("the last subscriber leaves");
+        assert!(mix.return_pad.is_none(), "the return branch outlived the mosaic");
+        assert!(
+            q.static_pad("sink").and_then(|p| p.peer()).is_none(),
+            "the return branch is still on the tee with nothing reading it"
+        );
+        mix.shutdown();
+    }
+
+    /// Two timers firing while the mixer is busy must not both queue. A
+    /// supervisor tick is worth doing once.
+    #[test]
+    fn repeated_ticks_coalesce_into_one() {
+        let (handle, mut rx) = parked_handle();
+        for _ in 0..20 {
+            handle.tick().unwrap();
+            handle.position_tick().unwrap();
+        }
+        let mut ticks = 0;
+        let mut positions = 0;
+        while let Ok(cmd) = rx.try_recv() {
+            match cmd {
+                Command::Tick => ticks += 1,
+                Command::PositionTick => positions += 1,
+                other => panic!("unexpected {}", Mixer::label(&other)),
+            }
+        }
+        assert_eq!((ticks, positions), (1, 1), "twenty fires queued more than one of each");
     }
 }

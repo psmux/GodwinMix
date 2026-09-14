@@ -131,6 +131,8 @@ def _struct(model, name, schema):
         f"pub struct {name} {{",
     ]
     for wire, sub in (schema.get("properties") or {}).items():
+        # A JSON Schema may be the bare `true`, which means "anything".
+        sub = sub if isinstance(sub, dict) else {}
         ident, renamed = rust_field(wire)
         ty = rs_type(model, sub)
         if wire not in required and not ty.startswith(("Option<", "Vec<", "BTreeMap<")) and ty != "Value":

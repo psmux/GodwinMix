@@ -215,6 +215,7 @@ fn copy_scenes(collection: &Path, out: &Path, wrote: &mut Vec<PathBuf>) -> Resul
             scenes: vec![scene.clone()],
             transitions: Vec::new(),
             assets: doc.assets.clone(),
+            sources: doc.sources.clone(),
         };
         let mut value = serde_json::to_value(&one).context("writing a scene")?;
         refresh_ids(&mut value, &mut BTreeMap::new());

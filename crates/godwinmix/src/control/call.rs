@@ -77,6 +77,14 @@ impl Call {
     /// The mixer's own refusals already name the state and the next step, so
     /// they pass through as `-32001` rather than being rewritten.
     pub fn mixer_error(&self, e: anyhow::Error) -> RpcError {
+        // A full command queue is a state, not a failure, and the one thing a
+        // caller needs from it is how long to wait.
+        if let Some(busy) = e.downcast_ref::<godwinmix_core::mixer::Busy>() {
+            return RpcError::not_in_state(busy.to_string())
+                .with("method", self.method)
+                .with("retry_after_ms", busy.retry_after_ms)
+                .with("retryable", true);
+        }
         RpcError::not_in_state(e.to_string()).with("method", self.method)
     }
 

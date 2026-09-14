@@ -248,21 +248,36 @@ pub fn insert(
             .upstream
             .static_pad("src")
             .context("the element above a filter has no src pad")?;
+
+        // Started here, on the control thread, while the bin is still
+        // disconnected from everything.
+        //
+        // This used to happen inside the pad probe, which runs on a streaming
+        // thread: a state change blocks, an element that takes its time to
+        // start (a hardware converter opening a device, a plugin loading)
+        // holds that thread, and the thread it holds is the one carrying the
+        // programme into the compositor. Nothing may stall the encoder, so
+        // the slow part happens where stalling costs nothing and the probe is
+        // left with two unlinks and two links.
+        //
+        // A bin with no peer on its sink pad goes to PLAYING and waits. It
+        // sees its first buffer only once the probe has linked it, which is
+        // the same order as before from the data's point of view.
+        if let Err(e) = bin.sync_state_with_parent() {
+            let _ = bin.set_state(gst::State::Null);
+            let _ = at.pipeline.remove(&bin);
+            return Err(anyhow::anyhow!(
+                "the filter {} would not start: {e}. Nothing in the pipeline was changed.",
+                spec.id
+            ));
+        }
+
         let (up, down, b) = (at.upstream.clone(), at.downstream.clone(), bin.clone());
         let src_for_link = src.clone();
         // What went wrong inside the block, carried back out. The closure runs
         // on the streaming thread and cannot return anything.
         let failure: Arc<Mutex<Option<anyhow::Error>>> = Arc::new(Mutex::new(None));
         let report = failure.clone();
-        // Linked and brought up to PLAYING while the pad above is still
-        // blocked, in that order.
-        //
-        // Syncing the bin after the block is released is a race, and under
-        // load the programme loses it: the first buffer reaches a bin that is
-        // still in READY, the chain refuses it, and the picture stops for as
-        // long as the filter is in. That is principle one, so it is done here
-        // where nothing is flowing rather than a line later where something
-        // is.
         crate::gstutil::with_pad_blocked(&src, BLOCK_TIMEOUT, move || {
             down.unlink_from(&src_for_link);
             let joined = up
@@ -271,30 +286,38 @@ pub fn insert(
                 .and_then(|_| match b.static_pad("src") {
                     Some(out) => down.link_from(&out),
                     None => Err(anyhow::anyhow!("the filter bin has no src pad")),
-                })
-                .and_then(|_| {
-                    b.sync_state_with_parent()
-                        .map(|_| ())
-                        .map_err(|e| anyhow::anyhow!("the filter would not start: {e}"))
                 });
             if let Err(e) = joined {
                 // Put the programme back the way it was before letting go of
-                // the pad. A filter that will not start is a refused call, not
-                // a stopped output.
+                // the pad. A filter that will not link is a refused call, not
+                // a stopped output. Taking the bin down to NULL is left to the
+                // caller: it is a state change and it does not belong here.
                 up.unlink(&b);
                 if let Some(out) = b.static_pad("src") {
                     down.unlink_from(&out);
                 }
-                let _ = b.set_state(gst::State::Null);
                 if let Err(relink) = down.link_from(&src_for_link) {
                     tracing::error!(?relink, "could not relink around a filter that failed to go in");
                 }
                 *report.lock() = Some(e);
             }
         })
+        .inspect_err(|e| {
+            // Cancelled means the relink never began, so the bin this call
+            // created is linked to nothing and can go. A block that had
+            // already started is left alone: taking its bin out from under a
+            // streaming thread mid relink is worse than leaking one.
+            if e.downcast_ref::<crate::gstutil::BlockTimeout>()
+                == Some(&crate::gstutil::BlockTimeout::Cancelled)
+            {
+                let _ = bin.set_state(gst::State::Null);
+                let _ = at.pipeline.remove(&bin);
+            }
+        })
         .context("inserting a filter while blocked")?;
         let failed = failure.lock().take();
         if let Some(e) = failed {
+            let _ = bin.set_state(gst::State::Null);
             let _ = at.pipeline.remove(&bin);
             return Err(e).with_context(|| format!("putting the filter {} in", spec.id));
         }
@@ -519,6 +542,92 @@ mod tests {
             );
             std::thread::sleep(std::time::Duration::from_millis(50));
         }
+    }
+
+    /// A filter bin that will not go to PLAYING, because one of the elements
+    /// in it points at a file that is not there.
+    struct WillNotStart(Manifest);
+
+    impl Filter for WillNotStart {
+        fn manifest(&self) -> &Manifest {
+            &self.0
+        }
+
+        fn build(&mut self, _canvas: &CanvasCaps, _params: &Params) -> Result<gst::Element> {
+            let bin = gst::Bin::with_name("wont-start");
+            let pass = crate::gstutil::make("identity", "wont-start-pass")?;
+            let dead = crate::gstutil::make("filesrc", "wont-start-dead")?;
+            dead.set_property("location", "/this/path/does/not/exist");
+            let sink = crate::gstutil::make("fakesink", "wont-start-sink")?;
+            bin.add_many([&pass, &dead, &sink])?;
+            gst::Element::link(&dead, &sink)?;
+            let sink_pad = pass.static_pad("sink").unwrap();
+            let src_pad = pass.static_pad("src").unwrap();
+            bin.add_pad(&gst::GhostPad::with_target(&sink_pad)?)?;
+            bin.add_pad(&gst::GhostPad::with_target(&src_pad)?)?;
+            Ok(bin.upcast())
+        }
+
+        fn configure(&mut self, _params: &Params) -> Result<Configure> {
+            Ok(Configure::Applied)
+        }
+    }
+
+    /// The state change happens on the control thread, before the pad is
+    /// blocked, so a filter that will not start costs the programme nothing.
+    ///
+    /// It used to be `sync_state_with_parent()` inside the IDLE probe, which
+    /// runs on a streaming thread: an element slow to start held the thread
+    /// carrying the programme into the compositor, and one that failed then
+    /// did a rollback and a `set_state(Null)` there too. This asserts what the
+    /// order buys: the call is refused, nothing was relinked, and the frames
+    /// never stopped.
+    #[test]
+    fn a_filter_that_will_not_start_is_refused_before_anything_is_relinked() {
+        init();
+        let canvas = crate::plugin::harness::test_canvas();
+        let (pipeline, caps, tee, intervals) = programme_stand_in();
+        pipeline.set_state(gst::State::Playing).unwrap();
+        std::thread::sleep(std::time::Duration::from_millis(300));
+        let before = intervals.seen.load(Ordering::Relaxed);
+        assert!(before > 2, "the stand in produced nothing to measure");
+
+        let manifest = super::super::filters::chroma::MANIFEST;
+        let outcome = insert(
+            Insertion::between(&pipeline, &caps, &tee),
+            FilterSpec {
+                id: "dud".into(),
+                type_id: "dud/filter".into(),
+                side: FilterSide::Programme,
+                params: Params::new(),
+            },
+            Box::new(WillNotStart(manifest)),
+            &canvas,
+            true,
+        );
+        let err = match outcome {
+            Ok(_) => panic!("a filter that will not start must be refused"),
+            Err(e) => e,
+        };
+        assert!(
+            format!("{err:#}").contains("Nothing in the pipeline was changed"),
+            "the refusal must say the pipeline is untouched: {err:#}"
+        );
+
+        // The picture never stopped and the original link is still the one in
+        // place, which is what "nothing was changed" has to mean.
+        wait_past(&intervals, before, "after a filter was refused");
+        let out = caps.static_pad("src").unwrap();
+        assert_eq!(
+            out.peer().map(|p| p.parent_element().unwrap().name().to_string()),
+            Some(tee.name().to_string()),
+            "the refused filter left the programme relinked through something else"
+        );
+        assert!(
+            pipeline.by_name("wont-start").is_none(),
+            "the refused filter's bin was left in the pipeline"
+        );
+        let _ = pipeline.set_state(gst::State::Null);
     }
 
     #[test]

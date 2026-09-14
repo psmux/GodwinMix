@@ -61,11 +61,10 @@ pub enum Target {
     Program,
     /// One source's cell.
     Source(String),
-    /// The armed scene. Until the scene server lands this is the programme
-    /// tile, which is what the operator is looking at anyway when nothing is
-    /// armed.
+    /// The armed scene. With nothing armed this is the programme tile, which
+    /// is what the operator is looking at anyway.
     Preview,
-    /// One scene item as a projector. Needs the scene server.
+    /// One scene item as a projector.
     Item(String),
 }
 
@@ -82,19 +81,67 @@ impl Target {
 
     /// The pick on the mosaic this target reads, or `None` when it is not a
     /// cell at all.
+    ///
+    /// The mosaic carries one tile per source, so a preview or a projector is
+    /// the tile of the source behind it. A full preview composite (the armed
+    /// scene drawn from those thumbnails at multiview size) is the next step;
+    /// `SceneServer::preview_layout` already says where every item would sit,
+    /// and `event/multiview.layout` carries it, so a client can draw the
+    /// arrangement over this picture today.
     pub fn pick(&self) -> Option<Pick> {
+        self.pick_in(None)
+    }
+
+    /// The same, with the scene server in hand so a preview or a projector
+    /// resolves to the source it is actually showing.
+    pub fn pick_in(&self, scenes: Option<&crate::scene::server::SceneServer>) -> Option<Pick> {
         match self {
             Self::Sheet => Some(Pick::Sheet),
+            Self::Program => Some(Pick::Program),
             // With no armed scene the preview is the programme tile, and
             // `event/multiview.layout` says the preview is empty.
-            Self::Program | Self::Preview => Some(Pick::Program),
+            Self::Preview => match scenes.and_then(main_preview_source) {
+                Some(source) => Some(Pick::Source(source)),
+                None => Some(Pick::Program),
+            },
             Self::Source(id) => Some(Pick::Source(id.clone())),
-            Self::Item(_) => None,
+            // A projector on one item is that item's source. An item that
+            // draws no source (a graphic) has no tile and says so.
+            Self::Item(item) => scenes
+                .and_then(|s| item_source(s, item))
+                .map(Pick::Source),
         }
     }
 
     pub fn is_sheet(&self) -> bool {
         matches!(self, Self::Sheet)
+    }
+}
+
+/// The source the armed scene mostly shows: the largest visible item of it.
+///
+/// The biggest box is the one an operator means by "the preview", and it is
+/// stable across a layout change in a way "the first item" is not.
+fn main_preview_source(scenes: &crate::scene::server::SceneServer) -> Option<String> {
+    let layout = scenes.preview_layout(1920, 1080)?;
+    layout
+        .cells
+        .into_iter()
+        .filter(|c| c.alpha > 0.0)
+        .max_by(|a, b| {
+            (a.width as i64 * a.height as i64).cmp(&(b.width as i64 * b.height as i64))
+        })
+        .map(|c| c.source)
+}
+
+/// The source one item draws, by the item's name or its id, anywhere in the
+/// collection.
+fn item_source(scenes: &crate::scene::server::SceneServer, item: &str) -> Option<String> {
+    let doc = scenes.document();
+    let (_, found) = crate::scene::server::find::item(&doc, item).ok()?;
+    match &found.content {
+        crate::scene::Content::Source { source } => Some(source.clone()),
+        _ => None,
     }
 }
 

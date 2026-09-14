@@ -115,7 +115,10 @@ def _types(model):
                 out.append(f'    """{_one_line(desc)}"""')
                 out.append("")
             for key, sub in props.items():
-                hint = sub.get("description")
+                # A JSON Schema may be the bare `true`, which means "anything".
+                # `Override.params` is one: it holds whatever the referenced
+                # graphic takes.
+                hint = sub.get("description") if isinstance(sub, dict) else None
                 out.append(f"    {key}: {py_type(model, sub)}")
                 if hint:
                     out.append(f"    # {_one_line(hint)}")

@@ -185,6 +185,7 @@ fn write_scenes(
             scenes: Vec::new(),
             transitions: Vec::new(),
             assets: Default::default(),
+            sources: Default::default(),
         },
     };
     for scene in scenes {

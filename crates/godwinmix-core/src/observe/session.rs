@@ -525,7 +525,7 @@ mod tests {
             tx.send(Envelope { seq, event })
         };
 
-        tx(Event::Took { source: Some("cam1".into()), at_running_time_ms: 1234 }).unwrap();
+        tx(Event::Took { source: Some("cam1".into()), scene: None, at_running_time_ms: 1234 }).unwrap();
         tx(Event::SourceStateChanged { source: "cam1".into(), state: SourceState::Live }).unwrap();
         tx(Event::Alert { severity: Severity::Warning, message: "cam1 stalled".into() }).unwrap();
         // Meters are counted, not written.
