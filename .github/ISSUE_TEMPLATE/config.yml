@@ -2,12 +2,18 @@
 # refuses the report you wanted to make is worse than no form.
 blank_issues_enabled: true
 contact_links:
+  - name: Question about how to do something
+    url: https://github.com/psmux/GodwinMix/discussions
+    about: Ask in discussions. If the answer should have been in the documentation, that is a bug and it will be treated as one.
+  - name: The documentation
+    url: https://github.com/psmux/GodwinMix/tree/main/docs
+    about: Tutorials, how-to pages, the reference and the explanations. Start at docs/README.md.
   - name: Security problem
     url: https://github.com/psmux/GodwinMix/security/advisories/new
     about: Do not open a public issue. Report it privately here, or mail maintainers@example.invalid.
   - name: Friction on the developer path
     url: https://github.com/psmux/GodwinMix/blob/main/docs/friction-log.md
     about: Got stuck for ten minutes on something that should have taken one? That goes in the friction log.
-  - name: Question about how to do something
-    url: https://github.com/psmux/GodwinMix/discussions
-    about: Ask here. If the answer should have been in the documentation, that is a bug and it will be treated as one.
+  - name: How fast issues are answered here
+    url: https://github.com/psmux/GodwinMix/blob/main/community/dashboard.md
+    about: The median time to a first response over the last 30 days, and the three other numbers this project keeps.

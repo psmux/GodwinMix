@@ -11,6 +11,7 @@ pub mod agent;
 pub mod bundle;
 pub mod chaos;
 pub mod codec;
+pub mod marketplace;
 pub mod observe;
 pub mod plugin;
 pub mod preset;

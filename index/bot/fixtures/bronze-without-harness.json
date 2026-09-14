@@ -1,0 +1,41 @@
+{
+  "name": "fixture-index",
+  "title": "A bronze listing with no harness result",
+  "description": "The entry asks for bronze and never ran the conformance harness, so entry.bronze refuses it. This is the acceptance case: a listing with a failing harness is refused, and the failing check is named.",
+  "owner": "psmux",
+  "version": 1,
+  "signing": {
+    "identity_regexp": "^https://github\\.com/psmux/godwinmix-plugins/\\.github/workflows/listing\\.yml@refs/heads/main$",
+    "oidc_issuer": "https://token.actions.githubusercontent.com"
+  },
+  "plugins": [
+    {
+      "name": "clock",
+      "source": "psmux/gmx-clock",
+      "description": "A source that draws the current time, large, on a solid background.",
+      "tier": "bronze",
+      "kinds": [
+        "source"
+      ],
+      "license": "MIT",
+      "repository": "https://github.com/psmux/gmx-clock",
+      "skill": "SKILL.md",
+      "policy": {
+        "network": [],
+        "secrets": [],
+        "telemetry": "none"
+      },
+      "versions": [
+        {
+          "version": "0.2.0",
+          "api": 1,
+          "platforms": [
+            "linux-x86_64"
+          ],
+          "signed": true,
+          "harness": []
+        }
+      ]
+    }
+  ]
+}

@@ -39,6 +39,51 @@ pub enum Codec {
         #[arg(long)]
         json: bool,
     },
+    /// Prove an entry on this machine and record that you did.
+    ///
+    /// Runs the same encode and decode `gmx codec test` runs, then appends a
+    /// `verified` record (platform, driver, GStreamer version, who, when) to
+    /// your own catalogue and prints the block to paste into a pull request
+    /// against codecs.toml. That is how the catalogue reaches hardware the
+    /// project does not own: whoever has the card runs this and sends the
+    /// record.
+    Verify {
+        /// Entry id, as `gmx codec list` prints it.
+        entry: String,
+        /// Your name or handle, for the record. Defaults to $GMX_AUTHOR or
+        /// $USER.
+        #[arg(long)]
+        by: Option<String>,
+        /// The graphics driver version. Read off the machine when it can be.
+        #[arg(long)]
+        driver: Option<String>,
+        #[arg(long, default_value_t = 10.0)]
+        seconds: f64,
+        #[arg(long, default_value_t = 1280)]
+        width: i32,
+        #[arg(long, default_value_t = 720)]
+        height: i32,
+        #[arg(long, default_value_t = 30)]
+        fps: i32,
+    },
+    /// Fetch the catalogue from the signed release channel and install it.
+    ///
+    /// A driver rename or a new GPU generation is a catalogue entry, not a
+    /// core release, so the catalogue ships on its own. The update is verified
+    /// the same way a plugin is, parsed before it is installed, and laid over
+    /// the built in catalogue and under your own `[codecs]` table.
+    Update {
+        /// Where the catalogue comes from: `owner/repo`, or a URL to the
+        /// directory holding codecs.toml and its signature.
+        #[arg(long)]
+        channel: Option<String>,
+        /// A particular release. Defaults to the newest.
+        #[arg(long)]
+        tag: Option<String>,
+        /// Print what would be installed and install nothing.
+        #[arg(long)]
+        dry_run: bool,
+    },
     /// One line per entry, each backed by a one second encode. This is what
     /// `gmx doctor` calls.
     Doctor,
@@ -63,6 +108,10 @@ pub fn run(cmd: Codec, cfg: Option<&Config>, codecs: Option<&Path>) -> Result<()
             }
             Ok(())
         }
+        Codec::Verify { entry, by, driver, seconds, width, height, fps } => {
+            verify(&cat, &entry, by, driver, seconds, width, height, fps)
+        }
+        Codec::Update { channel, tag, dry_run } => update(channel, tag, dry_run),
         Codec::Doctor => {
             for line in check::doctor_lines(&cat, &GstRegistry) {
                 println!("{line}");
@@ -70,6 +119,90 @@ pub fn run(cmd: Codec, cfg: Option<&Config>, codecs: Option<&Path>) -> Result<()
             Ok(())
         }
     }
+}
+
+/// `gmx codec verify <entry>`.
+#[allow(clippy::too_many_arguments)]
+fn verify(
+    cat: &Catalogue,
+    entry: &str,
+    by: Option<String>,
+    driver: Option<String>,
+    seconds: f64,
+    width: i32,
+    height: i32,
+    fps: i32,
+) -> Result<()> {
+    use godwinmix_core::catalogue::update;
+    let report = check::test_entry(cat, entry, seconds, width, height, fps)
+        .with_context(|| format!("testing catalogue entry {entry}"))?;
+    print!("{}", report.human());
+    if !report.ok {
+        anyhow::bail!(
+            "{} did not pass, so nothing was recorded: {}. A `verified` record says an entry \
+             works on this hardware; recording a failure would say the opposite of what it \
+             means. If you think this is the catalogue's fault rather than the machine's, \
+             open an issue with the report above.",
+            report.entry,
+            report.note
+        );
+    }
+    let by = by.unwrap_or_else(update::whoami);
+    let driver = driver.unwrap_or_else(update::driver);
+    let recorded = update::record_verified(entry, cat, &report, &by, &driver)?;
+    println!("\nrecorded on this machine, in {}", recorded.path.display());
+    println!(
+        "  {} on {}, GStreamer {}, by {} on {}",
+        recorded.record.report,
+        recorded.record.platform,
+        recorded.record.gstreamer,
+        recorded.record.by,
+        recorded.record.date
+    );
+    println!("\nSend it: open a pull request against codecs.toml with this block.");
+    println!("\n{}", recorded.block);
+    println!(
+        "docs/how-to/add-a-codec-entry.md says what a good pull request carries besides \
+         the block."
+    );
+    Ok(())
+}
+
+/// `gmx codec update`.
+fn update(channel: Option<String>, tag: Option<String>, dry_run: bool) -> Result<()> {
+    use godwinmix_core::catalogue::update;
+    let channel = channel.unwrap_or_else(update::default_channel);
+    if dry_run {
+        println!("would fetch the catalogue from {channel} and install it at");
+        println!("  {}", update::installed_path().display());
+        println!("Nothing was fetched.");
+        return Ok(());
+    }
+    println!("fetching the catalogue from {channel}");
+    let installed = update::install(&channel, tag.as_deref())?;
+    println!(
+        "installed {} ({}, {})",
+        installed.tag, installed.trust, installed.detail
+    );
+    println!("  {}", installed.path.display());
+    println!(
+        "  {} video, {} audio, {} graphics entries",
+        installed.video, installed.audio, installed.graphics
+    );
+    for id in &installed.added {
+        println!("  new      {id}");
+    }
+    for id in &installed.changed {
+        println!("  changed  {id}");
+    }
+    if installed.added.is_empty() && installed.changed.is_empty() {
+        println!("  nothing changed against the catalogue this core shipped with");
+    }
+    println!(
+        "\nIt takes effect on the next start. `godwinmix --probe` says what will be chosen \
+         and why; delete the file above to go back to what the core shipped with."
+    );
+    Ok(())
 }
 
 fn request(cfg: Option<&Config>, cat: &Catalogue) -> Request {

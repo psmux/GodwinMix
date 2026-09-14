@@ -1,0 +1,134 @@
+name: Bug report
+description: Something the mixer did that it should not have done
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        First response on an issue is targeted at under 48 hours, and the
+        median is published at
+        [community/dashboard.md](https://github.com/psmux/GodwinMix/blob/main/community/dashboard.md).
+        If three days pass with nothing, assume it was missed and say so on the
+        thread.
+
+        Do not report a security problem here. See
+        [SECURITY.md](https://github.com/psmux/GodwinMix/blob/main/SECURITY.md).
+
+  - type: textarea
+    id: did
+    attributes:
+      label: What you did
+      description: The steps, in the order you took them, with the commands if there were commands.
+      placeholder: |
+        1. gmx ctl source add cam1 rtmp://...
+        2. gmx ctl ad /srv/ads/spot.mp4
+        3. gmx ctl take cam2 while the ad was playing
+    validations:
+      required: true
+
+  - type: textarea
+    id: happened
+    attributes:
+      label: What happened
+      description: >
+        What you saw, including the exact error text if there was one. If it
+        happens once in twenty times, say so. An intermittent bug reported as
+        intermittent is much easier to find than one reported as certain.
+      placeholder: The programme went black for about a second and then came back on cam2.
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected instead
+      placeholder: The ad to finish and the take to land after it.
+    validations:
+      required: true
+
+  - type: textarea
+    id: doctor
+    attributes:
+      label: gmx doctor
+      description: |
+        Run it on the machine the fault happened on and paste the output.
+
+        ```sh
+        gmx doctor
+        ```
+
+        It prints one line per check and exits non zero when something the
+        default pipeline needs is missing. Most "the stream will not start"
+        reports are one of these lines.
+      render: shell
+    validations:
+      required: true
+
+  - type: textarea
+    id: bundle
+    attributes:
+      label: Support bundle
+      description: |
+        One zip with the versions, the doctor's verdict, the redacted config,
+        every pipeline's graph, the last hour of the session log and the log
+        files:
+
+        ```sh
+        gmx support-bundle
+        ```
+
+        Add `--url` and `--token` if the mixer is running somewhere other than
+        `http://127.0.0.1:8080`, and the graphs and metrics come with it. Every
+        secret in the config is replaced before the zip is written. Read it
+        before you attach it anyway.
+
+        Attach the zip by dragging it into this box. If you would rather not
+        attach the whole thing, say which parts you are leaving out.
+    validations:
+      required: false
+
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: >
+        The release tag you installed, the image tag you pulled, or the
+        `versions.txt` line from the support bundle. If you built it yourself,
+        the commit.
+      placeholder: "v0.2.0, or ghcr.io/psmux/godwinmix:latest pulled today"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: platform
+    attributes:
+      label: Platform
+      options:
+        - Linux (distribution packages)
+        - Linux (the Docker image)
+        - macOS
+        - Windows
+        - Raspberry Pi
+        - Something else, described above
+    validations:
+      required: true
+
+  - type: input
+    id: hardware
+    attributes:
+      label: Encoder and decoder
+      description: >
+        The line from `godwinmix --probe`, which reports the codec backends
+        this machine would select. Skip it if the fault has nothing to do with
+        encoding.
+      placeholder: "nvh264dec / nvh264enc, hardware_accelerated: true"
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before you post
+      options:
+        - label: I removed my stream keys and control token from everything I pasted
+          required: true
+        - label: I checked the known limitations in the README
+          required: false

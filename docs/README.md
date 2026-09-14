@@ -46,6 +46,8 @@ Start here if you have never run it.
 * [Write a source plugin in Rust](how-to/write-a-source-plugin.md)
 * [Install a plugin](how-to/install-a-plugin.md)
 * [Test a plugin](how-to/test-a-plugin.md)
+* [Publish a plugin](how-to/publish-a-plugin.md)
+* [Run a marketplace](how-to/run-a-marketplace.md)
 
 ## Reference
 
@@ -64,6 +66,8 @@ Start here if you have never run it.
 * [Streams: MJPEG, PCM, Opus, WHEP and the local socket](reference/streams.md)
 * [The generated protocol reference](reference/protocol.md)
 * [The plugin manifest](reference/plugin-manifest.md)
+* [The index format](reference/index-format.md)
+* [The quality scale](reference/quality-scale.md)
 * [The plugin protocol](reference/plugin-protocol.md)
 * [The plugin lifecycle](reference/plugin-lifecycle.md)
 * [The client libraries](reference/clients.md)
@@ -78,6 +82,7 @@ Start here if you have never run it.
 * [Footprint budgets and the reference machines](explanation/footprint-budgets.md)
 * [The crate map](explanation/architecture.md)
 * [Cross platform: what is gated where, and why](explanation/cross-platform.md)
+* [Trust and signing](explanation/trust-and-signing.md)
 
 ## For AI agents
 

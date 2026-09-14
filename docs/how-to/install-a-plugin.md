@@ -8,13 +8,30 @@ This page takes about five minutes.
 
 ## Install it
 
-Point `gmx plugin add` at the directory the plugin was built in, the one with
-`gmx-plugin.toml` at its root:
+`gmx plugin add` takes seven forms. Reach for the first one:
 
-    gmx plugin add ./my-plugin
+    gmx plugin add ndi                     a name a marketplace knows
+    gmx plugin add psmux/gmx-ndi           a GitHub release, @1.2.0 to pin
+    gmx plugin add https://x/y.git         a git clone, built here
+    gmx plugin add cargo:gmx-ndi           a crate
+    gmx plugin add npm:@x/gmx-chat         an npm package
+    gmx plugin add pypi:gmx-director       a PyPI package
+    gmx plugin add ./my-plugin             a directory you are working in
 
-The mixer copies it into its plugins directory, reads the manifest, and
-registers everything the plugin declares. It answers with what it added:
+A bare name is looked up in the marketplaces this mixer knows, which is why it
+is the form to teach: it does not change when an author moves their repository.
+Add the community index once and names start working:
+
+    gmx marketplace add psmux/godwinmix-plugins
+    gmx plugin search ndi
+
+For a release, the asset for your platform is chosen by the platform triple in
+its name, its signature is checked against the bytes that arrived, and its
+`api` level is checked against what this core speaks. Only then is anything
+copied.
+
+The mixer puts it in its plugins directory, reads the manifest, and registers
+everything the plugin declares. It answers with what it added:
 
     installed bars v0.1.0
       provides bars/source
@@ -46,8 +63,8 @@ Every plugin's price is next to its name:
 
     gmx plugin list
 
-    PLUGIN           VERSION   STATE    PROVIDES
-    bars             0.1.0     on       bars/source
+    PLUGIN           VERSION   STATE    TRUST                PROVIDES
+    bars             0.1.0     on       custom, unreviewed   bars/source
         cam1           running    cpu 6%    rss 48 MB   latency 0 ms   dropped 0     restarts 0
 
 `gmx plugin stats` is the same numbers on their own, and `gmx plugin stats
@@ -135,8 +152,8 @@ Change it with `plugins_dir` under `[control]` in your config. Anything under
 that directory is read at startup, and a manifest that does not validate is
 listed by `gmx plugin list` with the reason rather than dropped in silence:
 
-    PLUGIN           VERSION   STATE    PROVIDES
-    broken           0.1.0     broken
+    PLUGIN           VERSION   STATE    TRUST                PROVIDES
+    broken           0.1.0     broken   custom, unreviewed
         gmx-plugin.toml has 1 problems:
           provides[0].settings: 'schemas/source.json' does not exist.
 
@@ -169,9 +186,38 @@ That disables half the plugins, runs the check, keeps the half that still fails,
 and repeats. A bad plugin among thirty two takes at most six steps. Every plugin
 is put back the way it was found, whatever happens.
 
+## Keep it up to date
+
+    gmx plugin update ndi
+
+That fetches a newer build from wherever this plugin was installed from,
+installs it beside the one that is running, and gives it ten seconds to say
+hello. A build that does not start is rolled back and you keep the version that
+worked, so a bad release from an author costs you an error message rather than
+a show.
+
+## What the trust column means
+
+`signed` is a signature cosign verified. `signed, digest only` is a signature
+whose digest matches the bytes that arrived, on a machine with no cosign
+installed to check who made it. `custom, unreviewed` is everything nobody
+signed, which includes every path install and everything from cargo, npm and
+PyPI.
+
+`gmx plugin describe <name>` prints the sentence behind the label. A mixer that
+should install signed releases only sets this in its config:
+
+    [plugins]
+    allow_unsigned = false
+
+[Trust and signing](../explanation/trust-and-signing.md) says what each level
+proves and what none of them do.
+
 ## Next
 
 * [Test a plugin](test-a-plugin.md), before you install it anywhere that matters.
+* [Publish a plugin](publish-a-plugin.md), when it is somebody else's turn to
+  install yours.
 * [The plugin lifecycle](../reference/plugin-lifecycle.md): the states, the
   budgets, and the environment a plugin process gets.
 * [Write a source plugin](write-a-source-plugin.md).

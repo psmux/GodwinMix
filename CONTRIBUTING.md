@@ -129,7 +129,9 @@ request descriptions.
 * No slogan openers, no taglines, no "not X but Y" constructions, no bolded
   lead ins on every bullet, no sets of three used for rhythm.
 * Avoid the words: leverage, seamless, robust, cutting edge, delve, elevate,
-  unlock, harness, landscape, journey, transformative, testament.
+  unlock, harness, landscape, journey, transformative, testament. The one
+  exception is "harness" as a noun: the conformance harness is a thing with a
+  name, and `gmx plugin test` runs it. As a verb it is still out.
 * Comments say why, not what. The code already says what.
 
 ## Pull requests
@@ -180,6 +182,79 @@ This is a commitment rather than an aspiration, and the reason is in the
 evidence: a study of 111,094 pull requests found that the wait for a first
 reply is what decides whether a newcomer becomes a contributor. A "good first
 issue" label on its own does not work; a label plus a fast reply does.
+
+## Listing a plugin
+
+Anybody may write a plugin and publish it wherever they like. Nothing here
+stops that, and a plugin installed from a path or a repository works exactly as
+well as a listed one. What a listing buys is what the project does on the
+author's behalf: five platform builds, the conformance harness on each, sigstore
+signatures the installer checks, a badge, and a row on the public compatibility
+dashboard.
+
+The condition of being listed is this policy. The bot checks what can be
+checked mechanically; the rest is checked by a person reading the pull request,
+and by anybody who reads the source afterwards.
+
+**No obfuscation.** The source that is published is the source that is built.
+Minification for a browser panel is fine and is not obfuscation. Packed
+binaries, encoded payloads pulled at runtime, and generated code with the
+generator withheld are not, and a listing carrying any of them is refused
+without a second look.
+
+**No telemetry without disclosure.** A plugin that reports anything anywhere
+says so in its README, in its listing description, and in a sentence the
+operator sees before it runs. Anonymous counts are still telemetry. Opt out is
+better than opt in only for the project's own installation count, and a plugin
+is not the project.
+
+**Declared network use.** Say which hosts the plugin talks to and what for. A
+source that fetches from one address, an output that pushes to one CDN, and a
+service that polls one API are all easy to declare. A plugin that talks to an
+address chosen at runtime says that, and says who chooses it.
+
+**Declared secrets.** Say what the plugin reads and from where: an environment
+variable, a file, the operator's config, a keychain. A plugin that reads a
+stream key declares it, and an operator can then decide before it is running
+rather than after.
+
+Alongside those, a listing has to be a plugin somebody can use: a licence, a
+version, a release, and a `SKILL.md` so an agent knows when to reach for it.
+[The quality scale](docs/reference/quality-scale.md) has the full list per
+tier, and [the index format](docs/reference/index-format.md) has every field of
+an entry.
+
+### How a listing is handled
+
+Open a pull request against `index.json` in the index repository. The bot runs
+`index/bot/validate.py`, which checks the document, the tier requirements and
+the harness result and names the check that failed when it refuses. A pull
+request that passes is looked at by a person, and the 48 hour first response
+above covers listing pull requests as well as issues.
+
+You can run the same check yourself before opening it:
+
+    python3 index/bot/validate.py --entry <your plugin>
+
+### When a listing breaks the policy
+
+It is delisted, and the pull request that delists it names the clause and links
+to the evidence. An author who fixes it can relist, and the history stays in
+the repository because a quiet delisting teaches nobody anything.
+
+A plugin that is abandoned rather than in breach is not delisted. It falls to
+the tier its checks still support, which for a plugin whose harness run stopped
+passing is `custom`, and the compatibility dashboard shows why.
+
+### AI written pull requests
+
+This project advertises that an agent can operate and extend it, so it will get
+agent written pull requests, and some of them will be the kind that made tldraw
+pause external contributions in January 2026. The answer here is the harness
+rather than a ban: a pull request that does not pass `gmx plugin test` or
+`cargo test` is closed by a bot with the failing check named, and one that does
+pass gets read like any other. Say in the description what wrote it. Nobody
+minds; the check is the same either way.
 
 ## Security
 
