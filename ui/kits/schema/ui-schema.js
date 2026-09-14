@@ -82,7 +82,9 @@ export function fieldOfScope(scope) {
  * @returns {{kind: "group"|"row"|"control"|"tabs", ...}}
  */
 export function layoutFor(form, ui) {
-  if (!ui || typeof ui !== "object") return defaultLayout(form);
+  // An array is not a UI schema. Walking one as a container spec would produce
+  // a layout with no controls in it and no error to say why.
+  if (!ui || typeof ui !== "object" || Array.isArray(ui)) return defaultLayout(form);
   const used = new Set();
   const root = node(ui, form, used);
   const left = form.fields.filter((f) => !used.has(f.name));

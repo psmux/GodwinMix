@@ -87,7 +87,7 @@ export class SceneMirror {
     if (!view || !Array.isArray(view.records)) return { changed: [] };
     const keep = new Set(view.records.map((r) => r.id));
     for (const stale of [view.id, ...this.descendants(view.id).map((r) => r.id)]) {
-      if (!keep.has(stale)) this.records.delete(stale);
+      if (!keep.has(stale)) this._drop(stale);
     }
     const changed = [];
     for (const record of view.records) {
@@ -147,9 +147,7 @@ export class SceneMirror {
       // A removal names the id; `removed_records` is the core's own business.
       const key = typeof id === "string" ? id : id && id.id;
       if (!key) continue;
-      const record = this.records.get(key);
-      if (record && !KNOWN.has(record.kind)) this.unknown -= 1;
-      this.records.delete(key);
+      this._drop(key);
       removed.push(key);
     }
     if (seq > 0) this.seq = seq;
@@ -162,6 +160,13 @@ export class SceneMirror {
       updated,
       removed,
     };
+  }
+
+  /** Forget one record, keeping the count of unknown kinds honest. */
+  _drop(id) {
+    const record = this.records.get(id);
+    if (record && !KNOWN.has(record.kind)) this.unknown -= 1;
+    this.records.delete(id);
   }
 
   _put(record) {
@@ -178,8 +183,10 @@ export class SceneMirror {
  * lexically so an item can be moved between two others without renumbering.
  */
 function byOrder(a, b) {
-  const x = a.order === undefined ? "" : String(a.order);
-  const y = b.order === undefined ? "" : String(b.order);
+  // A record with no order sorts first rather than under the string "null",
+  // which is where `String(null)` would put it.
+  const x = a.order === undefined || a.order === null ? "" : String(a.order);
+  const y = b.order === undefined || b.order === null ? "" : String(b.order);
   return x < y ? -1 : x > y ? 1 : 0;
 }
 
