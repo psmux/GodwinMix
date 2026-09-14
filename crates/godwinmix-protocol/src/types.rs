@@ -121,7 +121,9 @@ impl SourceStatus {
     /// True when this website source is running with its media decoded outside
     /// the browser and the page drawn over it.
     pub fn superimposed(&self) -> bool {
-        self.extra("superimposed").and_then(|v| v.as_bool()).unwrap_or(false)
+        self.extra("superimposed")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false)
     }
 }
 
@@ -268,9 +270,19 @@ pub enum Event {
     Status(Box<MixerStatus>),
     /// The program source changed. Carries the running time the cut landed on
     /// so the UI can show how close a scheduled take was to its mark.
-    Took { source: Option<SourceId>, at_running_time_ms: u64 },
-    SourceStateChanged { source: SourceId, state: SourceState },
-    OutputStateChanged { output: OutputId, state: OutputState, reconnects: u32 },
+    Took {
+        source: Option<SourceId>,
+        at_running_time_ms: u64,
+    },
+    SourceStateChanged {
+        source: SourceId,
+        state: SourceState,
+    },
+    OutputStateChanged {
+        output: OutputId,
+        state: OutputState,
+        reconnects: u32,
+    },
     /// An ad break started or ended.
     AdBreakChanged { ad: Option<AdStatus> },
     /// Peak level per channel, in dBFS, from the program bus. The mosaic
@@ -284,14 +296,21 @@ pub enum Event {
     /// How far through a seekable source has got. Sent a few times a second for
     /// those sources only, because a camera has no position to report and a
     /// scrubber updated twice a minute is worse than no scrubber.
-    SourcePosition { source: SourceId, position_ms: u64, duration_ms: Option<u64> },
+    SourcePosition {
+        source: SourceId,
+        position_ms: u64,
+        duration_ms: Option<u64>,
+    },
     /// Something went wrong that the operator should see.
     Alert { severity: Severity, message: String },
     /// A file in the media library changed: uploaded, deleted, or its
     /// conversion moved on. The UI refetches the media listing rather than
     /// being sent the whole item, because the listing is the one place a
     /// converted copy gets folded onto its original.
-    MediaChanged { name: String, conversion: Option<ConversionState> },
+    MediaChanged {
+        name: String,
+        conversion: Option<ConversionState>,
+    },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
@@ -456,10 +475,14 @@ mod tests {
             extra: Extra::new(),
         };
         let v = serde_json::to_value(&s).unwrap();
-        assert!(v.get("extra").is_none(), "an empty extra writes no key at all");
+        assert!(
+            v.get("extra").is_none(),
+            "an empty extra writes no key at all"
+        );
 
         s.extra.insert("codec".into(), Value::String("h264".into()));
-        s.extra.insert("device".into(), serde_json::json!({ "index": 0 }));
+        s.extra
+            .insert("device".into(), serde_json::json!({ "index": 0 }));
         let v = serde_json::to_value(&s).unwrap();
         // Flat, beside `id`, not nested under a wrapper.
         assert_eq!(v["codec"], "h264");
@@ -486,7 +509,9 @@ mod tests {
         let v = serde_json::to_value(&o).unwrap();
         assert!(v.get("extra").is_none());
         let o = OutputStatus {
-            extra: [("bitrate_kbps".to_string(), Value::from(4500))].into_iter().collect(),
+            extra: [("bitrate_kbps".to_string(), Value::from(4500))]
+                .into_iter()
+                .collect(),
             ..o
         };
         let v = serde_json::to_value(&o).unwrap();

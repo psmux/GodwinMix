@@ -52,10 +52,13 @@ impl std::error::Error for FramingError {}
 impl From<FramingError> for RpcError {
     fn from(e: FramingError) -> RpcError {
         match e {
-            FramingError::LineTooLong { bytes } => {
-                RpcError::new(codes::LINE_TOO_LONG, e.to_string())
-                    .with_data(serde_json::json!({"bytes": bytes, "limit": MAX_LINE_BYTES, "retryable": false}))
-            }
+            FramingError::LineTooLong { bytes } => RpcError::new(
+                codes::LINE_TOO_LONG,
+                e.to_string(),
+            )
+            .with_data(
+                serde_json::json!({"bytes": bytes, "limit": MAX_LINE_BYTES, "retryable": false}),
+            ),
             _ => RpcError::new(codes::INTERNAL_ERROR, e.to_string()),
         }
     }
@@ -251,7 +254,9 @@ mod tests {
 
     #[test]
     fn a_last_line_without_a_newline_still_arrives() {
-        let mut r = Reader::new(Cursor::new("{\"jsonrpc\":\"2.0\",\"method\":\"initialized\"}"));
+        let mut r = Reader::new(Cursor::new(
+            "{\"jsonrpc\":\"2.0\",\"method\":\"initialized\"}",
+        ));
         match r.next_message().unwrap().unwrap() {
             Message::Notification(req) => assert_eq!(req.method, "initialized"),
             other => panic!("got {other:?}"),
@@ -260,7 +265,9 @@ mod tests {
 
     #[test]
     fn carriage_returns_are_stripped() {
-        let mut r = Reader::new(Cursor::new("{\"jsonrpc\":\"2.0\",\"method\":\"initialized\"}\r\n"));
+        let mut r = Reader::new(Cursor::new(
+            "{\"jsonrpc\":\"2.0\",\"method\":\"initialized\"}\r\n",
+        ));
         assert!(matches!(
             r.next_message().unwrap().unwrap(),
             Message::Notification(_)

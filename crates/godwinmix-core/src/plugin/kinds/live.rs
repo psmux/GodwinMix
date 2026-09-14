@@ -38,7 +38,11 @@ pub const MANIFEST: Manifest = Manifest {
     tier: Tier::Core,
 };
 
-pub const PROVIDE: Provide = Provide { manifest: MANIFEST, claims, make: new };
+pub const PROVIDE: Provide = Provide {
+    manifest: MANIFEST,
+    claims,
+    make: new,
+};
 
 fn claims(uri: &str) -> Option<u16> {
     let lower = uri.trim().to_lowercase();
@@ -56,7 +60,10 @@ fn claims(uri: &str) -> Option<u16> {
 }
 
 fn new(req: SourceRequest<'_>) -> Result<Box<dyn Source>> {
-    Ok(Box::new(LiveSource { ctx: req.ctx(), pipeline: None }))
+    Ok(Box::new(LiveSource {
+        ctx: req.ctx(),
+        pipeline: None,
+    }))
 }
 
 pub struct LiveSource {
@@ -92,11 +99,17 @@ impl Source for LiveSource {
 
     fn configure(&mut self, params: &Params) -> Result<Configure> {
         validate(params)?;
-        Ok(Configure::RestartRequired("a stream takes a new address by being reopened".into()))
+        Ok(Configure::RestartRequired(
+            "a stream takes a new address by being reopened".into(),
+        ))
     }
 
     fn health(&self) -> Health {
-        Health::of(if self.pipeline.is_some() { PluginState::Running } else { PluginState::Starting })
+        Health::of(if self.pipeline.is_some() {
+            PluginState::Running
+        } else {
+            PluginState::Starting
+        })
     }
 
     fn call(&mut self, method: &str, _params: Value) -> Result<Value> {

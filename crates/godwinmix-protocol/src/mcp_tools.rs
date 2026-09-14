@@ -99,7 +99,10 @@ pub fn all_tools<C>(registry: &Registry<C>) -> Vec<Value> {
 /// byte identical output and a client's prompt cache survives a reconnect.
 pub fn tools<C>(registry: &Registry<C>, profile: Profile) -> Vec<Value> {
     let wanted = |tier: Tier| {
-        matches!((profile, tier), (_, Tier::Minimal) | (Profile::Standard, Tier::Standard))
+        matches!(
+            (profile, tier),
+            (_, Tier::Minimal) | (Profile::Standard, Tier::Standard)
+        )
     };
     let hot_names: Vec<&str> = registry
         .iter()
@@ -150,7 +153,11 @@ pub fn search<C>(registry: &Registry<C>, query: &str, limit: usize) -> Vec<Value
         .filter(|(score, _)| *score > 0)
         .collect();
     scored.sort_by(|a, b| b.0.cmp(&a.0).then_with(|| name_of(&a.1).cmp(name_of(&b.1))));
-    scored.into_iter().take(limit.clamp(1, 20)).map(|(_, t)| t).collect()
+    scored
+        .into_iter()
+        .take(limit.clamp(1, 20))
+        .map(|(_, t)| t)
+        .collect()
 }
 
 fn name_of(tool: &Value) -> &str {
@@ -160,7 +167,10 @@ fn name_of(tool: &Value) -> &str {
 fn score(tool: &Value, words: &[String]) -> usize {
     let name = name_of(tool).to_lowercase();
     let method = tool["method"].as_str().unwrap_or_default().to_lowercase();
-    let description = tool["description"].as_str().unwrap_or_default().to_lowercase();
+    let description = tool["description"]
+        .as_str()
+        .unwrap_or_default()
+        .to_lowercase();
     let mut score = 0;
     for word in words {
         if name.contains(word.as_str()) || method.contains(word.as_str()) {
@@ -193,7 +203,8 @@ pub fn inline_refs(schema: &Value, defs: &Map<String, Value>, depth: usize) -> V
                     let mut inlined = inline_refs(target, defs, depth + 1);
                     // A sibling `description` on the reference is the field's
                     // own documentation and beats the type's.
-                    if let (Some(out), Some(doc)) = (inlined.as_object_mut(), map.get("description"))
+                    if let (Some(out), Some(doc)) =
+                        (inlined.as_object_mut(), map.get("description"))
                     {
                         out.insert("description".into(), doc.clone());
                     }
@@ -209,9 +220,12 @@ pub fn inline_refs(schema: &Value, defs: &Map<String, Value>, depth: usize) -> V
             }
             Value::Object(out)
         }
-        Value::Array(items) => {
-            Value::Array(items.iter().map(|v| inline_refs(v, defs, depth + 1)).collect())
-        }
+        Value::Array(items) => Value::Array(
+            items
+                .iter()
+                .map(|v| inline_refs(v, defs, depth + 1))
+                .collect(),
+        ),
         other => other.clone(),
     }
 }
@@ -222,7 +236,9 @@ fn def_name(reference: &str) -> Option<&str> {
 
 /// The bytes a tool list costs, which is what the budget test measures.
 pub fn wire_size(tools: &[Value]) -> usize {
-    serde_json::to_string(&json!({ "tools": tools })).map(|s| s.len()).unwrap_or(0)
+    serde_json::to_string(&json!({ "tools": tools }))
+        .map(|s| s.len())
+        .unwrap_or(0)
 }
 
 #[cfg(test)]
@@ -245,7 +261,10 @@ mod tests {
         // The field's own documentation wins, because that is the one written
         // about this use of the type.
         assert_eq!(out["properties"]["x"]["description"], "the field's doc");
-        assert!(out.get("$defs").is_none(), "$defs must not survive inlining");
+        assert!(
+            out.get("$defs").is_none(),
+            "$defs must not survive inlining"
+        );
     }
 
     #[test]

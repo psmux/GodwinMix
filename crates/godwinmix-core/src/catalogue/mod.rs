@@ -270,10 +270,13 @@ pub fn select(cfg: &Config, extra: Option<&Path>) -> Result<Selection> {
 /// without needing a registry to look it up in.
 pub fn plausible_factory(name: &str) -> bool {
     !name.is_empty()
-        && name.chars().next().is_some_and(|c| c.is_ascii_lowercase() || c.is_ascii_digit())
         && name
             .chars()
-            .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || matches!(c, '_' | '-' | '+' | '.'))
+            .next()
+            .is_some_and(|c| c.is_ascii_lowercase() || c.is_ascii_digit())
+        && name.chars().all(|c| {
+            c.is_ascii_lowercase() || c.is_ascii_digit() || matches!(c, '_' | '-' | '+' | '.')
+        })
 }
 
 impl Catalogue {
@@ -301,7 +304,10 @@ impl Catalogue {
             check_props(&mut out, &id, &e.properties);
             if let Some(kf) = &e.keyframe {
                 if !matches!(kf.unit.as_str(), "frames" | "seconds") {
-                    out.push(format!("{id}: keyframe unit {:?} is not frames or seconds", kf.unit));
+                    out.push(format!(
+                        "{id}: keyframe unit {:?} is not frames or seconds",
+                        kf.unit
+                    ));
                 }
             }
         }
@@ -324,7 +330,9 @@ impl Catalogue {
                 out.push(format!("{id}: no license. Every entry carries one."));
             }
             if e.compositor.is_empty() || e.convert.is_empty() {
-                out.push(format!("{id}: a graphics entry needs a compositor and a convert"));
+                out.push(format!(
+                    "{id}: a graphics entry needs a compositor and a convert"
+                ));
             }
             let mut names = e.needs();
             names.extend(e.upload.clone());
@@ -333,7 +341,10 @@ impl Catalogue {
         }
         for c in &self.container {
             if !plausible_factory(&c.muxer) {
-                out.push(format!("container {}: {:?} is not an element name", c.name, c.muxer));
+                out.push(format!(
+                    "container {}: {:?} is not an element name",
+                    c.name, c.muxer
+                ));
             }
             check_props(&mut out, &c.name, &c.properties);
         }
@@ -351,12 +362,18 @@ fn check_id(out: &mut Vec<String>, ids: &mut Vec<String>, id: &str) {
 fn check_names(out: &mut Vec<String>, id: &str, names: &[String]) {
     for n in names {
         if !plausible_factory(n) {
-            out.push(format!("{id}: {n:?} is not a plausible element factory name"));
+            out.push(format!(
+                "{id}: {n:?} is not a plausible element factory name"
+            ));
         }
     }
 }
 
-fn check_props(out: &mut Vec<String>, id: &str, props: &std::collections::BTreeMap<String, PropValue>) {
+fn check_props(
+    out: &mut Vec<String>,
+    id: &str,
+    props: &std::collections::BTreeMap<String, PropValue>,
+) {
     for (name, v) in props {
         if name.is_empty() {
             out.push(format!("{id}: a property with no name"));
@@ -459,7 +476,10 @@ pub fn listing(cat: &Catalogue, reg: &dyn Registry, req: &Request) -> Listing {
         ));
     }
     let selected = cat.select(req, reg).ok();
-    let considered = selected.as_ref().map(|s| s.considered.clone()).unwrap_or_default();
+    let considered = selected
+        .as_ref()
+        .map(|s| s.considered.clone())
+        .unwrap_or_default();
     Listing {
         platform: select::current_platform(),
         gstreamer: gstreamer_version(),

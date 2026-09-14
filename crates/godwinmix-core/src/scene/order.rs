@@ -95,7 +95,11 @@ fn midpoint(a: &str, b: Option<&str>) -> String {
         // starts inside `b`: its first digit alone already sits between them.
         Some(b) if b.len() > 1 => b[..1].to_string(),
         // Nothing to borrow from `b`, so keep `a`'s first digit and go deeper.
-        _ => format!("{}{}", DIGITS[digit_a] as char, midpoint(a.get(1..).unwrap_or(""), None)),
+        _ => format!(
+            "{}{}",
+            DIGITS[digit_a] as char,
+            midpoint(a.get(1..).unwrap_or(""), None)
+        ),
     }
 }
 
@@ -119,7 +123,10 @@ mod tests {
             assert_eq!(keys, sorted, "spread({n}) came out unordered");
             sorted.dedup();
             assert_eq!(sorted.len(), n, "spread({n}) repeated a key");
-            assert!(keys.iter().all(|k| !k.ends_with('0')), "spread({n}) ended a key in zero");
+            assert!(
+                keys.iter().all(|k| !k.ends_with('0')),
+                "spread({n}) ended a key in zero"
+            );
         }
     }
 
@@ -130,7 +137,12 @@ mod tests {
         // client can produce.
         for _ in 0..1000 {
             let next = between(Some(&keys[1]), Some(&keys[2])).expect("a key fits in the gap");
-            assert!(keys[1] < next && next < keys[2], "{} < {next} < {}", keys[1], keys[2]);
+            assert!(
+                keys[1] < next && next < keys[2],
+                "{} < {next} < {}",
+                keys[1],
+                keys[2]
+            );
             assert!(!next.ends_with('0'));
             keys.insert(2, next);
         }

@@ -200,14 +200,20 @@ Add it with source.add.\n";
             "a".repeat(MAX_DESCRIPTION_CHARS)
         );
         let got = validate(&text);
-        assert!(got.iter().any(|p| p.message.contains("the limit is")), "{got:#?}");
+        assert!(
+            got.iter().any(|p| p.message.contains("the limit is")),
+            "{got:#?}"
+        );
     }
 
     #[test]
     fn a_description_that_never_says_when_is_caught() {
         let text = "---\nname: x\ndescription: Does a thing.\n---\n\nbody\n";
         let got = validate(text);
-        assert!(got.iter().any(|p| p.message.contains("when to use")), "{got:#?}");
+        assert!(
+            got.iter().any(|p| p.message.contains("when to use")),
+            "{got:#?}"
+        );
     }
 
     #[test]
@@ -232,7 +238,10 @@ Add it with source.add.\n";
     fn extra_keys_are_kept() {
         let text = "---\nname: x\ndescription: Use when testing.\nlicense: MIT\n---\n\nbody\n";
         let skill = parse(text).unwrap();
-        assert_eq!(skill.extra, vec![("license".to_string(), "MIT".to_string())]);
+        assert_eq!(
+            skill.extra,
+            vec![("license".to_string(), "MIT".to_string())]
+        );
     }
 
     #[test]

@@ -409,7 +409,10 @@ impl Manifest {
         if !is_semver(&p.version) {
             out.push(problem(
                 "plugin.version",
-                format!("'{}' is not semver. Write it as MAJOR.MINOR.PATCH.", p.version),
+                format!(
+                    "'{}' is not semver. Write it as MAJOR.MINOR.PATCH.",
+                    p.version
+                ),
             ));
         }
         if p.api == 0 {
@@ -440,28 +443,40 @@ impl Manifest {
         if p.platforms.is_empty() {
             out.push(problem(
                 "plugin.platforms",
-                format!("name at least one platform. Known: {}.", PLATFORMS.join(", ")),
+                format!(
+                    "name at least one platform. Known: {}.",
+                    PLATFORMS.join(", ")
+                ),
             ));
         }
         for (i, plat) in p.platforms.iter().enumerate() {
             if !PLATFORMS.contains(&plat.as_str()) {
                 out.push(problem(
                     format!("plugin.platforms[{i}]"),
-                    format!("'{plat}' is not a platform triple. Known: {}.", PLATFORMS.join(", ")),
+                    format!(
+                        "'{plat}' is not a platform triple. Known: {}.",
+                        PLATFORMS.join(", ")
+                    ),
                 ));
             }
         }
         if p.placements.is_empty() {
             out.push(problem(
                 "plugin.placements",
-                format!("name at least one placement. Known: {}.", PLACEMENTS.join(", ")),
+                format!(
+                    "name at least one placement. Known: {}.",
+                    PLACEMENTS.join(", ")
+                ),
             ));
         }
         for (i, pl) in p.placements.iter().enumerate() {
             if !PLACEMENTS.contains(&pl.as_str()) {
                 out.push(problem(
                     format!("plugin.placements[{i}]"),
-                    format!("'{pl}' is not a placement. Known: {}.", PLACEMENTS.join(", ")),
+                    format!(
+                        "'{pl}' is not a placement. Known: {}.",
+                        PLACEMENTS.join(", ")
+                    ),
                 ));
             }
         }
@@ -509,7 +524,10 @@ impl Manifest {
                     if !PLATFORMS.contains(&plat.as_str()) {
                         out.push(problem(
                             format!("run.bin.{plat}"),
-                            format!("'{plat}' is not a platform triple. Known: {}.", PLATFORMS.join(", ")),
+                            format!(
+                                "'{plat}' is not a platform triple. Known: {}.",
+                                PLATFORMS.join(", ")
+                            ),
                         ));
                     }
                     if !self.plugin.platforms.contains(plat) {
@@ -531,7 +549,11 @@ impl Manifest {
                     }
                 }
                 if run.shell.is_some()
-                    && self.plugin.platforms.iter().any(|p| p.starts_with("windows"))
+                    && self
+                        .plugin
+                        .platforms
+                        .iter()
+                        .any(|p| p.starts_with("windows"))
                     && run.bin.is_empty()
                 {
                     out.push(problem(
@@ -573,7 +595,10 @@ impl Manifest {
             if seen.contains(&p.id.as_str()) {
                 out.push(problem(
                     format!("{at}.id"),
-                    format!("'{}' is used by an earlier provide. Ids are unique per plugin.", p.id),
+                    format!(
+                        "'{}' is used by an earlier provide. Ids are unique per plugin.",
+                        p.id
+                    ),
                 ));
             }
             seen.push(&p.id);
@@ -671,13 +696,22 @@ impl Manifest {
         }
     }
 
-    fn validate_kind_keys(&self, out: &mut Vec<Problem>, at: &str, p: &Provide, root: Option<&Path>) {
+    fn validate_kind_keys(
+        &self,
+        out: &mut Vec<Problem>,
+        at: &str,
+        p: &Provide,
+        root: Option<&Path>,
+    ) {
         let require_media = |out: &mut Vec<Problem>| {
             if p.media.is_none() {
                 out.push(problem(
                     format!("{at}.media"),
-                    format!("a {} provide must declare media, for example \
-                             media = {{ video = \"raw\", audio = \"none\" }}.", p.kind),
+                    format!(
+                        "a {} provide must declare media, for example \
+                             media = {{ video = \"raw\", audio = \"none\" }}.",
+                        p.kind
+                    ),
                 ));
             }
         };
@@ -758,10 +792,7 @@ impl Manifest {
                     if panel.kind != "custom-element" && panel.kind != "iframe" {
                         out.push(problem(
                             format!("{at}.panel.kind"),
-                            format!(
-                                "'{}' is neither 'custom-element' nor 'iframe'.",
-                                panel.kind
-                            ),
+                            format!("'{}' is neither 'custom-element' nor 'iframe'.", panel.kind),
                         ));
                     }
                     check_relative(out, &format!("{at}.panel.entry"), &panel.entry, root);
@@ -907,7 +938,10 @@ impl Manifest {
                 }
                 "http" => {
                     if hook.url.is_none() {
-                        out.push(problem(format!("{at}.url"), "mode 'http' needs a url to POST to."));
+                        out.push(problem(
+                            format!("{at}.url"),
+                            "mode 'http' needs a url to POST to.",
+                        ));
                     }
                 }
                 other => out.push(problem(
@@ -1192,7 +1226,8 @@ settings = "s.json"
 
     #[test]
     fn a_hook_timeout_over_a_hundred_is_caught() {
-        let text = format!("{GOOD}\n[hooks]\n\"take.before\" = {{ mode = \"rpc\", timeout_ms = 500 }}\n");
+        let text =
+            format!("{GOOD}\n[hooks]\n\"take.before\" = {{ mode = \"rpc\", timeout_ms = 500 }}\n");
         let m = Manifest::parse(&text).unwrap();
         let got = m.validate(None);
         assert!(

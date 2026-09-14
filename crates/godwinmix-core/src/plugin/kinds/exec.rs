@@ -47,7 +47,11 @@ pub const MANIFEST: Manifest = Manifest {
     tier: Tier::Core,
 };
 
-pub const PROVIDE: Provide = Provide { manifest: MANIFEST, claims, make: new };
+pub const PROVIDE: Provide = Provide {
+    manifest: MANIFEST,
+    claims,
+    make: new,
+};
 
 fn claims(uri: &str) -> Option<u16> {
     crate::input::exec_command(uri).map(|_| MANIFEST.rank)
@@ -70,7 +74,11 @@ pub struct ExecProcess {
 
 impl ExecProcess {
     pub fn new(spec: ExecSpec) -> Self {
-        Self { spec, child: None, src: None }
+        Self {
+            spec,
+            child: None,
+            src: None,
+        }
     }
 
     /// Build the `fdsrc` (or, on Windows, the reader thread's `appsrc`) and
@@ -126,7 +134,11 @@ pub struct ExecSource {
 
 impl ExecSource {
     pub fn new(ctx: BuildCtx, spec: ExecSpec) -> Self {
-        Self { ctx, process: ExecProcess::new(spec), running: false }
+        Self {
+            ctx,
+            process: ExecProcess::new(spec),
+            running: false,
+        }
     }
 }
 
@@ -153,7 +165,9 @@ impl Source for ExecSource {
         let ends = assemble(
             &self.ctx,
             thumb,
-            Ingest::default().with([src.clone(), decode.clone()]).livesync(false),
+            Ingest::default()
+                .with([src.clone(), decode.clone()])
+                .livesync(false),
             |w: &Wiring| {
                 gst::Element::link(&src, &decode).context("linking exec source to decoder")?;
                 w.route(&decode, w.norm.video_entry(), w.norm.audio_entry());
@@ -172,11 +186,17 @@ impl Source for ExecSource {
 
     fn configure(&mut self, params: &Params) -> Result<Configure> {
         validate(params)?;
-        Ok(Configure::RestartRequired("an exec source takes a new command line by respawning".into()))
+        Ok(Configure::RestartRequired(
+            "an exec source takes a new command line by respawning".into(),
+        ))
     }
 
     fn health(&self) -> Health {
-        Health::of(if self.running { PluginState::Running } else { PluginState::Starting })
+        Health::of(if self.running {
+            PluginState::Running
+        } else {
+            PluginState::Starting
+        })
     }
 
     fn call(&mut self, method: &str, _params: Value) -> Result<Value> {

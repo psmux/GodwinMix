@@ -176,7 +176,9 @@ impl Pacer {
         let now = self.start.elapsed();
         if deadline > now {
             std::thread::sleep(deadline - now);
-        } else if self.frame > 0 && now.saturating_sub(deadline) > Duration::from_nanos(self.frame_duration_ns) {
+        } else if self.frame > 0
+            && now.saturating_sub(deadline) > Duration::from_nanos(self.frame_duration_ns)
+        {
             self.late += 1;
         }
         self.frame += 1;

@@ -76,9 +76,8 @@ impl TraceId {
         // One span id per outgoing call, derived from the trace id so that two
         // calls in the same trace do not claim the same span.
         static SPANS: AtomicU64 = AtomicU64::new(1);
-        let span = mix(SPANS.fetch_add(1, Ordering::Relaxed) ^ u64::from_be_bytes(
-            self.0[..8].try_into().expect("eight bytes"),
-        ));
+        let span = mix(SPANS.fetch_add(1, Ordering::Relaxed)
+            ^ u64::from_be_bytes(self.0[..8].try_into().expect("eight bytes")));
         format!("00-{self}-{span:016x}-01")
     }
 
@@ -155,7 +154,8 @@ pub fn sanitise_client_id(s: &str) -> Option<String> {
     let s = s.trim();
     let ok = !s.is_empty()
         && s.len() <= 64
-        && s.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_' || b == b'.');
+        && s.bytes()
+            .all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_' || b == b'.');
     ok.then(|| s.to_string())
 }
 
@@ -168,7 +168,9 @@ mod tests {
         let id = TraceId::new();
         let s = id.to_string();
         assert_eq!(s.len(), 32);
-        assert!(s.chars().all(|c| c.is_ascii_hexdigit() && !c.is_ascii_uppercase()));
+        assert!(s
+            .chars()
+            .all(|c| c.is_ascii_hexdigit() && !c.is_ascii_uppercase()));
         assert_eq!(TraceId::parse(&s), Some(id));
     }
 
@@ -208,7 +210,10 @@ mod tests {
     fn incoming_prefers_the_explicit_id_then_the_header_then_a_fresh_one() {
         let explicit = TraceId::new().to_string();
         let header = "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01";
-        assert_eq!(incoming(Some(header), Some(&explicit)).to_string(), explicit);
+        assert_eq!(
+            incoming(Some(header), Some(&explicit)).to_string(),
+            explicit
+        );
         assert_eq!(
             incoming(Some(header), None).to_string(),
             "4bf92f3577b34da6a3ce929d0e0e4736"
@@ -228,7 +233,10 @@ mod tests {
     #[test]
     fn a_traceparent_header_wins_over_a_generated_id() {
         let header = "00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01";
-        assert_eq!(from_parts(Some(header), None), "0af7651916cd43dd8448eb211c80319c");
+        assert_eq!(
+            from_parts(Some(header), None),
+            "0af7651916cd43dd8448eb211c80319c"
+        );
         // An explicit trace_id in the params beats the header, because that is
         // the one the caller will be looking for in the answer.
         assert_eq!(
@@ -265,7 +273,10 @@ mod tests {
 
     #[test]
     fn a_clients_own_label_is_kept_if_it_is_sane() {
-        assert_eq!(sanitise_client_id("take-cam1-7").as_deref(), Some("take-cam1-7"));
+        assert_eq!(
+            sanitise_client_id("take-cam1-7").as_deref(),
+            Some("take-cam1-7")
+        );
         assert_eq!(sanitise_client_id("  "), None);
         assert_eq!(sanitise_client_id(&"x".repeat(65)), None);
         assert_eq!(sanitise_client_id("drop table;"), None);

@@ -197,7 +197,11 @@ impl<W: Write> MatroskaWriter<W> {
             element(&mut entry, ID_TRACK_TYPE, &uint(2));
             element(&mut entry, ID_CODEC_ID, b"A_PCM/FLOAT/IEEE\0");
             let mut audio = Vec::new();
-            element(&mut audio, ID_SAMPLING_FREQUENCY, &(a.rate as f64).to_be_bytes());
+            element(
+                &mut audio,
+                ID_SAMPLING_FREQUENCY,
+                &(a.rate as f64).to_be_bytes(),
+            );
             element(&mut audio, ID_CHANNELS, &uint(a.channels as u64));
             element(&mut audio, ID_BIT_DEPTH, &uint(a.bit_depth as u64));
             element(&mut entry, ID_AUDIO, &audio);
@@ -490,7 +494,10 @@ mod tests {
     }
 
     fn count(haystack: &[u8], needle: &[u8]) -> usize {
-        haystack.windows(needle.len()).filter(|w| *w == needle).count()
+        haystack
+            .windows(needle.len())
+            .filter(|w| *w == needle)
+            .count()
     }
 
     // ---------------------------------------------------------------------

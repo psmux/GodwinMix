@@ -12,11 +12,11 @@
 //! pipes them wants the bytes, not a string inside an object. A test in this
 //! file fails if the two ever name different paths.
 
+use crate::control::call::Call;
+use crate::control::methods::{body, handler};
 use godwinmix_protocol::error::RpcError;
 use godwinmix_protocol::method::{any_object, schema_of, MethodDef, Registry, Tier};
 use godwinmix_protocol::scope::Scope;
-use crate::control::call::Call;
-use crate::control::methods::{body, handler};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
@@ -100,13 +100,17 @@ fn register_logs(reg: &mut Registry<Call>) {
                 let level = if req.level.eq_ignore_ascii_case("default") {
                     None
                 } else {
-                    Some(godwinmix_core::observe::logs::LevelCode::parse(&req.level).ok_or_else(|| {
-                        RpcError::invalid_params(format!(
+                    Some(
+                        godwinmix_core::observe::logs::LevelCode::parse(&req.level).ok_or_else(
+                            || {
+                                RpcError::invalid_params(format!(
                             "'{}' is not a level. Use off, error, warn, info, debug, trace, \
                              or default to stop overriding.",
                             req.level
                         ))
-                    })?)
+                            },
+                        )?,
+                    )
                 };
                 match (&req.instance, &req.target) {
                     (None, None) => match level {
@@ -118,8 +122,12 @@ fn register_logs(reg: &mut Registry<Call>) {
                             ))
                         }
                     },
-                    (Some(instance), None) => godwinmix_core::observe::logs::set_instance_level(instance, level),
-                    (None, Some(target)) => godwinmix_core::observe::logs::set_target_level(target, level),
+                    (Some(instance), None) => {
+                        godwinmix_core::observe::logs::set_instance_level(instance, level)
+                    }
+                    (None, Some(target)) => {
+                        godwinmix_core::observe::logs::set_target_level(target, level)
+                    }
                     (Some(_), Some(_)) => {
                         return Err(RpcError::invalid_params(
                             "set an `instance` or a `target`, not both: the two would \
@@ -160,7 +168,10 @@ fn register_logs(reg: &mut Registry<Call>) {
                         "duration_secs": req.duration_secs,
                     }),
                 );
-                body(LogGstResult { categories: applied, duration_secs: req.duration_secs })
+                body(LogGstResult {
+                    categories: applied,
+                    duration_secs: req.duration_secs,
+                })
             }),
         )
         .params(schema_of::<LogGstRequest>)
@@ -237,8 +248,12 @@ fn register_pipeline(reg: &mut Registry<Call>) {
              negotiated between them.",
             handler(|call: Call, params| async move {
                 let req: PipelineRequest = call.params(&params)?;
-                let dot = godwinmix_core::observe::introspect::dot(&req.name).map_err(no_such_pipeline)?;
-                body(PipelineDot { pipeline: req.name, dot })
+                let dot = godwinmix_core::observe::introspect::dot(&req.name)
+                    .map_err(no_such_pipeline)?;
+                body(PipelineDot {
+                    pipeline: req.name,
+                    dot,
+                })
             }),
         )
         .params(schema_of::<PipelineRequest>)
@@ -252,7 +267,10 @@ fn register_pipeline(reg: &mut Registry<Call>) {
             "How much delay one pipeline is carrying, and which stage put it there.",
             handler(|call: Call, params| async move {
                 let req: PipelineRequest = call.params(&params)?;
-                body(godwinmix_core::observe::introspect::latency(&req.name).map_err(no_such_pipeline)?)
+                body(
+                    godwinmix_core::observe::introspect::latency(&req.name)
+                        .map_err(no_such_pipeline)?,
+                )
             }),
         )
         .params(schema_of::<PipelineRequest>)
@@ -274,7 +292,8 @@ fn register_pipeline(reg: &mut Registry<Call>) {
              that stays full is where the trouble is.",
             handler(|call: Call, params| async move {
                 let req: PipelineRequest = call.params(&params)?;
-                let queues = godwinmix_core::observe::introspect::queues(&req.name).map_err(no_such_pipeline)?;
+                let queues = godwinmix_core::observe::introspect::queues(&req.name)
+                    .map_err(no_such_pipeline)?;
                 Ok(json!({ "pipeline": req.name, "queues": body(queues)? }))
             }),
         )
@@ -315,7 +334,9 @@ fn register_core(reg: &mut Registry<Call>) {
             "core.startup_report",
             Scope::Read,
             "How long each stage of the start took, and what was over the 250 ms mark.",
-            handler(|_call: Call, _| async move { body(godwinmix_core::observe::introspect::startup_report()) }),
+            handler(|_call: Call, _| async move {
+                body(godwinmix_core::observe::introspect::startup_report())
+            }),
         )
         .result(any_object),
     );
@@ -329,13 +350,16 @@ fn register_core(reg: &mut Registry<Call>) {
             handler(|call: Call, _| async move {
                 // Every check is a syscall or a registry lookup, none of it
                 // long, but none of it belongs on a runtime worker either.
-                let path = godwinmix_core::config::path_in_force(std::path::Path::new("godwinmix.toml"));
-                let checks = tokio::task::spawn_blocking(move || godwinmix_core::observe::doctor::run(&path))
-                    .await
-                    .map_err(|e| {
-                        RpcError::internal(format!("the doctor could not run: {e}"))
-                            .with("method", call.method)
-                    })?;
+                let path =
+                    godwinmix_core::config::path_in_force(std::path::Path::new("godwinmix.toml"));
+                let checks = tokio::task::spawn_blocking(move || {
+                    godwinmix_core::observe::doctor::run(&path)
+                })
+                .await
+                .map_err(|e| {
+                    RpcError::internal(format!("the doctor could not run: {e}"))
+                        .with("method", call.method)
+                })?;
                 let ok = godwinmix_core::observe::doctor::exit_code(&checks) == 0;
                 Ok(json!({ "checks": body(checks)?, "ok": ok }))
             }),
@@ -357,7 +381,8 @@ fn register_core(reg: &mut Registry<Call>) {
             "The append only record of everything that happened, back as far as you ask.",
             handler(|call: Call, params| async move {
                 let req: SessionLogRequest = call.params(&params)?;
-                let lines = godwinmix_core::observe::session::session().tail_since(req.secs.min(86_400));
+                let lines =
+                    godwinmix_core::observe::session::session().tail_since(req.secs.min(86_400));
                 Ok(json!({ "secs": req.secs, "lines": lines }))
             }),
         )
@@ -398,8 +423,10 @@ mod tests {
     #[test]
     fn the_router_and_the_table_name_the_same_paths() {
         let served = super::super::routes::served_paths();
-        let mut declared: Vec<String> =
-            PATHS.iter().map(|(http, path, _)| format!("{http} {path}")).collect();
+        let mut declared: Vec<String> = PATHS
+            .iter()
+            .map(|(http, path, _)| format!("{http} {path}"))
+            .collect();
         declared.sort();
         let mut served: Vec<String> = served.iter().map(|s| s.to_string()).collect();
         served.sort();

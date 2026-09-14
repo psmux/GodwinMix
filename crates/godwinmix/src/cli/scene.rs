@@ -103,7 +103,14 @@ pub enum Scene {
 
 /// Run `gmx import ...`.
 pub fn run_import(cmd: Import) -> Result<()> {
-    let Import::Obs { file, out, scenes, canvas, source_size, report } = cmd;
+    let Import::Obs {
+        file,
+        out,
+        scenes,
+        canvas,
+        source_size,
+        report,
+    } = cmd;
     let text = read(&file)?;
     let options = obs_import::Options {
         canvas: canvas.as_deref().map(parse_canvas).transpose()?,
@@ -119,7 +126,10 @@ pub fn run_import(cmd: Import) -> Result<()> {
     }
     match report {
         ReportFormat::Json => println!("{}", serde_json::to_string_pretty(&imported.report)?),
-        ReportFormat::Text => print!("{}", render_report(&imported, out.as_deref(), scenes.as_deref())),
+        ReportFormat::Text => print!(
+            "{}",
+            render_report(&imported, out.as_deref(), scenes.as_deref())
+        ),
     }
     Ok(())
 }
@@ -128,7 +138,13 @@ pub fn run_import(cmd: Import) -> Result<()> {
 pub fn run_scene(cmd: Scene) -> Result<()> {
     match cmd {
         Scene::Validate { file, report } => validate_file(&file, report),
-        Scene::Layout { name, values, canvas, out, list } => {
+        Scene::Layout {
+            name,
+            values,
+            canvas,
+            out,
+            list,
+        } => {
             if list {
                 return list_layouts();
             }
@@ -152,7 +168,14 @@ pub fn run_scene(cmd: Scene) -> Result<()> {
             emit(out.as_deref(), &doc.to_flat().to_json())
         }
         Scene::Schema { flat } => {
-            print!("{}", if flat { schema::generate_flat() } else { schema::generate() });
+            print!(
+                "{}",
+                if flat {
+                    schema::generate_flat()
+                } else {
+                    schema::generate()
+                }
+            );
             Ok(())
         }
     }
@@ -189,7 +212,10 @@ fn validate_file(file: &Path, report: ReportFormat) -> Result<()> {
 fn list_layouts() -> Result<()> {
     for name in layout::NAMES {
         let doc = layout::builtin(name)?;
-        let properties = doc.params.get("properties").and_then(serde_json::Value::as_object);
+        let properties = doc
+            .params
+            .get("properties")
+            .and_then(serde_json::Value::as_object);
         let params: Vec<String> = properties
             .into_iter()
             .flatten()
@@ -240,12 +266,18 @@ fn render_report(
             Outcome::NeedsPlugin { r#type, plugin, id } => {
                 format!("imported as {type} {id:?}, {used}: needs the {plugin} plugin")
             }
-            Outcome::Skipped { reason, placeholder } => match placeholder {
+            Outcome::Skipped {
+                reason,
+                placeholder,
+            } => match placeholder {
                 Some(p) => format!("skipped, because {reason}; left {p}"),
                 None => format!("skipped, because {reason}"),
             },
         };
-        out.push_str(&format!("  {:<24} {:<22} {line}\n", source.obs_name, source.obs_type));
+        out.push_str(&format!(
+            "  {:<24} {:<22} {line}\n",
+            source.obs_name, source.obs_type
+        ));
     }
     if !r.filters_duplicated.is_empty() {
         out.push_str("\nFilters copied onto each placement\n");
@@ -288,10 +320,15 @@ fn parse_sizes(given: &[String]) -> Result<BTreeMap<String, (f64, f64)>> {
     let mut out = BTreeMap::new();
     for pair in given {
         let (name, size) = pair.split_once('=').with_context(|| {
-            format!("{pair:?} is not a source size. Write it as --source-size \"NAME=WIDTHxHEIGHT\".")
+            format!(
+                "{pair:?} is not a source size. Write it as --source-size \"NAME=WIDTHxHEIGHT\"."
+            )
         })?;
         let canvas = parse_canvas(size)?;
-        out.insert(name.to_string(), (canvas.width as f64, canvas.height as f64));
+        out.insert(
+            name.to_string(),
+            (canvas.width as f64, canvas.height as f64),
+        );
     }
     Ok(out)
 }
@@ -334,8 +371,8 @@ mod tests {
 
     #[test]
     fn source_size_hints_are_read_off_the_command_line() {
-        let sizes = parse_sizes(&["CAM 1 (Studio)=1920x1080".into(), "phone=1080x1920".into()])
-            .unwrap();
+        let sizes =
+            parse_sizes(&["CAM 1 (Studio)=1920x1080".into(), "phone=1080x1920".into()]).unwrap();
         assert_eq!(sizes["CAM 1 (Studio)"], (1920.0, 1080.0));
         assert_eq!(sizes["phone"], (1080.0, 1920.0));
         let err = parse_sizes(&["nonsense".into()]).unwrap_err().to_string();

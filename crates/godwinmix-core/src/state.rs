@@ -44,7 +44,10 @@ pub struct EventBus {
 impl EventBus {
     pub fn new(capacity: usize) -> Self {
         let (tx, _) = broadcast::channel(capacity);
-        Self { tx, seq: Arc::new(AtomicU64::new(0)) }
+        Self {
+            tx,
+            seq: Arc::new(AtomicU64::new(0)),
+        }
     }
 
     /// Publish one event. The returned count is how many receivers took it,
@@ -172,8 +175,16 @@ mod tests {
         let mut a = bus.subscribe();
         let mut b = bus.subscribe();
         assert_eq!(bus.seq(), 0);
-        bus.send(Event::Took { source: Some("cam1".into()), at_running_time_ms: 10 }).unwrap();
-        bus.send(Event::Took { source: None, at_running_time_ms: 20 }).unwrap();
+        bus.send(Event::Took {
+            source: Some("cam1".into()),
+            at_running_time_ms: 10,
+        })
+        .unwrap();
+        bus.send(Event::Took {
+            source: None,
+            at_running_time_ms: 20,
+        })
+        .unwrap();
         assert_eq!(bus.seq(), 2);
         for rx in [&mut a, &mut b] {
             assert_eq!(rx.recv().await.unwrap().seq, 1);
@@ -186,7 +197,11 @@ mod tests {
     #[test]
     fn sending_into_an_empty_room_still_advances_the_sequence() {
         let bus = EventBus::new(4);
-        assert!(bus.send(Event::AudioLevel { peak_db: vec![-6.0] }).is_err());
+        assert!(bus
+            .send(Event::AudioLevel {
+                peak_db: vec![-6.0]
+            })
+            .is_err());
         assert_eq!(bus.seq(), 1);
     }
 
@@ -197,25 +212,31 @@ mod tests {
     #[test]
     fn event_json_shape_matches_what_the_ui_parses() {
         let mut page = SourceStatus {
-                id: "page".into(),
-                name: "Live game".into(),
-                uri: "web+https://example.com/live-game".into(),
-                state: SourceState::Live,
-                has_video: true,
-                has_audio: true,
-                cell: Some(1),
-                video_idle_ms: Some(12),
-                audio_idle_ms: Some(9),
-                extra: Default::default(),
-                gain: 0.5,
-                muted: true,
-                seekable: false,
-                position_ms: None,
-                duration_ms: None,
+            id: "page".into(),
+            name: "Live game".into(),
+            uri: "web+https://example.com/live-game".into(),
+            state: SourceState::Live,
+            has_video: true,
+            has_audio: true,
+            cell: Some(1),
+            video_idle_ms: Some(12),
+            audio_idle_ms: Some(9),
+            extra: Default::default(),
+            gain: 0.5,
+            muted: true,
+            seekable: false,
+            position_ms: None,
+            duration_ms: None,
         };
         // Written as extras, and still the same two top level keys on the wire.
         page.put_extra("superimposed", true);
-        page.put_extra("audio", SourceAudio { page: 0.8, media: vec![1.0, 0.0] });
+        page.put_extra(
+            "audio",
+            SourceAudio {
+                page: 0.8,
+                media: vec![1.0, 0.0],
+            },
+        );
         let status = MixerStatus {
             program: Some("cam1".into()),
             sources: vec![page],
@@ -241,8 +262,7 @@ mod tests {
             },
         };
 
-        let v: serde_json::Value =
-            serde_json::to_value(Event::Status(Box::new(status))).unwrap();
+        let v: serde_json::Value = serde_json::to_value(Event::Status(Box::new(status))).unwrap();
         assert_eq!(v["type"], "status");
         // Flattened, not nested: `v["program"]`, never `v["status"]["program"]`.
         assert_eq!(v["program"], "cam1");
@@ -274,11 +294,16 @@ mod tests {
         })
         .unwrap();
         assert_eq!(v["type"], "took");
-        assert!(v["source"].is_null(), "a cut to black reports a null source");
+        assert!(
+            v["source"].is_null(),
+            "a cut to black reports a null source"
+        );
         assert_eq!(v["at_running_time_ms"], 4200);
 
-        let v: serde_json::Value =
-            serde_json::to_value(Event::AudioLevel { peak_db: vec![-6.0, -7.5] }).unwrap();
+        let v: serde_json::Value = serde_json::to_value(Event::AudioLevel {
+            peak_db: vec![-6.0, -7.5],
+        })
+        .unwrap();
         assert_eq!(v["type"], "audio_level");
         assert_eq!(v["peak_db"][1], -7.5);
 
@@ -409,7 +434,10 @@ mod tests {
         assert_eq!(v["duration_ms"], 154_000);
         // A clip whose duration the demuxer has not worked out yet still
         // reports where it has got to.
-        let early = SourceStatus { duration_ms: None, ..clip };
+        let early = SourceStatus {
+            duration_ms: None,
+            ..clip
+        };
         let v = serde_json::to_value(&early).unwrap();
         assert_eq!(v["position_ms"], 12_345);
         assert!(v.get("duration_ms").is_none());
@@ -418,14 +446,20 @@ mod tests {
     /// The seek endpoint's answer, which is also what rides in the event.
     #[test]
     fn the_seek_answer_leaves_an_unknown_duration_out() {
-        let landed = SourcePositionState { position_ms: 42_000, duration_ms: Some(154_000) };
+        let landed = SourcePositionState {
+            position_ms: 42_000,
+            duration_ms: Some(154_000),
+        };
         let v = serde_json::to_value(&landed).unwrap();
         assert_eq!(v["position_ms"], 42_000);
         assert_eq!(v["duration_ms"], 154_000);
         let back: SourcePositionState = serde_json::from_value(v).unwrap();
         assert_eq!(back, landed);
 
-        let unknown = SourcePositionState { position_ms: 0, duration_ms: None };
+        let unknown = SourcePositionState {
+            position_ms: 0,
+            duration_ms: None,
+        };
         let v = serde_json::to_value(&unknown).unwrap();
         assert_eq!(v["position_ms"], 0);
         assert!(v.get("duration_ms").is_none());
@@ -436,12 +470,23 @@ mod tests {
     /// would have the UI drawing balance faders that control nothing.
     #[test]
     fn the_audio_answer_carries_a_balance_only_when_there_is_one() {
-        let camera = SourceAudioState { gain: 0.75, muted: true, page: None, media: None };
+        let camera = SourceAudioState {
+            gain: 0.75,
+            muted: true,
+            page: None,
+            media: None,
+        };
         let v = serde_json::to_value(&camera).unwrap();
         assert_eq!(v["gain"], 0.75);
         assert_eq!(v["muted"], true);
-        assert!(v.get("page").is_none(), "a camera must not carry a page gain");
-        assert!(v.get("media").is_none(), "a camera must not carry media gains");
+        assert!(
+            v.get("page").is_none(),
+            "a camera must not carry a page gain"
+        );
+        assert!(
+            v.get("media").is_none(),
+            "a camera must not carry media gains"
+        );
 
         let page = SourceAudioState {
             gain: 1.0,
@@ -480,13 +525,22 @@ mod tests {
             duration_ms: None,
         };
         let v = serde_json::to_value(&camera).unwrap();
-        assert!(v.get("audio").is_none(), "a camera must not carry a balance");
+        assert!(
+            v.get("audio").is_none(),
+            "a camera must not carry a balance"
+        );
         // It does carry a fader though. Every source has one of those.
         assert_eq!(v["gain"], 1.0);
         assert_eq!(v["muted"], false);
 
         let mut page = camera.clone();
-        page.put_extra("audio", SourceAudio { page: 0.25, media: vec![1.0] });
+        page.put_extra(
+            "audio",
+            SourceAudio {
+                page: 0.25,
+                media: vec![1.0],
+            },
+        );
         page.put_extra("superimposed", true);
         let v = serde_json::to_value(&page).unwrap();
         assert_eq!(v["audio"]["page"], 0.25);

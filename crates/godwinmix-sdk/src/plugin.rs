@@ -64,9 +64,10 @@ impl Reporter {
     /// rather than wait to be asked about.
     pub fn health_changed(&self, health: Health) {
         self.set_health(health.clone());
-        let _ = self
-            .writer
-            .notify("health.changed", serde_json::to_value(&health).unwrap_or(Value::Null));
+        let _ = self.writer.notify(
+            "health.changed",
+            serde_json::to_value(&health).unwrap_or(Value::Null),
+        );
     }
 
     /// A `media.report` notification: what the plugin is actually producing,
@@ -151,8 +152,11 @@ pub trait Source: Send {
 /// container mode that is a pipe the core opened; the plugin reads it rather
 /// than writing, which is the one place the media flows the other way.
 pub trait Output: Send {
-    fn initialize(&mut self, ready: &Ready, reporter: Reporter)
-        -> Result<InitializeResult, RpcError>;
+    fn initialize(
+        &mut self,
+        ready: &Ready,
+        reporter: Reporter,
+    ) -> Result<InitializeResult, RpcError>;
     fn start(&mut self, params: &StartParams) -> Result<StartResult, RpcError>;
     fn stop(&mut self) -> Result<(), RpcError>;
     fn configure(&mut self, params: Value) -> Result<Configure, RpcError>;
@@ -173,8 +177,11 @@ pub trait Output: Send {
 /// The declared latency must match what the filter actually adds within one
 /// frame, because the aligner trusts it. The harness measures it.
 pub trait Filter: Send {
-    fn initialize(&mut self, ready: &Ready, reporter: Reporter)
-        -> Result<InitializeResult, RpcError>;
+    fn initialize(
+        &mut self,
+        ready: &Ready,
+        reporter: Reporter,
+    ) -> Result<InitializeResult, RpcError>;
     fn start(&mut self, params: &StartParams) -> Result<StartResult, RpcError>;
     fn stop(&mut self) -> Result<(), RpcError>;
     fn configure(&mut self, params: Value) -> Result<Configure, RpcError>;
@@ -188,8 +195,11 @@ pub trait Filter: Send {
 
 /// A service: no media, one singleton instance, usually tools and hooks.
 pub trait Service: Send {
-    fn initialize(&mut self, ready: &Ready, reporter: Reporter)
-        -> Result<InitializeResult, RpcError>;
+    fn initialize(
+        &mut self,
+        ready: &Ready,
+        reporter: Reporter,
+    ) -> Result<InitializeResult, RpcError>;
     fn configure(&mut self, params: Value) -> Result<Configure, RpcError>;
     fn health(&mut self) -> Health {
         Health::ok()
@@ -206,8 +216,11 @@ pub trait Service: Send {
 /// A device: finds things on the network or the machine and offers them as
 /// candidates ready for `source.add`.
 pub trait Device: Send {
-    fn initialize(&mut self, ready: &Ready, reporter: Reporter)
-        -> Result<InitializeResult, RpcError>;
+    fn initialize(
+        &mut self,
+        ready: &Ready,
+        reporter: Reporter,
+    ) -> Result<InitializeResult, RpcError>;
     fn configure(&mut self, params: Value) -> Result<Configure, RpcError>;
     fn health(&mut self) -> Health {
         Health::ok()
@@ -222,8 +235,11 @@ pub trait Device: Send {
 
 /// A transition: asked for pad properties at the compositor's frame rate.
 pub trait Transition: Send {
-    fn initialize(&mut self, ready: &Ready, reporter: Reporter)
-        -> Result<InitializeResult, RpcError>;
+    fn initialize(
+        &mut self,
+        ready: &Ready,
+        reporter: Reporter,
+    ) -> Result<InitializeResult, RpcError>;
     fn configure(&mut self, params: Value) -> Result<Configure, RpcError>;
     fn health(&mut self) -> Health {
         Health::ok()
@@ -282,8 +298,12 @@ fn parse<T: serde::de::DeserializeOwned>(method: &str, params: Value) -> Result<
 }
 
 fn json<T: serde::Serialize>(value: T) -> Result<Value, RpcError> {
-    serde_json::to_value(value)
-        .map_err(|e| RpcError::new(codes::INTERNAL_ERROR, format!("could not encode the result: {e}")))
+    serde_json::to_value(value).map_err(|e| {
+        RpcError::new(
+            codes::INTERNAL_ERROR,
+            format!("could not encode the result: {e}"),
+        )
+    })
 }
 
 /// Wraps a [`Source`] for the runtime.
@@ -310,7 +330,10 @@ impl<S: Source> Handler for SourceHandler<S> {
                 Ok(serde_json::json!({}))
             }
             "configure" => json(self.0.configure(config_params(params))?),
-            "seek" => json(self.0.seek(parse::<crate::wire::Seek>(method, params)?.position_ms)?),
+            "seek" => json(
+                self.0
+                    .seek(parse::<crate::wire::Seek>(method, params)?.position_ms)?,
+            ),
             "position" => json(self.0.position()?),
             "audio.set" => json(self.0.audio_set(parse::<AudioSet>(method, params)?)?),
             "keyframe" => {
@@ -567,7 +590,9 @@ mod tests {
                 .unwrap()["applied"],
             true
         );
-        assert!(h.on_call("seek", serde_json::json!({"position_ms": 0})).is_err());
+        assert!(h
+            .on_call("seek", serde_json::json!({"position_ms": 0}))
+            .is_err());
         assert!(h.on_call("keyframe", serde_json::json!({})).is_ok());
         assert_eq!(h.on_health().state, crate::wire::HealthState::Ok);
         assert!(h.starts("start"));
@@ -576,7 +601,9 @@ mod tests {
     #[test]
     fn bad_params_are_minus_32602_and_name_the_method() {
         let mut h = SourceHandler(Nothing);
-        let err = h.on_call("start", serde_json::json!({"canvas": "wrong"})).unwrap_err();
+        let err = h
+            .on_call("start", serde_json::json!({"canvas": "wrong"}))
+            .unwrap_err();
         assert_eq!(err.code, codes::INVALID_PARAMS);
         assert!(err.message.contains("start"), "{}", err.message);
     }

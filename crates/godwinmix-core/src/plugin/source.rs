@@ -53,7 +53,11 @@ pub fn unknown_method(manifest: &Manifest, method: &str, known: &[&str]) -> anyh
     anyhow::anyhow!(
         "{} does not answer `{method}`. It answers: {}",
         manifest.provide_id(),
-        if known.is_empty() { "nothing".to_string() } else { known.join(", ") }
+        if known.is_empty() {
+            "nothing".to_string()
+        } else {
+            known.join(", ")
+        }
     )
 }
 
@@ -204,7 +208,10 @@ mod tests {
         let mut cfg = SourceConfig::bare("x", "ndi://CAM 1");
         cfg.type_id = Some("ndi/source".into());
         let err = match resolve_config(&cfg) {
-            Ok(p) => panic!("this build has no ndi, but {} claimed it", p.manifest.provide_id()),
+            Ok(p) => panic!(
+                "this build has no ndi, but {} claimed it",
+                p.manifest.provide_id()
+            ),
             Err(e) => e,
         };
         let text = format!("{err}");

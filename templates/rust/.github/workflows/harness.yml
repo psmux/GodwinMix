@@ -1,0 +1,49 @@
+name: harness
+
+# The conformance harness on every push. A plugin that passes it gets a badge
+# in the index; one that fails cannot be listed above "custom, unreviewed".
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  check:
+    # The offline half: no core, no GStreamer, seconds not minutes.
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+      - name: check
+        shell: bash
+        run: ./check
+
+  harness:
+    # The real thing, against a test core.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: install gmx
+        run: |
+          # Replace with the release asset for the core version you target.
+          # Until gmx ships a release, build it from source:
+          #   cargo install --git https://github.com/psmux/godwinmix gmx
+          echo "gmx is not published yet; this step is a placeholder."
+      - name: gmx plugin test
+        run: |
+          if command -v gmx >/dev/null; then
+            gmx plugin test .
+          else
+            echo "gmx not installed, running the offline checks only"
+            ./check --quick
+          fi

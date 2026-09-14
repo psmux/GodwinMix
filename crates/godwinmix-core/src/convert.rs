@@ -42,7 +42,13 @@ pub struct WebSafety {
 /// The short codec name behind a stream's caps, e.g. "video/x-h264" -> "h264".
 fn codec_of(caps: &gst::Caps) -> Option<String> {
     let name = caps.structure(0)?.name().to_string();
-    Some(name.rsplit('/').next().unwrap_or(&name).trim_start_matches("x-").to_string())
+    Some(
+        name.rsplit('/')
+            .next()
+            .unwrap_or(&name)
+            .trim_start_matches("x-")
+            .to_string(),
+    )
 }
 
 /// Decide whether a file is what a browser opens without transcoding.
@@ -91,7 +97,11 @@ pub fn web_safety(info: &DiscovererInfo) -> WebSafety {
     }
 
     let astreams = info.audio_streams();
-    let audio_codec = astreams.first().and_then(|a| a.caps()).as_ref().and_then(codec_of);
+    let audio_codec = astreams
+        .first()
+        .and_then(|a| a.caps())
+        .as_ref()
+        .and_then(codec_of);
     if let Some(codec) = &audio_codec {
         // AAC's caps name is "audio/mpeg"; anything else (mp3, opus, vorbis,
         // ac3, raw) is recoded.
@@ -154,7 +164,10 @@ pub fn moov_first(path: &Path) -> Option<bool> {
 
 /// The converted sibling of a source file: `clip.mkv` -> `clip.web.mp4`.
 pub fn converted_sibling(path: &Path) -> PathBuf {
-    let stem = path.file_stem().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default();
+    let stem = path
+        .file_stem()
+        .map(|s| s.to_string_lossy().into_owned())
+        .unwrap_or_default();
     path.with_file_name(format!("{stem}.web.mp4"))
 }
 
@@ -200,7 +213,12 @@ impl Converter {
             }
             jobs.insert(
                 name.clone(),
-                ConversionState { state: ConversionPhase::Running, progress: 0.0, error: None, output: None },
+                ConversionState {
+                    state: ConversionPhase::Running,
+                    progress: 0.0,
+                    error: None,
+                    output: None,
+                },
             );
         }
         self.emit(&name);
@@ -216,7 +234,9 @@ impl Converter {
                 Err(_) => {
                     // Wait for the running job by blocking on the async permit
                     // from this blocking thread.
-                    match tokio::runtime::Handle::current().block_on(me.slot.clone().acquire_owned()) {
+                    match tokio::runtime::Handle::current()
+                        .block_on(me.slot.clone().acquire_owned())
+                    {
                         Ok(p) => p,
                         Err(e) => {
                             me.finish(&name, Err(anyhow::anyhow!("converter closed: {e}")));
@@ -235,7 +255,10 @@ impl Converter {
 
     fn emit(&self, name: &str) {
         let conversion = self.jobs.lock().get(name).cloned();
-        self.events.emit(Event::MediaChanged { name: name.to_string(), conversion });
+        self.events.emit(Event::MediaChanged {
+            name: name.to_string(),
+            conversion,
+        });
     }
 
     fn set_progress(&self, name: &str, progress: f64) {
@@ -294,8 +317,8 @@ impl Converter {
         let odd = safety.width.map(|w| w % 2 != 0).unwrap_or(false)
             || safety.height.map(|h| h % 2 != 0).unwrap_or(false);
 
-        let aenc_factory = probe::best_audio_encoder()
-            .context("no AAC encoder available to convert with")?;
+        let aenc_factory =
+            probe::best_audio_encoder().context("no AAC encoder available to convert with")?;
 
         // Lower this thread's priority before the pipeline (and x264's worker
         // threads, created during the state change) exist. Per-thread nice is
@@ -314,7 +337,9 @@ impl Converter {
         let sink = make("filesink", "conv-sink")?;
         sink.set_property("location", part.to_string_lossy().as_ref());
 
-        pipeline.add_many([&src, &dec, &mux, &sink]).context("adding converter elements")?;
+        pipeline
+            .add_many([&src, &dec, &mux, &sink])
+            .context("adding converter elements")?;
         src.link(&dec).context("linking filesrc to decodebin")?;
         mux.link(&sink).context("linking mux to filesink")?;
 
@@ -324,7 +349,9 @@ impl Converter {
         let vscale = make("videoscale", "conv-vscale")?;
         let vcaps = crate::gstutil::capsfilter(
             "conv-vcaps",
-            &gst::Caps::builder("video/x-raw").field("format", "I420").build(),
+            &gst::Caps::builder("video/x-raw")
+                .field("format", "I420")
+                .build(),
         )?;
         let venc = make("x264enc", "conv-venc")?;
         // A file transcode, not a live output: a quality target keeps a static
@@ -338,7 +365,9 @@ impl Converter {
         probe::set_int(&venc, "threads", self.threads as i64);
         let vprofile = crate::gstutil::capsfilter(
             "conv-vprofile",
-            &gst::Caps::builder("video/x-h264").field("profile", "main").build(),
+            &gst::Caps::builder("video/x-h264")
+                .field("profile", "main")
+                .build(),
         )?;
         let vparse = make("h264parse", "conv-vparse")?;
         pipeline
@@ -346,7 +375,9 @@ impl Converter {
             .context("adding video branch")?;
         gst::Element::link_many([&vq, &vconv, &vscale, &vcaps, &venc, &vprofile, &vparse])
             .context("linking video branch")?;
-        vparse.link_pads(Some("src"), &mux, Some("video_%u")).context("video to mux")?;
+        vparse
+            .link_pads(Some("src"), &mux, Some("video_%u"))
+            .context("video to mux")?;
         if odd {
             info!("converting odd dimensions; videoscale will round to even");
         }
@@ -358,7 +389,10 @@ impl Converter {
             let ares = make("audioresample", "conv-ares")?;
             let acaps = crate::gstutil::capsfilter(
                 "conv-acaps",
-                &gst::Caps::builder("audio/x-raw").field("rate", 48000i32).field("channels", 2i32).build(),
+                &gst::Caps::builder("audio/x-raw")
+                    .field("rate", 48000i32)
+                    .field("channels", 2i32)
+                    .build(),
             )?;
             let aenc = make(aenc_factory, "conv-aenc")?;
             probe::configure_audio_encoder(&aenc, 160);
@@ -368,8 +402,13 @@ impl Converter {
                 .context("adding audio branch")?;
             gst::Element::link_many([&aq, &aconv, &ares, &acaps, &aenc, &aparse])
                 .context("linking audio branch")?;
-            aparse.link_pads(Some("src"), &mux, Some("audio_%u")).context("audio to mux")?;
-            Some(aq.static_pad("sink").context("audio queue has no sink pad")?)
+            aparse
+                .link_pads(Some("src"), &mux, Some("audio_%u"))
+                .context("audio to mux")?;
+            Some(
+                aq.static_pad("sink")
+                    .context("audio queue has no sink pad")?,
+            )
         } else {
             None
         };
@@ -377,7 +416,9 @@ impl Converter {
         // Route decodebin's dynamic pads to the branches. The video sink is
         // taken once; a file with several video tracks sends the rest nowhere,
         // which is what web_safety warned about.
-        let vq_sink = vq.static_pad("sink").context("video queue has no sink pad")?;
+        let vq_sink = vq
+            .static_pad("sink")
+            .context("video queue has no sink pad")?;
         let vq_taken = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
         dec.connect_pad_added(move |_el, pad| {
             let media = pad
@@ -404,7 +445,9 @@ impl Converter {
             }
         });
 
-        pipeline.set_state(gst::State::Playing).context("starting the converter")?;
+        pipeline
+            .set_state(gst::State::Playing)
+            .context("starting the converter")?;
         let bus = pipeline.bus().context("converter pipeline has no bus")?;
 
         let started = std::time::Instant::now();
@@ -443,7 +486,8 @@ impl Converter {
         if let Ok(f) = std::fs::File::open(&part) {
             let _ = f.sync_all();
         }
-        std::fs::rename(&part, out).with_context(|| format!("renaming {} to {}", part.display(), out.display()))?;
+        std::fs::rename(&part, out)
+            .with_context(|| format!("renaming {} to {}", part.display(), out.display()))?;
         Ok(())
     }
 }
@@ -467,10 +511,23 @@ mod tests {
     #[test]
     fn every_element_the_converter_needs_is_installed() {
         let _ = gst::init();
-        for f in ["filesrc", "decodebin", "videoconvert", "videoscale", "x264enc", "h264parse", "aacparse", "mp4mux", "filesink"] {
+        for f in [
+            "filesrc",
+            "decodebin",
+            "videoconvert",
+            "videoscale",
+            "x264enc",
+            "h264parse",
+            "aacparse",
+            "mp4mux",
+            "filesink",
+        ] {
             assert!(probe::exists(f), "missing GStreamer element: {f}");
         }
-        assert!(probe::best_audio_encoder().is_some(), "no AAC encoder installed");
+        assert!(
+            probe::best_audio_encoder().is_some(),
+            "no AAC encoder installed"
+        );
     }
 
     #[test]
@@ -506,7 +563,10 @@ mod tests {
 
     #[test]
     fn converted_sibling_is_web_mp4_beside_the_original() {
-        assert_eq!(converted_sibling(Path::new("/m/clip.mkv")), Path::new("/m/clip.web.mp4"));
+        assert_eq!(
+            converted_sibling(Path::new("/m/clip.mkv")),
+            Path::new("/m/clip.web.mp4")
+        );
         assert!(is_converted_name("clip.web.mp4"));
         assert!(!is_converted_name("clip.mp4"));
     }

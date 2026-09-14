@@ -6,11 +6,11 @@
 //! names the next step.
 
 use super::{body, handler};
+use crate::control::call::Call;
+use godwinmix_core::mixer::FilterOutcome;
 use godwinmix_protocol::error::{ErrorCode, RpcError};
 use godwinmix_protocol::method::{schema_of, MethodDef, Registry, Tier};
 use godwinmix_protocol::scope::Scope;
-use crate::control::call::Call;
-use godwinmix_core::mixer::FilterOutcome;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
@@ -169,7 +169,12 @@ fn record(status: godwinmix_core::mixer::FilterStatus) -> FilterRecord {
 /// The filter with this id, after the mixer has done the work, so the answer
 /// says what is in the pipeline rather than what was asked for.
 async fn read_back(call: &Call, id: &str) -> Result<FilterRecord, RpcError> {
-    let filters = call.app.mixer.filters().await.map_err(|e| call.mixer_error(e))?;
+    let filters = call
+        .app
+        .mixer
+        .filters()
+        .await
+        .map_err(|e| call.mixer_error(e))?;
     filters
         .into_iter()
         .find(|f| f.id == id)
@@ -205,7 +210,11 @@ async fn add(call: Call, params: Value) -> Result<Value, RpcError> {
         },
         params: to_params(&req.params),
     };
-    call.app.mixer.add_filter(cfg).await.map_err(|e| call.mixer_error(e))?;
+    call.app
+        .mixer
+        .add_filter(cfg)
+        .await
+        .map_err(|e| call.mixer_error(e))?;
     body(read_back(&call, &req.id).await?)
 }
 
@@ -255,6 +264,13 @@ async fn remove(call: Call, params: Value) -> Result<Value, RpcError> {
 }
 
 async fn list(call: Call, _params: Value) -> Result<Value, RpcError> {
-    let filters = call.app.mixer.filters().await.map_err(|e| call.mixer_error(e))?;
-    body(FilterListing { filters: filters.into_iter().map(record).collect() })
+    let filters = call
+        .app
+        .mixer
+        .filters()
+        .await
+        .map_err(|e| call.mixer_error(e))?;
+    body(FilterListing {
+        filters: filters.into_iter().map(record).collect(),
+    })
 }

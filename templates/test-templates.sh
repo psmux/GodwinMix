@@ -34,7 +34,8 @@ fill() {
         -e "s/{{description}}/A source that shows a test picture./g" \
         -e "s/{{author}}/A Person/g" \
         -e "s/{{license}}/MIT/g" \
-        -e "s/{{year}}/2026/g"
+        -e "s/{{year}}/2026/g" \
+        -e "s|{{sdk}}|{ path = \"$root/crates/godwinmix-sdk\" }|g"
 }
 
 have() { command -v "$1" >/dev/null 2>&1; }

@@ -170,7 +170,9 @@ pub fn open(
 ) -> std::io::Result<Box<dyn MediaWriter>> {
     match transport {
         Transport::Container => Ok(Box::new(open_stdout(canvas, streams)?)),
-        Transport::Unixfd | Transport::Shm => open_fd_transport(transport, address, canvas, streams),
+        Transport::Unixfd | Transport::Shm => {
+            open_fd_transport(transport, address, canvas, streams)
+        }
     }
 }
 
@@ -225,7 +227,8 @@ mod tests {
     fn a_finished_writer_refuses_more_frames() {
         let canvas = Canvas::new(32, 32, 30);
         let mut w =
-            ContainerWriter::new(Vec::new(), canvas, Streams::video_only(VideoFormat::I420)).unwrap();
+            ContainerWriter::new(Vec::new(), canvas, Streams::video_only(VideoFormat::I420))
+                .unwrap();
         let frame = vec![0u8; canvas.i420_frame_bytes()];
         w.write_video(0, &frame, true).unwrap();
         w.finish().unwrap();

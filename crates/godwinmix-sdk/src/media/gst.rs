@@ -107,9 +107,8 @@ impl GstContainerWriter {
     /// transport means.
     pub fn new(fd: i32, canvas: Canvas, streams: Streams) -> Result<Self, GstError> {
         init()?;
-        let mut description = format!(
-            "matroskamux name=mux streamable=true ! fdsink fd={fd} sync=false async=false"
-        );
+        let mut description =
+            format!("matroskamux name=mux streamable=true ! fdsink fd={fd} sync=false async=false");
         if streams.video.is_some() {
             description.push_str(" appsrc name=v is-live=true format=time do-timestamp=false ! queue max-size-buffers=3 ! mux.");
         }
@@ -172,7 +171,10 @@ impl MediaWriter for GstContainerWriter {
             return Ok(());
         }
         self.done = true;
-        for src in [self.video.as_ref(), self.audio.as_ref()].into_iter().flatten() {
+        for src in [self.video.as_ref(), self.audio.as_ref()]
+            .into_iter()
+            .flatten()
+        {
             let _ = src.end_of_stream();
         }
         // Wait briefly for the mux to drain, then stop. A plugin shutting down
@@ -320,7 +322,10 @@ impl MediaWriter for FdTransportWriter {
             return Ok(());
         }
         *done = true;
-        for (pipeline, src) in [self.video.as_ref(), self.audio.as_ref()].into_iter().flatten() {
+        for (pipeline, src) in [self.video.as_ref(), self.audio.as_ref()]
+            .into_iter()
+            .flatten()
+        {
             let _ = src.end_of_stream();
             let _ = pipeline.set_state(gst::State::Null);
         }
@@ -335,7 +340,10 @@ impl MediaWriter for FdTransportWriter {
 #[cfg(unix)]
 impl Drop for FdTransportWriter {
     fn drop(&mut self) {
-        for (pipeline, _) in [self.video.as_ref(), self.audio.as_ref()].into_iter().flatten() {
+        for (pipeline, _) in [self.video.as_ref(), self.audio.as_ref()]
+            .into_iter()
+            .flatten()
+        {
             let _ = pipeline.set_state(gst::State::Null);
         }
     }

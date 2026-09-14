@@ -7,14 +7,14 @@
 //! each; this module is the REST spelling, which is what `curl` and
 //! `gmx dot cam1 | dot -Tsvg` use.
 
-use godwinmix_core::mixer::MixerHandle;
-use godwinmix_core::observe::{doctor, introspect, logs, metrics, session, trace};
 use axum::extract::{Query, Request, State};
 use axum::http::{header, StatusCode};
 use axum::middleware::Next;
 use axum::response::{IntoResponse, Response};
 use axum::routing::{get, post};
 use axum::{Json, Router};
+use godwinmix_core::mixer::MixerHandle;
+use godwinmix_core::observe::{doctor, introspect, logs, metrics, session, trace};
 use serde::Deserialize;
 use serde_json::json;
 use std::path::PathBuf;
@@ -85,13 +85,19 @@ pub fn router(state: ObserveState) -> Router {
         .route("/api/v1/core/startup_report", get(startup_report))
         .route("/api/v1/core/doctor", get(core_doctor))
         .route("/api/v1/core/session_log", get(session_log))
-        .route_layer(axum::middleware::from_fn_with_state(state.clone(), require_token));
+        .route_layer(axum::middleware::from_fn_with_state(
+            state.clone(),
+            require_token,
+        ));
 
     let metrics = Router::new().route("/metrics", get(scrape));
     let metrics = if metrics_open {
         metrics
     } else {
-        metrics.route_layer(axum::middleware::from_fn_with_state(state.clone(), require_token))
+        metrics.route_layer(axum::middleware::from_fn_with_state(
+            state.clone(),
+            require_token,
+        ))
     };
 
     Router::new()
@@ -184,7 +190,10 @@ async fn scrape(State(state): State<ObserveState>) -> Response {
     metrics::sample_source_queues();
     (
         StatusCode::OK,
-        [(header::CONTENT_TYPE, "text/plain; version=0.0.4; charset=utf-8")],
+        [(
+            header::CONTENT_TYPE,
+            "text/plain; version=0.0.4; charset=utf-8",
+        )],
         metrics::render(),
     )
         .into_response()
@@ -207,16 +216,22 @@ async fn log_set(Json(body): Json<LogSet>) -> Response {
     } else {
         match logs::LevelCode::parse(&body.level) {
             Some(l) => Some(l),
-            None => return bad_request(format!(
-                "'{}' is not a level. Use off, error, warn, info, debug, trace, or default",
-                body.level
-            )),
+            None => {
+                return bad_request(format!(
+                    "'{}' is not a level. Use off, error, warn, info, debug, trace, or default",
+                    body.level
+                ))
+            }
         }
     };
     match (&body.instance, &body.target) {
         (None, None) => match level {
             Some(level) => logs::set_default_level(level),
-            None => return bad_request("name an instance or a target, or give a level to set the default to"),
+            None => {
+                return bad_request(
+                    "name an instance or a target, or give a level to set the default to",
+                )
+            }
         },
         (Some(instance), None) => logs::set_instance_level(instance, level),
         (None, Some(target)) => logs::set_target_level(target, level),
@@ -248,7 +263,11 @@ fn default_gst_secs() -> u64 {
 }
 
 async fn log_gst(Json(body): Json<LogGst>) -> Response {
-    match logs::set_gst_debug(body.instance.as_deref(), &body.categories, body.duration_secs) {
+    match logs::set_gst_debug(
+        body.instance.as_deref(),
+        &body.categories,
+        body.duration_secs,
+    ) {
         Ok(applied) => {
             session::session().record(
                 "log.gst",
@@ -341,7 +360,10 @@ async fn core_doctor(State(state): State<ObserveState>) -> Response {
             let failed = doctor::exit_code(&checks) != 0;
             Json(json!({ "checks": checks, "ok": !failed })).into_response()
         }
-        Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({ "error": e.to_string() })))
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({ "error": e.to_string() })),
+        )
             .into_response(),
     }
 }
@@ -371,11 +393,19 @@ async fn session_log(Query(q): Query<SessionQuery>) -> Response {
 }
 
 fn bad_request(message: impl Into<String>) -> Response {
-    (StatusCode::BAD_REQUEST, Json(json!({ "error": message.into() }))).into_response()
+    (
+        StatusCode::BAD_REQUEST,
+        Json(json!({ "error": message.into() })),
+    )
+        .into_response()
 }
 
 fn not_found(message: impl Into<String>) -> Response {
-    (StatusCode::NOT_FOUND, Json(json!({ "error": message.into() }))).into_response()
+    (
+        StatusCode::NOT_FOUND,
+        Json(json!({ "error": message.into() })),
+    )
+        .into_response()
 }
 
 #[cfg(test)]
@@ -397,13 +427,19 @@ mod tests {
 
     impl Served {
         async fn start(state: ObserveState) -> Self {
-            let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.expect("bind");
+            let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+                .await
+                .expect("bind");
             let base = format!("http://{}", listener.local_addr().unwrap());
             let app = router(state);
             let task = tokio::spawn(async move {
                 let _ = axum::serve(listener, app).await;
             });
-            Self { base, client: reqwest::Client::new(), task }
+            Self {
+                base,
+                client: reqwest::Client::new(),
+                task,
+            }
         }
 
         fn get(&self, path: &str) -> reqwest::RequestBuilder {
@@ -446,13 +482,21 @@ mod tests {
         let server = Served::start(test_state()).await;
         let response = server.get("/metrics").send().await.unwrap();
         assert_eq!(response.status(), 200);
-        let content_type =
-            response.headers().get("content-type").unwrap().to_str().unwrap().to_string();
+        let content_type = response
+            .headers()
+            .get("content-type")
+            .unwrap()
+            .to_str()
+            .unwrap()
+            .to_string();
         assert!(content_type.starts_with("text/plain"), "{content_type}");
         let text = response.text().await.unwrap();
         assert!(text.contains("gmx_programme_frame_interval_ms"), "{text}");
         assert!(text.contains("gmx_programme_frames_total"), "{text}");
-        assert!(text.contains("# TYPE gmx_programme_frame_interval_ms histogram"), "{text}");
+        assert!(
+            text.contains("# TYPE gmx_programme_frame_interval_ms histogram"),
+            "{text}"
+        );
     }
 
     #[tokio::test]
@@ -469,8 +513,12 @@ mod tests {
         state.metrics_open = false;
         let closed = Served::start(state).await;
         assert_eq!(closed.get("/metrics").send().await.unwrap().status(), 401);
-        let with_token =
-            closed.get("/metrics").bearer_auth("secret").send().await.unwrap();
+        let with_token = closed
+            .get("/metrics")
+            .bearer_auth("secret")
+            .send()
+            .await
+            .unwrap();
         assert_eq!(with_token.status(), 200);
     }
 
@@ -478,7 +526,10 @@ mod tests {
     async fn log_set_moves_a_level_and_answers_with_what_is_in_force() {
         let server = Served::start(test_state()).await;
         let response = server
-            .post("/api/v1/log/set", r#"{"instance":"routes-cam","level":"debug"}"#)
+            .post(
+                "/api/v1/log/set",
+                r#"{"instance":"routes-cam","level":"debug"}"#,
+            )
             .send()
             .await
             .unwrap();
@@ -490,7 +541,10 @@ mod tests {
         // And "default" puts it back, which is how an operator turns the
         // firehose off without knowing what it was before.
         let back = server
-            .post("/api/v1/log/set", r#"{"instance":"routes-cam","level":"default"}"#)
+            .post(
+                "/api/v1/log/set",
+                r#"{"instance":"routes-cam","level":"default"}"#,
+            )
             .send()
             .await
             .unwrap()
@@ -503,18 +557,27 @@ mod tests {
     #[tokio::test]
     async fn a_level_nobody_can_spell_is_refused_with_the_list() {
         let server = Served::start(test_state()).await;
-        let response =
-            server.post("/api/v1/log/set", r#"{"instance":"cam1","level":"chatty"}"#).send().await.unwrap();
+        let response = server
+            .post("/api/v1/log/set", r#"{"instance":"cam1","level":"chatty"}"#)
+            .send()
+            .await
+            .unwrap();
         assert_eq!(response.status(), 400);
         let text = response.text().await.unwrap();
-        assert!(text.contains("debug"), "the error should list the levels: {text}");
+        assert!(
+            text.contains("debug"),
+            "the error should list the levels: {text}"
+        );
     }
 
     #[tokio::test]
     async fn setting_an_instance_and_a_target_at_once_is_refused_rather_than_guessed() {
         let server = Served::start(test_state()).await;
         let response = server
-            .post("/api/v1/log/set", r#"{"instance":"cam1","target":"godwinmix","level":"debug"}"#)
+            .post(
+                "/api/v1/log/set",
+                r#"{"instance":"cam1","target":"godwinmix","level":"debug"}"#,
+            )
             .send()
             .await
             .unwrap();
@@ -525,7 +588,10 @@ mod tests {
     async fn log_gst_raises_a_category_and_says_for_how_long() {
         let server = Served::start(test_state()).await;
         let response = server
-            .post("/api/v1/log/gst", r#"{"categories":"rtmp2src:4","duration_secs":1}"#)
+            .post(
+                "/api/v1/log/gst",
+                r#"{"categories":"rtmp2src:4","duration_secs":1}"#,
+            )
             .send()
             .await
             .unwrap();
@@ -534,9 +600,19 @@ mod tests {
         assert_eq!(v["categories"][0], "rtmp2src");
         assert_eq!(v["duration_secs"], 1);
 
-        let levels: serde_json::Value =
-            server.get("/api/v1/log/levels").send().await.unwrap().json().await.unwrap();
-        assert!(levels["gst"].as_array().unwrap().iter().any(|c| c["category"] == "rtmp2src"));
+        let levels: serde_json::Value = server
+            .get("/api/v1/log/levels")
+            .send()
+            .await
+            .unwrap()
+            .json()
+            .await
+            .unwrap();
+        assert!(levels["gst"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|c| c["category"] == "rtmp2src"));
     }
 
     #[tokio::test]
@@ -548,7 +624,11 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(response.status(), 400);
-        assert!(response.text().await.unwrap().contains("<category>:<level>"));
+        assert!(response
+            .text()
+            .await
+            .unwrap()
+            .contains("<category>:<level>"));
     }
 
     #[tokio::test]
@@ -557,11 +637,23 @@ mod tests {
         let pipeline = gstreamer::Pipeline::with_name("routes-programme");
         godwinmix_core::observe::register_pipeline(godwinmix_core::observe::PROGRAMME, &pipeline);
 
-        let response = server.get("/api/v1/pipeline/dot?name=programme").send().await.unwrap();
+        let response = server
+            .get("/api/v1/pipeline/dot?name=programme")
+            .send()
+            .await
+            .unwrap();
         assert_eq!(response.status(), 200);
-        let content_type =
-            response.headers().get("content-type").unwrap().to_str().unwrap().to_string();
-        assert!(content_type.starts_with("text/vnd.graphviz"), "{content_type}");
+        let content_type = response
+            .headers()
+            .get("content-type")
+            .unwrap()
+            .to_str()
+            .unwrap()
+            .to_string();
+        assert!(
+            content_type.starts_with("text/vnd.graphviz"),
+            "{content_type}"
+        );
         let text = response.text().await.unwrap();
         assert!(text.contains("digraph"), "{text}");
         godwinmix_core::observe::unregister_pipeline(godwinmix_core::observe::PROGRAMME);
@@ -570,7 +662,11 @@ mod tests {
     #[tokio::test]
     async fn an_unknown_pipeline_is_a_404_naming_what_is_known() {
         let server = Served::start(test_state()).await;
-        let response = server.get("/api/v1/pipeline/dot?name=nothing-here").send().await.unwrap();
+        let response = server
+            .get("/api/v1/pipeline/dot?name=nothing-here")
+            .send()
+            .await
+            .unwrap();
         assert_eq!(response.status(), 404);
         assert!(response.text().await.unwrap().contains("Known:"));
     }
@@ -580,11 +676,20 @@ mod tests {
         let server = Served::start(test_state()).await;
         let response = server
             .get("/api/v1/pipeline/list")
-            .header("traceparent", "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01")
+            .header(
+                "traceparent",
+                "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01",
+            )
             .send()
             .await
             .unwrap();
-        let out = response.headers().get("traceparent").unwrap().to_str().unwrap().to_string();
+        let out = response
+            .headers()
+            .get("traceparent")
+            .unwrap()
+            .to_str()
+            .unwrap()
+            .to_string();
         assert!(out.contains("4bf92f3577b34da6a3ce929d0e0e4736"), "{out}");
     }
 
@@ -592,8 +697,17 @@ mod tests {
     async fn a_request_with_no_traceparent_still_gets_one() {
         let server = Served::start(test_state()).await;
         let response = server.get("/api/v1/pipeline/list").send().await.unwrap();
-        let out = response.headers().get("traceparent").unwrap().to_str().unwrap().to_string();
-        assert!(godwinmix_core::observe::TraceId::from_traceparent(&out).is_some(), "{out}");
+        let out = response
+            .headers()
+            .get("traceparent")
+            .unwrap()
+            .to_str()
+            .unwrap()
+            .to_string();
+        assert!(
+            godwinmix_core::observe::TraceId::from_traceparent(&out).is_some(),
+            "{out}"
+        );
     }
 
     #[tokio::test]
@@ -604,13 +718,33 @@ mod tests {
             false,
         )));
         let server = Served::start(state).await;
-        assert_eq!(server.get("/api/v1/pipeline/list").send().await.unwrap().status(), 401);
         assert_eq!(
-            server.get("/api/v1/pipeline/list").bearer_auth("wrong").send().await.unwrap().status(),
+            server
+                .get("/api/v1/pipeline/list")
+                .send()
+                .await
+                .unwrap()
+                .status(),
             401
         );
         assert_eq!(
-            server.get("/api/v1/pipeline/list").bearer_auth("secret").send().await.unwrap().status(),
+            server
+                .get("/api/v1/pipeline/list")
+                .bearer_auth("wrong")
+                .send()
+                .await
+                .unwrap()
+                .status(),
+            401
+        );
+        assert_eq!(
+            server
+                .get("/api/v1/pipeline/list")
+                .bearer_auth("secret")
+                .send()
+                .await
+                .unwrap()
+                .status(),
             200
         );
     }
@@ -618,8 +752,14 @@ mod tests {
     #[tokio::test]
     async fn the_startup_report_is_json_with_a_threshold() {
         let server = Served::start(test_state()).await;
-        let v: serde_json::Value =
-            server.get("/api/v1/core/startup_report").send().await.unwrap().json().await.unwrap();
+        let v: serde_json::Value = server
+            .get("/api/v1/core/startup_report")
+            .send()
+            .await
+            .unwrap()
+            .json()
+            .await
+            .unwrap();
         assert_eq!(v["threshold_ms"], 250.0);
         assert!(v["stages"].is_array());
     }
@@ -627,8 +767,14 @@ mod tests {
     #[tokio::test]
     async fn the_doctor_answers_over_http_with_a_verdict_per_check() {
         let server = Served::start(test_state()).await;
-        let v: serde_json::Value =
-            server.get("/api/v1/core/doctor").send().await.unwrap().json().await.unwrap();
+        let v: serde_json::Value = server
+            .get("/api/v1/core/doctor")
+            .send()
+            .await
+            .unwrap()
+            .json()
+            .await
+            .unwrap();
         let checks = v["checks"].as_array().expect("checks");
         assert!(checks.len() >= 6, "{v}");
         for check in checks {
@@ -650,7 +796,11 @@ mod tests {
             let _ = axum::serve(listener, app).await;
         });
         let client = reqwest::Client::new();
-        client.post(format!("{base}/rpc/program.take")).send().await.unwrap();
+        client
+            .post(format!("{base}/rpc/program.take"))
+            .send()
+            .await
+            .unwrap();
         task.abort();
 
         let text = metrics::render();

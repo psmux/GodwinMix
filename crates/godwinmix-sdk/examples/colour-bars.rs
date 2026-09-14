@@ -91,7 +91,11 @@ fn draw_bars(frame: &mut [u8], canvas: Canvas, shift: i64) {
 }
 
 impl Source for ColourBars {
-    fn initialize(&mut self, ready: &Ready, reporter: Reporter) -> Result<InitializeResult, RpcError> {
+    fn initialize(
+        &mut self,
+        ready: &Ready,
+        reporter: Reporter,
+    ) -> Result<InitializeResult, RpcError> {
         self.canvas = ready.canvas;
         self.drift = Self::drift_from(&ready.params);
         reporter.info(format!(
@@ -100,7 +104,9 @@ impl Source for ColourBars {
         ));
         self.reporter = Some(reporter);
         // Bars are drawn on demand, so nothing is buffered and nothing is late.
-        Ok(InitializeResult { latency_ms: Some(0) })
+        Ok(InitializeResult {
+            latency_ms: Some(0),
+        })
     }
 
     fn start(&mut self, params: &StartParams) -> Result<StartResult, RpcError> {
@@ -123,7 +129,9 @@ impl Source for ColourBars {
                 draw_bars(frame, canvas, (drift * seconds) as i64);
             },
         ));
-        Ok(StartResult { latency_ms: Some(0) })
+        Ok(StartResult {
+            latency_ms: Some(0),
+        })
     }
 
     fn stop(&mut self) -> Result<(), RpcError> {

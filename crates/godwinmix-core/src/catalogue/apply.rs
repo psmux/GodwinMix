@@ -39,7 +39,9 @@ impl Default for Vars {
 }
 
 pub fn cpu_count() -> i64 {
-    std::thread::available_parallelism().map(|n| n.get() as i64).unwrap_or(1)
+    std::thread::available_parallelism()
+        .map(|n| n.get() as i64)
+        .unwrap_or(1)
 }
 
 /// Which family a unit belongs to, so a conversion that makes no sense is
@@ -72,13 +74,18 @@ pub fn known_variable(from: &str) -> Option<&'static str> {
 pub fn check_derived(d: &Derived) -> Option<String> {
     let Some(native) = known_variable(&d.from) else {
         let names: Vec<&str> = UNITS.iter().map(|(n, _)| *n).collect();
-        return Some(format!("unknown variable {:?}; known: {}", d.from, names.join(", ")));
+        return Some(format!(
+            "unknown variable {:?}; known: {}",
+            d.from,
+            names.join(", ")
+        ));
     };
     match (family(native), family(&d.unit)) {
         (_, None) => Some(format!("unknown unit {:?}", d.unit)),
-        (Some(a), Some(b)) if a != b => {
-            Some(format!("{:?} is in {native}, which cannot convert to {:?}", d.from, d.unit))
-        }
+        (Some(a), Some(b)) if a != b => Some(format!(
+            "{:?} is in {native}, which cannot convert to {:?}",
+            d.from, d.unit
+        )),
         _ => None,
     }
 }
@@ -161,22 +168,45 @@ mod tests {
     use super::*;
 
     fn derived(unit: &str, from: &str) -> Derived {
-        Derived { unit: unit.into(), from: from.into() }
+        Derived {
+            unit: unit.into(),
+            from: from.into(),
+        }
     }
 
     #[test]
     fn bitrate_converts_into_the_unit_the_element_wants() {
-        let vars = Vars { video_bitrate_kbps: 4000, ..Default::default() };
-        assert_eq!(vars.resolve(&derived("kbit", "video.bitrate_kbps")), Some(4000));
-        assert_eq!(vars.resolve(&derived("bit", "video.bitrate_kbps")), Some(4_000_000));
-        assert_eq!(vars.resolve(&derived("mbit", "video.bitrate_kbps")), Some(4));
+        let vars = Vars {
+            video_bitrate_kbps: 4000,
+            ..Default::default()
+        };
+        assert_eq!(
+            vars.resolve(&derived("kbit", "video.bitrate_kbps")),
+            Some(4000)
+        );
+        assert_eq!(
+            vars.resolve(&derived("bit", "video.bitrate_kbps")),
+            Some(4_000_000)
+        );
+        assert_eq!(
+            vars.resolve(&derived("mbit", "video.bitrate_kbps")),
+            Some(4)
+        );
     }
 
     #[test]
     fn keyframe_seconds_and_frames_relate_through_the_framerate() {
-        let vars = Vars { keyframe_secs: 2, keyframe_frames: 120, fps: 60, ..Default::default() };
+        let vars = Vars {
+            keyframe_secs: 2,
+            keyframe_frames: 120,
+            fps: 60,
+            ..Default::default()
+        };
         assert_eq!(vars.resolve(&derived("frames", "keyframe.secs")), Some(120));
-        assert_eq!(vars.resolve(&derived("seconds", "keyframe.frames")), Some(2));
+        assert_eq!(
+            vars.resolve(&derived("seconds", "keyframe.frames")),
+            Some(2)
+        );
     }
 
     #[test]

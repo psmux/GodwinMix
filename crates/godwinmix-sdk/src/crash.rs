@@ -64,11 +64,7 @@ fn now_ms() -> u128 {
 /// turns into `None` and a line on stderr.
 pub fn write_report(dir: &Path, message: &str, backtrace: &str) -> Option<PathBuf> {
     if let Err(e) = std::fs::create_dir_all(dir) {
-        let _ = writeln!(
-            std::io::stderr(),
-            "could not create {}: {e}",
-            dir.display()
-        );
+        let _ = writeln!(std::io::stderr(), "could not create {}: {e}", dir.display());
         return None;
     }
     let path = dir.join(format!("crash-{}.json", now_ms()));
@@ -185,7 +181,11 @@ mod tests {
             logs.iter().any(|l| l == "[warn] the camera went away"),
             "the report lost the log line: {logs:?}"
         );
-        assert!(path.file_name().unwrap().to_string_lossy().starts_with("crash-"));
+        assert!(path
+            .file_name()
+            .unwrap()
+            .to_string_lossy()
+            .starts_with("crash-"));
         let _ = std::fs::remove_dir_all(&dir);
         clear_logs();
     }

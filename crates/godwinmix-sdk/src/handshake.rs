@@ -32,6 +32,32 @@ impl State {
         }
     }
 
+    /// Every method this protocol level defines for a plugin.
+    ///
+    /// A method outside this list is not a state error, it is a method the
+    /// plugin has never heard of, and it is answered -32601 by the handler.
+    /// Keeping the two apart matters: -32001 tells a caller to wait and try
+    /// again, and waiting for a method that does not exist never ends.
+    pub fn is_known(method: &str) -> bool {
+        matches!(
+            method,
+            "initialize"
+                | "initialized"
+                | "shutdown"
+                | "configure"
+                | "health"
+                | "start"
+                | "stop"
+                | "seek"
+                | "position"
+                | "keyframe"
+                | "audio.set"
+                | "render"
+                | "discover"
+                | "tool.call"
+        )
+    }
+
     /// Which methods the core may call in this state.
     ///
     /// `stalled` and `degraded` are the same as `running`: a plugin in trouble
@@ -177,8 +203,12 @@ impl Machine {
     }
 
     /// Check a call against the table. `Ok(())` means dispatch it.
+    ///
+    /// A method this protocol level does not define is dispatched whatever the
+    /// state, so the handler answers -32601 rather than the state machine
+    /// answering -32001 and inviting a retry that can never work.
     pub fn check(&self, method: &str) -> Result<(), RpcError> {
-        if self.state.allows(method) {
+        if !State::is_known(method) || self.state.allows(method) {
             Ok(())
         } else {
             Err(self.state.refuse(method))
@@ -274,7 +304,10 @@ mod tests {
             assert!(m.check(method).is_ok(), "{method} must be legal when ready");
         }
         for method in ["stop", "seek", "position", "keyframe", "audio.set"] {
-            assert!(m.check(method).is_err(), "{method} must be refused when ready");
+            assert!(
+                m.check(method).is_err(),
+                "{method} must be refused when ready"
+            );
         }
     }
 
@@ -293,7 +326,10 @@ mod tests {
             "audio.set",
             "render",
         ] {
-            assert!(m.check(method).is_ok(), "{method} must be legal when running");
+            assert!(
+                m.check(method).is_ok(),
+                "{method} must be legal when running"
+            );
         }
         assert!(m.check("start").is_err(), "start twice is refused");
     }
@@ -346,6 +382,19 @@ mod tests {
         r.initialized();
         r.degraded(true);
         assert_eq!(r.state(), State::Ready);
+    }
+
+    #[test]
+    fn a_method_this_level_does_not_define_reaches_the_handler() {
+        // The handler answers -32601. The state machine must not turn it into
+        // -32001, which would tell the caller to wait for a method that will
+        // never exist.
+        let mut m = Machine::new();
+        m.initialized();
+        m.started();
+        assert!(m.check("teleport").is_ok());
+        assert!(!State::is_known("teleport"));
+        assert!(State::is_known("audio.set"));
     }
 
     #[test]

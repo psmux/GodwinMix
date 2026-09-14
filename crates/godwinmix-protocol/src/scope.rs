@@ -14,7 +14,9 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 /// What a token may reach. Ordered: `admin` implies `operate` implies `read`.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, JsonSchema)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, JsonSchema,
+)]
 #[serde(rename_all = "lowercase")]
 pub enum Scope {
     Read,
@@ -95,7 +97,11 @@ impl Token {
     /// What an open control port grants: everything, under the id "open", so
     /// the history still says who took.
     pub fn open() -> Self {
-        Self { id: "open".into(), secret: String::new(), ..Self::legacy("") }
+        Self {
+            id: "open".into(),
+            secret: String::new(),
+            ..Self::legacy("")
+        }
     }
 
     pub fn has(&self, needed: Scope) -> bool {
@@ -150,7 +156,10 @@ impl AuthFailure {
 
 impl Tokens {
     pub fn new(entries: Vec<Token>, rehearsal_core: bool) -> Self {
-        Self { entries, rehearsal_core }
+        Self {
+            entries,
+            rehearsal_core,
+        }
     }
 
     /// No token configured: the control port is open, which is how it has
@@ -179,7 +188,9 @@ impl Tokens {
                 found = Some(entry);
             }
         }
-        let Some(token) = found else { return Err(AuthFailure::Wrong) };
+        let Some(token) = found else {
+            return Err(AuthFailure::Wrong);
+        };
         // 09 section 5 item 14: an agent must not have to know which core it
         // is talking to, so the credential decides and the mismatch is refused
         // rather than quietly downgraded.
@@ -245,7 +256,11 @@ impl Confirmations {
         issued.retain(|_, p| p.at.elapsed() < CONFIRM_TTL);
         issued.insert(
             confirm_token.clone(),
-            Pending { method: method.to_string(), token_id: token.id.clone(), at: Instant::now() },
+            Pending {
+                method: method.to_string(),
+                token_id: token.id.clone(),
+                at: Instant::now(),
+            },
         );
         RpcError::new(
             ErrorCode::ConfirmationRequired,
@@ -356,26 +371,41 @@ mod tests {
     /// tell rehearsal from live does not have to.
     #[test]
     fn a_rehearsal_token_and_a_live_core_refuse_each_other() {
-        let rehearsal = Token { rehearsal: true, ..token("bot", "r", &[Scope::Operate]) };
+        let rehearsal = Token {
+            rehearsal: true,
+            ..token("bot", "r", &[Scope::Operate])
+        };
         let live = token("desk", "l", &[Scope::Operate]);
 
         let live_core = Tokens::new(vec![rehearsal.clone(), live.clone()], false);
         assert!(live_core.authenticate(Some("l")).is_ok());
-        assert!(matches!(live_core.authenticate(Some("r")), Err(AuthFailure::WrongCore(_))));
+        assert!(matches!(
+            live_core.authenticate(Some("r")),
+            Err(AuthFailure::WrongCore(_))
+        ));
 
         let rehearsal_core = Tokens::new(vec![rehearsal, live], true);
         assert!(rehearsal_core.authenticate(Some("r")).is_ok());
-        assert!(matches!(rehearsal_core.authenticate(Some("l")), Err(AuthFailure::WrongCore(_))));
+        assert!(matches!(
+            rehearsal_core.authenticate(Some("l")),
+            Err(AuthFailure::WrongCore(_))
+        ));
     }
 
     #[test]
     fn a_confirm_token_works_once_for_one_method() {
         let c = Confirmations::default();
-        let who = Token { confirm: ConfirmPolicy::Required, ..token("bot", "x", &[Scope::Operate]) };
+        let who = Token {
+            confirm: ConfirmPolicy::Required,
+            ..token("bot", "x", &[Scope::Operate])
+        };
         let refusal = c.require("source.remove", &who);
         assert_eq!(refusal.code, ErrorCode::ConfirmationRequired.number());
         let ct = refusal.data["confirm_token"].as_str().unwrap().to_string();
-        assert!(refusal.message.contains(&ct), "the message has to carry the token: {refusal}");
+        assert!(
+            refusal.message.contains(&ct),
+            "the message has to carry the token: {refusal}"
+        );
 
         // Wrong method: refused, and the token survives for the call it was
         // issued for.
@@ -392,9 +422,18 @@ mod tests {
     #[test]
     fn a_confirm_token_belongs_to_the_token_that_asked() {
         let c = Confirmations::default();
-        let mine = Token { confirm: ConfirmPolicy::Required, ..token("a", "1", &[Scope::Operate]) };
-        let yours = Token { confirm: ConfirmPolicy::Required, ..token("b", "2", &[Scope::Operate]) };
-        let ct = c.require("source.remove", &mine).data["confirm_token"].as_str().unwrap().to_string();
+        let mine = Token {
+            confirm: ConfirmPolicy::Required,
+            ..token("a", "1", &[Scope::Operate])
+        };
+        let yours = Token {
+            confirm: ConfirmPolicy::Required,
+            ..token("b", "2", &[Scope::Operate])
+        };
+        let ct = c.require("source.remove", &mine).data["confirm_token"]
+            .as_str()
+            .unwrap()
+            .to_string();
         assert!(c.redeem(&ct, "source.remove", &yours).is_err());
         assert!(c.redeem(&ct, "source.remove", &mine).is_ok());
     }

@@ -108,7 +108,12 @@ impl Grid {
         // Round cell dimensions down to even numbers for 4:2:0 chroma.
         let cell_w = ((width / cols as i32) / 2) * 2;
         let cell_h = ((height / rows as i32) / 2) * 2;
-        Self { cols, rows, cell_w, cell_h }
+        Self {
+            cols,
+            rows,
+            cell_w,
+            cell_h,
+        }
     }
 
     /// Top-left corner of cell `index`, counting from zero in reading order.

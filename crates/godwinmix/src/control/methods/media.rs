@@ -1,14 +1,14 @@
 //! The clip library, ad breaks, and looking at the pictures.
 
 use super::{body, handler};
+use crate::control::call::Call;
+use base64::Engine;
+use godwinmix_core::mixer::Command;
 use godwinmix_protocol::error::{ErrorCode, RpcError};
 use godwinmix_protocol::method::{any_object, schema_of, MethodDef, Registry, Tier};
 use godwinmix_protocol::requests::*;
 use godwinmix_protocol::scope::Scope;
 use godwinmix_protocol::types::*;
-use crate::control::call::Call;
-use godwinmix_core::mixer::Command;
-use base64::Engine;
 use serde_json::{json, Value};
 
 pub fn register(reg: &mut Registry<Call>) {
@@ -128,7 +128,12 @@ fn register_adbreak(reg: &mut Registry<Call>) {
                     })
                     .await
                     .map_err(|e| call.mixer_error(e))?;
-                let status = call.app.mixer.status().await.map_err(|e| call.mixer_error(e))?;
+                let status = call
+                    .app
+                    .mixer
+                    .status()
+                    .await
+                    .map_err(|e| call.mixer_error(e))?;
                 body(json!({ "ad": status.ad, "program": status.program }))
             }),
         )
@@ -157,7 +162,12 @@ fn register_adbreak(reg: &mut Registry<Call>) {
                     .request(|ack| Command::EndAdBreak(Some(ack)))
                     .await
                     .map_err(|e| call.mixer_error(e))?;
-                let status = call.app.mixer.status().await.map_err(|e| call.mixer_error(e))?;
+                let status = call
+                    .app
+                    .mixer
+                    .status()
+                    .await
+                    .map_err(|e| call.mixer_error(e))?;
                 body(json!({ "ad": status.ad, "program": status.program }))
             }),
         )
@@ -169,7 +179,6 @@ fn register_adbreak(reg: &mut Registry<Call>) {
              armed or on air.",
         ),
     );
-
 }
 
 fn register_snapshot(reg: &mut Registry<Call>) {
@@ -240,8 +249,17 @@ async fn remove_media(call: Call, params: Value) -> Result<Value, RpcError> {
         RpcError::not_found("media file", &req.name, &[]).with("detail", e.to_string())
     })?;
     let target = godwinmix_core::input::to_uri(&path.display().to_string());
-    let configs = call.app.mixer.configs().await.map_err(|e| call.mixer_error(e))?;
-    if let Some(s) = configs.sources.iter().find(|s| godwinmix_core::input::to_uri(&s.uri) == target) {
+    let configs = call
+        .app
+        .mixer
+        .configs()
+        .await
+        .map_err(|e| call.mixer_error(e))?;
+    if let Some(s) = configs
+        .sources
+        .iter()
+        .find(|s| godwinmix_core::input::to_uri(&s.uri) == target)
+    {
         return Err(RpcError::not_in_state(format!(
             "{} is the source \"{}\" on this mixer. Remove the source first, then delete \
              the file.",
@@ -256,7 +274,10 @@ async fn remove_media(call: Call, params: Value) -> Result<Value, RpcError> {
         .map(|p| p.display().to_string())
         .collect();
     if call.dry_run {
-        return Ok(call.dry_run_answer(!would.is_empty(), would.iter().map(|p| format!("delete {p}")).collect()));
+        return Ok(call.dry_run_answer(
+            !would.is_empty(),
+            would.iter().map(|p| format!("delete {p}")).collect(),
+        ));
     }
     let mut removed = Vec::new();
     for p in &would {
@@ -264,8 +285,9 @@ async fn remove_media(call: Call, params: Value) -> Result<Value, RpcError> {
             removed.push(p.clone());
         }
     }
-    call.app
-        .mixer
-        .emit(Event::MediaChanged { name: req.name.clone(), conversion: None });
+    call.app.mixer.emit(Event::MediaChanged {
+        name: req.name.clone(),
+        conversion: None,
+    });
     Ok(json!({ "removed": removed, "name": req.name }))
 }

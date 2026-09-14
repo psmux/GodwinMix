@@ -25,8 +25,13 @@ pub fn openapi<C>(registry: &Registry<C>) -> Value {
         let params = (m.params)(&mut g);
         let result = (m.result)(&mut g);
         let entry = paths.entry(rest.path.clone()).or_insert_with(|| json!({}));
-        let Some(item) = entry.as_object_mut() else { continue };
-        item.insert(rest.http.to_lowercase(), operation(m, rest, &params, &result));
+        let Some(item) = entry.as_object_mut() else {
+            continue;
+        };
+        item.insert(
+            rest.http.to_lowercase(),
+            operation(m, rest, &params, &result),
+        );
     }
 
     let mut schemas = Value::Object(g.take_definitions(true));
@@ -121,7 +126,11 @@ fn operation<C>(
 }
 
 fn description<C>(m: &crate::method::MethodDef<C>) -> String {
-    let mut text = format!("JSON-RPC method `{}`. Needs the `{}` scope.", m.name, m.scope.as_str());
+    let mut text = format!(
+        "JSON-RPC method `{}`. Needs the `{}` scope.",
+        m.name,
+        m.scope.as_str()
+    );
     if m.destructive {
         text.push_str(
             " Destructive: accepts `dry_run: true`, and on a token whose policy is \
@@ -167,7 +176,14 @@ fn query_parameters(params: &Value) -> Vec<Value> {
 fn error_response() -> Value {
     let codes: Vec<Value> = ErrorCode::ALL
         .iter()
-        .map(|c| json!(format!("{}: {} (HTTP {})", c.number(), c.meaning(), c.http_status())))
+        .map(|c| {
+            json!(format!(
+                "{}: {} (HTTP {})",
+                c.number(),
+                c.meaning(),
+                c.http_status()
+            ))
+        })
         .collect();
     json!({
         "description": "One error shape everywhere. The message names the current state and \
@@ -242,11 +258,17 @@ mod tests {
             "list": [{ "$ref": "#/$defs/Ext" }]
         });
         let after = rewrite_refs(&before);
-        assert_eq!(after["properties"]["x"]["$ref"], "#/components/schemas/SourceStatus");
+        assert_eq!(
+            after["properties"]["x"]["$ref"],
+            "#/components/schemas/SourceStatus"
+        );
         assert_eq!(after["list"][0]["$ref"], "#/components/schemas/Ext");
         // A reference that is already an OpenAPI one is left alone.
         let already = json!({ "$ref": "#/components/responses/Error" });
-        assert_eq!(rewrite_refs(&already)["$ref"], "#/components/responses/Error");
+        assert_eq!(
+            rewrite_refs(&already)["$ref"],
+            "#/components/responses/Error"
+        );
     }
 
     #[test]
@@ -260,7 +282,11 @@ mod tests {
             }
         });
         let query = query_parameters(&params);
-        assert_eq!(query.len(), 1, "the path id must not be a query parameter too");
+        assert_eq!(
+            query.len(),
+            1,
+            "the path id must not be a query parameter too"
+        );
         assert_eq!(query[0]["name"], "width");
         assert_eq!(query[0]["in"], "query");
         assert_eq!(query[0]["required"], false);
