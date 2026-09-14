@@ -1,0 +1,33 @@
+# A first party service plugin. Unlike `templates/rust`, this one is a member
+# of the repository's workspace (the `plugins/*` glob in the root manifest), so
+# `cargo test --workspace` runs its unit tests and `cargo clippy --all-targets`
+# lints it with everything else. A third party plugin keeps its own workspace;
+# nothing else about it differs.
+[package]
+name = "gmx-osc"
+version = "0.2.0"
+edition = "2021"
+rust-version = "1.82"
+description = "OSC in and out for GodwinMix: take, fader and mute from any control surface, tally and programme back out"
+license = "Apache-2.0"
+repository = "https://github.com/psmux/godwinmix"
+
+[[bin]]
+name = "gmx-osc"
+path = "src/main.rs"
+
+[lib]
+name = "gmx_osc"
+path = "src/lib.rs"
+
+[dependencies]
+# The sidecar half: the manifest, the JSON lines loop and the Service trait.
+godwinmix-sdk = { path = "../../crates/godwinmix-sdk" }
+# The control half. A service plugin has no media, so everything it does is a
+# call or an event on the core's /rpc, which is exactly what this crate is.
+godwinmix-client = { path = "../../crates/godwinmix-client" }
+serde_json = "1"
+tokio = { version = "1", features = ["rt", "macros", "sync", "time", "net"] }
+
+[dev-dependencies]
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "time", "net"] }
