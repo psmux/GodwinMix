@@ -204,6 +204,7 @@ where
         vcaps: norm.vcaps.clone(),
         acaps: norm.acaps.clone(),
         vtee: norm.vtee.clone(),
+        atee: norm.atee.clone(),
         health,
         last_video,
         last_audio,

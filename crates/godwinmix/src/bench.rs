@@ -79,6 +79,16 @@ pub struct BenchArgs {
     #[arg(long)]
     pub only: Option<String>,
 
+    /// Which encode path the mixer rows use: `auto` picks what this machine
+    /// has, `software` pins the software encoder.
+    ///
+    /// Worth pinning because the encoder's idle cost is what `[program]
+    /// encoder = "on-demand"` exists to remove, and on a machine with hardware
+    /// encode that cost is small enough to hide in the noise. The number that
+    /// matters for a Pi 5 or a laptop is the software one.
+    #[arg(long, default_value = "auto")]
+    pub encode: String,
+
     /// Where to write the Markdown table. Defaults to
     /// `bench/results/<machine>-<date>.md` under the working directory.
     #[arg(long)]
@@ -463,9 +473,53 @@ async fn measure_pipeline_added(args: &BenchArgs, desc: &str) -> Result<Load> {
     Ok(load.minus(Load { cores: 0.0, rss_mb: floor }))
 }
 
+/// The idle core with `[program] encoder = "always"`: what a core cost before
+/// the encoder learned to wait for a consumer.
+///
+/// Its own mixer, because the policy is read once in `Mixer::build`. Torn down
+/// before it returns, so the rows after it start from a clean process.
+async fn encoder_always_row(args: &BenchArgs) -> Result<Row> {
+    let mut cfg = bench_config_with(
+        MultiviewConfig { enabled: false, ..Default::default() },
+        &args.encode,
+    );
+    cfg.program.encoder = "always".into();
+    let (mut mix, handle, cmd_rx, _bus_rx) = godwinmix_core::mixer::Mixer::build(cfg)?;
+    mix.start().context("starting the always-on encoder mixer")?;
+    let encoder = mix.encoder_handle();
+    let thread = godwinmix_core::mixer::spawn(mix, cmd_rx, handle.clone());
+    let load = steady(args.warmup(), args.window()).await;
+    let running = encoder.is_running();
+    let _ = handle.send(godwinmix_core::mixer::Command::Shutdown);
+    let _ = tokio::task::spawn_blocking(move || thread.join()).await;
+    Ok(Row::new(
+        "core-idle-encoder-always",
+        "Core idle with [program] encoder = \"always\", no outputs, nobody subscribed",
+        "documented, not budgeted: it is what the default avoids",
+        "gmx bench --only core-idle-encoder-always".into(),
+    )
+    .load(load)
+    .other(format!("encoder running: {running}"))
+    .note(
+        "What every release before this one did: the encode chain built, linked \
+         and encoding a black slate from boot with nothing attached to read it. \
+         The difference against `core-idle` above is what `on-demand` saves, and \
+         it is largest where the encoder is software.",
+    ))
+}
+
 /// The config every mixer row is built from: 720p30, no outputs, no sources.
 fn bench_config(multiview: MultiviewConfig) -> Config {
+    bench_config_with(multiview, "auto")
+}
+
+/// The same, with the encode path pinned. `--encode software` is what makes
+/// the encoder rows mean anything on a machine with hardware encode.
+fn bench_config_with(multiview: MultiviewConfig, encode: &str) -> Config {
     let mut cfg: Config = toml::from_str("").expect("an empty config is every default");
+    if encode == "software" {
+        cfg.hardware.encode = godwinmix_core::config::Accel::Software;
+    }
     cfg.canvas = godwinmix_core::config::Canvas {
         width: BENCH_WIDTH,
         height: BENCH_HEIGHT,
@@ -487,12 +541,10 @@ fn bench_config(multiview: MultiviewConfig) -> Config {
 /// the snapshot tracker on top of that.
 async fn mixer_rows(args: &BenchArgs) -> Result<Vec<Row>> {
     let mut rows = Vec::new();
-    let cfg = bench_config(MultiviewConfig {
-        width: 1280,
-        height: 720,
-        fps: 8,
-        ..Default::default()
-    });
+    let cfg = bench_config_with(
+        MultiviewConfig { width: 1280, height: 720, fps: 8, ..Default::default() },
+        &args.encode,
+    );
     let (mut mix, handle, cmd_rx, _bus_rx) = godwinmix_core::mixer::Mixer::build(cfg)?;
     mix.start().context("starting the mixer")?;
     let mv: MultiviewHandle = mix.multiview_handle();
@@ -508,12 +560,20 @@ async fn mixer_rows(args: &BenchArgs) -> Result<Vec<Row>> {
         )
         .load(idle)
         .note(
-            "The programme pipeline, including the H.264 encoder, is built and \
-             playing from boot even with no output attached, so this is not an \
-             idle process in the sense the budget means. See the note under the \
-             table.",
+            "With `[program] encoder = \"on-demand\"`, which is the default, the \
+             encode chain is off the raw tees and at NULL until something reads \
+             it. The compositor, the audio mixer and both raw tees run, so the \
+             picture never stops and a take is never delayed. The row below is \
+             the same core with the encoder pinned on, which is what every \
+             release before this one did.",
         ),
     );
+
+    // The same idle core with the encoder pinned on, so the table carries the
+    // cost of the old behaviour beside the new one rather than asking a reader
+    // to take the saving on trust. A second mixer, because the policy is read
+    // once at build time.
+    rows.push(encoder_always_row(args).await?);
 
     // With multiview enabled in the config and nobody subscribed there is no
     // mosaic pipeline at all, which is the whole point of the row.

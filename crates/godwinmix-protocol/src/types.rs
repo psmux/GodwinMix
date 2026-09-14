@@ -281,6 +281,9 @@ pub enum Event {
         scene: Option<String>,
         at_running_time_ms: u64,
     },
+    /// The armed scene changed, or was cleared. Nothing is composited for a
+    /// preview until a client asks for one, so this costs a message.
+    PreviewChanged { scene: Option<String> },
     SourceStateChanged { source: SourceId, state: SourceState },
     OutputStateChanged { output: OutputId, state: OutputState, reconnects: u32 },
     /// An ad break started or ended.

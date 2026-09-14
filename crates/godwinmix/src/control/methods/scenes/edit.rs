@@ -194,13 +194,12 @@ fn preview(reg: &mut Registry<Call>) {
                     .arm(req.scene.as_deref())
                     .map_err(|e| scene_error(&call, e))?;
                 // Nothing is composited for a preview until a client asks for
-                // one with ext.preview, so arming costs a property write.
-                call.app.mixer.emit(godwinmix_protocol::types::Event::Alert {
-                    severity: godwinmix_protocol::types::Severity::Info,
-                    message: match &armed {
-                        Some(s) => format!("preview armed: {}", s.name),
-                        None => "preview cleared".into(),
-                    },
+                // one with ext.preview, so arming costs one message and a
+                // property write. Everything that follows the preview (the
+                // tally, the multiview layout, /mjpeg/preview) reads the armed
+                // scene off the server rather than off this event.
+                call.app.mixer.emit(godwinmix_protocol::types::Event::PreviewChanged {
+                    scene: armed.as_ref().map(|s| s.name.clone()),
                 });
                 body(json!({ "preview": armed }))
             }),
