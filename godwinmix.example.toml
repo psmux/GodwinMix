@@ -102,6 +102,16 @@ bind = "0.0.0.0:8080"
 # the browser. The GODWINMIX_TOKEN environment variable overrides this line,
 # for deployments that keep secrets out of config files.
 # token = "change-me"
+#
+# Where plugins live. Each plugin's `ui/` directory is served at
+# `/plugins/<name>/ui/`, which is how a plugin adds a panel to the web UI: drop
+# a file at <plugins_dir>/<name>/ui/panel.js with the panel contract and it
+# appears on the next reload. See docs/how-to/write-a-panel.md.
+# plugins_dir = "~/.godwinmix/plugins"
+#
+# Read the web UI from this directory instead of from the copy built into the
+# binary. For editing the page without rebuilding; leave it unset in production.
+# ui_dir = "/opt/godwinmix/ui"
 
 [hardware]
 # auto, nvidia, va, qsv, amf, videotoolbox, mediafoundation, d3d11, d3d12,

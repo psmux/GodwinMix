@@ -1,0 +1,2258 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>GodwinMix</title>
+<style>
+  :root {
+    --bg: #090b0e; --panel: #12151a; --panel2: #171b21; --raise: #1f242c;
+    --line: #262c35; --line-soft: #1b2028;
+    --text: #e8ebf0; --dim: #8b93a2; --faint: #5b6373;
+    /* Saturated red is spent only on what is going out: the tally, the on air
+       cell border, the ad pill, the top of a meter. Faults use --bad, which is
+       duller on purpose, so a failed source never reads as a live one. */
+    --live: #ff2a36; --bad: #d9584c;
+    --ok: #34d07f; --warn: #eea62a; --accent: #5590ff;
+    --num: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, monospace;
+    --radius: 8px;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font: 13px/1.45 ui-sans-serif, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+    display: flex; flex-direction: column; overflow: hidden;
+    -webkit-font-smoothing: antialiased;
+  }
+  .num { font-variant-numeric: tabular-nums; font-family: var(--num); }
+
+  /* --- header ------------------------------------------------------------- */
+  header {
+    display: flex; align-items: center; gap: 14px; flex: none;
+    padding: 0 14px; height: 54px;
+    background: linear-gradient(180deg, #171b22, #12151a);
+    border-bottom: 1px solid var(--line);
+  }
+  .brand {
+    display: flex; align-items: center; gap: 8px; font-size: 13px;
+    font-weight: 700; letter-spacing: .14em; text-transform: uppercase;
+    color: var(--text); white-space: nowrap; padding-right: 4px;
+  }
+  .brand i { width: 7px; height: 7px; border-radius: 50%; background: var(--faint); display: block; }
+  body.onair .brand i { background: var(--live); box-shadow: 0 0 9px var(--live); }
+
+  /* The tally is the one thing an operator glances at from across the room, so
+     it gets the largest type on the page and the only saturated red. */
+  #tally {
+    display: flex; align-items: center; gap: 10px; min-width: 0;
+    border: 1px solid var(--line); border-radius: var(--radius);
+    background: var(--panel2); padding: 5px 12px 5px 10px; height: 38px;
+  }
+  #tally .tl {
+    font-size: 9.5px; font-weight: 700; letter-spacing: .12em; color: var(--faint);
+    text-transform: uppercase; line-height: 1.1; text-align: right; white-space: nowrap;
+  }
+  #tally .tn {
+    font-size: 17px; font-weight: 650; letter-spacing: .01em; line-height: 1.1;
+    max-width: 30ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  #tally.on { background: var(--live); border-color: #ff5a62; box-shadow: 0 0 22px rgba(255,42,54,.32); }
+  #tally.on .tl, #tally.on .tn { color: #fff; }
+  #tally.on .tl { opacity: .85; }
+
+  /* --- program meter in the header ---------------------------------------- */
+  #pgmmeter {
+    display: flex; align-items: center; gap: 8px;
+    border: 1px solid var(--line); border-radius: var(--radius);
+    background: var(--panel2); padding: 0 10px; height: 38px; flex: none;
+  }
+  #pgmmeter .cap { font-size: 9.5px; letter-spacing: .12em; text-transform: uppercase; color: var(--faint); font-weight: 700; }
+  .hbars { display: flex; flex-direction: column; gap: 3px; width: 132px; }
+  /* The id carries these past the vertical meter rules further down, which are
+     written for the cells and would otherwise win on source order. */
+  #pgmmeter .mtr { width: 100%; height: 7px; border-radius: 2px; background: #05070a; }
+  #pgmmeter .fill {
+    background: linear-gradient(90deg, #14814a 0%, #2cb96f 35%, #3fdc88 68%, var(--warn) 78%, var(--live) 88%);
+    clip-path: inset(0 100% 0 0);
+  }
+  #pgmmeter .hold {
+    top: 0; left: 0; height: 100%; width: 100%; border-top: 0;
+    border-right: 2px solid rgba(255,255,255,.9); transform: translateX(-100%);
+  }
+  #pgmmeter .pk { font-size: 11px; color: var(--dim); width: 42px; text-align: right; }
+
+  .spacer { flex: 1; min-width: 0; }
+  .stat { display: flex; flex-direction: column; gap: 1px; line-height: 1.15; white-space: nowrap; }
+  .stat .k { font-size: 9.5px; letter-spacing: .1em; text-transform: uppercase; color: var(--faint); font-weight: 700; }
+  .stat b { font-weight: 550; font-size: 12px; color: var(--text); }
+  .pill {
+    font-size: 11px; color: var(--dim); border: 1px solid var(--line);
+    padding: 4px 10px; border-radius: 999px; white-space: nowrap;
+  }
+  #adpill {
+    border-color: #ff5a62; color: #fff; background: var(--live);
+    font-weight: 700; letter-spacing: .08em; font-size: 10.5px;
+  }
+  #cut {
+    height: 38px; padding: 0 16px; font-size: 13px; font-weight: 600;
+    border-color: #4a2a2e; background: #24171a; color: #ffb7ba;
+  }
+  #cut:hover { background: #32191d; border-color: var(--bad); color: #fff; }
+  #cut kbd { margin-left: 8px; }
+  kbd {
+    font: 600 10px/1.5 var(--num); background: #0a0d11; color: var(--dim);
+    border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 4px;
+    padding: 0 5px; display: inline-block; min-width: 18px; text-align: center;
+  }
+
+  /* --- stage -------------------------------------------------------------- */
+  main { flex: 1; display: flex; min-height: 0; }
+  #stage { flex: 1; display: flex; flex-direction: column; min-width: 0; padding: 14px; gap: 10px; }
+  #viewport { flex: 1; min-height: 0; display: flex; align-items: center; justify-content: center; }
+  #wrap { position: relative; line-height: 0; max-width: 100%; max-height: 100%; }
+  #mosaic {
+    max-width: 100%; max-height: 100%; display: block; background: #000;
+    border-radius: 10px; box-shadow: 0 0 0 1px var(--line), 0 18px 50px rgba(0,0,0,.55);
+  }
+  #cells { position: absolute; inset: 0; }
+  /* Nothing in this bar may wrap. It is one line under the wall, and a button
+     that folds onto two lines at 1280 pushes the pictures up the screen. */
+  #stagebar {
+    flex: none; display: flex; align-items: center; gap: 12px;
+    font-size: 11px; color: var(--faint); padding: 0 2px; white-space: nowrap;
+  }
+  #stagebar > * { flex: none; }
+  #stagebar .spacer { flex: 1; }
+  #stagebar .keys { display: flex; align-items: center; gap: 6px; }
+  #stagebar .wide { display: flex; align-items: center; gap: 6px; }
+  /* Under a 1440 window the bar is full: the keyboard hint is the part an
+     operator has already read, so it is the part that goes. */
+  @media (max-width: 1439px) { #stagebar .wide { display: none; } }
+  #stagebar .sep { width: 1px; height: 12px; background: var(--line); margin: 0 4px; }
+  /* The controls that fold the strips away. They belong under the wall with the
+     keyboard hints because they are about the wall as a whole, and because
+     nothing in here should sit on top of a picture. */
+  #stagebar .strips { display: flex; align-items: center; gap: 5px; }
+  #stagebar .tg {
+    font-size: 10.5px; line-height: 1.5; padding: 1px 9px; border-radius: 999px;
+    background: transparent; border-color: var(--line-soft); color: var(--faint);
+  }
+  #stagebar .tg:hover { background: var(--raise); border-color: var(--line); color: var(--text); }
+  /* Pressed means the control is on the cells, which is the state an operator
+     is checking when they look down here. */
+  #stagebar .tg[aria-pressed="true"] { background: var(--raise); border-color: var(--line); color: var(--text); }
+
+  /* --- one multiview cell and its channel strip --------------------------- */
+  /* Cells are positioned as percentages of the mosaic so the overlay tracks the
+     image at any display size, and the server stays the single source of truth
+     for the layout. Each cell is its own container so a nine up grid on a
+     laptop can drop the parts of the strip that no longer fit.
+
+     Four rows, and the order of them is the whole layout. Row 1 is the tally
+     bar, row 2 is the picture with the vertical controls down its right hand
+     edge, row 3 is the name, row 4 is the horizontal lane. Row 4 has no height
+     at all on a source the mixer cannot seek, so a camera's cell ends at its
+     name the way it always did. */
+  .cell {
+    position: absolute; cursor: pointer; container: cell / size;
+    display: grid; grid-template-columns: 1fr auto; grid-template-rows: auto 1fr auto auto;
+    border-radius: 5px; overflow: hidden;
+    box-shadow: inset 0 0 0 2px transparent;
+    transition: box-shadow .12s;
+  }
+  .cell:hover { box-shadow: inset 0 0 0 2px rgba(255,255,255,.5); }
+  .cell.live { box-shadow: inset 0 0 0 3px var(--live), 0 0 20px rgba(255,42,54,.35); }
+  /* The program return is the one cell on the wall that is not a camera: it is
+     the picture the audience is actually receiving. A one pixel outline left it
+     looking like the quietest thing on screen, when it is the first thing an
+     operator should be able to find, and people seeing the mixer for the first
+     time could not tell which box was the output at all.
+
+     So the two states are told apart by fill rather than by reading a label. A
+     source that is feeding program gets a red outline. Program itself gets a
+     filled red banner across the top, which no source ever has. Outline means
+     this one is going out, filled means this is where it goes. */
+  .cell.pgm { cursor: default; box-shadow: inset 0 0 0 1px rgba(255,42,54,.42); }
+  .cell.pgm:hover { box-shadow: inset 0 0 0 1px rgba(255,42,54,.42); }
+  /* A slim bar in a muted red rather than a heavy frame. A thick saturated
+     border around the one cell an operator looks at for hours pulls the eye
+     constantly and makes the picture inside it harder to judge. The label is
+     what identifies the output, so the colour only has to support it. */
+  .cell.pgm .ctop {
+    background: linear-gradient(rgba(122,18,24,.96), rgba(122,18,24,.86));
+    padding: 5px 8px; align-items: center;
+  }
+  /* The banner is the label, so the chip that numbers a source turns into plain
+     letterspaced text on it. A chip on a bar of the same colour reads as a hole. */
+  .cell.pgm .key {
+    background: transparent; color: #fff; box-shadow: none; padding: 0;
+    font: 800 10px/1.55 ui-sans-serif, sans-serif; letter-spacing: .14em; min-width: 0;
+  }
+  .cell.pgm .ctop .pk { color: rgba(255,255,255,.86); }
+  /* Green on red is unreadable, and on this bar the state is already implied by
+     the colour, so it just needs to stay legible. */
+  .cell.pgm .ctop .st, .cell.pgm .ctop .st.live { color: #fff; text-shadow: none; }
+  .cell.pgm .cbot { background: linear-gradient(transparent, rgba(0,0,0,.9) 55%); }
+  .cell.pgm .cname { color: #fff; }
+
+  .ctop {
+    grid-area: 1 / 1 / 2 / 3; display: flex; align-items: center; gap: 6px;
+    padding: 5px 6px 10px; line-height: 1;
+    background: linear-gradient(rgba(0,0,0,.72), transparent);
+  }
+  .key {
+    font: 700 11px/1.55 var(--num); color: #0a0d11; background: #c6cdd9;
+    border-radius: 3px; padding: 0 5px; min-width: 18px; text-align: center; flex: none;
+  }
+  .cell.live .key { background: var(--live); color: #fff; }
+  .ctop .pk { margin-left: auto; font-size: 10px; color: rgba(255,255,255,.62); }
+  .st { font-size: 10px; color: var(--dim); text-transform: uppercase; letter-spacing: .06em; font-weight: 600; }
+  .st.live { color: var(--ok); } .st.connecting, .st.stalled, .st.reconnecting { color: var(--warn); }
+  .st.failed { color: var(--bad); }
+  .ctop .st { text-shadow: 0 1px 3px #000; }
+
+  .cbot {
+    grid-area: 3 / 1 / 4 / 3; padding: 12px 6px 5px;
+    background: linear-gradient(transparent, rgba(0,0,0,.82) 55%);
+    display: flex; flex-direction: column; gap: 4px; min-width: 0;
+  }
+  .nameline { display: flex; align-items: center; gap: 6px; min-width: 0; }
+  .cname {
+    font-size: 12px; font-weight: 600; line-height: 1.2; text-shadow: 0 1px 3px #000;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  /* Mute is marked on everything around the meter and never on the meter, which
+     stays at full brightness: the level is how an operator checks a camera has
+     sound on it before cutting to it, and a muted channel is exactly when they
+     need to check. Signal present and signal reaching program are two separate
+     facts and the strip shows them separately. */
+  .mutetag {
+    display: none; flex: none; font: 700 9px/1.6 ui-sans-serif, sans-serif;
+    letter-spacing: .09em; text-transform: uppercase; color: #1a1203;
+    background: var(--warn); border-radius: 3px; padding: 0 5px;
+  }
+  .cell.muted .mutetag { display: block; }
+  .cell.muted .cbot { box-shadow: inset 3px 0 0 var(--warn); }
+  /* The signal is still there, it just stops here, so the track that carries it
+     to program is the thing that looks broken. */
+  .cell.muted .fader::-webkit-slider-runnable-track {
+    background: repeating-linear-gradient(0deg, #6b5a2c 0 5px, #2b323d 5px 10px);
+  }
+  .cell.muted .fader::-moz-range-track {
+    background: repeating-linear-gradient(0deg, #6b5a2c 0 5px, #2b323d 5px 10px);
+  }
+  /* The gain number sits at the foot of the column, over the bottom of the
+     scale. Its own dark chip keeps it from reading as another scale label. */
+  .gv {
+    font-size: 9.5px; line-height: 1.5; color: var(--dim); text-align: center; flex: none;
+    background: rgba(10,13,17,.78); border-radius: 3px; padding: 0 3px;
+  }
+  .gv.unity { color: var(--ok); }
+  .gv.muted { color: var(--warn); font-weight: 700; }
+
+  /* Mute sits in the tally bar, not with the fader. The bar is the one part of
+     a cell that is drawn at every size, and it is the one part that neither
+     collapse toggle can take away, so the button an operator may need in a
+     hurry is always in the same place and always there. */
+  .mute {
+    flex: none; width: 21px; height: 17px; padding: 0; border-radius: 4px;
+    font: 700 9.5px/1 ui-sans-serif, sans-serif; letter-spacing: .04em;
+    background: rgba(10,13,17,.75); border: 1px solid var(--line); color: var(--dim);
+  }
+  .mute:hover { background: rgba(30,36,44,.9); color: var(--text); }
+  .mute.on { background: var(--warn); border-color: #ffc45e; color: #1a1203; }
+  .mute:disabled { opacity: .35; cursor: default; }
+
+  /* --- the fader ---------------------------------------------------------- */
+  /* Every fader on this page is vertical and lives on a cell, in the spelling
+     browsers settled on: the writing mode turns the control and direction: rtl
+     puts zero at the bottom, where the zero of a fader belongs. The old
+     -webkit-appearance: slider-vertical draws the same thing and loses the arrow
+     keys in current Chrome, which is the one thing a level control cannot
+     afford to lose. */
+  .fader {
+    -webkit-appearance: none; appearance: none;
+    writing-mode: vertical-lr; direction: rtl;
+    flex: 1; width: 17px; height: auto; min-height: 0;
+    background: transparent; margin: 0; cursor: ns-resize; pointer-events: auto;
+  }
+  .fader::-webkit-slider-runnable-track {
+    width: 5px; height: 100%; border-radius: 3px;
+    background:
+      linear-gradient(rgba(255,255,255,.55), rgba(255,255,255,.55)) 0 25% / 100% 1px no-repeat,
+      linear-gradient(to top, #2b323d, #444d5b);
+    box-shadow: inset 0 0 0 1px rgba(0,0,0,.5);
+  }
+  .fader::-webkit-slider-thumb {
+    -webkit-appearance: none; width: 15px; height: 10px; margin: 0 0 0 -5px;
+    border-radius: 2px; background: linear-gradient(90deg, #f2f5fa, #b9c2d0);
+    border: 1px solid #05070a; box-shadow: 0 1px 4px rgba(0,0,0,.7);
+  }
+  .fader::-moz-range-track {
+    width: 5px; height: 100%; border-radius: 3px;
+    background: linear-gradient(to top, #2b323d, #444d5b);
+  }
+  .fader::-moz-range-thumb {
+    width: 14px; height: 9px; border-radius: 2px; border: 1px solid #05070a;
+    background: linear-gradient(90deg, #f2f5fa, #b9c2d0);
+  }
+  /* The balance inside a decoded page: its own sound, and one fader per video
+     the mixer is decoding underneath it. Narrower and plainer than the channel
+     fader on purpose, because the channel fader is the one that governs the
+     whole source and should stay the one your eye lands on. Their unity mark
+     sits at the middle of the travel, where 1.00 is on a 0 to 2 scale. */
+  .fader.aux { width: 11px; }
+  .fader.aux::-webkit-slider-runnable-track {
+    width: 3px;
+    background:
+      linear-gradient(rgba(255,255,255,.5), rgba(255,255,255,.5)) 0 50% / 100% 1px no-repeat,
+      linear-gradient(to top, #2b323d, #3f4754);
+  }
+  .fader.aux::-webkit-slider-thumb {
+    width: 11px; height: 8px; margin: 0 0 0 -4px;
+    background: linear-gradient(90deg, #dfe5ee, #a7b0be);
+  }
+  .fader.aux::-moz-range-track { width: 3px; }
+  .fader.aux::-moz-range-thumb { width: 10px; height: 7px; }
+  .fader:focus-visible { outline: none; }
+  .fader:focus-visible::-webkit-slider-thumb { box-shadow: 0 0 0 2px var(--accent); }
+  .fader:disabled { opacity: .35; cursor: default; }
+
+  /* --- the horizontal lane: a scrubber for files -------------------------- */
+  /* The reason the fader stood up. A scrubber is read left to right, every
+     player anyone has ever used puts it along the bottom, and an operator
+     reaching to fast forward a clip should not have to think about where this
+     mixer decided to put it. Only a source the mixer says it can seek has one,
+     so the lane is built per cell rather than hidden per cell. */
+  .lane {
+    grid-area: 4 / 1 / 5 / 3; display: flex; align-items: center; gap: 7px;
+    padding: 1px 7px 5px; background: rgba(0,0,0,.82); min-width: 0;
+  }
+  .scrub {
+    -webkit-appearance: none; appearance: none; flex: 1; min-width: 0;
+    height: 14px; background: transparent; margin: 0; cursor: pointer;
+  }
+  /* The played part of the track is lighter than the rest. --p is written by the
+     paint loop, and a custom property set on the input inherits into the track
+     pseudo element, which is the only way to colour part of a range's track. */
+  .scrub::-webkit-slider-runnable-track {
+    height: 4px; border-radius: 2px;
+    background: linear-gradient(90deg, #8b93a2 0 var(--p, 0%), #2b323d var(--p, 0%));
+    box-shadow: inset 0 0 0 1px rgba(0,0,0,.5);
+  }
+  .scrub::-webkit-slider-thumb {
+    -webkit-appearance: none; width: 10px; height: 10px; margin-top: -3px;
+    border-radius: 50%; background: #e8ebf0;
+    border: 1px solid #05070a; box-shadow: 0 1px 4px rgba(0,0,0,.7);
+  }
+  .scrub::-moz-range-track { height: 4px; border-radius: 2px; background: #2b323d; }
+  .scrub::-moz-range-progress { height: 4px; border-radius: 2px; background: #8b93a2; }
+  .scrub::-moz-range-thumb {
+    width: 9px; height: 9px; border-radius: 50%; border: 1px solid #05070a; background: #e8ebf0;
+  }
+  .scrub:focus-visible { outline: none; }
+  .scrub:focus-visible::-webkit-slider-thumb { box-shadow: 0 0 0 2px var(--accent); }
+  /* A seekable file the mixer has not given a length for cannot be put at a
+     point, so the handle greys out rather than pretending to mean something. */
+  .scrub:disabled { opacity: .4; cursor: default; }
+  .lane .pos { font-size: 10px; color: var(--dim); flex: none; text-shadow: 0 1px 2px #000; }
+
+  /* --- the vertical block: meter, then the faders -------------------------- */
+  /* The right hand edge of the picture, read bottom to top. The meter comes
+     first, then the fader for the source as a whole, then one narrow fader per
+     sound inside it. That order does not change, so the fader that governs the
+     whole source is in the same place on every cell whether the source happens
+     to be a page with videos under it or a camera with nothing.
+
+     pointer-events is off on the block so a click on the bars still takes the
+     source, and back on for the faders, which are the only things in here that
+     anyone drags. */
+  .vblk {
+    grid-area: 2 / 2 / 3 / 3; display: flex; align-items: stretch; gap: 4px;
+    padding: 2px 5px 2px 0; pointer-events: none; min-height: 0;
+  }
+  /* One fader with whatever names it: the gain number under the channel fader,
+     a single character under each of the ones inside it. */
+  .vch { display: flex; flex-direction: column; align-items: center; gap: 2px; min-height: 0; }
+  .chl {
+    display: none; flex: none; font: 700 8px/1.5 ui-sans-serif, sans-serif;
+    letter-spacing: .02em; color: rgba(255,255,255,.72);
+    background: rgba(10,13,17,.78); border-radius: 3px; padding: 0 3px;
+  }
+  .rail { display: flex; align-items: stretch; gap: 3px; }
+  .scale { display: none; position: relative; width: 22px; flex: none; }
+  .scale span {
+    position: absolute; right: 0; transform: translateY(50%);
+    font: 500 8px/1 var(--num); color: rgba(255,255,255,.5);
+    text-shadow: 0 1px 2px #000; padding-right: 5px; white-space: nowrap;
+  }
+  .scale span::after {
+    content: ""; position: absolute; right: 0; top: 50%; width: 4px;
+    border-top: 1px solid rgba(255,255,255,.35);
+  }
+  .scale span.ref { color: rgba(255,255,255,.85); }
+  .scale span.ref::after { width: 4px; border-top-color: rgba(255,255,255,.8); }
+  .bars { display: flex; gap: 2px; align-items: stretch; }
+  .mtr {
+    position: relative; width: 4px; border-radius: 2px; overflow: hidden;
+    background: rgba(0,0,0,.72); box-shadow: inset 0 0 0 1px rgba(255,255,255,.07);
+  }
+  /* The colour stops sit where the dB scale puts them: green to about -8 dBFS,
+     amber through the last few, red from -3 dBFS up, which is the same place
+     the numbers turn into a problem. */
+  .mtr .fill {
+    position: absolute; inset: 0; display: block; clip-path: inset(100% 0 0 0);
+    background: linear-gradient(to top, #14814a 0%, #2cb96f 35%, #3fdc88 68%, var(--warn) 78%, var(--live) 88%);
+  }
+  .mtr .hold {
+    position: absolute; left: 0; right: 0; top: 0; height: 100%;
+    border-top: 2px solid rgba(255,255,255,.9); transform: translateY(100%);
+  }
+  /* A reference line at -18 dBFS, which is where a well set channel sits. Drawn
+     over the bars rather than beside them so the eye can compare without
+     tracking sideways to the scale. */
+  .barswrap > .ref {
+    position: absolute; left: -3px; right: -3px; height: 0;
+    border-top: 1px dashed rgba(255,255,255,.45); pointer-events: none;
+  }
+  .barswrap { position: relative; display: flex; }
+  .noaud {
+    writing-mode: vertical-rl; font: 600 8px/1 ui-sans-serif, sans-serif;
+    letter-spacing: .1em; color: var(--faint); text-transform: uppercase;
+    align-self: center; text-shadow: 0 1px 2px #000;
+  }
+
+  /* Small cells keep the picture, the tally and the meter, and give up the rest.
+     The order things come back in: the channel fader and the lane, then the dB
+     labels and the faders for the sounds inside a page, then the marks that name
+     those. Measured on a 1280 window, a nine up wall keeps everything but the
+     marks, a twelve up is down to the channel fader and the lane, and a twenty
+     four up to a picture with a meter on it. That last one is the right answer:
+     a tile that size is there to be watched, and an operator who wants to ride a
+     level or scrub a clip has a four up or a six up wall to do it on.
+
+     All of it is kept out by display: none rather than by not being built, so
+     the same cell gains it the moment the window or the grid gives it the room,
+     with no rebuild and nothing lost mid gesture. */
+  .cell .cname, .cell .ctop .pk, .cell .vch, .cell .lane { display: none; }
+  @container cell (min-width: 150px) and (min-height: 92px) {
+    .cell .cname { display: block; }
+    .mtr { width: 5px; }
+  }
+  @container cell (min-width: 190px) and (min-height: 112px) {
+    .cell .vch { display: flex; }
+    .cell .lane { display: flex; }
+    .cell .ctop .pk { display: block; }
+    /* The faders inside a page wait for a wider tile than the channel fader
+       does. On a twelve up wall the level for the whole source is the one an
+       operator reaches for, and four faders on a tile that size would cover
+       more picture than they are worth. */
+    .cell .vch.aux { display: none; }
+  }
+  @container cell (min-width: 260px) and (min-height: 150px) {
+    .scale { display: block; }
+    .mtr { width: 6px; }
+    .vblk { padding-right: 7px; }
+    .cell .vch.aux { display: flex; }
+  }
+  @container cell (min-width: 340px) and (min-height: 190px) {
+    .scale { width: 26px; }
+    .scale span { font-size: 9px; }
+    .mtr { width: 8px; }
+    .cname { font-size: 13px; }
+    .gv { font-size: 10.5px; }
+    .cell .chl { display: block; }
+  }
+  /* A four cell grid on a big monitor gives tiles the size of a small preview
+     monitor, and a strip drawn for a laptop looks lost on one. */
+  @container cell (min-width: 520px) and (min-height: 290px) {
+    .scale { width: 32px; }
+    .scale span { font-size: 10.5px; }
+    .mtr { width: 11px; }
+    .vblk { padding: 4px 9px 4px 0; gap: 7px; }
+    .cname { font-size: 15px; }
+    .ctop { padding: 8px 9px 14px; }
+    .cbot { padding: 14px 9px 8px; }
+    .key { font-size: 13px; padding: 1px 7px; min-width: 22px; }
+    .st, .ctop .pk { font-size: 11.5px; }
+    .gv { font-size: 12px; }
+    .mute { width: 26px; height: 22px; font-size: 11px; }
+    .fader { width: 24px; }
+    .fader::-webkit-slider-runnable-track { width: 6px; }
+    .fader::-webkit-slider-thumb { width: 22px; height: 12px; margin-left: -8px; }
+    .fader.aux { width: 15px; }
+    .fader.aux::-webkit-slider-runnable-track { width: 4px; }
+    .fader.aux::-webkit-slider-thumb { width: 15px; height: 10px; margin-left: -5.5px; }
+    .chl { font-size: 10px; }
+    .lane { padding: 2px 10px 8px; gap: 10px; }
+    .lane .pos { font-size: 12px; }
+    .scrub { height: 18px; }
+    .scrub::-webkit-slider-runnable-track { height: 5px; }
+    .scrub::-webkit-slider-thumb { width: 14px; height: 14px; margin-top: -4.5px; }
+  }
+
+  /* --- collapsing the controls -------------------------------------------- */
+  /* Collapsing has to give the picture back, so every one of these takes the
+     row or the column with it rather than leaving an empty band where the
+     control was. The meter's numbers in the tally bar stay either way: an
+     operator who folds the bars away to see a shot still wants to know the
+     camera has sound, and one line of text costs no picture at all. */
+  body.nometer .cell .rail { display: none; }
+  /* Both spellings of the same thing, so this goes on beating the container
+     query that brings the faders inside a page back, whichever order the two
+     blocks end up in. */
+  body.nofader .cell .vch, body.nofader .cell .vch.aux { display: none; }
+  body.nometer.nofader .cell .vblk { display: none; }
+  body.nolane .cell .lane { display: none; }
+
+  /* --- sidebar ------------------------------------------------------------ */
+  aside {
+    width: 316px; flex: none; border-left: 1px solid var(--line); background: var(--panel);
+    padding: 12px; overflow-y: auto; overflow-x: hidden;
+    display: flex; flex-direction: column; gap: 12px;
+    scrollbar-width: thin; scrollbar-color: #2f3641 transparent;
+  }
+  @media (min-width: 1800px) { aside { width: 360px; } }
+  aside::-webkit-scrollbar { width: 9px; }
+  aside::-webkit-scrollbar-thumb { background: #2b323c; border-radius: 5px; border: 2px solid var(--panel); }
+  .card { background: var(--panel2); border: 1px solid var(--line-soft); border-radius: 10px; padding: 11px 11px 12px; }
+  h2 {
+    font-size: 10px; text-transform: uppercase; letter-spacing: .11em;
+    color: var(--faint); margin: 0 0 9px; font-weight: 700;
+    display: flex; align-items: baseline; gap: 7px;
+  }
+  h2 .n { color: var(--dim); font-weight: 600; letter-spacing: 0; font-size: 10px; }
+
+  .out { border: 1px solid var(--line); border-radius: 7px; padding: 8px 9px; margin-bottom: 7px; background: #101318; }
+  .out:last-of-type { margin-bottom: 0; }
+  .out .row { display: flex; align-items: center; gap: 7px; }
+  .out .id { font-weight: 600; font-size: 12px; }
+  .out .meta { font-size: 11px; color: var(--dim); margin-top: 3px; word-break: break-all; }
+  .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--faint); flex: none; }
+  .dot.live { background: var(--ok); box-shadow: 0 0 7px rgba(52,208,127,.6); }
+  .dot.reconnecting, .dot.connecting { background: var(--warn); }
+  .dot.failed { background: var(--bad); }
+  .out .st { margin-left: auto; }
+
+  button {
+    background: var(--raise); color: var(--text); border: 1px solid var(--line);
+    border-radius: 6px; padding: 5px 10px; font-size: 12px; font-family: inherit;
+    cursor: pointer; transition: background .1s, border-color .1s, color .1s;
+  }
+  button:hover { background: #29303a; border-color: #39414e; }
+  button:disabled { opacity: .4; cursor: default; }
+  button:disabled:hover { background: var(--raise); border-color: var(--line); }
+  button.ghost { background: transparent; }
+  button.ghost:hover { background: var(--raise); }
+  button.warn { border-color: #4a3a1e; color: var(--warn); }
+  button.warn:hover { border-color: var(--warn); background: #2a2012; }
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+  .kv { display: flex; justify-content: space-between; font-size: 12px; color: var(--dim); }
+  .clips { max-height: 210px; overflow-y: auto; border: 1px solid var(--line); border-radius: 7px; background: #0d1015; }
+  .clip {
+    display: flex; align-items: baseline; flex-wrap: wrap; gap: 7px; padding: 6px 8px;
+    cursor: pointer; border-bottom: 1px solid rgba(255,255,255,.045); font-size: 12px;
+  }
+  .clip:last-child { border-bottom: 0; }
+  .clip:hover { background: rgba(255,255,255,.05); }
+  /* Selection is blue, not red. Red on this page means something is going out. */
+  .clip.sel { background: rgba(85,144,255,.16); box-shadow: inset 2px 0 0 var(--accent); }
+  .clip .cn { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .clip .cd { color: var(--dim); font-variant-numeric: tabular-nums; font-size: 11px; }
+  .clip .warn { color: var(--warn); font-size: 10px; }
+  /* Green means the file is ready to cut to: web safe as it is, or a converted
+     copy exists. Mirrors the mute/warn chips above, just a different colour. */
+  .clip .ok { color: var(--ok); font-size: 10px; }
+  /* The actions block takes a full width line of its own under the row, so the
+     buttons and the progress bar never crowd the name. */
+  .clip .acts { flex-basis: 100%; display: flex; align-items: center; gap: 6px; margin-top: 5px; }
+  .clip .acts button { padding: 2px 8px; font-size: 11px; }
+  .clip .acts .cvt { color: var(--dim); flex: none; font-size: 11px; }
+  .clip .acts .prog { flex: 1; height: 4px; background: #05070a; border-radius: 2px; overflow: hidden; }
+  .clip .acts .prog i { display: block; height: 100%; background: var(--ok); transition: width .1s linear; }
+  .clips .empty { padding: 10px; color: var(--dim); font-size: 12px; line-height: 1.45; }
+
+  details { margin-top: 10px; border-top: 1px solid var(--line-soft); padding-top: 9px; }
+  summary { font-size: 11px; color: var(--dim); cursor: pointer; list-style: none; display: flex; align-items: center; gap: 5px; }
+  summary::-webkit-details-marker { display: none; }
+  summary::before { content: "+"; font: 600 12px/1 var(--num); color: var(--faint); }
+  details[open] summary::before { content: "\2212"; }
+  summary:hover { color: var(--text); }
+  select, input[type=text], input[type=number], #aduri, #noid, #nouri, #nsuri, #nsname {
+    background: #0b0e12; color: var(--text); border: 1px solid var(--line);
+    border-radius: 6px; padding: 6px 8px; font-size: 12px; font-family: inherit;
+  }
+  input::placeholder { color: #4e5665; }
+  #aduri, #noid, #nouri, #nsuri, #nsname { width: 100%; margin-top: 7px; }
+  .srcrow {
+    display: flex; align-items: center; gap: 7px; padding: 5px 7px;
+    border-radius: 6px; background: #101318; border: 1px solid var(--line-soft);
+    margin-bottom: 5px;
+  }
+  .srcrow.live { border-color: rgba(255,42,54,.55); background: rgba(255,42,54,.07); }
+  .srcrow .nm { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; }
+  .srcrow .kind {
+    font-size: 9px; color: var(--dim); border: 1px solid var(--line);
+    border-radius: 3px; padding: 1px 4px; text-transform: uppercase; letter-spacing: .05em; flex: none;
+  }
+  /* Green, because it means the mixer got the cheap path it asked for. */
+  .srcrow .sup { color: var(--ok); border-color: rgba(52,208,127,.5); }
+  .srcrow .mutechip { color: #1a1203; background: var(--warn); border-color: var(--warn); font-weight: 700; }
+  .srcrow .del {
+    border: 0; background: transparent; color: var(--faint); cursor: pointer;
+    font-size: 15px; line-height: 1; padding: 0 2px; flex: none;
+  }
+  .srcrow .del:hover { color: var(--bad); background: transparent; }
+  .adrow { display: flex; gap: 6px; margin-top: 7px; align-items: center; }
+  .adrow button { flex: 1; }
+  .cue { font-size: 11px; color: var(--dim); display: flex; align-items: center; gap: 5px; }
+  .cue input { width: 58px; }
+  /* display: flex above beats the browser's own rule for [hidden], so a .cue
+     that is hidden would otherwise still be laid out. */
+  .cue[hidden] { display: none; }
+  #adplay { border-color: #2a4a34; color: #9df0c2; background: #132118; }
+  #adplay:hover:not(:disabled) { background: #17301f; border-color: var(--ok); color: #fff; }
+  .hint { font-size: 11px; color: var(--dim); margin-top: 7px; line-height: 1.4; }
+  .seg { display: flex; margin-top: 8px; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }
+  .seg button { flex: 1; border: 0; border-radius: 0; background: transparent; color: var(--dim); padding: 6px 4px; font-size: 11px; }
+  .seg button + button { border-left: 1px solid var(--line); }
+  .seg button.on { background: var(--raise); color: var(--text); font-weight: 600; }
+
+  #alerts { position: fixed; right: 16px; bottom: 16px; display: flex; flex-direction: column; gap: 7px; z-index: 20; }
+  .alert {
+    background: var(--panel2); border: 1px solid var(--line); border-left: 3px solid var(--warn);
+    border-radius: 7px; padding: 8px 12px; font-size: 12px; max-width: 380px;
+    box-shadow: 0 10px 30px rgba(0,0,0,.5);
+  }
+  .alert.error { border-left-color: var(--bad); }
+  .alert.info { border-left-color: var(--accent); }
+  #offline {
+    position: fixed; inset: 0; background: rgba(9,11,14,.92); display: none; z-index: 30;
+    align-items: center; justify-content: center; font-size: 15px; color: var(--warn);
+  }
+  /* Shown only while files are over the window. Nothing in it is clickable, so
+     it must not eat the drop event it exists to advertise. */
+  #dropzone {
+    position: fixed; inset: 0; z-index: 40; pointer-events: none;
+    display: flex; align-items: center; justify-content: center;
+    background: rgba(9,11,14,.82);
+  }
+  #dropzone[hidden] { display: none; }
+  #dropzone > div {
+    display: flex; flex-direction: column; gap: 6px; text-align: center;
+    border: 2px dashed var(--accent); border-radius: 10px; padding: 28px 44px;
+    background: var(--panel);
+  }
+  #dropzone b { font-size: 15px; }
+  #dropzone span { font-size: 12px; color: var(--dim); }
+
+  @media (prefers-reduced-motion: reduce) {
+    * { transition: none !important; animation: none !important; }
+  }
+</style>
+
+<header>
+  <div class="brand"><i></i>GodwinMix</div>
+  <div id="tally"><span class="tl">on<br>program</span><span class="tn" id="pgm">…</span></div>
+  <div id="pgmmeter" title="Program bus, peak dBFS. This is what the outputs are carrying.">
+    <span class="cap">pgm<br>audio</span>
+    <div class="hbars" id="meters"></div>
+    <span class="pk num" id="pgmpk"></span>
+  </div>
+  <div class="spacer"></div>
+  <div class="stat"><span class="k">uptime</span><b id="uptime" class="num">…</b></div>
+  <div class="stat"><span class="k">encoder</span><b id="backend">…</b></div>
+  <span class="pill" id="adpill" hidden>AD ON AIR</span>
+  <span id="desk" hidden>
+    <button class="ghost" id="closewin" title="Close this window. The mixer and the stream keep running.">Close window</button>
+    <button class="ghost warn" id="stopall" title="Stop the mixer, the stream and this window.">Stop everything</button>
+  </span>
+  <button id="cut">Cut to black <kbd>0</kbd></button>
+</header>
+
+<main>
+  <div id="stage">
+    <div id="viewport">
+      <div id="wrap">
+        <img id="mosaic" alt="Multiview">
+        <div id="cells"></div>
+      </div>
+    </div>
+    <div id="stagebar">
+      <div class="keys">
+        <kbd>1</kbd><kbd>…</kbd><kbd>9</kbd> take a source
+        <span class="sep"></span>
+        <kbd>0</kbd><kbd>Esc</kbd> cut to black
+        <span class="wide"><span class="sep"></span>double click a fader for unity</span>
+      </div>
+      <div class="spacer"></div>
+      <div class="strips">
+        <button class="tg" id="tgmeter" aria-pressed="true" title="Show or hide the level meter on every cell.">Meters</button>
+        <button class="tg" id="tgfader" aria-pressed="true" title="Show or hide the level fader on every cell.">Faders</button>
+        <button class="tg" id="tgvert" title="Collapse all the vertical controls: the meter and the fader together, on every cell.">Hide vertical</button>
+        <button class="tg" id="tghorz" title="Collapse all the horizontal controls: the scrubber along the bottom of every file that can be seeked.">Hide horizontal</button>
+      </div>
+      <div id="gridinfo" class="num"></div>
+    </div>
+  </div>
+  <aside>
+    <section class="card">
+      <h2>Media <span class="n" id="medianum"></span></h2>
+      <div id="medialist" class="clips"></div>
+      <input id="mediafile" type="file" accept="video/*,.mkv,.ts,.flv" multiple hidden>
+      <div class="hint" id="uphint" hidden></div>
+      <div class="adrow">
+        <button id="adrefresh" class="ghost" title="Rescan the library">Rescan</button>
+        <button id="mediaupload" class="ghost" title="Send video files from this computer to the mixer. You can also drag them onto the window.">Upload…</button>
+        <label class="cue">in <input id="adcue" type="number" min="0" max="600" step="1" value="0"> s</label>
+      </div>
+      <div class="adrow">
+        <button id="adplay" disabled>Roll ad</button>
+        <button id="adstop" disabled>End early</button>
+      </div>
+      <div class="hint" id="adhint">Pick a clip. Double-click rolls it straight away.</div>
+      <details id="adcustom">
+        <summary>Use a path instead</summary>
+        <input id="aduri" placeholder="/path/on/the/server/ad.mp4" spellcheck="false">
+      </details>
+    </section>
+    <section class="card">
+      <h2>Outputs <span class="n" id="outnum"></span></h2>
+      <div id="outputs"></div>
+      <details id="addout">
+        <summary>Add a destination</summary>
+        <input id="noid" placeholder="id (e.g. youtube)" spellcheck="false">
+        <input id="nouri" placeholder="rtmp://a.rtmp.youtube.com/live2/KEY" spellcheck="false">
+        <label class="cue" style="margin-top:7px">
+          policy
+          <select id="nopolicy">
+            <option value="own">own server (reconnect fast)</option>
+            <option value="cdn">CDN (back off harder)</option>
+          </select>
+        </label>
+        <div class="adrow"><button id="noadd">Add destination</button></div>
+      </details>
+    </section>
+    <section class="card">
+      <h2>Sources <span class="n" id="srcnum"></span></h2>
+      <div id="sources"></div>
+      <details id="addsrc">
+        <summary>Add a source</summary>
+        <div class="seg" id="nskind">
+          <button data-kind="web" class="on" title="Render a website, with its audio, as a source">Website</button>
+          <button data-kind="stream" title="RTMP, HLS, DASH, RTSP, SRT">Camera</button>
+          <button data-kind="exec" title="A command line whose output is the source">Command</button>
+          <button data-kind="file" title="A video file already on the mixer machine">File</button>
+        </div>
+        <input id="nsuri" placeholder="Paste the page address, e.g. https://www.youtube.com/watch?v=…" spellcheck="false">
+        <input id="nsname" placeholder="name (optional, the site's name by default)" spellcheck="false">
+        <label class="cue" id="nssuperrow" style="margin-top:7px">
+          page video
+          <select id="nssuper">
+            <option value="off">browser renders it</option>
+            <option value="auto">mixer decodes it</option>
+          </select>
+        </label>
+        <div class="adrow"><button id="nsadd">Add source</button></div>
+        <div class="hint" id="nshint">The page is rendered by a real browser and its sound comes along. Paste and add.</div>
+      </details>
+    </section>
+  </aside>
+</main>
+
+<div id="alerts"></div>
+<div id="dropzone" hidden><div><b>Drop video files to upload</b><span>They go into the mixer's library, ready to add as a source.</span></div></div>
+<div id="offline">Disconnected from the mixer. Retrying…</div>
+
+<script data-cfasync="false">
+"use strict";
+  // The desktop shell announces itself in the user agent. In a browser these
+  // two buttons mean nothing and stay hidden.
+  if (navigator.userAgent.includes("GodwinMix-Desktop")) {
+    const desk = document.getElementById("desk");
+    desk.hidden = false;
+    document.getElementById("closewin").onclick = () => { location.href = "godwinmix://quit"; };
+    const stop = document.getElementById("stopall");
+    let armed = 0;
+    // Two clicks, four seconds apart at most. A modal confirm would do the
+    // same job and freeze the window while it asked.
+    stop.onclick = () => {
+      if (Date.now() - armed < 4000) { location.href = "godwinmix://quit-all"; return; }
+      armed = Date.now(); stop.textContent = "Click again to stop everything";
+      setTimeout(() => { if (Date.now() - armed >= 4000) stop.textContent = "Stop everything"; }, 4200);
+    };
+  }
+// The rename moved every stored key from lbx. to gmx. Whatever this browser
+// remembered under the old names is moved across once, so an operator does not
+// have to type the token again or lose the strips they had hidden. Delete this
+// block in the release after 0.2.
+try {
+  for (const k of ["token", "adUri", "strips"]) {
+    const old = localStorage.getItem("lbx." + k);
+    if (old !== null && localStorage.getItem("gmx." + k) === null) localStorage.setItem("gmx." + k, old);
+    if (old !== null) localStorage.removeItem("lbx." + k);
+  }
+} catch {}
+
+const $ = (id) => document.getElementById(id);
+let status = null;
+let objectUrl = null;
+
+// --- token -----------------------------------------------------------------
+// A mixer with a token configured answers 401 until it gets one. It is asked
+// for once and kept in this browser; fetches carry it as a header, the socket
+// in its query because a WebSocket has nowhere else to put it. Without a token
+// configured none of this is ever exercised.
+let token = null;
+try { token = localStorage.getItem("gmx.token"); } catch {}
+let tokenAsked = false;
+
+function askToken() {
+  // Once per page load. The status poll runs every two seconds and a refused
+  // prompt must not turn into a dialog every two seconds.
+  if (tokenAsked) return false;
+  tokenAsked = true;
+  const t = window.prompt("This mixer needs a token.");
+  if (!t || !t.trim()) return false;
+  token = t.trim();
+  try { localStorage.setItem("gmx.token", token); } catch {}
+  return true;
+}
+
+async function api(path, init = {}) {
+  const send = () => {
+    const headers = Object.assign({}, init.headers || {});
+    if (token) headers["Authorization"] = `Bearer ${token}`;
+    return fetch(path, Object.assign({}, init, { headers }));
+  };
+  let r = await send();
+  if (r.status === 401 && askToken()) r = await send();
+  if (r.status === 401 && token) {
+    // A stored token that no longer works is worse than none: forget it so a
+    // reload asks again instead of failing quietly forever.
+    token = null;
+    try { localStorage.removeItem("gmx.token"); } catch {}
+  }
+  return r;
+}
+
+// --- transport -------------------------------------------------------------
+// One socket carries both state (text) and mosaic frames (binary).
+function connect() {
+  const proto = location.protocol === "https:" ? "wss:" : "ws:";
+  const query = token ? `?token=${encodeURIComponent(token)}` : "";
+  const ws = new WebSocket(`${proto}//${location.host}/ws${query}`);
+  ws.binaryType = "blob";
+
+  ws.onopen = () => { $("offline").style.display = "none"; };
+  ws.onclose = () => {
+    $("offline").style.display = "flex";
+    setTimeout(connect, 1000);
+  };
+  ws.onmessage = (ev) => {
+    if (typeof ev.data === "string") { onEvent(JSON.parse(ev.data)); return; }
+    // Revoke the previous URL or the tab leaks a blob per frame.
+    const url = URL.createObjectURL(ev.data);
+    const img = $("mosaic");
+    const previous = objectUrl;
+    img.onload = () => { if (previous) URL.revokeObjectURL(previous); };
+    img.src = url;
+    objectUrl = url;
+  };
+}
+
+function onEvent(ev) {
+  switch (ev.type) {
+    // Serde flattens the snapshot into the event, so the event *is* the
+    // status, with an extra `type` field. See the shape test in state.rs.
+    case "status": status = ev; render(); break;
+    case "took": if (status) { status.program = ev.source; render(); } break;
+    case "source_state_changed":
+      if (status) {
+        const s = status.sources.find((s) => s.id === ev.source);
+        if (s) { s.state = ev.state; render(); }
+      }
+      break;
+    case "output_state_changed":
+      if (status) {
+        const o = status.outputs.find((o) => o.id === ev.output);
+        if (o) { o.state = ev.state; o.reconnects = ev.reconnects; render(); }
+      }
+      break;
+    case "ad_break_changed":
+      if (status) { status.ad = ev.ad; renderAd(); }
+      break;
+    // Conversion progress arrives per percent, so the whole list is refetched
+    // on a leash rather than on every tick. See loadMediaSoon.
+    case "media_changed": loadMediaSoon(); break;
+    case "audio_level": takeLevel("program", ev.peak_db); break;
+    // One of these per source, ten times a second. Nine sources is ninety
+    // events a second, so nothing here touches the DOM: the numbers go into a
+    // store and the rAF loop below paints whatever is current when it runs.
+    case "source_audio_level": takeLevel("src:" + ev.source, ev.peak_db); break;
+    // Four a second per seekable file, and the same arrangement as the levels
+    // for the same reason: into the store here, onto the handle in the rAF loop.
+    case "source_position": takePosition(ev.source, ev.position_ms, ev.duration_ms); break;
+    case "alert": alert_(ev.severity, ev.message); break;
+  }
+}
+
+// --- meters ----------------------------------------------------------------
+// A peak meter that draws its level linearly in dB wastes most of its length on
+// silence. These stops give the working range, -20 dBFS to 0 dBFS, about two
+// thirds of the travel, and squeeze -60 dBFS to -40 dBFS into the last tenth
+// where nobody is reading precise numbers anyway.
+const METER_STOPS = [[-60, 0], [-40, .12], [-20, .35], [-10, .60], [-6, .74], [-3, .86], [0, 1]];
+const METER_FLOOR = -60;
+const SCALE_TICKS = [0, -6, -12, -18, -24, -36, -60];
+const REF_DB = -18;
+
+function dbToPos(db) {
+  if (!(db > METER_FLOOR)) return 0;
+  if (db >= 0) return 1;
+  for (let i = 1; i < METER_STOPS.length; i++) {
+    const [d1, p1] = METER_STOPS[i];
+    if (db <= d1) {
+      const [d0, p0] = METER_STOPS[i - 1];
+      return p0 + ((db - d0) / (d1 - d0)) * (p1 - p0);
+    }
+  }
+  return 1;
+}
+
+// Level key -> { peaks, t }. Written by the socket, read by the paint loop.
+const audioLevels = new Map();
+// View id -> view. Two meters can watch the same level key (the program bus is
+// on the header and on the program return cell at the same time), so a view is
+// identified by where it is drawn, not by what it is drawing.
+const meterViews = new Map();
+
+function takeLevel(key, peaks) {
+  if (!Array.isArray(peaks)) return;
+  let watched = false;
+  for (const view of meterViews.values()) {
+    if (view.key !== key) continue;
+    watched = true;
+    // Channel counts do not change mid-broadcast in practice, but a source that
+    // reopens as mono after being stereo would otherwise paint into bars that
+    // are no longer there. Structure is rebuilt here, never in the paint loop.
+    if (view.bars.length !== peaks.length) buildBars(view, peaks.length);
+  }
+  // Levels for something with no cell on screen have nowhere to go. Keeping
+  // them would leave one entry per source the mixer ever had behind.
+  if (!watched) { audioLevels.delete(key); return; }
+  audioLevels.set(key, { peaks, t: performance.now() });
+}
+
+function makeMeterView(key, host, orient, readout) {
+  const view = { key, host, orient, readout, bars: [], lastPk: null };
+  buildBars(view, 2);
+  return view;
+}
+
+function buildBars(view, n) {
+  view.host.innerHTML = "";
+  view.bars = [];
+  for (let i = 0; i < n; i++) {
+    const mtr = document.createElement("div");
+    mtr.className = "mtr";
+    const fill = document.createElement("i");
+    fill.className = "fill";
+    const hold = document.createElement("b");
+    hold.className = "hold";
+    mtr.append(fill, hold);
+    view.host.appendChild(mtr);
+    view.bars.push({ fill, hold, cur: -120, pk: -120, pkAt: 0, lastP: -1, lastQ: -1 });
+  }
+}
+
+// Real meters fall at a fixed rate rather than following the samples down, or
+// every gap between words reads as silence. The peak line sits still for a
+// moment so a transient is readable, then slides.
+const FALL_DB_PER_S = 60;
+const HOLD_MS = 1100;
+const HOLD_FALL_DB_PER_S = 20;
+
+// One loop paints everything that arrives faster than a person can read it:
+// ninety level events a second across nine sources, plus four positions a second
+// per file. rAF is suspended outright in a hidden tab, which is the behaviour we
+// want and the reason none of this is on a timer.
+function paintFrame(ts) {
+  paintMeters(ts);
+  paintPositions(ts);
+  requestAnimationFrame(paintFrame);
+}
+
+let lastPaint = 0;
+function paintMeters(ts) {
+  const dt = lastPaint ? Math.min(0.1, (ts - lastPaint) / 1000) : 0;
+  lastPaint = ts;
+  for (const view of meterViews.values()) {
+    const lv = audioLevels.get(view.key);
+    // A source that stopped sending levels (removed, or its audio went away)
+    // must drain rather than freeze with a bar still lit.
+    const stale = !lv || ts - lv.t > 1200;
+    let top = -120;
+    for (let i = 0; i < view.bars.length; i++) {
+      const bar = view.bars[i];
+      const raw = stale ? -120 : lv.peaks[i];
+      const target = typeof raw === "number" && isFinite(raw) ? raw : -120;
+      bar.cur = target >= bar.cur ? target : Math.max(target, bar.cur - FALL_DB_PER_S * dt);
+      if (bar.cur >= bar.pk) { bar.pk = bar.cur; bar.pkAt = ts; }
+      else if (ts - bar.pkAt > HOLD_MS) bar.pk = Math.max(bar.cur, bar.pk - HOLD_FALL_DB_PER_S * dt);
+      if (bar.pk > top) top = bar.pk;
+
+      const p = dbToPos(bar.cur);
+      if (Math.abs(p - bar.lastP) > 0.0015) {
+        bar.lastP = p;
+        bar.fill.style.clipPath = view.orient === "h"
+          ? `inset(0 ${((1 - p) * 100).toFixed(2)}% 0 0)`
+          : `inset(${((1 - p) * 100).toFixed(2)}% 0 0 0)`;
+      }
+      const q = dbToPos(bar.pk);
+      if (Math.abs(q - bar.lastQ) > 0.0015) {
+        bar.lastQ = q;
+        // A percentage translate is measured against the bar's own box, which
+        // is the full track, so this moves the line without a layout pass.
+        bar.hold.style.transform = view.orient === "h"
+          ? `translateX(${(-(1 - q) * 100).toFixed(2)}%)`
+          : `translateY(${((1 - q) * 100).toFixed(2)}%)`;
+      }
+    }
+    if (view.readout) {
+      const txt = top <= METER_FLOOR ? "" : top.toFixed(1);
+      if (txt !== view.lastPk) { view.lastPk = txt; view.readout.textContent = txt; }
+    }
+  }
+}
+
+meterViews.set("header", makeMeterView("program", $("meters"), "h", $("pgmpk")));
+
+// --- the scrubber -----------------------------------------------------------
+// Where each seekable file is, held the same way the levels are: written on
+// receipt, painted once a frame. A file nothing on screen is showing is dropped
+// rather than kept, or the map ends up holding every clip the mixer ever rolled.
+const positions = new Map();    // source id -> { pos, dur, t }
+const scrubActive = new Set();  // sources whose handle is under a pointer
+const scrubHold = new Map();    // source id -> { ms, until } while a seek lands
+
+function scrubWatched(source) {
+  for (const view of cellViews.values()) if (view.source === source && view.scrub) return true;
+  return false;
+}
+
+function setPosition(source, pos, dur) {
+  if (!scrubWatched(source)) { positions.delete(source); return; }
+  const prev = positions.get(source);
+  positions.set(source, {
+    pos: typeof pos === "number" && isFinite(pos) ? Math.max(0, pos) : (prev ? prev.pos : 0),
+    dur: typeof dur === "number" && dur > 0 ? dur : (prev ? prev.dur : 0),
+    t: performance.now(),
+  });
+}
+
+// A position from the mixer's own clock. While a seek is in flight the handle
+// stays where the operator dropped it, and this is what ends that: once the
+// mixer reports a position near the one they asked for, the file is where they
+// put it and the mixer can drive the handle again.
+function takePosition(source, pos, dur) {
+  setPosition(source, pos, dur);
+  const hold = scrubHold.get(source);
+  if (hold && typeof pos === "number" && Math.abs(pos - hold.ms) < 1000) scrubHold.delete(source);
+}
+
+// A mixer without the seek endpoint refuses every one of these. Say it once.
+let seekPostWarned = false;
+async function postSeek(sourceId, ms) {
+  try {
+    const r = await api(`/api/sources/${encodeURIComponent(sourceId)}/seek`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ position_ms: ms }),
+    });
+    if (!r.ok) {
+      // The file did not move, so stop pretending it did and let the mixer's
+      // own position take the handle back on the next event.
+      scrubHold.delete(sourceId);
+      if (!seekPostWarned) {
+        seekPostWarned = true;
+        alert_("warning", `The mixer would not seek that source: ${serverError(await r.text(), r.status, "refused")}`);
+      }
+      return;
+    }
+    const answer = await r.json().catch(() => null);
+    if (answer && typeof answer.position_ms === "number") {
+      setPosition(sourceId, answer.position_ms, answer.duration_ms);
+      // The answer is the mixer agreeing, not the pipeline having got there, so
+      // the hold is renewed against the answered position rather than dropped.
+      scrubHold.set(sourceId, { ms: answer.position_ms, until: performance.now() + 1500 });
+    }
+  } catch {}
+}
+
+// One seek when the gesture settles. Sending on every tick of a drag would have
+// the mixer chasing a handle that has already moved on, and a file that reseeks
+// twenty times in a second shows it. A drag fires change once, on release, but
+// an arrow key held down fires it again on every repeat, which is worse than the
+// drag would have been, so the send is on a short leash either way. The handle
+// itself moves at once: only the request waits.
+const seekTimers = new Map();
+function bindScrub(input, sourceId) {
+  input.oninput = () => { scrubActive.add(sourceId); };
+  input.onchange = () => {
+    const ms = Math.max(0, Math.round(Number(input.value)));
+    scrubActive.delete(sourceId);
+    scrubHold.set(sourceId, { ms, until: performance.now() + 3000 });
+    clearTimeout(seekTimers.get(sourceId));
+    seekTimers.set(sourceId, setTimeout(() => {
+      seekTimers.delete(sourceId);
+      postSeek(sourceId, Math.max(0, Math.round(Number(input.value))));
+    }, 120));
+    flushDeferred();
+  };
+  // Same reason as the fader: the second press of a double click would jump the
+  // file to wherever the pointer happened to be.
+  input.onmousedown = (e) => { if (e.detail > 1) e.preventDefault(); };
+}
+
+// The handle is painted from the store, never from the event, and never at all
+// while a pointer is on it. The position is drawn exactly as the mixer reported
+// it with nothing interpolated between events: a quarter second step is fine to
+// watch, and a handle that creeps forward on its own would crawl on a paused
+// file and snap back four times a second.
+function paintPositions(ts) {
+  for (const view of cellViews.values()) {
+    if (!view.scrub) continue;
+    const p = positions.get(view.source);
+    const dur = p ? p.dur : 0;
+    const usable = dur > 0;
+    if (view.scrubUsable !== usable) {
+      view.scrubUsable = usable;
+      view.scrub.disabled = !usable;
+    }
+    if (usable && view.scrubMax !== dur) {
+      view.scrubMax = dur;
+      view.scrub.max = String(dur);
+    }
+    const hold = scrubHold.get(view.source);
+    if (hold && hold.until < ts) scrubHold.delete(view.source);
+    const dragging = scrubActive.has(view.source);
+    let ms;
+    if (dragging) ms = Number(view.scrub.value);
+    else if (scrubHold.has(view.source)) ms = scrubHold.get(view.source).ms;
+    else ms = p ? p.pos : 0;
+    // Without a length there is no point on the track that means anything, so
+    // the handle parks at the start rather than being clamped to an invented
+    // maximum and sitting at the end as though the file had finished. The time
+    // is still real and still shown.
+    const handle = usable ? Math.min(dur, Math.max(0, ms)) : 0;
+    if (!dragging && view.scrubAt !== handle) {
+      view.scrubAt = handle;
+      view.scrub.value = String(handle);
+    }
+    const pct = usable ? Math.round((handle / dur) * 1000) / 10 : 0;
+    if (view.scrubPct !== pct) {
+      view.scrubPct = pct;
+      view.scrub.style.setProperty("--p", pct + "%");
+    }
+    const txt = usable ? `${fmtDur(handle)} / ${fmtDur(dur)}` : fmtDur(ms);
+    if (view.posTxt !== txt) { view.posTxt = txt; view.pos.textContent = txt; }
+  }
+}
+
+requestAnimationFrame(paintFrame);
+
+// --- actions ---------------------------------------------------------------
+async function take(source) {
+  try {
+    const r = await api("/api/take", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ source }),
+    });
+    if (!r.ok) alert_("error", serverError(await r.text(), r.status, "The mixer refused that"));
+  } catch (e) { alert_("error", String(e)); }
+}
+
+async function reconnect(id) {
+  await api(`/api/outputs/${encodeURIComponent(id)}/reconnect`, { method: "POST" });
+}
+
+$("cut").onclick = () => take(null);
+
+async function post(path, body) {
+  try {
+    const r = await api(path, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: body === undefined ? undefined : JSON.stringify(body),
+    });
+    if (!r.ok) alert_("error", serverError(await r.text(), r.status, "The mixer refused that"));
+    return r.ok;
+  } catch (e) { alert_("error", String(e)); return false; }
+}
+
+let media = null;
+let selectedClip = null;
+
+async function loadMedia() {
+  try {
+    const r = await api("/api/media");
+    if (!r.ok) { alert_("error", serverError(await r.text(), r.status, "Could not read the media library")); return; }
+    media = await r.json();
+    renderMedia();
+  } catch (e) { alert_("error", String(e)); }
+}
+
+// Coalesce a burst of media_changed events (one per percent of a conversion)
+// into at most one refetch every 500ms.
+let mediaReloadTimer = null;
+function loadMediaSoon() {
+  if (mediaReloadTimer) return;
+  mediaReloadTimer = setTimeout(() => { mediaReloadTimer = null; loadMedia(); }, 500);
+}
+
+// Clock time for a clip, used in the library and on the scrubbers. A recording
+// past the hour read as "94:12", which nobody converts in their head while a
+// programme is running, so anything that long gets an hours field.
+function fmtDur(ms) {
+  if (ms == null) return "";
+  const t = Math.round(ms / 1000);
+  const mm = Math.floor(t / 60) % 60;
+  const ss = String(t % 60).padStart(2, "0");
+  if (t < 3600) return `${mm}:${ss}`;
+  return `${Math.floor(t / 3600)}:${String(mm).padStart(2, "0")}:${ss}`;
+}
+
+function renderMedia() {
+  const host = $("medialist");
+  if (!media) { host.innerHTML = `<div class="empty">Loading…</div>`; return; }
+  $("medianum").textContent = media.items && media.items.length ? media.items.length : "";
+  if (!media.items.length) {
+    host.innerHTML = `<div class="empty">${
+      media.error
+        ? `Cannot read <b>${escapeHtml(media.dir)}</b>: ${escapeHtml(media.error)}`
+        : `No clips yet. Drag video files onto this window, or press Upload, and they appear here ready to put on air.`
+    }</div>`;
+    return;
+  }
+  host.innerHTML = media.items.map((it, i) => {
+    // Every new field is optional. An older server sends none of them, and the
+    // row must fall back to just the name, the mute chip and the duration.
+    const conv = it.conversion || null;
+    const running = !!(conv && conv.state === "running");
+    const failed = !!(conv && conv.state === "failed");
+    const failMsg = failed && conv.error ? conv.error : "";
+    // Ready to cut to: web safe as delivered, or a converted copy exists.
+    const ready = it.web_safe === true || !!it.converted_path;
+    // Offer Convert only when we actually know it is not web safe and there is
+    // no converted copy yet. Unknown (older server) means no button.
+    const needsConvert = it.web_safe === false && !it.converted_path;
+    // The path holds the error too, so hovering the whole row explains a fail.
+    const rowTitle = failMsg ? `${it.path}\n${failMsg}` : it.path;
+
+    let acts;
+    if (running) {
+      const pct = Math.round((conv.progress || 0) * 100);
+      acts = `<div class="acts">
+        <span class="cvt">converting ${pct}%</span>
+        <span class="prog"><i style="width:${pct}%"></i></span>
+      </div>`;
+    } else {
+      const cvtBtn = needsConvert
+        ? `<button class="cvt-btn" title="${escapeHtml((it.reasons || []).join("; "))}">Convert</button>`
+        : "";
+      const failLabel = failMsg ? `<span class="warn" title="${escapeHtml(failMsg)}">convert failed</span>` : "";
+      acts = `<div class="acts">
+        <button class="add-btn">Add as source</button>
+        ${cvtBtn}${failLabel}
+      </div>`;
+    }
+
+    return `
+    <div class="clip${it.path === selectedClip ? " sel" : ""}" data-i="${i}" title="${escapeHtml(rowTitle)}">
+      <span class="cn">${escapeHtml(it.name)}</span>
+      ${ready ? `<span class="ok" title="Web friendly, ready to cut to">web</span>` : ""}
+      ${it.has_audio ? "" : `<span class="warn" title="No audio track">mute</span>`}
+      <span class="cd">${fmtDur(it.duration_ms)}</span>
+      ${acts}
+    </div>`;
+  }).join("");
+  [...host.querySelectorAll(".clip")].forEach((el) => {
+    const it = media.items[Number(el.dataset.i)];
+    el.onclick = () => { selectedClip = it.path; $("aduri").value = it.path; renderMedia(); renderAd(); };
+    el.ondblclick = () => { selectedClip = it.path; rollAd(); };
+    // stopPropagation so a click on a button does not also select the clip for
+    // the ad roll, the way the row's own onclick would.
+    const add = el.querySelector(".add-btn");
+    if (add) add.onclick = (e) => { e.stopPropagation(); addMediaSource(it); };
+    const cvt = el.querySelector(".cvt-btn");
+    if (cvt) cvt.onclick = (e) => { e.stopPropagation(); cvt.disabled = true; convertMedia(it.name); };
+  });
+}
+
+// Add a media file to the mixer as a source. The converted copy wins when there
+// is one, because that is the file the browser and the encoder can both read.
+async function addMediaSource(it) {
+  const uri = it.converted_path || it.path;
+  const ok = await post("/api/sources", { uri, name: it.name, kind: null, superimpose: null });
+  if (ok) alert_("info", it.name + " is ready. Click its picture in the preview to put it on air.");
+}
+
+// Kick off a background conversion. Progress comes back as media_changed events,
+// which refetch the list and redraw the row's progress bar.
+async function convertMedia(name) {
+  await post(`/api/media/${encodeURIComponent(name)}/convert`);
+}
+
+// fetch cannot report upload progress, so this one call uses XMLHttpRequest and
+// carries the bearer token itself. The body is the raw file bytes. It resolves
+// rather than rejects on a failed upload, because a batch of dropped files
+// should carry on past one bad file rather than abandoning the rest.
+function uploadMedia(file, position) {
+  return new Promise((resolve) => {
+    const hint = $("uphint");
+    const label = position ? `${position} ` : "";
+    hint.hidden = false;
+    hint.textContent = `${label}Uploading ${file.name}… 0%`;
+    const xhr = new XMLHttpRequest();
+    xhr.open("POST", `/api/media/upload?name=${encodeURIComponent(file.name)}`);
+    xhr.setRequestHeader("Content-Type", "application/octet-stream");
+    if (token) xhr.setRequestHeader("Authorization", `Bearer ${token}`);
+    xhr.upload.onprogress = (e) => {
+      if (e.lengthComputable) {
+        hint.textContent = `${label}Uploading ${file.name}… ${Math.round((e.loaded / e.total) * 100)}%`;
+      }
+    };
+    xhr.onload = () => {
+      if (xhr.status >= 200 && xhr.status < 300) {
+        hint.textContent = `Uploaded ${file.name}.`;
+        loadMedia();
+      } else {
+        alert_("error", serverError(xhr.responseText, xhr.status, `Could not upload ${file.name}`));
+      }
+      resolve();
+    };
+    xhr.onerror = () => { alert_("error", `Could not upload ${file.name}.`); resolve(); };
+    xhr.send(file);
+  });
+}
+
+// One at a time. The mixer is encoding a live programme on the same machine,
+// and saturating its disk and its network with parallel uploads is not worth
+// the few seconds it would save.
+let uploading = false;
+async function uploadFiles(files) {
+  const list = [...files];
+  if (!list.length || uploading) return;
+  uploading = true;
+  for (let i = 0; i < list.length; i++) {
+    await uploadMedia(list[i], list.length > 1 ? `(${i + 1} of ${list.length})` : "");
+  }
+  uploading = false;
+  const hint = $("uphint");
+  setTimeout(() => { if (!uploading) hint.hidden = true; }, 3000);
+}
+
+$("mediaupload").onclick = () => $("mediafile").click();
+$("mediafile").onchange = () => {
+  uploadFiles($("mediafile").files);
+  // Clear it so picking the same file again still fires change.
+  $("mediafile").value = "";
+};
+
+// Dropping files on the window uploads them. Nobody should have to know where
+// the media directory lives on the server, and the file picker is one more
+// thing to find for someone who already has the clip in a folder in front of
+// them. dragover has to be cancelled or the browser navigates to the file and
+// the operator loses the page mid-programme.
+const drop = $("dropzone");
+let dragDepth = 0;
+function draggingFiles(e) {
+  return [...(e.dataTransfer?.types || [])].includes("Files");
+}
+window.addEventListener("dragenter", (e) => {
+  if (!draggingFiles(e)) return;
+  e.preventDefault();
+  dragDepth++;
+  drop.hidden = false;
+});
+window.addEventListener("dragover", (e) => { if (draggingFiles(e)) e.preventDefault(); });
+// Counted rather than cleared on the first leave, because dragging across a
+// child element fires leave on the one being left before enter on the next.
+window.addEventListener("dragleave", (e) => {
+  if (!draggingFiles(e)) return;
+  dragDepth = Math.max(0, dragDepth - 1);
+  if (dragDepth === 0) drop.hidden = true;
+});
+window.addEventListener("drop", (e) => {
+  if (!draggingFiles(e)) return;
+  e.preventDefault();
+  dragDepth = 0;
+  drop.hidden = true;
+  uploadFiles(e.dataTransfer.files);
+});
+
+$("adrefresh").onclick = loadMedia;
+
+function adTarget() {
+  const typed = $("aduri").value.trim();
+  return typed || selectedClip;
+}
+
+function rollAd() {
+  const uri = adTarget();
+  if (!uri) { alert_("warning", "Pick a clip first."); return; }
+  try { localStorage.setItem("gmx.adUri", uri); } catch {}
+  // A cue is an absolute point on the program's running time, so the mixer can
+  // arm it on the pipeline clock and land it on the intended frame.
+  const delay = Math.max(0, Number($("adcue").value) || 0);
+  const body = { uri };
+  if (delay > 0 && status) {
+    body.at_running_time_ms = status.running_time_ms + delay * 1000;
+  }
+  post("/api/adbreak", body);
+}
+
+$("adplay").onclick = rollAd;
+$("adstop").onclick = () => post("/api/adbreak/end");
+$("aduri").oninput = renderAd;
+try {
+  const saved = localStorage.getItem("gmx.adUri");
+  if (saved) selectedClip = saved;
+} catch {}
+loadMedia();
+
+// Number keys take the camera in that slot. Any operator switching cameras
+// will reach for these before they reach for the mouse.
+document.addEventListener("keydown", (e) => {
+  // Anything that takes typed characters swallows the key, or a cue time of 30
+  // would cut to camera 3. A fader is not one of those: an operator who has
+  // just set a level still expects the number keys to work, and leaving focus
+  // on the slider they touched would quietly disarm the whole keyboard.
+  const t = e.target;
+  const typing = t.tagName === "TEXTAREA" || t.tagName === "SELECT" || t.isContentEditable
+    || (t.tagName === "INPUT" && t.type !== "range");
+  if (typing || e.metaKey || e.ctrlKey || e.altKey) return;
+  if (e.key >= "1" && e.key <= "9") {
+    const i = Number(e.key) - 1;
+    const s = status?.sources?.[i];
+    if (s) { e.preventDefault(); take(s.id); }
+  } else if (e.key === "0" || e.key === "Escape") {
+    e.preventDefault(); take(null);
+  }
+});
+
+// --- rendering -------------------------------------------------------------
+function render() {
+  if (!status) return;
+  const live = status.program != null;
+  // The name, because that is what the operator wrote on the camera. The id is
+  // the mixer's handle for it and means nothing to anyone at the desk.
+  $("pgm").textContent = live ? (currentSource(status.program)?.name ?? status.program) : "black";
+  $("tally").classList.toggle("on", live);
+  document.body.classList.toggle("onair", live);
+  $("uptime").textContent = fmtDuration(status.uptime_secs);
+  const b = status.backend;
+  $("backend").textContent =
+    `${b.video_encoder} · ${b.hardware_accelerated ? "hardware" : "software"}`;
+  const mv = status.multiview;
+  $("gridinfo").textContent = mv && mv.enabled
+    ? `${mv.cols} × ${mv.rows} multiview · ${mv.fps} fps`
+    : "multiview off";
+  $("srcnum").textContent = status.sources.length || "";
+  $("outnum").textContent = status.outputs.length || "";
+
+  renderCells();
+  renderOutputs();
+  renderSources();
+  renderAd();
+}
+
+function renderAd() {
+  const ad = status?.ad;
+  const onAir = !!(ad && ad.on_air);
+  $("adpill").hidden = !onAir;
+  $("adstop").disabled = !ad;
+  $("adplay").disabled = !!ad;
+  $("adcue").disabled = !!ad;
+  $("adplay").disabled = !!ad || !adTarget();
+  $("adhint").textContent = ad
+    ? (onAir
+        ? `On air. Returns to ${ad.return_to ?? "black"} when the file ends.`
+        : `Armed and prerolled, waiting for its cue.`)
+    : "Pick a clip. Double-click rolls it straight away; set a cue to place it exactly.";
+}
+
+// --- the operator's fader ---------------------------------------------------
+// The slider is a straight line in decibels, because that is what an operator
+// hears and what the printing on a real desk says. Unity sits at three quarters
+// of the travel so the top quarter still has somewhere to go: +20 dB, which is
+// the 10.0 gain ceiling the mixer accepts.
+const FADER_UNITY = 0.75;
+const FADER_BOTTOM_DB = -60;
+const FADER_TOP_DB = 20;
+
+function faderToGain(p) {
+  if (p <= 0.004) return 0;
+  const db = p <= FADER_UNITY
+    ? FADER_BOTTOM_DB + (p / FADER_UNITY) * -FADER_BOTTOM_DB
+    : ((p - FADER_UNITY) / (1 - FADER_UNITY)) * FADER_TOP_DB;
+  return Math.min(10, Math.pow(10, db / 20));
+}
+
+function gainToFader(g) {
+  if (!(g > 0)) return 0;
+  const db = 20 * Math.log10(Math.min(10, g));
+  if (db >= 0) return FADER_UNITY + (db / FADER_TOP_DB) * (1 - FADER_UNITY);
+  return Math.max(0, ((db - FADER_BOTTOM_DB) / -FADER_BOTTOM_DB) * FADER_UNITY);
+}
+
+function gainLabel(g) {
+  if (!(g > 0)) return "off";
+  const db = 20 * Math.log10(g);
+  if (db <= FADER_BOTTOM_DB + 0.5) return "off";
+  return (db > 0.05 ? "+" : "") + db.toFixed(1);
+}
+
+// --- audio state held against the server ------------------------------------
+// audioActive holds the keys currently under the operator's pointer. A status
+// refresh mid-drag must not write the server's value back into the slider they
+// are holding, and it must not replace the node either: the browser has pointer
+// capture on it, and a replacement ends the drag with no way to resume without
+// letting go and grabbing again.
+const audioLocal = new Map();   // key -> last value the operator set
+const audioActive = new Set();  // keys currently overriding the server's value
+const audioTimers = new Map();  // key -> pending debounce timer
+const audioSettle = new Map();  // key -> ignore the server until this time
+
+function audioKey(sourceId, channel) { return `${sourceId} ${channel}`; }
+
+// The value to show: what the operator is holding, then what they set a moment
+// ago and the mixer has not echoed back yet, then the server's own number.
+function audioShown(key, serverValue, fallback) {
+  if (audioActive.has(key)) return audioLocal.get(key);
+  if ((audioSettle.get(key) || 0) > performance.now()) return audioLocal.get(key);
+  return serverValue === undefined || serverValue === null ? fallback : serverValue;
+}
+
+function audioHold(key, value) {
+  audioLocal.set(key, value);
+  // Long enough to cover the debounce plus a round trip, short enough that a
+  // change made anywhere else shows up quickly.
+  audioSettle.set(key, performance.now() + 900);
+}
+
+// A mixer without the gain endpoint answers every one of these, and a dragged
+// fader sends one per debounce tick, so the first refusal is worth saying once
+// and the rest are worth swallowing.
+let audioPostWarned = false;
+async function postAudio(sourceId, body) {
+  try {
+    const r = await api(`/api/sources/${encodeURIComponent(sourceId)}/audio`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    if (!r.ok && !audioPostWarned) {
+      audioPostWarned = true;
+      alert_("warning", `The mixer would not take that fader: ${serverError(await r.text(), r.status, "refused")}`);
+    }
+    return r.ok;
+  } catch { return false; }
+}
+
+// A sparse media array (null for the channels that did not move) keeps the
+// request to just the one fader the operator touched, the same "null means
+// leave it alone" convention the add-source form already uses for kind and
+// superimpose.
+function mediaSparse(sourceId, index, value) {
+  const s = status?.sources?.find((s) => s.id === sourceId);
+  const len = Math.max((s?.audio?.media || []).length, index + 1);
+  const arr = new Array(len).fill(null);
+  arr[index] = value;
+  return arr;
+}
+
+// The sounds inside one source, in the order they are drawn down the column:
+// the page itself, then each video the mixer is decoding underneath it. Any
+// source without an audio object has none of these, which is every camera,
+// every stream and every page the mixer is not decoding for.
+function auxChannels(src) {
+  const a = src && src.audio;
+  if (!a) return [];
+  const out = [{ channel: "page", mark: "P", name: "Page sound" }];
+  (a.media || []).forEach((_, i) => out.push({
+    channel: "media:" + i, mark: String(i + 1), name: "Video " + (i + 1),
+  }));
+  return out;
+}
+
+function auxValue(src, channel) {
+  const a = src && src.audio;
+  if (!a) return undefined;
+  if (channel === "page") return a.page;
+  return (a.media || [])[Number(channel.slice(6))];
+}
+
+function audioBody(channel, sourceId, v) {
+  if (channel === "gain") return { gain: v };
+  if (channel === "muted") return { muted: v };
+  if (channel === "page") return { page: v };
+  return { media: mediaSparse(sourceId, Number(channel.slice(6)), v) };
+}
+
+function sendAudio(sourceId, channel, key) {
+  audioTimers.delete(key);
+  return postAudio(sourceId, audioBody(channel, sourceId, audioLocal.get(key)));
+}
+
+// Wire one slider to one channel. Everything that touches a fader goes through
+// here so the drag guard is in one place rather than repeated per call site.
+function bindFader(input, sourceId, channel, onLocal) {
+  const key = audioKey(sourceId, channel);
+  input.oninput = () => {
+    const v = Number(input.value);
+    audioActive.add(key);
+    audioHold(key, channel === "gain" ? faderToGain(v) : v);
+    if (onLocal) onLocal(audioLocal.get(key));
+    clearTimeout(audioTimers.get(key));
+    audioTimers.set(key, setTimeout(() => sendAudio(sourceId, channel, key), 140));
+  };
+  // "change" fires once when the drag or key press settles, well ahead of the
+  // debounce firing on its own; send the final value right away and only then
+  // let status renders take this fader back over.
+  input.onchange = () => {
+    clearTimeout(audioTimers.get(key));
+    audioHold(key, audioLocal.get(key));
+    sendAudio(sourceId, channel, key).then(releaseFader);
+  };
+  // The second press of a double click would otherwise jump the level to
+  // wherever the pointer is, one more time, before the reset lands on unity.
+  input.onmousedown = (e) => { if (e.detail > 1) e.preventDefault(); };
+  // A fader with no way home is a fader an operator stops trusting.
+  input.ondblclick = (e) => {
+    e.preventDefault();
+    input.value = channel === "gain" ? FADER_UNITY : 1;
+    audioHold(key, 1);
+    if (onLocal) onLocal(1);
+    clearTimeout(audioTimers.get(key));
+    sendAudio(sourceId, channel, key);
+  };
+  return key;
+}
+
+// Whatever was deferred while a pointer was down happens the moment it comes
+// back up, so the panels are never more than one gesture out of date. A scrubber
+// counts as a pointer down for this: rebuilding the cell under a dragged handle
+// ends the gesture just as thoroughly as it does under a fader.
+function gestureBusy() { return audioActive.size > 0 || scrubActive.size > 0; }
+function flushDeferred() {
+  if (gestureBusy()) return;
+  if (deferredRender) { deferredRender = false; render(); }
+}
+function releaseFader() {
+  audioActive.clear();
+  flushDeferred();
+}
+let deferredRender = false;
+
+// --- folding the controls away ----------------------------------------------
+// Every control on a cell is drawn over a picture, and on a nine up wall that is
+// nine pictures with a corner of each one covered. An operator checking framing,
+// or showing the wall to someone else, wants them gone for a minute without
+// losing the page they know. So the meter and the fader fold away one at a time,
+// and the two group buttons fold a whole axis at once.
+//
+// Nothing is rebuilt to do it. The cells keep their nodes and CSS takes the row
+// or the column out of the grid, which means a toggle cannot land in the middle
+// of a gesture and cannot throw away a meter's ballistics. A private window
+// throws on localStorage, so the state is read and written inside try/catch and
+// an interface that cannot remember simply starts with everything showing.
+const STRIPS = { meter: true, fader: true, lane: true };
+try {
+  const saved = JSON.parse(localStorage.getItem("gmx.strips") || "null");
+  if (saved && typeof saved === "object") {
+    for (const k of Object.keys(STRIPS)) if (typeof saved[k] === "boolean") STRIPS[k] = saved[k];
+  }
+} catch {}
+
+function applyStrips() {
+  document.body.classList.toggle("nometer", !STRIPS.meter);
+  document.body.classList.toggle("nofader", !STRIPS.fader);
+  document.body.classList.toggle("nolane", !STRIPS.lane);
+  $("tgmeter").setAttribute("aria-pressed", String(STRIPS.meter));
+  $("tgfader").setAttribute("aria-pressed", String(STRIPS.fader));
+  // The group buttons say what pressing them will do, because a button whose
+  // label never changes leaves an operator guessing which way it goes.
+  $("tgvert").textContent = STRIPS.meter || STRIPS.fader ? "Hide vertical" : "Show vertical";
+  $("tghorz").textContent = STRIPS.lane ? "Hide horizontal" : "Show horizontal";
+  try { localStorage.setItem("gmx.strips", JSON.stringify(STRIPS)); } catch {}
+}
+$("tgmeter").onclick = () => { STRIPS.meter = !STRIPS.meter; applyStrips(); };
+$("tgfader").onclick = () => { STRIPS.fader = !STRIPS.fader; applyStrips(); };
+$("tgvert").onclick = () => {
+  const show = !(STRIPS.meter || STRIPS.fader);
+  STRIPS.meter = show; STRIPS.fader = show;
+  applyStrips();
+};
+$("tghorz").onclick = () => { STRIPS.lane = !STRIPS.lane; applyStrips(); };
+applyStrips();
+
+// --- multiview cells and their channel strips -------------------------------
+// The cells are rebuilt only when the layout itself changes. Everything that
+// moves often (tally, state, gain, mute, meters) is written into nodes that
+// already exist, because rebuilding this overlay two or three times a second
+// would throw away the meter ballistics and any fader under a pointer.
+const cellViews = new Map();
+let cellSig = "";
+
+// Whether a source is seekable decides whether its cell has a lane at all, and
+// how many sounds are inside it decides how many faders its column has, so both
+// belong in here: a page that drops a video has to lose that fader. Where the
+// file has got to does not: a position arrives four times a second and would
+// rebuild the whole wall that often.
+function cellSignature(mv) {
+  return JSON.stringify([
+    mv.cells.map((c) => [c.index, c.source, c.x, c.y, c.w, c.h]),
+    status.sources.map((s) =>
+      [s.id, s.name, s.has_audio !== false, s.seekable === true, auxChannels(s).length]),
+  ]);
+}
+
+function renderCells() {
+  const mv = status.multiview;
+  const host = $("cells");
+  if (!mv || !mv.enabled || !mv.width) {
+    if (cellSig !== "") { host.innerHTML = ""; cellViews.clear(); cellSig = ""; dropMeters(new Set()); }
+    return;
+  }
+  const sig = cellSignature(mv);
+  if (sig !== cellSig) {
+    if (gestureBusy()) { deferredRender = true; }
+    else { buildCells(mv); cellSig = sig; }
+  }
+  syncCells();
+}
+
+function buildCells(mv) {
+  const host = $("cells");
+  host.innerHTML = "";
+  cellViews.clear();
+  const order = status.sources.map((s) => s.id);
+  const keep = new Set();
+
+  for (const c of mv.cells) {
+    const div = document.createElement("div");
+    div.className = "cell";
+    div.style.left = `${(c.x / mv.width) * 100}%`;
+    div.style.top = `${(c.y / mv.height) * 100}%`;
+    div.style.width = `${(c.w / mv.width) * 100}%`;
+    div.style.height = `${(c.h / mv.height) * 100}%`;
+
+    const src = c.source === null ? null : status.sources.find((s) => s.id === c.source);
+    const isProgram = c.source === null;
+    const slot = isProgram ? -1 : order.indexOf(c.source);
+    const meterKey = isProgram ? "program" : "src:" + c.source;
+    keep.add("cell:" + c.index);
+
+    const top = document.createElement("div");
+    top.className = "ctop";
+    const key = document.createElement("span");
+    key.className = "key";
+    key.textContent = isProgram ? "PROGRAM OUT" : (slot >= 0 && slot < 9 ? String(slot + 1) : "·");
+    const pk = document.createElement("span");
+    pk.className = "pk num";
+    const st = document.createElement("span");
+    st.className = "st";
+    top.append(key, pk, st);
+
+    // The vertical block down the right hand edge of the picture: the meter,
+    // then the channel fader, then whatever is inside the source.
+    const vblk = document.createElement("div");
+    vblk.className = "vblk";
+    const rail = document.createElement("div");
+    rail.className = "rail";
+    const scale = document.createElement("div");
+    scale.className = "scale";
+    for (const db of SCALE_TICKS) {
+      const t = document.createElement("span");
+      t.style.bottom = `${dbToPos(db) * 100}%`;
+      t.textContent = db === 0 ? "0" : String(db);
+      if (db === REF_DB) t.className = "ref";
+      scale.appendChild(t);
+    }
+    const wrap = document.createElement("div");
+    wrap.className = "barswrap";
+    const bars = document.createElement("div");
+    bars.className = "bars";
+    const ref = document.createElement("span");
+    ref.className = "ref";
+    ref.style.bottom = `${dbToPos(REF_DB) * 100}%`;
+    wrap.append(bars, ref);
+    rail.append(scale, wrap);
+    vblk.appendChild(rail);
+
+    const bot = document.createElement("div");
+    bot.className = "cbot";
+    const nameline = document.createElement("div");
+    nameline.className = "nameline";
+    const name = document.createElement("div");
+    name.className = "cname";
+    name.textContent = isProgram ? "What your audience is seeing" : (src ? src.name : c.source);
+    const mutetag = document.createElement("span");
+    mutetag.className = "mutetag";
+    mutetag.textContent = "muted";
+    nameline.append(name, mutetag);
+    bot.appendChild(nameline);
+
+    const view = { el: div, meterKey, source: c.source, isProgram, st, name };
+
+    if (!isProgram) {
+      const mute = document.createElement("button");
+      mute.className = "mute";
+      mute.textContent = "M";
+      mute.title = "Stop this source reaching program. Its meter keeps running, so you can still see whether it has sound.";
+      top.appendChild(mute);
+      const fader = document.createElement("input");
+      fader.className = "fader";
+      fader.type = "range";
+      fader.min = "0"; fader.max = "1"; fader.step = "0.005";
+      fader.title = "Level for this source. Double click for unity.";
+      const gv = document.createElement("span");
+      gv.className = "gv num";
+      const gch = document.createElement("div");
+      gch.className = "vch";
+      gch.append(fader, gv);
+      vblk.appendChild(gch);
+
+      const hasAudio = !src || src.has_audio !== false;
+      if (!hasAudio) {
+        fader.disabled = true;
+        mute.disabled = true;
+        const na = document.createElement("span");
+        na.className = "noaud";
+        na.textContent = "no audio";
+        rail.replaceChildren(na);
+      }
+      Object.assign(view, { mute, fader, gv, hasAudio, aux: [] });
+
+      bindFader(fader, c.source, "gain", (g) => setGainLabel(view, g, view.mutedShown));
+
+      // A page the mixer is decoding for has more than one sound in it: the page
+      // itself, and each video the mixer is mixing in underneath. These used to
+      // sit in the source list in the sidebar, which is exactly the arrangement
+      // the rest of this redesign moved away from: a control for a sound belongs
+      // beside the picture that sound is coming out of. So they stand here, in
+      // the same column, after the fader for the source as a whole.
+      //
+      // There is no room for "Page" and "Video 1" beside a nine up wall, so each
+      // one is marked with a single character and carries its full name and its
+      // current value in the tooltip. The marks are the first thing a small cell
+      // drops, ahead of the faders themselves: a fader you can reach and read by
+      // position is worth more than a letter you cannot read at all.
+      for (const ch of auxChannels(src)) {
+        const col = document.createElement("div");
+        col.className = "vch aux";
+        const af = document.createElement("input");
+        af.className = "fader aux";
+        af.type = "range";
+        af.min = "0"; af.max = "2"; af.step = "0.05";
+        // A source the mixer reports no audio on has nothing to balance, so
+        // these grey out with the channel fader rather than sitting there live.
+        af.disabled = !hasAudio;
+        const mark = document.createElement("span");
+        mark.className = "chl";
+        mark.textContent = ch.mark;
+        col.append(af, mark);
+        vblk.appendChild(col);
+        bindFader(af, c.source, ch.channel);
+        view.aux.push({ input: af, channel: ch.channel, name: ch.name, key: audioKey(c.source, ch.channel), title: "" });
+      }
+      mute.onclick = (e) => {
+        e.stopPropagation();
+        const k = audioKey(c.source, "muted");
+        const next = !audioShown(k, currentSource(c.source)?.muted, false);
+        audioHold(k, next);
+        applyMute(view, next);
+        sendAudio(c.source, "muted", k);
+      };
+      // The picture takes the source; the controls on it do not. An operator
+      // dragging a fader to zero has not asked to put that camera on program.
+      vblk.onclick = (e) => e.stopPropagation();
+      vblk.ondblclick = (e) => e.stopPropagation();
+
+      div.onclick = () => take(c.source);
+      div.title = src ? `${src.name}: ${shownUri(src.uri)}` : c.source;
+    } else {
+      div.classList.add("pgm");
+      div.title = "The mixed picture going to your outputs. This is what your audience is seeing right now.";
+    }
+
+    if (view.hasAudio !== false) {
+      meterViews.set("cell:" + c.index, makeMeterView(meterKey, bars, "v", pk));
+    }
+
+    div.append(top, vblk, bot);
+
+    // A lane only exists where there is something to scrub. A camera, a stream
+    // or a website has no position to show, and a cell with an empty bar across
+    // the bottom of it reads as a cell with something wrong with it, so those
+    // cells end at their name instead.
+    if (!isProgram && src && src.seekable === true) {
+      const lane = document.createElement("div");
+      lane.className = "lane";
+      const scrub = document.createElement("input");
+      scrub.className = "scrub";
+      scrub.type = "range";
+      // The handle is in milliseconds against the file's own length, so an arrow
+      // key is a quarter of a second and Page Up is a tenth of the clip. A
+      // normalised 0 to 1 slider would have made both of those meaningless.
+      scrub.min = "0"; scrub.max = "1000"; scrub.step = "250"; scrub.value = "0";
+      scrub.disabled = true;
+      scrub.title = "Where this file is playing. Drag to move it.";
+      const pos = document.createElement("span");
+      pos.className = "pos num";
+      lane.append(scrub, pos);
+      lane.onclick = (e) => e.stopPropagation();
+      lane.ondblclick = (e) => e.stopPropagation();
+      bindScrub(scrub, c.source);
+      Object.assign(view, { scrub, pos });
+      div.appendChild(lane);
+    }
+
+    host.appendChild(div);
+    cellViews.set(c.index, view);
+  }
+  dropMeters(keep);
+}
+
+// Views that belonged to cells which no longer exist would keep painting into
+// detached nodes forever, and the level store would grow with every source ever
+// added. The header meter is not a cell and survives.
+function dropMeters(keep) {
+  for (const id of [...meterViews.keys()]) {
+    if (id.startsWith("cell:") && !keep.has(id)) meterViews.delete(id);
+  }
+  for (const k of [...audioLevels.keys()]) {
+    if (k !== "program" && ![...meterViews.values()].some((v) => v.key === k)) audioLevels.delete(k);
+  }
+  // Same for the scrubbers: a file that lost its cell, or turned out not to be
+  // seekable after all, leaves a position behind that nothing will ever read.
+  for (const id of [...positions.keys()]) if (!scrubWatched(id)) positions.delete(id);
+  for (const id of [...scrubHold.keys()]) if (!scrubWatched(id)) scrubHold.delete(id);
+  // A seek still on its leash for a source that has just gone would land as a
+  // 404 and put a warning on screen for something nobody did.
+  for (const [id, t] of [...seekTimers]) {
+    if (!scrubWatched(id)) { clearTimeout(t); seekTimers.delete(id); }
+  }
+}
+
+function currentSource(id) { return status?.sources?.find((s) => s.id === id); }
+
+function setGainLabel(view, gain, muted) {
+  if (!view.gv) return;
+  // The number stays the fader's, muted or not. The fader is ahead of the meter
+  // in the mixer, so an operator trimming a muted channel before they open it
+  // needs to see the level they are setting and the meter answering it.
+  view.gv.textContent = gainLabel(gain);
+  view.gv.classList.toggle("unity", !muted && Math.abs(gain - 1) < 0.005);
+  view.gv.classList.toggle("muted", !!muted);
+}
+
+// Everything here marks the strip around the meter. The meter itself is left
+// alone on purpose: the mixer meters each source after its fader and before its
+// mute, so a muted camera goes on showing whether it has sound, which is the
+// question an operator is asking right before they cut to it.
+function applyMute(view, muted) {
+  view.mutedShown = muted;
+  view.mute.classList.toggle("on", muted);
+  view.el.classList.toggle("muted", muted);
+  const g = view.fader ? faderToGain(Number(view.fader.value)) : 1;
+  setGainLabel(view, g, muted);
+}
+
+function syncCells() {
+  for (const view of cellViews.values()) {
+    if (view.isProgram) {
+      const on = status.program != null;
+      view.st.className = "st " + (on ? "live" : "");
+      view.st.textContent = on ? "on air" : "black";
+      // Plain words rather than "Program · black". Someone who has not run a
+      // gallery before should be able to read this box and know both that it is
+      // the output and what is currently in it.
+      view.name.textContent = on
+        ? `Audience sees ${currentSource(status.program)?.name ?? status.program}`
+        : "Audience sees black";
+      continue;
+    }
+    const src = currentSource(view.source);
+    view.el.classList.toggle("live", status.program === view.source);
+    view.st.className = "st " + (src ? src.state : "");
+    view.st.textContent = src ? src.state : "gone";
+
+    // The snapshot carries a position too, which is what fills a scrubber in on
+    // a fresh page before the first event arrives. It is up to two seconds old
+    // by the time it gets here, so it only speaks when the events are not.
+    if (view.scrub && src) {
+      const have = positions.get(view.source);
+      if (!have || performance.now() - have.t > 1500) {
+        setPosition(view.source, src.position_ms, src.duration_ms);
+      }
+    }
+    if (!view.fader) continue;
+
+    const gkey = audioKey(view.source, "gain");
+    const mkey = audioKey(view.source, "muted");
+    const muted = !!audioShown(mkey, src ? src.muted : undefined, false);
+    // Writing value into a slider the operator is holding would fight them for
+    // the handle, so audioShown decides whether the server gets a say at all.
+    if (!audioActive.has(gkey)) {
+      const gain = audioShown(gkey, src ? src.gain : undefined, 1);
+      const p = gainToFader(gain);
+      if (Math.abs(Number(view.fader.value) - p) > 0.002) view.fader.value = String(p);
+      setGainLabel(view, gain, muted);
+    }
+    applyMute(view, muted);
+
+    // The faders inside the source, on the same terms as the one above: the
+    // server only gets a say when the operator is not holding that one. The
+    // tooltip carries the name and the number, which is where they go now that
+    // the column has no room to print either.
+    for (const ch of view.aux || []) {
+      if (audioActive.has(ch.key)) continue;
+      const server = auxValue(src, ch.channel);
+      const v = audioShown(ch.key, typeof server === "number" ? server : undefined, 1);
+      if (Math.abs(Number(ch.input.value) - v) > 0.002) ch.input.value = String(v);
+      const title = `${ch.name}, ${v.toFixed(2)}. Double click for unity.`;
+      if (ch.title !== title) { ch.title = title; ch.input.title = title; }
+    }
+  }
+}
+
+function renderOutputs() {
+  $("outputs").innerHTML = status.outputs.map((o) => `
+    <div class="out">
+      <div class="row">
+        <span class="dot ${o.state}"></span>
+        <span class="id">${escapeHtml(o.id)}</span>
+        <span class="st ${o.state}">${o.state}</span>
+      </div>
+      <div class="meta">${escapeHtml(o.uri_host)}</div>
+      <div class="meta">buffer ${o.queue_secs.toFixed(1)}s · ${o.reconnects} reconnect${o.reconnects === 1 ? "" : "s"}</div>
+    </div>`).join("") || `<div class="kv">no outputs configured</div>`;
+
+  // Rebind after innerHTML replaced the nodes.
+  [...$("outputs").querySelectorAll(".out")].forEach((el, i) => {
+    const o = status.outputs[i];
+    if (!o) return;
+    const row = document.createElement("div");
+    row.className = "adrow";
+    const rc = document.createElement("button");
+    rc.textContent = "Reconnect";
+    rc.onclick = () => reconnect(o.id);
+    const rm = document.createElement("button");
+    rm.textContent = "Remove";
+    rm.onclick = async () => {
+      if (!confirm(`Stop sending to "${o.id}"?`)) return;
+      const r = await api(`/api/outputs/${encodeURIComponent(o.id)}`, { method: "DELETE" });
+      if (!r.ok) alert_("error", serverError(await r.text(), r.status, "The mixer refused that"));
+    };
+    row.append(rc, rm);
+    el.appendChild(row);
+  });
+}
+
+// Mirrors SourceKind::detect on the server, for display only.
+function kindOf(uri) {
+  const u = (uri || "").toLowerCase();
+  if (u.startsWith("exec:")) return "exec";
+  if (u.startsWith("web://") || u.startsWith("web+http://") || u.startsWith("web+https://")) return "web";
+  if (u.startsWith("rtmp://") || u.startsWith("rtmps://")) return "rtmp";
+  if (/^(rtsps?|srt|udp|rtp):\/\//.test(u)) return u.split(":")[0];
+  const path = u.split(/[?#]/)[0];
+  if (path.endsWith(".m3u8")) return "hls";
+  if (path.endsWith(".mpd")) return "dash";
+  return "file";
+}
+
+// What a person sees in the list; the prefixes are the mixer's business.
+const KIND_LABEL = { web: "website", exec: "command", rtmp: "RTMP", hls: "HLS", dash: "DASH", file: "file",
+  rtsp: "RTSP", rtsps: "RTSP", srt: "SRT", udp: "UDP", rtp: "RTP" };
+function shownUri(uri) {
+  const u = uri || "";
+  const m = u.match(/^web\+(https?:\/\/.*)$/i);
+  if (m) return m[1];
+  if (/^web:\/\//i.test(u)) return "https://" + u.slice(6);
+  return u;
+}
+
+// --- the source list --------------------------------------------------------
+// Every audio control lives on the cell now, the page's own sound and each of
+// its videos along with the level and the mute. What is left here is the
+// inventory: what exists, what it is, and what state it is in. Nothing in this
+// list is a live control any more, so a rebuild here cannot interrupt a gesture
+// and it no longer waits for one.
+function renderSources() {
+  const host = $("sources");
+  host.innerHTML = status.sources.map((s, i) => `
+    <div class="srcrow${status.program === s.id ? " live" : ""}" data-id="${escapeHtml(s.id)}" title="${escapeHtml(shownUri(s.uri))}">
+      ${i < 9 ? `<span class="key">${i + 1}</span>` : ""}
+      <span class="nm"><b>${escapeHtml(s.name)}</b></span>
+      ${s.superimposed
+        ? `<span class="kind sup" title="Website. The mixer is decoding this page's video itself and drawing the page over it, so Chromium is not rendering the video. That is where the CPU saving is. The balance between the page and its videos is on this source's cell.">direct</span>`
+        : `<span class="kind">${KIND_LABEL[kindOf(s.uri)] || kindOf(s.uri)}</span>`}
+      ${s.muted ? `<span class="kind mutechip" title="Muted. It still meters on its cell.">muted</span>` : ""}
+      <span class="st ${s.state}">${s.state}${s.has_audio ? "" : " · no audio"}</span>
+      <button class="del" title="Remove this source">&times;</button>
+    </div>`).join("") || `<div class="kv">no sources</div>`;
+
+  [...host.querySelectorAll(".srcrow")].forEach((row) => {
+    const id = row.dataset.id;
+    row.querySelector(".del").onclick = async (e) => {
+      e.stopPropagation();
+      if (!confirm(`Remove source "${id}"?`)) return;
+      const r = await api(`/api/sources/${encodeURIComponent(id)}`, { method: "DELETE" });
+      if (!r.ok) alert_("error", serverError(await r.text(), r.status, "The mixer refused that"));
+    };
+  });
+}
+
+// --- adding a source: pick what it is, paste, done -------------------------
+const KIND_UI = {
+  web: {
+    placeholder: "Paste the page address, e.g. https://www.youtube.com/watch?v=…",
+    hint: "The page is rendered by a real browser and its sound comes along. Paste and add.",
+  },
+  stream: {
+    placeholder: "rtmp://host/live/key   https://host/stream.m3u8   rtsp://…   srt://…",
+    hint: "RTMP, HLS (.m3u8), DASH (.mpd), RTSP and SRT are recognised from the address.",
+  },
+  exec: {
+    placeholder: "ffmpeg -re -i … -f matroska -",
+    hint: "Runs on the mixer machine; its output is the source. Needs security.allow_exec_sources.",
+  },
+  file: {
+    placeholder: "/var/lib/godwinmix/media/clip.mp4",
+    hint: "A video file already on the mixer machine. The library above adds these for you.",
+  },
+};
+let nsKind = "web";
+
+// "auto" can quietly do nothing, and an operator who was not told that would
+// read a page still costing a whole core as a fault. So choosing it says up
+// front what will and will not work, and the source list marks the sources
+// where it actually happened.
+function srcHint() {
+  const base = KIND_UI[nsKind].hint;
+  if (nsKind !== "web" || $("nssuper").value !== "auto") return base;
+  return base + " Its video is decoded here when the page has an address to hand over. Sites that feed their player from JavaScript, YouTube among them, and anything with DRM have none, and those keep rendering in the browser with nothing to show for it.";
+}
+
+// Only a page has a video that could be handed over, so the superimpose
+// control follows the type rather than sitting on a camera doing nothing.
+function setKind(k) {
+  nsKind = k;
+  [...$("nskind").children].forEach((b) => b.classList.toggle("on", b.dataset.kind === k));
+  $("nsuri").placeholder = KIND_UI[k].placeholder;
+  $("nssuperrow").hidden = k !== "web";
+  $("nshint").textContent = srcHint();
+}
+[...$("nskind").children].forEach((b) => (b.onclick = () => setKind(b.dataset.kind)));
+$("nssuper").onchange = () => ($("nshint").textContent = srcHint());
+// Once at load, so the panel's starting state comes from one place rather
+// than from the markup agreeing with the code by hand.
+setKind(nsKind);
+
+// Guess from what was pasted, so the right tab lights up without a click.
+function guessKind(u) {
+  const l = u.toLowerCase();
+  if (l.startsWith("exec:")) return "exec";
+  if (/^(rtmps?|rtsps?|srt|udp|rtp):\/\//.test(l)) return "stream";
+  if (/^web(\+https?)?:\/\//.test(l)) return "web";
+  if (/^https?:\/\//.test(l)) {
+    const path = l.split(/[?#]/)[0];
+    return /\.(m3u8|mpd|mp4|mkv|flv|ts|webm|mov)$/.test(path) ? "stream" : "web";
+  }
+  if (l.startsWith("/") || l.startsWith("file://")) return "file";
+  return null;
+}
+$("nsuri").oninput = () => {
+  const u = $("nsuri").value.trim();
+  const g = guessKind(u);
+  if (g && g !== nsKind) setKind(g);
+  if (u && g === "stream") $("nshint").textContent = `Will be opened as: ${KIND_LABEL[kindOf(u)] || kindOf(u)}`;
+};
+
+$("nsadd").onclick = async () => {
+  let uri = $("nsuri").value.trim();
+  const name = $("nsname").value.trim();
+  if (!uri) { alert_("warning", "Paste an address first."); return; }
+  if (nsKind === "exec" && !uri.toLowerCase().startsWith("exec:")) uri = "exec:" + uri;
+  const body = {
+    uri,
+    name: name || null,
+    kind: nsKind === "web" ? "web" : null,
+    // Null on anything that is not a page. The server takes it on any source
+    // and ignores it, but sending it would imply it does something.
+    superimpose: nsKind === "web" ? $("nssuper").value : null,
+  };
+  const ok = await post("/api/sources", body);
+  if (ok) { $("nsname").value = ""; $("nsuri").value = ""; $("nshint").textContent = srcHint(); }
+};
+$("noadd").onclick = async () => {
+  const id = $("noid").value.trim();
+  const uri = $("nouri").value.trim();
+  if (!id || !uri) { alert_("warning", "A destination needs an id and a URL."); return; }
+  const ok = await post("/api/outputs", { id, uri, policy: $("nopolicy").value });
+  if (ok) { $("noid").value = ""; $("nouri").value = ""; }
+};
+
+// What a failing request should say to an operator.
+//
+// The mixer answers with a short plain message or a JSON error, but nothing
+// guarantees the mixer is what answered: a proxy, a gateway or a captive portal
+// in front of it replies with a whole HTML error page, and dumping that into a
+// toast fills the screen with markup during a programme. Anything that arrives
+// looking like a document is thrown away in favour of the status code, which is
+// the only part of it that meant anything.
+function serverError(text, status, fallback) {
+  const t = (text || "").trim();
+  if (!t || /^\s*</.test(t)) return `${fallback} (${status})`;
+  try {
+    const j = JSON.parse(t);
+    if (j && typeof j.error === "string") return j.error;
+  } catch {}
+  return t.length > 300 ? `${t.slice(0, 300)}…` : t;
+}
+
+function alert_(severity, message) {
+  const el = document.createElement("div");
+  el.className = `alert ${severity}`;
+  el.textContent = message;
+  $("alerts").appendChild(el);
+  setTimeout(() => el.remove(), 8000);
+}
+
+function fmtDuration(s) {
+  const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60);
+  return h ? `${h}h ${m}m` : `${m}m ${s % 60}s`;
+}
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, (c) =>
+    ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
+
+async function refreshStatus() {
+  // The event stream carries changes; this refreshes the slowly-moving numbers
+  // (uptime, queue depth) and resynchronises if an event was ever missed.
+  try {
+    const r = await api("/api/status");
+    if (r.ok) { status = await r.json(); render(); }
+  } catch {}
+}
+// Status first, so a mixer that wants a token asks for it before the socket
+// tries without one; the socket reconnects on its own once the token is in.
+refreshStatus().then(connect);
+setInterval(refreshStatus, 2000);
+</script>
