@@ -216,3 +216,75 @@ fn descriptors() -> usize {
     let dir = if cfg!(target_os = "macos") { "/dev/fd" } else { "/proc/self/fd" };
     std::fs::read_dir(dir).map(|d| d.count()).unwrap_or(0)
 }
+
+/// Checks 1, 4, 6 and 7 against the shell plugin: the ones a built in kind
+/// has no process for.
+#[test]
+fn the_harness_makes_every_check_a_plugin_has_a_process_for() {
+    let _lock = exclusive();
+    if which("gst-launch-1.0").is_none() {
+        println!("skipping: gst-launch-1.0 is not on PATH");
+        return;
+    }
+    let _ = gstreamer::init();
+    let root = temp("harness");
+    let source = root.join("checkout");
+    write_plugin(&source);
+    let plugins = root.join("plugins");
+    std::fs::create_dir_all(&plugins).expect("the plugins directory");
+    loader::set_dir(plugins.clone());
+    loader::set_runtime_dir(root.join("run"));
+    loader::install_from_path(&source).expect("it installs");
+    let installed = loader::get("shellbars").expect("it is installed");
+
+    use godwinmix_core::plugin::harness;
+    // Check 7 needs no process at all.
+    let manifest = harness::check_manifest(&installed.root);
+    println!("  {}", manifest.detail);
+    assert!(manifest.passed, "{}", manifest.detail);
+
+    // Check 1: it says hello inside the window, and the report says how long
+    // it took so an author can watch that number.
+    let spawn = harness::check_spawn(&installed.root, "source");
+    println!("  {}", spawn.detail);
+    assert!(spawn.passed, "{}", spawn.detail);
+    assert!(spawn.detail.contains("container"), "{}", spawn.detail);
+
+    // Check 4: a schema with no examples says so rather than passing quietly.
+    let configure = harness::check_configure(&installed.root, "source");
+    println!("  {}", configure.detail);
+    assert!(configure.passed, "{}", configure.detail);
+
+    loader::uninstall("shellbars").ok();
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+/// The whole run, as `gmx plugin test` makes it.
+#[test]
+fn gmx_plugin_test_runs_the_quick_suite_against_a_real_plugin() {
+    let _lock = exclusive();
+    if which("gst-launch-1.0").is_none() {
+        println!("skipping: gst-launch-1.0 is not on PATH");
+        return;
+    }
+    let _ = gstreamer::init();
+    let root = temp("quick");
+    let source = root.join("checkout");
+    write_plugin(&source);
+    let plugins = root.join("plugins");
+    std::fs::create_dir_all(&plugins).expect("the plugins directory");
+    loader::set_dir(plugins.clone());
+    loader::set_runtime_dir(root.join("run"));
+    loader::install_from_path(&source).expect("it installs");
+    let installed = loader::get("shellbars").expect("it is installed");
+
+    let report = godwinmix_core::plugin::harness::check_plugin(&installed.root, true)
+        .expect("the harness runs");
+    for line in report.lines() {
+        println!("  {line}");
+    }
+    let outcome = report.into_result();
+    loader::uninstall("shellbars").ok();
+    outcome.expect("a forty line shell plugin is conformant");
+    let _ = std::fs::remove_dir_all(&root);
+}
