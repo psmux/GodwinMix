@@ -163,6 +163,20 @@ impl Node {
             .collect()
     }
 
+    /// The settings schema of every provide on this machine that has one.
+    fn schemas(&self) -> std::collections::BTreeMap<String, Value> {
+        let mut out = std::collections::BTreeMap::new();
+        for plugin in crate::plugin::loader::list().into_iter().filter(|p| p.live()) {
+            for provide in &plugin.manifest.provides {
+                let id = format!("{}/{}", plugin.name(), provide.id);
+                if let Some(schema) = crate::plugin::loader::settings_schema(&id) {
+                    out.insert(id, schema);
+                }
+            }
+        }
+        out
+    }
+
     fn report(&self) -> Vec<InstanceReport> {
         self.hosted
             .lock()
@@ -479,6 +493,7 @@ pub async fn connect(node: &Arc<Node>, identity: &Issued) -> Result<String> {
         api: BRIDGE_API,
         platform: platform().into(),
         plugins: node.plugins(),
+        schemas: node.schemas(),
         media_host: node.options.media_host.clone().unwrap_or_default(),
     };
     let welcome: Welcome = serde_json::from_value(

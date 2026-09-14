@@ -15,7 +15,7 @@ use super::enrol::Tickets;
 use super::media::PortPool;
 use super::reconcile::Reconciler;
 use super::registry::Nodes;
-use super::server::{NodeEvent, NodeServer, Watcher};
+use super::server::{NodeServer, Watcher};
 use super::wire::{BridgeTransport, ClockOffer, MediaPlan, CALL_TIMEOUT_MS};
 use crate::plugin::host::LinkSource;
 use anyhow::{Context, Result};
@@ -97,24 +97,6 @@ pub async fn start(options: Options) -> Result<SocketAddr> {
         .parse()
         .with_context(|| format!("`{}` is not an address to listen on", options.bind))?;
 
-    let watch = options.watch.clone();
-    let seen = nodes.clone();
-    // Everything a node says is folded in here first, so the registry and the
-    // remote plugin table are up to date before whoever asked to watch sees it.
-    let fanout: Watcher = Arc::new(move |event: NodeEvent| {
-        match &event {
-            NodeEvent::Joined { node, hello } => {
-                crate::plugin::remote::learn(node, hello.plugins.clone());
-            }
-            NodeEvent::Left { node, .. } => {
-                crate::plugin::remote::forget(node);
-                let _ = &seen;
-            }
-            _ => {}
-        }
-        watch(event);
-    });
-
     let advert = options
         .advertise
         .then(|| {
@@ -152,7 +134,7 @@ pub async fn start(options: Options) -> Result<SocketAddr> {
             port: clock_port,
             kind: options.clock_kind,
         },
-        fanout,
+        options.watch,
     );
     let bound = server.serve(bind, &options.server_names).await?;
     let _ = RUNTIME.set(runtime);

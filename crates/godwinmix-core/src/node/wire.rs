@@ -122,6 +122,16 @@ pub struct Hello {
     /// per instance.
     #[serde(default)]
     pub media_host: String,
+    /// The settings schema for each provide that has one, keyed
+    /// `<plugin>/<provide>`.
+    ///
+    /// Sent with the manifests rather than fetched on demand: a settings form
+    /// is what an operator opens first, and a read method that waited on a
+    /// network round trip to render one would be the first thing to feel
+    /// remote. A schema is a few kilobytes and a node has a handful of
+    /// plugins.
+    #[serde(default)]
+    pub schemas: std::collections::BTreeMap<String, Value>,
 }
 
 /// What the core answers a hello with.

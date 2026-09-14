@@ -251,6 +251,10 @@ impl NodeServer {
         *slot.lock() = Some(peer.clone());
         let why = pump.await;
         self.nodes.left(&name, &why);
+        // Its plugins stop being offered the moment its socket goes. The
+        // interned manifests stay, because a source being torn down may still
+        // hold one.
+        crate::plugin::remote::forget(&name);
         (self.watch)(NodeEvent::Left { node: name.clone(), why: why.clone() });
         Ok(())
     }
@@ -308,6 +312,15 @@ impl NodeServer {
                     .lock()
                     .take()
                     .context("a second hello arrived on one connection; the first one won")?;
+                // What a node has becomes reachable here rather than in
+                // whatever is watching, because a core that did not learn a
+                // node's plugins would accept `place = "node:x"` and then have
+                // nothing to build. The watcher is told afterwards.
+                crate::plugin::remote::learn(
+                    name,
+                    hello.plugins.clone(),
+                    hello.schemas.clone(),
+                );
                 self.nodes.joined(&hello, Some(identity.to_string()), from.to_string(), peer);
                 tracing::info!(
                     node = name,

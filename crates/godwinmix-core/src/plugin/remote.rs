@@ -32,6 +32,8 @@ struct Table {
     by_node: BTreeMap<String, Vec<PluginManifest>>,
     /// `<plugin>/<provide>` to the interned manifest, leaked once.
     interned: BTreeMap<String, &'static Manifest>,
+    /// `<plugin>/<provide>` to its settings schema, as the node sent it.
+    schemas: BTreeMap<String, serde_json::Value>,
 }
 
 fn table() -> &'static RwLock<Table> {
@@ -40,8 +42,13 @@ fn table() -> &'static RwLock<Table> {
 }
 
 /// A node has said what it has. Replaces whatever it said before.
-pub fn learn(node: &str, plugins: Vec<PluginManifest>) {
+pub fn learn(
+    node: &str,
+    plugins: Vec<PluginManifest>,
+    schemas: BTreeMap<String, serde_json::Value>,
+) {
     let mut table = table().write();
+    table.schemas.extend(schemas);
     for plugin in &plugins {
         for decl in &plugin.provides {
             let type_id = format!("{}/{}", plugin.plugin.name, decl.id);
@@ -71,6 +78,25 @@ pub fn forget(node: &str) {
 /// The interned manifest for a provide some node has.
 pub fn manifest(type_id: &str) -> Option<&'static Manifest> {
     table().read().interned.get(type_id).copied()
+}
+
+/// The settings schema for a provide some node has, as that node sent it.
+pub fn schema(type_id: &str) -> Option<serde_json::Value> {
+    table().read().schemas.get(type_id).cloned()
+}
+
+/// Every plugin reachable on any node, with the node it is on, newest listing
+/// per plugin name wins. For `plugin.list`.
+pub fn plugins() -> Vec<Reachable> {
+    let mut out = Vec::new();
+    for (node, plugins) in &table().read().by_node {
+        for manifest in plugins {
+            out.push(Reachable { node: node.clone(), manifest: manifest.clone() });
+        }
+    }
+    out.sort_by(|a, b| a.manifest.plugin.name.cmp(&b.manifest.plugin.name));
+    out.dedup_by(|a, b| a.manifest.plugin.name == b.manifest.plugin.name);
+    out
 }
 
 /// The whole `gmx-plugin.toml` for a provide, from whichever node has it.
@@ -134,6 +160,7 @@ pub fn on_node(node: &str) -> Vec<PluginManifest> {
 pub fn clear() {
     let mut table = table().write();
     table.by_node.clear();
+    table.schemas.clear();
 }
 
 #[cfg(test)]
@@ -170,7 +197,7 @@ transports = ["container"]
     #[test]
     fn a_nodes_plugins_become_reachable_and_stop_being_so() {
         clear();
-        learn("studio-b", vec![manifest_toml("ndi")]);
+        learn("studio-b", vec![manifest_toml("ndi")], Default::default());
         assert_eq!(nodes_with("ndi/source"), vec!["studio-b".to_string()]);
         assert!(manifest("ndi/source").is_some());
         assert_eq!(plugin_manifest("ndi/source", Some("studio-b")).unwrap().plugin.name, "ndi");
@@ -179,7 +206,7 @@ transports = ["container"]
         assert_eq!(on_node("studio-b").len(), 1);
 
         // A second node with the same plugin is a second place to run it.
-        learn("graphics-pc", vec![manifest_toml("ndi")]);
+        learn("graphics-pc", vec![manifest_toml("ndi")], Default::default());
         let mut both = nodes_with("ndi/source");
         both.sort();
         assert_eq!(both, vec!["graphics-pc".to_string(), "studio-b".to_string()]);
