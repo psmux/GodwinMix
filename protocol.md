@@ -66,6 +66,9 @@ Keys accepted on every method, handled before a method runs.
 | `pipeline.latency` | `GET /api/v1/pipeline/latency` | read |  | 1 | How much delay one pipeline is carrying, and which stage put it there. |
 | `pipeline.list` | `GET /api/v1/pipeline/list` | read |  | 1 | Every pipeline running right now, by the name the other pipeline methods accept. |
 | `pipeline.queues` | `GET /api/v1/pipeline/queues` | read |  | 1 | Every queue in one pipeline with how full it is, fullest first. A queue that stays full is where the trouble is. |
+| `preset.apply` | `POST /api/v1/preset/apply` | admin | yes | 1 | Put a preset on this core: its config, its scenes, its layout, its theme and its gallery mode. Pass dry_run to get the plan and write nothing. |
+| `preset.list` | `GET /api/v1/preset/list` | read |  | 1 | Every preset this core can apply: the six built in, plus anything installed beside the binary or under ~/.godwinmix/presets. |
+| `preset.save` | `POST /api/v1/preset/save` | admin |  | 1 | Turn this core's working setup into a preset directory somebody else can apply. Stream keys and the control token are replaced with placeholders. |
 | `program.get` | `GET /api/v1/program` | read |  | 1 | What is on air, the programme running time, and what revert would go back to. |
 | `program.golive` | `POST /api/v1/program/golive` | operate |  | 1 | One call to put a web page on air: add the page, add the destination, and take the page as soon as it renders. |
 | `program.history` | `GET /api/v1/program/history` | read |  | 1 | The last hundred takes, newest first, with the token that asked for each. |
@@ -643,6 +646,57 @@ Every queue in one pipeline with how full it is, fullest first. A queue that sta
 }
 ```
 
+#### `preset.apply`
+
+Put a preset on this core: its config, its scenes, its layout, its theme and its gallery mode. Pass dry_run to get the plan and write nothing.
+
+MCP tool `apply_preset` in the `search` profile: readOnlyHint false, destructiveHint true, idempotentHint true.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/ApplyRequest"
+  },
+  "result": {
+    "$ref": "#/$defs/ApplyResult"
+  }
+}
+```
+
+#### `preset.list`
+
+Every preset this core can apply: the six built in, plus anything installed beside the binary or under ~/.godwinmix/presets.
+
+MCP tool `list_presets` in the `search` profile: readOnlyHint true, destructiveHint false, idempotentHint true.
+
+```json
+{
+  "params": {
+    "additionalProperties": false,
+    "properties": {},
+    "type": "object"
+  },
+  "result": {
+    "type": "object"
+  }
+}
+```
+
+#### `preset.save`
+
+Turn this core's working setup into a preset directory somebody else can apply. Stream keys and the control token are replaced with placeholders.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/SaveRequest"
+  },
+  "result": {
+    "type": "object"
+  }
+}
+```
+
 #### `program.get`
 
 What is on air, the programme running time, and what revert would go back to.
@@ -867,6 +921,7 @@ Subscribe with `core.subscribe`. Patterns match the part after `event/`, so `pro
 | `event/source.position` | `positions` | `source_position` | How far through a seekable source has got, a few times a second. Never sent for a camera, which has no position to report. |
 | `event/output.state` |  | `output_state_changed` | A destination connected, dropped or is retrying. |
 | `event/adbreak.changed` |  | `ad_break_changed` | An ad break was armed, went on air, or ended. |
+| `event/ui.changed` |  |  | The surface defaults changed: a preset was applied, or an operator set the layout, theme or gallery mode by hand. Nothing on air moves. |
 | `event/media.changed` |  | `media_changed` | A file in the library was uploaded, deleted, or its conversion moved on. |
 | `event/meters` | `meters` | `audio_level, source_audio_level` | Peak dBFS for the programme bus and every source, in one message at 10 per second. Replaces the two separate meter events on /ws. |
 | `event/tally` | `tally` |  | Which sources are on programme, on preview, or off. Derived by the core so a Stream Deck does not have to. |

@@ -388,6 +388,8 @@ pub async fn run() -> Result<()> {
     let cfg_media = cfg.media.clone();
     // Where the web UI and any plugin panels are read from.
     ui::configure(cfg.control.ui_dir.as_deref(), cfg.control.plugins_dir.as_deref());
+    // Which config `preset.apply` writes to, and what the surface starts with.
+    control::methods::presets::configure(&config_path, cfg.ui.clone());
     // Kept for the control plane, which reads the canvas, the snapshot limits,
     // the feature list and the token table off it once at startup.
     let cfg_for_control = cfg.clone();

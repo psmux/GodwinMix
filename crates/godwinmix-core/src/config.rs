@@ -67,33 +67,10 @@ pub struct Config {
     pub extra: std::collections::BTreeMap<String, toml::Value>,
 }
 
-/// The `[ui]` section: what a surface starts with, chosen by a preset.
-///
-/// None of it changes what the core does. It is what a client reads out of
-/// `core.info` so that the first page a volunteer sees is the one their preset
-/// chose, rather than the one the last person to use this browser chose.
-#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
-pub struct UiDefaults {
-    /// The preset that set these, for the welcome panel to know it has run.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub preset: Option<String>,
-    /// A theme id the surface resolves, for example `dark` or `calm`.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub theme: Option<String>,
-    /// `live`, `snapshot`, `icon` or `label` (05 section 3b). Absent means the
-    /// surface asks the machine, which is what `gmx doctor` proposes.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub gallery: Option<String>,
-    /// Slot to panels, top to bottom. Empty means the surface's own default.
-    #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
-    pub layout: std::collections::BTreeMap<String, Vec<String>>,
-}
-
-impl UiDefaults {
-    pub fn is_empty(&self) -> bool {
-        self == &Self::default()
-    }
-}
+/// What a surface starts with. The type lives in the protocol crate because
+/// `core.info` returns it and `event/ui.changed` carries it; here it is the
+/// `[ui]` table of the config file and of the runtime store.
+pub use godwinmix_protocol::types::UiDefaults;
 
 /// A plugin's own settings, as written in `params = { .. }` or in
 /// `[plugins.<name>]`. A TOML table, uninterpreted by the core.

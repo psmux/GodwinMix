@@ -143,6 +143,20 @@ fn state_events() -> Vec<EventDef> {
             },
         },
         EventDef {
+            name: "ui.changed",
+            since: "1",
+            summary: "The surface defaults changed: a preset was applied, or an operator set \
+                      the layout, theme or gallery mode by hand. Nothing on air moves.",
+            ext: None,
+            legacy: None,
+            payload: |g| {
+                json!({
+                    "type": "object",
+                    "properties": { "ui": schema_of::<types::UiDefaults>(g) }
+                })
+            },
+        },
+        EventDef {
             name: "media.changed",
             since: "1",
             summary: "A file in the library was uploaded, deleted, or its conversion moved on.",
