@@ -30,8 +30,12 @@ step() {
 echo "checking {{name}} with $(cargo --version)"
 
 # 1. Formatting and lint. Both are advisory if the component is not installed.
+#
+# `cargo fmt` without --all, and `--quiet` clippy on this package alone: a
+# plugin is its own crate and has no business formatting or linting whatever
+# else happens to be on disk around it.
 if cargo fmt --version >/dev/null 2>&1; then
-    step "cargo fmt" cargo fmt --all -- --check
+    step "cargo fmt" cargo fmt -- --check
 else
     printf '%-34s%s\n' "cargo fmt" "skipped (rustup component add rustfmt)"
 fi
