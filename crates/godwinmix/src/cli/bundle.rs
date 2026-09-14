@@ -314,6 +314,11 @@ async fn from_running_mixer(url: &str, token: Option<&str>) -> Vec<(String, Vec<
         ("startup-report.json", "/api/v1/core/startup_report".to_string()),
         ("pipeline-clock.json", "/api/v1/pipeline/clock".to_string()),
         ("session-last-hour.jsonl", "/api/v1/core/session_log?secs=3600".to_string()),
+        // What plugins are installed, what they registered and what each one
+        // is costing. The first question about a mixer that is misbehaving
+        // with plugins on it is which plugin, and this is the answer.
+        ("plugins.json", "/api/v1/plugins".to_string()),
+        ("plugin-stats.json", "/api/v1/plugin/stats".to_string()),
     ] {
         if let Ok(response) = get(path).await {
             if let Ok(bytes) = response.bytes().await {
@@ -344,6 +349,44 @@ async fn from_running_mixer(url: &str, token: Option<&str>) -> Vec<(String, Vec<
                     let ext = if dir == "dot" { "dot" } else { "json" };
                     out.push((format!("{dir}/{name}.{ext}"), bytes.to_vec()));
                 }
+            }
+        }
+    }
+    out.extend(plugin_crash_reports(&get).await);
+    out
+}
+
+/// Every plugin's own log and crash report.
+///
+/// The SDK writes a report to `<plugin root>/crash-<ts>.txt` when a plugin
+/// dies of something it did not expect, and the core attaches the path to
+/// `event/plugin.state {state: "failed", detail}`. A bundle taken after a
+/// crash therefore carries the backtrace without anybody having to go looking
+/// for it, which is the whole point of the file an issue template asks for.
+async fn plugin_crash_reports<F, Fut>(get: &F) -> Vec<(String, Vec<u8>)>
+where
+    F: Fn(String) -> Fut,
+    Fut: std::future::Future<Output = reqwest::Result<reqwest::Response>>,
+{
+    let mut out = Vec::new();
+    let Ok(response) = get("/api/v1/plugins".to_string()).await else { return out };
+    let Ok(listing) = response.json::<serde_json::Value>().await else { return out };
+    for plugin in listing["plugins"].as_array().cloned().unwrap_or_default() {
+        let (Some(name), Some(root)) = (plugin["name"].as_str(), plugin["root"].as_str()) else {
+            continue;
+        };
+        let Ok(entries) = std::fs::read_dir(root) else { continue };
+        for entry in entries.flatten() {
+            let file = entry.file_name().to_string_lossy().into_owned();
+            if !file.starts_with("crash-") {
+                continue;
+            }
+            if let Ok(bytes) = std::fs::read(entry.path()) {
+                // Capped like every other log in the bundle: a crash report
+                // with a very long backtrace must not make the archive
+                // unusable.
+                let tail = tail_lines(&String::from_utf8_lossy(&bytes), 500);
+                out.push((format!("plugins/{name}/{file}"), tail.into_bytes()));
             }
         }
     }

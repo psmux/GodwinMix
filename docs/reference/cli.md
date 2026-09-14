@@ -121,6 +121,51 @@ because the caller is a machine and the saving is a CPU core. Pass `"off"`
 to render the whole page in the browser.
 
 
+## Plugins
+
+`gmx plugin new` and `gmx plugin test` need no running mixer. Everything else
+is a thin client of the `plugin.*` methods, which is the same contract the web
+UI and an agent use.
+
+| Command | Does |
+|---|---|
+| `gmx plugin new <name> --kind source --lang rust\|python\|node\|go\|shell` | write a plugin from a template, with every placeholder filled in |
+| `gmx plugin test <dir> [--quick] [--offline]` | run the conformance harness; `--quick` skips the two slow checks, `--offline` replays a transcript with no core |
+| `gmx plugin add <dir>` | install from a local directory, while live |
+| `gmx plugin update <name> <dir>` | reinstall from a directory, keeping the settings |
+| `gmx plugin reload <name>` | read the directory again and swap the running instances one at a time |
+| `gmx plugin remove <name>` | uninstall, unwinding every registration |
+| `gmx plugin enable\|disable <name>` | turn one on or off without uninstalling it |
+| `gmx plugin list [--json]` | every plugin, with what each instance costs |
+| `gmx plugin describe <name> [--json]` | manifest, settings schemas and skill descriptions |
+| `gmx plugin stats [--json]` | per instance cpu, memory, latency, dropped buffers and restarts |
+| `gmx plugin bisect --check "<command>"` | binary search the enabled plugins for the one that breaks a check |
+
+`--url` and `--token` take the mixer's address and credential, or the
+`GODWINMIX_URL` and `GODWINMIX_TOKEN` environment variables.
+
+See [install a plugin](../how-to/install-a-plugin.md) and
+[test a plugin](../how-to/test-a-plugin.md).
+
+## Chaos
+
+Break something on purpose, to see that the programme survives it. Both
+subcommands need the `admin` scope, and a core that is not in rehearsal refuses
+them unless `--i-am-sure` is given.
+
+| Command | Does |
+|---|---|
+| `gmx chaos kill <instance>` | SIGKILL a plugin's process, the way a segfault would |
+| `gmx chaos stall <instance> --secs 12` | SIGSTOP it for a while, then resume: a camera unplugged rather than a plugin crashed |
+
+The supervisor should cover either with the freeze frame and rebuild, and the
+programme's frame interval should never exceed 34 ms while it does. That is
+what the harness's kill check measures automatically; these commands are for
+reproducing it against a real mixer.
+
+Stalling needs `SIGSTOP`, so it is Linux and macOS only. Killing works
+everywhere.
+
 ## Presets
 
 A preset is a name for a working setup: the plugins it needs, a configuration, a

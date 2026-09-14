@@ -3,36 +3,32 @@
 In about fifteen minutes you will have a GodwinMix source plugin written in
 Python, producing a real picture, and you will watch the frames come out of it.
 
-Three commands on the finished path do not exist yet: `gmx plugin new`, which
-will do the copying for you, `gmx plugin add`, which will install the plugin
-into a core, and the step that puts your picture on the multiview; this page
-will grow its last three minutes when they land, and everything below works
-today.
-
 ## What you need
 
 * `python3`, version 3.9 or later. Nothing else is imported: no pip, no venv.
-* A checkout of this repository, for the template.
+* A checkout of this repository, or a built `gmx` on your PATH.
 * About fifteen minutes.
 
 GStreamer is optional. If you have `gst-discoverer-1.0` you can inspect the file
 your plugin produces; if you do not, the plugin still runs and you can check its
 size.
 
-## 1. Copy the template (about one minute)
-
-From the root of your checkout:
+## 1. Write the plugin (about one minute)
 
 ```sh
-cp -r templates/python my-cam
+gmx plugin new my-cam --kind source --lang python
 cd my-cam
 ```
 
-`gmx plugin new --kind source --lang python my-cam` will do this, and will fill
-in the placeholders for you. It does not exist yet, so `cp -r` is the command
-and the next step is the filling in.
+That copies the template and fills in every placeholder: the name, the
+description, the licence, your name and the year. Add `--description` and
+`--author` to set them yourself; the defaults are a sentence you should replace
+and whatever your shell calls you.
 
-## 2. Fill in the placeholders (about two minutes)
+Skip to step 3. The next step is here for anyone working from a checkout with
+no `gmx` built yet, who wants `cp -r templates/python my-cam` instead.
+
+## 2. Fill in the placeholders by hand (about two minutes, if you skipped step 1)
 
 Four placeholders are spread across the template: `{{name}}`, `{{description}}`,
 `{{license}}` and `{{author}}`. Replace them everywhere:
@@ -283,12 +279,37 @@ actually draw, and set `DELIBERATELY_FAILING = False`.
 For the ramp above, the first pixel is 16 rather than 235, so the assertion to
 write is `frame[0] == 16`.
 
+## Put it on air (about three minutes)
+
+Check it against a real core first:
+
+```sh
+gmx plugin test . --quick
+```
+
+Ten checks, about fifteen seconds. Every one that fails names what was wanted;
+[test a plugin](../how-to/test-a-plugin.md) says what to do about each.
+
+Then install it into a running mixer and take it to programme:
+
+```sh
+gmx plugin add .
+gmx source add cam1 --type my-cam/source
+gmx ctl status
+gmx take cam1
+```
+
+`gmx plugin list` shows what your plugin is costing in cpu and memory while it
+runs. Nothing restarted to install it, and `gmx plugin remove my-cam` takes
+everything it added away again.
+
 ## What you have
 
 A directory with a manifest, a settings schema that every GodwinMix surface
-renders as a form, a `SKILL.md` an agent reads before using your source, a CI
-workflow, and a plugin that produces frames. When `gmx plugin add` lands, that
-directory is the whole of what you hand it.
+renders as a form, a `SKILL.md` an agent reads before using your source, a
+recorded transcript its CI replays with no core at all, a CI workflow, and a
+plugin that produces frames. That directory is the whole of what you hand
+`gmx plugin add`.
 
 ## What to read next
 
@@ -298,6 +319,11 @@ directory is the whole of what you hand it.
   `gmx-plugin.toml` and every rule the validator checks.
 * [The plugin protocol](../reference/plugin-protocol.md), every method, every
   parameter and every error code.
+* [The plugin lifecycle](../reference/plugin-lifecycle.md), the states your
+  process moves through, the environment it is given and the budgets it is held
+  to.
+* [Install a plugin](../how-to/install-a-plugin.md), for the operator's side of
+  what you just built.
 
 If you got stuck, write it down in [the friction log](../friction-log.md). The
 time to a first plugin is the score this project keeps.

@@ -96,7 +96,14 @@ pub enum SourceCmd {
     Add {
         /// Stable id. Pass "-" to have one derived from the name or the host.
         id: String,
-        uri: String,
+        /// The address. Optional when `--type` names the kind outright, which
+        /// is how a plugin source with no address of its own is added.
+        uri: Option<String>,
+        /// The plugin qualified kind: `ndi/source`, `bars/source`. What
+        /// `gmx plugin list` prints under PROVIDES. Without it the kind is
+        /// worked out from the URL by scheme and rank.
+        #[arg(long = "type")]
+        type_id: Option<String>,
         #[arg(long)]
         name: Option<String>,
         /// Render the URL as a website (with its audio) rather than opening
@@ -263,14 +270,31 @@ async fn source(api: &Api, cmd: SourceCmd) -> Result<()> {
                 println!("{}", source_line(s));
             }
         }
-        SourceCmd::Add { id, uri, name, web, superimpose } => {
+        SourceCmd::Add { id, uri, type_id, name, web, superimpose } => {
+            let type_id = type_id.map(|t| t.trim().to_string()).filter(|t| !t.is_empty());
+            // A kind named outright needs no address, but the core still wants
+            // a `uri` to key an id off. The type is the honest answer to "what
+            // is this", so it is what goes there.
+            let uri = match (uri, &type_id) {
+                (Some(u), _) => u,
+                (None, Some(t)) => t.clone(),
+                (None, None) => anyhow::bail!(
+                    "a source needs an address, or a `--type` naming the kind.                      `gmx plugin list` prints the types this mixer has."
+                ),
+            };
+            let mut params = serde_json::Map::new();
+            if let Some(t) = type_id {
+                // Rides underneath the fields the core knows, which is the
+                // seam a plugin's `type` reaches its config through.
+                params.insert("type".into(), Value::String(t));
+            }
             let req = AddSourceRequest {
                 id: (id != "-").then_some(id),
                 name,
                 uri,
                 kind: web.then(|| "web".to_string()),
                 superimpose: Some(superimpose),
-                params: Default::default(),
+                params,
             };
             // The whole record comes back, so the id it actually got is in the
             // answer and nobody has to diff the status to find out.
@@ -351,13 +375,15 @@ fn source_line(s: &SourceStatus) -> String {
 
 /// Where the mixer is and how to be let in. The token, when there is one,
 /// rides as a default header so no call site can forget it.
-struct Api {
+/// A thin client over `/api/v1`, shared with the subcommands in `cli/` so that
+/// `gmx plugin list` and `gmx ctl status` reach the mixer the same way.
+pub struct Api {
     base: String,
     client: reqwest::Client,
 }
 
 impl Api {
-    fn new(base: &str, token: Option<&str>) -> Result<Self> {
+    pub fn new(base: &str, token: Option<&str>) -> Result<Self> {
         let mut headers = HeaderMap::new();
         if let Some(t) = token.map(str::trim).filter(|t| !t.is_empty()) {
             let mut v = HeaderValue::from_str(&format!("Bearer {t}"))
@@ -389,7 +415,7 @@ impl Api {
     }
 
     /// A read, with query parameters.
-    async fn get<T: DeserializeOwned>(
+    pub async fn get<T: DeserializeOwned>(
         &self,
         method: &str,
         id: Option<&str>,
@@ -406,7 +432,7 @@ impl Api {
         read(method, r).await
     }
 
-    async fn call<Req: Serialize, T: DeserializeOwned>(
+    pub async fn call<Req: Serialize, T: DeserializeOwned>(
         &self,
         method: &str,
         id: Option<&str>,

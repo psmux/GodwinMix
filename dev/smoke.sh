@@ -71,7 +71,7 @@ GMX="$REPO/target/debug/gmx"
 step "config from --example-config"
 "$REPO/target/debug/godwinmix" --example-config >"$WORK/example.toml" 2>/dev/null
 python3 - "$WORK/example.toml" "$WORK/godwinmix.toml" "$PORT" "$TOKEN" <<'PY'
-import re, sys
+import os, re, sys
 src, dst, port, token = sys.argv[1:5]
 text = open(src).read()
 # Comment out every [[sources]] and [[outputs]] block: a smoke test drives the
@@ -93,6 +93,13 @@ text = re.sub(r'(?m)^# token = .*$', f'token = "{token}"', text)
 # both have to let go before it comes down.
 text = re.sub(r'(?m)^linger_secs = .*$', 'linger_secs = 2', text)
 text = re.sub(r'(?m)^idle_secs = .*$', 'idle_secs = 2', text)
+# Plugins under the work directory, not the user's own. The plugin steps
+# install into this and check it is empty again afterwards.
+text = re.sub(
+    r'(?m)^# plugins_dir = .*$',
+    'plugins_dir = "%s/plugins"' % os.path.dirname(dst),
+    text,
+)
 open(dst, "w").write(text)
 PY
 if grep -q "^token = " "$WORK/godwinmix.toml" && grep -q "127.0.0.1:$PORT" "$WORK/godwinmix.toml"; then
@@ -367,6 +374,71 @@ if grep -q "bars" "$WORK/ctl.log"; then
     ok
 else
     bad "ctl status did not list the source: $(tr '\n' '; ' <"$WORK/ctl.log")"
+fi
+
+# --- a plugin, installed and removed while the programme runs ---------------
+# The whole tier 2 path in one step: a plugin written in shell, installed into a
+# live core, producing real frames at canvas caps, then removed with nothing
+# left behind. If this passes, a third party can write a source.
+step "gmx plugin new writes a plugin that passes the harness"
+PLUGDIR="$WORK/smoke-bars"
+if "$GMX" plugin new smoke-bars --kind source --lang shell --out "$PLUGDIR" \
+        >"$WORK/plugin-new.log" 2>&1 \
+    && "$GMX" plugin test "$PLUGDIR" --quick >"$WORK/plugin-test.log" 2>&1; then
+    ok
+else
+    bad "the generated plugin did not pass: $(tail -5 "$WORK/plugin-test.log" | tr '\n' '; ')"
+fi
+
+step "gmx plugin test --offline replays its transcript with no core"
+if "$GMX" plugin test "$PLUGDIR" --offline >"$WORK/plugin-offline.log" 2>&1; then
+    ok
+else
+    bad "the offline replay failed: $(tail -3 "$WORK/plugin-offline.log" | tr '\n' '; ')"
+fi
+
+step "gmx plugin add installs it into the running core"
+if GODWINMIX_URL="$BASE" GODWINMIX_TOKEN="$TOKEN" "$GMX" plugin add "$PLUGDIR" \
+        >"$WORK/plugin-add.log" 2>&1 \
+    && grep -q "smoke-bars/source" "$WORK/plugin-add.log"; then
+    ok
+else
+    bad "plugin add failed: $(tr '\n' '; ' <"$WORK/plugin-add.log")"
+fi
+
+step "its source goes live and carries its cost in plugin list"
+GODWINMIX_URL="$BASE" GODWINMIX_TOKEN="$TOKEN" "$GMX" ctl source add plugbars \
+    --type smoke-bars/source >"$WORK/plugin-source.log" 2>&1 || true
+LIVE=no
+for _ in 1 2 3 4 5 6 7 8 9 10; do
+    sleep 1
+    if GODWINMIX_URL="$BASE" GODWINMIX_TOKEN="$TOKEN" "$GMX" ctl status 2>/dev/null \
+            | grep -E "plugbars.*live" >/dev/null; then
+        LIVE=yes
+        break
+    fi
+done
+GODWINMIX_URL="$BASE" GODWINMIX_TOKEN="$TOKEN" "$GMX" plugin list \
+    >"$WORK/plugin-list.log" 2>&1 || true
+if [ "$LIVE" = yes ] && grep -q "plugbars" "$WORK/plugin-list.log"; then
+    ok
+else
+    bad "the plugin source did not go live: $(tr '\n' '; ' <"$WORK/plugin-list.log")"
+fi
+
+step "gmx plugin remove leaves no process and no directory"
+GODWINMIX_URL="$BASE" GODWINMIX_TOKEN="$TOKEN" "$GMX" ctl source remove plugbars \
+    >/dev/null 2>&1 || true
+sleep 1
+GODWINMIX_URL="$BASE" GODWINMIX_TOKEN="$TOKEN" "$GMX" plugin remove smoke-bars \
+    >"$WORK/plugin-remove.log" 2>&1 || true
+sleep 2
+STRAYS=$(pgrep -f "smoke-bars/0.1.0/run.sh" 2>/dev/null | wc -l | tr -d ' ')
+LEFT=$(ls "$WORK/plugins/smoke-bars" 2>/dev/null | wc -l | tr -d ' ')
+if [ "$STRAYS" = "0" ] && [ "$LEFT" = "0" ]; then
+    ok
+else
+    bad "removal left $STRAYS process(es) and $LEFT directory entr(ies)"
 fi
 
 step "gmx mcp lists 12 tools on standard"
