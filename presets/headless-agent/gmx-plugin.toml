@@ -18,5 +18,14 @@ plugins = ["browser@^1", "rtmp@^1", "director@^1"]
 config = "config/godwinmix.toml"
 layout = "config/layout.json"
 surface = "none"
-theme = "none"
+theme = "dark"
 scenes = "scenes"
+gallery = "label"
+
+# The three things the person does next. The welcome panel in the web UI
+# shows these in this order, and the README repeats them.
+steps = [
+  "Put your destination's URL and stream key into the [[outputs]] block.",
+  "Run `gmx`, then point your agent at it with `gmx mcp --url http://localhost:8080`.",
+  "Ask the agent for `get_state`, then `take` a source, and watch `gmx ctl status`.",
+]

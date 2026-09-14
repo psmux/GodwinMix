@@ -37,6 +37,7 @@ gstreamer = { workspace = true }
 
 tokio = { workspace = true, features = ["rt-multi-thread", "macros", "sync", "signal", "time", "io-std", "io-util", "fs"] }
 axum = { workspace = true, features = ["ws"] }
+tokio-tungstenite = { workspace = true }
 tower-http = { workspace = true, features = ["fs", "cors", "trace"] }
 
 serde = { workspace = true, features = ["derive"] }

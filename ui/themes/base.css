@@ -370,3 +370,61 @@ body.dropping::after {
 /* ---------------------------------------------------------------- panel iframe */
 
 iframe.panel { width: 100%; border: 0; background: var(--panel); display: block; }
+
+/* --- the welcome tiles (panels/welcome) --------------------------------- */
+
+.welcome-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+  gap: var(--pad, 12px);
+}
+
+.welcome-tile {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px;
+  text-align: left;
+  background: var(--panel);
+  color: var(--text);
+  border: 1px solid var(--line);
+  border-radius: var(--radius, 8px);
+  cursor: pointer;
+  font: inherit;
+}
+
+.welcome-tile:hover:not(:disabled),
+.welcome-tile:focus-visible {
+  border-color: var(--select);
+  background: var(--panel2);
+}
+
+.welcome-tile:disabled {
+  opacity: 0.55;
+  cursor: progress;
+}
+
+.welcome-art {
+  display: block;
+  line-height: 0;
+  border-radius: calc(var(--radius, 8px) - 2px);
+  overflow: hidden;
+}
+
+.welcome-steps {
+  margin: 0 0 8px;
+  padding-left: 1.3em;
+  line-height: 1.6;
+}
+
+.welcome-code {
+  margin: 0;
+  padding: 8px 10px;
+  background: var(--panel2);
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius, 8px);
+  font-family: var(--mono, ui-monospace, monospace);
+  font-size: 12px;
+  white-space: pre-wrap;
+  overflow-x: auto;
+}

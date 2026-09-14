@@ -23,16 +23,3 @@ The venues' encoders pointed at this machine's ports 9001 and 9002, an SRT addre
 **The picture breaks up under load.** Usually SRT latency is too low for the link. Raise `latency_ms` to three times the round trip time and have the venue do the same.
 
 **Tally lights are on the wrong camera.** Usually the tally plugin maps source ids to addresses, and the ids here are `venue-a`, `venue-b` and `studio`. Check that map before the cameras.
-
-
-## What is in this directory
-
-| File | What it is |
-|---|---|
-| `gmx-plugin.toml` | the manifest: the plugins this preset needs, and where its config, layout and scenes are |
-| `config/godwinmix.toml` | the mixer's configuration, with every line you have to change near the top |
-| `config/layout.json` | which panels go in which slot of the web UI |
-| `scenes/` | the scene documents this preset uses, one file each |
-| `README.md` | this page |
-
-Copy this whole directory to make your own. `presets/README.md` says how.

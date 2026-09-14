@@ -139,13 +139,11 @@ pub async fn run(base: &str, token: Option<&str>, cmd: Plugin) -> Result<()> {
     let api = Api::new(base, token)?;
     match cmd {
         Plugin::Add { source } => {
-            let record: Value =
-                api.call("plugin.add", None, &json!({ "source": absolute(&source)? })).await?;
+            let record = add_and_wait(&api, &source).await?;
             print_added(&record);
         }
         Plugin::Update { name, source } => {
-            let record: Value =
-                api.call("plugin.add", None, &json!({ "source": absolute(&source)? })).await?;
+            let record = add_and_wait(&api, &source).await?;
             println!("updated {name} to {}", record["version"].as_str().unwrap_or("?"));
             print_added(&record);
         }
@@ -198,6 +196,43 @@ pub async fn run(base: &str, token: Option<&str>, cmd: Plugin) -> Result<()> {
     Ok(())
 }
 
+/// Install, and wait for the task to finish.
+///
+/// `plugin.add` answers with a task handle because a plugin with a virtual
+/// environment to build can take longer than a call is allowed to. A person at
+/// a terminal wants the answer, so this polls until it has one.
+async fn add_and_wait(api: &Api, source: &str) -> Result<Value> {
+    let started: Value =
+        api.call("plugin.add", None, &json!({ "source": absolute(source)? })).await?;
+    // A core that answered outright rather than with a handle: take it.
+    let Some(task_id) = started["task_id"].as_str().map(str::to_string) else {
+        return Ok(started);
+    };
+    let wait = started["poll_interval_ms"].as_u64().unwrap_or(200).clamp(50, 2_000);
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(600);
+    loop {
+        tokio::time::sleep(std::time::Duration::from_millis(wait)).await;
+        // `task.get` is a singleton route with no `{id}` in its path, so the
+        // id travels as a query parameter rather than as a path segment.
+        let task: Value =
+            api.get("task.get", None, &[("task_id", task_id.clone())]).await?;
+        match task["state"].as_str().unwrap_or("running") {
+            "completed" => return Ok(task["result"].clone()),
+            "failed" => anyhow::bail!(
+                "{}",
+                task["error"].as_str().unwrap_or("the install failed and said nothing")
+            ),
+            "cancelled" => anyhow::bail!("the install was cancelled"),
+            _ => {}
+        }
+        anyhow::ensure!(
+            std::time::Instant::now() < deadline,
+            "the install is still running after ten minutes. It has not been cancelled; \
+             read it back with `gmx ctl ... task.get {task_id}`."
+        );
+    }
+}
+
 fn absolute(path: &str) -> Result<String> {
     let p = Path::new(path);
     let full = if p.is_absolute() {
@@ -235,7 +270,7 @@ fn print_list(listing: &Value) {
         println!("write one with:  gmx plugin new --lang python my-plugin");
         return;
     }
-    println!("{:<16} {:<9} {:<8} {}", "PLUGIN", "VERSION", "STATE", "PROVIDES");
+    println!("{:<16} {:<9} {:<8} PROVIDES", "PLUGIN", "VERSION", "STATE");
     for p in &plugins {
         let state = if p["problem"].is_string() {
             "broken"

@@ -124,6 +124,10 @@ async fn take(call: Call, params: Value) -> Result<Value, RpcError> {
             return Err(RpcError::not_found("source", id, &ids));
         }
     }
+    // Every caller, human or agent, before the command reaches the pipeline.
+    // The policy is in `godwinmix_core::safety` and the refusal names the
+    // time left rather than saying no.
+    call.app.safety.check(&call.token).map_err(|r| call.safety_error(r))?;
     cut(&call, target, req.at_running_time_ms).await
 }
 
@@ -140,6 +144,10 @@ async fn revert(call: Call, _params: Value) -> Result<Value, RpcError> {
         )
         .with("program", now.program.clone()));
     };
+    // Revert is held to the rate limit and to the flash guard, but not to the
+    // minimum hold. The whole point of it is to undo a take that turned out
+    // wrong, and a revert that has to wait eight seconds is not one.
+    call.app.safety.check_revert(&call.token).map_err(|r| call.safety_error(r))?;
     cut(&call, previous, None).await
 }
 
@@ -156,6 +164,9 @@ async fn cut(
         .request(|ack| Command::Take { source, at_running_time_ms, ack: Some(ack) })
         .await
         .map_err(|e| call.mixer_error(e))?;
+    // Only once the mixer has taken it: a cut the pipeline refused must not
+    // start the hold on the next one.
+    call.app.safety.record(&call.token.id);
     body(state(call).await?)
 }
 

@@ -15,6 +15,8 @@ import { chordOf, DEFAULT_MAP } from "../shell/keymap.js";
 import { kindOfUri } from "../client/kinds.js";
 import { tagFor } from "../shell/registry.js";
 import * as layout from "../shell/layout.js";
+import { ART } from "../panels/welcome/tiles.js";
+import { WelcomePanel } from "../panels/welcome/panel.js";
 
 let passed = 0;
 let failed = 0;
@@ -173,7 +175,7 @@ test("a frame header is sixteen little endian bytes then JPEG", () => {
   const frame = parseFrame(buf);
   eq(frame.seq, 4821);
   eq(frame.layout, 7);
-  ok(frame.runningTimeNs === 1234567890n);
+  ok(frame.runningTimeMs === 1234567890n);
   eq([...frame.jpeg], [0xff, 0xd8, 0xff]);
 });
 
@@ -490,6 +492,56 @@ async function legacySuite() {
   window.WebSocket = realSocket;
 }
 
+// ------------------------------------------------------- the welcome panel
+
+test("every welcome tile is an inline SVG under two kilobytes", () => {
+  const ids = Object.keys(ART);
+  eq(ids, ["church", "classroom", "esports", "empty", "obs"], "the five choices");
+  for (const id of ids) {
+    ok(ART[id].startsWith("<svg"), `${id} is not an svg`);
+    ok(ART[id].length < 2048, `${id} is ${ART[id].length} bytes, over the budget`);
+    ok(!/https?:/.test(ART[id]), `${id} fetches something from outside the page`);
+  }
+});
+
+async function welcomeSuite() {
+  const calls = [];
+  const client = {
+    state: { sources: [] },
+    on: () => () => {},
+    call: async (method, params) => {
+      calls.push([method, params]);
+      if (method === "core.info") return { version: "test", ui: null };
+      return {
+        dry_run: false,
+        plan: { steps: ["One.", "Two.", "Three."], plugins: [{ name: "camera", installed: false }] },
+        needs_restart: [],
+      };
+    },
+  };
+  const panel = new WelcomePanel();
+  panel.setClient(client);
+  panel.connectedCallback();
+  await new Promise((r) => setTimeout(r, 20));
+
+  test("the welcome tiles come up on a core with no sources and no preset", () => {
+    ok(panel.dialog, "nothing opened");
+    const tiles = panel.dialog.el.querySelectorAll(".welcome-tile");
+    eq(tiles.length, 5, "five tiles");
+  });
+
+  const first = panel.dialog && panel.dialog.el.querySelector(".welcome-tile");
+  if (first) first.click();
+  await new Promise((r) => setTimeout(r, 20));
+
+  test("picking a tile applies that preset over the protocol", () => {
+    const applied = calls.find((c) => c[0] === "preset.apply");
+    ok(applied, "preset.apply was never called");
+    eq(applied[1], { name: "church" }, "the preset it asked for");
+  });
+  panel.close();
+}
+
 // ---------------------------------------------------------------- summary
 
 function summarise() {
@@ -500,8 +552,16 @@ function summarise() {
   console.log(failed ? `FAILED: ${summary}` : `ALL PASSED: ${summary}`);
 }
 
-legacySuite().catch((e) => {
-  failed += 1;
-  line("fail", "the legacy suite threw: " + e.message);
-  console.error(e);
-}).then(summarise);
+legacySuite()
+  .catch((e) => {
+    failed += 1;
+    line("fail", "the legacy suite threw: " + e.message);
+    console.error(e);
+  })
+  .then(welcomeSuite)
+  .catch((e) => {
+    failed += 1;
+    line("fail", "the welcome suite threw: " + e.message);
+    console.error(e);
+  })
+  .then(summarise);
