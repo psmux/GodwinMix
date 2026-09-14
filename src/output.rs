@@ -96,6 +96,9 @@ impl OutputSlot {
         bus_tx: mpsc::UnboundedSender<BusEvent>,
     ) -> Result<Arc<Self>> {
         let id = &cfg.id;
+        // As in `InputPipeline::build_kind`: the instance tag on every line
+        // below, and the start time for `--startup-report`.
+        let _observe = crate::observe::output_span(id);
 
         let feed_video = gstutil::queue_time(&format!("out-{id}-vq"), cfg.queue_secs, true)?;
         let feed_audio = gstutil::queue_time(&format!("out-{id}-aq"), cfg.queue_secs, true)?;
@@ -173,6 +176,7 @@ impl OutputSlot {
         }
 
         let pipeline = gst::Pipeline::with_name(&format!("output-{id}"));
+        crate::observe::register_pipeline(&format!("output-{id}"), &pipeline);
 
         let vsrc = make("proxysrc", &format!("out-{id}-vsrc-{gen}"))?;
         vsrc.set_property("proxysink", &*self.vproxy.lock());

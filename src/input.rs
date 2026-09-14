@@ -1758,6 +1758,10 @@ impl InputPipeline {
         overlay: Option<MediaReport>,
     ) -> Result<Self> {
         let id = cfg.id.clone();
+        // Tags every line logged below with this source's instance, so
+        // `log.set {instance, level}` reaches it, and times the build for
+        // `--startup-report`. See `observe::source_span`.
+        let _observe = crate::observe::source_span(&id);
         let mut exec_child: Option<ExecChild> = None;
         // A page is rendered by the sidecar when there is one, and the sidecar
         // is just another process writing a container to stdout. From here on
@@ -1797,6 +1801,7 @@ impl InputPipeline {
 
         let kind = if exec.is_some() { SourceKind::Exec } else { kind };
         let pipeline = gst::Pipeline::with_name(&format!("input-{id}"));
+        crate::observe::register_pipeline(&format!("input-{id}"), &pipeline);
         let health = SourceHealth::new(origin);
         let rtmp_head_early = kind == SourceKind::Rtmp;
 
