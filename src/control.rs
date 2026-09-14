@@ -1051,8 +1051,22 @@ pub async fn serve(bind: &str, state: AppState) -> Result<()> {
     let listener = tokio::net::TcpListener::bind(bind).await?;
     info!(%bind, "control server listening");
     let snapshots = Tracker::start(state.frames.clone(), state.mixer.clone());
-    axum::serve(listener, router(state, snapshots)).await?;
+    let observe = crate::observe::router(observe_state(&state));
+    axum::serve(listener, router(state, snapshots).merge(observe)).await?;
     Ok(())
+}
+
+/// What `/metrics`, `log.set` and the pipeline introspection routes need.
+/// Everything else about them lives in `src/observe/`.
+fn observe_state(state: &AppState) -> crate::observe::ObserveState {
+    crate::observe::ObserveState {
+        mixer: Some(state.mixer.clone()),
+        frames: state.frames.clone(),
+        token: state.token.clone(),
+        // Prometheus scrapes with no credentials. See the field's own note.
+        metrics_open: true,
+        config_path: crate::config::path_in_force(std::path::Path::new("godwinmix.toml")),
+    }
 }
 
 #[cfg(test)]

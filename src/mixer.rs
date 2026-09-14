@@ -692,6 +692,10 @@ impl Mixer {
         let vmix_caps = gstutil::capsfilter("vmix-caps", &canvas.video())?;
         let vraw_tee = make("tee", "vraw-tee")?;
         vraw_tee.set_property("allow-not-linked", true);
+        // Every programme frame passes this tee exactly once, before the
+        // encoder and the multiview split apart, so it is where the frame
+        // counter and the interval histogram go. See `observe::metrics`.
+        crate::observe::attach_programme(&program, &vraw_tee);
 
         let venc_q = gstutil::queue_thread("venc-q")?;
 

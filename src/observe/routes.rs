@@ -352,12 +352,51 @@ fn not_found(message: impl Into<String>) -> Response {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use axum::body::Body;
-    use axum::http::Request as HttpRequest;
-    use tower::ServiceExt;
 
-    /// The routes with no mixer behind them. Everything here is about the
-    /// HTTP surface: the pipeline calls are tested against real pipelines in
+    /// The routes, served on an ephemeral port, with a client pointed at them.
+    ///
+    /// A real listener and a real HTTP client rather than calling the handlers
+    /// directly: the token guard, the content types and the `traceparent`
+    /// header are all things that only exist once a request has been through
+    /// axum, and this is the cheapest way to test them without adding a
+    /// dependency for it.
+    struct Served {
+        base: String,
+        client: reqwest::Client,
+        task: tokio::task::JoinHandle<()>,
+    }
+
+    impl Served {
+        async fn start(state: ObserveState) -> Self {
+            let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.expect("bind");
+            let base = format!("http://{}", listener.local_addr().unwrap());
+            let app = router(state);
+            let task = tokio::spawn(async move {
+                let _ = axum::serve(listener, app).await;
+            });
+            Self { base, client: reqwest::Client::new(), task }
+        }
+
+        fn get(&self, path: &str) -> reqwest::RequestBuilder {
+            self.client.get(format!("{}{path}", self.base))
+        }
+
+        fn post(&self, path: &str, body: &str) -> reqwest::RequestBuilder {
+            self.client
+                .post(format!("{}{path}", self.base))
+                .header("content-type", "application/json")
+                .body(body.to_string())
+        }
+    }
+
+    impl Drop for Served {
+        fn drop(&mut self) {
+            self.task.abort();
+        }
+    }
+
+    /// The routes with no mixer behind them. Everything here is about the HTTP
+    /// surface; the pipeline calls are tested against real pipelines in
     /// `introspect`, and a mixer built per test would cost an encoder probe
     /// each time for nothing.
     fn test_state() -> ObserveState {
@@ -371,187 +410,219 @@ mod tests {
         }
     }
 
-    async fn body_text(response: Response) -> String {
-        let bytes = axum::body::to_bytes(response.into_body(), 4 * 1024 * 1024).await.unwrap();
-        String::from_utf8_lossy(&bytes).to_string()
-    }
-
     /// The acceptance criterion: a scrape lists the programme frame interval
     /// histogram.
     #[tokio::test]
     async fn metrics_lists_the_programme_frame_interval_histogram() {
-        let state = test_state();
-        let app = router(state);
-        let response = app
-            .oneshot(HttpRequest::builder().uri("/metrics").body(Body::empty()).unwrap())
-            .await
-            .unwrap();
-        assert_eq!(response.status(), StatusCode::OK);
-        let text = body_text(response).await;
+        let server = Served::start(test_state()).await;
+        let response = server.get("/metrics").send().await.unwrap();
+        assert_eq!(response.status(), 200);
+        let content_type =
+            response.headers().get("content-type").unwrap().to_str().unwrap().to_string();
+        assert!(content_type.starts_with("text/plain"), "{content_type}");
+        let text = response.text().await.unwrap();
         assert!(text.contains("gmx_programme_frame_interval_ms"), "{text}");
         assert!(text.contains("gmx_programme_frames_total"), "{text}");
+        assert!(text.contains("# TYPE gmx_programme_frame_interval_ms histogram"), "{text}");
     }
 
     #[tokio::test]
-    async fn metrics_answers_without_a_token_when_it_is_open_and_not_when_it_is_not() {
+    async fn metrics_is_open_by_default_and_closed_when_the_operator_says_so() {
         let mut state = test_state();
         state.token = Some("secret".into());
         state.metrics_open = true;
-        let open = router(state.clone());
-        let response = open
-            .oneshot(HttpRequest::builder().uri("/metrics").body(Body::empty()).unwrap())
-            .await
-            .unwrap();
-        assert_eq!(response.status(), StatusCode::OK);
+        let open = Served::start(state.clone()).await;
+        assert_eq!(open.get("/metrics").send().await.unwrap().status(), 200);
 
         state.metrics_open = false;
-        let closed = router(state);
-        let response = closed
-            .oneshot(HttpRequest::builder().uri("/metrics").body(Body::empty()).unwrap())
-            .await
-            .unwrap();
-        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+        let closed = Served::start(state).await;
+        assert_eq!(closed.get("/metrics").send().await.unwrap().status(), 401);
+        let with_token =
+            closed.get("/metrics").bearer_auth("secret").send().await.unwrap();
+        assert_eq!(with_token.status(), 200);
     }
 
     #[tokio::test]
     async fn log_set_moves_a_level_and_answers_with_what_is_in_force() {
-        let state = test_state();
-        let app = router(state);
-        let response = app
-            .clone()
-            .oneshot(
-                HttpRequest::builder()
-                    .method("POST")
-                    .uri("/api/v1/log/set")
-                    .header("content-type", "application/json")
-                    .body(Body::from(r#"{"instance":"routes-cam","level":"debug"}"#))
-                    .unwrap(),
-            )
+        let server = Served::start(test_state()).await;
+        let response = server
+            .post("/api/v1/log/set", r#"{"instance":"routes-cam","level":"debug"}"#)
+            .send()
             .await
             .unwrap();
-        assert_eq!(response.status(), StatusCode::OK);
-        let text = body_text(response).await;
+        assert_eq!(response.status(), 200);
+        let text = response.text().await.unwrap();
         assert!(text.contains("routes-cam"), "{text}");
         assert!(text.contains("debug"), "{text}");
-        logs::set_instance_level("routes-cam", None);
+
+        // And "default" puts it back, which is how an operator turns the
+        // firehose off without knowing what it was before.
+        let back = server
+            .post("/api/v1/log/set", r#"{"instance":"routes-cam","level":"default"}"#)
+            .send()
+            .await
+            .unwrap()
+            .text()
+            .await
+            .unwrap();
+        assert!(!back.contains("routes-cam"), "{back}");
     }
 
     #[tokio::test]
     async fn a_level_nobody_can_spell_is_refused_with_the_list() {
-        let state = test_state();
-        let response = router(state)
-            .oneshot(
-                HttpRequest::builder()
-                    .method("POST")
-                    .uri("/api/v1/log/set")
-                    .header("content-type", "application/json")
-                    .body(Body::from(r#"{"instance":"cam1","level":"chatty"}"#))
-                    .unwrap(),
-            )
-            .await
-            .unwrap();
-        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
-        let text = body_text(response).await;
+        let server = Served::start(test_state()).await;
+        let response =
+            server.post("/api/v1/log/set", r#"{"instance":"cam1","level":"chatty"}"#).send().await.unwrap();
+        assert_eq!(response.status(), 400);
+        let text = response.text().await.unwrap();
         assert!(text.contains("debug"), "the error should list the levels: {text}");
     }
 
     #[tokio::test]
-    async fn the_programme_dot_comes_back_as_graphviz() {
-        let state = test_state();
-        let response = router(state)
-            .oneshot(
-                HttpRequest::builder()
-                    .uri("/api/v1/pipeline/dot?name=programme")
-                    .body(Body::empty())
-                    .unwrap(),
-            )
+    async fn setting_an_instance_and_a_target_at_once_is_refused_rather_than_guessed() {
+        let server = Served::start(test_state()).await;
+        let response = server
+            .post("/api/v1/log/set", r#"{"instance":"cam1","target":"godwinmix","level":"debug"}"#)
+            .send()
             .await
             .unwrap();
-        assert_eq!(response.status(), StatusCode::OK);
-        let content_type = response
-            .headers()
-            .get(header::CONTENT_TYPE)
-            .and_then(|v| v.to_str().ok())
-            .unwrap_or_default()
-            .to_string();
+        assert_eq!(response.status(), 400);
+    }
+
+    #[tokio::test]
+    async fn log_gst_raises_a_category_and_says_for_how_long() {
+        let server = Served::start(test_state()).await;
+        let response = server
+            .post("/api/v1/log/gst", r#"{"categories":"rtmp2src:4","duration_secs":1}"#)
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(response.status(), 200);
+        let v: serde_json::Value = response.json().await.unwrap();
+        assert_eq!(v["categories"][0], "rtmp2src");
+        assert_eq!(v["duration_secs"], 1);
+
+        let levels: serde_json::Value =
+            server.get("/api/v1/log/levels").send().await.unwrap().json().await.unwrap();
+        assert!(levels["gst"].as_array().unwrap().iter().any(|c| c["category"] == "rtmp2src"));
+    }
+
+    #[tokio::test]
+    async fn a_category_that_is_not_gst_debugs_spelling_is_refused() {
+        let server = Served::start(test_state()).await;
+        let response = server
+            .post("/api/v1/log/gst", r#"{"categories":"rtmp2src"}"#)
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(response.status(), 400);
+        assert!(response.text().await.unwrap().contains("<category>:<level>"));
+    }
+
+    #[tokio::test]
+    async fn the_programme_dot_comes_back_as_graphviz_ready_to_pipe() {
+        let server = Served::start(test_state()).await;
+        let pipeline = gstreamer::Pipeline::with_name("routes-programme");
+        crate::observe::register_pipeline(crate::observe::PROGRAMME, &pipeline);
+
+        let response = server.get("/api/v1/pipeline/dot?name=programme").send().await.unwrap();
+        assert_eq!(response.status(), 200);
+        let content_type =
+            response.headers().get("content-type").unwrap().to_str().unwrap().to_string();
         assert!(content_type.starts_with("text/vnd.graphviz"), "{content_type}");
-        let text = body_text(response).await;
+        let text = response.text().await.unwrap();
         assert!(text.contains("digraph"), "{text}");
+        crate::observe::unregister_pipeline(crate::observe::PROGRAMME);
     }
 
     #[tokio::test]
     async fn an_unknown_pipeline_is_a_404_naming_what_is_known() {
-        let state = test_state();
-        let response = router(state)
-            .oneshot(
-                HttpRequest::builder()
-                    .uri("/api/v1/pipeline/dot?name=nothing-here")
-                    .body(Body::empty())
-                    .unwrap(),
-            )
-            .await
-            .unwrap();
-        assert_eq!(response.status(), StatusCode::NOT_FOUND);
-        assert!(body_text(response).await.contains("Known:"));
+        let server = Served::start(test_state()).await;
+        let response = server.get("/api/v1/pipeline/dot?name=nothing-here").send().await.unwrap();
+        assert_eq!(response.status(), 404);
+        assert!(response.text().await.unwrap().contains("Known:"));
     }
 
     #[tokio::test]
     async fn a_traceparent_from_the_caller_comes_back_on_the_response() {
-        let state = test_state();
-        let response = router(state)
-            .oneshot(
-                HttpRequest::builder()
-                    .uri("/api/v1/pipeline/list")
-                    .header("traceparent", "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01")
-                    .body(Body::empty())
-                    .unwrap(),
-            )
+        let server = Served::start(test_state()).await;
+        let response = server
+            .get("/api/v1/pipeline/list")
+            .header("traceparent", "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01")
+            .send()
             .await
             .unwrap();
-        let out = response.headers().get("traceparent").unwrap().to_str().unwrap();
+        let out = response.headers().get("traceparent").unwrap().to_str().unwrap().to_string();
         assert!(out.contains("4bf92f3577b34da6a3ce929d0e0e4736"), "{out}");
+    }
+
+    #[tokio::test]
+    async fn a_request_with_no_traceparent_still_gets_one() {
+        let server = Served::start(test_state()).await;
+        let response = server.get("/api/v1/pipeline/list").send().await.unwrap();
+        let out = response.headers().get("traceparent").unwrap().to_str().unwrap().to_string();
+        assert!(crate::observe::TraceId::from_traceparent(&out).is_some(), "{out}");
     }
 
     #[tokio::test]
     async fn the_guarded_routes_need_the_token_and_the_right_one_gets_in() {
         let mut state = test_state();
         state.token = Some("secret".into());
-        let app = router(state);
-        let refused = app
-            .clone()
-            .oneshot(
-                HttpRequest::builder().uri("/api/v1/pipeline/list").body(Body::empty()).unwrap(),
-            )
-            .await
-            .unwrap();
-        assert_eq!(refused.status(), StatusCode::UNAUTHORIZED);
-        let allowed = app
-            .oneshot(
-                HttpRequest::builder()
-                    .uri("/api/v1/pipeline/list")
-                    .header("authorization", "Bearer secret")
-                    .body(Body::empty())
-                    .unwrap(),
-            )
-            .await
-            .unwrap();
-        assert_eq!(allowed.status(), StatusCode::OK);
+        let server = Served::start(state).await;
+        assert_eq!(server.get("/api/v1/pipeline/list").send().await.unwrap().status(), 401);
+        assert_eq!(
+            server.get("/api/v1/pipeline/list").bearer_auth("wrong").send().await.unwrap().status(),
+            401
+        );
+        assert_eq!(
+            server.get("/api/v1/pipeline/list").bearer_auth("secret").send().await.unwrap().status(),
+            200
+        );
     }
 
     #[tokio::test]
     async fn the_startup_report_is_json_with_a_threshold() {
-        let state = test_state();
-        let response = router(state)
-            .oneshot(
-                HttpRequest::builder()
-                    .uri("/api/v1/core/startup_report")
-                    .body(Body::empty())
-                    .unwrap(),
-            )
-            .await
-            .unwrap();
-        let v: serde_json::Value = serde_json::from_str(&body_text(response).await).unwrap();
+        let server = Served::start(test_state()).await;
+        let v: serde_json::Value =
+            server.get("/api/v1/core/startup_report").send().await.unwrap().json().await.unwrap();
         assert_eq!(v["threshold_ms"], 250.0);
         assert!(v["stages"].is_array());
+    }
+
+    #[tokio::test]
+    async fn the_doctor_answers_over_http_with_a_verdict_per_check() {
+        let server = Served::start(test_state()).await;
+        let v: serde_json::Value =
+            server.get("/api/v1/core/doctor").send().await.unwrap().json().await.unwrap();
+        let checks = v["checks"].as_array().expect("checks");
+        assert!(checks.len() >= 6, "{v}");
+        for check in checks {
+            assert!(check["verdict"].is_string(), "{check}");
+            assert!(check["detail"].is_string(), "{check}");
+        }
+    }
+
+    /// `rpc_layer!` is what the api agent wraps `/rpc` with, so it is tested
+    /// the way they will use it.
+    #[tokio::test]
+    async fn the_rpc_layer_counts_and_times_a_call() {
+        let app: Router = Router::new()
+            .route("/rpc/{method}", axum::routing::post(|| async { "{}" }))
+            .layer(crate::rpc_layer!());
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let base = format!("http://{}", listener.local_addr().unwrap());
+        let task = tokio::spawn(async move {
+            let _ = axum::serve(listener, app).await;
+        });
+        let client = reqwest::Client::new();
+        client.post(format!("{base}/rpc/program.take")).send().await.unwrap();
+        task.abort();
+
+        let text = metrics::render();
+        assert!(
+            text.contains(r#"gmx_rpc_calls_total{code="200",method="/rpc/{method}"}"#),
+            "the method label should be the route, not the path: {text}"
+        );
+        assert!(text.contains("gmx_rpc_duration_ms_count"), "{text}");
     }
 }
