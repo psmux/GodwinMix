@@ -1,0 +1,27 @@
+; Godot 4 project file.
+;
+; Open this folder in Godot 4.2 or later and press F5. The panel asks for the
+; mixer's address and token, then lists the sources and takes one on click.
+;
+; Nothing here is a plugin or an add-on: `WebSocketPeer` and `HTTPClient` are in
+; the engine, and the GodwinMix protocol is JSON over a WebSocket, so a game
+; engine speaks it as easily as a browser does.
+
+config_version=5
+
+[application]
+
+config/name="GodwinMix panel"
+config/description="A control surface for a GodwinMix core, in Godot 4."
+run/main_scene="res://main.tscn"
+config/features=PackedStringArray("4.2")
+
+[display]
+
+window/size/viewport_width=960
+window/size/viewport_height=600
+
+[rendering]
+
+; A control panel is not a game: no reason to spin a GPU at 60 frames a second.
+renderer/rendering_method="gl_compatibility"

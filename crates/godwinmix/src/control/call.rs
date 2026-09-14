@@ -9,7 +9,7 @@
 //! are the same call arriving by different doors.
 
 use godwinmix_protocol::error::{ErrorCode, RpcError};
-use godwinmix_protocol::idempotency::Lookup;
+use godwinmix_protocol::idempotency::{Lookup, Reservation};
 use godwinmix_protocol::method::Registry;
 use godwinmix_protocol::rpc::CallEnvelope;
 use godwinmix_protocol::scope::{ConfirmPolicy, Token};
@@ -87,6 +87,20 @@ impl Call {
         }
         RpcError::not_in_state(e.to_string()).with("method", self.method)
     }
+
+    /// A safety rule said no. `-32003` with the time left, which is the one
+    /// thing the caller needs to try again (03 section 6's code table).
+    pub fn safety_error(&self, refusal: godwinmix_core::safety::Refusal) -> RpcError {
+        safety_error(self.method, refusal)
+    }
+}
+
+/// The same, without a `Call` in hand.
+pub fn safety_error(method: &str, refusal: godwinmix_core::safety::Refusal) -> RpcError {
+    RpcError::new(ErrorCode::Safety, refusal.message)
+        .with("rule", refusal.rule)
+        .with("retry_after_ms", refusal.retry_after_ms)
+        .with("method", method)
 }
 
 /// Run one method, with everything that has to happen around it.
@@ -144,15 +158,24 @@ pub async fn dispatch(
         }
     }
 
-    // A replay is looked up before the work and stored after it, so two
-    // clients racing on one key both end up with the first answer.
+    // Whoever is calling is still there, which is what the operator watchdog
+    // in `safety` watches for.
+    app.safety.note_call(&token.id);
+
+    // The key is claimed before the work, not after it. Two clients racing on
+    // one key: the first owns it and the second waits on the same slot and
+    // gets the first answer, rather than both running the work.
     let key = envelope.idempotency_key.filter(|_| def.mutating && !dry_run);
-    if let Some(key) = &key {
-        if let Lookup::Replay(body) = app.idempotency.lookup(key, method, &params)? {
-            info!(%trace_id, method, key, "replayed from the idempotency cache");
-            return Ok(body);
-        }
-    }
+    let reservation = match &key {
+        None => None,
+        Some(key) => match claim(app, key, method, &params).await? {
+            Claim::Replayed(body) => {
+                info!(%trace_id, method, key, "replayed from the idempotency cache");
+                return Ok(body);
+            }
+            Claim::Mine(reservation) => Some(reservation),
+        },
+    };
 
     let call = Call {
         app: app.clone(),
@@ -170,8 +193,8 @@ pub async fn dispatch(
         Ok(mut body) => {
             if def.mutating && !dry_run {
                 stamp(&mut body, def.idempotent);
-                if let Some(key) = &key {
-                    app.idempotency.store(key, method, &params, &body);
+                if let Some(reservation) = reservation {
+                    reservation.commit(&body);
                 }
             }
             info!(%trace_id, method, elapsed_ms, token = %token.id, "ok");
@@ -180,6 +203,52 @@ pub async fn dispatch(
         Err(e) => {
             warn!(%trace_id, method, elapsed_ms, code = e.code, message = %e.message, "refused");
             Err(e)
+        }
+    }
+}
+
+/// What claiming an idempotency key ended in.
+enum Claim {
+    /// This call owns the key and commits the answer when it has one.
+    Mine(Reservation),
+    /// Somebody else already answered this exact call.
+    Replayed(Value),
+}
+
+/// Take the key, or wait for whoever has it.
+///
+/// A waiter never waits longer than a call is allowed to take. If the first
+/// caller is still going after that, the waiter takes the key itself rather
+/// than hanging: the alternative is a client that gets nothing at all, and
+/// the reservation's own TTL has released the key by then.
+async fn claim(
+    app: &AppState,
+    key: &str,
+    method: &str,
+    params: &Value,
+) -> Result<Claim, RpcError> {
+    let deadline = std::time::Instant::now()
+        + std::time::Duration::from_secs(godwinmix_protocol::MAX_CALL_SECS);
+    loop {
+        match app.idempotency.reserve(key, method, params)? {
+            Lookup::Fresh(reservation) => return Ok(Claim::Mine(reservation)),
+            Lookup::Replay(body) => return Ok(Claim::Replayed(body)),
+            Lookup::InFlight(wake) => {
+                let left = deadline.saturating_duration_since(std::time::Instant::now());
+                if left.is_zero() {
+                    warn!(method, key, "the call holding this idempotency key is still running");
+                    return Err(RpcError::new(
+                        ErrorCode::NotInState,
+                        format!(
+                            "another call is still running under idempotency_key '{key}'.                              Wait and send the identical call again to get its answer."
+                        ),
+                    )
+                    .with("idempotency", "in_flight")
+                    .with("key", key)
+                    .with("retry_after_ms", 500));
+                }
+                let _ = tokio::time::timeout(left, wake.notified()).await;
+            }
         }
     }
 }

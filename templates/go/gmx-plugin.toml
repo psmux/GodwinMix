@@ -1,0 +1,27 @@
+[plugin]
+name = "{{name}}"
+version = "0.1.0"
+api = 1
+description = "{{description}}"
+license = "{{license}}"
+authors = ["{{author}}"]
+platforms = ["linux-x86_64", "linux-aarch64", "macos-aarch64", "macos-x86_64", "windows-x86_64"]
+placements = ["sidecar", "node"]
+process = "per-instance"
+
+[run]
+bin = { "linux-x86_64" = "bin/{{name}}", "linux-aarch64" = "bin/{{name}}", "macos-aarch64" = "bin/{{name}}", "macos-x86_64" = "bin/{{name}}", "windows-x86_64" = "bin/{{name}}.exe" }
+
+[[provides]]
+kind = "source"
+id = "source"
+media = { video = "raw", audio = "none", alpha = false, thumb = true }
+transports = ["container"]
+capabilities = ["restart-in-place", "health"]
+latency_ms = 0
+settings = "schemas/source.json"
+skill = "skills/source/SKILL.md"
+
+[build]
+command = "go build -o bin/{{name}} ."
+output = "bin/{{name}}"

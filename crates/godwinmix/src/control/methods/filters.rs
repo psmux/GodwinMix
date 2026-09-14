@@ -243,6 +243,14 @@ async fn set(call: Call, params: Value) -> Result<Value, RpcError> {
 
 async fn remove(call: Call, params: Value) -> Result<Value, RpcError> {
     let req: FilterIdRequest = call.params(&params)?;
+    // Checked here rather than left to the mixer, so an unknown id answers
+    // with the ids that exist like every other -32004 does. The mixer's own
+    // refusal says only that there is no such filter, which leaves a caller
+    // guessing at the name.
+    let ids = filter_ids(&call).await;
+    if !ids.contains(&req.id) {
+        return Err(RpcError::not_found("filter", &req.id, &ids));
+    }
     if call.dry_run {
         return Ok(call.dry_run_answer(true, vec![format!("take the filter {} out", req.id)]));
     }
@@ -252,6 +260,16 @@ async fn remove(call: Call, params: Value) -> Result<Value, RpcError> {
         .await
         .map_err(|e| call.mixer_error(e))?;
     body(FilterRemoved { removed: req.id })
+}
+
+/// Every filter in place, wherever it is hung.
+async fn filter_ids(call: &Call) -> Vec<String> {
+    call.app
+        .mixer
+        .filters()
+        .await
+        .map(|list| list.into_iter().map(|f| f.id).collect())
+        .unwrap_or_default()
 }
 
 async fn list(call: Call, _params: Value) -> Result<Value, RpcError> {

@@ -68,6 +68,49 @@ idle_secs = 15
 # a clickable library in the UI, so it works the same whether the operator is at
 # this machine or somewhere else: a browser file picker would hand back a file
 # from *their* machine, which the mixer cannot open.
+# The rules that stand in front of every take, whoever is calling. See
+# docs/reference/safety.md. Enforced in program.take, not in a plugin and not
+# in an agent's prompt, because a prompt is a suggestion.
+[safety]
+# A take within this window of the last one is refused with error -32003 and
+# data.retry_after_ms, and the message says how long is left. Not a standard:
+# no standards body publishes a minimum shot length, so this is a default an
+# operator is expected to move. A concert would use 1500; a church service
+# leaves it where it is.
+min_hold_ms = 8000
+# Takes allowed in any rolling minute, counted per core.
+max_takes_per_minute = 12
+# ITU-R BT.1702-3, which Ofcom rule 2.12 gives the force of a rule in the UK:
+# a cut that changes the picture's luminance by 20 candela per square metre or
+# more over more than a quarter of the frame is held 360 ms from the next one
+# (334 above 50 Hz), and at most three of those are allowed in any second.
+# This is the one hold time here that is not a matter of taste.
+flash_guard = true
+# What happens when whoever made the last take stops calling. The core raises
+# a critical alert and then does this. "alert" changes nothing, which is the
+# safe state for a programme that is already running; "hold" refuses further
+# takes until somebody calls; "slate" cuts to the slate; "fallback:cam1" cuts
+# to that source. Any call from any token clears it.
+on_operator_silence = { after_secs = 120, action = "alert" }
+
+# A token may carry its own numbers. A person at a desk may move them in either
+# direction; a token marked `agent = true` may only make them harder, so an
+# agent told to raise its own limits finds that it cannot.
+#
+# [[tokens]]
+# id = "vision-desk"
+# secret = "..."
+# scopes = ["read", "operate"]
+# safety = { min_hold_ms = 1500 }
+#
+# [[tokens]]
+# id = "studio-agent"
+# secret = "..."
+# scopes = ["read", "operate"]
+# agent = true
+# confirm = "required"
+# profile = "minimal"
+
 # Running a command line as a source is arbitrary code execution for anyone who
 # can reach the control port. Off unless you turn it on deliberately.
 [security]
@@ -326,3 +369,31 @@ queue_secs = 5.0
 #
 # [plugins.ndi]
 # discovery_interval_secs = 5
+
+# --- what a surface starts with --------------------------------------------
+# The `[ui]` table is the layout, the theme and the gallery mode a client opens
+# with. Nothing here changes what the core does: it is what `core.info` answers
+# so that the first page a volunteer sees is the one their setup chose, rather
+# than the one the last person to use that browser chose.
+#
+# `gmx preset apply <name>` writes this for you, into the runtime store beside
+# this file (`godwinmix.runtime.toml`), which takes precedence over what is
+# here. Set it by hand when you are not using a preset.
+#
+# `gallery` is what the input tiles show: "live" is the picture moving and costs
+# the multiview stream; "snapshot" is a still refreshed on a click; "icon" and
+# "label" cost nothing and are what a Pi class machine wants. Leave it out and
+# the page asks the machine, which is what `gmx doctor` proposes.
+#
+# `theme` is "dark", "light", "high-contrast", "system", or a name a preset
+# ships a stylesheet for.
+#
+# [ui]
+# theme = "dark"
+# gallery = "live"
+#
+# [ui.layout]
+# header = ["header"]
+# main = ["scenes", "multiview"]
+# sidebar = ["sources"]
+# footer = ["alerts", "outputs"]

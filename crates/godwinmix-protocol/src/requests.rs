@@ -22,16 +22,14 @@ use serde_json::{Map, Value};
 /// `program.take`: put a source on programme.
 #[derive(Debug, Clone, Default, Serialize, Deserialize, JsonSchema)]
 pub struct TakeRequest {
-    /// Id of the source to put on air. Null or omitted cuts to the slate.
+    /// Id of the source to put on air.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub source: Option<String>,
-    /// The scene to take, by name or by id. `source` is shorthand for a one
-    /// item full canvas scene and wins when both are given. With neither, the
-    /// armed scene (`scene.preview.set`) goes on air.
+    /// The scene to take, by name or by id. `source` wins when both are
+    /// given; with neither, the armed scene goes on air.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub scene: Option<String>,
-    /// Which transition to run. Transitions between scenes are Phase 6; this
-    /// build does `cut` and answers -32602 with the list for anything else.
+    /// `cut` in this build.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub transition: Option<String>,
     /// Programme running time to land the cut on, in milliseconds. Omit for
@@ -298,12 +296,56 @@ pub struct Ext {
     /// `event/source.position` for seekable sources.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub positions: bool,
-    /// Keys this build does not implement yet (`thumb`, `preview`,
-    /// `telemetry`, `agent`). Kept rather than refused so that a client
-    /// written against the full table still connects, and so the core can say
-    /// in the subscribe result which keys it ignored.
+    /// `event/telemetry`: a line of numbers per tick, at 1 to 10 per second.
+    /// This is what turns the probes on; nothing measures until it is here.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub telemetry: Option<TelemetryExt>,
+    /// `event/agent.state` when a threshold crosses or a state flips, with a
+    /// snapshot URL. `true` takes the defaults from 09 section 5 item 12.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub agent: Option<AgentExt>,
+    /// Keys this build does not implement yet (`thumb`, `preview`). Kept
+    /// rather than refused so that a client written against the full table
+    /// still connects, and so the core can say in the subscribe result which
+    /// keys it ignored.
     #[serde(flatten, default, skip_serializing_if = "Map::is_empty")]
     pub other: Map<String, Value>,
+}
+
+/// `ext.telemetry`. Accepts `false` to mean off, `true` for the default rate,
+/// or an object naming it.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(untagged)]
+pub enum TelemetryExt {
+    /// `"telemetry": true` or `false`.
+    Off(bool),
+    On {
+        /// Ticks per second, 1 to 10. The core clamps to that range.
+        #[serde(default)]
+        hz: Option<u32>,
+    },
+}
+
+/// `ext.agent`. `true` takes the default thresholds; an object moves them.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(untagged)]
+pub enum AgentExt {
+    /// `"agent": true` or `false`.
+    On(bool),
+    Thresholds {
+        /// Shot change score, 0 to 1. Default 0.3.
+        #[serde(default)]
+        shot: Option<f64>,
+        /// Fraction of the picture at black. Default 0.98.
+        #[serde(default)]
+        black: Option<f64>,
+        /// How long the picture has to be identical. Default 200.
+        #[serde(default)]
+        freeze_ms: Option<u64>,
+        /// How long the programme has to be quiet. Default 500.
+        #[serde(default)]
+        silence_ms: Option<u64>,
+    },
 }
 
 /// `ext.multiview`. Accepts `false` to mean off, or an object.
@@ -331,6 +373,21 @@ impl MultiviewExt {
 impl Ext {
     pub fn wants_multiview(&self) -> bool {
         self.multiview.as_ref().is_some_and(|m| m.wanted())
+    }
+
+    /// Ticks per second for `event/telemetry`, `None` when it was not asked
+    /// for. Clamped to the 1 to 10 the table names.
+    pub fn telemetry_hz(&self) -> Option<u32> {
+        match self.telemetry.as_ref()? {
+            TelemetryExt::Off(false) => None,
+            TelemetryExt::Off(true) => Some(1),
+            TelemetryExt::On { hz } => Some(hz.unwrap_or(1).clamp(1, 10)),
+        }
+    }
+
+    /// Whether `event/agent.state` was asked for. `"agent": false` is not.
+    pub fn wants_agent(&self) -> bool {
+        !matches!(self.agent, None | Some(AgentExt::On(false)))
     }
 
     /// Keys in `ext` this build does not act on, so `core.subscribe` can say
@@ -502,19 +559,40 @@ mod tests {
             serde_json::from_value(json!({ "ext": { "multiview": false } })).unwrap();
         assert!(!off.ext.wants_multiview());
 
-        // A client written against the whole table connects, and is told which
-        // keys this build did nothing with.
+        // Telemetry and the agent push, which this build does implement.
         let ahead: SubscribeRequest = serde_json::from_value(json!({
             "ext": { "telemetry": { "hz": 4 }, "agent": true }
         }))
         .unwrap();
-        let mut ignored = ahead.ext.unsupported();
-        ignored.sort();
-        assert_eq!(ignored, vec!["agent".to_string(), "telemetry".to_string()]);
+        assert!(ahead.ext.unsupported().is_empty());
+        assert_eq!(ahead.ext.telemetry_hz(), Some(4));
+        assert!(ahead.ext.wants_agent());
+        // The rate is clamped to the 1 to 10 the table names, and `true` is
+        // the default rate rather than an error.
+        let fast: SubscribeRequest =
+            serde_json::from_value(json!({ "ext": { "telemetry": { "hz": 99 } } })).unwrap();
+        assert_eq!(fast.ext.telemetry_hz(), Some(10));
+        let plain: SubscribeRequest =
+            serde_json::from_value(json!({ "ext": { "telemetry": true } })).unwrap();
+        assert_eq!(plain.ext.telemetry_hz(), Some(1));
+        // And off is off, not on with a default.
+        let none: SubscribeRequest =
+            serde_json::from_value(json!({ "ext": { "telemetry": false, "agent": false } }))
+                .unwrap();
+        assert_eq!(none.ext.telemetry_hz(), None);
+        assert!(!none.ext.wants_agent());
+
+        // A client written against a key this build does not have connects,
+        // and is told which keys it did nothing with.
+        let ahead: SubscribeRequest =
+            serde_json::from_value(json!({ "ext": { "thumb": { "fps": 2 } } })).unwrap();
+        assert_eq!(ahead.ext.unsupported(), vec!["thumb".to_string()]);
 
         // Nothing at all is the agent's subscription: no expensive stream runs.
         let bare: SubscribeRequest = serde_json::from_value(json!({})).unwrap();
         assert!(!bare.ext.wants_multiview());
         assert!(!bare.ext.meters && !bare.ext.tally && !bare.ext.positions);
+        assert_eq!(bare.ext.telemetry_hz(), None);
+        assert!(!bare.ext.wants_agent());
     }
 }

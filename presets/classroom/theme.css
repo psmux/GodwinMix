@@ -1,0 +1,25 @@
+/* daylight: the classroom preset's own theme. A room with the blinds open and a
+   projector on, so the page is light and the text is close to black. The live
+   red stays saturated because it still has to read across the room. */
+
+:root {
+  --bg: #f6f7f9;
+  --panel: #ffffff;
+  --panel2: #eef1f5;
+  --raise: #e3e8ef;
+  --overlay: rgba(255, 255, 255, 0.86);
+  --line: #cdd5df;
+  --line-soft: #e2e7ee;
+  --text: #0f1419;
+  --dim: #4d5765;
+  --faint: #7d8797;
+  --on-accent: #ffffff;
+  --live: #d80c1c;
+  --bad: #b8332a;
+  --ok: #128050;
+  --warn: #9b6000;
+  --accent: #1a5fbf;
+  --select: #1a5fbf;
+  --select-fill: rgba(26, 95, 191, 0.14);
+  --shadow: 0 8px 28px rgba(15, 20, 25, 0.16);
+}

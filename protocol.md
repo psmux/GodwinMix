@@ -66,6 +66,9 @@ Keys accepted on every method, handled before a method runs.
 | `pipeline.latency` | `GET /api/v1/pipeline/latency` | read |  | 1 | How much delay one pipeline is carrying, and which stage put it there. |
 | `pipeline.list` | `GET /api/v1/pipeline/list` | read |  | 1 | Every pipeline running right now, by the name the other pipeline methods accept. |
 | `pipeline.queues` | `GET /api/v1/pipeline/queues` | read |  | 1 | Every queue in one pipeline with how full it is, fullest first. A queue that stays full is where the trouble is. |
+| `preset.apply` | `POST /api/v1/preset/apply` | admin | yes | 1 | Put a preset on this core: its config, its scenes, its layout, its theme and its gallery mode. Pass dry_run to get the plan and write nothing. |
+| `preset.list` | `GET /api/v1/preset/list` | read |  | 1 | Every preset this core can apply: the six built in, plus anything installed beside the binary or under ~/.godwinmix/presets. |
+| `preset.save` | `POST /api/v1/preset/save` | admin |  | 1 | Turn this core's working setup into a preset directory somebody else can apply. Stream keys and the control token are replaced with placeholders. |
 | `program.get` | `GET /api/v1/program` | read |  | 1 | What is on air, the programme running time, and what revert would go back to. |
 | `program.golive` | `POST /api/v1/program/golive` | operate |  | 1 | One call to put a web page on air: add the page, add the destination, and take the page as soon as it renders. |
 | `program.history` | `GET /api/v1/program/history` | read |  | 1 | The last hundred takes, newest first, with the token that asked for each. |
@@ -125,6 +128,9 @@ Keys accepted on every method, handled before a method runs.
 | `source.remove` | `DELETE /api/v1/sources/{id}` | operate | yes | 1 | Remove a source. If it is on programme the mixer cuts to the slate first. |
 | `source.seek` | `POST /api/v1/sources/{id}/seek` | operate |  | 1 | Move a seekable source to a position. Answers with where it actually landed. |
 | `source.set` | `POST /api/v1/sources/{id}/set` | operate |  | 1 | Name and colour a source. Both live on the scene document, so every client, the tally and an agent see the same ones. |
+| `task.cancel` | `POST /api/v1/task/cancel` | operate |  | 1 | Ask a piece of long running work to stop. Cooperative: the answer says the request landed, not that the work has stopped yet. |
+| `task.get` | `GET /api/v1/task` | read |  | 1 | How a piece of long running work is getting on, and its answer once it has one. |
+| `task.list` | `GET /api/v1/task/list` | read |  | 1 | Every background job this core knows about, newest first. |
 
 ### Params and results
 
@@ -173,9 +179,7 @@ MCP tool `agent_state` in the `minimal` profile: readOnlyHint true, destructiveH
 ```json
 {
   "params": {
-    "additionalProperties": false,
-    "properties": {},
-    "type": "object"
+    "$ref": "#/$defs/AgentStateRequest"
   },
   "result": {
     "type": "object"
@@ -683,6 +687,57 @@ Every queue in one pipeline with how full it is, fullest first. A queue that sta
 {
   "params": {
     "$ref": "#/$defs/PipelineRequest"
+  },
+  "result": {
+    "type": "object"
+  }
+}
+```
+
+#### `preset.apply`
+
+Put a preset on this core: its config, its scenes, its layout, its theme and its gallery mode. Pass dry_run to get the plan and write nothing.
+
+MCP tool `apply_preset` in the `search` profile: readOnlyHint false, destructiveHint true, idempotentHint true.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/ApplyRequest"
+  },
+  "result": {
+    "$ref": "#/$defs/ApplyResult"
+  }
+}
+```
+
+#### `preset.list`
+
+Every preset this core can apply: the six built in, plus anything installed beside the binary or under ~/.godwinmix/presets.
+
+MCP tool `list_presets` in the `search` profile: readOnlyHint true, destructiveHint false, idempotentHint true.
+
+```json
+{
+  "params": {
+    "additionalProperties": false,
+    "properties": {},
+    "type": "object"
+  },
+  "result": {
+    "type": "object"
+  }
+}
+```
+
+#### `preset.save`
+
+Turn this core's working setup into a preset directory somebody else can apply. Stream keys and the control token are replaced with placeholders.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/SaveRequest"
   },
   "result": {
     "type": "object"
@@ -1643,6 +1698,60 @@ Name and colour a source. Both live on the scene document, so every client, the 
 }
 ```
 
+#### `task.cancel`
+
+Ask a piece of long running work to stop. Cooperative: the answer says the request landed, not that the work has stopped yet.
+
+MCP tool `task_cancel` in the `search` profile: readOnlyHint false, destructiveHint false, idempotentHint true.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/TaskRequest"
+  },
+  "result": {
+    "type": "object"
+  }
+}
+```
+
+#### `task.get`
+
+How a piece of long running work is getting on, and its answer once it has one.
+
+MCP tool `task_get` in the `search` profile: readOnlyHint true, destructiveHint false, idempotentHint true.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/TaskRequest"
+  },
+  "result": {
+    "$ref": "#/$defs/TaskView"
+  }
+}
+```
+
+#### `task.list`
+
+Every background job this core knows about, newest first.
+
+```json
+{
+  "params": {
+    "additionalProperties": false,
+    "properties": {},
+    "type": "object"
+  },
+  "result": {
+    "items": {
+      "$ref": "#/$defs/TaskView"
+    },
+    "type": "array"
+  }
+}
+```
+
 ## Events
 
 Subscribe with `core.subscribe`. Patterns match the part after `event/`, so `program.*` matches `event/program.took`. Every event carries `seq`; every batch ends with `event/flush`; a client that falls behind gets `event/resync`.
@@ -1655,10 +1764,13 @@ Subscribe with `core.subscribe`. Patterns match the part after `event/`, so `pro
 | `event/source.position` | `positions` | `source_position` | How far through a seekable source has got, a few times a second. Never sent for a camera, which has no position to report. |
 | `event/output.state` |  | `output_state_changed` | A destination connected, dropped or is retrying. |
 | `event/adbreak.changed` |  | `ad_break_changed` | An ad break was armed, went on air, or ended. |
+| `event/ui.changed` |  |  | The surface defaults changed: a preset was applied, or an operator set the layout, theme or gallery mode by hand. Nothing on air moves. |
 | `event/media.changed` |  | `media_changed` | A file in the library was uploaded, deleted, or its conversion moved on. |
 | `event/meters` | `meters` | `audio_level, source_audio_level` | Peak dBFS for the programme bus and every source, in one message at 10 per second. Replaces the two separate meter events on /ws. |
 | `event/tally` | `tally` |  | Which sources are on programme, on preview, or off. Derived by the core so a Stream Deck does not have to. |
 | `event/alert` |  | `alert` | Something an operator should see. Also written to the log and to the alert webhook. |
+| `event/telemetry` | `telemetry` |  | Numbers instead of a picture, up to ten times a second and under 200 bytes: the shot change score, the black ratio, a freeze flag, short term and integrated loudness, a silence flag and which sources are live. From cheap probes on the raw programme frames, which run only while a client is subscribed. |
+| `event/agent.state` | `agent` |  | The agent.state document, pushed when a telemetry threshold crosses or a take lands, with `why` naming which and a snapshot URL beside it. Edge triggered and at most one a second, so a picture that stays black is one message rather than one a tick. |
 | `event/multiview.layout` | `multiview` |  | How to read the binary frames that follow: the cells, and the layout id carried in every frame header. |
 | `event/multiview.frame` | `multiview` | `raw JPEG binary frame` | A mosaic frame, as a binary WebSocket frame rather than JSON: a 16 byte little endian header (seq u32, layout id u32, programme running time in milliseconds u64) then the JPEG. |
 | `event/resync` |  |  | This client fell behind and events were dropped. Re-subscribe for a fresh snapshot; nothing between from_seq and the new snapshot arrives. |

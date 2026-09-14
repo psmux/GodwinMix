@@ -214,6 +214,7 @@ fn the_table_matches_the_scopes_in_the_protocol_document() {
             "filter.remove",
             "media.remove",
             "output.remove",
+            "preset.apply",
             // A scene and an item are documents: deleting one cannot be undone
             // by repeating the call, so both are confirmed like the rest.
             "scene.item.filter.remove",
@@ -221,8 +222,10 @@ fn the_table_matches_the_scopes_in_the_protocol_document() {
             "scene.remove",
             "source.remove",
         ],
-        "the destructive set is the one 03 section 6 marks, plus filter.remove: taking a \
-         filter out changes the picture and cannot be undone by repeating it"
+        "the destructive set is the one 03 section 6 marks, plus filter.remove (taking a \
+         filter out changes the picture and cannot be undone by repeating it), \
+         preset.apply (it rewrites the operator's configuration file) and the two scene \
+         removals (a deleted composition does not come back)"
     );
 }
 
@@ -429,6 +432,8 @@ fn a_read_only_token_is_refused_before_the_handler_runs() {
         confirm: ConfirmPolicy::None,
         rehearsal: false,
         profile: Profile::Standard,
+        agent: false,
+        safety: None,
     };
     let reg = methods::registry();
     assert!(reader.has(reg.get("source.list").unwrap().scope));
@@ -478,6 +483,8 @@ fn the_legacy_paths_carry_the_scope_of_the_method_they_alias() {
         confirm: ConfirmPolicy::None,
         rehearsal: false,
         profile: Profile::Standard,
+        agent: false,
+        safety: None,
     };
     for (http, path) in [
         (Method::POST, "/api/take"),
@@ -490,6 +497,58 @@ fn the_legacy_paths_carry_the_scope_of_the_method_they_alias() {
     }
     assert!(reader.has(scope_of(Method::GET, "/api/status").1));
     assert!(reader.has(scope_of(Method::GET, "/api/agent/state").1));
+}
+
+/// The other half of the same rule, which the deprecated door used to miss: a
+/// token whose policy is `confirm = required` could remove a source, drop an
+/// output or shut the mixer down through `/api`, because the guard there
+/// checked the scope and the rehearsal flag and not the confirm policy. Those
+/// paths have no envelope to carry a confirm token, so the answer is to send
+/// the caller to the versioned route rather than to invent a round trip they
+/// cannot complete.
+#[test]
+fn a_confirm_required_token_cannot_destroy_anything_through_the_deprecated_door() {
+    let routes = rest::legacy_routes();
+    let registry = methods::registry();
+    let careful = Token {
+        id: "studio-agent".into(),
+        secret: "x".into(),
+        scopes: vec![Scope::Read, Scope::Operate, Scope::Admin],
+        confirm: ConfirmPolicy::Required,
+        rehearsal: false,
+        profile: Profile::Standard,
+        agent: true,
+        safety: None,
+    };
+    let easy = Token { confirm: ConfirmPolicy::None, ..careful.clone() };
+
+    let destructive = [
+        (Method::DELETE, "/api/sources/cam1", "source.remove"),
+        (Method::DELETE, "/api/outputs/yt", "output.remove"),
+        (Method::DELETE, "/api/media/clip.mp4", "media.remove"),
+        (Method::POST, "/api/shutdown", "core.shutdown"),
+    ];
+    for (http, path, method) in destructive {
+        let (route, _) = rest::resolve(&routes, &http, path).expect("a legacy route");
+        assert_eq!(route.method, method);
+        let def = registry.get(route.method).unwrap();
+        assert!(def.destructive, "{method} should be marked destructive");
+        assert!(careful.has(def.scope), "the scope is not what is refusing this");
+
+        let refusal = super::legacy_refusal(&careful, def, path)
+            .unwrap_or_else(|| panic!("{path} let a confirm-required token through"));
+        assert!(refusal.contains("/api/v1"), "the refusal has to name the way through: {refusal}");
+        assert!(refusal.contains(method), "{refusal}");
+        // A token that needs no confirmation is not affected.
+        assert!(super::legacy_refusal(&easy, def, path).is_none(), "{path}");
+    }
+
+    // And nothing that is not destructive is refused.
+    for (http, path) in [(Method::POST, "/api/take"), (Method::GET, "/api/status")] {
+        let (route, _) = rest::resolve(&routes, &http, path).unwrap();
+        let def = registry.get(route.method).unwrap();
+        assert!(super::legacy_refusal(&careful, def, path).is_none(), "{path}");
+    }
 }
 
 // --- the pieces the legacy handlers still lean on --------------------------

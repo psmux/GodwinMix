@@ -16,6 +16,9 @@ Start here if you have never run it.
 
 * [Your first stream in five minutes, with Docker](tutorials/first-stream-docker.md)
 * [Your first stream with the desktop app](tutorials/first-stream-desktop.md)
+* [Your first plugin](tutorials/your-first-plugin.md)
+* [Your first stream with a preset](tutorials/first-stream-with-a-preset.md), the
+  church path from install to on air
 * [Your first plugin](tutorials/your-first-plugin.md) (planned; the page says what is missing)
 
 ## How to
@@ -25,20 +28,34 @@ Start here if you have never run it.
 * [Run it on a Raspberry Pi](how-to/raspberry-pi.md)
 * [Choose a hardware encoder](how-to/choose-a-hardware-encoder.md)
 * [Roll an ad break](how-to/ad-breaks.md)
+* [Run the terminal UI](how-to/terminal-ui.md)
 * [Add a theme](how-to/add-a-theme.md) (planned)
 * [Write a preset](how-to/write-a-preset.md) (planned)
+* [Add a theme](how-to/add-a-theme.md)
+* [Make a preset](how-to/make-a-preset.md)
+* [Make a custom build](how-to/custom-build.md)
 * [Upgrade from LiveboxMix](how-to/upgrade-from-liveboxmix.md)
+* [Write a UI of your own](how-to/write-a-ui.md)
 * [Run the smoke test](how-to/smoke-test.md)
 * [Embed the engine in your own program](how-to/embed-the-engine.md)
+* [Write a source plugin in Rust](how-to/write-a-source-plugin.md)
 
 ## Reference
 
 * [The HTTP API](reference/http-api.md)
+* [Safety: the minimum hold, the rate limit, the flash guard](reference/safety.md)
+* [`agent.state`, both formats and their sizes](reference/agent-state.md)
+* [Tasks: work that outlives the call that started it](reference/tasks.md)
 * [The command line](reference/cli.md)
+* [The keyboard](reference/keyboard.md)
 * [Configuration, every key](reference/configuration.md)
+* [Presets, every manifest key and the merge rules](reference/presets.md)
 * [Sources](reference/sources.md)
 * [Web page sources](reference/web-page-sources.md)
 * [The generated protocol reference](reference/protocol.md)
+* [The plugin manifest](reference/plugin-manifest.md)
+* [The plugin protocol](reference/plugin-protocol.md)
+* [The client libraries](reference/clients.md)
 
 ## Explanation
 

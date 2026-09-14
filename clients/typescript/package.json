@@ -1,0 +1,36 @@
+{
+  "name": "@godwinmix/client",
+  "version": "1.0.0",
+  "description": "Client for the GodwinMix control protocol: connect, subscribe, a typed state store, typed calls, the multiview frame decoder, MJPEG and WHEP helpers and a schema to form reader",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/psmux/modulargodwinmix.git",
+    "directory": "clients/typescript"
+  },
+  "keywords": ["video", "mixer", "broadcast", "jsonrpc", "websocket", "godwinmix"],
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": ["dist", "README.md"],
+  "sideEffects": false,
+  "scripts": {
+    "generate": "python3 ../gen/generate.py --lang ts",
+    "build": "tsc -p tsconfig.json",
+    "test": "node --test \"test/*.test.ts\"",
+    "e2e": "./e2e/run.sh",
+    "prepack": "npm run build"
+  },
+  "devDependencies": {
+    "typescript": "^5.8.0"
+  }
+}

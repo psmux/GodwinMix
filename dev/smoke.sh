@@ -237,6 +237,120 @@ if [[ $DOWN -eq 1 ]]; then ok; else bad "gmx_multiview_subscribers stuck at ${SU
 step "and the log says the mosaic was torn down"
 if grep -qi "multiview\|mosaic" "$LOG"; then ok; else bad "nothing in the log about the mosaic"; fi
 
+# --- presets ----------------------------------------------------------------
+#
+# The volunteer's install, on a directory that has nothing in it: the plan
+# first, then the real thing, then a core started from what it wrote.
+
+PWORK="$WORK/preset"
+mkdir -p "$PWORK"
+
+step "gmx preset list names the six official presets"
+LISTED="$("$GMX" preset list --json 2>"$WORK/preset.log" | python3 -c 'import json,sys; print(",".join(sorted(r["name"] for r in json.load(sys.stdin) if r["official"])))')"
+if [[ "$LISTED" == "broadcast,church,classroom,default,esports,headless-agent" ]]; then
+    ok
+else
+    bad "listed ${LISTED:-nothing}"
+fi
+
+step "preset apply --dry-run names the camera plugin"
+"$GMX" preset apply church --dry-run --config "$PWORK/godwinmix.toml" >"$WORK/dry.log" 2>&1
+if grep -q "MISSING  camera" "$WORK/dry.log" && [[ ! -f "$PWORK/godwinmix.toml" ]]; then
+    ok
+else
+    bad "$(tail -3 "$WORK/dry.log")"
+fi
+
+step "and nothing else in the plan is wrong"
+if grep -qiE "error|does not (load|apply|resolve|validate)" "$WORK/dry.log"; then
+    bad "$(grep -iE -m 2 'error|does not' "$WORK/dry.log")"
+else
+    ok
+fi
+
+step "preset apply writes config, scenes and [ui]"
+"$GMX" preset apply church --config "$PWORK/godwinmix.toml" >"$WORK/apply.log" 2>&1
+if [[ -f "$PWORK/godwinmix.toml" ]] && [[ -f "$PWORK/godwinmix.scenes.json" ]] \
+    && grep -q '^\[ui\]' "$PWORK/godwinmix.runtime.toml"; then
+    ok
+else
+    bad "$(tail -3 "$WORK/apply.log")"
+fi
+
+step "the preset's own comments came with its config"
+if grep -q "# The church preset" "$PWORK/godwinmix.toml"; then ok; else bad "the comments were lost"; fi
+
+step "applying it twice does not double the sources"
+BEFORE="$(grep -c '^\[\[sources\]\]' "$PWORK/godwinmix.toml")"
+"$GMX" preset apply church --config "$PWORK/godwinmix.toml" >>"$WORK/apply.log" 2>&1
+AFTER="$(grep -c '^\[\[sources\]\]' "$PWORK/godwinmix.toml")"
+if [[ "$BEFORE" == "$AFTER" ]]; then ok; else bad "$BEFORE sources became $AFTER"; fi
+
+step "a core starts from what the preset wrote"
+PPORT="$(python3 -c 'import socket;s=socket.socket();s.bind(("127.0.0.1",0));print(s.getsockname()[1]);s.close()')"
+python3 - "$PWORK/godwinmix.toml" "$PPORT" <<'PYEOF'
+import re, sys
+path, port = sys.argv[1], sys.argv[2]
+text = open(path).read()
+open(path, "w").write(re.sub(r'bind = "[^"]*"', f'bind = "127.0.0.1:{port}"', text))
+PYEOF
+"$REPO/target/debug/godwinmix" --config "$PWORK/godwinmix.toml" >"$WORK/preset-core.log" 2>&1 &
+PRESET_PID=$!
+PUP=0
+for _ in $(seq 1 80); do
+    if curl -fsS "http://127.0.0.1:$PPORT/api/v1/core/info" >"$WORK/pinfo.json" 2>/dev/null; then PUP=1; break; fi
+    sleep 0.25
+done
+if [[ $PUP -eq 1 ]]; then ok; else bad "the core did not come up: $(tail -3 "$WORK/preset-core.log")"; fi
+
+step "core.info carries the preset's theme and gallery"
+UI="$(python3 -c 'import json,sys; d=json.load(open(sys.argv[1])).get("ui") or {}; print(d.get("preset"), d.get("theme"), d.get("gallery"), len(d.get("layout") or {}))' "$WORK/pinfo.json" 2>/dev/null)"
+if [[ "$UI" == "church calm icon 4" ]]; then ok; else bad "core.info ui is '${UI:-absent}'"; fi
+
+step "the preset's theme is served over HTTP"
+if curl -fsS "http://127.0.0.1:$PPORT/presets/church/theme.css" | grep -q -- "--live"; then
+    ok
+else
+    bad "no stylesheet at /presets/church/theme.css"
+fi
+
+step "ctl status: the preset's sources and outputs"
+GODWINMIX_URL="http://127.0.0.1:$PPORT" "$GMX" ctl status >"$WORK/pstatus.log" 2>&1
+if grep -q "cam-wide" "$WORK/pstatus.log" && grep -q "youtube" "$WORK/pstatus.log"; then
+    ok
+else
+    bad "$(tr '\n' '; ' <"$WORK/pstatus.log")"
+fi
+
+step "preset.apply over the API returns the plan"
+APPLIED="$(curl -fsS -X POST "http://127.0.0.1:$PPORT/api/v1/preset/apply" \
+    -H 'content-type: application/json' -d '{"name":"church","dry_run":true}' \
+    | python3 -c 'import json,sys; r=json.load(sys.stdin); print(r["dry_run"], len(r["plan"]["steps"]))' 2>/dev/null)"
+if [[ "$APPLIED" == "True 3" ]]; then ok; else bad "preset.apply answered '${APPLIED:-nothing}'"; fi
+
+step "preset save writes one the loader reads back"
+"$GMX" preset save my-church --config "$PWORK/godwinmix.toml" --out "$PWORK/mine" >"$WORK/save.log" 2>&1
+if "$GMX" preset show "$PWORK/mine" --config "$PWORK/second.toml" >"$WORK/show.log" 2>&1 \
+    && grep -q "YOUR-STREAM-KEY" "$PWORK/mine/config/godwinmix.toml" \
+    && ! grep -q "token = \"" "$PWORK/mine/config/godwinmix.toml"; then
+    ok
+else
+    bad "$(tail -3 "$WORK/save.log") $(tail -3 "$WORK/show.log")"
+fi
+
+step "gmx build refuses to bundle a copyleft codec entry"
+"$GMX" build --preset church --name "SmokeMix" --out "$PWORK/build" --no-binary >"$WORK/build2.log" 2>&1
+if grep -q "copyleft" "$WORK/build2.log" \
+    && [[ -f "$PWORK/build/tauri.conf.json" ]] \
+    && ! grep -q "GPL-2.0" "$PWORK/build/codecs.toml"; then
+    ok
+else
+    bad "$(tail -3 "$WORK/build2.log")"
+fi
+
+kill "$PRESET_PID" 2>/dev/null
+wait "$PRESET_PID" 2>/dev/null
+
 # --- the clients ------------------------------------------------------------
 
 step "gmx ctl status"

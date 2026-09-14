@@ -1,7 +1,13 @@
 # The church preset: a Sunday service with two cameras, lyrics and slides,
 # going to YouTube and Facebook at the same time.
 #
-# Everything a volunteer has to change is in the first twenty lines.
+# Everything a volunteer has to change is in the first thirty lines.
+#
+# The two cameras are placeholders you can put on air today: they show a test
+# pattern so the picture moves and the stream is real while you set the rest
+# up. `gmx plugin add camera` replaces them with the real thing when the camera
+# plugin is installed; change `type` to "camera/source" and put the device in
+# `params` and nothing else in this file moves.
 
 [canvas]
 width = 1920
@@ -25,6 +31,16 @@ fps = 8
 jpeg_quality = 60
 include_program = true
 
+# The gallery starts on icons for this preset, so the tiles cost nothing and
+# the machine at the back of the hall has its cores for the encoder. Snapshots
+# are what the tiles fall back to when somebody wants a look.
+[snapshot]
+enabled = true
+default_width = 320
+min_interval_secs = 5
+max_width = 1280
+idle_secs = 15
+
 [media]
 dir = "media"
 
@@ -37,24 +53,26 @@ bind = "0.0.0.0:8080"
 decode = "auto"
 encode = "auto"
 
-# The two cameras, by their NDI names. `gmx ctl device list` prints every NDI
-# sender on the network, and these are the names it shows.
+# The two cameras. Until `gmx plugin add camera` has run these are test
+# patterns, which means the service can go out today and the cameras can be
+# sorted out next week.
 [[sources]]
 id = "cam-wide"
 name = "Wide"
-type = "ndi/source"
-uri = "ndi://CAM 1 (Wide)"
-params = { name = "CAM 1 (Wide)" }
+type = "test/source"
+uri = "test://smpte"
+params = { uri = "test://smpte" }
 
 [[sources]]
 id = "cam-pulpit"
 name = "Pulpit"
-type = "ndi/source"
-uri = "ndi://CAM 2 (Pulpit)"
-params = { name = "CAM 2 (Pulpit)" }
+type = "test/source"
+uri = "test://ball"
+params = { uri = "test://ball" }
 
 # The lyrics page. Any presentation program with a web output works here:
-# point this at its address.
+# point this at its address. A transparent background is what makes the words
+# sit over the picture rather than replace it.
 [[sources]]
 id = "lyrics"
 name = "Lyrics"
@@ -62,12 +80,14 @@ type = "browser/source"
 uri = "web+http://127.0.0.1:8000/lyrics"
 params = { url = "http://127.0.0.1:8000/lyrics", superimpose = "auto" }
 
+# The slides. A file on this machine, in the media directory above. Drop a new
+# one onto the page on a Saturday and it is there on Sunday.
 [[sources]]
 id = "slides"
 name = "Slides"
-type = "browser/source"
-uri = "web+http://127.0.0.1:8000/slides"
-params = { url = "http://127.0.0.1:8000/slides", superimpose = "auto" }
+type = "file/source"
+uri = "media/slides.mp4"
+params = { uri = "media/slides.mp4" }
 
 [[outputs]]
 id = "youtube"
