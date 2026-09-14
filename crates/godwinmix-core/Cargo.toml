@@ -9,6 +9,10 @@ repository.workspace = true
 
 [dependencies]
 godwinmix-protocol = { workspace = true }
+# The tier 2 host: the launch plan, the JSON lines channel, the handshake, the
+# lifecycle and the budgets. No GStreamer, no server, no runtime of its own; it
+# is the half of a sidecar that is not a pipeline. See `plugin/host/`.
+godwinmix-host = { workspace = true }
 
 gstreamer = { workspace = true }
 gstreamer-video = { workspace = true }

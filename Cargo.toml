@@ -33,6 +33,7 @@ repository = "https://github.com/psmux/godwinmix"
 [workspace.dependencies]
 godwinmix-protocol = { path = "crates/godwinmix-protocol", version = "0.2.0" }
 godwinmix-core = { path = "crates/godwinmix-core", version = "0.2.0" }
+godwinmix-host = { path = "crates/godwinmix-host", version = "0.2.0" }
 
 gstreamer = "0.24"
 gstreamer-video = "0.24"
