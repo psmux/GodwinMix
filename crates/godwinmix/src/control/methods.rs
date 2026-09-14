@@ -26,7 +26,7 @@ mod preview;
 mod plugins;
 pub mod presets;
 mod program;
-mod scenes;
+pub(crate) mod scenes;
 mod sources;
 mod tasks;
 

@@ -1422,7 +1422,7 @@ EXT_KEYS = {
     "tally": {"value": 'true', "implemented": True},
     "positions": {"value": 'true', "implemented": True},
     "thumb": {"value": '{fps}', "implemented": False},
-    "preview": {"value": '{fps, width} or "full"', "implemented": False},
+    "preview": {"value": '{fps, width} or "full"', "implemented": True},
     "telemetry": {"value": '{hz: 1..10}', "implemented": False},
     "agent": {"value": 'true or thresholds', "implemented": False},
 }

@@ -142,6 +142,15 @@ pub struct Engine {
     pub plugins: Arc<godwinmix_core::plugin::supervisor::Supervisor>,
 }
 
+/// Tell the mixer what the armed scene is, so a preview compositor draws it.
+///
+/// Here rather than beside `scene.preview.set` because the stream handlers
+/// need it too: opening `/mjpeg/preview` is what builds the preview, and it
+/// has to know what to draw before the first frame.
+pub fn push_preview(app: &AppState) {
+    methods::scenes::edit::push_preview_for(app);
+}
+
 impl AppState {
     /// Everything the control plane holds, worked out from the config once.
     pub fn new(cfg: &Config, engine: Engine, rehearsal: bool) -> Self {

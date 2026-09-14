@@ -859,6 +859,9 @@ pub struct Mixer {
     /// Set for the one call to `apply_visibility` that follows a geometry
     /// command with a duration, so the pads are eased rather than jumped.
     ramp: Option<Duration>,
+    /// The armed scene, in canvas pixels, as the control plane last said. The
+    /// preview compositor draws these when one exists.
+    preview_cells: Vec<crate::multiview::preview::Cell>,
 }
 
 /// A scene as the compositor has it: a name to report and the placements that
@@ -1415,6 +1418,7 @@ impl Mixer {
             pool,
             program_scene: None,
             ramp: None,
+            preview_cells: Vec::new(),
         };
         Ok((mixer, handle, rx, bus_rx))
     }
@@ -4027,6 +4031,7 @@ impl Mixer {
                     .context("attaching the programme return branch for the mosaic")?;
                 info!(?shape, "multiview built for a subscriber");
             }
+            Demand::Preview => return self.preview_demand_now(),
             Demand::Teardown => {
                 // Decided on another thread, checked again here: this is the
                 // one place where the count and the pipeline are both in hand.
@@ -4038,7 +4043,56 @@ impl Mixer {
                 self.drop_mosaic()
             }
         }
+        // The preview lives in the mosaic's pipeline, so a mosaic that has
+        // just been built or rebuilt has to be told what is armed.
+        self.preview_demand_now()
+    }
+
+    /// Reconcile the preview compositor against what is subscribed.
+    ///
+    /// One function for build, rebuild and teardown, because the mixer thread
+    /// is the only place where the subscriber count and the pipeline are both
+    /// in hand: it looks at both and makes them agree, rather than trusting a
+    /// verb decided somewhere else a moment ago.
+    fn preview_demand_now(&mut self) -> Result<()> {
+        let wanted = self.mv.preview_wanted(&self.canvas);
+        let Some(mv) = self.multiview.as_mut() else {
+            // No mosaic, so there is nowhere for a preview to live. The demand
+            // that built the mosaic is behind this one and will come back here.
+            self.mv.mark_preview_built(None);
+            return Ok(());
+        };
+        match wanted {
+            Some(shape) => {
+                mv.preview_on(shape, self.mv.preview_publisher())
+                    .context("building the preview compositor")?;
+                self.mv.mark_preview_built(Some(shape));
+                let cells = self.preview_cells.clone();
+                mv.apply_preview(&self.canvas, &cells).context("drawing the armed scene")?;
+                info!(?shape, items = cells.len(), "preview composited for a subscriber");
+            }
+            None => {
+                mv.preview_off();
+                self.mv.mark_preview_built(None);
+            }
+        }
         Ok(())
+    }
+
+    /// What the armed scene is, for the preview compositor to draw.
+    ///
+    /// Pushed by the control plane, because the scene document lives in the
+    /// scene server and the mixer has never seen one. Held whether or not a
+    /// preview exists, so arming a scene before anybody subscribes costs one
+    /// `Vec` and nothing else.
+    pub fn set_preview_cells(&mut self, cells: Vec<crate::multiview::preview::Cell>) {
+        self.preview_cells = cells;
+        let cells = self.preview_cells.clone();
+        if let Some(mv) = self.multiview.as_mut() {
+            if let Err(e) = mv.apply_preview(&self.canvas, &cells) {
+                warn!(?e, "the armed scene could not be drawn in the preview");
+            }
+        }
     }
 
     /// What the control plane holds to open a preview or monitoring stream.
@@ -4073,6 +4127,7 @@ impl Mixer {
                 let _ = reply.send(self.open_local_preview(&target));
             }
             P::CloseLocal { target } => self.close_local_preview(&target),
+            P::Scene { cells } => self.set_preview_cells(cells),
         }
     }
 
@@ -4803,9 +4858,24 @@ mod tests {
     /// asked for scenes. Nothing here is a double: the sources are real
     /// pipelines producing real frames into the real compositor.
     async fn with_sources(ids: &[&str]) -> Mixer {
+        with_sources_cfg(ids, programme_config(crate::config::Accel::Software)).await
+    }
+
+    /// The same, with the mosaic turned on, for the tests that need somewhere
+    /// for a preview to live.
+    async fn with_sources_and_mosaic(ids: &[&str]) -> Mixer {
+        let mut cfg = programme_config(crate::config::Accel::Software);
+        cfg.multiview.enabled = true;
+        cfg.multiview.width = 320;
+        cfg.multiview.height = 180;
+        cfg.multiview.fps = 8;
+        cfg.multiview.linger_secs = 0;
+        with_sources_cfg(ids, cfg).await
+    }
+
+    async fn with_sources_cfg(ids: &[&str], cfg: crate::config::Config) -> Mixer {
         let _ = gst::init();
-        let (mut mix, _handle, _cmds, _bus) =
-            Mixer::build(programme_config(crate::config::Accel::Software)).expect("mixer builds");
+        let (mut mix, _handle, _cmds, _bus) = Mixer::build(cfg).expect("mixer builds");
         mix.start().expect("the programme starts");
         for (i, id) in ids.iter().enumerate() {
             let pattern = ["smpte", "ball", "snow", "red", "green", "blue", "checkers-1", "bar"]
@@ -5271,6 +5341,87 @@ mod tests {
         );
         assert_eq!(mix.pool.misses(), 0, "an animated layout change relinked the graph");
         let _ = before;
+        mix.shutdown();
+    }
+
+    /// The armed scene is composited in the multiview pipeline, and a preview
+    /// that falls over cannot reach air.
+    ///
+    /// The third isolation boundary in the README, measured rather than
+    /// asserted: the preview's whole branch is taken to NULL with buffers
+    /// still arriving at its pads, and what is watched is the interval between
+    /// consecutive frames on the encoder's own sink pad.
+    #[tokio::test(flavor = "multi_thread")]
+    #[ignore = "builds a mosaic and a preview and runs for several seconds"]
+    async fn killing_the_preview_branch_leaves_the_programme_untouched() {
+        let mut mix = with_sources_and_mosaic(&["cam1", "cam2"]).await;
+        let canvas = mix.canvas.clone();
+        let frame = canvas.frame_duration().nseconds();
+        mix.take_scene(scene("a", vec![Placement::full_canvas("cam1".into(), &canvas)]), None)
+            .expect("something on air");
+
+        // The mosaic first, because the preview lives in its pipeline, then
+        // the preview, exactly as a subscriber's demand would do it.
+        let sub = mix.mv.subscribe_preview(crate::multiview::PreviewRequest {
+            fps: 8,
+            width: 320,
+            full: false,
+        });
+        let shape = mix.mv.wanted().expect("a preview subscriber wants a mosaic too");
+        mix.multiview_demand(DemandAt { demand: Demand::Build(shape), generation: mix.mv.generation() })
+            .expect("building the mosaic");
+        mix.set_preview_cells(vec![
+            crate::multiview::preview::Cell {
+                source: "cam1".into(),
+                x: 0,
+                y: 0,
+                width: canvas.width / 2,
+                height: canvas.height / 2,
+                alpha: 1.0,
+            },
+            crate::multiview::preview::Cell {
+                source: "cam2".into(),
+                x: canvas.width / 2,
+                y: 0,
+                width: canvas.width / 2,
+                height: canvas.height / 2,
+                alpha: 1.0,
+            },
+        ]);
+        let drawn = mix.multiview.as_ref().map(|mv| mv.preview_drawn()).unwrap_or(0);
+        assert_eq!(drawn, 2, "the armed scene's two items must be composited");
+        assert!(
+            mix.mv.preview_built().is_some(),
+            "asking for a preview must have built one"
+        );
+
+        let gaps = Arc::new(Gaps::default());
+        gaps.watch(&mix.venc_tee.static_pad("sink").expect("the encoder tee has a sink pad"));
+        gaps.wait_for(20).await;
+        gaps.largest.store(0, Ordering::Relaxed);
+
+        // Kill it mid stream, with its inputs still pushing.
+        assert!(
+            mix.multiview.as_ref().expect("a mosaic").break_preview_for_a_test(),
+            "there was no preview to break"
+        );
+        gaps.wait_for(30).await;
+        let largest = gaps.largest.load(Ordering::Relaxed);
+        println!(
+            "preview isolation: the preview branch killed mid stream, programme's largest \
+             interval {:.1} ms, one frame is {:.1} ms",
+            largest as f64 / 1e6,
+            frame as f64 / 1e6
+        );
+        assert!(
+            largest <= frame * 2,
+            "killing the preview cost the programme {largest} ns, more than two frames ({} ns)",
+            frame * 2
+        );
+        // And the programme is still what it was.
+        assert_eq!(mix.status().program.as_deref(), Some("cam1"));
+
+        drop(sub);
         mix.shutdown();
     }
 

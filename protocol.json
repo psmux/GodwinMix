@@ -4689,9 +4689,9 @@
       "value": "{fps}"
     },
     {
-      "implemented": false,
+      "implemented": true,
       "key": "preview",
-      "turns_on": "the preview scene",
+      "turns_on": "the armed scene, composited in the multiview pipeline from the per source thumbnails and published to /mjpeg/preview, scene.preview.frame and its own cell on the mosaic. \"full\" composites it at the canvas's own size while a client is subscribed, so a designer's handles land on real coordinates",
       "value": "{fps, width} or \"full\""
     },
     {
