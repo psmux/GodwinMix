@@ -1,0 +1,20 @@
+# An ease in and out crossfade, as a WebAssembly component.
+
+[plugin]
+name = "wasm-ease"
+version = "0.2.0"
+api = 1
+description = "A crossfade that starts and ends gently, answered once as a curve the core binds to the pads"
+license = "Apache-2.0"
+authors = ["GodwinMix"]
+platforms = ["linux-x86_64", "linux-aarch64", "macos-aarch64", "macos-x86_64", "windows-x86_64"]
+placements = ["wasm"]
+process = "singleton"
+
+[run]
+wasm = "plugin.wasm"
+
+[[provides]]
+kind = "transition"
+id = "ease"
+settings = "schemas/ease.json"

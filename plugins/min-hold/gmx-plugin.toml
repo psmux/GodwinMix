@@ -1,0 +1,38 @@
+# A minimum hold, as a WebAssembly component. Tier W: it runs inside the core,
+# it touches no media, and it can be stopped mid call.
+
+[plugin]
+name = "min-hold"
+version = "0.2.0"
+api = 1
+description = "Refuse a take that comes too soon after the last one, with the time left in the reason"
+license = "Apache-2.0"
+authors = ["GodwinMix"]
+# A component is the same bytes everywhere, so every platform is listed and
+# none of them has a binary.
+platforms = ["linux-x86_64", "linux-aarch64", "macos-aarch64", "macos-x86_64", "windows-x86_64"]
+placements = ["wasm"]
+process = "singleton"
+
+[run]
+wasm = "plugin.wasm"
+
+[[provides]]
+kind = "service"
+id = "hold"
+capabilities = ["health"]
+settings = "schemas/hold.json"
+skill = "skills/hold/SKILL.md"
+
+[[tools]]
+name = "hold_state"
+description = "How long is left of the minimum hold before the next take will be allowed. Use before a take when a previous one just landed, so the take is not refused. Example: hold_state {} returns {window_ms: 8000, remaining_ms: 3200, refused: 1}."
+input = "schemas/tools/hold_state.json"
+output = "schemas/tools/hold_state.out.json"
+annotations = { readOnlyHint = true, destructiveHint = false, idempotentHint = true, openWorldHint = false }
+user_invocable = true
+model_invocable = true
+
+[hooks]
+"take.before" = { mode = "rpc", timeout_ms = 20 }
+"take.after" = { mode = "rpc" }
