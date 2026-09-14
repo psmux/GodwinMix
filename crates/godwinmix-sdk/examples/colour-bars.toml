@@ -1,0 +1,26 @@
+# The manifest for examples/colour-bars.rs. It is compiled into the example so
+# it runs from a checkout with nothing beside it; a real plugin ships this file
+# at its root as gmx-plugin.toml.
+
+[plugin]
+name = "colour-bars"
+version = "0.1.0"
+api = 1
+description = "Eight colour bars at the canvas caps, with an optional sideways drift. A test picture that costs almost nothing to draw."
+license = "Apache-2.0"
+authors = ["GodwinMix"]
+platforms = ["linux-x86_64", "linux-aarch64", "macos-aarch64", "macos-x86_64", "windows-x86_64"]
+placements = ["sidecar", "node"]
+process = "per-instance"
+
+[run]
+bin = { "linux-x86_64" = "bin/colour-bars", "linux-aarch64" = "bin/colour-bars", "macos-aarch64" = "bin/colour-bars", "macos-x86_64" = "bin/colour-bars", "windows-x86_64" = "bin/colour-bars.exe" }
+
+[[provides]]
+kind = "source"
+id = "source"
+media = { video = "raw", audio = "none", alpha = false, thumb = true }
+transports = ["container"]
+capabilities = ["restart-in-place", "health"]
+latency_ms = 0
+settings = "settings.json"
