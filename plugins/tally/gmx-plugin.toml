@@ -1,0 +1,37 @@
+[plugin]
+name = "tally"
+version = "0.2.0"
+api = 1
+description = "TSL UMD v5 tally: one lamp per source, over UDP or TCP, because tally lamps do not speak JSON"
+license = "Apache-2.0"
+authors = ["GodwinMix"]
+repository = "https://github.com/psmux/godwinmix"
+platforms = ["linux-x86_64", "linux-aarch64", "macos-aarch64", "macos-x86_64", "windows-x86_64"]
+placements = ["sidecar", "node"]
+process = "singleton"
+
+# Staged into bin/ by `dev/plugins.sh build`: a workspace member's target
+# directory sits above the plugin, and a manifest path may not climb out of the
+# plugin's own directory.
+[run]
+bin = { "linux-x86_64" = "bin/gmx-tally", "linux-aarch64" = "bin/gmx-tally", "macos-aarch64" = "bin/gmx-tally", "macos-x86_64" = "bin/gmx-tally", "windows-x86_64" = "bin/gmx-tally.exe" }
+
+[[provides]]
+kind = "service"
+id = "tally"
+settings = "schemas/tally.json"
+skill = "skills/tally/SKILL.md"
+capabilities = ["health"]
+
+[[tools]]
+name = "test_lamp"
+description = "Light one tally lamp for a moment so an engineer can see which index is which, without taking a source on air. Example: test_lamp {index: 0, colour: \"red\", hold_ms: 3000} lights UMD index 0 red for three seconds and then puts it out."
+input = "schemas/tools/test_lamp.json"
+output = "schemas/tools/test_lamp.out.json"
+annotations = { readOnlyHint = false, destructiveHint = false, idempotentHint = true, openWorldHint = true }
+user_invocable = true
+model_invocable = true
+
+[build]
+command = "cargo build --release -p gmx-tally"
+output = "bin/gmx-tally"

@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "explain result",
+  "description": "The decision and the sentence saying why.",
+  "type": "object",
+  "properties": {
+    "content": { "type": "array", "items": { "type": "object" } },
+    "structured_content": {
+      "type": "object",
+      "properties": {
+        "decision": { "type": "string", "enum": ["hold", "take"] },
+        "source": { "type": ["string", "null"] },
+        "why": { "type": "string" },
+        "uses_a_model": { "type": "boolean" }
+      }
+    }
+  },
+  "additionalProperties": true
+}

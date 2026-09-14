@@ -17,3 +17,4 @@ pub mod plugin;
 pub mod preset;
 pub mod scene;
 pub mod skill;
+pub mod ui;

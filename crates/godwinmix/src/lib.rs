@@ -260,6 +260,14 @@ enum Command {
         cmd: cli::plugin::Plugin,
     },
 
+    /// Start a whole UI against the running mixer. See `src/cli/ui.rs`.
+    ///
+    /// `gmx ui tui` runs the terminal UI; `gmx ui list` shows every surface
+    /// this machine can start. A surface is a plugin whose manifest says
+    /// `kind = "surface"`, and it talks the same public protocol as every
+    /// other client.
+    Ui(cli::ui::UiArgs),
+
     /// Break something on purpose and watch what the programme does.
     ///
     /// Refused on a core that is not in rehearsal unless `--i-am-sure`. See
@@ -447,6 +455,11 @@ pub async fn run() -> Result<()> {
             let url = url.or_else(|| config::env_var("URL")).unwrap_or_else(|| DEFAULT_URL.into());
             let token = token.or_else(|| config::env_var("TOKEN"));
             return cli::chaos::run(&url, token.as_deref(), cmd).await;
+        }
+        Some(Command::Ui(args)) => {
+            let url = args.url.clone().or_else(|| config::env_var("URL")).unwrap_or_else(|| DEFAULT_URL.into());
+            let token = args.token.clone().or_else(|| config::env_var("TOKEN"));
+            return cli::ui::run(&url, token.as_deref(), args);
         }
         Some(Command::Preset { cmd }) => {
             // Validating a preset's config asks each built in kind what its

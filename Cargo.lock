@@ -809,6 +809,36 @@ dependencies = [
 ]
 
 [[package]]
+name = "gmx-director"
+version = "0.2.0"
+dependencies = [
+ "godwinmix-client",
+ "godwinmix-sdk",
+ "serde_json",
+ "tokio",
+]
+
+[[package]]
+name = "gmx-osc"
+version = "0.2.0"
+dependencies = [
+ "godwinmix-client",
+ "godwinmix-sdk",
+ "serde_json",
+ "tokio",
+]
+
+[[package]]
+name = "gmx-tally"
+version = "0.2.0"
+dependencies = [
+ "godwinmix-client",
+ "godwinmix-sdk",
+ "serde_json",
+ "tokio",
+]
+
+[[package]]
 name = "gobject-sys"
 version = "0.21.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"

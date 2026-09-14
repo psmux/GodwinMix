@@ -290,3 +290,8 @@ jobs:
       - run: cd clients/typescript && npm test
       - run: cd clients/python && python3 -m unittest -q
       - run: bash examples/test-zero-dep.sh
+      # The two host specific integrations. Both run with nothing installed:
+      # they import the client by path and carry their own copy of the fake
+      # core, so neither needs a registry.
+      - run: cd integrations/companion && npm test
+      - run: cd integrations/streamdeck && npm test
