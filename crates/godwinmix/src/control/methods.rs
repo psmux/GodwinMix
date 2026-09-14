@@ -55,7 +55,7 @@ pub fn registry() -> Registry<Call> {
     crate::observe::register(&mut reg);
     // Other modules add their own here. One line each, and they land on
     // /rpc, /api/v1, protocol.json and the tool list together. See
-    // src/api/README.md.
+    // the README in `godwinmix-protocol`.
     reg
 }
 
