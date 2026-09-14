@@ -374,11 +374,15 @@ impl OutputSlot {
     }
 
     pub fn state(&self) -> OutputState {
+        // Two ways to be reconnecting and they mean the same thing to a
+        // client: the last attempt failed, or an earlier one did and this is
+        // not the first time round. An output that has never connected and
+        // never failed is still connecting.
         if self.connected.load(Ordering::Relaxed) {
             OutputState::Live
-        } else if self.failed.load(Ordering::Relaxed) {
-            OutputState::Reconnecting
-        } else if self.reconnects.load(Ordering::Relaxed) > 0 {
+        } else if self.failed.load(Ordering::Relaxed)
+            || self.reconnects.load(Ordering::Relaxed) > 0
+        {
             OutputState::Reconnecting
         } else {
             OutputState::Connecting
