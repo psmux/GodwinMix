@@ -90,14 +90,14 @@ impl CodecReport {
         };
         format!(
             "verified = [{{ platform = \"{}\", driver = \"fill in\", gstreamer = \"{}\", \
-             by = \"fill in\", date = \"{}\", report = \"{}{}/{} frames, {:.0}% of one core, {:.0} MB RSS\" }}]",
+             by = \"fill in\", date = \"{}\", report = \"{}{}/{} frames, {:.2} core at real time, {:.0} MB RSS\" }}]",
             self.platform,
             self.gstreamer,
             today(),
             psnr,
             self.frames_out,
             self.frames_in,
-            self.cpu_percent,
+            self.cpu_percent / 100.0,
             self.rss_mb,
         )
     }
@@ -119,10 +119,13 @@ impl CodecReport {
             s.push_str(&format!("  psnr      {avg:.1} dB average, {min:.1} dB worst frame\n"));
         }
         s.push_str(&format!(
-            "  cpu       {:.2} s over {:.1} s wall, {:.0}% of one core\n  rss       {:.0} MB peak (whole process)\n  result    {}\n",
+            "  cpu       {:.2} s for {:.0} s of media, {:.2} of one core at real time\n\
+             \x20 wall      {:.1} s (the test runs as fast as it can, not in real time)\n\
+             \x20 rss       {:.0} MB peak, whole process\n  result    {}\n",
             self.cpu_secs,
+            self.seconds,
+            self.cpu_percent / 100.0,
             self.wall_secs,
-            self.cpu_percent,
             self.rss_mb,
             if self.ok { "pass" } else { self.note.as_str() }
         ));
@@ -130,13 +133,23 @@ impl CodecReport {
     }
 }
 
+/// Today as `YYYY-MM-DD`, UTC. Written out rather than pulled in, because one
+/// date in one report is not worth a dependency. Civil from days, Howard
+/// Hinnant's algorithm.
 fn today() -> String {
-    // No date crate here for one line of output. Seconds since the epoch is
-    // unambiguous and the person pasting the report can write the date.
-    match std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH) {
-        Ok(d) => format!("epoch:{}", d.as_secs()),
-        Err(_) => "unknown".into(),
-    }
+    let Ok(d) = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH) else {
+        return "unknown".into();
+    };
+    let z = (d.as_secs() / 86_400) as i64 + 719_468;
+    let era = z.div_euclid(146_097);
+    let doe = z.rem_euclid(146_097);
+    let yoe = (doe - doe / 1460 + doe / 36_524 - doe / 146_096) / 365;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    let mp = (5 * doy + 2) / 153;
+    let day = doy - (153 * mp + 2) / 5 + 1;
+    let month = if mp < 10 { mp + 3 } else { mp - 9 };
+    let year = yoe + era * 400 + i64::from(month <= 2);
+    format!("{year:04}-{month:02}-{day:02}")
 }
 
 /// Run the round trip for one catalogue entry.
@@ -283,7 +296,7 @@ fn video_round_trip(spec: &Spec, seconds: f64, width: i32, height: i32, fps: i32
         psnr_db: avg,
         min_psnr_db: min,
         cpu_secs: cpu,
-        cpu_percent: if wall > 0.0 { cpu / wall * 100.0 } else { 0.0 },
+        cpu_percent: if seconds > 0.0 { cpu / seconds * 100.0 } else { 0.0 },
         rss_mb: after.1,
         wall_secs: wall,
         platform: super::select::current_platform(),
@@ -305,9 +318,6 @@ fn build_video_pipeline(
     let src = make("videotestsrc", "src")?;
     src.set_property("num-buffers", frames);
     src.set_property_from_str("pattern", "smpte");
-    // A moving overlay on the bars, so the encoder has motion to deal with and
-    // a frozen decoder cannot pass by returning the same picture every time.
-    crate::probe::set_bool(&src, "animation-mode", false);
     let caps = crate::caps::CanvasCaps::video_at(width, height, gst::Fraction::new(fps, 1));
     let src_caps = capsfilter("src-caps", &caps)?;
     let overlay = make("timeoverlay", "motion").ok();
@@ -560,7 +570,7 @@ fn audio_round_trip(
         psnr_db: None,
         min_psnr_db: None,
         cpu_secs: cpu,
-        cpu_percent: if wall > 0.0 { cpu / wall * 100.0 } else { 0.0 },
+        cpu_percent: if seconds > 0.0 { cpu / seconds * 100.0 } else { 0.0 },
         rss_mb: after.1,
         wall_secs: wall,
         platform: super::select::current_platform(),
@@ -691,8 +701,8 @@ fn one_second(cat: &Catalogue, id: &str) -> String {
         Ok(r) if r.ok => {
             let psnr = r.psnr_db.map(|p| format!(", psnr {p:.1} dB")).unwrap_or_default();
             format!(
-                "codec {id}: encodes here ({} frames in 1 s{}, {:.0}% of one core)",
-                r.frames_out, psnr, r.cpu_percent
+                "codec {id}: encodes here ({} frames in 1 s{}, {:.2} of one core at real time)",
+                r.frames_out, psnr, r.cpu_percent / 100.0
             )
         }
         Ok(r) => format!("codec {id}: elements load but the encode failed: {}", r.note),

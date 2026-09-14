@@ -253,8 +253,17 @@ pub fn set_float(el: &gst::Element, prop: &str, v: f64) {
 }
 
 pub fn set_bool(el: &gst::Element, prop: &str, v: bool) {
-    if writable_property(el, prop).is_some() {
+    let Some(pspec) = writable_property(el, prop) else {
+        return;
+    };
+    // The same name can be a boolean on one backend and an enum on the next.
+    // `zerolatency` is a gboolean on the old nvh264enc and the catalogue will
+    // meet a build where it is not, so coerce rather than panic.
+    let t = pspec.value_type();
+    if t == bool::static_type() {
         el.set_property(prop, v);
+    } else {
+        set_int(el, prop, v as i64);
     }
 }
 
