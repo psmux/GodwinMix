@@ -1,0 +1,39 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "WHIP endpoint",
+  "description": "The mixer runs the WHIP server. A browser needs nothing but this address to publish to it.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "port": {
+      "title": "Port",
+      "description": "The TCP port the endpoint's HTTP server listens on. 8889 is what mediamtx used, so an address already written down keeps working.",
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 65535,
+      "default": 8889,
+      "examples": [8889, 8890]
+    },
+    "bind": {
+      "title": "Interface",
+      "description": "0.0.0.0 listens on every interface. Give one address to listen on that one only.",
+      "type": "string",
+      "default": "0.0.0.0",
+      "examples": ["0.0.0.0", "127.0.0.1"]
+    },
+    "path": {
+      "title": "Path",
+      "description": "The part of the URL after the host, beginning with a slash. A publisher is given http://<this machine>:<port><path>.",
+      "type": "string",
+      "default": "/whip",
+      "examples": ["/whip", "/whip/guest"]
+    },
+    "stun_server": {
+      "title": "STUN server",
+      "description": "How the two ends learn their public addresses. stun://host:port. Leave empty on a local network, where it is not needed.",
+      "type": "string",
+      "default": "",
+      "examples": ["", "stun://stun.l.google.com:19302"]
+    }
+  }
+}

@@ -1,0 +1,20 @@
+# A library, not a plugin. The four network plugins (srt, whip, ingest, ndi)
+# all build a small GStreamer pipeline, watch its bus without blocking it, read
+# statistics out of an element whose field names change between versions, and
+# reconnect with a backoff. That is the whole of this crate. It carries no
+# gmx-plugin.toml and the loader never sees it.
+[package]
+name = "gmx-netkit"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Shared GStreamer plumbing for the GodwinMix network plugins"
+publish = false
+
+[dependencies]
+godwinmix-sdk = { path = "../../crates/godwinmix-sdk" }
+gstreamer = { workspace = true }
+glib = { workspace = true }
+serde_json = { workspace = true }

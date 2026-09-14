@@ -1,0 +1,63 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "WHEP source",
+  "description": "Which WebRTC stream to watch, and where to reach it from.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "endpoint": {
+      "title": "WHEP endpoint",
+      "description": "The URL of the stream to watch. It looks like https://example.com/whep/<stream>.",
+      "type": "string",
+      "default": "",
+      "examples": [
+        "",
+        "https://example.com/whep/guest"
+      ]
+    },
+    "token": {
+      "title": "Bearer token",
+      "description": "Sent as an Authorization: Bearer header. Leave empty for an endpoint that wants no authentication.",
+      "type": "string",
+      "format": "secret",
+      "default": "",
+      "examples": [
+        "",
+        "a-token-from-the-service"
+      ]
+    },
+    "stun_server": {
+      "title": "STUN server",
+      "description": "How the receiver learns its own public address. stun://host:port. Leave empty to use the element's default.",
+      "type": "string",
+      "default": "",
+      "examples": [
+        "",
+        "stun://stun.l.google.com:19302"
+      ]
+    },
+    "turn_server": {
+      "title": "TURN server",
+      "description": "A relay for when the two ends cannot reach each other directly. turn://user:password@host:port, or turns:// for TLS.",
+      "type": "string",
+      "format": "secret",
+      "default": "",
+      "examples": [
+        "",
+        "turn://user:password@turn.example.com:3478"
+      ]
+    },
+    "timeout_secs": {
+      "title": "Endpoint timeout",
+      "description": "How long to wait for the endpoint to answer the POST. 0 waits forever.",
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 300,
+      "default": 15,
+      "examples": [
+        15,
+        5
+      ]
+    }
+  }
+}

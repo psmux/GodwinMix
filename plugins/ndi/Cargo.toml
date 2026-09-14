@@ -1,0 +1,28 @@
+[package]
+name = "gmx-ndi"
+description = "The ndi plugin: NDI sources and outputs with the runtime loaded at run time and never linked, and mDNS discovery of every sender on the network"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[[bin]]
+name = "gmx-ndi"
+path = "src/main.rs"
+
+[dependencies]
+godwinmix-sdk = { path = "../../crates/godwinmix-sdk" }
+gmx-netkit = { path = "../netkit" }
+
+gstreamer = { workspace = true }
+serde_json = { workspace = true }
+
+# dlopen, portably. The NDI runtime's licence forbids redistribution, so this
+# plugin must build and run on a machine that has never seen it: nothing NDI is
+# linked at build time, and this crate is how the plugin asks at run time
+# whether the runtime is there. One small dependency with no transitive weight
+# beyond cfg-if, and the alternative is unsafe libc::dlopen with three
+# platform spellings.
+libloading = "0.8"

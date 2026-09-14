@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "add_publishers output",
+  "type": "object",
+  "properties": {
+    "add": {
+      "description": "Source ids that would be added, on a dry run.",
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "remove": {
+      "description": "Source ids that would be removed, on a dry run.",
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "publishers": {
+      "description": "Every publisher connected right now, by the source id it would take.",
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "changed": {
+      "description": "What was actually added, and what was removed, prefixed with a minus.",
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "failed": {
+      "description": "One line per source the core refused, with the reason.",
+      "type": "array",
+      "items": { "type": "string" }
+    }
+  }
+}

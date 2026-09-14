@@ -1,0 +1,21 @@
+[package]
+name = "gmx-whip"
+description = "The whip/output and whip/whep plugin: send the programme to a WHIP endpoint over WebRTC, and receive somebody else's stream over WHEP"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[[bin]]
+name = "gmx-whip"
+path = "src/main.rs"
+
+[dependencies]
+godwinmix-sdk = { path = "../../crates/godwinmix-sdk" }
+gmx-netkit = { path = "../netkit" }
+
+gstreamer = { workspace = true }
+glib = { workspace = true }
+serde_json = { workspace = true }

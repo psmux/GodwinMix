@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "NDI output",
+  "description": "The name this mixer announces its programme under on the network.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "name": {
+      "title": "Sender name",
+      "description": "What everybody else on the network sees this mixer called. Anything running NDI can then take the programme with no address to type.",
+      "type": "string",
+      "default": "GodwinMix",
+      "examples": ["GodwinMix", "Studio A Programme"]
+    }
+  }
+}

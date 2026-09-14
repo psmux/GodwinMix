@@ -1,0 +1,13 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "add_publishers input",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "dry_run": {
+      "description": "Answer with the sources that would be added and removed, and change nothing.",
+      "type": "boolean",
+      "default": false
+    }
+  }
+}

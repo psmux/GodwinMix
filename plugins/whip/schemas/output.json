@@ -1,0 +1,68 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "WHIP output",
+  "description": "Where to POST the programme, and what to do when the endpoint is not there.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "endpoint": {
+      "title": "WHIP endpoint",
+      "description": "The URL the service gave you. It looks like https://example.com/whip/<stream> and it is the only thing most services need.",
+      "type": "string",
+      "default": "",
+      "examples": ["", "https://example.com/whip/studio"]
+    },
+    "token": {
+      "title": "Bearer token",
+      "description": "Sent as an Authorization: Bearer header. Leave empty for an endpoint that wants no authentication.",
+      "type": "string",
+      "format": "secret",
+      "default": "",
+      "examples": ["", "a-token-from-the-service"]
+    },
+    "stun_server": {
+      "title": "STUN server",
+      "description": "How the sender learns its own public address. stun://host:port. Leave empty to use the element's default, which is usually enough on an ordinary network.",
+      "type": "string",
+      "default": "",
+      "examples": ["", "stun://stun.l.google.com:19302"]
+    },
+    "turn_server": {
+      "title": "TURN server",
+      "description": "A relay for when the two ends cannot reach each other directly, which is what a strict corporate firewall causes. turn://user:password@host:port, or turns:// for TLS.",
+      "type": "string",
+      "format": "secret",
+      "default": "",
+      "examples": ["", "turn://user:password@turn.example.com:3478"]
+    },
+    "timeout_secs": {
+      "title": "Endpoint timeout",
+      "description": "How long to wait for the endpoint to answer the POST. 0 waits forever.",
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 300,
+      "default": 15,
+      "examples": [15, 5]
+    },
+    "reconnect_first_ms": {
+      "title": "First reconnect wait",
+      "description": "How long to wait before dialling again the first time the endpoint drops. It doubles from here.",
+      "type": "integer",
+      "minimum": 100,
+      "maximum": 60000,
+      "default": 500,
+      "x-gmx-unit": "ms",
+      "examples": [500, 2000]
+    },
+    "reconnect_max_ms": {
+      "title": "Longest reconnect wait",
+      "description": "Where the doubling stops. Keep it short: an output that is down holds the core's outage buffer open, and that buffer is finite.",
+      "type": "integer",
+      "minimum": 100,
+      "maximum": 300000,
+      "default": 15000,
+      "x-gmx-unit": "ms",
+      "examples": [15000, 60000]
+    }
+  }
+}
