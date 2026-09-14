@@ -12,6 +12,7 @@
 //! `gmx`, because the short name is what an operator types and neither should
 //! be a copy of the other. `run` below is what both call.
 
+pub mod bench;
 pub mod caps;
 pub mod catalogue;
 pub mod config;
@@ -144,6 +145,13 @@ enum Command {
     /// doctor, logs, trace, dot and support-bundle. See `src/observe/`.
     #[command(flatten)]
     Observe(observe::cli::ObserveCmd),
+
+    /// Measure this machine's footprint and print the budget table.
+    ///
+    /// Every performance number GodwinMix publishes comes from here, with the
+    /// machine, the commit and the command that produced each row. See
+    /// `docs/explanation/footprint.md`.
+    Bench(bench::BenchArgs),
 }
 
 /// Run the conformance harness and print what it found.
@@ -202,6 +210,11 @@ pub async fn run() -> Result<()> {
             let url = url.or_else(|| config::env_var("URL")).unwrap_or_else(|| DEFAULT_URL.into());
             let token = token.or_else(|| config::env_var("TOKEN"));
             return ctl::run(&url, token.as_deref(), cmd).await;
+        }
+        Some(Command::Bench(b)) => {
+            // Needs GStreamer, which the mixer path initialises further down.
+            gstreamer::init().context("initialising GStreamer")?;
+            return bench::run(b).await;
         }
         Some(Command::Mcp { url, token }) => {
             let url = url.or_else(|| config::env_var("URL")).unwrap_or_else(|| DEFAULT_URL.into());
@@ -268,6 +281,7 @@ pub async fn run() -> Result<()> {
     let cfg_media = cfg.media.clone();
     // Where the web UI and any plugin panels are read from.
     ui::configure(cfg.control.ui_dir.as_deref(), cfg.control.plugins_dir.as_deref());
+    let cfg_snapshot = cfg.snapshot.clone();
     drop(load);
 
     let build = observe::introspect::stage("mixer build");
@@ -294,7 +308,7 @@ pub async fn run() -> Result<()> {
         mix.start().context("starting mixer")?;
     }
 
-    let frames = mix.multiview_sender().map(Arc::new);
+    let multiview = mix.multiview_handle();
 
     // Bus messages from every pipeline are funnelled into the same command
     // queue the operator's requests use, so the mixer handles a camera dying
@@ -321,7 +335,8 @@ pub async fn run() -> Result<()> {
     let quit = Arc::new(tokio::sync::Notify::new());
     let state = control::AppState {
         mixer: handle.clone(),
-        frames,
+        multiview,
+        snapshot: cfg_snapshot,
         library,
         converter,
         quit: quit.clone(),

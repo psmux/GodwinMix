@@ -430,6 +430,11 @@ pub fn set_multiview_subscribers(n: usize) {
     gauge("gmx_multiview_subscribers", &[]).set(n as f64);
 }
 
+/// The mosaic's measured rate, zero when no mosaic exists.
+pub fn set_multiview_fps(fps: f64) {
+    gauge("gmx_multiview_fps", &[]).set(fps);
+}
+
 /// How full each source's queues are, read off the pipelines at scrape time.
 ///
 /// Reading a queue's level is a property read on a GStreamer object, so this

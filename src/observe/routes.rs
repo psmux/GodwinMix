@@ -27,7 +27,8 @@ pub struct ObserveState {
     pub mixer: Option<MixerHandle>,
     /// The mosaic broadcast, so a scrape can say how many clients are on it
     /// without a second counter kept in step by hand.
-    pub frames: Option<Arc<tokio::sync::broadcast::Sender<Arc<[u8]>>>>,
+    /// The multiview handle, for the subscriber count and the mosaic rate.
+    pub multiview: Option<crate::multiview::MultiviewHandle>,
     /// The same bearer token the rest of the control plane uses. `None` leaves
     /// these routes as open as the rest of it.
     pub token: Option<Arc<str>>,
@@ -150,8 +151,10 @@ async fn scrape(State(state): State<ObserveState>) -> Response {
             metrics::observe_status(&status);
         }
     }
-    if let Some(frames) = &state.frames {
-        metrics::set_multiview_subscribers(frames.receiver_count());
+    if let Some(mv) = &state.multiview {
+        let stats = mv.stats();
+        metrics::set_multiview_subscribers(stats.subscribers as usize);
+        metrics::set_multiview_fps(stats.fps);
     }
     metrics::sample_source_queues();
     (
@@ -404,7 +407,7 @@ mod tests {
         gstreamer::init().expect("gstreamer");
         ObserveState {
             mixer: None,
-            frames: None,
+            multiview: None,
             token: None,
             metrics_open: true,
             config_path: crate::observe::tempdir("routes").join("godwinmix.toml"),
