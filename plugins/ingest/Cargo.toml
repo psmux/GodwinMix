@@ -1,0 +1,29 @@
+[package]
+name = "gmx-ingest"
+description = "The ingest plugin: GodwinMix as a server. An RTMP listener in pure Rust, WHIP ingest, and a device provide that reports who is publishing"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[[bin]]
+name = "gmx-ingest"
+path = "src/main.rs"
+
+[dependencies]
+godwinmix-sdk = { path = "../../crates/godwinmix-sdk" }
+gmx-netkit = { path = "../netkit" }
+
+gstreamer = { workspace = true }
+glib = { workspace = true }
+serde_json = { workspace = true }
+
+# The RTMP protocol, sans-io: it parses chunks and raises events and never
+# touches a socket. About 6,000 lines of library code, MIT, and it brings
+# byteorder, rml_amf0 and a second copy of the sha2/hmac stack for the Flash
+# Player 9 handshake. Eight small pure Rust crates and no C, against a 30 MB Go
+# binary and a second supervised process for the mediamtx alternative. The
+# reasoning is written out at the top of src/rtmp.rs.
+rml_rtmp = "0.8.0"
