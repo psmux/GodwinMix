@@ -837,6 +837,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "godwinmix-capture-common"
+version = "0.1.0"
+dependencies = [
+ "godwinmix-sdk",
+ "gstreamer",
+ "libc",
+ "serde_json",
+]
+
+[[package]]
 name = "godwinmix-client"
 version = "1.0.0"
 dependencies = [
