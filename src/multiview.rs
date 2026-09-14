@@ -61,6 +61,7 @@ impl Multiview {
         program_video: &gst::Element,
     ) -> Result<Self> {
         let pipeline = gst::Pipeline::with_name("multiview");
+        crate::observe::register_pipeline("multiview", &pipeline);
         let fps = gst::Fraction::new(cfg.fps.max(1), 1);
 
         // force-live and ignore-inactive-pads together make the mosaic tick

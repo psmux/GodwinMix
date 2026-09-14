@@ -144,6 +144,7 @@ where
 {
     let id = &ctx.id;
     let pipeline = gst::Pipeline::with_name(&format!("input-{id}"));
+    crate::observe::register_pipeline(&format!("input-{id}"), &pipeline);
     let norm = Normaliser::build(
         id,
         &ctx.canvas,
