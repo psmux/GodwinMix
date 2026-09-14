@@ -29,6 +29,7 @@ Start here if you have never run it.
 * [Choose a hardware encoder](how-to/choose-a-hardware-encoder.md)
 * [Put more than one thing on screen](how-to/scenes.md)
 * [Roll an ad break](how-to/ad-breaks.md)
+* [See and hear the mixer from anywhere](how-to/preview-and-audio.md)
 * [Run the terminal UI](how-to/terminal-ui.md)
 * [Add a theme](how-to/add-a-theme.md) (planned)
 * [Write a preset](how-to/write-a-preset.md) (planned)
@@ -55,6 +56,7 @@ Start here if you have never run it.
 * [The scene document](reference/scene-document.md)
 * [Sources](reference/sources.md)
 * [Web page sources](reference/web-page-sources.md)
+* [Streams: MJPEG, PCM, Opus, WHEP and the local socket](reference/streams.md)
 * [The generated protocol reference](reference/protocol.md)
 * [The plugin manifest](reference/plugin-manifest.md)
 * [The plugin protocol](reference/plugin-protocol.md)
@@ -63,6 +65,7 @@ Start here if you have never run it.
 ## Explanation
 
 * [Why the programme never stops](explanation/why-the-programme-never-stops.md)
+* [Nothing runs unless asked](explanation/nothing-runs-unless-asked.md)
 * [Why plugins are processes](explanation/why-plugins-are-processes.md)
 * [Why the UI is a client](explanation/why-the-ui-is-a-client.md)
 * [How a scene reaches the compositor](explanation/how-a-scene-reaches-the-compositor.md)

@@ -475,6 +475,11 @@ pub struct Ext {
     /// `event/source.position` for seekable sources.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub positions: Option<bool>,
+    /// The preview scene, composited in the multiview pipeline at mosaic size,
+    /// or `"full"` for a full resolution preview compositor built while
+    /// subscribed. See 11 section 3.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub preview: Option<PreviewExt>,
     /// `event/tally`.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tally: Option<bool>,
@@ -1126,12 +1131,31 @@ pub struct PipelineRequest {
     pub name: Option<String>,
 }
 
+/// What `preview.close` answers with.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct PreviewClosed {
+    pub closed: bool,
+    pub target: String,
+}
+
+/// `ext.preview`. Either `"full"`, `false`, or an object.
+pub type PreviewExt = Value;
+
 /// `scene.preview.frame`.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct PreviewFrameRequest {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub width: Option<u32>,
+}
+
+/// `preview.open {target}`.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct PreviewOpenRequest {
+    /// `program`, or a source id.
+    pub target: String,
 }
 
 /// `scene.preview.set`.
@@ -1141,6 +1165,19 @@ pub struct PreviewRequest {
     /// The scene to arm. Null or omitted disarms.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub scene: Option<String>,
+}
+
+/// What `preview.open` answers with.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct PreviewSocket {
+    /// The Unix socket to connect to, absolute. Read it with `unixfdsrc` in
+    /// GStreamer, or with the media contract's own reader.
+    pub path: String,
+    pub target: String,
+    /// What is on the far end, so a client knows what to expect before it
+    /// connects.
+    pub transport: String,
 }
 
 /// What `program.get` answers with, and what `program.take` returns so that no
@@ -1702,6 +1739,13 @@ pub struct ProgramTookEvent {
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
+pub struct PreviewChangedEvent {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub scene: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
 pub struct SourceStateEvent {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub detail: Option<String>,
@@ -1795,7 +1839,7 @@ pub struct MethodInfo {
     pub rest: Option<(&'static str, &'static str)>,
 }
 
-pub const METHODS: [MethodInfo; 98] = [
+pub const METHODS: [MethodInfo; 100] = [
     MethodInfo { name: "adbreak.end", summary: "Cut a running ad short, or disarm one that is scheduled.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/adbreak/end")) },
     MethodInfo { name: "adbreak.start", summary: "Interrupt the programme with a clip, then rejoin live when it ends.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/adbreak/start")) },
     MethodInfo { name: "agent.state", summary: "The compact document written for agents: the programme, each source's state and a motion score saying how much its picture is changing.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/agent/state")) },
@@ -1832,6 +1876,8 @@ pub const METHODS: [MethodInfo; 98] = [
     MethodInfo { name: "preset.apply", summary: "Put a preset on this core: its config, its scenes, its layout, its theme and its gallery mode. Pass dry_run to get the plan and write nothing.", scope: "admin", mutating: true, destructive: true, rest: Some(("POST", "/api/v1/preset/apply")) },
     MethodInfo { name: "preset.list", summary: "Every preset this core can apply: the six built in, plus anything installed beside the binary or under ~/.godwinmix/presets.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/preset/list")) },
     MethodInfo { name: "preset.save", summary: "Turn this core's working setup into a preset directory somebody else can apply. Stream keys and the control token are replaced with placeholders.", scope: "admin", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/preset/save")) },
+    MethodInfo { name: "preview.close", summary: "Give up a raw frame socket. The socket goes when the last holder closes it.", scope: "read", mutating: false, destructive: false, rest: Some(("POST", "/api/v1/preview/close")) },
+    MethodInfo { name: "preview.open", summary: "Open a raw frame socket on this machine for a source or the programme, and answer with its path. No encode anywhere: a client on the same host reads the frames the mixer already has. Close it with preview.close.", scope: "read", mutating: false, destructive: false, rest: Some(("POST", "/api/v1/preview/open")) },
     MethodInfo { name: "program.get", summary: "What is on air, the programme running time, and what revert would go back to.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/program")) },
     MethodInfo { name: "program.golive", summary: "One call to put a web page on air: add the page, add the destination, and take the page as soon as it renders.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/program/golive")) },
     MethodInfo { name: "program.history", summary: "The last hundred takes, newest first, with the token that asked for each.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/program/history")) },
@@ -1896,9 +1942,10 @@ pub const METHODS: [MethodInfo; 98] = [
     MethodInfo { name: "task.list", summary: "Every background job this core knows about, newest first.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/task/list")) },
 ];
 
-pub const EVENT_NAMES: [&str; 17] = [
+pub const EVENT_NAMES: [&str; 18] = [
     "snapshot",
     "program.took",
+    "preview.changed",
     "source.state",
     "source.position",
     "output.state",
@@ -1937,6 +1984,8 @@ pub enum Event {
     Snapshot(Snapshot),
     /// The programme changed. Carries the running time the cut landed on, so a client can see how close a scheduled take was to its mark.
     ProgramTook(ProgramTookEvent),
+    /// A scene was armed, or the arming was cleared. The armed scene is the preview, and program.take with no argument takes it.
+    PreviewChanged(PreviewChangedEvent),
     /// A source moved between connecting, live, stalled and failed.
     SourceState(SourceStateEvent),
     /// How far through a seekable source has got, a few times a second. Never sent for a camera, which has no position to report.
@@ -1983,6 +2032,10 @@ impl Event {
             },
             "program.took" => match serde_json::from_value(params.clone()) {
                 Ok(payload) => Event::ProgramTook(payload),
+                Err(_) => Event::Other { name: pattern.to_string(), params },
+            },
+            "preview.changed" => match serde_json::from_value(params.clone()) {
+                Ok(payload) => Event::PreviewChanged(payload),
                 Err(_) => Event::Other { name: pattern.to_string(), params },
             },
             "source.state" => match serde_json::from_value(params.clone()) {
@@ -2050,6 +2103,7 @@ impl Event {
         match self {
             Event::Snapshot(_) => "snapshot",
             Event::ProgramTook(_) => "program.took",
+            Event::PreviewChanged(_) => "preview.changed",
             Event::SourceState(_) => "source.state",
             Event::SourcePosition(_) => "source.position",
             Event::OutputState(_) => "output.state",
@@ -2251,6 +2305,16 @@ impl Client {
     /// Turn this core's working setup into a preset directory somebody else can apply. Stream keys and the control token are replaced with placeholders.
     pub async fn preset_save(&self, params: &SaveRequest) -> Result<BTreeMap<String, Value>> {
         self.call("preset.save", params).await
+    }
+
+    /// Give up a raw frame socket. The socket goes when the last holder closes it.
+    pub async fn preview_close(&self, params: &PreviewOpenRequest) -> Result<PreviewClosed> {
+        self.call("preview.close", params).await
+    }
+
+    /// Open a raw frame socket on this machine for a source or the programme, and answer with its path. No encode anywhere: a client on the same host reads the frames the mixer already has. Close it with preview.close.
+    pub async fn preview_open(&self, params: &PreviewOpenRequest) -> Result<PreviewSocket> {
+        self.call("preview.open", params).await
     }
 
     /// What is on air, the programme running time, and what revert would go back to.

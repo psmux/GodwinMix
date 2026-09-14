@@ -965,6 +965,17 @@
           "description": "`event/source.position` for seekable sources.",
           "type": "boolean"
         },
+        "preview": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PreviewExt"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The preview scene, composited in the multiview pipeline at mosaic size,\nor `\"full\"` for a full resolution preview compositor built while\nsubscribed. See 11 section 3."
+        },
         "tally": {
           "description": "`event/tally`.",
           "type": "boolean"
@@ -2514,6 +2525,59 @@
       },
       "type": "object"
     },
+    "PreviewClosed": {
+      "description": "What `preview.close` answers with.",
+      "properties": {
+        "closed": {
+          "type": "boolean"
+        },
+        "target": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "target",
+        "closed"
+      ],
+      "type": "object"
+    },
+    "PreviewExt": {
+      "anyOf": [
+        {
+          "description": "`\"full\"`: a full resolution preview compositor, built while subscribed\nand torn down after.",
+          "type": "string"
+        },
+        {
+          "description": "`\"preview\": false`.",
+          "type": "boolean"
+        },
+        {
+          "description": "Thumbnails at mosaic size, which is what a designer drawing handles\nwants and costs about 1.7 percent of a programme composite.",
+          "properties": {
+            "fps": {
+              "default": null,
+              "format": "uint32",
+              "minimum": 0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "width": {
+              "default": null,
+              "format": "uint32",
+              "minimum": 0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            }
+          },
+          "type": "object"
+        }
+      ],
+      "description": "`ext.preview`. Either `\"full\"`, `false`, or an object."
+    },
     "PreviewFrameRequest": {
       "description": "`scene.preview.frame`.",
       "properties": {
@@ -2528,6 +2592,19 @@
       },
       "type": "object"
     },
+    "PreviewOpenRequest": {
+      "description": "`preview.open {target}`.",
+      "properties": {
+        "target": {
+          "description": "`program`, or a source id.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "target"
+      ],
+      "type": "object"
+    },
     "PreviewRequest": {
       "description": "`scene.preview.set`.",
       "properties": {
@@ -2539,6 +2616,28 @@
           ]
         }
       },
+      "type": "object"
+    },
+    "PreviewSocket": {
+      "description": "What `preview.open` answers with.",
+      "properties": {
+        "path": {
+          "description": "The Unix socket to connect to, absolute. Read it with `unixfdsrc` in\nGStreamer, or with the media contract's own reader.",
+          "type": "string"
+        },
+        "target": {
+          "type": "string"
+        },
+        "transport": {
+          "description": "What is on the far end, so a client knows what to expect before it\nconnects.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "target",
+        "path",
+        "transport"
+      ],
       "type": "object"
     },
     "ProgramState": {
@@ -3866,6 +3965,25 @@
       },
       "since": "1",
       "summary": "The programme changed. Carries the running time the cut landed on, so a client can see how close a scheduled take was to its mark."
+    },
+    {
+      "ext": null,
+      "legacy": null,
+      "name": "event/preview.changed",
+      "pattern": "preview.changed",
+      "payload": {
+        "properties": {
+          "scene": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "type": "object"
+      },
+      "since": "1",
+      "summary": "A scene was armed, or the arming was cleared. The armed scene is the preview, and program.take with no argument takes it."
     },
     {
       "ext": null,
@@ -5236,6 +5354,44 @@
       "scope": "admin",
       "since": "1",
       "summary": "Turn this core's working setup into a preset directory somebody else can apply. Stream keys and the control token are replaced with placeholders."
+    },
+    {
+      "destructive": false,
+      "idempotent": true,
+      "mutating": false,
+      "name": "preview.close",
+      "params": {
+        "$ref": "#/$defs/PreviewOpenRequest"
+      },
+      "rest": {
+        "method": "POST",
+        "path": "/api/v1/preview/close"
+      },
+      "result": {
+        "$ref": "#/$defs/PreviewClosed"
+      },
+      "scope": "read",
+      "since": "1",
+      "summary": "Give up a raw frame socket. The socket goes when the last holder closes it."
+    },
+    {
+      "destructive": false,
+      "idempotent": true,
+      "mutating": false,
+      "name": "preview.open",
+      "params": {
+        "$ref": "#/$defs/PreviewOpenRequest"
+      },
+      "rest": {
+        "method": "POST",
+        "path": "/api/v1/preview/open"
+      },
+      "result": {
+        "$ref": "#/$defs/PreviewSocket"
+      },
+      "scope": "read",
+      "since": "1",
+      "summary": "Open a raw frame socket on this machine for a source or the programme, and answer with its path. No encode anywhere: a client on the same host reads the frames the mixer already has. Close it with preview.close."
     },
     {
       "destructive": false,

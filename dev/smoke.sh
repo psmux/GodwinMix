@@ -3,9 +3,10 @@
 # One run of everything a person does on a fresh mixer, against a real core.
 #
 # Starts a core on a free port with a token, adds a test source, puts it on
-# air, looks at it through all three doors (/api/v1, /rpc, /metrics) and the
-# two clients (gmx ctl, gmx mcp), then takes it down and checks nothing was
-# left running. Every step prints ok or fails the script.
+# air, looks at it through all three doors (/api/v1, /rpc, /metrics), the
+# preview and monitoring streams (/mjpeg, /pcm, /whep) and the two clients
+# (gmx ctl, gmx mcp), then takes it down and checks nothing was left running.
+# Every step prints ok or fails the script.
 #
 # Usage: dev/smoke.sh [--keep]
 #   --keep   leave the working directory and the core's log behind
@@ -233,6 +234,13 @@ for _ in $(seq 1 40); do
     sleep 0.25
 done
 if [[ $DOWN -eq 1 ]]; then ok; else bad "gmx_multiview_subscribers stuck at ${SUBS:-unknown}"; fi
+
+step "preview and audio: /mjpeg, /pcm, /whep"
+if python3 "$REPO/dev/smoke_streams.py" "127.0.0.1" "$PORT" "$TOKEN" >"$WORK/streams.log" 2>&1; then
+    ok
+else
+    bad "$(cat "$WORK/streams.log")"
+fi
 
 step "and the log says the mosaic was torn down"
 if grep -qi "multiview\|mosaic" "$LOG"; then ok; else bad "nothing in the log about the mosaic"; fi

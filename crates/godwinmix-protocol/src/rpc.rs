@@ -198,6 +198,9 @@ pub fn event_name_and_payload(event: &Event) -> Option<(&'static str, Value)> {
                 "at_running_time_ms": at_running_time_ms,
             })),
         ),
+        Event::PreviewChanged { scene } => {
+            ("preview.changed", payload(json!({ "scene": scene })))
+        }
         Event::SourceStateChanged { source, state } => (
             "source.state",
             payload(json!({ "source": source, "state": state, "detail": Value::Null })),

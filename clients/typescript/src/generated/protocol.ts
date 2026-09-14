@@ -268,6 +268,7 @@ export interface Ext {
   meters?: boolean;
   multiview?: MultiviewExt | null;
   positions?: boolean;
+  preview?: PreviewExt | null;
   tally?: boolean;
   telemetry?: TelemetryExt | null;
   [key: string]: unknown;
@@ -678,14 +679,38 @@ export interface PipelineRequest {
   name?: string;
 }
 
+/** What `preview.close` answers with. */
+export interface PreviewClosed {
+  closed: boolean;
+  target: string;
+}
+
+/** `ext.preview`. Either `"full"`, `false`, or an object. */
+export type PreviewExt = string | boolean | {
+  fps?: number | null;
+  width?: number | null;
+};
+
 /** `scene.preview.frame`. */
 export interface PreviewFrameRequest {
   width?: number | null;
 }
 
+/** `preview.open {target}`. */
+export interface PreviewOpenRequest {
+  target: string;
+}
+
 /** `scene.preview.set`. */
 export interface PreviewRequest {
   scene?: string | null;
+}
+
+/** What `preview.open` answers with. */
+export interface PreviewSocket {
+  path: string;
+  target: string;
+  transport: string;
 }
 
 /**
@@ -1007,6 +1032,10 @@ export interface ProgramTookEvent {
   transition?: string;
 }
 
+export interface PreviewChangedEvent {
+  scene?: string | null;
+}
+
 export interface SourceStateEvent {
   detail?: string | null;
   source?: string;
@@ -1092,6 +1121,8 @@ export interface MethodParams {
   "preset.apply": ApplyRequest;
   "preset.list": Record<string, never>;
   "preset.save": SaveRequest;
+  "preview.close": PreviewOpenRequest;
+  "preview.open": PreviewOpenRequest;
   "program.get": Record<string, never>;
   "program.golive": GoLiveRequest;
   "program.history": HistoryRequest;
@@ -1194,6 +1225,8 @@ export interface MethodResults {
   "preset.apply": ApplyResult;
   "preset.list": Record<string, unknown>;
   "preset.save": Record<string, unknown>;
+  "preview.close": PreviewClosed;
+  "preview.open": PreviewSocket;
   "program.get": ProgramState;
   "program.golive": GoLiveResult;
   "program.history": TakeRecord[];
@@ -1264,6 +1297,7 @@ export type MethodName = keyof MethodParams;
 export interface EventPayloads {
   "snapshot": Snapshot;
   "program.took": ProgramTookEvent;
+  "preview.changed": PreviewChangedEvent;
   "source.state": SourceStateEvent;
   "source.position": SourcePositionEvent;
   "output.state": OutputStateEvent;
@@ -1330,6 +1364,8 @@ export const METHODS: readonly MethodInfo[] = [
   { name: "preset.apply", summary: "Put a preset on this core: its config, its scenes, its layout, its theme and its gallery mode. Pass dry_run to get the plan and write nothing.", scope: "admin", mutating: true, destructive: true, rest: { method: "POST", path: "/api/v1/preset/apply" } },
   { name: "preset.list", summary: "Every preset this core can apply: the six built in, plus anything installed beside the binary or under ~/.godwinmix/presets.", scope: "read", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/preset/list" } },
   { name: "preset.save", summary: "Turn this core's working setup into a preset directory somebody else can apply. Stream keys and the control token are replaced with placeholders.", scope: "admin", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/preset/save" } },
+  { name: "preview.close", summary: "Give up a raw frame socket. The socket goes when the last holder closes it.", scope: "read", mutating: false, destructive: false, rest: { method: "POST", path: "/api/v1/preview/close" } },
+  { name: "preview.open", summary: "Open a raw frame socket on this machine for a source or the programme, and answer with its path. No encode anywhere: a client on the same host reads the frames the mixer already has. Close it with preview.close.", scope: "read", mutating: false, destructive: false, rest: { method: "POST", path: "/api/v1/preview/open" } },
   { name: "program.get", summary: "What is on air, the programme running time, and what revert would go back to.", scope: "read", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/program" } },
   { name: "program.golive", summary: "One call to put a web page on air: add the page, add the destination, and take the page as soon as it renders.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/program/golive" } },
   { name: "program.history", summary: "The last hundred takes, newest first, with the token that asked for each.", scope: "read", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/program/history" } },
@@ -1409,6 +1445,7 @@ export const EXT_KEYS: Readonly<Record<string, { value: string; implemented: boo
 export const EVENT_NAMES: readonly EventName[] = [
   "snapshot",
   "program.took",
+  "preview.changed",
   "source.state",
   "source.position",
   "output.state",
@@ -1617,6 +1654,16 @@ export class GeneratedMethods {
   /** Turn this core's working setup into a preset directory somebody else can apply. Stream keys and the control token are replaced with placeholders. */
   presetSave(params: SaveRequest): Promise<Record<string, unknown>> {
     return this._call("preset.save", params as unknown as Record<string, unknown>) as Promise<Record<string, unknown>>;
+  }
+
+  /** Give up a raw frame socket. The socket goes when the last holder closes it. */
+  previewClose(params: PreviewOpenRequest): Promise<PreviewClosed> {
+    return this._call("preview.close", params as unknown as Record<string, unknown>) as Promise<PreviewClosed>;
+  }
+
+  /** Open a raw frame socket on this machine for a source or the programme, and answer with its path. No encode anywhere: a client on the same host reads the frames the mixer already has. Close it with preview.close. */
+  previewOpen(params: PreviewOpenRequest): Promise<PreviewSocket> {
+    return this._call("preview.open", params as unknown as Record<string, unknown>) as Promise<PreviewSocket>;
   }
 
   /** What is on air, the programme running time, and what revert would go back to. */

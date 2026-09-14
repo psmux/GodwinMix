@@ -29,7 +29,7 @@ use crate::caps::CanvasCaps;
 use crate::config::{Config, OutputConfig, SourceConfig};
 use crate::gstutil::{self, make, BusEvent};
 use crate::input::{InputPipeline, MediaReport};
-use crate::multiview::{Demand, Multiview, MultiviewHandle};
+use crate::multiview::{Demand, DemandAt, Multiview, MultiviewHandle};
 use crate::output::OutputSlot;
 use crate::probe::Backends;
 use crate::state::*;
@@ -321,9 +321,17 @@ pub enum Command {
     /// scrubber.
     PositionTick,
     /// Build or tear down the mosaic. Sent by `MultiviewHandle` when the first
-    /// client subscribes or the last one leaves, never by the API. See
-    /// `multiview.rs`.
-    Multiview(Demand),
+    /// client subscribes or the last one leaves, never by the API. Carries the
+    /// subscriber generation it was decided at, so one that has been overtaken
+    /// is refused rather than applied. See `multiview.rs`.
+    Multiview(DemandAt),
+    /// Start or stop the programme encode chain. Sent by `EncoderHandle` when
+    /// the first consumer arrives or the last one leaves, never by the API.
+    /// See `encoder.rs`.
+    Encoder(crate::encoder::EncoderDemand),
+    /// Open or close a preview or monitoring branch. Sent by `PreviewHandle`
+    /// when a client opens or closes a stream. See `preview/hub.rs`.
+    Preview(crate::preview::PreviewDemand),
     Shutdown,
 }
 
@@ -698,9 +706,13 @@ pub struct Mixer {
 
     program: gst::Pipeline,
     amix: gst::Element,
-    vraw_tee: gst::Element,
     venc_tee: gst::Element,
     aenc_tee: gst::Element,
+    /// The raw programme tees, where a preview or monitoring branch hangs off.
+    /// Both carry `allow-not-linked`, so a branch coming and going never
+    /// reaches the encoder beside it.
+    vraw_tee: gst::Element,
+    araw_tee: gst::Element,
     pgm_video_proxy: gst::Element,
     /// The programme's return branch to the mosaic: queue, download, rate,
     /// scale, caps, proxysink. In the pipeline from the start, linked to
@@ -714,6 +726,24 @@ pub struct Mixer {
     multiview: Option<Multiview>,
     /// The mosaic's demand counter. Alive whether or not the pipeline is.
     mv: MultiviewHandle,
+    /// The encode chains and whether they are joined to the raw tees.
+    encoder: crate::encoder::Encoder,
+    /// The encoder's demand counter, handed to anything that wants to keep it
+    /// up. Alive whether or not the chain is.
+    enc: crate::encoder::EncoderHandle,
+    /// One lease per attached output, so an encoder on demand runs for as long
+    /// as there is somewhere for its bytes to go.
+    output_leases: HashMap<OutputId, crate::encoder::Lease>,
+    /// Audio monitoring branches, by the shape key they were opened under,
+    /// with how many clients are on each. The branch goes when the count does.
+    audio_taps: HashMap<String, (crate::preview::audio::AudioTap, u32)>,
+    /// Local raw preview sockets, by target, counted the same way.
+    #[cfg(unix)]
+    local_previews: HashMap<String, (crate::preview::local::LocalPreview, u32)>,
+    /// What the control plane holds to ask for the two above.
+    preview: crate::preview::PreviewHandle,
+    /// Where preview sockets live, from `persist_runtime_to`'s neighbour.
+    runtime_dir: Option<std::path::PathBuf>,
     program_source: Option<SourceId>,
     ad: Option<AdStatus>,
     /// Running time an armed break was asked to land on, so the roll can hit
@@ -1088,7 +1118,7 @@ impl Mixer {
         // is the encoder's own path. Bounded and leaky, so even attached it
         // drops its own frames rather than anyone else's.
         let pgm_video_proxy = make("proxysink", "pgm-v-proxy")?;
-        let mut rchain: Vec<gst::Element> = vec![gstutil::queue_time("pgm-v-q", 0.5, true)?];
+        let mut rchain: Vec<gst::Element> = vec![gstutil::queue_preview("pgm-v-q")?];
         rchain.extend(download_bridge(gfx, "pgm-v")?);
         rchain.push(make("videorate", "pgm-v-rate")?);
         rchain.push(make("videoscale", "pgm-v-scale")?);
@@ -1218,6 +1248,40 @@ impl Mixer {
         // never another. See `mixer::slots`.
         let pool = SlotPool::build(&program, &vmix).context("building the compositor slots")?;
 
+        // --- encoder lifecycle: the whole of it, in one block ---------------
+        //
+        // Everything above built and linked the encode chains exactly as it
+        // always did. This adopts them, and with `[program] encoder =
+        // "on-demand"` (the default) takes them straight back off the raw tees
+        // so a core nobody is reading encodes nothing. The first consumer, an
+        // output or a WHEP session or a recording, takes a lease and the chain
+        // comes back with a keyframe on its first frame. The raw programme is
+        // untouched either way. See `encoder.rs`.
+        let enc_policy = cfg.program.encoder_policy();
+        let enc = crate::encoder::EncoderHandle::new(enc_policy, {
+            let h = handle.clone();
+            Arc::new(move |d| {
+                let _ = h.send(Command::Encoder(d));
+            })
+        });
+        let mut encoder = crate::encoder::Encoder::new(
+            enc.clone(),
+            crate::encoder::EncodeChain::new("video", &vraw_tee, vchain.clone()),
+            crate::encoder::EncodeChain::new("audio", &araw_tee, achain.clone()),
+        );
+        encoder.arm().context("arming the programme encoder")?;
+
+        // Preview and monitoring branches ask through the same queue, for the
+        // same reason: a pipeline change belongs on the mixer thread. See
+        // `preview/hub.rs`.
+        let preview = crate::preview::PreviewHandle::new(crate::preview::StreamClients::new(), {
+            let h = handle.clone();
+            Arc::new(move |d| {
+                let _ = h.send(Command::Preview(d));
+            })
+        });
+        // --- end of the encoder lifecycle block -----------------------------
+
         let mixer = Self {
             cfg,
             canvas,
@@ -1225,9 +1289,10 @@ impl Mixer {
             origin: Instant::now(),
             program,
             amix,
-            vraw_tee: vraw_tee.clone(),
             venc_tee,
             aenc_tee,
+            vraw_tee: vraw_tee.clone(),
+            araw_tee: araw_tee.clone(),
             pgm_video_proxy,
             return_chain: rchain,
             return_pad: None,
@@ -1235,6 +1300,14 @@ impl Mixer {
             outputs: Vec::new(),
             multiview: None,
             mv,
+            encoder,
+            enc,
+            output_leases: HashMap::new(),
+            audio_taps: HashMap::new(),
+            #[cfg(unix)]
+            local_previews: HashMap::new(),
+            preview,
+            runtime_dir: None,
             program_source: None,
             ad: None,
             ad_cue_ms: None,
@@ -1280,7 +1353,10 @@ impl Mixer {
                 &out,
                 self.bus_tx.clone(),
             ) {
-                Ok(slot) => self.outputs.push(slot),
+                Ok(slot) => {
+                    self.hold_encoder_for(&out.id);
+                    self.outputs.push(slot);
+                }
                 Err(e) => error!(output = %out.id, ?e, "failed to attach output"),
             }
         }
@@ -2179,6 +2255,7 @@ impl Mixer {
             self.bus_tx.clone(),
         )
         .with_context(|| format!("attaching output {}", cfg.id))?;
+        self.hold_encoder_for(&cfg.id);
         self.outputs.push(slot);
         info!(output = %cfg.id, "output added");
         self.persist_runtime();
@@ -2193,6 +2270,7 @@ impl Mixer {
         };
         let slot = self.outputs.remove(pos);
         slot.detach(&self.program);
+        self.release_encoder_for(id);
         self.output_attempts.remove(id);
         info!(output = %id, "output removed");
         self.persist_runtime();
@@ -2673,6 +2751,8 @@ impl Mixer {
             Command::Tick => "tick",
             Command::PositionTick => "position tick",
             Command::Multiview(_) => "multiview demand",
+            Command::Encoder(_) => "encoder demand",
+            Command::Preview(_) => "preview demand",
             Command::Shutdown => "core.shutdown",
         }
     }
@@ -2717,6 +2797,8 @@ impl Mixer {
                 r?;
             }
             Command::Multiview(d) => self.multiview_demand(d)?,
+            Command::Encoder(d) => self.encoder.demand(d)?,
+            Command::Preview(d) => self.preview_demand(d),
             Command::AddSource(cfg, ack) => {
                 self.begin_add_source(*cfg, ack)?;
             }
@@ -3437,19 +3519,76 @@ impl Mixer {
         debug!("programme return branch detached: nothing is reading it");
     }
 
+    /// The encoder's demand counter, for `/metrics` and for anything outside
+    /// the mixer that wants to hold the encode chain up.
+    pub fn encoder_handle(&self) -> crate::encoder::EncoderHandle {
+        self.enc.clone()
+    }
+
+    /// Whether the encode chain is joined to the raw tees right now. What a
+    /// test asks to prove that an idle core is not merely flagged off.
+    pub fn encoder_running(&self) -> bool {
+        self.encoder.is_running()
+    }
+
+    /// The state of the two encoder elements, by name, for the same reason.
+    pub fn encoder_element_states(&self) -> (Option<gst::State>, Option<gst::State>) {
+        self.encoder.element_states("venc", "aenc")
+    }
+
+    /// Take a lease for an output and act on it here and now.
+    ///
+    /// The lease also posts a `Command::Encoder` on the queue, which this
+    /// thread will read later and find nothing to do. Reconciling inline means
+    /// the chain is up before the output's first buffer could want it.
+    fn hold_encoder_for(&mut self, id: &OutputId) {
+        self.output_leases.insert(id.clone(), self.enc.lease("output"));
+        self.sync_encoder();
+    }
+
+    fn release_encoder_for(&mut self, id: &OutputId) {
+        self.output_leases.remove(id);
+        self.sync_encoder();
+    }
+
+    fn sync_encoder(&mut self) {
+        let wanted = self.enc.wanted();
+        if let Err(e) = self.encoder.reconcile(wanted) {
+            error!(?e, "could not move the programme encoder");
+        }
+    }
+
     /// Build or destroy the mosaic because the subscriber count changed.
     /// Everything that decides *whether* lives in `multiview.rs`; this is only
     /// the part that has to happen on the mixer thread.
-    fn multiview_demand(&mut self, d: Demand) -> Result<()> {
-        match d {
+    fn multiview_demand(&mut self, at: DemandAt) -> Result<()> {
+        // A subscriber that arrived after this was decided has bumped the
+        // generation and put its own demand on the queue behind this one. It
+        // decides, not this. Without the check a client arriving between the
+        // emptiness test and the delivery would watch the mosaic it had just
+        // asked for be taken away.
+        if !self.mv.accepts(at) {
+            debug!("stale multiview demand refused, a newer one is behind it");
+            // The count may have gone up while a teardown was in flight, so
+            // reconcile against what is wanted now rather than doing nothing.
+            if let Some(shape) = self.mv.wanted() {
+                if !self.multiview.as_ref().is_some_and(|mv| mv.shape() == shape) {
+                    return self.multiview_demand(DemandAt {
+                        demand: Demand::Build(shape),
+                        generation: self.mv.generation(),
+                    });
+                }
+            }
+            return Ok(());
+        }
+        match at.demand {
             Demand::Build(shape) => {
                 if self.multiview.as_ref().is_some_and(|mv| mv.shape() == shape) {
                     return Ok(());
                 }
                 // A rebuild at another size drops the old one first, so there
                 // is never a moment with two mosaic encoders running.
-                self.multiview = None;
-                self.mv.mark_built(None);
+                self.drop_mosaic();
                 let mut mv = Multiview::build(&self.mv, shape, &self.pgm_video_proxy)
                     .context("building multiview")?;
                 mv.attach_watch(gstutil::watch_bus(
@@ -3485,15 +3624,167 @@ impl Mixer {
                 info!(?shape, "multiview built for a subscriber");
             }
             Demand::Teardown => {
-                self.multiview = None;
-                self.mv.mark_built(None);
-                for slot in &self.sources {
-                    slot.input.detach_thumb_end();
+                // Decided on another thread, checked again here: this is the
+                // one place where the count and the pipeline are both in hand.
+                if self.mv.wanted().is_some() {
+                    debug!("a subscriber arrived before the teardown landed, keeping the mosaic");
+                    return Ok(());
                 }
                 self.detach_programme_return();
+                self.drop_mosaic()
             }
         }
         Ok(())
+    }
+
+    /// What the control plane holds to open a preview or monitoring stream.
+    pub fn preview_handle(&self) -> crate::preview::PreviewHandle {
+        self.preview.clone()
+    }
+
+    /// Where preview sockets go. Set beside the runtime store.
+    pub fn preview_sockets_in(&mut self, dir: std::path::PathBuf) {
+        self.runtime_dir = Some(dir);
+    }
+
+    /// One preview demand off the queue. Everything that decides *whether*
+    /// lives in `preview/hub.rs`; this is the part that has to happen on the
+    /// thread that owns GStreamer state changes.
+    fn preview_demand(&mut self, d: crate::preview::PreviewDemand) {
+        use crate::preview::PreviewDemand as P;
+        match d {
+            P::OpenAudio { target, request, reply } => {
+                let _ = reply.send(self.open_audio_tap(&target, request));
+            }
+            P::CloseAudio { key } => {
+                if let Some((_, n)) = self.audio_taps.get_mut(&key) {
+                    *n = n.saturating_sub(1);
+                    if *n == 0 {
+                        self.audio_taps.remove(&key);
+                        debug!(%key, "last audio monitoring client left");
+                    }
+                }
+            }
+            P::OpenLocal { target, reply } => {
+                let _ = reply.send(self.open_local_preview(&target));
+            }
+            P::CloseLocal { target } => self.close_local_preview(&target),
+        }
+    }
+
+    /// Join an audio monitoring branch, building it if it is not there.
+    fn open_audio_tap(
+        &mut self,
+        target: &str,
+        request: crate::preview::audio::AudioRequest,
+    ) -> Result<tokio::sync::broadcast::Receiver<crate::preview::audio::Frame>, String> {
+        let key = request.key(target);
+        if let Some((tap, n)) = self.audio_taps.get_mut(&key) {
+            *n += 1;
+            return Ok(tap.subscribe());
+        }
+        // `program` is the programme's own raw audio tee; anything else is a
+        // source's, which lives in that source's pipeline.
+        let (pipeline, tee) = if target == "program" || target == "programme" {
+            (self.program.clone(), self.araw_tee.clone())
+        } else {
+            let slot = self
+                .sources
+                .iter()
+                .find(|s| s.input.id == target)
+                .ok_or_else(|| self.no_such_source(target))?;
+            let (pipeline, _vtee, atee) = slot.input.taps();
+            (pipeline, atee)
+        };
+        let tap = crate::preview::audio::AudioTap::build(&pipeline, &tee, &key, request)
+            .map_err(|e| format!("could not open audio monitoring on {target}: {e:#}"))?;
+        let frames = tap.subscribe();
+        self.audio_taps.insert(key.clone(), (tap, 1));
+        info!(%key, "audio monitoring branch opened");
+        Ok(frames)
+    }
+
+    /// The refusal for a target that is not here, naming what is.
+    fn no_such_source(&self, target: &str) -> String {
+        let live: Vec<&str> = self.sources.iter().map(|s| s.input.id.as_str()).collect();
+        format!(
+            "no source '{target}'. Sources here: {}. Ask for 'program' for the programme mix.",
+            if live.is_empty() { "none".to_string() } else { live.join(", ") }
+        )
+    }
+
+    #[cfg(unix)]
+    fn open_local_preview(&mut self, target: &str) -> Result<String, String> {
+        if !crate::preview::local::supported() {
+            return Err(crate::preview::local::unsupported_message());
+        }
+        let t = crate::preview::local::Target::parse(target);
+        let slug = t.slug();
+        if let Some((preview, n)) = self.local_previews.get_mut(&slug) {
+            *n += 1;
+            return Ok(preview.path().to_string_lossy().to_string());
+        }
+        let dir = self
+            .runtime_dir
+            .clone()
+            .ok_or_else(|| "this core has no runtime directory, so it cannot place a preview socket".to_string())?;
+        let path = crate::preview::local::socket_path(&dir, &t);
+        let (pipeline, tee) = match &t {
+            crate::preview::local::Target::Program => (self.program.clone(), self.vraw_tee.clone()),
+            crate::preview::local::Target::Source(id) => {
+                let slot = self
+                    .sources
+                    .iter()
+                    .find(|s| &s.input.id == id)
+                    .ok_or_else(|| self.no_such_source(id))?;
+                let (pipeline, vtee, _atee) = slot.input.taps();
+                (pipeline, vtee)
+            }
+        };
+        let preview = crate::preview::local::LocalPreview::build(&pipeline, &tee, t, path)
+            .map_err(|e| format!("could not open a local preview for {target}: {e:#}"))?;
+        let answer = preview.path().to_string_lossy().to_string();
+        self.local_previews.insert(slug, (preview, 1));
+        info!(target = %target, path = %answer, "local raw preview opened");
+        Ok(answer)
+    }
+
+    #[cfg(not(unix))]
+    fn open_local_preview(&mut self, _target: &str) -> Result<String, String> {
+        Err(crate::preview::local::unsupported_message())
+    }
+
+    #[cfg(unix)]
+    fn close_local_preview(&mut self, target: &str) {
+        let slug = crate::preview::local::Target::parse(target).slug();
+        if let Some((_, n)) = self.local_previews.get_mut(&slug) {
+            *n = n.saturating_sub(1);
+            if *n == 0 {
+                self.local_previews.remove(&slug);
+                debug!(%target, "last local preview client left");
+            }
+        }
+    }
+
+    #[cfg(not(unix))]
+    fn close_local_preview(&mut self, _target: &str) {}
+
+    /// Take the mosaic away, thumbnail ends first.
+    ///
+    /// The order is load bearing. A mosaic pipeline on its way to NULL stops
+    /// reading its `proxysrc`s, and the thumbnail branch still feeding it then
+    /// fills up. The queue at the head of that branch is leaky now, so the
+    /// worst case is dropped preview frames rather than a source's tee blocking
+    /// and the programme branch with it, but there is no reason to produce a
+    /// second of frames for a mosaic that has gone. Nothing here blocks: the
+    /// detach is an unlink and a pad release, and the mosaic pipeline has
+    /// nothing pushing into it by the time it is dropped.
+    fn drop_mosaic(&mut self) {
+        for slot in &self.sources {
+            slot.input.detach_thumb_end();
+        }
+        self.multiview = None;
+        self.mv.mark_built(None);
     }
 
     pub fn shutdown(&mut self) {
@@ -3507,9 +3798,14 @@ impl Mixer {
         for slot in &self.sources {
             slot.input.stop();
         }
-        self.multiview = None;
-        self.mv.mark_built(None);
+        self.drop_mosaic();
+        self.detach_programme_return();
         self.pool.teardown();
+        self.audio_taps.clear();
+        #[cfg(unix)]
+        self.local_previews.clear();
+        self.output_leases.clear();
+        self.encoder.shutdown();
         let _ = self.program.set_state(gst::State::Null);
     }
 }
@@ -3864,6 +4160,11 @@ mod tests {
         };
         cfg.multiview.enabled = false;
         cfg.hardware.graphics = graphics;
+        // These tests are about whether the encode chain encodes at all, and
+        // they read the encoder tee without holding a lease on it. Pin the
+        // encoder on, which is the policy this question belongs to; the
+        // on-demand path has its own tests in `encoder.rs`.
+        cfg.program.encoder = "always".into();
         cfg
     }
 
@@ -4568,16 +4869,23 @@ mod tests {
         );
 
         mix.start().expect("the programme starts");
-        mix.multiview_demand(Demand::Build(crate::multiview::MultiviewShape {
-            fps: 5,
-            width: 320,
-            height: 180,
-        }))
+        mix.multiview_demand(crate::multiview::DemandAt {
+            demand: Demand::Build(crate::multiview::MultiviewShape {
+                fps: 5,
+                width: 320,
+                height: 180,
+            }),
+            generation: 0,
+        })
         .expect("a subscriber builds the mosaic");
         assert!(mix.return_pad.is_some(), "the mosaic was built without the programme return");
         assert!(q.static_pad("sink").and_then(|p| p.peer()).is_some());
 
-        mix.multiview_demand(Demand::Teardown).expect("the last subscriber leaves");
+        mix.multiview_demand(crate::multiview::DemandAt {
+            demand: Demand::Teardown,
+            generation: 0,
+        })
+        .expect("the last subscriber leaves");
         assert!(mix.return_pad.is_none(), "the return branch outlived the mosaic");
         assert!(
             q.static_pad("sink").and_then(|p| p.peer()).is_none(),
