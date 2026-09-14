@@ -25,3 +25,10 @@ auto.key
 
 .DS_Store
 dev/linux-x86/out/
+
+# The client crate builds standalone, with its own target directory.
+crates/*/target/
+clients/typescript/node_modules/
+clients/typescript/dist/
+clients/python/*.egg-info/
+clients/**/__pycache__/
