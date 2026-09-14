@@ -1274,13 +1274,26 @@ pub(crate) fn write_pad(
 /// carry, so the nick is looked up first: a `compositor` built before
 /// `keep-aspect-ratio-with-crop` existed gets the next best thing rather than
 /// taking the mixer thread down mid take.
+///
+/// The value the pad already has is read before anything is written, and this
+/// one is worth a comment. `compositor` marks its pad's video converter dirty
+/// whenever `sizing-policy` is set, whatever it is set to, and rebuilds the
+/// converter on the next aggregation. The visibility tick reapplies the whole
+/// scene twice a second, so an unconditional write here threw away and rebuilt
+/// a converter per pad twice a second and put the programme's frame interval
+/// over 34 ms on an idle mixer. Comparing first is the difference between a
+/// late frame every half second and none.
 fn set_sizing(pad: &gst::Pad, sizing: Sizing) {
     let Some(pspec) = pad.find_property("sizing-policy") else { return };
     let class = glib::EnumClass::with_type(pspec.value_type());
+    let held = pad.property_value("sizing-policy");
+    let now = glib::EnumValue::from_value(&held).map(|(_, v)| v.nick().to_string());
     for nick in sizing.nicks() {
         let known = class.as_ref().and_then(|c| c.value_by_nick(nick)).is_some();
         if known {
-            pad.set_property_from_str("sizing-policy", nick);
+            if now.as_deref() != Some(*nick) {
+                pad.set_property_from_str("sizing-policy", nick);
+            }
             return;
         }
     }
