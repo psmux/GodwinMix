@@ -573,7 +573,7 @@ fn share_device_contexts(bus: &gst::Bus) {
 pub fn watch_bus(
     pipeline: &gst::Pipeline,
     owner: BusOwner,
-    tx: tokio::sync::mpsc::UnboundedSender<BusEvent>,
+    tx: tokio::sync::mpsc::Sender<BusEvent>,
 ) -> Result<BusWatch> {
     let label = owner.label();
     let bus = pipeline.bus().context("pipeline has no bus")?;
@@ -644,13 +644,38 @@ pub fn watch_bus(
                 if flag.load(Ordering::SeqCst) {
                     return;
                 }
-                if tx.send(ev).is_err() {
+                if !deliver(&tx, ev, &label) {
                     return;
                 }
             }
         })
         .context("spawning bus watcher thread")?;
     Ok(BusWatch { stop })
+}
+
+/// Put one bus message on the queue. False means the watcher should stop.
+///
+/// The queue is bounded, so a full one has to mean something. A meter reading
+/// is dropped: they arrive ten a second per source, the next one is along in
+/// 100 ms, and a mixer too busy to read them has nothing to gain from a
+/// backlog of stale peaks. Everything else (an error, a warning, an end of
+/// stream) is a thing that happened once and decides whether a source is
+/// rebuilt, so this thread waits for room. Waiting here is safe: it is a
+/// watcher thread of ours polling the bus, not a GStreamer streaming thread,
+/// and nothing upstream of it is carrying the programme.
+fn deliver(tx: &tokio::sync::mpsc::Sender<BusEvent>, ev: BusEvent, label: &str) -> bool {
+    match tx.try_send(ev) {
+        Ok(()) => true,
+        Err(tokio::sync::mpsc::error::TrySendError::Closed(_)) => false,
+        Err(tokio::sync::mpsc::error::TrySendError::Full(BusEvent::Level { src, .. })) => {
+            tracing::debug!(pipeline = %label, %src, "dropped a meter reading: the mixer queue is full");
+            true
+        }
+        Err(tokio::sync::mpsc::error::TrySendError::Full(other)) => {
+            warn!(pipeline = %label, "the mixer queue is full; waiting to report a bus message");
+            tx.blocking_send(other).is_ok()
+        }
+    }
 }
 
 /// Pull the per-channel peak out of a `level` element message.
@@ -749,7 +774,7 @@ mod tests {
     fn dropping_a_bus_watch_stops_delivery() {
         init();
         let pipeline = gst::Pipeline::with_name("watched");
-        let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
+        let (tx, mut rx) = tokio::sync::mpsc::channel(16);
         let watch = watch_bus(&pipeline, BusOwner::Other("watched".into()), tx).unwrap();
 
         let bus = pipeline.bus().unwrap();
