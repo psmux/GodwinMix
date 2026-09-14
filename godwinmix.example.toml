@@ -406,6 +406,30 @@ queue_secs = 5.0
 # max_cpu_percent = 60
 # on_over_budget = "restart"   # or "disable", or "alert" (the default)
 #
+# A plugin that runs as a WebAssembly component (placements = ["wasm"]) reads
+# two more keys from the same table, and one switch from [plugins] itself.
+# `place` picks the placement when a plugin declares more than one. `wasm_fuel`
+# and `wasm_deadline_ms` are what one call into the component may spend; both
+# are ceilings, and lowering either makes a slow component fail sooner rather
+# than letting it run longer. `max_rss_mb` above is its memory ceiling too.
+#
+# [plugins]
+# allow_wasi = []              # which plugins may have the WASI their manifest asks for
+#
+# [plugins.min-hold]
+# min_hold_ms = 8000           # the plugin's own setting
+# place = "wasm"               # only needed when the plugin has another placement too
+# wasm_fuel = 500000000        # operations per call
+# wasm_deadline_ms = 500       # wall clock per call
+#
+# `allow_wasi` is half of a grant and the manifest's `wasi` key is the other
+# half. Neither works alone: the author says what the plugin needs and the
+# operator says whether this machine gives it. Empty, which is the default,
+# means a component gets no filesystem and no sockets at all.
+#
+# None of this does anything unless the binary was built with `--features
+# wasm`. `gmx doctor` says whether yours was, on the `wasm host` line.
+#
 # A breach has to hold for three samples, which is three seconds, before
 # anything happens: one busy second while a plugin opens a file is not a plugin
 # that is broken. When it does, the core logs it, emits
