@@ -1,0 +1,38 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Clock settings",
+  "type": "object",
+  "properties": {
+    "format": {
+      "description": "A strftime string. The clock redraws once a second whatever this says.",
+      "type": "string",
+      "default": "%H:%M:%S",
+      "examples": [
+        "%H:%M:%S",
+        "%H:%M"
+      ]
+    },
+    "background": {
+      "description": "The colour behind the digits, as #rrggbb.",
+      "type": "string",
+      "pattern": "^#[0-9a-fA-F]{6}$",
+      "default": "#101014",
+      "examples": [
+        "#101014",
+        "#00b140"
+      ]
+    },
+    "font_size": {
+      "description": "The digit height as a fraction of the canvas height.",
+      "type": "number",
+      "minimum": 0.1,
+      "maximum": 0.8,
+      "default": 0.4,
+      "examples": [
+        0.4,
+        0.65
+      ]
+    }
+  },
+  "additionalProperties": false
+}

@@ -1,0 +1,42 @@
+# The one file you edit.
+#
+# Everything the build is made of is here: which preset the product is, what it
+# is called, the identifier the installers register, the icon, and which
+# GodwinMix release the core comes from. The workflow in
+# .github/workflows/build.yml reads this file and nothing else.
+#
+# Nothing in this repository is a fork of GodwinMix. Change a value here, push
+# a tag, and the workflow builds the product again from upstream's source.
+
+[product]
+# The preset the build is made of. A name that `gmx preset list` knows
+# (broadcast, church, classroom, default, esports, headless-agent), or a path
+# to a directory holding a gmx-plugin.toml, relative to this file.
+preset = "church"
+
+# The product name. It goes on the window title, on the installer, and on the
+# publisher field of the bundle.
+name = "AcmeMix"
+
+# The reverse domain identifier the installers register. macOS uses it for the
+# bundle id, Windows for the upgrade code. Pick one and never change it: an
+# installer with a new identifier installs beside the old product instead of
+# over it.
+identifier = "com.acme.mix"
+
+# A square PNG, 512x512 or larger, relative to this file. The workflow turns it
+# into the .icns and .ico the macOS and Windows bundles need. Empty, as it
+# ships, means the stock GodwinMix icon, so a fresh fork builds before you have
+# drawn anything. Put your PNG in branding/ and name it here:
+#
+#   icon = "branding/icon.png"
+icon = ""
+
+[upstream]
+# The GodwinMix repository the core is built from.
+repository = "psmux/GodwinMix"
+
+# The release tag it is pinned to. This is the version of the mixer inside your
+# product. Raise it when a GodwinMix release comes out, push a new tag of your
+# own, and the workflow builds your product on the new core.
+tag = "v0.2.0"

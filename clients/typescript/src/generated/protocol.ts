@@ -711,7 +711,10 @@ export interface PluginDescription {
   root: string;
   schemas: Record<string, unknown>;
   skills: Record<string, unknown>;
+  source?: string;
   tools: string[];
+  trust: string;
+  trust_detail: string;
   version: string;
 }
 
@@ -742,7 +745,10 @@ export interface PluginRecord {
   problem?: string | null;
   provides: string[];
   root: string;
+  source?: string;
   tools: string[];
+  trust: string;
+  trust_detail: string;
   version: string;
 }
 
@@ -756,6 +762,14 @@ export interface PluginSettings {
   name: string;
   schemas: Record<string, unknown>;
   settings: Record<string, unknown>;
+}
+
+/** What `plugin.update` answers with. */
+export interface PluginUpdated {
+  from: string;
+  handshake_ms: number;
+  plugin: PluginRecord;
+  to: string;
 }
 
 /** What `preview.close` answers with. */
@@ -873,6 +887,29 @@ export interface SceneView {
   id: Id;
   name: string;
   records: Record[];
+}
+
+/** `plugin.search`. */
+export interface SearchRequest {
+  term?: string;
+}
+
+/** One plugin a marketplace lists. */
+export interface SearchResult {
+  description: string;
+  installed: boolean;
+  kinds: string[];
+  marketplace: string;
+  name: string;
+  source: string;
+  tier: string;
+  version: string;
+}
+
+/** What `plugin.search` answers with. */
+export interface SearchResults {
+  marketplaces: string[];
+  results: SearchResult[];
 }
 
 /** `source.seek`. */
@@ -1097,6 +1134,12 @@ export interface Update {
   before: Record;
 }
 
+/** `plugin.update`. */
+export interface UpdatePluginRequest {
+  id: string;
+  source?: string | null;
+}
+
 export interface ValidateRequest {
   scene?: string | null;
 }
@@ -1214,9 +1257,11 @@ export interface MethodParams {
   "plugin.list": Record<string, never>;
   "plugin.reload": PluginName;
   "plugin.remove": PluginName;
+  "plugin.search": SearchRequest;
   "plugin.settings.get": PluginName;
   "plugin.settings.set": SetSettingsRequest;
   "plugin.stats": Record<string, never>;
+  "plugin.update": UpdatePluginRequest;
   "preset.apply": ApplyRequest;
   "preset.list": Record<string, never>;
   "preset.save": SaveRequest;
@@ -1328,9 +1373,11 @@ export interface MethodResults {
   "plugin.list": PluginListing;
   "plugin.reload": PluginRecord;
   "plugin.remove": PluginRemoved;
+  "plugin.search": SearchResults;
   "plugin.settings.get": PluginSettings;
   "plugin.settings.set": PluginSettings;
   "plugin.stats": StatsListing;
+  "plugin.update": PluginUpdated;
   "preset.apply": ApplyResult;
   "preset.list": Record<string, unknown>;
   "preset.save": Record<string, unknown>;
@@ -1470,16 +1517,18 @@ export const METHODS: readonly MethodInfo[] = [
   { name: "pipeline.latency", summary: "How much delay one pipeline is carrying, and which stage put it there.", scope: "read", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/pipeline/latency" } },
   { name: "pipeline.list", summary: "Every pipeline running right now, by the name the other pipeline methods accept.", scope: "read", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/pipeline/list" } },
   { name: "pipeline.queues", summary: "Every queue in one pipeline with how full it is, fullest first. A queue that stays full is where the trouble is.", scope: "read", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/pipeline/queues" } },
-  { name: "plugin.add", summary: "Install a plugin from a local directory, while live. The directory is the one with gmx-plugin.toml at its root.", scope: "admin", mutating: true, destructive: true, rest: { method: "POST", path: "/api/v1/plugins" } },
+  { name: "plugin.add", summary: "Install a plugin, while live, from any source form: a GitHub release (owner/repo), a git URL, cargo:, npm:, pypi:, a local directory, or a bare name looked up in the marketplaces this mixer knows. The signature and the api level are checked before anything is copied.", scope: "admin", mutating: true, destructive: true, rest: { method: "POST", path: "/api/v1/plugins" } },
   { name: "plugin.describe", summary: "One plugin in full: its manifest, the settings schema of every provide, and the description from each SKILL.md.", scope: "read", mutating: false, destructive: false, rest: { method: "POST", path: "/api/v1/plugins/{id}/describe" } },
   { name: "plugin.disable", summary: "Turn a plugin off without uninstalling it. It registers nothing and runs no process until it is enabled again.", scope: "admin", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/plugins/{id}/disable" } },
   { name: "plugin.enable", summary: "Turn a plugin back on. It registers what it declares and its instances start.", scope: "admin", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/plugins/{id}/enable" } },
   { name: "plugin.list", summary: "Every plugin installed, with what it provides and what each running instance is costing in cpu, memory, latency, dropped buffers and restarts.", scope: "read", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/plugins" } },
   { name: "plugin.reload", summary: "Read a plugin's directory again and swap its running instances one at a time, with the freeze frame covering each.", scope: "admin", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/plugins/{id}/reload" } },
   { name: "plugin.remove", summary: "Uninstall a plugin and unwind everything it registered: its provides, its tools, its panels, its hooks and its discovery matchers.", scope: "admin", mutating: true, destructive: true, rest: { method: "DELETE", path: "/api/v1/plugins/{id}" } },
+  { name: "plugin.search", summary: "Search every marketplace this mixer knows for a plugin, by name, description or kind. Answers what `gmx plugin add <name>` would install.", scope: "read", mutating: false, destructive: false, rest: { method: "POST", path: "/api/v1/plugins/{id}/search" } },
   { name: "plugin.settings.get", summary: "A plugin's settings as they stand, with its schema beside them.", scope: "read", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/plugins/{id}/settings" } },
   { name: "plugin.settings.set", summary: "Change a plugin's settings. A plugin that cannot take a change while running says so rather than being restarted behind your back.", scope: "admin", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/plugins/{id}/settings" } },
   { name: "plugin.stats", summary: "Per instance cpu, memory, media latency, dropped buffers and restarts, refreshed once a second.", scope: "read", mutating: false, destructive: false, rest: { method: "POST", path: "/api/v1/plugins/{id}/stats" } },
+  { name: "plugin.update", summary: "Fetch a newer build of a plugin, install it beside the one that is running, and prove it starts. A build that does not answer `initialize` within ten seconds is rolled back and the plugin that was working stays working.", scope: "admin", mutating: true, destructive: true, rest: { method: "POST", path: "/api/v1/plugins/{id}/update" } },
   { name: "preset.apply", summary: "Put a preset on this core: its config, its scenes, its layout, its theme and its gallery mode. Pass dry_run to get the plan and write nothing.", scope: "admin", mutating: true, destructive: true, rest: { method: "POST", path: "/api/v1/preset/apply" } },
   { name: "preset.list", summary: "Every preset this core can apply: the six built in, plus anything installed beside the binary or under ~/.godwinmix/presets.", scope: "read", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/preset/list" } },
   { name: "preset.save", summary: "Turn this core's working setup into a preset directory somebody else can apply. Stream keys and the control token are replaced with placeholders.", scope: "admin", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/preset/save" } },
@@ -1760,7 +1809,7 @@ export class GeneratedMethods {
     return this._call("pipeline.queues", params as unknown as Record<string, unknown>) as Promise<Record<string, unknown>>;
   }
 
-  /** Install a plugin from a local directory, while live. The directory is the one with gmx-plugin.toml at its root. */
+  /** Install a plugin, while live, from any source form: a GitHub release (owner/repo), a git URL, cargo:, npm:, pypi:, a local directory, or a bare name looked up in the marketplaces this mixer knows. The signature and the api level are checked before anything is copied. */
   pluginAdd(params: AddPluginRequest): Promise<PluginRecord> {
     return this._call("plugin.add", params as unknown as Record<string, unknown>) as Promise<PluginRecord>;
   }
@@ -1795,6 +1844,11 @@ export class GeneratedMethods {
     return this._call("plugin.remove", params as unknown as Record<string, unknown>) as Promise<PluginRemoved>;
   }
 
+  /** Search every marketplace this mixer knows for a plugin, by name, description or kind. Answers what `gmx plugin add <name>` would install. */
+  pluginSearch(params: SearchRequest = {}): Promise<SearchResults> {
+    return this._call("plugin.search", params as unknown as Record<string, unknown>) as Promise<SearchResults>;
+  }
+
   /** A plugin's settings as they stand, with its schema beside them. */
   pluginSettingsGet(params: PluginName): Promise<PluginSettings> {
     return this._call("plugin.settings.get", params as unknown as Record<string, unknown>) as Promise<PluginSettings>;
@@ -1808,6 +1862,11 @@ export class GeneratedMethods {
   /** Per instance cpu, memory, media latency, dropped buffers and restarts, refreshed once a second. */
   pluginStats(): Promise<StatsListing> {
     return this._call("plugin.stats", {}) as Promise<StatsListing>;
+  }
+
+  /** Fetch a newer build of a plugin, install it beside the one that is running, and prove it starts. A build that does not answer `initialize` within ten seconds is rolled back and the plugin that was working stays working. */
+  pluginUpdate(params: UpdatePluginRequest): Promise<PluginUpdated> {
+    return this._call("plugin.update", params as unknown as Record<string, unknown>) as Promise<PluginUpdated>;
   }
 
   /** Put a preset on this core: its config, its scenes, its layout, its theme and its gallery mode. Pass dry_run to get the plan and write nothing. */

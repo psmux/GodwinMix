@@ -1,0 +1,262 @@
+name: first response
+
+# The one number this project watches: how long somebody waits for a first
+# reply on an issue or a pull request. The MSR 2023 study of 111,094 pull
+# requests found the wait for a first response is what decides whether a
+# newcomer becomes a contributor, and the target here is a median under 48
+# hours over the last 30 days.
+#
+# Every 6 hours this labels anything open that nobody has answered in 48 hours,
+# takes the label off again once a reply arrives, and writes the median, the
+# waiting count and the new contributor count into the run summary and into
+# community/dashboard.md. The dashboard is committed only when a number moved.
+
+on:
+  schedule:
+    - cron: "0 */6 * * *"
+  workflow_dispatch:
+
+permissions:
+  issues: write
+  pull-requests: write
+  contents: write
+
+# A fork inherits this file and has no business labelling anything or pushing a
+# dashboard commit.
+jobs:
+  measure:
+    name: Label what is waiting and measure the wait
+    if: github.repository == 'psmux/GodwinMix'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v4
+
+      - name: Walk the issues and pull requests
+        id: measure
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+
+            // ------------------------------------------------ the settings --
+            const WAITING_LABEL = 'awaiting-first-response';
+            const TARGET_HOURS  = 48;
+            const WINDOW_DAYS   = 30;
+            const DASHBOARD     = 'community/dashboard.md';
+            const START_MARKER  = '<!-- metrics:start -->';
+            const END_MARKER    = '<!-- metrics:end -->';
+
+            const owner = context.repo.owner;
+            const repo  = context.repo.repo;
+            const now   = new Date();
+            const windowStart = new Date(now.getTime() - WINDOW_DAYS * 864e5);
+
+            // ------------------------------------------------- the queries --
+            // Every call to GitHub is in this object. Nothing below reaches
+            // for the API on its own, so the cost of a run is readable here.
+            const q = {
+              open: () => github.paginate(github.rest.issues.listForRepo, {
+                owner, repo, state: 'open', per_page: 100,
+              }),
+              // `since` filters on updated_at, so this is a superset of the
+              // items created in the window. The filter below narrows it.
+              touchedInWindow: () => github.paginate(github.rest.issues.listForRepo, {
+                owner, repo, state: 'all', since: windowStart.toISOString(), per_page: 100,
+              }),
+              comments: (number) => github.paginate(github.rest.issues.listComments, {
+                owner, repo, issue_number: number, per_page: 100,
+              }),
+              reviews: (number) => github.paginate(github.rest.pulls.listReviews, {
+                owner, repo, pull_number: number, per_page: 100,
+              }),
+              closedPulls: () => github.paginate(github.rest.pulls.list, {
+                owner, repo, state: 'closed', per_page: 100,
+              }),
+            };
+
+            // --------------------------------------------------- the rules --
+            const isBot = (user) =>
+              !user || user.type === 'Bot' || user.login.endsWith('[bot]');
+
+            const hoursBetween = (a, b) => (b.getTime() - a.getTime()) / 36e5;
+
+            const median = (values) => {
+              if (values.length === 0) return null;
+              const sorted = [...values].sort((a, b) => a - b);
+              const middle = Math.floor(sorted.length / 2);
+              return sorted.length % 2 === 1
+                ? sorted[middle]
+                : (sorted[middle - 1] + sorted[middle]) / 2;
+            };
+
+            // The author talking to themselves is not a response, and neither
+            // is a bot. A review counts, because a review is an answer.
+            const firstResponseAt = async (item) => {
+              const replies = [];
+              for (const comment of await q.comments(item.number)) {
+                replies.push({ at: comment.created_at, user: comment.user });
+              }
+              if (item.pull_request) {
+                for (const review of await q.reviews(item.number)) {
+                  if (review.submitted_at) {
+                    replies.push({ at: review.submitted_at, user: review.user });
+                  }
+                }
+              }
+              const fromOthers = replies
+                .filter((r) => !isBot(r.user) && r.user.login !== item.user.login)
+                .map((r) => new Date(r.at))
+                .sort((a, b) => a - b);
+              return fromOthers[0] ?? null;
+            };
+
+            const hasLabel = (item) =>
+              (item.labels || []).some((l) => (l.name || l) === WAITING_LABEL);
+
+            // addLabels creates a missing label with a random colour. Making
+            // it here means it is described and the same colour every time.
+            const ensureLabel = async () => {
+              try {
+                await github.rest.issues.createLabel({
+                  owner, repo,
+                  name: WAITING_LABEL,
+                  color: 'd93f0b',
+                  description: 'Open for more than 48 hours with no reply from anyone but the author',
+                });
+              } catch (error) {
+                if (error.status !== 422) throw error;   // 422 is "already exists"
+              }
+            };
+
+            // ------------------------------------------- label what is open --
+            await ensureLabel();
+
+            const openItems = await q.open();
+            let waiting = 0;
+            let labelled = 0;
+            let cleared = 0;
+
+            for (const item of openItems) {
+              const responded = await firstResponseAt(item);
+              const ageHours = hoursBetween(new Date(item.created_at), now);
+
+              if (responded === null && ageHours >= TARGET_HOURS) {
+                waiting += 1;
+                if (!hasLabel(item)) {
+                  await github.rest.issues.addLabels({
+                    owner, repo, issue_number: item.number, labels: [WAITING_LABEL],
+                  });
+                  labelled += 1;
+                }
+              } else if (hasLabel(item)) {
+                await github.rest.issues.removeLabel({
+                  owner, repo, issue_number: item.number, name: WAITING_LABEL,
+                }).catch((error) => { if (error.status !== 404) throw error; });
+                cleared += 1;
+              }
+            }
+
+            // ------------------------- the median over the last 30 days --
+            const inWindow = (await q.touchedInWindow())
+              .filter((item) => new Date(item.created_at) >= windowStart);
+
+            const responseHours = [];
+            let unansweredInWindow = 0;
+            for (const item of inWindow) {
+              const responded = await firstResponseAt(item);
+              if (responded) {
+                responseHours.push(hoursBetween(new Date(item.created_at), responded));
+              } else {
+                unansweredInWindow += 1;
+              }
+            }
+            const medianHours = median(responseHours);
+
+            // ------------------------------------ new contributors, 30 days --
+            // Somebody whose first merged pull request landed inside the
+            // window. Every closed pull request is read once for this; on a
+            // repository of this size that is a few pages.
+            const firstMergeByAuthor = new Map();
+            for (const pull of await q.closedPulls()) {
+              if (!pull.merged_at || isBot(pull.user)) continue;
+              const merged = new Date(pull.merged_at);
+              const seen = firstMergeByAuthor.get(pull.user.login);
+              if (!seen || merged < seen) firstMergeByAuthor.set(pull.user.login, merged);
+            }
+            const newContributors = [...firstMergeByAuthor.values()]
+              .filter((at) => at >= windowStart).length;
+
+            // -------------------------------------------------- the report --
+            const hours = (value) => value === null ? 'no data' : value.toFixed(1) + ' h';
+            const verdict = medianHours === null
+              ? 'no items answered in the window'
+              : (medianHours < TARGET_HOURS ? 'under the 48 hour target' : 'over the 48 hour target');
+
+            const table = [
+              '| Metric | Now | Target |',
+              '|---|---|---|',
+              '| Median time to first response (30 days) | ' + hours(medianHours) + ' | under 48 h |',
+              '| Items opened in the window | ' + inWindow.length + ' | |',
+              '| Of those, still with no reply | ' + unansweredInWindow + ' | 0 |',
+              '| Open items waiting longer than 48 h | ' + waiting + ' | 0 |',
+              '| New contributors (first merged PR, 30 days) | ' + newContributors + ' | |',
+            ].join('\n');
+
+            const report = [
+              '## Time to first response',
+              '',
+              table,
+              '',
+              'Median is ' + verdict + '. Labelled this run: ' + labelled +
+                '. Label removed this run: ' + cleared + '.',
+            ].join('\n');
+
+            await core.summary.addRaw(report).write();
+
+            // ----------------------------------------------- the dashboard --
+            // Rewritten only when a number moved, so the file's history is a
+            // record of changes rather than of the workflow having run.
+            const today = now.toISOString().slice(0, 10);
+            const block = [
+              START_MARKER,
+              '',
+              table,
+              '',
+              '_Last updated ' + today + ' by `.github/workflows/first-response.yml`._',
+              '',
+              END_MARKER,
+            ].join('\n');
+
+            const page = fs.readFileSync(DASHBOARD, 'utf8');
+            const from = page.indexOf(START_MARKER);
+            const to = page.indexOf(END_MARKER);
+            if (from === -1 || to === -1) {
+              core.warning(DASHBOARD + ' has lost its marker comments; leaving it alone');
+              core.setOutput('changed', 'false');
+              return;
+            }
+
+            const withoutDate = (text) =>
+              text.split('\n').filter((line) => !line.startsWith('_Last updated')).join('\n');
+
+            const current = page.slice(from, to + END_MARKER.length);
+            if (withoutDate(current) === withoutDate(block)) {
+              core.info('the numbers are unchanged; not touching ' + DASHBOARD);
+              core.setOutput('changed', 'false');
+              return;
+            }
+
+            fs.writeFileSync(DASHBOARD, page.slice(0, from) + block + page.slice(to + END_MARKER.length));
+            core.setOutput('changed', 'true');
+            core.info('wrote new numbers into ' + DASHBOARD);
+
+      - name: Commit the dashboard when the numbers changed
+        if: steps.measure.outputs.changed == 'true'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add community/dashboard.md
+          git commit -m "community: the response numbers moved"
+          git push

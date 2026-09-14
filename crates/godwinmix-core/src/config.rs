@@ -50,11 +50,12 @@ pub struct Config {
     /// provided filter and where it goes.
     #[serde(default)]
     pub filters: Vec<FilterConfig>,
-    /// Settings belonging to a plugin, one table per plugin name. The core
-    /// never reads inside these; it hands `[plugins.ndi]` to the plugin called
-    /// `ndi` and nothing else sees it.
+    /// Settings belonging to a plugin, one table per plugin name, plus the
+    /// handful of switches that are about installing plugins rather than about
+    /// one plugin. The core never reads inside a plugin's own table; it hands
+    /// `[plugins.ndi]` to the plugin called `ndi` and nothing else sees it.
     #[serde(default)]
-    pub plugins: std::collections::BTreeMap<String, Params>,
+    pub plugins: PluginsTable,
     /// Several credentials, each with its own scopes. The single
     /// `[control] token` still works and still carries everything; this is
     /// for a show that wants an agent's token to be able to take and not to
@@ -85,6 +86,115 @@ pub use godwinmix_protocol::types::UiDefaults;
 /// A plugin's own settings, as written in `params = { .. }` or in
 /// `[plugins.<name>]`. A TOML table, uninterpreted by the core.
 pub type Params = toml::Table;
+
+/// The `[plugins]` table: one sub table per plugin, and the switches that are
+/// about installing.
+///
+/// TOML puts both in one table, so this reads them apart: a value is a
+/// setting, a sub table is a plugin's own settings. It dereferences to the map
+/// of plugin tables, so every existing reader (`cfg.plugins["ndi"]`,
+/// `load_all(&cfg.plugins)`) goes on working unchanged.
+#[derive(Debug, Clone)]
+pub struct PluginsTable {
+    /// `[plugins.<name>]`, one per plugin.
+    pub settings: std::collections::BTreeMap<String, Params>,
+    /// Whether a plugin nothing signed may be installed. True by default,
+    /// because that is what `gmx plugin add ./my-plugin` is, and it is the
+    /// whole of the developer path. An operator running unattended channels
+    /// sets it false and then only a signed release installs.
+    pub allow_unsigned: bool,
+}
+
+impl Default for PluginsTable {
+    fn default() -> Self {
+        Self { settings: Default::default(), allow_unsigned: true }
+    }
+}
+
+impl std::ops::Deref for PluginsTable {
+    type Target = std::collections::BTreeMap<String, Params>;
+    fn deref(&self) -> &Self::Target {
+        &self.settings
+    }
+}
+
+/// The keys in `[plugins]` that are the core's rather than a plugin's. A
+/// plugin may not be called any of these.
+const PLUGIN_SWITCHES: &[&str] = &["allow_unsigned"];
+
+impl<'de> Deserialize<'de> for PluginsTable {
+    fn deserialize<D: serde::Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
+        let raw = std::collections::BTreeMap::<String, toml::Value>::deserialize(d)?;
+        let mut out = PluginsTable::default();
+        for (key, value) in raw {
+            match (key.as_str(), &value) {
+                ("allow_unsigned", toml::Value::Boolean(on)) => out.allow_unsigned = *on,
+                (k, _) if PLUGIN_SWITCHES.contains(&k) => {
+                    return Err(serde::de::Error::custom(format!(
+                        "[plugins] {k} is a switch and wants a boolean, not {}",
+                        value.type_str()
+                    )))
+                }
+                (_, toml::Value::Table(table)) => {
+                    out.settings.insert(key, table.clone());
+                }
+                _ => {
+                    return Err(serde::de::Error::custom(format!(
+                        "`[plugins] {key}` is a {}. A plugin's settings are a table, written \
+                         `[plugins.{key}]`; the only plain values [plugins] takes are: {}.",
+                        value.type_str(),
+                        PLUGIN_SWITCHES.join(", ")
+                    )))
+                }
+            }
+        }
+        Ok(out)
+    }
+}
+
+impl Serialize for PluginsTable {
+    fn serialize<S: serde::Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
+        use serde::ser::SerializeMap;
+        let mut map = s.serialize_map(None)?;
+        // TOML wants values before tables, so the switch goes first. It is
+        // written only when it is not the default, so a config round trip does
+        // not grow a line nobody asked for.
+        if !self.allow_unsigned {
+            map.serialize_entry("allow_unsigned", &self.allow_unsigned)?;
+        }
+        for (name, table) in &self.settings {
+            map.serialize_entry(name, table)?;
+        }
+        map.end()
+    }
+}
+
+/// `[marketplaces] only = ["acme"]`: the marketplaces a plugin name may be
+/// resolved through.
+///
+/// Empty, which is the default, means every marketplace the operator added
+/// with `gmx marketplace add`. A list pins it, which is 06 section 2's "an
+/// organisation can pin its operators to specific marketplaces": the
+/// organisation ships its own marketplace, puts its name here, and its
+/// operators install from nowhere else.
+///
+/// It is read out of `extra` rather than being a field of its own because
+/// `[marketplaces]` is a table the engine has no other opinion about, and a
+/// field would be one more thing every `Config { .. }` literal in the tree has
+/// to name.
+impl Config {
+    pub fn marketplaces_only(&self) -> Vec<String> {
+        self.extra
+            .get("marketplaces")
+            .and_then(toml::Value::as_table)
+            .and_then(|t| t.get("only"))
+            .and_then(toml::Value::as_array)
+            .map(|items| {
+                items.iter().filter_map(toml::Value::as_str).map(str::to_string).collect()
+            })
+            .unwrap_or_default()
+    }
+}
 
 /// Where a filter goes. Either on one source, on the input or the programme
 /// side of the proxy boundary, or on the programme itself.

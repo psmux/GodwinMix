@@ -1,0 +1,83 @@
+name: Plugin idea
+description: A plugin you want to exist, whether or not you are going to write it
+labels: ["plugin-idea"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Short form. Four fields and you are done.
+
+        A plugin is a separate process that speaks JSON-RPC over a pipe, so it
+        can be written in any language and it cannot take the mixer down with
+        it. Most useful ones are small.
+
+  - type: textarea
+    id: what
+    attributes:
+      label: I want a plugin that does X
+      description: One or two sentences. What it does, not how it works.
+      placeholder: >
+        A source that shows the next hymn number from a text file our
+        projection software already writes, so I do not need a second machine
+        publishing a slide.
+    validations:
+      required: true
+
+  - type: dropdown
+    id: kind
+    attributes:
+      label: What kind
+      description: A guess is fine. Somebody will correct it if it is wrong.
+      options:
+        - A source (something that produces video or audio)
+        - An output (something the programme is sent to)
+        - A filter (something that changes the programme on the way through)
+        - A panel (something in the operator's window)
+        - I do not know
+    validations:
+      required: true
+
+  - type: textarea
+    id: today
+    attributes:
+      label: What you do instead today
+      description: The workaround, however ugly. If there is none, say so.
+    validations:
+      required: true
+
+  - type: dropdown
+    id: build
+    attributes:
+      label: Would you build it
+      options:
+        - Yes, if somebody points me at the right file
+        - Yes, and I have started
+        - No, I am asking for it
+    validations:
+      required: true
+
+  - type: markdown
+    attributes:
+      value: |
+        ## What makes this a good first issue here
+
+        A maintainer adds the `good first issue` label when the answer to all
+        four of these is yes. You are welcome to make the case in the box
+        above, and being wrong about it costs nothing.
+
+        1. It is one file, or one file plus its test. A change that touches the
+           protocol, the mixer and the UI at once is not a first issue no
+           matter how small each part is.
+        2. The acceptance fits in one sentence, and somebody can tell from the
+           outside whether it happened.
+        3. There is a test to run, and it already exists or the issue says what
+           it should assert.
+        4. Somebody is named to ask. A first issue with no named person is a
+           first issue that stalls the first time it is confusing.
+
+        The label on its own does not work. A 2020 study of 9,368 good first
+        issues across 816 projects found that almost half of them were never
+        solved by a newcomer. What changes the outcome is the label plus a
+        reply inside 48 hours, which is why response time is the number this
+        project watches:
+        [community/dashboard.md](https://github.com/psmux/GodwinMix/blob/main/community/dashboard.md).

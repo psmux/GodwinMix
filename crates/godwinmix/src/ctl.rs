@@ -628,7 +628,7 @@ async fn read<T: DeserializeOwned>(method: &str, r: reqwest::Response) -> Result
     let status = r.status();
     let text = r.text().await.unwrap_or_default();
     if !status.is_success() {
-        bail!("{method}: {}", refusal_message(&text));
+        bail!("{method}: {}", refusal_message(&text, status));
     }
     if text.trim().is_empty() {
         return serde_json::from_str("null").context("decoding an empty response");
@@ -640,12 +640,22 @@ async fn read<T: DeserializeOwned>(method: &str, r: reqwest::Response) -> Result
 ///
 /// `/api/v1` has one error shape, so the message is read out of it rather than
 /// guessed at from a status code. A legacy route answers plain text, and that
-/// falls through unchanged.
-fn refusal_message(text: &str) -> String {
-    serde_json::from_str::<Value>(text)
+/// falls through unchanged. Something that is not this mixer at all answers
+/// with no body, and then the status is all there is to say; an empty message
+/// after the method name tells the reader nothing, and that used to be what
+/// they got when they pointed `gmx` at the wrong port.
+fn refusal_message(text: &str, status: reqwest::StatusCode) -> String {
+    let message = serde_json::from_str::<Value>(text)
         .ok()
         .and_then(|v| v["error"]["message"].as_str().map(String::from))
-        .unwrap_or_else(|| text.trim().to_string())
+        .unwrap_or_else(|| text.trim().to_string());
+    if !message.is_empty() {
+        return message;
+    }
+    format!(
+        "the server answered {status} with no message. Check that a GodwinMix core is \
+         listening where --url points, and that nothing else is on that port."
+    )
 }
 
 // ---------------------------------------------------------------------------
@@ -988,14 +998,23 @@ mod tests {
             },
             "trace_id": "0af7651916cd43dd8448eb211c80319c"
         });
-        let message = refusal_message(&serde_json::to_string(&body).unwrap());
+        let bad_request = reqwest::StatusCode::BAD_REQUEST;
+        let message = refusal_message(&serde_json::to_string(&body).unwrap(), bad_request);
         assert!(message.contains("cam9"), "{message}");
         assert!(message.contains("cam1, cam2"), "{message}");
 
         // A legacy route answers plain text, and that has to survive too, or a
         // CLI pointed at an older mixer prints nothing useful.
-        assert_eq!(refusal_message("  no such source cam9  "), "no such source cam9");
+        assert_eq!(
+            refusal_message("  no such source cam9  ", bad_request),
+            "no such source cam9"
+        );
         // So does a body that is JSON but not an error envelope.
-        assert_eq!(refusal_message("{\"ok\":true}"), "{\"ok\":true}");
+        assert_eq!(refusal_message("{\"ok\":true}", bad_request), "{\"ok\":true}");
+        // Something that is not this mixer answers with no body at all, and
+        // then naming the status and the port is the whole of what can be said.
+        let nothing = refusal_message("", reqwest::StatusCode::NOT_FOUND);
+        assert!(nothing.contains("404"), "{nothing}");
+        assert!(nothing.contains("--url"), "{nothing}");
     }
 }

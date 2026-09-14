@@ -1,0 +1,43 @@
+{
+  "name": "fixture-index",
+  "title": "A listing whose source is a path on the author's machine",
+  "description": "Everything here is in order except the source, which is a directory. It resolves on one laptop and nowhere else, so entry.source refuses it.",
+  "owner": "psmux",
+  "version": 1,
+  "signing": {
+    "identity_regexp": "^https://github\\.com/psmux/godwinmix-plugins/\\.github/workflows/listing\\.yml@refs/heads/main$",
+    "oidc_issuer": "https://token.actions.githubusercontent.com"
+  },
+  "plugins": [
+    {
+      "name": "clock",
+      "source": "./plugins/gmx-clock",
+      "description": "A source that draws the current time, large, on a solid background.",
+      "tier": "bronze",
+      "kinds": [
+        "source"
+      ],
+      "license": "MIT",
+      "repository": "https://github.com/psmux/gmx-clock",
+      "skill": "SKILL.md",
+      "policy": {
+        "network": [],
+        "secrets": [],
+        "telemetry": "none"
+      },
+      "versions": [
+        {
+          "version": "0.2.0",
+          "api": 1,
+          "platforms": [
+            "linux-x86_64"
+          ],
+          "signed": true,
+          "harness": [
+            "linux-x86_64: 8/8"
+          ]
+        }
+      ]
+    }
+  ]
+}
