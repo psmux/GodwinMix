@@ -36,6 +36,10 @@ const CONFIG_PREAMBLE: &str = "\
 #   [control] bind  a free port on 127.0.0.1, chosen at start
 #   [control] token a random token, kept next to this file in core-token
 #
+# The example's two sample cameras and its sample output are commented out
+# below, so the app starts on an empty desk. Uncomment them, or add sources
+# and outputs from the window and let the app write them down for you.
+#
 # Connecting to a mixer somewhere else instead? Then none of this is used:
 # that mixer reads its own config file on its own machine.
 
@@ -88,9 +92,33 @@ pub fn log_dir(app: &AppHandle) -> io::Result<PathBuf> {
 pub fn config_path(app: &AppHandle) -> io::Result<PathBuf> {
     let path = data_dir(app)?.join(CONFIG_FILE);
     if !path.exists() {
-        fs::write(&path, format!("{CONFIG_PREAMBLE}{EXAMPLE_CONFIG}"))?;
+        fs::write(&path, first_run_config(EXAMPLE_CONFIG))?;
     }
     Ok(path)
+}
+
+/// The example config, ready for someone who has never run this before.
+///
+/// Everything down to the first `[[sources]]` is settings with defaults, and
+/// is copied as it stands. From there on the example is two cameras and an
+/// output pointed at an RTMP server on this machine, which nobody has on a
+/// first run: left switched on they fill the window with sources that cannot
+/// connect and the log with reconnect attempts. They stay, commented, because
+/// the comments around them are the documentation for adding a real one.
+fn first_run_config(example: &str) -> String {
+    let mut out = String::with_capacity(CONFIG_PREAMBLE.len() + example.len() + 512);
+    out.push_str(CONFIG_PREAMBLE);
+    let mut reached_the_samples = false;
+    for line in example.lines() {
+        reached_the_samples |= line.starts_with("[[sources]]");
+        let sample = reached_the_samples && !line.trim().is_empty() && !line.trim_start().starts_with('#');
+        if sample {
+            out.push_str("# ");
+        }
+        out.push_str(line);
+        out.push('\n');
+    }
+    out
 }
 
 /// The token the local daemon is started with. Generated once and kept, so
@@ -173,6 +201,24 @@ mod tests {
     fn the_example_config_travels_with_the_binary() {
         assert!(EXAMPLE_CONFIG.contains("[control]"), "the example must still have a control section");
         assert!(EXAMPLE_CONFIG.contains("[canvas]"));
+    }
+
+    #[test]
+    fn a_first_run_config_has_no_source_switched_on() {
+        let made = first_run_config(EXAMPLE_CONFIG);
+        assert!(made.starts_with("# GodwinMix desktop"), "the preamble comes first");
+        assert!(made.contains("\n[canvas]\n"), "settings above the samples are left alone");
+        assert!(made.contains("\n[control]\n"));
+        for line in made.lines() {
+            assert!(
+                !line.starts_with("[[sources]]") && !line.starts_with("[[outputs]]"),
+                "a sample is still switched on: {line}"
+            );
+        }
+        // Commented out, not deleted: the comments around them are how
+        // someone learns what a source can be given.
+        assert!(made.contains("# [[sources]]"));
+        assert!(made.contains("# id = \"cam1\""));
     }
 
     #[test]

@@ -99,11 +99,13 @@ fn main() {
                 }
             }
             // Any other route to the door, the operating system's included.
-            RunEvent::ExitRequested { api, code, .. } => {
-                if code.is_none() && app.state::<Shell>().local.lock().unwrap().is_some() {
-                    api.prevent_exit();
-                    quit(app, false);
-                }
+            // Only when a mixer of ours is still running: otherwise there is
+            // nothing to wind down and the exit should just happen.
+            RunEvent::ExitRequested { api, code: None, .. }
+                if app.state::<Shell>().local.lock().unwrap().is_some() =>
+            {
+                api.prevent_exit();
+                quit(app, false);
             }
             _ => {}
         });
@@ -175,6 +177,7 @@ async fn headless_check(app: &AppHandle) -> i32 {
     };
     let target = local.target.clone();
     println!("started on {} with a {} character token", target.base, target.token.len());
+    println!("its process id is {}", local.pid());
     if target.base.ends_with(":8080") {
         println!("FAIL the port was 8080, which means it was not taken from the operating system");
         return 1;
@@ -192,6 +195,15 @@ async fn headless_check(app: &AppHandle) -> i32 {
             return 1;
         }
     }
+
+    // Long enough to prove it is not a process that starts and falls over,
+    // and long enough for someone watching the process list to see it there.
+    tokio::time::sleep(std::time::Duration::from_secs(3)).await;
+    if !local.is_running() {
+        println!("FAIL it did not stay up for three seconds");
+        return 1;
+    }
+    println!("still up after three seconds");
 
     sidecar::stop(app, local).await;
     tokio::time::sleep(std::time::Duration::from_millis(500)).await;
