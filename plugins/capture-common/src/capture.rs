@@ -293,7 +293,9 @@ where
         }
         if attempt < attempts.max(1) {
             if let Some(r) = reporter {
-                r.warn(format!("attempt {attempt} did not open: {last}. Trying again."));
+                r.warn(format!(
+                    "attempt {attempt} did not open: {last}. Trying again."
+                ));
             }
             std::thread::sleep(gap);
         }

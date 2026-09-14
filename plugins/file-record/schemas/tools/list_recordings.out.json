@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "list_recordings result",
+  "description": "What is in the recording folder, newest first.",
+  "type": "object",
+  "properties": {
+    "directory": { "type": "string", "description": "The folder that was read." },
+    "free_bytes": { "type": "integer", "description": "Room left on the disk holding it, or absent where the platform will not say." },
+    "recordings": {
+      "type": "array",
+      "description": "One entry per file, newest first, at most fifty.",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": { "type": "string", "description": "The file name." },
+          "bytes": { "type": "integer", "description": "Its size right now." },
+          "modified": { "type": "string", "description": "When it was last written, as RFC 3339 in UTC." },
+          "recording": { "type": "boolean", "description": "True for the file this output is writing at the moment." }
+        },
+        "required": ["name", "bytes"],
+        "additionalProperties": false
+      }
+    }
+  },
+  "required": ["directory", "recordings"],
+  "additionalProperties": false
+}

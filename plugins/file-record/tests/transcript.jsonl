@@ -1,0 +1,28 @@
+# A recorded conversation with the core, replayed with no core, no FIFO and no
+# clock. Recording is not exercised here: an output receives the programme on a
+# FIFO the core makes, and there is no core. What is exercised is everything
+# either side of that, which is where the mistakes are.
+{"plugin": {"jsonrpc": "2.0", "id": 0, "method": "initialize", "params": {"plugin": "file-record", "api": 1}}}
+{"core": {"jsonrpc": "2.0", "id": 0, "result": {"core": "godwinmix", "version": "0.2.0", "api_level": 1, "api_compatible": 1, "canvas": {"width": 1280, "height": 720, "fps": 30}, "transport": "container", "media": "", "instance": "archive", "provide": "output", "params": {"format": "mp4", "label": "Archive"}}}}
+{"plugin": {"jsonrpc": "2.0", "method": "initialized"}}
+{"core": {"jsonrpc": "2.0", "id": 1, "method": "health", "params": {}}}
+{"plugin": {"jsonrpc": "2.0", "id": 1, "result": {"state": "ok"}}}
+# Nothing is recording, so every setting applies.
+{"core": {"jsonrpc": "2.0", "id": 2, "method": "configure", "params": {"params": {"format": "mkv", "split_after_minutes": 30, "label": "Archive"}}}}
+{"plugin": {"jsonrpc": "2.0", "id": 2, "result": {"applied": true}}}
+{"core": {"jsonrpc": "2.0", "id": 3, "method": "tool.call", "params": {"name": "list_recordings", "arguments": {}}}}
+{"plugin": {"jsonrpc": "2.0", "id": 3, "result": {"structured_content": {"directory": "*", "recordings": "*"}}}}
+{"core": {"jsonrpc": "2.0", "id": 4, "method": "tool.call", "params": {"name": "delete_everything", "arguments": {}}}}
+{"plugin": {"jsonrpc": "2.0", "id": 4, "error": {"code": -32601, "message": "*"}}}
+# A start with no address says what an output receives rather than crashing.
+{"core": {"jsonrpc": "2.0", "id": 5, "method": "start", "params": {"canvas": {"width": 1280, "height": 720, "fps": 30}, "transport": "container", "media": ""}}}
+{"plugin": {"jsonrpc": "2.0", "id": 5, "error": {"code": -32603, "message": "*"}}}
+{"core": {"jsonrpc": "2.0", "id": 6, "method": "teleport", "params": {}}}
+{"plugin": {"jsonrpc": "2.0", "id": 6, "error": {"code": -32601, "message": "*"}}}
+# No `stop` here. The start above failed, so the instance is still `ready`, and
+# `stop` is not legal from `ready`: the SDK refuses it with the state named.
+# Stopping a recording that is running is covered by the unit tests.
+{"core": {"jsonrpc": "2.0", "id": 7, "method": "stop", "params": {}}}
+{"plugin": {"jsonrpc": "2.0", "id": 7, "error": {"code": -32001, "message": "*"}}}
+{"core": {"jsonrpc": "2.0", "id": 8, "method": "shutdown", "params": {"reason": "offline test"}}}
+{"plugin": {"jsonrpc": "2.0", "id": 8, "result": {}}}
