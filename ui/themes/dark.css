@@ -1,0 +1,24 @@
+/* dark: the default. Near black so a lit studio picture is the brightest thing
+   on the screen. Only custom properties here; structure lives in base.css. */
+
+:root {
+  --bg: #090b0e;
+  --panel: #12151a;
+  --panel2: #171b21;
+  --raise: #1f242c;
+  --overlay: rgba(4, 6, 9, 0.72);
+  --line: #262c35;
+  --line-soft: #1b2028;
+  --text: #e8ebf0;
+  --dim: #8b93a2;
+  --faint: #5b6373;
+  --on-accent: #06080c;
+  --live: #ff2a36;
+  --bad: #d9584c;
+  --ok: #34d07f;
+  --warn: #eea62a;
+  --accent: #5590ff;
+  --select: #5590ff;
+  --select-fill: rgba(85, 144, 255, 0.16);
+  --shadow: 0 8px 28px rgba(0, 0, 0, 0.5);
+}
