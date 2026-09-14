@@ -306,6 +306,16 @@ commitments below are written down rather than implied.
 **One executable, no interpreter.** The core, the CLI and the MCP server are
 one binary. The only external dependency is the platform's GStreamer.
 
+**A library, not only a framework.** The repository is four crates.
+`godwinmix-protocol` is the wire contract, with serde and schemars underneath
+it and no media stack, so a client library can depend on it and install
+nothing. `godwinmix-core` is the mixing engine with no server and no command
+line attached: `cargo add godwinmix-core` puts the pipeline inside your own
+program, and the example that shows it is built and run in CI.
+`godwinmix-host` will be the plugin host. `godwinmix` is the binary. See
+[the crate map](docs/explanation/architecture.md) and
+[how to embed the engine](docs/how-to/embed-the-engine.md).
+
 **One protocol, no private doors.** The web UI, `gmx ctl`, the MCP server and
 the desktop app all use the public HTTP API. There is no faster internal path
 that a third party cannot use, because a reference implementation that cheats
@@ -328,9 +338,10 @@ theme directory. Nothing in this paragraph exists yet, and the pages under
 [docs/](docs/) say so where they describe it.
 
 Where to start reading: [CONTRIBUTING.md](CONTRIBUTING.md) for the build and
-the house style, [docs/explanation/](docs/explanation/) for why the thing is
-shaped the way it is, and `src/mixer.rs` for the pipeline everything else
-exists to protect.
+the house style, [docs/explanation/architecture.md](docs/explanation/architecture.md)
+for the crate map, [docs/explanation/](docs/explanation/) for why the thing is
+shaped the way it is, and `crates/godwinmix-core/src/mixer.rs` for the pipeline
+everything else exists to protect.
 
 ## For agents
 

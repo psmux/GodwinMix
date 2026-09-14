@@ -27,22 +27,35 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 WORKDIR /src
 
-# Manifests first, then a throwaway main, so the dependency build is cached
-# and only the mixer itself is recompiled when the source changes. The two
-# binary targets and the library have to exist for `cargo build` to accept
-# the manifest at all.
+# Manifests first, then a throwaway main per crate, so the dependency build is
+# cached and only the mixer itself is recompiled when the source changes.
+# Every target a manifest names has to exist for `cargo build` to accept it,
+# which is four library roots and the two binaries.
 COPY Cargo.toml Cargo.lock ./
-RUN mkdir -p src/bin \
-    && echo 'fn main() {}' > src/main.rs \
-    && echo 'fn main() {}' > src/bin/gmx.rs \
-    && touch src/lib.rs \
+COPY crates/godwinmix-protocol/Cargo.toml crates/godwinmix-protocol/
+COPY crates/godwinmix-core/Cargo.toml crates/godwinmix-core/
+COPY crates/godwinmix-host/Cargo.toml crates/godwinmix-host/
+COPY crates/godwinmix/Cargo.toml crates/godwinmix/
+RUN mkdir -p crates/godwinmix-protocol/src crates/godwinmix-core/src \
+        crates/godwinmix-host/src crates/godwinmix/src/bin \
+    && touch crates/godwinmix-protocol/src/lib.rs \
+        crates/godwinmix-core/src/lib.rs \
+        crates/godwinmix-host/src/lib.rs \
+        crates/godwinmix/src/lib.rs \
+    && echo 'fn main() {}' > crates/godwinmix/src/main.rs \
+    && echo 'fn main() {}' > crates/godwinmix/src/bin/gmx.rs \
     && cargo build --release --locked \
-    && rm -rf src
+    && find crates -name '*.rs' -delete
 
-# The real source. `touch` defeats the cache on the crate itself: cargo goes
-# by mtime, and COPY can preserve one older than the stub build above.
-COPY src ./src
-RUN touch src/lib.rs src/main.rs src/bin/gmx.rs \
+# The real source, and the data the crates embed with `include_str!`:
+# `codecs.toml` and the example config for the engine, `layouts/` for the
+# scene module, `ui/` for the web UI the binary serves. They stay at the
+# repository root, which is where every document says they live.
+COPY crates ./crates
+COPY codecs.toml godwinmix.example.toml ./
+COPY layouts ./layouts
+COPY ui ./ui
+RUN find crates -name '*.rs' -exec touch {} + \
     && cargo build --release --locked --bins \
     && strip target/release/godwinmix target/release/gmx
 
@@ -50,7 +63,7 @@ RUN touch src/lib.rs src/main.rs src/bin/gmx.rs \
 FROM debian:trixie-slim AS runtime
 
 # x264enc is the only software H.264 encoder the mixer's probe knows
-# (src/probe.rs), and on Debian it ships inside gstreamer1.0-plugins-ugly.
+# (crates/godwinmix-core/src/probe.rs), and on Debian it ships inside gstreamer1.0-plugins-ugly.
 # Build with --build-arg WITH_X264=0 if that package's licensing is a problem
 # where the image runs; the mixer then needs a hardware encoder (VA, NVENC)
 # and refuses to start without one.

@@ -29,6 +29,7 @@ Start here if you have never run it.
 * [Write a preset](how-to/write-a-preset.md) (planned)
 * [Upgrade from LiveboxMix](how-to/upgrade-from-liveboxmix.md)
 * [Run the smoke test](how-to/smoke-test.md)
+* [Embed the engine in your own program](how-to/embed-the-engine.md)
 
 ## Reference
 
@@ -45,6 +46,7 @@ Start here if you have never run it.
 * [Why plugins are processes](explanation/why-plugins-are-processes.md)
 * [Why the UI is a client](explanation/why-the-ui-is-a-client.md)
 * [Footprint budgets and the reference machines](explanation/footprint-budgets.md)
+* [The crate map](explanation/architecture.md)
 
 ## For AI agents
 

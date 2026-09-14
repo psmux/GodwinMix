@@ -1,0 +1,19 @@
+[package]
+name = "godwinmix-protocol"
+description = "The GodwinMix control protocol: request, response, event and status types, error codes, scopes, the method table and the schema generators"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+# No media stack and no transport. A client library, an SDK or a test harness
+# depends on this and pulls in nothing that has to be installed first.
+[dependencies]
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
+schemars = { workspace = true }
+# One warning line in `types.rs` and two mutexes. Both are facades with no
+# runtime of their own; neither pulls in a media stack or a server.
+tracing = { workspace = true }
+parking_lot = { workspace = true }
