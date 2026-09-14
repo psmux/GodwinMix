@@ -66,6 +66,16 @@ Keys accepted on every method, handled before a method runs.
 | `pipeline.latency` | `GET /api/v1/pipeline/latency` | read |  | 1 | How much delay one pipeline is carrying, and which stage put it there. |
 | `pipeline.list` | `GET /api/v1/pipeline/list` | read |  | 1 | Every pipeline running right now, by the name the other pipeline methods accept. |
 | `pipeline.queues` | `GET /api/v1/pipeline/queues` | read |  | 1 | Every queue in one pipeline with how full it is, fullest first. A queue that stays full is where the trouble is. |
+| `plugin.add` | `POST /api/v1/plugins` | admin | yes | 1 | Install a plugin from a local directory, while live. The directory is the one with gmx-plugin.toml at its root. |
+| `plugin.describe` | `POST /api/v1/plugins/{id}/describe` | read |  | 1 | One plugin in full: its manifest, the settings schema of every provide, and the description from each SKILL.md. |
+| `plugin.disable` | `POST /api/v1/plugins/{id}/disable` | admin |  | 1 | Turn a plugin off without uninstalling it. It registers nothing and runs no process until it is enabled again. |
+| `plugin.enable` | `POST /api/v1/plugins/{id}/enable` | admin |  | 1 | Turn a plugin back on. It registers what it declares and its instances start. |
+| `plugin.list` | `GET /api/v1/plugins` | read |  | 1 | Every plugin installed, with what it provides and what each running instance is costing in cpu, memory, latency, dropped buffers and restarts. |
+| `plugin.reload` | `POST /api/v1/plugins/{id}/reload` | admin |  | 1 | Read a plugin's directory again and swap its running instances one at a time, with the freeze frame covering each. |
+| `plugin.remove` | `DELETE /api/v1/plugins/{id}` | admin | yes | 1 | Uninstall a plugin and unwind everything it registered: its provides, its tools, its panels, its hooks and its discovery matchers. |
+| `plugin.settings.get` | `GET /api/v1/plugins/{id}/settings` | read |  | 1 | A plugin's settings as they stand, with its schema beside them. |
+| `plugin.settings.set` | `POST /api/v1/plugins/{id}/settings` | admin |  | 1 | Change a plugin's settings. A plugin that cannot take a change while running says so rather than being restarted behind your back. |
+| `plugin.stats` | `POST /api/v1/plugins/{id}/stats` | read |  | 1 | Per instance cpu, memory, media latency, dropped buffers and restarts, refreshed once a second. |
 | `program.get` | `GET /api/v1/program` | read |  | 1 | What is on air, the programme running time, and what revert would go back to. |
 | `program.golive` | `POST /api/v1/program/golive` | operate |  | 1 | One call to put a web page on air: add the page, add the destination, and take the page as soon as it renders. |
 | `program.history` | `GET /api/v1/program/history` | read |  | 1 | The last hundred takes, newest first, with the token that asked for each. |
@@ -639,6 +649,164 @@ Every queue in one pipeline with how full it is, fullest first. A queue that sta
   },
   "result": {
     "type": "object"
+  }
+}
+```
+
+#### `plugin.add`
+
+Install a plugin from a local directory, while live. The directory is the one with gmx-plugin.toml at its root.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/AddPluginRequest"
+  },
+  "result": {
+    "$ref": "#/$defs/PluginRecord"
+  }
+}
+```
+
+#### `plugin.describe`
+
+One plugin in full: its manifest, the settings schema of every provide, and the description from each SKILL.md.
+
+MCP tool `describe_plugin` in the `search` profile: readOnlyHint true, destructiveHint false, idempotentHint true.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/PluginName"
+  },
+  "result": {
+    "$ref": "#/$defs/PluginDescription"
+  }
+}
+```
+
+#### `plugin.disable`
+
+Turn a plugin off without uninstalling it. It registers nothing and runs no process until it is enabled again.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/PluginName"
+  },
+  "result": {
+    "$ref": "#/$defs/PluginRecord"
+  }
+}
+```
+
+#### `plugin.enable`
+
+Turn a plugin back on. It registers what it declares and its instances start.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/PluginName"
+  },
+  "result": {
+    "$ref": "#/$defs/PluginRecord"
+  }
+}
+```
+
+#### `plugin.list`
+
+Every plugin installed, with what it provides and what each running instance is costing in cpu, memory, latency, dropped buffers and restarts.
+
+MCP tool `list_plugins` in the `search` profile: readOnlyHint true, destructiveHint false, idempotentHint true.
+
+```json
+{
+  "params": {
+    "additionalProperties": false,
+    "properties": {},
+    "type": "object"
+  },
+  "result": {
+    "$ref": "#/$defs/PluginListing"
+  }
+}
+```
+
+#### `plugin.reload`
+
+Read a plugin's directory again and swap its running instances one at a time, with the freeze frame covering each.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/PluginName"
+  },
+  "result": {
+    "$ref": "#/$defs/PluginRecord"
+  }
+}
+```
+
+#### `plugin.remove`
+
+Uninstall a plugin and unwind everything it registered: its provides, its tools, its panels, its hooks and its discovery matchers.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/PluginName"
+  },
+  "result": {
+    "$ref": "#/$defs/PluginRemoved"
+  }
+}
+```
+
+#### `plugin.settings.get`
+
+A plugin's settings as they stand, with its schema beside them.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/PluginName"
+  },
+  "result": {
+    "$ref": "#/$defs/PluginSettings"
+  }
+}
+```
+
+#### `plugin.settings.set`
+
+Change a plugin's settings. A plugin that cannot take a change while running says so rather than being restarted behind your back.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/SetSettingsRequest"
+  },
+  "result": {
+    "$ref": "#/$defs/PluginSettings"
+  }
+}
+```
+
+#### `plugin.stats`
+
+Per instance cpu, memory, media latency, dropped buffers and restarts, refreshed once a second.
+
+```json
+{
+  "params": {
+    "additionalProperties": false,
+    "properties": {},
+    "type": "object"
+  },
+  "result": {
+    "$ref": "#/$defs/StatsListing"
   }
 }
 ```

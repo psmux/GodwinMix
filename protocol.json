@@ -118,6 +118,19 @@
       ],
       "type": "object"
     },
+    "AddPluginRequest": {
+      "description": "`plugin.add`.",
+      "properties": {
+        "source": {
+          "description": "A local directory with `gmx-plugin.toml` at its root. Git, an index and\na signed release are Phase 5; this takes a path.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "source"
+      ],
+      "type": "object"
+    },
     "AddSourceRequest": {
       "additionalProperties": true,
       "description": "`source.add`.",
@@ -592,6 +605,69 @@
       },
       "required": [
         "id"
+      ],
+      "type": "object"
+    },
+    "InstanceRecord": {
+      "description": "One running instance and its cost.",
+      "properties": {
+        "buffers_dropped": {
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "cpu_percent": {
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "instance": {
+          "type": "string"
+        },
+        "media_latency_ms": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "pid": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "provide": {
+          "type": "string"
+        },
+        "restarts": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "rss_bytes": {
+          "format": "uint64",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "state": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "instance",
+        "provide",
+        "state",
+        "buffers_dropped",
+        "restarts"
       ],
       "type": "object"
     },
@@ -1127,6 +1203,236 @@
       },
       "type": "object"
     },
+    "PluginDescription": {
+      "description": "The whole of one plugin, for an agent about to use it.",
+      "properties": {
+        "description": {
+          "type": "string"
+        },
+        "enabled": {
+          "type": "boolean"
+        },
+        "hooks": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "instances": {
+          "description": "Every running instance of it, with what it costs.",
+          "items": {
+            "$ref": "#/$defs/InstanceRecord"
+          },
+          "type": "array"
+        },
+        "manifest": {
+          "description": "The manifest as JSON, every table of it."
+        },
+        "name": {
+          "type": "string"
+        },
+        "problem": {
+          "description": "Why it is not loaded, when it is not.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "provides": {
+          "description": "The type ids it contributes: what goes in `type` on a source, an output\nor a filter.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "root": {
+          "description": "Where it is installed.",
+          "type": "string"
+        },
+        "schemas": {
+          "additionalProperties": true,
+          "description": "Per provide id, its settings schema.",
+          "type": "object"
+        },
+        "skills": {
+          "additionalProperties": true,
+          "description": "Per provide id, the description line from its SKILL.md.",
+          "type": "object"
+        },
+        "tools": {
+          "description": "Its MCP tools, as `gmx_<plugin>_<tool>`. Reachable with `search_tools`;\nnever in the hot list.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "version": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "version",
+        "description",
+        "enabled",
+        "root",
+        "provides",
+        "tools",
+        "hooks",
+        "instances",
+        "manifest",
+        "schemas",
+        "skills"
+      ],
+      "type": "object"
+    },
+    "PluginListing": {
+      "properties": {
+        "plugins": {
+          "items": {
+            "$ref": "#/$defs/PluginRecord"
+          },
+          "type": "array"
+        },
+        "plugins_dir": {
+          "description": "Where plugins are read from on this machine.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "plugins",
+        "plugins_dir"
+      ],
+      "type": "object"
+    },
+    "PluginName": {
+      "description": "Anything that names one plugin.",
+      "properties": {
+        "name": {
+          "description": "The plugin's name, which is the namespace of every id it contributes.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "type": "object"
+    },
+    "PluginRecord": {
+      "description": "One plugin as the core reports it.",
+      "properties": {
+        "description": {
+          "type": "string"
+        },
+        "enabled": {
+          "type": "boolean"
+        },
+        "hooks": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "instances": {
+          "description": "Every running instance of it, with what it costs.",
+          "items": {
+            "$ref": "#/$defs/InstanceRecord"
+          },
+          "type": "array"
+        },
+        "name": {
+          "type": "string"
+        },
+        "problem": {
+          "description": "Why it is not loaded, when it is not.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "provides": {
+          "description": "The type ids it contributes: what goes in `type` on a source, an output\nor a filter.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "root": {
+          "description": "Where it is installed.",
+          "type": "string"
+        },
+        "tools": {
+          "description": "Its MCP tools, as `gmx_<plugin>_<tool>`. Reachable with `search_tools`;\nnever in the hot list.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "version": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "version",
+        "description",
+        "enabled",
+        "root",
+        "provides",
+        "tools",
+        "hooks",
+        "instances"
+      ],
+      "type": "object"
+    },
+    "PluginRemoved": {
+      "properties": {
+        "provides": {
+          "description": "What went with it, so a caller can see the blast radius.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "removed": {
+          "type": "string"
+        },
+        "tools": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "removed",
+        "provides",
+        "tools"
+      ],
+      "type": "object"
+    },
+    "PluginSettings": {
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "schemas": {
+          "additionalProperties": true,
+          "description": "The JSON Schema every surface renders, one per provide.",
+          "type": "object"
+        },
+        "settings": {
+          "additionalProperties": true,
+          "type": "object"
+        }
+      },
+      "required": [
+        "name",
+        "settings",
+        "schemas"
+      ],
+      "type": "object"
+    },
     "ProgramState": {
       "description": "What `program.get` answers with, and what `program.take` returns so that no\nfollow up read is needed.",
       "properties": {
@@ -1236,6 +1542,24 @@
       },
       "required": [
         "id"
+      ],
+      "type": "object"
+    },
+    "SetSettingsRequest": {
+      "description": "`plugin.settings.set`.",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "settings": {
+          "additionalProperties": true,
+          "default": {},
+          "description": "Only the keys named are changed.",
+          "type": "object"
+        }
+      },
+      "required": [
+        "name"
       ],
       "type": "object"
     },
@@ -1475,6 +1799,20 @@
         "state",
         "has_video",
         "has_audio"
+      ],
+      "type": "object"
+    },
+    "StatsListing": {
+      "properties": {
+        "instances": {
+          "items": {
+            "$ref": "#/$defs/InstanceRecord"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "instances"
       ],
       "type": "object"
     },
@@ -3008,6 +3346,214 @@
       "scope": "read",
       "since": "1",
       "summary": "Every queue in one pipeline with how full it is, fullest first. A queue that stays full is where the trouble is."
+    },
+    {
+      "destructive": true,
+      "idempotent": true,
+      "mutating": true,
+      "name": "plugin.add",
+      "params": {
+        "$ref": "#/$defs/AddPluginRequest"
+      },
+      "rest": {
+        "method": "POST",
+        "path": "/api/v1/plugins"
+      },
+      "result": {
+        "$ref": "#/$defs/PluginRecord"
+      },
+      "scope": "admin",
+      "since": "1",
+      "summary": "Install a plugin from a local directory, while live. The directory is the one with gmx-plugin.toml at its root."
+    },
+    {
+      "destructive": false,
+      "idempotent": true,
+      "mcp": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "profile": "search",
+        "readOnlyHint": true,
+        "tool": "describe_plugin"
+      },
+      "mutating": false,
+      "name": "plugin.describe",
+      "params": {
+        "$ref": "#/$defs/PluginName"
+      },
+      "rest": {
+        "method": "POST",
+        "path": "/api/v1/plugins/{id}/describe"
+      },
+      "result": {
+        "$ref": "#/$defs/PluginDescription"
+      },
+      "scope": "read",
+      "since": "1",
+      "summary": "One plugin in full: its manifest, the settings schema of every provide, and the description from each SKILL.md."
+    },
+    {
+      "destructive": false,
+      "idempotent": true,
+      "mutating": true,
+      "name": "plugin.disable",
+      "params": {
+        "$ref": "#/$defs/PluginName"
+      },
+      "rest": {
+        "method": "POST",
+        "path": "/api/v1/plugins/{id}/disable"
+      },
+      "result": {
+        "$ref": "#/$defs/PluginRecord"
+      },
+      "scope": "admin",
+      "since": "1",
+      "summary": "Turn a plugin off without uninstalling it. It registers nothing and runs no process until it is enabled again."
+    },
+    {
+      "destructive": false,
+      "idempotent": true,
+      "mutating": true,
+      "name": "plugin.enable",
+      "params": {
+        "$ref": "#/$defs/PluginName"
+      },
+      "rest": {
+        "method": "POST",
+        "path": "/api/v1/plugins/{id}/enable"
+      },
+      "result": {
+        "$ref": "#/$defs/PluginRecord"
+      },
+      "scope": "admin",
+      "since": "1",
+      "summary": "Turn a plugin back on. It registers what it declares and its instances start."
+    },
+    {
+      "destructive": false,
+      "idempotent": true,
+      "mcp": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "profile": "search",
+        "readOnlyHint": true,
+        "tool": "list_plugins"
+      },
+      "mutating": false,
+      "name": "plugin.list",
+      "params": {
+        "additionalProperties": false,
+        "properties": {},
+        "type": "object"
+      },
+      "rest": {
+        "method": "GET",
+        "path": "/api/v1/plugins"
+      },
+      "result": {
+        "$ref": "#/$defs/PluginListing"
+      },
+      "scope": "read",
+      "since": "1",
+      "summary": "Every plugin installed, with what it provides and what each running instance is costing in cpu, memory, latency, dropped buffers and restarts."
+    },
+    {
+      "destructive": false,
+      "idempotent": true,
+      "mutating": true,
+      "name": "plugin.reload",
+      "params": {
+        "$ref": "#/$defs/PluginName"
+      },
+      "rest": {
+        "method": "POST",
+        "path": "/api/v1/plugins/{id}/reload"
+      },
+      "result": {
+        "$ref": "#/$defs/PluginRecord"
+      },
+      "scope": "admin",
+      "since": "1",
+      "summary": "Read a plugin's directory again and swap its running instances one at a time, with the freeze frame covering each."
+    },
+    {
+      "destructive": true,
+      "idempotent": true,
+      "mutating": true,
+      "name": "plugin.remove",
+      "params": {
+        "$ref": "#/$defs/PluginName"
+      },
+      "rest": {
+        "method": "DELETE",
+        "path": "/api/v1/plugins/{id}"
+      },
+      "result": {
+        "$ref": "#/$defs/PluginRemoved"
+      },
+      "scope": "admin",
+      "since": "1",
+      "summary": "Uninstall a plugin and unwind everything it registered: its provides, its tools, its panels, its hooks and its discovery matchers."
+    },
+    {
+      "destructive": false,
+      "idempotent": true,
+      "mutating": false,
+      "name": "plugin.settings.get",
+      "params": {
+        "$ref": "#/$defs/PluginName"
+      },
+      "rest": {
+        "method": "GET",
+        "path": "/api/v1/plugins/{id}/settings"
+      },
+      "result": {
+        "$ref": "#/$defs/PluginSettings"
+      },
+      "scope": "read",
+      "since": "1",
+      "summary": "A plugin's settings as they stand, with its schema beside them."
+    },
+    {
+      "destructive": false,
+      "idempotent": true,
+      "mutating": true,
+      "name": "plugin.settings.set",
+      "params": {
+        "$ref": "#/$defs/SetSettingsRequest"
+      },
+      "rest": {
+        "method": "POST",
+        "path": "/api/v1/plugins/{id}/settings"
+      },
+      "result": {
+        "$ref": "#/$defs/PluginSettings"
+      },
+      "scope": "admin",
+      "since": "1",
+      "summary": "Change a plugin's settings. A plugin that cannot take a change while running says so rather than being restarted behind your back."
+    },
+    {
+      "destructive": false,
+      "idempotent": true,
+      "mutating": false,
+      "name": "plugin.stats",
+      "params": {
+        "additionalProperties": false,
+        "properties": {},
+        "type": "object"
+      },
+      "rest": {
+        "method": "POST",
+        "path": "/api/v1/plugins/{id}/stats"
+      },
+      "result": {
+        "$ref": "#/$defs/StatsListing"
+      },
+      "scope": "read",
+      "since": "1",
+      "summary": "Per instance cpu, memory, media latency, dropped buffers and restarts, refreshed once a second."
     },
     {
       "destructive": false,
