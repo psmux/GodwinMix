@@ -842,14 +842,12 @@ class PluginSettings(TypedDict, total=False):
     # The JSON Schema every surface renders, one per provide.
     settings: Dict[str, Any]
 
-class PluginUpdated(TypedDict, total=False):
-    """What `plugin.update` answers with."""
-
-    from: str
-    handshake_ms: int
-    # How long the new build took to answer `initialize`.
-    plugin: PluginRecord
-    to: str
+PluginUpdated = TypedDict("PluginUpdated", {
+    "from": str,
+    "handshake_ms": int,
+    "plugin": PluginRecord,
+    "to": str,
+}, total=False)
 
 class PreviewClosed(TypedDict, total=False):
     """What `preview.close` answers with."""

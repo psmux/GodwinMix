@@ -1,7 +1,8 @@
 """Python output: TypedDicts, the tables, and one coroutine per protocol method."""
 
-from model import keyword
-import Ref
+import keyword
+
+from model import Ref
 from names import python_arg, snake
 
 HEADER = '''"""Generated from protocol.json by clients/gen/generate.py. Do not edit.
