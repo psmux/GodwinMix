@@ -1,21 +1,16 @@
 // The legacy transport: today's REST endpoints and today's broadcast socket,
-// dressed as `/rpc`.
-//
-// This file exists so the new UI is usable against a server that has not got
-// `/rpc` yet. Every panel calls `source.audio.set` and receives `source.state`;
-// only this file knows that the wire underneath is `POST /api/sources/{id}/audio`
-// and `{"type":"source_state_changed"}`. Delete it once `/rpc` ships and nothing
-// else changes.
+// dressed as `/rpc`, so the new UI works against a server with no `/rpc` yet.
+// Every panel calls `source.audio.set`; only this file knows the wire is
+// `POST /api/sources/{id}/audio`. Delete it once `/rpc` ships.
 //
 // Three things the old server cannot do, and what happens instead:
-//   * `core.subscribe` has no effect. The server sends mosaic frames to every
-//     client whether or not one is wanted. The client still stops decoding them
-//     when no tile is live, which is the expensive half, and says so in
-//     `capabilities.subscriptionIsReal`.
-//   * Frames have no 16 byte header. They are wrapped with the layout id the
-//     status document implies, so `frames.js` sees one shape either way.
-//   * `source.set {name, color}` does not exist. It answers -32601 and the
-//     sources panel keeps the change on this device, marked as local.
+//   * `core.subscribe` has no effect: frames go to every client regardless. The
+//     client still stops decoding them when no tile is live, which is the
+//     expensive half, and says so in `capabilities.subscriptionIsReal`.
+//   * Frames have no 16 byte header, so they are wrapped with the layout id the
+//     status document implies and `frames.js` sees one shape either way.
+//   * `source.set {name, color}` does not exist: it answers -32601 and the tray
+//     keeps the change on this device, marked as local.
 
 import { RpcError, CODES } from "./errors.js";
 import { bareFrame } from "./frames.js";

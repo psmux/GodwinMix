@@ -1,9 +1,6 @@
-// The test runner: forty lines, no dependencies, no toolchain.
-//
-// Everything testable without a mixer is tested here: the selection rules, the
-// meter scale, the fader curve, the frame header, the store, the schema form,
-// the ext union, the palette ranking and the legacy error unwrapping. Open the
-// page, read the console, or read the list.
+// The test runner: forty lines, no dependencies, no toolchain. Open the page,
+// read the console, or read the list. Everything testable without a mixer is
+// here, including the legacy adapter against a stubbed server.
 
 import { Selection, overlaps, rectFrom } from "../shell/selection.js";
 import { dbToPos, FLOOR } from "../shell/meter.js";
