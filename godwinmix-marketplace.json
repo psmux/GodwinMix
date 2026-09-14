@@ -10,6 +10,60 @@
   },
   "plugins": [
     {
+      "name": "audio-device",
+      "source": "./plugins/audio-device",
+      "description": "A microphone, a line input or a sound card as a source: PipeWire or PulseAudio on Linux, Core Audio on macOS, WASAPI on Windows, with gain and mute and device discovery.",
+      "tier": "gold",
+      "kinds": [
+        "device",
+        "source"
+      ],
+      "license": "Apache-2.0",
+      "repository": "https://github.com/psmux/godwinmix/tree/main/plugins/audio-device",
+      "versions": [
+        {
+          "version": "0.1.0",
+          "api": 1,
+          "platforms": [
+            "linux-x86_64",
+            "linux-aarch64",
+            "linux-armv7",
+            "macos-aarch64",
+            "macos-x86_64",
+            "windows-x86_64"
+          ],
+          "signed": true
+        }
+      ]
+    },
+    {
+      "name": "camera",
+      "source": "./plugins/camera",
+      "description": "A USB or built in camera as a source: v4l2 on Linux, AVFoundation on macOS, Media Foundation on Windows, with device discovery and a resolution and frame rate you can set.",
+      "tier": "gold",
+      "kinds": [
+        "device",
+        "source"
+      ],
+      "license": "Apache-2.0",
+      "repository": "https://github.com/psmux/godwinmix/tree/main/plugins/camera",
+      "versions": [
+        {
+          "version": "0.1.0",
+          "api": 1,
+          "platforms": [
+            "linux-x86_64",
+            "linux-aarch64",
+            "linux-armv7",
+            "macos-aarch64",
+            "macos-x86_64",
+            "windows-x86_64"
+          ],
+          "signed": true
+        }
+      ]
+    },
+    {
       "name": "director",
       "source": "./plugins/director",
       "description": "An automatic director: rule based out of the box, and able to consult a model when one is configured",
@@ -29,6 +83,31 @@
             "macos-aarch64",
             "macos-x86_64",
             "windows-x86_64"
+          ],
+          "signed": true
+        }
+      ]
+    },
+    {
+      "name": "file-record",
+      "source": "./plugins/file-record",
+      "description": "Record the programme to a file: fragmented MP4 so a crash leaves something playable, or Matroska; a path pattern with the date and time, splitting by the clock, and a disk space check that says so before the disk fills.",
+      "tier": "gold",
+      "kinds": [
+        "output"
+      ],
+      "license": "Apache-2.0",
+      "repository": "https://github.com/psmux/godwinmix/tree/main/plugins/file-record",
+      "versions": [
+        {
+          "version": "0.1.0",
+          "api": 1,
+          "platforms": [
+            "linux-x86_64",
+            "linux-aarch64",
+            "linux-armv7",
+            "macos-aarch64",
+            "macos-x86_64"
           ],
           "signed": true
         }
@@ -100,6 +179,32 @@
       "versions": [
         {
           "version": "0.2.0",
+          "api": 1,
+          "platforms": [
+            "linux-x86_64",
+            "linux-aarch64",
+            "macos-aarch64",
+            "macos-x86_64",
+            "windows-x86_64"
+          ],
+          "signed": true
+        }
+      ]
+    },
+    {
+      "name": "screen",
+      "source": "./plugins/screen",
+      "description": "A monitor or a window as a source: the PipeWire portal or X11 on Linux, AVFoundation on macOS, Desktop Duplication on Windows. Desktop duplication only, not exclusive fullscreen game capture.",
+      "tier": "gold",
+      "kinds": [
+        "device",
+        "source"
+      ],
+      "license": "Apache-2.0",
+      "repository": "https://github.com/psmux/godwinmix/tree/main/plugins/screen",
+      "versions": [
+        {
+          "version": "0.1.0",
           "api": 1,
           "platforms": [
             "linux-x86_64",

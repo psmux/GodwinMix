@@ -1,0 +1,42 @@
+[plugin]
+name = "file-record"
+version = "0.1.0"
+api = 1
+description = "Record the programme to a file: fragmented MP4 so a crash leaves something playable, or Matroska; a path pattern with the date and time, splitting by the clock, and a disk space check that says so before the disk fills."
+license = "Apache-2.0"
+authors = ["GodwinMix"]
+repository = "https://github.com/psmux/godwinmix"
+# No Windows triple. An output plugin receives the programme on a FIFO and
+# Windows has none, so the core refuses a sidecar output there before it starts
+# one. Claiming the platform would mean installing cleanly and then failing at
+# the first record. See the README and docs/reference/plugin-lifecycle.md.
+platforms = ["linux-x86_64", "linux-aarch64", "linux-armv7", "macos-aarch64", "macos-x86_64"]
+placements = ["sidecar"]
+process = "per-instance"
+
+[run]
+bin = { "linux-x86_64" = "bin/gmx-file-record", "linux-aarch64" = "bin/gmx-file-record", "linux-armv7" = "bin/gmx-file-record", "macos-aarch64" = "bin/gmx-file-record", "macos-x86_64" = "bin/gmx-file-record" }
+
+[build]
+command = "sh build"
+output = "bin/gmx-file-record"
+
+[[provides]]
+kind = "output"
+id = "output"
+# The programme arrives already encoded and muxed, which is what an output
+# receives. Nothing here decodes it: the file is a remux, so recording costs
+# almost no CPU whatever the canvas is.
+media = { video = "container", audio = "container", alpha = false, thumb = false }
+capabilities = ["restart-in-place", "health"]
+settings = "schemas/output.json"
+skill = "skills/output/SKILL.md"
+
+[[tools]]
+name = "list_recordings"
+description = "List the files this recorder has written, newest first, with their size and when they were finished. Use it after a service to tell the operator where the recording went, and to check a recording is actually growing when they ask whether it is working. Example: list_recordings {} returns {directory: '/home/av/Videos/GodwinMix', recordings: [{name: 'sunday-2026-09-13-1030-00000.mp4', bytes: 2411724800, modified: '2026-09-13T11:42:06Z', recording: false}]}."
+input = "schemas/tools/list_recordings.json"
+output = "schemas/tools/list_recordings.out.json"
+annotations = { readOnlyHint = true, destructiveHint = false, idempotentHint = false, openWorldHint = false }
+user_invocable = true
+model_invocable = true

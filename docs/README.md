@@ -59,6 +59,9 @@ Start here if you have never run it.
 * [Receive and send SRT](how-to/srt.md)
 * [Send the programme to a WHIP endpoint](how-to/send-to-whip.md)
 * [Use NDI](how-to/use-ndi.md)
+* [Use a webcam](how-to/use-a-webcam.md)
+* [Capture the screen](how-to/capture-the-screen.md)
+* [Record to a file](how-to/record-to-a-file.md)
 
 ## Reference
 
@@ -77,6 +80,7 @@ Start here if you have never run it.
 * [Web page sources](reference/web-page-sources.md)
 * [Streams: MJPEG, PCM, Opus, WHEP and the local socket](reference/streams.md)
 * [The generated protocol reference](reference/protocol.md)
+* [The first party plugins](reference/plugins.md)
 * [The plugin manifest](reference/plugin-manifest.md)
 * [The index format](reference/index-format.md)
 * [The quality scale](reference/quality-scale.md)

@@ -1,0 +1,65 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Screen",
+  "description": "A monitor, or part of one, as a source. Desktop duplication: what is on the screen, not what a full screen game is drawing.",
+  "type": "object",
+  "properties": {
+    "monitor": {
+      "type": "integer",
+      "title": "Monitor",
+      "description": "Which monitor, counting from 0 in the order the operating system lists them. On a machine with one screen, leave it at 0.",
+      "default": 0,
+      "minimum": 0,
+      "maximum": 15,
+      "examples": [0, 1]
+    },
+    "region": {
+      "type": "string",
+      "title": "Region",
+      "description": "Capture part of the screen instead of all of it, as X,Y,WIDTH,HEIGHT in screen pixels from the top left. Empty captures the whole monitor.",
+      "default": "",
+      "pattern": "^$|^[0-9]{1,5},[0-9]{1,5},[1-9][0-9]{0,4},[1-9][0-9]{0,4}$",
+      "examples": ["", "0,0,1920,1080", "640,0,1280,720"]
+    },
+    "show_cursor": {
+      "type": "boolean",
+      "title": "Show the mouse pointer",
+      "description": "Whether the mouse pointer appears in the picture. On for a tutorial, off for lyrics or slides.",
+      "default": true,
+      "examples": [true, false]
+    },
+    "display": {
+      "type": "string",
+      "title": "X display",
+      "description": "Linux with X11 only: which X display to capture, such as ':0'. Empty uses DISPLAY from the environment. Ignored everywhere else.",
+      "default": "",
+      "maxLength": 64,
+      "examples": ["", ":0", ":0.1"]
+    },
+    "node_id": {
+      "type": "string",
+      "title": "PipeWire node",
+      "description": "Linux with Wayland only: the PipeWire node id of a screen cast the desktop portal has already granted. Leave it empty on X11 and on every other platform. See the plugin's README for how to get one and why it is not asked for automatically yet.",
+      "default": "",
+      "maxLength": 64,
+      "examples": ["", "42"]
+    },
+    "label": {
+      "type": "string",
+      "title": "Label",
+      "description": "A name for this capture, shown wherever the source is listed.",
+      "default": "",
+      "maxLength": 64,
+      "examples": ["", "Lyrics screen", "Presenter laptop"]
+    },
+    "element": {
+      "type": "string",
+      "title": "Capture element",
+      "description": "Force one GStreamer capture element instead of letting the plugin choose. Empty is the right answer almost always.",
+      "default": "",
+      "enum": ["", "pipewiresrc", "ximagesrc", "avfvideosrc", "d3d11screencapturesrc", "dxgiscreencapsrc", "gdiscreencapsrc", "videotestsrc"],
+      "examples": ["", "ximagesrc", "videotestsrc"]
+    }
+  },
+  "additionalProperties": false
+}

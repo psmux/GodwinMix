@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "list_cameras result",
+  "description": "Every camera the operating system is offering, in the order it offers them.",
+  "type": "object",
+  "properties": {
+    "cameras": {
+      "type": "array",
+      "description": "One entry per camera. `id` is what goes in a camera source's `device` setting.",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string", "description": "What to put in the `device` setting." },
+          "name": { "type": "string", "description": "What the operating system calls it." },
+          "api": { "type": "string", "description": "The capture API behind it: v4l2, avf, mediafoundation." },
+          "width": { "type": "integer", "description": "The widest size it advertises." },
+          "height": { "type": "integer", "description": "The tallest size it advertises." }
+        },
+        "required": ["id", "name"],
+        "additionalProperties": false
+      }
+    }
+  },
+  "required": ["cameras"],
+  "additionalProperties": false
+}

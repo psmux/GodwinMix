@@ -1,0 +1,21 @@
+# The webcam source. A member of the repository's workspace through the
+# `plugins/*` glob, so `cargo build` and `cargo test --workspace` cover it.
+#
+# The binary the core runs is staged at `bin/gmx-camera` by `./build`, because
+# a workspace member's `cargo` output lands in the workspace target directory
+# and `gmx plugin add` copies neither that nor anything named `target`.
+
+[package]
+name = "gmx-camera"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.82"
+description = "A USB or built in camera as a GodwinMix source"
+license = "Apache-2.0"
+repository = "https://github.com/psmux/godwinmix"
+
+[dependencies]
+godwinmix-sdk = { path = "../../crates/godwinmix-sdk", version = "0.1.0" }
+godwinmix-capture-common = { path = "../capture-common", version = "0.1.0" }
+gstreamer = { workspace = true }
+serde_json = { workspace = true }

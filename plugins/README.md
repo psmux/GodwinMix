@@ -58,3 +58,19 @@ dev/integrations-live.sh                             # all three against a real 
 test sources, and then sends an OSC take from a ten line Python sender, reads a
 TSL packet with a Python listener and checks the lamp bits, and runs the
 director for thirty seconds. Each plugin's README carries the recorded output.
+## What is in here
+| Directory | What it is |
+|---|---|
+| `camera/` | a USB or built in camera as a source |
+| `audio-device/` | a microphone, a line input or a sound card as a source |
+| `screen/` | a monitor, or part of one, as a source |
+| `file-record/` | the programme recorded to a file |
+| `capture-common/` | **a library, not a plugin.** What the four above share: choosing a capture element that this machine has, spelling the media transport the way the core reads it, watching the bus off the streaming thread, the device monitor, the programme FIFO and the free space reading. It has no `gmx-plugin.toml` and `gmx plugin add` has nothing to do with it |
+[The first party plugin reference](../docs/reference/plugins.md) has the table
+of what each one provides, where it runs and what is verified.
+## Building one
+These are workspace members, so `cargo build --release` puts their binaries in
+the repository's own `target/`. `gmx plugin add` copies a plugin directory and
+skips anything called `target`, so each plugin has a `./build` that stages its
+binary at `bin/<name>`, which is where its manifest says it is. Run `./build`
+before `gmx plugin add`.
