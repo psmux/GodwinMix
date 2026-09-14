@@ -274,6 +274,21 @@ builds the desktop bundle with the trimmed runtime inside, runs
 measures the installer against the budget. The Windows installer budget is 150
 MB and going over it fails the job.
 
+The crates that do not link GStreamer can be checked for Windows from a Mac or
+a Linux box, without a Windows machine, which is the quickest way to catch a
+platform arm that stopped compiling:
+
+```sh
+rustup target add x86_64-pc-windows-msvc
+cargo check --target x86_64-pc-windows-msvc -p godwinmix-protocol
+cargo check --target x86_64-pc-windows-msvc -p godwinmix-client
+```
+
+Both of those pass today. `godwinmix-tui` gets further than it looks: its own
+Rust compiles, and the check stops in `ring`'s C build, which wants the MSVC
+headers a Mac does not have. Anything that links GStreamer needs the real
+runner, which is what the Windows job is for.
+
 And the refusals are tested as refusals. `handshake.rs` and `transport.rs`
 both carry `#[cfg(not(unix))]` tests that assert the Windows error message
 names `container`, so a refusal that stops naming the way forward fails CI on
