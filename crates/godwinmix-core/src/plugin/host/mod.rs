@@ -20,6 +20,7 @@
 //! reaches the mixer through `Source`, `Output` and `Filter`, which is the
 //! same door `rtmp/source` uses.
 
+pub mod bridged;
 pub mod filter;
 pub mod output;
 pub mod process;
@@ -27,6 +28,7 @@ pub mod service;
 pub mod source;
 pub mod transport;
 
+pub use bridged::{BridgedSource, BridgedSpec, LinkSource};
 pub use filter::SidecarFilter;
 pub use output::SidecarOutput;
 pub use process::{Notice, Sidecar};
