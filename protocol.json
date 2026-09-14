@@ -160,6 +160,69 @@
       ],
       "type": "object"
     },
+    "ApplyRequest": {
+      "properties": {
+        "dry_run": {
+          "default": false,
+          "description": "Work out the plan and write nothing.",
+          "type": "boolean"
+        },
+        "force": {
+          "default": false,
+          "description": "Take the preset's value wherever the operator already has one.",
+          "type": "boolean"
+        },
+        "keep_sources": {
+          "default": false,
+          "description": "Leave the operator's sources and outputs alone.",
+          "type": "boolean"
+        },
+        "name": {
+          "description": "A preset name, or a path to a directory holding `gmx-plugin.toml`.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "type": "object"
+    },
+    "ApplyResult": {
+      "description": "What `preset.apply` answers with.",
+      "properties": {
+        "applied": {
+          "description": "Present when the preset was actually applied."
+        },
+        "dry_run": {
+          "description": "True when nothing was written because `dry_run` was set.",
+          "type": "boolean"
+        },
+        "live": {
+          "description": "The sources and outputs this core picked up without a restart.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "needs_restart": {
+          "description": "What still needs a restart, in plain words. Empty is the good case.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "plan": {
+          "description": "The whole plan, as JSON. The same object `preset.list` rows point at."
+        }
+      },
+      "required": [
+        "dry_run",
+        "plan",
+        "live",
+        "needs_restart"
+      ],
+      "type": "object"
+    },
     "AudioSetParams": {
       "description": "`source.audio.set` takes an id as well as the levels: the id comes off the\npath on REST and out of the params on `/rpc`, and both land in one object.",
       "properties": {
@@ -381,6 +444,17 @@
             }
           ],
           "description": "Present when the request carried a token the core recognises."
+        },
+        "ui": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/UiDefaults"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "What a surface should start with, when a preset chose it. Absent on a\ncore no preset has been applied to, which is what puts the welcome\npanel up in the reference UI."
         },
         "version": {
           "description": "The build's own version, as in Cargo.toml.",
@@ -1189,6 +1263,26 @@
       ],
       "type": "object"
     },
+    "SaveRequest": {
+      "properties": {
+        "name": {
+          "description": "The new preset's name. A slug: lower case letters, digits and hyphens.",
+          "type": "string"
+        },
+        "out": {
+          "default": null,
+          "description": "Where to write it. Defaults to `~/.godwinmix/presets/<name>`.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "type": "object"
+    },
     "SeekParams": {
       "description": "`source.seek`.",
       "properties": {
@@ -1637,6 +1731,43 @@
         "profile"
       ],
       "type": "object"
+    },
+    "UiDefaults": {
+      "description": "What a surface starts with: the layout, the theme and the gallery mode.\n\nChosen by a preset (`preset.apply`), carried in `core.info` and pushed as\n`event/ui.changed`. None of it changes what the core does. It exists so the\nfirst page a volunteer sees is the one their preset chose rather than the\none the last person to use this browser chose. 05 section 3b is where the\nfour gallery modes are defined.",
+      "properties": {
+        "gallery": {
+          "description": "`live`, `snapshot`, `icon` or `label`. Absent means the surface asks\nthe machine, which is what `gmx doctor` proposes.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "layout": {
+          "additionalProperties": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "description": "Slot to panels, top to bottom. Empty means the surface's own default.",
+          "type": "object"
+        },
+        "preset": {
+          "description": "The preset that set these, so a surface knows one has been applied.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "theme": {
+          "description": "A theme id the surface resolves, for example `dark` or `calm`.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "type": "object"
     }
   },
   "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -1892,6 +2023,22 @@
       },
       "since": "1",
       "summary": "An ad break was armed, went on air, or ended."
+    },
+    {
+      "ext": null,
+      "legacy": null,
+      "name": "event/ui.changed",
+      "pattern": "ui.changed",
+      "payload": {
+        "properties": {
+          "ui": {
+            "$ref": "#/$defs/UiDefaults"
+          }
+        },
+        "type": "object"
+      },
+      "since": "1",
+      "summary": "The surface defaults changed: a preset was applied, or an operator set the layout, theme or gallery mode by hand. Nothing on air moves."
     },
     {
       "ext": null,
@@ -3008,6 +3155,79 @@
       "scope": "read",
       "since": "1",
       "summary": "Every queue in one pipeline with how full it is, fullest first. A queue that stays full is where the trouble is."
+    },
+    {
+      "destructive": true,
+      "idempotent": true,
+      "mcp": {
+        "destructiveHint": true,
+        "idempotentHint": true,
+        "profile": "search",
+        "readOnlyHint": false,
+        "tool": "apply_preset"
+      },
+      "mutating": true,
+      "name": "preset.apply",
+      "params": {
+        "$ref": "#/$defs/ApplyRequest"
+      },
+      "rest": {
+        "method": "POST",
+        "path": "/api/v1/preset/apply"
+      },
+      "result": {
+        "$ref": "#/$defs/ApplyResult"
+      },
+      "scope": "admin",
+      "since": "1",
+      "summary": "Put a preset on this core: its config, its scenes, its layout, its theme and its gallery mode. Pass dry_run to get the plan and write nothing."
+    },
+    {
+      "destructive": false,
+      "idempotent": true,
+      "mcp": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "profile": "search",
+        "readOnlyHint": true,
+        "tool": "list_presets"
+      },
+      "mutating": false,
+      "name": "preset.list",
+      "params": {
+        "additionalProperties": false,
+        "properties": {},
+        "type": "object"
+      },
+      "rest": {
+        "method": "GET",
+        "path": "/api/v1/preset/list"
+      },
+      "result": {
+        "type": "object"
+      },
+      "scope": "read",
+      "since": "1",
+      "summary": "Every preset this core can apply: the six built in, plus anything installed beside the binary or under ~/.godwinmix/presets."
+    },
+    {
+      "destructive": false,
+      "idempotent": true,
+      "mutating": true,
+      "name": "preset.save",
+      "params": {
+        "$ref": "#/$defs/SaveRequest"
+      },
+      "rest": {
+        "method": "POST",
+        "path": "/api/v1/preset/save"
+      },
+      "result": {
+        "type": "object"
+      },
+      "scope": "admin",
+      "since": "1",
+      "summary": "Turn this core's working setup into a preset directory somebody else can apply. Stream keys and the control token are replaced with placeholders."
     },
     {
       "destructive": false,

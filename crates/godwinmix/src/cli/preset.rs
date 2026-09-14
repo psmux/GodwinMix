@@ -109,7 +109,7 @@ fn list(json: bool) -> Result<()> {
         println!("no presets. This build ships six; something has gone wrong with it.");
         return Ok(());
     }
-    println!("{:<16} {:<9} {:<10} {}", "NAME", "THEME", "GALLERY", "FOR");
+    println!("{:<16} {:<9} {:<10} FOR", "NAME", "THEME", "GALLERY");
     for row in &rows {
         println!(
             "{:<16} {:<9} {:<10} {}",
