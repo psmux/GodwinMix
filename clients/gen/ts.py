@@ -18,12 +18,24 @@ HEADER = """// Generated from protocol.json by clients/gen/generate.py. Do not e
 SCALARS = {"string": "string", "integer": "number", "number": "number", "boolean": "boolean"}
 
 
+# A protocol type whose name is also a TypeScript global (the scene record is
+# called `Record`) would shadow the global for the whole module, including the
+# generator's own `Record<string, unknown>`. Such a type is emitted under a
+# prefixed name and re exported under its wire name, which binds only the
+# export and leaves the global alone inside the module.
+_GLOBALS = {"Record", "Map", "Set", "Date", "Error", "Event", "Object", "Function", "Promise", "Array"}
+
+
+def ts_name(name):
+    return f"Protocol{name}" if name in _GLOBALS else name
+
+
 def ts_type(model, schema, indent=0):
     """One JSON Schema node as a TypeScript type expression."""
     if not isinstance(schema, dict) or not schema:
         return "unknown"
     if "$ref" in schema:
-        return schema["$ref"].split("/")[-1]
+        return ts_name(schema["$ref"].split("/")[-1])
     if "enum" in schema:
         return " | ".join(_literal(v) for v in schema["enum"]) or "never"
     if "const" in schema:
@@ -125,10 +137,13 @@ def _types(model):
         out += _doc(schema.get("description"))
         kinds = schema.get("type")
         is_object = kinds == "object" or (isinstance(kinds, list) and "object" in kinds)
+        local = ts_name(name)
         if is_object and (schema.get("properties") or schema.get("additionalProperties") is True):
-            out.append(f"export interface {name} {_inline_object(model, schema, 0) if schema.get('properties') else '{ [key: string]: unknown }'}")
+            out.append(f"export interface {local} {_inline_object(model, schema, 0) if schema.get('properties') else '{ [key: string]: unknown }'}")
         else:
-            out.append(f"export type {name} = {ts_type(model, schema)};")
+            out.append(f"export type {local} = {ts_type(model, schema)};")
+        if local != name:
+            out.append(f"export type {{ {local} as {name} }};")
         out.append("")
     return out
 
@@ -137,7 +152,7 @@ def _type_of(model, slot, fallback="Record<string, unknown>"):
     if slot is None:
         return fallback
     if isinstance(slot, Ref):
-        return slot.name
+        return ts_name(slot.name)
     return ts_type(model, slot)
 
 
