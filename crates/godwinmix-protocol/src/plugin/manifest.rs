@@ -773,14 +773,36 @@ impl Manifest {
                     }
                 }
             },
-            "surface" => {
-                if p.surface.is_none() {
-                    out.push(problem(
-                        format!("{at}.surface"),
-                        "a surface provide must declare surface = { run, api }.",
-                    ));
+            "surface" => match &p.surface {
+                None => out.push(problem(
+                    format!("{at}.surface"),
+                    "a surface provide must declare surface = { run, api }.",
+                )),
+                Some(surface) => {
+                    // `run` is the command `gmx ui <name>` starts, and `api`
+                    // is the protocol level the surface speaks. A surface is
+                    // not a sidecar: it is a whole UI the operator runs, it
+                    // owns a terminal or a window, and it reaches the core
+                    // over /rpc like any other client. So it names its command
+                    // here rather than in [run].
+                    match surface.get("run").and_then(Value::as_str) {
+                        Some(run) if !run.trim().is_empty() => {}
+                        _ => out.push(problem(
+                            format!("{at}.surface.run"),
+                            "name the command to start, as a string. It is looked for inside \
+                             the plugin directory, then beside the gmx binary, then on PATH.",
+                        )),
+                    }
+                    match surface.get("api").and_then(Value::as_u64) {
+                        Some(api) if api >= 1 => {}
+                        _ => out.push(problem(
+                            format!("{at}.surface.api"),
+                            "say which protocol level this surface speaks, as an integer of \
+                             1 or more.",
+                        )),
+                    }
                 }
-            }
+            },
             "preset" => {
                 if p.preset.is_none() {
                     out.push(problem(

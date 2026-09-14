@@ -42,3 +42,7 @@ clients/typescript/node_modules/
 clients/typescript/dist/
 clients/python/*.egg-info/
 clients/**/__pycache__/
+
+# The first party plugins are workspace members, so their binaries are staged
+# into plugins/<name>/bin/ by dev/plugins.sh rather than committed.
+plugins/*/bin/

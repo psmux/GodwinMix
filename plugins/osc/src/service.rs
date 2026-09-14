@@ -91,6 +91,11 @@ async fn serve(
     settings: &Settings,
     changes: &mut watch::Receiver<Settings>,
 ) -> String {
+    // Two sockets rather than one. Sending a datagram to a port nobody is
+    // listening on gets an ICMP port unreachable back, and the kernel reports
+    // it on the *next* operation on that socket, which on one socket means a
+    // tally message to a tablet that is asleep kills the listener that takes
+    // sources. A surface being off must never stop the mixer being driven.
     let socket = match UdpSocket::bind(&settings.listen).await {
         Ok(socket) => Arc::new(socket),
         Err(error) => {
@@ -103,6 +108,16 @@ async fn serve(
             // Nothing to do but wait for someone to change the setting.
             changes.changed().await.ok();
             return "the listen address changed".into();
+        }
+    };
+    let out = match UdpSocket::bind("0.0.0.0:0").await {
+        Ok(out) => out,
+        Err(error) => {
+            wiring
+                .log
+                .warn(&format!("cannot open a socket to send from: {error}"));
+            changes.changed().await.ok();
+            return "the settings changed".into();
         }
     };
     wiring
@@ -118,10 +133,14 @@ async fn serve(
                 Ok((length, peer)) => {
                     handle_packet(wiring, client, settings, &buffer[..length], peer).await;
                 }
+                // A refused or reset connection here is the echo of a datagram
+                // this process sent somewhere nobody was listening. It says
+                // nothing about the listener, so carry on.
+                Err(error) if transient(&error) => {}
                 Err(error) => return format!("the OSC socket failed: {error}"),
             },
             event = events.recv() => match event {
-                Ok(event) => send_out(wiring, &socket, settings, &event).await,
+                Ok(event) => send_out(wiring, &out, settings, &event).await,
                 Err(tokio::sync::broadcast::error::RecvError::Lagged(n)) => {
                     wiring.log.warn(&format!("fell {n} events behind; the next tally message is the truth"));
                 }
@@ -231,13 +250,35 @@ async fn send_out(wiring: &Wiring, socket: &UdpSocket, settings: &Settings, even
     for message in out {
         let bytes = message.encode();
         for target in &settings.send_to {
-            if let Err(error) = socket.send_to(&bytes, target).await {
-                wiring
+            match socket.send_to(&bytes, target).await {
+                Ok(_) => {}
+                // An ICMP port unreachable from an earlier datagram is
+                // delivered on the next send, so the first message after a
+                // surface comes back would otherwise be the one that is lost.
+                // One retry clears it. A surface that is still off fails again
+                // and that is the ordinary case, not an incident.
+                Err(error) if transient(&error) => {
+                    let _ = socket.send_to(&bytes, target).await;
+                }
+                Err(error) => wiring
                     .log
-                    .warn(&format!("could not send {} to {target}: {error}", message.address));
+                    .warn(&format!("could not send {} to {target}: {error}", message.address)),
             }
         }
     }
+}
+
+/// Errors that mean "the far end was not there", which on a connectionless
+/// socket is news about the far end and not about this one.
+fn transient(error: &std::io::Error) -> bool {
+    matches!(
+        error.kind(),
+        std::io::ErrorKind::ConnectionRefused
+            | std::io::ErrorKind::ConnectionReset
+            | std::io::ErrorKind::HostUnreachable
+            | std::io::ErrorKind::NetworkUnreachable
+            | std::io::ErrorKind::Interrupted
+    )
 }
 
 /// The number a lamp on an OSC surface wants: 0 off, 1 programme, 2 preview.
