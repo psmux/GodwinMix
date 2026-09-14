@@ -67,3 +67,38 @@ the file exists: the first real entries will come from the first people who are
 not the author, and there is somewhere to put them.
 
 Status: waiting
+
+### 2026-09-15: two rusts on a mac, and neither one builds a component
+
+Tried to build the first WebAssembly plugin with `cargo build --release
+--target wasm32-wasip2` after `rustup target add wasm32-wasip2`. Got
+`can't find crate for core: the wasm32-wasip2 target may not be installed`,
+which is the one thing I had just done.
+
+The cause was two rust installations. Homebrew's `rustc` was first on `PATH`
+and has only the host target; rustup's had the wasm one. Working that out took
+a while because the error names the target and not the toolchain.
+
+Then, with the right `rustc`, the link failed with
+`Library not loaded: @rpath/libLLVM.dylib` from rustup's own `rust-lld`, which
+looks for it one directory away from where it is.
+
+Fix: `dev/build-wasm.sh` and the `check` script in `templates/wasm/` both pick
+rustup's toolchain explicitly and set `DYLD_FALLBACK_LIBRARY_PATH` when the
+library is where rustup puts it. `docs/how-to/write-a-wasm-plugin.md` has both
+symptoms and both one line workarounds under "When it will not build". Neither
+affects a checkout that only runs the committed `.wasm`.
+Status: fixed
+
+### 2026-09-15: a component that trapped answered nonsense for the rest of the show
+
+Starved a transition component of fuel on purpose to see what a cut looks like.
+The call that ran out said so, clearly. Every call after it answered
+`wasm trap: cannot enter component instance`, which says nothing about what
+went wrong or what to do, and would have left the transition silently broken
+until the core was restarted.
+
+Fix: a trap now ends the instance. It reads `failed`, the supervisor builds a
+fresh one on its next pass under the same backoff a crashing process gets, and
+a call in between says both what happened and what happens next.
+Status: fixed
