@@ -42,7 +42,42 @@ Applying a scene is four steps and none of them touches the graph:
 2. **Bind.** Each entry takes the slot that already holds its source.
 3. **Write.** `xpos`, `ypos`, `width`, `height`, `alpha`, `zorder`, the sizing
    policy from `fit`, the alignment from `align`, the crop, the rotation.
-4. **Hide the rest.** Every slot nobody claimed goes to alpha 0.
+4. **Filter.** An item carrying filters gets them on its own slot's chain,
+   between the flip and the compositor pad, and only if the chain it wants is
+   different from the chain it has. See below.
+5. **Hide the rest.** Every slot nobody claimed goes to alpha 0.
+
+## Per item filters
+
+A filter belongs to the item, not to the source. That is the whole difference
+from `filter.add`, which puts one on a source and therefore on every picture of
+it: with per item filters the same camera drawn twice can be keyed in one place
+and clean in the other, which is what the reference lower third and the
+picture in picture both want.
+
+```text
+  pgm-vtee-{source} =|=> gate > q > crop > flip > [chroma] > vmix pad
+```
+
+`scene.item.filter.add`, `.set` and `.remove` write the filter onto the item in
+the document; the slot pool puts it on the chain the next time the scene is
+applied, which for a scene that is on air is straight away, under
+`with_pad_blocked` on that slot's own queue. The programme keeps aggregating
+its other pads throughout.
+
+Two rules make that cheap enough to do on a running programme:
+
+* **The chain is compared before it is touched.** The visibility tick reapplies
+  the scene twice a second; a chain that has not changed takes no pad block. A
+  filter renamed is the same filter, because what is compared is the type and
+  the parameters.
+* **A disabled filter is not in the chain at all.** Turning one off costs one
+  pad block and then nothing, rather than an element seeing every frame and
+  deciding not to act on it.
+
+A slot rebound to a different source loses its chain, because the chain
+belonged to the item that asked for it and a chroma key must not follow a slot
+onto the next camera.
 
 ## Why binding happens when a source is added
 
@@ -85,9 +120,36 @@ item id, so a target that gains an item does not silently move every override
 onto the wrong entry. Cycles are refused at edit time and stop at a depth limit
 if one reaches the store by hand.
 
-The one thing flattening cannot express is a filter over a composited group, a
-blur across three items at once. That needs a sub compositor built on demand and
-is the expensive path; it is not in this release.
+## The one thing flattening cannot express
+
+A filter over a composited group: a blur across three items at once, which is
+not three blurs. The filter has to see the group as one picture, so the group
+gets a compositor of its own:
+
+```text
+ cam-a tee =|=> gate > q > crop > flip > sub pad 0 \
+ cam-b tee =|=> gate > q > crop > flip > sub pad 1  >-- sub compositor --> caps
+ cam-c tee =|=> gate > q > crop > flip > sub pad 2 /                        |
+                                                                           v
+                  programme slot:  gate > q > crop > flip > [blur] > vmix pad
+```
+
+This is the expensive path, and it is the one place on the scene path that adds
+elements to a running programme on purpose. It is built when a scene has a
+group carrying an enabled filter, and taken apart the moment it does not: turn
+the filter off and the group goes back to being flattened, with no element
+anywhere. A scene with no filtered group never goes near it, and the check for
+one is a walk of the tree that answers no for every scene anybody has built.
+
+What it costs, from 11 section 3: a full canvas opaque pad through a second
+compositor is 0.14 ms a frame. The sub compositor's output stays I420, because
+AYUV is 3.5 times the price; a group that needs alpha through the whole chain
+is not something this build offers, and this page says so rather than the
+picture quietly costing four times what the budget allows.
+
+The children are drawn at their canvas coordinates, so the composite is the
+picture the group would have made and the filter sees what an operator sees.
+Moving the group moves them on that surface exactly as it would on the canvas.
 
 ## The valve, and what it is worth
 
@@ -147,6 +209,51 @@ cargo test -p godwinmix-core -- --ignored --nocapture gapless
 cargo test -p godwinmix-core -- --ignored --nocapture hidden_slots
 ```
 
+## Preview: the armed scene, beside the mosaic
+
+An operator arms a scene before taking it and wants to see it, and the picture
+must not come from the programme pipeline: a preview problem reaching air is
+the third isolation boundary the README promises. It does not need its own
+pipeline either, because the pictures are already there once, as the mosaic's
+per source thumbnails.
+
+So the preview is a second `compositor` inside the multiview pipeline, fed from
+the same tile branches:
+
+```text
+ source thumb ==> proxysrc > q > rate > scale > caps > tee =|=> mosaic pad
+                                                            |
+                                                            +=> q > preview pad
+                                                                      |
+ preview compositor  <------------------------------------------------+
+      |
+      +--> caps --> jpegenc --> appsink   (/mjpeg/preview, scene.preview.frame)
+      +--> its own tile on the mosaic
+```
+
+Every tile now ends at a `tee` with `allow-not-linked`, which costs no thread
+and lets the preview take the same picture without a second decode, a second
+scale or a second proxy.
+
+Nothing exists until somebody asks. A client subscribing with `ext.preview`, or
+opening `/mjpeg/preview`, or calling `scene.preview.frame`, holds a preview
+subscription; the last one to let go takes the compositor, its slots and its
+tile away. Arming a scene with nobody watching costs one message and a `Vec`.
+
+`ext.preview = "full"` composites at the canvas's own size instead of the
+mosaic's, so a designer's handles and a projector land on real coordinates. The
+pictures in it are still the thumbnail ends: copying every source into a second
+pipeline at canvas size is exactly the cost the mosaic exists to avoid, and a
+full detail look at one source is a projector on that source.
+
+Measured: the preview's whole branch taken to NULL with buffers still arriving
+at its pads left the programme's largest inter frame interval at 33.3 ms, which
+is one frame.
+
+```bash
+cargo test -p godwinmix-core -- --ignored --nocapture killing_the_preview
+```
+
 ## Moving rather than cutting
 
 A geometry command with a `duration_ms` on a scene that is on air eases the
@@ -163,9 +270,11 @@ has commands to answer, and it must not run on a streaming thread, which is
 carrying the programme.
 
 `GstInterpolationControlSource` bindings sampled by the aggregator are the
-accurate way, and are what transitions between scenes will want. They need a
-crate this build does not carry, and at sixty steps a second the difference is
-not visible; the swap is one function.
+accurate way, and are what transitions between scenes use: see
+[transitions](../reference/transitions.md). The thread is still here for a
+geometry command on a scene that is on air, where the pads are already drawing
+these items and there is no second scene to cross to, and as the fallback for
+an element whose pads will not take a binding.
 
 Measured: `pip-bottom-right` reapplied onto the same scene with a bigger inset
 over 300 ms moves the inset through the middle (a cut would already be at the
@@ -187,6 +296,19 @@ which is the graphics catalogue's job.
 Scaling stays on the compositor pad. Moving it to the input side would make a
 take a caps renegotiation across the proxy boundary, which is the traffic
 `answer_negotiation_here` exists to stop.
+
+## What a transition adds
+
+A transition needs both scenes on the canvas at once, which is the one thing
+the ordinary path does not do. The slot pool holds the outgoing scene's slots
+out of the pool for the length of the crossing and binds the incoming scene to
+different ones, so slot pressure doubles and the pool grows if it has to. Every
+incoming pad arrives at alpha 0, so the frame between binding and the first
+sync is never the wrong picture, and the curves take it from there.
+
+Measured: six 300 ms crossfades between two eight item scenes left the
+programme's largest inter frame interval at 33.3 ms, one frame, with the pool
+grown to sixteen.
 
 ## Where the document lives
 

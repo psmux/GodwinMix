@@ -24,6 +24,8 @@ to check the claim rather than believe it.
 | A PCM or Opus branch | a client opens it | the last client on that shape closes | none |
 | A WHEP session | an offer is answered | the session ends | none |
 | A local raw preview socket | `preview.open` | the last `preview.close` | none |
+| The preview compositor | `ext.preview`, `/mjpeg/preview` or `scene.preview.frame` | the last one lets go | none: no compositor, no pads, no queues |
+| A plugin's service, device or transition | the plugin is installed and enabled | `plugin.disable` or `plugin.remove` | one process per provide, held to `[plugins.<name>]` |
 | **The programme encoder** | the first consumer takes a lease | the last one gives it up | none |
 
 The last row is the newest and was the largest. Everything above it was already
@@ -178,6 +180,13 @@ are measuring something and want one fewer variable. Nothing else changes.
 
 The other switches are where they always were: `[multiview] enabled`,
 `[multiview] linger_secs`, `[snapshot] enabled` and `[snapshot] idle_secs`.
+
+The one row above that is not a stream is the plugin singletons. A `service`, a
+`device` or a `transition` is a process per provide and it runs while the
+plugin is enabled, because that is what those kinds are for: a tally sender
+that only runs while somebody is watching a tally is a tally sender that misses
+the take. `gmx plugin disable <name>` stops them; `plugin.list` says what each
+one costs.
 
 ## The rule underneath
 
