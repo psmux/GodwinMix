@@ -2322,9 +2322,15 @@ mod tests {
                 baseline = fd_floor(0, Duration::from_secs(2));
             }
         }
-        let after = fd_floor(baseline + 2, Duration::from_secs(20));
+        // Sixteen, because the count is process wide and every other test in
+        // this binary is opening and closing files of its own while this
+        // window runs: neighbours have been measured holding twelve. The leak
+        // this catches was two descriptors a build, and fifteen builds of it
+        // is thirty, so sixteen is still half the smallest regression it is
+        // here to catch and is not cover for one.
+        let after = fd_floor(baseline + 16, Duration::from_secs(20));
         assert!(
-            after <= baseline + 2,
+            after <= baseline + 16,
             "fifteen builds added {} descriptors ({baseline} to {after})",
             after.saturating_sub(baseline)
         );
@@ -2491,9 +2497,11 @@ mod tests {
                 baseline = fd_floor(0, Duration::from_secs(2));
             }
         }
-        let after = fd_floor(baseline + 2, Duration::from_secs(20));
+        // Sixteen, as above. The leak this catches was two a probe, and nine
+        // probes of it is eighteen.
+        let after = fd_floor(baseline + 16, Duration::from_secs(20));
         assert!(
-            after <= baseline + 2,
+            after <= baseline + 16,
             "nine probes added {} descriptors ({baseline} to {after})",
             after.saturating_sub(baseline)
         );
