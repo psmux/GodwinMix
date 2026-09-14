@@ -93,6 +93,65 @@ const AD_LEAD_IN: gst::ClockTime = gst::ClockTime::from_mseconds(500);
 /// whoever clicked the button.
 pub type Ack = oneshot::Sender<Result<(), String>>;
 
+/// How many commands may be waiting for the mixer thread.
+///
+/// The queue was unbounded, which is a memory leak wearing a helpful face: a
+/// client in a loop, or a plugin posting bus messages faster than they can be
+/// read, grows it without limit and the work still only happens at the rate
+/// one thread can do it. Bounded, a caller is told to come back rather than
+/// being quietly enqueued behind a thousand others. Deep enough that a burst
+/// from a UI redraw or a scene apply never touches it; shallow enough that
+/// what is in it can still be worked through in well under a second.
+pub const COMMAND_QUEUE: usize = 256;
+
+/// How many bus messages may be waiting. Larger than the command queue
+/// because several pipelines post onto it and a `level` element alone posts
+/// ten a second per source.
+pub const BUS_QUEUE: usize = 512;
+
+/// What a refused caller is told to wait. Two ticks of the supervisor, which
+/// is long enough for a full queue to have drained on any machine that is not
+/// already in trouble.
+const BUSY_RETRY_MS: u64 = 1000;
+
+/// What to tell a caller when the mixer's queue is full.
+///
+/// Its own type so the control plane can answer -32001 with `retry_after_ms`
+/// rather than turning a full queue into a generic failure.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Busy {
+    /// How long to wait before trying again, in milliseconds.
+    pub retry_after_ms: u64,
+    /// How deep the queue is, so the message can say what was full.
+    pub queue: usize,
+}
+
+impl std::fmt::Display for Busy {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "the mixer already has {} commands waiting and will not take another. \
+             Nothing was changed. Try again in {} ms",
+            self.queue, self.retry_after_ms
+        )
+    }
+}
+
+impl std::error::Error for Busy {}
+
+/// One tick's worth of the mixer's own housekeeping, so two timers that fire
+/// while the mixer is busy do not both queue.
+///
+/// A supervisor tick is worth doing once, not once per timer fire. Without
+/// this, a mixer held up by a slow state change came back to a queue of
+/// identical ticks and did the same work over and over before reaching the
+/// command an operator was waiting on.
+#[derive(Debug, Default)]
+struct Coalesced {
+    tick: AtomicBool,
+    position: AtomicBool,
+}
+
 fn reply(ack: Option<Ack>, outcome: &Result<()>) {
     if let Some(tx) = ack {
         let _ = tx.send(outcome.as_ref().map(|_| ()).map_err(|e| format!("{e:#}")));
@@ -273,13 +332,47 @@ pub enum FilterOutcome {
 
 #[derive(Clone)]
 pub struct MixerHandle {
-    tx: mpsc::UnboundedSender<Command>,
+    tx: mpsc::Sender<Command>,
     events: EventBus,
+    coalesced: Arc<Coalesced>,
 }
 
 impl MixerHandle {
+    /// Queue a command. Never blocks: this is called from GStreamer clock
+    /// callbacks and from the bus thread as well as from the control plane,
+    /// and none of those may wait on the mixer thread.
     pub fn send(&self, cmd: Command) -> Result<()> {
-        self.tx.send(cmd).map_err(|_| anyhow::anyhow!("mixer is not running"))
+        match self.tx.try_send(cmd) {
+            Ok(()) => Ok(()),
+            Err(mpsc::error::TrySendError::Closed(_)) => {
+                Err(anyhow::anyhow!("mixer is not running"))
+            }
+            Err(mpsc::error::TrySendError::Full(cmd)) => {
+                let label = Mixer::label(&cmd);
+                warn!(command = label, "the mixer queue is full; the command was refused");
+                Err(Busy { retry_after_ms: BUSY_RETRY_MS, queue: COMMAND_QUEUE }.into())
+            }
+        }
+    }
+
+    /// Ask for a supervisor tick, unless one is already waiting.
+    fn tick(&self) -> Result<()> {
+        if self.coalesced.tick.swap(true, Ordering::SeqCst) {
+            return Ok(());
+        }
+        self.send(Command::Tick).inspect_err(|_| {
+            self.coalesced.tick.store(false, Ordering::SeqCst);
+        })
+    }
+
+    /// Ask for a position report, unless one is already waiting.
+    fn position_tick(&self) -> Result<()> {
+        if self.coalesced.position.swap(true, Ordering::SeqCst) {
+            return Ok(());
+        }
+        self.send(Command::PositionTick).inspect_err(|_| {
+            self.coalesced.position.store(false, Ordering::SeqCst);
+        })
     }
 
     /// Send a command and wait for the mixer to accept or reject it.
@@ -620,7 +713,7 @@ pub struct Mixer {
     /// Every pipeline we create gets a bus watcher feeding this. Held here so
     /// that a source added mid-broadcast is supervised exactly like one from
     /// the config file.
-    bus_tx: mpsc::UnboundedSender<BusEvent>,
+    bus_tx: mpsc::Sender<BusEvent>,
     /// Watches for the program and multiview pipelines, which live as long as
     /// the mixer does. Source watches live on their slots so that removing a
     /// source silences it. Held so they keep running.
@@ -854,12 +947,7 @@ impl Mixer {
     #[allow(clippy::type_complexity)]
     pub fn build(
         cfg: Config,
-    ) -> Result<(
-        Self,
-        MixerHandle,
-        mpsc::UnboundedReceiver<Command>,
-        mpsc::UnboundedReceiver<BusEvent>,
-    )> {
+    ) -> Result<(Self, MixerHandle, mpsc::Receiver<Command>, mpsc::Receiver<BusEvent>)> {
         let canvas = CanvasCaps::new(&cfg.canvas);
         // What this machine will encode with, and what it will composite on,
         // comes from the catalogue rather than from names written here. That
@@ -877,10 +965,11 @@ impl Mixer {
              thread has none of its own and uses this handle to schedule retries",
         )?;
 
-        let (tx, rx) = mpsc::unbounded_channel();
-        let (bus_tx, bus_rx) = mpsc::unbounded_channel();
+        let (tx, rx) = mpsc::channel(COMMAND_QUEUE);
+        let (bus_tx, bus_rx) = mpsc::channel(BUS_QUEUE);
         let events = EventBus::new(256);
-        let handle = MixerHandle { tx, events: events.clone() };
+        let handle =
+            MixerHandle { tx, events: events.clone(), coalesced: Arc::new(Coalesced::default()) };
 
         let program = gst::Pipeline::with_name("program");
 
@@ -2499,8 +2588,16 @@ impl Mixer {
                 let _ = reply.send(self.runtime_configs());
             }
             Command::Bus(ev) => self.on_bus(ev),
-            Command::Tick => self.tick(),
-            Command::PositionTick => self.position_tick(),
+            Command::Tick => {
+                // Cleared before the work, so a tick that fires while this one
+                // is running still queues the next.
+                self.handle.coalesced.tick.store(false, Ordering::SeqCst);
+                self.tick()
+            }
+            Command::PositionTick => {
+                self.handle.coalesced.position.store(false, Ordering::SeqCst);
+                self.position_tick()
+            }
             Command::Shutdown => return Ok(false),
         }
         Ok(true)
@@ -3191,7 +3288,7 @@ fn ramp_volumes(targets: Vec<(gst::Pad, f64)>, duration: Duration, generation: A
 /// must not run on a Tokio worker.
 pub fn spawn(
     mut mixer: Mixer,
-    mut rx: mpsc::UnboundedReceiver<Command>,
+    mut rx: mpsc::Receiver<Command>,
     handle: MixerHandle,
 ) -> std::thread::JoinHandle<()> {
     let ticker = handle.clone();
@@ -3199,8 +3296,12 @@ pub fn spawn(
         let mut interval = tokio::time::interval(TICK);
         loop {
             interval.tick().await;
-            if ticker.send(Command::Tick).is_err() {
-                return;
+            // Coalesced: a mixer held up by a slow state change comes back to
+            // one tick, not to however many fired while it was busy.
+            if let Err(e) = ticker.tick() {
+                if e.downcast_ref::<Busy>().is_none() {
+                    return;
+                }
             }
         }
     });
@@ -3213,8 +3314,10 @@ pub fn spawn(
         let mut interval = tokio::time::interval(POSITION_TICK);
         loop {
             interval.tick().await;
-            if positions.send(Command::PositionTick).is_err() {
-                return;
+            if let Err(e) = positions.position_tick() {
+                if e.downcast_ref::<Busy>().is_none() {
+                    return;
+                }
             }
         }
     });
@@ -3612,5 +3715,62 @@ mod tests {
             let label = Mixer::label(&cmd);
             assert!(!label.is_empty() && !label.contains("cam1"), "{label}");
         }
+    }
+
+    /// A handle whose mixer thread is not running, so the queue fills and
+    /// stays full. The receiver is kept alive: dropping it would make every
+    /// send report a closed channel instead of a full one.
+    fn parked_handle() -> (MixerHandle, mpsc::Receiver<Command>) {
+        let (tx, rx) = mpsc::channel(COMMAND_QUEUE);
+        let handle = MixerHandle {
+            tx,
+            events: EventBus::new(8),
+            coalesced: Arc::new(Coalesced::default()),
+        };
+        (handle, rx)
+    }
+
+    /// The command queue was unbounded, so a client in a loop grew it without
+    /// limit and the work still only happened at the rate one thread could do
+    /// it. Full, the caller is told to come back and told when.
+    #[test]
+    fn a_full_command_queue_refuses_with_a_time_to_wait() {
+        let (handle, _rx) = parked_handle();
+        for i in 0..COMMAND_QUEUE {
+            handle
+                .send(Command::Take { source: None, at_running_time_ms: None, ack: None })
+                .unwrap_or_else(|e| panic!("command {i} of the queue's own depth was refused: {e}"));
+        }
+        let err = handle
+            .send(Command::Take { source: None, at_running_time_ms: None, ack: None })
+            .expect_err("the queue is full and the next command must be refused");
+        let busy = err.downcast_ref::<Busy>().expect("a full queue answers with Busy");
+        assert_eq!(busy.queue, COMMAND_QUEUE);
+        assert!(busy.retry_after_ms > 0, "a refusal has to say how long to wait");
+        assert!(
+            busy.to_string().contains("Nothing was changed"),
+            "the message must say the mixer is unchanged: {busy}"
+        );
+    }
+
+    /// Two timers firing while the mixer is busy must not both queue. A
+    /// supervisor tick is worth doing once.
+    #[test]
+    fn repeated_ticks_coalesce_into_one() {
+        let (handle, mut rx) = parked_handle();
+        for _ in 0..20 {
+            handle.tick().unwrap();
+            handle.position_tick().unwrap();
+        }
+        let mut ticks = 0;
+        let mut positions = 0;
+        while let Ok(cmd) = rx.try_recv() {
+            match cmd {
+                Command::Tick => ticks += 1,
+                Command::PositionTick => positions += 1,
+                other => panic!("unexpected {}", Mixer::label(&other)),
+            }
+        }
+        assert_eq!((ticks, positions), (1, 1), "twenty fires queued more than one of each");
     }
 }
