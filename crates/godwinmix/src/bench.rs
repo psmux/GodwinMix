@@ -110,8 +110,10 @@ pub struct BenchArgs {
     /// budgets in 09 section 3, written to `bench/results/<machine>-<date>.md`,
     /// and a non zero exit when a row is over.
     ///
-    /// One flag rather than four, so the workflow that runs this every night
-    /// and the person reproducing it by hand type the same thing.
+    /// One flag rather than three, so the workflow that runs this every night
+    /// and the person reproducing it by hand type the same thing. `--only`
+    /// and `--no-write` still do what they say alongside it, for working on
+    /// the bench itself.
     #[arg(long)]
     pub nightly: bool,
     #[arg(long, hide = true)]
@@ -137,8 +139,6 @@ impl BenchArgs {
         if self.nightly {
             self.quick = false;
             self.budget = true;
-            self.no_write = false;
-            self.only = None;
         }
         self
     }

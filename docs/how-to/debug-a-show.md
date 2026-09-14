@@ -233,9 +233,25 @@ over 250 ms: mixer build, cam1
 The same report is `GET /api/v1/core/startup_report` on a running mixer, so you
 can ask after the fact.
 
+## Reading and replaying the session log
+
+The session log is not just a file to grep. Three commands work on it:
+
+```sh
+gmx session show .godwinmix/session.jsonl --from 20:13 --to 20:16
+gmx session replay bundle/session.jsonl --against test-core --source-fixture bundle/cam1.mkv
+gmx session diff before.jsonl after.jsonl
+```
+
+`show` is a timeline in sentences. `replay` re-issues the recorded commands at
+their recorded timing against a core built in this process, with the sources
+replaced by deterministic doubles, and compares what changed. That is what
+turns a fault from a church hall on a Sunday into a file that fails on a laptop
+on Monday.
+
+[Turn a bug into a test](turn-a-bug-into-a-test.md) is the whole loop, and
+[the session log reference](../reference/session-log.md) is the file format.
+
 ## What is not here yet
 
-`gmx stats`, `gmx events`, `gmx bisect`, `gmx chaos` and
-`gmx session replay` are Phase 2 and Phase 5. The session log this writes is
-already the file `session replay` will take, so a fault captured today is
-reproducible when it lands.
+`gmx stats` and `gmx events` are Phase 2.
