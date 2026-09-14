@@ -475,14 +475,67 @@ fn instance(stats: loader::InstanceStats) -> InstanceRecord {
 /// The plugin with this name, or a `-32004` that lists the ones there are.
 fn find(name: &str) -> Result<loader::Installed, RpcError> {
     loader::get(name).ok_or_else(|| {
-        let have: Vec<String> = loader::list().iter().map(|p| p.name().to_string()).collect();
+        let mut have: Vec<String> = loader::list().iter().map(|p| p.name().to_string()).collect();
+        have.extend(remote_plugins().into_iter().map(|r| r.manifest.plugin.name));
+        have.sort();
+        have.dedup();
         RpcError::not_found("plugin", name, &have)
     })
 }
 
+/// The plugins reachable on a node and not installed here.
+///
+/// A plugin on a node is not installed on this machine and never will be: the
+/// binary is on the other one. It is still a plugin the operator can place a
+/// source on, so it is listed, described and counted, with `root` naming the
+/// node instead of a directory. A plugin installed here wins the name, because
+/// a config written against `ndi/source` should mean the same thing whichever
+/// machine ends up running it.
+fn remote_plugins() -> Vec<godwinmix_core::plugin::remote::Reachable> {
+    godwinmix_core::plugin::remote::plugins()
+        .into_iter()
+        .filter(|r| loader::get(&r.manifest.plugin.name).is_none())
+        .collect()
+}
+
+/// One reachable plugin, in the shape `plugin.list` answers with.
+fn remote_record(reachable: &godwinmix_core::plugin::remote::Reachable) -> PluginRecord {
+    let manifest = &reachable.manifest;
+    let name = manifest.plugin.name.clone();
+    let provides: Vec<String> =
+        manifest.provides.iter().map(|p| format!("{name}/{}", p.id)).collect();
+    let instances = loader::stats()
+        .into_iter()
+        .filter(|s| s.plugin == name)
+        .map(instance)
+        .collect();
+    PluginRecord {
+        name: name.clone(),
+        version: manifest.plugin.version.clone(),
+        description: manifest.plugin.description.clone(),
+        enabled: true,
+        root: format!("node:{}", reachable.node),
+        provides,
+        tools: manifest.tools.iter().map(|t| format!("gmx_{name}_{}", t.name)).collect(),
+        hooks: Vec::new(),
+        problem: None,
+        trust: "node".into(),
+        trust_detail: format!(
+            "installed on the node `{}`, which this core trusts because it holds a certificate \
+             this core signed",
+            reachable.node
+        ),
+        source: format!("node:{}", reachable.node),
+        instances,
+    }
+}
+
 async fn list(_call: Call, _params: Value) -> Result<Value, RpcError> {
+    let mut plugins: Vec<PluginRecord> = loader::list().iter().map(record).collect();
+    plugins.extend(remote_plugins().iter().map(remote_record));
+    plugins.sort_by(|a, b| a.name.cmp(&b.name));
     body(PluginListing {
-        plugins: loader::list().iter().map(record).collect(),
+        plugins,
         plugins_dir: loader::dir().to_string_lossy().into_owned(),
     })
 }
@@ -493,6 +546,17 @@ async fn stats(_call: Call, _params: Value) -> Result<Value, RpcError> {
 
 async fn describe(call: Call, params: Value) -> Result<Value, RpcError> {
     let req: PluginName = call.params(&params)?;
+    // A plugin that is only on a node is described from the manifest and the
+    // schemas that node sent at its hello, in exactly the shape a local one
+    // is. Same fields, same settings form, same tool list.
+    if loader::get(&req.id).is_none() {
+        if let Some(reachable) = remote_plugins()
+            .into_iter()
+            .find(|r| r.manifest.plugin.name == req.id)
+        {
+            return describe_remote(&reachable);
+        }
+    }
     let installed = find(&req.id)?;
     let manifest = serde_json::to_value(&installed.manifest)
         .map_err(|e| RpcError::internal(format!("encoding the manifest: {e}")))?;
@@ -949,6 +1013,30 @@ async fn settings_set(call: Call, params: Value) -> Result<Value, RpcError> {
         .map_err(|e| RpcError::internal(format!("writing the settings: {e:#}")))?;
     let _ = saved;
     body(settings_of(&call, &installed))
+}
+
+/// `plugin.describe` for a plugin that lives on a node.
+fn describe_remote(
+    reachable: &godwinmix_core::plugin::remote::Reachable,
+) -> Result<Value, RpcError> {
+    let manifest = serde_json::to_value(&reachable.manifest)
+        .map_err(|e| RpcError::internal(format!("encoding the manifest: {e}")))?;
+    let mut schemas = Map::new();
+    for provide in &reachable.manifest.provides {
+        let id = format!("{}/{}", reachable.manifest.plugin.name, provide.id);
+        if let Some(schema) = godwinmix_core::plugin::remote::schema(&id) {
+            schemas.insert(id, schema);
+        }
+    }
+    // Skills are files on the node's disk and are not carried across. A
+    // reader who wants one reads it on the machine it is on; saying so beats
+    // an empty map that looks like the plugin has none.
+    body(PluginDescription {
+        plugin: remote_record(reachable),
+        manifest,
+        schemas,
+        skills: Map::new(),
+    })
 }
 
 fn settings_of(call: &Call, installed: &loader::Installed) -> PluginSettings {

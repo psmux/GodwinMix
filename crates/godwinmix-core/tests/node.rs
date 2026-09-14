@@ -319,3 +319,112 @@ fn every_enrolment_refusal_says_what_to_do() {
     let unknown = book.redeem("studio-b", "nope").unwrap_err().to_string();
     assert!(unknown.contains("gmx node token"), "{unknown}");
 }
+
+/// A plugin installed on the node is described by the core with the same
+/// fields a local one has: the same manifest, the same provide ids, the same
+/// settings schema. This is the acceptance criterion "a remote plugin's
+/// settings form, tools and health appear identically to a local one", checked
+/// at the layer where it is decided.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_plugin_on_a_node_looks_the_same_as_one_installed_here() {
+    let core = Core::start("describe").await;
+    let options = core.options("studio-b", Some(core.token("studio-b")));
+    let identity = daemon::ensure_identity(&options).await.unwrap();
+
+    // A plugin in a directory of its own, which the node will find and report.
+    // The core never sees the directory: only what the node says about it.
+    let plugins = core.dir.join("node-plugins");
+    let root = plugins.join("faux").join("1.0.0");
+    std::fs::create_dir_all(root.join("schemas")).unwrap();
+    std::fs::write(
+        root.join("gmx-plugin.toml"),
+        r#"
+[plugin]
+name = "faux"
+version = "1.0.0"
+api = 1
+description = "A source that exists to be described from the other side of a socket."
+license = "Apache-2.0"
+platforms = ["linux-x86_64", "linux-aarch64", "macos-aarch64", "macos-x86_64", "windows-x86_64"]
+placements = ["sidecar", "node"]
+
+[run]
+bin = { "linux-x86_64" = "bin/faux", "linux-aarch64" = "bin/faux", "macos-aarch64" = "bin/faux", "macos-x86_64" = "bin/faux", "windows-x86_64" = "bin/faux.exe" }
+
+[[provides]]
+kind = "source"
+id = "source"
+rank = 120
+media = { video = "container", audio = "container" }
+transports = ["container"]
+capabilities = ["health"]
+settings = "schemas/source.json"
+
+[[tools]]
+name = "look"
+description = "Says what it can see, for the test. Example: tool.call with name faux/look and no arguments."
+input = "schemas/look.json"
+"#,
+    )
+    .unwrap();
+    std::fs::write(root.join("schemas").join("look.json"), r#"{"type":"object"}"#).unwrap();
+    std::fs::write(
+        root.join("schemas").join("source.json"),
+        r#"{"type":"object","properties":{"name":{"type":"string"},"password":{"type":"string","format":"secret"}}}"#,
+    )
+    .unwrap();
+    // The loader is process wide, so this points it at the node's directory
+    // for the length of this test. The core half of the test reads only what
+    // came over the socket, so pointing both halves at one directory does not
+    // make the assertions easier than they should be.
+    let was = godwinmix_core::plugin::loader::dir();
+    godwinmix_core::plugin::loader::set_dir(plugins.clone());
+    godwinmix_core::plugin::loader::load_all(&Default::default());
+
+    let node = daemon::Node::new(options).unwrap();
+    let driving = tokio::spawn({
+        let node = node.clone();
+        async move { daemon::connect(&node, &identity).await }
+    });
+    until("the node to join", || core.nodes.is_online("studio-b")).await;
+    until("the node's plugins to arrive", || {
+        !godwinmix_core::plugin::remote::nodes_with("faux/source").is_empty()
+    })
+    .await;
+
+    use godwinmix_core::plugin::remote;
+    assert_eq!(remote::nodes_with("faux/source"), vec!["studio-b".to_string()]);
+
+    let manifest = remote::plugin_manifest("faux/source", Some("studio-b")).expect("the manifest");
+    assert_eq!(manifest.plugin.version, "1.0.0");
+    assert_eq!(manifest.plugin.placements, vec!["sidecar", "node"]);
+    assert_eq!(manifest.tools.len(), 1, "its tools come across whole");
+    assert_eq!(manifest.tools[0].name, "look");
+
+    // The interned manifest, which is what `source.add` and the picker read.
+    // Every field the local path fills in, filled in the same way, with the
+    // one difference being the tier.
+    let interned = remote::manifest("faux/source").expect("an interned manifest");
+    assert_eq!(interned.plugin, "faux");
+    assert_eq!(interned.id, "source");
+    assert_eq!(interned.rank, 120);
+    assert_eq!(interned.tier, godwinmix_core::plugin::Tier::Node);
+    assert!(interned.capabilities.has(godwinmix_core::plugin::Capability::Health));
+
+    // The settings form. Without this a remote plugin is exactly the second
+    // class citizen the whole design exists to avoid.
+    let schema = remote::schema("faux/source").expect("its settings schema");
+    assert_eq!(schema["properties"]["name"]["type"], "string");
+    assert_eq!(
+        godwinmix_core::secrets::secret_fields(&schema),
+        vec!["password".to_string()],
+        "a secret field on a remote plugin is a secret field"
+    );
+
+    // And when the node goes, it stops being offered.
+    core.nodes.link("studio-b").unwrap().close("the test is done");
+    until("the node to go", || !core.nodes.is_online("studio-b")).await;
+    let _ = driving.await;
+    assert!(remote::nodes_with("faux/source").is_empty());
+    godwinmix_core::plugin::loader::set_dir(was);
+}
