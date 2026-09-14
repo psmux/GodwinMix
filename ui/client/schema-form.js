@@ -1,20 +1,14 @@
 // JSON Schema draft 2020-12 to form controls.
 //
-// A UI never hardcodes a plugin's settings (05 section 2). It asks for the
-// schema and renders it. This renderer covers the part of draft 2020-12 a
-// settings document actually uses: objects, the scalar types, enums, arrays of
-// scalars, `if`/`then` visibility, and the two GodwinMix annotations.
+// A UI never hardcodes a plugin's settings: it asks for the schema and renders
+// it. Covered: objects, scalars, enums, arrays of scalars, `if`/`then`
+// visibility, `format: "secret"` (a password field, never echoed back, sent
+// only when retyped), `x-gmx-unit` (a suffix beside the control) and
+// `x-gmx-group` (a collapsible section, so common fields sit above advanced
+// ones without a second schema).
 //
-//   format: "secret"   render as a password field, never echo it back, and
-//                      send it only when the operator typed something new
-//   x-gmx-unit: "ms"   a unit suffix printed beside the control
-//   x-gmx-group        a named collapsible section; anything ungrouped sits
-//                      above the groups, which is how "common above advanced"
-//                      is expressed without a second schema
-//
-// What it deliberately does not do: $ref resolution beyond `#/$defs/...`,
-// oneOf discrimination, tuple arrays. A plugin that needs those ships its own
-// editor, which the picker already allows for.
+// Not covered, on purpose: $ref beyond `#/$defs/...`, oneOf discrimination,
+// tuple arrays. A plugin needing those ships its own editor.
 
 const SECRET_KEPT = "••••••••";
 

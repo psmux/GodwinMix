@@ -371,8 +371,10 @@ mod tests {
             .sum();
         assert!(page < 250 * 1024, "the page loads {page} bytes, over the 250 kB budget");
 
+        // And the plain reading of the same budget: everything served under
+        // ui/, the test page and all four themes included, under 250,000 bytes.
         let total: usize = ASSETS.iter().map(|(_, body)| body.len()).sum();
-        assert!(total < 256 * 1024, "everything served under ui/ is {total} bytes");
+        assert!(total < 250_000, "everything served under ui/ is {total} bytes");
     }
 
     #[test]

@@ -1,13 +1,10 @@
 // What you can add, and what it needs.
 //
-// The picker reads its tiles from the server: `plugin.describe` for each kind a
-// plugin provides, or `core.api` where the whole catalogue is published. Until
-// a core has either, this table stands in for it. It holds exactly what today's
-// server accepts, so the picker is honest on an old mixer and the same code
-// path serves both.
-//
-// Icons are inline SVG path data rather than files, because a picker that costs
-// one request per tile is a picker that stutters on a Pi.
+// The picker reads its tiles from the server, `core.api` or `plugin.describe`.
+// Until a core has either, this table stands in, holding exactly what today's
+// server accepts, so the picker is honest on an old mixer and one code path
+// serves both. Icons are inline SVG path data rather than files: a picker that
+// costs one request per tile stutters on a Pi.
 
 export const ICONS = {
   camera: "M4 7h3l2-2h6l2 2h3v11H4V7zm8 3a3.5 3.5 0 100 7 3.5 3.5 0 000-7z",
@@ -158,17 +155,11 @@ export function kindOfUri(uri) {
   if (u.startsWith("exec:")) return "exec";
   if (u.startsWith("web+") || /^https?:\/\//i.test(u)) {
     if (/\.(m3u8|mpd)(\?|$)/i.test(u)) return "stream";
-    return /^https?:\/\//i.test(u) && !u.startsWith("web+") ? "page" : "page";
+    return "page";
   }
   if (/^(rtmp|rtmps|srt|rtsp|udp|tcp|rist):\/\//i.test(u)) return "stream";
   if (/^file:\/\//i.test(u) || u.startsWith("/") || /^[a-z]:\\/i.test(u)) return "file";
   return "file";
-}
-
-/** A short word for a tile's badge. */
-export function kindLabel(id) {
-  const k = [...SOURCE_KINDS, ...OUTPUT_KINDS].find((x) => x.id === id);
-  return k ? k.title : id;
 }
 
 /** Group the kinds for the picker, keeping the order the table declares. */

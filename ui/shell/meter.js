@@ -1,14 +1,14 @@
 // Peak meters: the scale, the ballistics and one paint loop for all of them.
+// Carried over from the single page UI unchanged, because it was right.
 //
-// Carried over from the single page UI unchanged, because it was right. The
-// scale is piecewise so the working range, -20 to 0 dBFS, gets about two thirds
-// of the travel. Decay is 60 dB a second, the peak hold sits for 1.1 s and then
-// slides at 20 dB a second. A level older than 1.2 s is treated as silence, so a
-// source that was removed drains instead of freezing lit.
+// The scale is piecewise so the working range, -20 to 0 dBFS, gets about two
+// thirds of the travel. Decay is 60 dB a second, the peak hold sits for 1.1 s
+// then slides at 20 dB a second, and a level older than 1.2 s counts as
+// silence, so a removed source drains rather than freezing lit.
 //
-// One requestAnimationFrame loop paints every meter on the page. rAF and not a
-// timer, because a hidden tab suspends rAF and a mixer left open on a second
-// monitor should cost nothing.
+// One requestAnimationFrame loop paints every meter. rAF and not a timer,
+// because a hidden tab suspends rAF and a mixer left open on a second monitor
+// should cost nothing.
 
 const STOPS = [
   [-60, 0],
@@ -87,11 +87,6 @@ export function dropViews(prefix, keep) {
   for (const id of [...views.keys()]) {
     if (id.startsWith(prefix) && !(keep && keep.has(id))) views.delete(id);
   }
-}
-
-export function clearViews() {
-  views.clear();
-  levels.clear();
 }
 
 function ensureBars(view, count) {

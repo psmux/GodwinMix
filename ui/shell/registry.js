@@ -1,25 +1,13 @@
 // The panel registry, and the two tiers a panel can run in.
 //
-// The contract (05 section 3):
+// Trusted: a custom element in the page, handed the real client. Sandboxed: an
+// HTML file in an <iframe sandbox="allow-scripts"> talking the same JSON-RPC
+// over postMessage, never with allow-same-origin. The contract and a worked
+// example are in docs/how-to/write-a-panel.md.
 //
-//   class SendersPanel extends HTMLElement {
-//     static get panel() { return { id: "ndi/senders", title: "NDI senders", slots: ["sidebar"] } }
-//     setClient(client) {}
-//     setConfig(config) {}
-//     connectedCallback() {}
-//     disconnectedCallback() {}
-//   }
-//   customElements.define("gmx-ndi-senders", SendersPanel);
-//   window.godwinmixPanels.push(SendersPanel);
-//
-// `customElements.define` is optional: a class that only pushes itself is
-// defined here under a tag derived from its id. That is one less thing for a
-// first panel to get wrong.
-//
-// Tier one, trusted: the element runs in the page and is handed the real client.
-// Tier two, sandboxed: the panel is an HTML file in an <iframe sandbox="allow-scripts">
-// and talks the same JSON-RPC over postMessage. Never allow-same-origin, and the
-// host checks event.origin and the frame identity on every message.
+// `customElements.define` is optional: a class that only pushes itself onto
+// window.godwinmixPanels is defined here under a tag derived from its id. That
+// is one less thing for a first panel to get wrong.
 
 import { el } from "./dom.js";
 import { SandboxHost } from "./sandbox.js";
@@ -98,11 +86,6 @@ export function registerSandboxed(spec) {
   });
   changed();
   return spec.id;
-}
-
-export function unregister(id) {
-  panels.delete(id);
-  changed();
 }
 
 /** "ndi/senders" becomes "gmx-ndi-senders". Legible, and a valid tag name. */

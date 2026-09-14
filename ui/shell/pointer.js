@@ -1,15 +1,14 @@
 // One pointer pipeline for selecting, sweeping and dragging tiles.
 //
-// Pointer events, never HTML5 drag and drop. The reason is Windows: WebView2
-// swallows in page `dragstart` and `drop` when the window also accepts files
-// dropped from the desktop, which this window does, because media upload is a
-// drop zone. A `dragstart` implementation works on macOS and quietly does
-// nothing on Windows. Pointer events behave the same in WebView2, in WebKitGTK
-// and in Safari, and they are also the only model that works under a finger.
+// Pointer events, never HTML5 drag and drop. WebView2 on Windows swallows in
+// page `dragstart` and `drop` when the window also accepts files dropped from
+// the desktop, which this window does, because media upload is a drop zone: a
+// `dragstart` implementation works on macOS and quietly does nothing on
+// Windows. Pointer events behave the same in WebView2, WebKitGTK and Safari,
+// and are the only model that also works under a finger.
 //
-// HTML5 drag and drop is still used for one thing and one thing only: files
-// arriving from outside the page, on `window`. That path is the operating
-// system's, not ours, and it is unaffected.
+// HTML5 drag and drop is used for one thing: files arriving from outside the
+// page, on `window`. That path is the operating system's and is unaffected.
 
 import { Selection, overlaps, rectFrom } from "./selection.js";
 import { el, on } from "./dom.js";

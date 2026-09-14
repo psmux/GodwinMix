@@ -1,14 +1,11 @@
-// @godwinmix/client, for the browser.
+// @godwinmix/client, for the browser: connect, subscribe, a typed state store,
+// typed calls, and the frame decoders. A panel is handed one of these and never
+// touches fetch, WebSocket or JSON itself.
 //
-// connect, subscribe, a typed state store, typed calls, and the two frame
-// decoders. A panel is handed one of these and never touches fetch, WebSocket
-// or JSON itself.
-//
-// The `ext` bookkeeping here is the thing the core cares about. A live tile
-// asks for pictures; the client adds up what every asker wants, subscribes once
-// at the widest width and the highest rate anyone needs, and unsubscribes the
-// moment the last asker lets go. A gallery on icon mode therefore costs the
-// core nothing at all, which is principle 2.
+// The `ext` bookkeeping here is what the core cares about. A live tile asks for
+// pictures; the client adds up what every asker wants, subscribes once at the
+// widest width and highest rate anyone needs, and unsubscribes the moment the
+// last asker lets go. A gallery on icon mode costs the core nothing at all.
 
 import { Store } from "./store.js";
 import { RpcTransport } from "./transport-rpc.js";

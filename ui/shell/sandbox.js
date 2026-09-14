@@ -1,17 +1,14 @@
 // The sandboxed tier: a panel in an <iframe sandbox="allow-scripts"> talking the
 // same JSON-RPC over postMessage.
 //
-// The frame has no same origin access, so `event.origin` on everything it sends
-// is the string "null". That is not a check, it is a fact about opaque origins,
-// so the identity check that matters is `event.source === frame.contentWindow`:
-// only messages from this exact frame are served, and the reply goes back with
-// `postMessage(msg, "*")` because an opaque origin cannot be named any other
-// way. A frame cannot forge `event.source`.
+// The frame has an opaque origin, so `event.origin` is the string "null" and
+// checking it proves nothing. The check that matters is
+// `event.source === frame.contentWindow`, which a frame cannot forge; replies
+// go back with "*" because an opaque origin cannot be named any other way.
 //
-// What a sandboxed panel may do: call methods, subscribe to events, read state.
-// What it may not do: touch the page, read the token, or ask for an `ext`
-// stream that costs the core work without the shell counting it (the `want`
-// bookkeeping stays on this side, so a panel that is removed stops costing).
+// A sandboxed panel may call methods, subscribe and read state. It may not
+// touch the page, read the token, or hold an `ext` stream the shell is not
+// counting: that bookkeeping stays here, so a panel removed stops costing.
 
 const ALLOWED_PREFIXES = ["core.", "program.", "source.", "output.", "scene.", "media.", "adbreak.", "plugin.", "agent.", "tool.", "task."];
 

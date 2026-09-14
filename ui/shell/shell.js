@@ -1,9 +1,7 @@
-// The shell: slots, the panels in them, and the handful of things that belong
-// to the window rather than to any panel.
-//
-// It owns no mixer state. Every panel reads the client's store and renders at
-// flush. What the shell owns is where things sit, what the keyboard does, the
-// undo stack, the drawer, and the file drop zone.
+// The shell: slots, the panels in them, and the handful of things that belong to
+// the window rather than to any panel. It owns no mixer state; every panel reads
+// the client's store and renders at flush. What it owns is where things sit,
+// what the keyboard does, the undo stack, the drawer and the file drop zone.
 
 import { el, clear, on } from "./dom.js";
 import * as layout from "./layout.js";
@@ -31,10 +29,6 @@ export const shell = {
     clear(slot);
     if (node) slot.appendChild(node);
     document.body.classList.toggle("drawer-open", !!node);
-  },
-  drawerOpen() {
-    const slot = document.querySelector(".slot-sidebar");
-    return !!(slot && slot.firstChild);
   },
   toast,
   errorToast,

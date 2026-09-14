@@ -1,9 +1,8 @@
 // First run: ask for the token once, and say what to do first.
 //
-// The old page used window.prompt, once per load, guarded by a flag, because a
-// two second poll would otherwise reprompt forever. This asks in the page, with
-// the reason on screen and somewhere to paste, and only when a request has
-// actually come back 401. A mixer with no token configured never sees this.
+// The old page used window.prompt, guarded by a flag so the two second poll did
+// not reprompt forever. This asks in the page, with the reason on screen, and
+// only when a request has come back 401.
 
 import { el, on } from "./dom.js";
 import { modal } from "./modal.js";
