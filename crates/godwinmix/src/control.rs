@@ -22,6 +22,7 @@
 pub mod call;
 pub mod history;
 pub mod methods;
+pub mod push;
 pub mod rest;
 pub mod ws;
 

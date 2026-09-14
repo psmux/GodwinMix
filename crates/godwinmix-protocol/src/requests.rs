@@ -266,12 +266,56 @@ pub struct Ext {
     /// `event/source.position` for seekable sources.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub positions: bool,
-    /// Keys this build does not implement yet (`thumb`, `preview`,
-    /// `telemetry`, `agent`). Kept rather than refused so that a client
-    /// written against the full table still connects, and so the core can say
-    /// in the subscribe result which keys it ignored.
+    /// `event/telemetry`: a line of numbers per tick, at 1 to 10 per second.
+    /// This is what turns the probes on; nothing measures until it is here.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub telemetry: Option<TelemetryExt>,
+    /// `event/agent.state` when a threshold crosses or a state flips, with a
+    /// snapshot URL. `true` takes the defaults from 09 section 5 item 12.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub agent: Option<AgentExt>,
+    /// Keys this build does not implement yet (`thumb`, `preview`). Kept
+    /// rather than refused so that a client written against the full table
+    /// still connects, and so the core can say in the subscribe result which
+    /// keys it ignored.
     #[serde(flatten, default, skip_serializing_if = "Map::is_empty")]
     pub other: Map<String, Value>,
+}
+
+/// `ext.telemetry`. Accepts `false` to mean off, `true` for the default rate,
+/// or an object naming it.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(untagged)]
+pub enum TelemetryExt {
+    /// `"telemetry": true` or `false`.
+    Off(bool),
+    On {
+        /// Ticks per second, 1 to 10. The core clamps to that range.
+        #[serde(default)]
+        hz: Option<u32>,
+    },
+}
+
+/// `ext.agent`. `true` takes the default thresholds; an object moves them.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(untagged)]
+pub enum AgentExt {
+    /// `"agent": true` or `false`.
+    On(bool),
+    Thresholds {
+        /// Shot change score, 0 to 1. Default 0.3.
+        #[serde(default)]
+        shot: Option<f64>,
+        /// Fraction of the picture at black. Default 0.98.
+        #[serde(default)]
+        black: Option<f64>,
+        /// How long the picture has to be identical. Default 200.
+        #[serde(default)]
+        freeze_ms: Option<u64>,
+        /// How long the programme has to be quiet. Default 500.
+        #[serde(default)]
+        silence_ms: Option<u64>,
+    },
 }
 
 /// `ext.multiview`. Accepts `false` to mean off, or an object.
@@ -299,6 +343,21 @@ impl MultiviewExt {
 impl Ext {
     pub fn wants_multiview(&self) -> bool {
         self.multiview.as_ref().is_some_and(|m| m.wanted())
+    }
+
+    /// Ticks per second for `event/telemetry`, `None` when it was not asked
+    /// for. Clamped to the 1 to 10 the table names.
+    pub fn telemetry_hz(&self) -> Option<u32> {
+        match self.telemetry.as_ref()? {
+            TelemetryExt::Off(false) => None,
+            TelemetryExt::Off(true) => Some(1),
+            TelemetryExt::On { hz } => Some(hz.unwrap_or(1).clamp(1, 10)),
+        }
+    }
+
+    /// Whether `event/agent.state` was asked for. `"agent": false` is not.
+    pub fn wants_agent(&self) -> bool {
+        !matches!(self.agent, None | Some(AgentExt::On(false)))
     }
 
     /// Keys in `ext` this build does not act on, so `core.subscribe` can say
