@@ -80,6 +80,13 @@ base64 = "0.22"
 # already in the tree under rustls and costs nothing new to compile.
 getrandom = "0.3"
 
+# The tier W host, behind the binary's `wasm` feature. Kept at the 36 LTS line:
+# it asks for Rust 1.86 rather than the 1.95 the current release wants, and the
+# component model has not moved under it.
+wasmtime = { version = "36", default-features = false, features = ["cranelift", "component-model", "runtime", "std", "gc-drc"] }
+wasmtime-wasi = { version = "36", default-features = false }
+godwinmix-wasm = { path = "crates/godwinmix-wasm", version = "0.2.0" }
+
 [profile.release]
 opt-level = 3
 lto = "fat"
