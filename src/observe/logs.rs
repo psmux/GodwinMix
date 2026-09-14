@@ -149,16 +149,25 @@ pub fn levels() -> serde_json::Value {
     })
 }
 
+/// `try_read` rather than `read`, here and in `instance_level`.
+///
+/// These run inside `enabled`, which runs on whatever thread is logging,
+/// including a GStreamer streaming thread. If an override is being written at
+/// that moment the line falls back to the default level instead of waiting.
+/// Losing the level on one line during the microsecond a `log.set` takes is a
+/// trade nobody will notice; blocking a streaming thread on a lock is the kind
+/// of thing that takes a programme off air, and principle one says it cannot
+/// happen.
 fn target_level(target: &str) -> Option<LevelCode> {
     TARGETS
-        .read()
+        .try_read()?
         .iter()
         .find(|(name, _)| target.starts_with(name.as_str()))
         .map(|(_, level)| *level)
 }
 
 fn instance_level(instance: &str) -> Option<LevelCode> {
-    INSTANCES.read().get(instance).copied()
+    INSTANCES.try_read()?.get(instance).copied()
 }
 
 // --- GStreamer debug ---------------------------------------------------------
@@ -850,10 +859,15 @@ pub(crate) mod tests {
 
     fn reset_levels() {
         set_default_level(LevelCode::INFO);
-        for name in INSTANCES.read().keys().cloned().collect::<Vec<_>>() {
+        // Collected into a local first. A guard in a `for` loop's iterator
+        // expression lives for the whole loop, so reading it there and writing
+        // inside the body is a deadlock with itself.
+        let instances: Vec<String> = INSTANCES.read().keys().cloned().collect();
+        for name in instances {
             set_instance_level(&name, None);
         }
-        for name in TARGETS.read().iter().map(|(n, _)| n.clone()).collect::<Vec<_>>() {
+        let targets: Vec<String> = TARGETS.read().iter().map(|(n, _)| n.clone()).collect();
+        for name in targets {
             set_target_level(&name, None);
         }
     }
@@ -1003,7 +1017,7 @@ pub(crate) mod tests {
     #[test]
     fn timestamps_are_rfc3339_in_utc() {
         let t = std::time::UNIX_EPOCH + std::time::Duration::from_millis(1_757_851_234_567);
-        assert_eq!(rfc3339(&t), "2025-09-14T10:40:34.567Z");
+        assert_eq!(rfc3339(&t), "2025-09-14T12:00:34.567Z");
         assert_eq!(rfc3339(&std::time::UNIX_EPOCH), "1970-01-01T00:00:00.000Z");
     }
 
