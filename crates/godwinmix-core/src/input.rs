@@ -1714,7 +1714,7 @@ fn drain_stderr(
                 pending.extend_from_slice(&buf[..n]);
                 while let Some(nl) = pending.iter().position(|b| *b == b'\n') {
                     let line: Vec<u8> = pending.drain(..=nl).collect();
-                    on_line(String::from_utf8_lossy(&line[..nl]).trim_end().as_ref());
+                    on_line(String::from_utf8_lossy(&line[..nl]).trim_end());
                 }
                 // A child writing megabytes without a newline must not grow
                 // this without bound. Nothing either caller reads is near it.
@@ -1731,7 +1731,7 @@ fn drain_stderr(
         }
     }
     if !pending.is_empty() {
-        on_line(String::from_utf8_lossy(&pending).trim_end().as_ref());
+        on_line(String::from_utf8_lossy(&pending).trim_end());
     }
     // `err` drops here, and with it the read end of the pipe.
 }
