@@ -1018,7 +1018,7 @@ export interface TakeRequest {
   at_running_time_ms?: number | null;
   scene?: string | null;
   source?: string | null;
-  transition?: string | null;
+  transition?: Transition | null;
 }
 
 /** `event/tally`. */
@@ -1073,6 +1073,16 @@ export interface Transform {
   position?: Vec2;
   rotation?: number;
   scale?: Vec2;
+}
+
+/** A name, or an object. */
+export type Transition = string | TransitionRequest;
+
+/** How a take gets there. See docs/reference/transitions.md. */
+export interface TransitionRequest {
+  duration_ms?: number | null;
+  params?: Record<string, unknown>;
+  type: string;
 }
 
 /**

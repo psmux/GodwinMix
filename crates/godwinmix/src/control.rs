@@ -118,6 +118,10 @@ pub struct AppState {
     /// Where the config was read from, so a settings change can be written
     /// back to the file a restart will read.
     pub config_path: Arc<std::path::PathBuf>,
+    /// Every plugin instance that is not a source: services, devices and
+    /// transitions, kept running as singletons. See
+    /// `godwinmix_core::plugin::supervisor`.
+    pub plugins: Arc<godwinmix_core::plugin::supervisor::Supervisor>,
 }
 
 /// The handles onto one running engine, gathered so `AppState::new` takes a
@@ -133,13 +137,25 @@ pub struct Engine {
     /// The scene collection and everything true about it. See
     /// `godwinmix_core::scene::server`.
     pub scenes: Arc<godwinmix_core::scene::server::SceneServer>,
+    /// The plugin singletons. Built before the mixer thread starts so a
+    /// service is up by the time the first client connects.
+    pub plugins: Arc<godwinmix_core::plugin::supervisor::Supervisor>,
 }
 
 impl AppState {
     /// Everything the control plane holds, worked out from the config once.
     pub fn new(cfg: &Config, engine: Engine, rehearsal: bool) -> Self {
-        let Engine { mixer, multiview, preview, encoder, library, converter, quit, scenes } =
-            engine;
+        let Engine {
+            mixer,
+            multiview,
+            preview,
+            encoder,
+            library,
+            converter,
+            quit,
+            scenes,
+            plugins,
+        } = engine;
         let tokens = cfg.tokens(rehearsal);
         let safety =
             godwinmix_core::safety::Guard::new(cfg.safety.clone(), cfg.canvas.fps.max(1) as u32);
@@ -181,7 +197,14 @@ impl AppState {
             rehearsal,
             plugin_settings: Arc::new(cfg.plugins.clone()),
             config_path: Arc::new(cfg.source_path.clone()),
+            plugins,
         }
+    }
+
+    /// The transitions a plugin has added to the built in four, for
+    /// `program.take` to accept by name and for the error that lists them.
+    pub fn transition_names(&self) -> Vec<String> {
+        self.plugins.transition_names()
     }
 
     /// Write one plugin's settings back to the config file.

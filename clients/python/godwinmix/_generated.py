@@ -1119,8 +1119,8 @@ class TakeRequest(TypedDict, total=False):
     # The scene to take, by name or by id. `source` wins when both are given; with neither, the armed scene goes on air.
     source: Optional[str]
     # Id of the source to put on air.
-    transition: Optional[str]
-    # `cut` in this build.
+    transition: Union[Transition, None]
+    # "fade", or {type, duration_ms, params}. Absent is a cut.
 
 class Tally(TypedDict, total=False):
     """`event/tally`."""
@@ -1179,6 +1179,19 @@ class Transform(TypedDict, total=False):
     rotation: float
     # Degrees, clockwise, about the anchor.
     scale: Vec2
+
+# A name, or an object.
+Transition = Union[str, TransitionRequest]
+
+class TransitionRequest(TypedDict, total=False):
+    """How a take gets there. See docs/reference/transitions.md."""
+
+    duration_ms: Optional[int]
+    # How long it takes. 0 is a cut.
+    params: Dict[str, Any]
+    # A stinger takes clip, cut_at_ms, luma.
+    type: str
+    # cut, fade, move, stinger, or a plugin name.
 
 class UiDefaults(TypedDict, total=False):
     """What a surface starts with: the layout, the theme and the gallery mode. Chosen by a preset (`preset.apply`), carried in `core.info` and pushed as `event/ui.changed`. None of it changes what the core does. It exists so the first page a volunteer sees is the one their preset chose rather than the one the last person to use this browser chose. 05 section 3b is where the four gallery modes are defined."""
@@ -1954,7 +1967,7 @@ class GeneratedMethods:
         at_running_time_ms: Optional[int] = None,
         scene: Optional[str] = None,
         source: Optional[str] = None,
-        transition: Optional[str] = None,
+        transition: Optional[Union[Transition, None]] = None,
     ) -> ProgramState:
         """Put a scene or a source on programme. The cut is instant and the outgoing stream is not disturbed."""
         params: Dict[str, Any] = {}

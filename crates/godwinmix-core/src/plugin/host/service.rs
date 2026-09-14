@@ -73,6 +73,8 @@ impl SidecarService {
     /// and behaves like a source, and the error says so.
     pub fn start(&mut self, canvas: &CanvasCaps, params: &Params) -> Result<()> {
         self.spec.canvas = canvas.clone();
+        let plugin = self.spec.plugin.plugin.name.clone();
+        let provide = self.spec.provide.clone();
         let mut child = Sidecar::spawn(&self.instance, &self.spec.launch)
             .with_context(|| format!("starting `{}`", self.spec.launch.command_line()))?;
         let outcome = child.handshake(
@@ -94,6 +96,12 @@ impl SidecarService {
             child.shutdown("the handshake failed");
             return Err(e);
         }
+        // The same three the source path writes, so a singleton is in
+        // `plugin.list`, in `plugin.stats` and under the budget sampler
+        // exactly as a source instance is. Without them a service is a process
+        // nothing can see and nothing will hold to a limit.
+        crate::plugin::loader::set_pid(&self.instance, &plugin, &provide, child.pid());
+        crate::plugin::loader::set_state(&self.instance, "ready");
         self.child = Some(child);
         Ok(())
     }
@@ -103,6 +111,46 @@ impl SidecarService {
             child.shutdown(reason);
         }
         self.child = None;
+        crate::plugin::loader::set_pid(&self.instance, "", "", None);
+        crate::plugin::loader::set_state(&self.instance, "stopped");
+    }
+
+    /// One call on the control channel, whatever the method is.
+    ///
+    /// The state machine decides what is legal, not this: `Sidecar::call`
+    /// refuses a method the instance is not in a state for and names the state
+    /// and the event to wait for. What this adds is a service that is not
+    /// running at all, which is a different error and a different fix.
+    pub fn call(&self, method: &str, params: Value) -> Result<Value> {
+        self.child
+            .as_ref()
+            .with_context(|| {
+                format!(
+                    "`{}` is not running, so `{method}` has nowhere to go. Start it with                      `plugin.enable {}`.",
+                    self.instance, self.spec.plugin.plugin.name
+                )
+            })?
+            .call(method, params)
+    }
+
+    /// The same, with a deadline of its own. What a transition uses: a plugin
+    /// that cannot describe a wipe quickly is not one a take waits five
+    /// seconds for.
+    pub fn call_within(&self, method: &str, params: Value, within: Duration) -> Result<Value> {
+        self.child
+            .as_ref()
+            .with_context(|| format!("`{}` is not running, so `{method}` has nowhere to go", self.instance))?
+            .call_within(method, params, within)
+    }
+
+    /// What the plugin is called, for an error and for `plugin.reload`.
+    pub fn plugin(&self) -> &str {
+        &self.spec.plugin.plugin.name
+    }
+
+    /// Whether this instance declared `[[tools]]` the core can route to it.
+    pub fn tools(&self) -> Vec<String> {
+        self.spec.plugin.tools.iter().map(|t| t.name.clone()).collect()
     }
 
     pub fn configure(&mut self, params: &Params) -> Result<Configure> {
@@ -157,6 +205,29 @@ impl SidecarService {
 
     /// Answer a request the plugin made of the core, once the caller has
     /// carried it out.
+    /// Ask what is out there. Candidates come back with `params` ready for
+    /// `source.add`, and each names the provide id that would open it.
+    ///
+    /// On the service rather than on the device, because the supervisor keeps
+    /// one table of instances and asks the ones whose kind is `device`. A
+    /// plugin that is not a device answers `-32601` and the message says so,
+    /// which is a better error than one this side could invent.
+    pub fn discover(&self, timeout: Duration) -> Result<Vec<Candidate>> {
+        let child = self.child.as_ref().context(
+            "the discovery plugin is not running. Enable it with plugin.enable, or read \
+             plugin.list to see why it stopped.",
+        )?;
+        let within = timeout.min(DISCOVER_TIMEOUT);
+        let value = child.call_within(
+            "discover",
+            json!({ "timeout_ms": within.as_millis() as u64 }),
+            within + Duration::from_millis(500),
+        )?;
+        let found: Discovered = serde_json::from_value(value)
+            .context("the plugin's `discover` answer was not {candidates: [...]}")?;
+        Ok(found.candidates)
+    }
+
     pub fn answer(&self, id: &Value, result: Value) -> Result<()> {
         self.child
             .as_ref()
@@ -206,19 +277,7 @@ impl SidecarDevice {
     /// Ask what is out there. Candidates come back with `params` ready for
     /// `source.add`, and each names the provide id that would open it.
     pub fn discover(&self, timeout: Duration) -> Result<Vec<Candidate>> {
-        let child = self.0.child.as_ref().context(
-            "the discovery plugin is not running. Enable it with plugin.enable, or read \
-             plugin.list to see why it stopped.",
-        )?;
-        let within = timeout.min(DISCOVER_TIMEOUT);
-        let value = child.call_within(
-            "discover",
-            json!({ "timeout_ms": within.as_millis() as u64 }),
-            within + Duration::from_millis(500),
-        )?;
-        let found: Discovered = serde_json::from_value(value)
-            .context("the plugin's `discover` answer was not {candidates: [...]}")?;
-        Ok(found.candidates)
+        self.0.discover(timeout)
     }
 }
 

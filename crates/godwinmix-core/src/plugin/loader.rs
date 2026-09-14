@@ -108,6 +108,11 @@ struct Registry {
     /// reloading the same plugin reuses its entry, so a core that reloads a
     /// plugin a thousand times does not grow a thousand manifests.
     interned: BTreeMap<String, &'static Provide>,
+    /// One interned manifest per provide of every kind, so a service, a device
+    /// or a transition can be launched and supervised with the same `&'static
+    /// Manifest` a source gets. Only sources reach `interned`, because only
+    /// sources have a factory the URI resolver can call.
+    manifests: BTreeMap<String, &'static Manifest>,
     /// Per instance numbers, refreshed once a second by the sampler.
     stats: BTreeMap<String, InstanceStats>,
     /// The pid behind each instance, so the sampler can read a set at a time.
@@ -283,11 +288,24 @@ pub fn remove(name: &str) -> Option<Installed> {
     let gone = reg.plugins.remove(name)?;
     for id in &gone.provides {
         reg.interned.remove(id);
+        reg.manifests.remove(id);
     }
+    // Every instance this plugin ever had, by the two shapes an instance id
+    // takes: a source is named by whoever added it, a singleton is named after
+    // its provide (`ndi-discovery`). Gathering the keys from the stats table
+    // first is what stops a service's pid and budget watch outliving the
+    // plugin, which is the difference between `plugin.remove` leaving nothing
+    // and leaving a process nobody can name.
     let prefix = format!("{name}/");
-    reg.stats.retain(|k, v| !k.starts_with(&prefix) && v.plugin != name);
-    reg.pids.retain(|k, _| !k.starts_with(&prefix));
-    reg.watches.retain(|k, _| !k.starts_with(&prefix));
+    let instances: Vec<String> = reg
+        .stats
+        .iter()
+        .filter(|(k, v)| v.plugin == name || k.starts_with(&prefix))
+        .map(|(k, _)| k.clone())
+        .collect();
+    reg.stats.retain(|k, v| !instances.contains(k) && v.plugin != name);
+    reg.pids.retain(|k, _| !instances.contains(k) && !k.starts_with(&prefix));
+    reg.watches.retain(|k, _| !instances.contains(k) && !k.starts_with(&prefix));
     Some(gone)
 }
 
@@ -328,42 +346,98 @@ fn intern_all() {
     let plugins: Vec<Installed> =
         registry().read().plugins.values().filter(|p| p.live()).cloned().collect();
     let mut made: BTreeMap<String, &'static Provide> = BTreeMap::new();
+    let mut manifests: BTreeMap<String, &'static Manifest> = BTreeMap::new();
     {
         let reg = registry().read();
         for plugin in &plugins {
             for decl in &plugin.manifest.provides {
                 let id = format!("{}/{}", plugin.name(), decl.id);
-                if let Some(existing) = reg.interned.get(&id) {
-                    // Same id, same manifest: reuse rather than leak a second.
-                    if existing.manifest.rank == decl.rank.unwrap_or(128) as u16 {
-                        made.insert(id, *existing);
+                if let Some(existing) = reg.manifests.get(&id) {
+                    // Same id, same rank: reuse rather than leak a second.
+                    if existing.rank == decl.rank.unwrap_or(128) as u16 {
+                        manifests.insert(id.clone(), *existing);
+                        if let Some(provide) = reg.interned.get(&id) {
+                            made.insert(id, *provide);
+                        }
                         continue;
                     }
                 }
+                let manifest: &'static Manifest =
+                    Box::leak(Box::new(manifest_of(plugin, decl)));
+                manifests.insert(id.clone(), manifest);
                 if decl.kind != "source" {
-                    // Only sources reach the URI resolver. Outputs and filters
-                    // are looked up by `type` through their own registries.
+                    // Only sources reach the URI resolver. Everything else is
+                    // looked up by `type` through its own registry or run as a
+                    // singleton by the supervisor.
                     continue;
                 }
-                made.insert(id.clone(), intern_provide(plugin, decl));
+                made.insert(
+                    id.clone(),
+                    Box::leak(Box::new(Provide {
+                        manifest: *manifest,
+                        claims: claims_by_scheme,
+                        make: super::host::make_source,
+                    })),
+                );
             }
         }
     }
-    registry().write().interned = made;
+    let mut reg = registry().write();
+    reg.interned = made;
+    reg.manifests = manifests;
 }
 
-/// Make one `&'static Provide` for a plugin's source provide.
+/// The interned manifest of any provide, whatever kind it is.
+///
+/// What the supervisor hands the sidecar host when it starts a service, a
+/// device or a transition. `source_provide` answers only for sources, because
+/// only a source has a factory behind it.
+pub fn provide_manifest(type_id: &str) -> Option<&'static Manifest> {
+    let reg = registry().read();
+    if let Some(m) = reg.manifests.get(type_id) {
+        return Some(*m);
+    }
+    reg.manifests
+        .iter()
+        .find(|(id, _)| id.split('/').next() == Some(type_id))
+        .map(|(_, m)| *m)
+}
+
+/// Every provide of a kind, across every live plugin, as `<plugin>/<id>`.
+///
+/// How the supervisor knows what to start. Sorted, so a core starts its
+/// plugins in the same order every time and a startup report is comparable
+/// between runs.
+pub fn provides_of_kind(kind: &str) -> Vec<String> {
+    let reg = registry().read();
+    let mut found: Vec<String> = reg
+        .plugins
+        .values()
+        .filter(|p| p.live())
+        .flat_map(|p| {
+            p.manifest
+                .provides
+                .iter()
+                .filter(|d| d.kind == kind)
+                .map(move |d| format!("{}/{}", p.name(), d.id))
+        })
+        .collect();
+    found.sort();
+    found
+}
+
+/// Make one `&'static Manifest` for a plugin's provide, whatever kind it is.
 ///
 /// The strings are leaked once per distinct provide. A core that installs
 /// twenty plugins leaks twenty manifests' worth of short strings and never
 /// grows again, which is the price of letting a runtime provide sit in the
 /// same table as a compiled in one and be looked up with no allocation on the
 /// hot path.
-fn intern_provide(plugin: &Installed, decl: &ProvideDecl) -> &'static Provide {
-    let manifest = Manifest {
+fn manifest_of(plugin: &Installed, decl: &ProvideDecl) -> Manifest {
+    Manifest {
         plugin: leak(plugin.name()),
         id: leak(&decl.id),
-        kind: ProvideKind::Source,
+        kind: ProvideKind::parse(&decl.kind),
         api: plugin.manifest.plugin.api,
         description: leak(&plugin.manifest.plugin.description),
         uri_schemes: leak_list(&decl.uri_schemes),
@@ -372,8 +446,7 @@ fn intern_provide(plugin: &Installed, decl: &ProvideDecl) -> &'static Provide {
         capabilities: capabilities_of(decl),
         latency_ms: decl.latency_ms.unwrap_or(0),
         tier: Tier::Sidecar,
-    };
-    Box::leak(Box::new(Provide { manifest, claims: claims_by_scheme, make: super::host::make_source }))
+    }
 }
 
 /// A sidecar source claims a bare URI by the schemes it declared, at the rank

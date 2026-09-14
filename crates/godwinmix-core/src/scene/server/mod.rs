@@ -204,6 +204,29 @@ impl SceneServer {
         Ok((scene.name.clone(), compose::placements(&inner.doc, scene, &inner.canvas)))
     }
 
+    /// A transition the collection stores under a name.
+    ///
+    /// A collection carries its own transitions (11 section 7), so a church
+    /// that has settled on a 400 ms dissolve calls it "house" and every take
+    /// in every scene means the same thing by it. `program.take {transition:
+    /// "house"}` resolves here before the built in names are tried, so a
+    /// collection can also give "fade" a duration of its own.
+    pub fn transition(&self, name: &str) -> Option<crate::scene::Transition> {
+        let name = name.trim();
+        self.inner
+            .lock()
+            .doc
+            .transitions
+            .iter()
+            .find(|t| t.name.eq_ignore_ascii_case(name) || t.id.to_string() == name)
+            .cloned()
+    }
+
+    /// Every transition the collection names, for an error that lists them.
+    pub fn transition_names(&self) -> Vec<String> {
+        self.inner.lock().doc.transitions.iter().map(|t| t.name.clone()).collect()
+    }
+
     /// The armed scene, for `program.take` with no argument.
     pub fn armed(&self) -> Option<Id> {
         self.inner.lock().preview

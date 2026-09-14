@@ -3836,11 +3836,15 @@
           ]
         },
         "transition": {
-          "description": "`cut` in this build.",
-          "type": [
-            "string",
-            "null"
-          ]
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Transition"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "\"fade\", or {type, duration_ms, params}. Absent is a cut."
         }
       },
       "type": "object"
@@ -4044,6 +4048,44 @@
           }
         }
       },
+      "type": "object"
+    },
+    "Transition": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "$ref": "#/$defs/TransitionRequest"
+        }
+      ],
+      "description": "A name, or an object."
+    },
+    "TransitionRequest": {
+      "description": "How a take gets there. See docs/reference/transitions.md.",
+      "properties": {
+        "duration_ms": {
+          "description": "How long it takes. 0 is a cut.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "params": {
+          "additionalProperties": true,
+          "description": "A stinger takes clip, cut_at_ms, luma.",
+          "type": "object"
+        },
+        "type": {
+          "description": "cut, fade, move, stinger, or a plugin name.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type"
+      ],
       "type": "object"
     },
     "UiDefaults": {
