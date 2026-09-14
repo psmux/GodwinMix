@@ -1,0 +1,52 @@
+{
+  "Name": "GodwinMix",
+  "Version": "0.2.0.0",
+  "Author": "GodwinMix",
+  "Description": "Take a source and see the key go red when it is on air. Toggle an output. Cut to the slate.",
+  "Category": "GodwinMix",
+  "CategoryIcon": "imgs/category",
+  "Icon": "imgs/plugin",
+  "URL": "https://github.com/psmux/godwinmix",
+  "SDKVersion": 2,
+  "UUID": "com.godwinmix.streamdeck",
+  "Nodejs": {
+    "Version": "20",
+    "Debug": "enabled"
+  },
+  "CodePath": "bin/plugin.js",
+  "Software": {
+    "MinimumVersion": "6.5"
+  },
+  "OS": [
+    { "Platform": "mac", "MinimumVersion": "12" },
+    { "Platform": "windows", "MinimumVersion": "10" }
+  ],
+  "Actions": [
+    {
+      "Name": "Take",
+      "UUID": "com.godwinmix.streamdeck.take",
+      "Icon": "imgs/take",
+      "Tooltip": "Put a source on programme. The key is red while it is on air and green while it is on preview.",
+      "Controllers": ["Keypad"],
+      "PropertyInspectorPath": "ui/take.html",
+      "States": [{ "Image": "imgs/take", "TitleAlignment": "middle" }]
+    },
+    {
+      "Name": "Output",
+      "UUID": "com.godwinmix.streamdeck.output",
+      "Icon": "imgs/output",
+      "Tooltip": "Start or stop a destination. Green while it is live, amber while it is connecting, red when it has failed.",
+      "Controllers": ["Keypad"],
+      "PropertyInspectorPath": "ui/output.html",
+      "States": [{ "Image": "imgs/output", "TitleAlignment": "middle" }]
+    },
+    {
+      "Name": "Slate",
+      "UUID": "com.godwinmix.streamdeck.slate",
+      "Icon": "imgs/slate",
+      "Tooltip": "Cut the programme to the slate.",
+      "Controllers": ["Keypad"],
+      "States": [{ "Image": "imgs/slate", "TitleAlignment": "middle" }]
+    }
+  ]
+}
