@@ -1,0 +1,23 @@
+# One recorded conversation with the core, replayed by `gmx plugin test
+# --offline .`. `core` lines are written to the plugin's stdin; `plugin` lines
+# must appear on its stderr, in this order, as a subset of the real line. "*"
+# matches any value.
+#
+# There is no core, no socket and no clock in this test. The plugin is started
+# with an empty GMX_RPC, which is what a service does when nobody gave it a
+# mixer to call: it comes up, says so, and answers everything asked of it.
+{"plugin": {"jsonrpc": "2.0", "id": 0, "method": "initialize", "params": {"plugin": "osc", "api": 1}}}
+{"core": {"jsonrpc": "2.0", "id": 0, "result": {"core": "godwinmix", "version": "0.2.0", "api_level": 1, "api_compatible": 1, "canvas": {"width": 160, "height": 90, "fps": 30}, "transport": "container", "media": "", "instance": "bridge", "provide": "bridge", "params": {"listen": "127.0.0.1:19000", "prefix": "/gmx"}}}}
+{"plugin": {"jsonrpc": "2.0", "method": "log", "params": {"level": "info", "message": "*"}}}
+{"plugin": {"jsonrpc": "2.0", "method": "media.report", "params": {"latency_ms": 0}}}
+{"plugin": {"jsonrpc": "2.0", "method": "initialized"}}
+{"core": {"jsonrpc": "2.0", "id": 1, "method": "health", "params": {}}}
+{"plugin": {"jsonrpc": "2.0", "id": 1, "result": {"state": "ok"}}}
+{"core": {"jsonrpc": "2.0", "id": 2, "method": "configure", "params": {"params": {"listen": "127.0.0.1:19001", "send_to": ["127.0.0.1:19002"], "prefix": "/mixer"}}}}
+{"plugin": {"jsonrpc": "2.0", "id": 2, "result": {"applied": true}}}
+{"core": {"jsonrpc": "2.0", "id": 3, "method": "tool.call", "params": {"name": "no_such_tool", "arguments": {}}}}
+{"plugin": {"jsonrpc": "2.0", "id": 3, "error": {"code": -32601, "message": "*"}}}
+{"core": {"jsonrpc": "2.0", "id": 4, "method": "teleport", "params": {}}}
+{"plugin": {"jsonrpc": "2.0", "id": 4, "error": {"code": -32601, "message": "*"}}}
+{"core": {"jsonrpc": "2.0", "id": 5, "method": "shutdown", "params": {"reason": "offline test"}}}
+{"plugin": {"jsonrpc": "2.0", "id": 5, "result": {}}}

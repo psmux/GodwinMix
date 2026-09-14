@@ -1,0 +1,54 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "OSC bridge",
+  "description": "Where to listen for OSC, where to send tally and programme, and who is allowed to send.",
+  "type": "object",
+  "properties": {
+    "listen": {
+      "type": "string",
+      "title": "Listen on",
+      "description": "Address and port to receive OSC on. A bare port means every address on this machine. 9000 is what TouchOSC, Open Stage Control and QLab offer first.",
+      "default": "0.0.0.0:9000",
+      "examples": ["0.0.0.0:9000", "127.0.0.1:9000", "9010"]
+    },
+    "send_to": {
+      "type": "array",
+      "title": "Send to",
+      "description": "Where tally and programme go, as address:port. Empty means the bridge only listens, which costs nothing.",
+      "items": { "type": "string" },
+      "default": [],
+      "examples": [[], ["10.0.0.7:9001"], ["10.0.0.7:9001", "10.0.0.8:9001"]]
+    },
+    "send_tally": {
+      "type": "boolean",
+      "title": "Send tally",
+      "description": "Send <prefix>/tally/<source id> whenever the tally changes: 1 on programme, 2 on preview, 0 off, with the word beside the number.",
+      "default": true,
+      "examples": [true, false]
+    },
+    "send_program": {
+      "type": "boolean",
+      "title": "Send programme and states",
+      "description": "Send <prefix>/program on every take, and <prefix>/source/<id>/state and <prefix>/output/<id>/state as they change.",
+      "default": true,
+      "examples": [true, false]
+    },
+    "prefix": {
+      "type": "string",
+      "title": "Outgoing prefix",
+      "description": "Put in front of every address this plugin sends. Leave it empty for bare addresses.",
+      "default": "/gmx",
+      "maxLength": 64,
+      "examples": ["/gmx", "", "/mixer"]
+    },
+    "allow_from": {
+      "type": "array",
+      "title": "Accept only from",
+      "description": "Addresses allowed to send commands. Empty accepts anything that can reach the port, which is right on a show LAN and wrong on a network you do not own.",
+      "items": { "type": "string" },
+      "default": [],
+      "examples": [[], ["10.0.0.7"], ["10.0.0.7", "10.0.0.8:9000"]]
+    }
+  },
+  "additionalProperties": false
+}

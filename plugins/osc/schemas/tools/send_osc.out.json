@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "send_osc result",
+  "description": "What went out and where.",
+  "type": "object",
+  "properties": {
+    "content": {
+      "type": "array",
+      "description": "One text block naming the byte count, the targets and the address.",
+      "items": { "type": "object" }
+    }
+  },
+  "additionalProperties": true
+}
