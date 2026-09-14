@@ -491,13 +491,15 @@ pub async fn run() -> Result<()> {
     let quit = Arc::new(tokio::sync::Notify::new());
     let state = control::AppState::new(
         &cfg_for_control,
-        handle.clone(),
-        multiview,
-        preview,
-        encoder,
-        library,
-        converter,
-        quit.clone(),
+        control::Engine {
+            mixer: handle.clone(),
+            multiview,
+            preview,
+            encoder,
+            library,
+            converter,
+            quit: quit.clone(),
+        },
         args.rehearsal,
     );
     let server = tokio::spawn(async move {

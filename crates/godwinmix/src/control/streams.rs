@@ -71,21 +71,27 @@ pub fn router(ctx: Ctx) -> Router<Ctx> {
 /// Written out here rather than reused from `rest.rs` because these are not
 /// generated routes: they carry bytes, not JSON, and a refusal has to be a
 /// plain status a `<img>` tag or an `aplay` pipeline can act on.
-fn authorise(ctx: &Ctx, method: &Method, headers: &HeaderMap, uri: &Uri) -> Result<(), Response> {
+/// A refusal is boxed: an `axum::Response` is a large value and every caller
+/// discards the `Ok` side, so the happy path should not carry its weight.
+type Refusal = Box<Response>;
+
+fn authorise(ctx: &Ctx, method: &Method, headers: &HeaderMap, uri: &Uri) -> Result<(), Refusal> {
     let presented = presented_token(method, headers, uri);
     let token = ctx.app.tokens.authenticate(presented.as_deref()).map_err(|reason| {
-        (
-            StatusCode::UNAUTHORIZED,
-            [(header::WWW_AUTHENTICATE, "Bearer")],
-            axum::Json(json!({ "error": reason.message() })),
+        Box::new(
+            (
+                StatusCode::UNAUTHORIZED,
+                [(header::WWW_AUTHENTICATE, "Bearer")],
+                axum::Json(json!({ "error": reason.message() })),
+            )
+                .into_response(),
         )
-            .into_response()
     })?;
     if !token.has(godwinmix_protocol::scope::Scope::Read) {
-        return Err(refuse(
+        return Err(Box::new(refuse(
             StatusCode::FORBIDDEN,
             "this token does not carry the read scope, which a preview stream needs",
-        ));
+        )));
     }
     Ok(())
 }
@@ -109,7 +115,7 @@ async fn mjpeg_stream(
     req: Request,
 ) -> Response {
     if let Err(r) = authorise(&ctx, req.method(), req.headers(), req.uri()) {
-        return r;
+        return *r;
     }
     let target = mjpeg::Target::parse(&target);
     if !ctx.app.multiview.enabled() {
@@ -218,7 +224,7 @@ async fn mjpeg_item(
     req: Request,
 ) -> Response {
     if let Err(r) = authorise(&ctx, req.method(), req.headers(), req.uri()) {
-        return r;
+        return *r;
     }
     refuse(
         StatusCode::NOT_IMPLEMENTED,
@@ -261,7 +267,7 @@ async fn audio_stream(
     codec: Codec,
 ) -> Response {
     if let Err(r) = authorise(&ctx, req.method(), req.headers(), req.uri()) {
-        return r;
+        return *r;
     }
     let request = AudioRequest {
         rate: number(&q, "rate").unwrap_or(48_000),
@@ -333,7 +339,7 @@ async fn whep_offer(
     req: Request,
 ) -> Response {
     if let Err(r) = authorise(&ctx, req.method(), req.headers(), req.uri()) {
-        return r;
+        return *r;
     }
     if !whep::available() {
         return (

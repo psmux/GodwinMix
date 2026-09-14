@@ -100,19 +100,22 @@ pub struct AppState {
     pub rehearsal: bool,
 }
 
+/// The handles onto one running engine, gathered so `AppState::new` takes a
+/// config, an engine and a flag rather than a list nobody can read.
+pub struct Engine {
+    pub mixer: MixerHandle,
+    pub multiview: MultiviewHandle,
+    pub preview: godwinmix_core::preview::PreviewHandle,
+    pub encoder: godwinmix_core::encoder::EncoderHandle,
+    pub library: Arc<MediaLibrary>,
+    pub converter: Arc<godwinmix_core::convert::Converter>,
+    pub quit: Arc<tokio::sync::Notify>,
+}
+
 impl AppState {
     /// Everything the control plane holds, worked out from the config once.
-    pub fn new(
-        cfg: &Config,
-        mixer: MixerHandle,
-        multiview: MultiviewHandle,
-        preview: godwinmix_core::preview::PreviewHandle,
-        encoder: godwinmix_core::encoder::EncoderHandle,
-        library: Arc<MediaLibrary>,
-        converter: Arc<godwinmix_core::convert::Converter>,
-        quit: Arc<tokio::sync::Notify>,
-        rehearsal: bool,
-    ) -> Self {
+    pub fn new(cfg: &Config, engine: Engine, rehearsal: bool) -> Self {
+        let Engine { mixer, multiview, preview, encoder, library, converter, quit } = engine;
         let tokens = cfg.tokens(rehearsal);
         Self {
             mixer,
