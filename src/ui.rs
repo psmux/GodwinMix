@@ -133,6 +133,8 @@ where
     let mut router = Router::new()
         .route("/", get(|| async { asset("index.html") }))
         .route("/legacy", get(|| async { html(LEGACY) }))
+        // A directory URL is what a person types, so it answers rather than 404s.
+        .route("/test/", get(|| async { asset("test/index.html") }))
         .route("/plugins/index.json", get(plugin_index))
         .route("/plugins/{name}/ui/{*path}", get(plugin_file));
     for (path, _) in ASSETS {
@@ -410,6 +412,14 @@ mod tests {
         assert!(safe_relative("/etc/passwd").is_none());
         assert!(safe_relative("./panel.js").is_none());
         assert!(safe_relative("").is_none());
+    }
+
+    #[test]
+    fn the_test_page_is_served_with_and_without_its_file_name() {
+        // Both `/test/` and `/test/index.html` answer, because a person types
+        // the first and a link carries the second.
+        assert!(ASSETS.iter().any(|(p, _)| *p == "test/index.html"));
+        assert!(ASSETS.iter().any(|(p, _)| *p == "test/run.js"));
     }
 
     #[test]
