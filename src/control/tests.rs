@@ -424,6 +424,54 @@ fn a_read_only_token_is_refused_before_the_handler_runs() {
     assert!(refusal.message.contains("operate"), "{}", refusal.message);
 }
 
+/// Two doors onto one set of methods must not mean two sets of permissions.
+/// Every deprecated path resolves to the method it aliases, so the scope that
+/// governs `/api/v1` governs `/api` as well.
+#[test]
+fn the_legacy_paths_carry_the_scope_of_the_method_they_alias() {
+    let routes = rest::legacy_routes();
+    let registry = methods::registry();
+    let scope_of = |http: Method, path: &str| {
+        let (route, _) = rest::resolve(&routes, &http, path).expect("a legacy route");
+        (route.method, registry.get(route.method).unwrap().scope)
+    };
+    assert_eq!(scope_of(Method::GET, "/api/status"), ("core.status", Scope::Read));
+    assert_eq!(scope_of(Method::POST, "/api/take"), ("program.take", Scope::Operate));
+    assert_eq!(scope_of(Method::POST, "/api/sources"), ("source.add", Scope::Operate));
+    assert_eq!(
+        scope_of(Method::DELETE, "/api/sources/cam1"),
+        ("source.remove", Scope::Operate)
+    );
+    assert_eq!(scope_of(Method::POST, "/api/shutdown"), ("core.shutdown", Scope::Admin));
+    assert_eq!(scope_of(Method::GET, "/ws"), ("core.subscribe", Scope::Read));
+    // The listing and the adding sit on one path under two verbs, and they do
+    // not have the same scope.
+    assert_eq!(scope_of(Method::GET, "/api/outputs"), ("output.list", Scope::Read));
+    assert_eq!(scope_of(Method::POST, "/api/outputs"), ("output.add", Scope::Operate));
+
+    // A read only token is refused on every path that changes something, and
+    // nowhere else.
+    let reader = Token {
+        id: "watcher".into(),
+        secret: "r".into(),
+        scopes: vec![Scope::Read],
+        confirm: ConfirmPolicy::None,
+        rehearsal: false,
+        profile: Profile::Standard,
+    };
+    for (http, path) in [
+        (Method::POST, "/api/take"),
+        (Method::POST, "/api/sources"),
+        (Method::DELETE, "/api/sources/cam1"),
+        (Method::POST, "/api/shutdown"),
+    ] {
+        let (method, scope) = scope_of(http, path);
+        assert!(!reader.has(scope), "a read only token can still reach {method}");
+    }
+    assert!(reader.has(scope_of(Method::GET, "/api/status").1));
+    assert!(reader.has(scope_of(Method::GET, "/api/agent/state").1));
+}
+
 // --- the pieces the legacy handlers still lean on --------------------------
 
 /// `add_source` builds its `SourceConfig` through JSON, so the strings the
