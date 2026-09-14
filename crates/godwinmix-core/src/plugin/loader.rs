@@ -807,6 +807,42 @@ pub fn refresh_stats(sampler: &mut Sampler) -> Vec<Breach> {
     breaches
 }
 
+/// Start the once a second refresh of every instance's numbers.
+///
+/// One thread for the whole core, not one per plugin, and it does nothing at
+/// all while no plugin instance is running: `refresh_stats` returns before it
+/// reads anything when there are no pids. Nothing runs unless asked.
+///
+/// The breaches it finds are handed to `on_breach`, because what to do about
+/// one (restart the instance, disable it, raise an alert) needs a mixer and the
+/// loader has none.
+pub fn start_sampler(on_breach: impl Fn(Breach) + Send + 'static) {
+    static STARTED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+    if STARTED.swap(true, std::sync::atomic::Ordering::SeqCst) {
+        return;
+    }
+    std::thread::Builder::new()
+        .name("plugin-stats".into())
+        .spawn(move || {
+            let mut sampler = Sampler::new();
+            loop {
+                for breach in refresh_stats(&mut sampler) {
+                    tracing::warn!(
+                        plugin = %breach.plugin,
+                        instance = %breach.instance,
+                        action = breach.action.as_str(),
+                        "{} is over its budget: {}",
+                        breach.instance,
+                        breach.reason
+                    );
+                    on_breach(breach);
+                }
+                std::thread::sleep(godwinmix_host::sampler::REFRESH);
+            }
+        })
+        .ok();
+}
+
 /// Every instance's numbers. What `plugin.stats` answers with.
 pub fn stats() -> Vec<InstanceStats> {
     registry().read().stats.values().cloned().collect()

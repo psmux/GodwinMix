@@ -457,6 +457,32 @@ pub async fn run() -> Result<()> {
             // directory so that `plugin.add` then `plugin.remove` leaves
             // nothing behind anywhere else.
             plugin::loader::set_runtime_dir(dir);
+            // One thread for every plugin's numbers, refreshed once a second
+            // and idle while nothing is running. What it finds over budget is
+            // acted on here, because the loader has no mixer to act with.
+            let budgets = handle.clone();
+            plugin::loader::start_sampler(move |breach| {
+                use godwinmix_host::budget::OverBudget;
+                budgets.publish_alert(
+                    match breach.action {
+                        OverBudget::Alert => godwinmix_core::state::Severity::Warning,
+                        _ => godwinmix_core::state::Severity::Error,
+                    },
+                    format!("{} is over its budget: {}", breach.instance, breach.reason),
+                );
+                match breach.action {
+                    OverBudget::Restart => {
+                        let _ = budgets.send(mixer::Command::RestartSource(breach.instance));
+                    }
+                    // Disabling is the operator's decision to make permanent,
+                    // so the instance is stopped and the plugin stays
+                    // installed. `gmx plugin enable` puts it back.
+                    OverBudget::Disable => {
+                        plugin::loader::set_enabled(&breach.plugin, false);
+                    }
+                    OverBudget::Alert => {}
+                }
+            });
         }
         Err(e) => warn!(?e, "no runtime directory, so logs stay on stderr only"),
     }
