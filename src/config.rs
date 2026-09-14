@@ -21,6 +21,12 @@ pub struct Config {
     pub control: ControlConfig,
     #[serde(default)]
     pub hardware: HardwareConfig,
+    /// Additions and overrides to the shipped codec catalogue. An entry here
+    /// whose id matches a shipped one replaces it; anything else is appended.
+    /// See `codecs.toml` for the shape and `docs/how-to/add-a-codec-entry.md`
+    /// for a worked example.
+    #[serde(default)]
+    pub codecs: crate::catalogue::Catalogue,
     #[serde(default)]
     pub media: MediaConfig,
     #[serde(default)]
@@ -133,9 +139,14 @@ impl Default for ControlConfig {
     }
 }
 
-/// Hardware acceleration preference. `Auto` probes at startup and picks the
-/// best available backend; the named variants force one and fail loudly if it
-/// is not present, which is what you want on a server you control.
+/// Hardware acceleration preference. `Auto` picks the highest ranked
+/// catalogue entry whose elements are installed; the named variants pin an
+/// `accel` and fail loudly if no entry with it is present, which is what you
+/// want on a server you control.
+///
+/// These names are the `accel` field in `codecs.toml`. Adding a vendor means
+/// adding entries there and, if it is one an operator should be able to pin,
+/// one variant here.
 #[derive(Debug, Clone, Copy, Default, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
 pub enum Accel {
@@ -143,10 +154,40 @@ pub enum Accel {
     Auto,
     Nvidia,
     Va,
+    Qsv,
+    Amf,
     VideoToolbox,
     MediaFoundation,
     D3d11,
+    D3d12,
+    Cuda,
+    Gl,
+    Vulkan,
+    V4l2,
     Software,
+}
+
+impl Accel {
+    /// The `accel` string this matches in the catalogue, or None for `Auto`,
+    /// which matches everything.
+    pub fn name(self) -> Option<&'static str> {
+        Some(match self {
+            Accel::Auto => return None,
+            Accel::Nvidia => "nvidia",
+            Accel::Va => "va",
+            Accel::Qsv => "qsv",
+            Accel::Amf => "amf",
+            Accel::VideoToolbox => "videotoolbox",
+            Accel::MediaFoundation => "mediafoundation",
+            Accel::D3d11 => "d3d11",
+            Accel::D3d12 => "d3d12",
+            Accel::Cuda => "cuda",
+            Accel::Gl => "gl",
+            Accel::Vulkan => "vulkan",
+            Accel::V4l2 => "v4l2",
+            Accel::Software => "software",
+        })
+    }
 }
 
 #[derive(Debug, Clone, Default, Deserialize, Serialize)]
@@ -155,6 +196,11 @@ pub struct HardwareConfig {
     pub decode: Accel,
     #[serde(default)]
     pub encode: Accel,
+    /// Which compositor and conversion backend to draw the canvas on. `Auto`
+    /// keeps the software compositor until a GPU entry carries a `verified`
+    /// record for this platform; pin one to run the soak that earns it.
+    #[serde(default)]
+    pub graphics: Accel,
 }
 
 /// Which RTMP client implementation to pull a source with.
@@ -860,6 +906,7 @@ sidecar = \"/opt/b\"\n").unwrap();
             multiview: Default::default(),
             control: Default::default(),
             hardware: Default::default(),
+            codecs: Default::default(),
             media: Default::default(),
             security: Default::default(),
             browser: Default::default(),
