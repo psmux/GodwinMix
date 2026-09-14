@@ -43,6 +43,17 @@ export GODWINMIX_TOKEN=a-long-random-string
 gmx-tui
 ```
 
+Or let `gmx` start it for you. The TUI is registered as a `surface` plugin, so:
+
+```sh
+gmx ui tui
+```
+
+finds the binary, passes the address and the token it is already using, and
+hands over the terminal. `gmx ui list` shows every surface installed, and
+`gmx ui tui -- --multiview` passes flags through. See
+[surfaces](../reference/surfaces.md).
+
 The token goes in an `Authorization: Bearer` header, not in the URL, because a
 token in a URL ends up in more logs than it should. A token with the `operate`
 scope can run a show; a `read` token shows everything and is refused on the
