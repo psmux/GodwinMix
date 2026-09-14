@@ -538,20 +538,29 @@ pub fn provides_of_kind(kind: &str) -> Vec<String> {
 /// grows again, which is the price of letting a runtime provide sit in the
 /// same table as a compiled in one and be looked up with no allocation on the
 /// hot path.
-fn manifest_of(plugin: &Installed, decl: &ProvideDecl) -> Manifest {
+/// One provide's interned manifest.
+///
+/// `tier` is where the instance will actually run: `Sidecar` for a plugin
+/// installed here, `Node` for one the core can only reach through a node. It
+/// is the one field that differs, and the only reason this is not private.
+pub fn manifest_of_at(plugin: &PluginManifest, decl: &ProvideDecl, tier: Tier) -> Manifest {
     Manifest {
-        plugin: leak(plugin.name()),
+        plugin: leak(&plugin.plugin.name),
         id: leak(&decl.id),
         kind: ProvideKind::parse(&decl.kind),
-        api: plugin.manifest.plugin.api,
-        description: leak(&plugin.manifest.plugin.description),
+        api: plugin.plugin.api,
+        description: leak(&plugin.plugin.description),
         uri_schemes: leak_list(&decl.uri_schemes),
         rank: decl.rank.unwrap_or(128).min(256) as u16,
         media: media_of(decl),
         capabilities: capabilities_of(decl),
         latency_ms: decl.latency_ms.unwrap_or(0),
-        tier: Tier::Sidecar,
+        tier,
     }
+}
+
+fn manifest_of(plugin: &Installed, decl: &ProvideDecl) -> Manifest {
+    manifest_of_at(&plugin.manifest, decl, Tier::Sidecar)
 }
 
 /// A sidecar source claims a bare URI by the schemes it declared, at the rank

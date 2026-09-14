@@ -24,6 +24,7 @@ pub mod loader;
 pub mod kinds;
 pub mod output;
 pub mod outputs;
+pub mod remote;
 pub mod source;
 
 use crate::state::{SourceHealth, SourceId};
