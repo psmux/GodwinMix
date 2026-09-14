@@ -61,6 +61,21 @@ impl Sidecars {
         if let Some(component) = godwinmix_core::plugin::wasm::live(plugin) {
             return component_hook(component, hook, body).await;
         }
+        // A plugin that only ever runs as a component and is not running is
+        // not one to spawn: there is no process in its manifest to spawn. Say
+        // what is missing instead, because the answer is a build flag.
+        if let Some(installed) = loader::get(plugin) {
+            if godwinmix_core::plugin::wasm::runs_as_wasm(&installed.manifest) {
+                anyhow::bail!(
+                    "`{plugin}` runs as a WebAssembly component and none is loaded. This build \
+                     carries {}; `gmx doctor` says so on the `wasm host` line.",
+                    match godwinmix_core::plugin::wasm::describe() {
+                        Some(what) => what,
+                        None => "no WebAssembly host (rebuild with --features wasm)".to_string(),
+                    }
+                );
+            }
+        }
         let child = self.get_or_start(plugin).await?;
         let within = hook.timeout;
         let event = hook.event.clone();

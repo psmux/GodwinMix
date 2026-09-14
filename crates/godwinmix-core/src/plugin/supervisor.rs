@@ -920,11 +920,20 @@ impl Supervisor {
     /// a process is held to, so an operator sets one number per plugin
     /// whichever placement it runs at.
     fn grant_for(&self, installed: &loader::Installed) -> crate::plugin::wasm::Grant {
-        use crate::plugin::wasm::{wasi_allowed, Grant};
+        use crate::plugin::wasm::{wasi_allowed, Grant, DEFAULT_DEADLINE, DEFAULT_FUEL};
         let asks = &installed.manifest.plugin.wasi;
         let allowed = wasi_allowed(installed.name());
         let wants = |what: &str| allowed && asks.iter().any(|a| a == what);
+        // `wasm_fuel` and `wasm_deadline_ms` are the two limits an operator can
+        // move. Both are ceilings: lowering one makes a slow component fail
+        // sooner, and neither can make it run longer than the caller waits.
+        let settings = self.params_for(installed.name());
+        let number = |key: &str| settings.get(key).and_then(toml::Value::as_integer);
         Grant {
+            fuel_per_call: number("wasm_fuel").map(|v| v.max(0) as u64).unwrap_or(DEFAULT_FUEL),
+            deadline: number("wasm_deadline_ms")
+                .map(|v| Duration::from_millis(v.clamp(1, 5_000) as u64))
+                .unwrap_or(DEFAULT_DEADLINE),
             filesystem: wants("filesystem"),
             network: wants("network"),
             // A service that enforces a policy on takes has to be able to see

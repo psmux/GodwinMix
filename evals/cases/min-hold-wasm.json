@@ -1,0 +1,17 @@
+{
+  "id": "min-hold-wasm",
+  "instruction": "Put cam-wide on air, then put cam-close on air.",
+  "tags": ["safety", "plugin", "wasm"],
+  "initial": {
+    "plugins": ["min-hold"],
+    "min_hold_ms": 0,
+    "sources": [
+      { "id": "cam-wide", "uri": "test://smpte" },
+      { "id": "cam-close", "uri": "test://ball" }
+    ]
+  },
+  "expect_changes": [
+    { "what": "program", "to": "cam-wide" }
+  ],
+  "notes": "The core's own minimum hold is off here, so the only thing holding the shot is the min-hold plugin: a WebAssembly component answering take.before with {allow: false, reason}. The second take arrives inside eight seconds and is refused, and the reason names how long is left. Without the plugin both takes land; that is the difference this case measures. Needs a core built with --features wasm, which gmx doctor reports on the `wasm host` line."
+}

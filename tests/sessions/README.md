@@ -18,6 +18,19 @@ on Monday. That is the whole point.
 | `takes.jsonl` | Two sources come up, three takes, a revert, a cut to the slate. |
 | `ad-break.jsonl` | A break is armed, rolls, and rejoins the camera it left. |
 | `source-stall.jsonl` | A camera that will not connect, then the rebuild that replaces it. |
+| `min-hold-wasm.jsonl` | Three takes, two of them close together. Replayed twice: without a plugin every take lands, and with `plugins/min-hold` the one inside eight seconds is refused. |
+
+`min-hold-wasm` has a second expectation file, `min-hold-wasm.with-plugin.expect_changes.json`,
+because it is the one case that is replayed two ways:
+
+```
+gmx session replay tests/sessions/min-hold-wasm.jsonl
+gmx session replay tests/sessions/min-hold-wasm.jsonl --with-plugin ./plugins/min-hold \
+    --expect tests/sessions/min-hold-wasm.with-plugin.expect_changes.json
+```
+
+The difference between the two is what the plugin does, measured rather than
+described. The second needs a core built with `--features wasm`.
 
 ## Turning a field bug into a regression test
 
