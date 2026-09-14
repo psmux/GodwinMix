@@ -38,11 +38,7 @@ pub struct SidecarService {
 impl SidecarService {
     pub fn new(spec: SidecarSpec) -> Self {
         let instance = format!("{}-{}", spec.plugin.plugin.name, spec.provide);
-        Self {
-            spec,
-            child: None,
-            instance,
-        }
+        Self { spec, child: None, instance }
     }
 
     pub fn instance(&self) -> &str {
@@ -54,10 +50,7 @@ impl SidecarService {
     }
 
     pub fn instance_state(&self) -> InstanceState {
-        self.child
-            .as_ref()
-            .map(Sidecar::state)
-            .unwrap_or(InstanceState::Stopped)
+        self.child.as_ref().map(Sidecar::state).unwrap_or(InstanceState::Stopped)
     }
 
     pub fn pid(&self) -> Option<u32> {
@@ -115,11 +108,7 @@ impl SidecarService {
     pub fn configure(&mut self, params: &Params) -> Result<Configure> {
         let child = self.child.as_ref().context("the plugin is not running")?;
         let answer = child.call("configure", json!({ "params": params_json(params) }))?;
-        if answer
-            .get("applied")
-            .and_then(Value::as_bool)
-            .unwrap_or(false)
-        {
+        if answer.get("applied").and_then(Value::as_bool).unwrap_or(false) {
             return Ok(Configure::Applied);
         }
         Ok(Configure::RestartRequired(
@@ -135,12 +124,7 @@ impl SidecarService {
         let Some(child) = self.child.as_ref() else {
             return Health::of(PluginState::Stopped);
         };
-        if !self
-            .spec
-            .manifest
-            .capabilities
-            .has(crate::plugin::Capability::Health)
-        {
+        if !self.spec.manifest.capabilities.has(crate::plugin::Capability::Health) {
             return Health::of(state_of(child.state()));
         }
         match child.health() {

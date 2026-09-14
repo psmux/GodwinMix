@@ -100,11 +100,7 @@ impl<'a> Importer<'a> {
         self.classify();
         self.mint_ids();
         let scenes = self.build_scenes();
-        let name = self
-            .raw
-            .name
-            .clone()
-            .unwrap_or_else(|| "Imported from OBS".into());
+        let name = self.raw.name.clone().unwrap_or_else(|| "Imported from OBS".into());
         let mut document = Collection::new(name.clone(), self.canvas);
         document.scenes = scenes;
         let items = document.scenes.iter().map(|s| s.walk().len()).sum();
@@ -124,11 +120,7 @@ impl<'a> Importer<'a> {
             notes: std::mem::take(&mut self.notes),
         };
         document.check_refs()?;
-        Ok(Import {
-            document,
-            sources: self.imported_sources(),
-            report,
-        })
+        Ok(Import { document, sources: self.imported_sources(), report })
     }
 
     /// Run the mapping table over every source once.
@@ -138,9 +130,7 @@ impl<'a> Importer<'a> {
             .sources
             .iter()
             .map(|source| match source.id.as_str() {
-                "scene" | "group" => Mapped::Skip {
-                    reason: String::new(),
-                },
+                "scene" | "group" => Mapped::Skip { reason: String::new() },
                 _ => map_source(source),
             })
             .collect();
@@ -155,10 +145,7 @@ impl<'a> Importer<'a> {
                 self.scene_ids.insert(index, Id::new());
                 continue;
             }
-            if !matches!(
-                self.mapped[index],
-                Mapped::Core { .. } | Mapped::Plugin { .. }
-            ) {
+            if !matches!(self.mapped[index], Mapped::Core { .. } | Mapped::Plugin { .. }) {
                 continue;
             }
             let base = slug(&source.name);
@@ -199,12 +186,7 @@ impl<'a> Importer<'a> {
                     source.filters.len()
                 ));
             }
-            scenes.push(Scene {
-                id,
-                name: source.name.clone(),
-                items,
-                color: None,
-            });
+            scenes.push(Scene { id, name: source.name.clone(), items, color: None });
         }
         scenes
     }
@@ -281,10 +263,7 @@ impl<'a> Importer<'a> {
         match source.id.as_str() {
             "scene" => {
                 // A nested scene is a reference, which is what it always was.
-                Some(Content::Ref {
-                    scene: *self.scene_ids.get(&index)?,
-                    overrides: BTreeMap::new(),
-                })
+                Some(Content::Ref { scene: *self.scene_ids.get(&index)?, overrides: BTreeMap::new() })
             }
             "group" => {
                 if self.open_groups.contains(&index) {
@@ -300,15 +279,12 @@ impl<'a> Importer<'a> {
                 Some(Content::Children { children })
             }
             _ => match &self.mapped[index] {
-                Mapped::Core { .. } | Mapped::Plugin { .. } => Some(Content::Source {
-                    source: self.ids.get(&index)?.clone(),
-                }),
-                Mapped::Graphic {
-                    graphic, params, ..
-                } => Some(Content::Graphic {
-                    graphic: graphic.clone(),
-                    params: params.clone(),
-                }),
+                Mapped::Core { .. } | Mapped::Plugin { .. } => {
+                    Some(Content::Source { source: self.ids.get(&index)?.clone() })
+                }
+                Mapped::Graphic { graphic, params, .. } => {
+                    Some(Content::Graphic { graphic: graphic.clone(), params: params.clone() })
+                }
                 Mapped::Skip { .. } => None,
             },
         }
@@ -351,12 +327,7 @@ impl<'a> Importer<'a> {
     /// OBS crops the source's own pixels first, then either scales the result
     /// (no bounds) or fits it into a bounds box. Both orders are kept here, so
     /// an item lands on the same pixel it landed on in OBS.
-    fn geometry(
-        &mut self,
-        raw: &ObsItem,
-        size: Option<(f64, f64)>,
-        path: &str,
-    ) -> (Transform, Crop) {
+    fn geometry(&mut self, raw: &ObsItem, size: Option<(f64, f64)>, path: &str) -> (Transform, Crop) {
         let mut transform = Transform {
             position: Vec2::new(raw.pos.x, raw.pos.y),
             rotation: raw.rot,
@@ -444,10 +415,7 @@ impl<'a> Importer<'a> {
                 enabled: obs.enabled,
                 params: obs.settings.clone(),
             });
-            match self
-                .filters
-                .iter_mut()
-                .find(|f| f.filter == obs.name && f.source == source.name)
+            match self.filters.iter_mut().find(|f| f.filter == obs.name && f.source == source.name)
             {
                 Some(report) => report.placements.push(path.to_string()),
                 None => self.filters.push(FilterReport {
@@ -500,10 +468,7 @@ impl<'a> Importer<'a> {
                 }
             };
             out.push(SourceReport {
-                obs_type: source
-                    .versioned_id
-                    .clone()
-                    .unwrap_or_else(|| source.id.clone()),
+                obs_type: source.versioned_id.clone().unwrap_or_else(|| source.id.clone()),
                 obs_name: source.name.clone(),
                 outcome,
                 placements,

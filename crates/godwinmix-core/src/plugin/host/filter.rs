@@ -41,13 +41,7 @@ pub struct SidecarFilter {
 impl SidecarFilter {
     pub fn new(spec: SidecarSpec, id: String) -> Self {
         let latency_ms = spec.manifest.latency_ms;
-        Self {
-            spec,
-            child: None,
-            media: None,
-            id,
-            latency_ms,
-        }
+        Self { spec, child: None, media: None, id, latency_ms }
     }
 
     pub fn pid(&self) -> Option<u32> {
@@ -99,10 +93,7 @@ impl SidecarFilter {
     /// The bin that carries a frame out to the plugin and back.
     fn round_trip(&self, transport: Transport, canvas: &CanvasCaps) -> Result<gst::Element> {
         let id = &self.id;
-        let media = self
-            .media
-            .as_ref()
-            .context("the filter has no media address")?;
+        let media = self.media.as_ref().context("the filter has no media address")?;
         anyhow::ensure!(
             transport != Transport::Container,
             "a container round trip for a filter is not built yet: it would mux and demux \
@@ -124,19 +115,12 @@ impl SidecarFilter {
         crate::probe::set_bool(&back, "is-live", true);
         let caps = make("capsfilter", &format!("{id}-filter-caps"))?;
         caps.set_property("caps", canvas.video());
-        bin.add_many([&out, &back, &caps])
-            .context("adding the filter's ends")?;
+        bin.add_many([&out, &back, &caps]).context("adding the filter's ends")?;
         gst::Element::link(&back, &caps).context("linking the filter's return")?;
-        let sink_pad = out
-            .static_pad("sink")
-            .context("the filter sink has no pad")?;
-        let src_pad = caps
-            .static_pad("src")
-            .context("the filter capsfilter has no pad")?;
-        bin.add_pad(&gst::GhostPad::with_target(&sink_pad)?)
-            .context("the filter's sink pad")?;
-        bin.add_pad(&gst::GhostPad::with_target(&src_pad)?)
-            .context("the filter's src pad")?;
+        let sink_pad = out.static_pad("sink").context("the filter sink has no pad")?;
+        let src_pad = caps.static_pad("src").context("the filter capsfilter has no pad")?;
+        bin.add_pad(&gst::GhostPad::with_target(&sink_pad)?).context("the filter's sink pad")?;
+        bin.add_pad(&gst::GhostPad::with_target(&src_pad)?).context("the filter's src pad")?;
         Ok(bin.upcast())
     }
 
@@ -145,14 +129,10 @@ impl SidecarFilter {
         let bin = gst::Bin::with_name(&format!("{}-sidecar-bypass", self.id));
         let queue = make("identity", &format!("{}-bypass", self.id))?;
         bin.add(&queue).context("adding the bypass")?;
-        let sink = queue
-            .static_pad("sink")
-            .context("no sink pad on identity")?;
+        let sink = queue.static_pad("sink").context("no sink pad on identity")?;
         let src = queue.static_pad("src").context("no src pad on identity")?;
-        bin.add_pad(&gst::GhostPad::with_target(&sink)?)
-            .context("the bypass sink pad")?;
-        bin.add_pad(&gst::GhostPad::with_target(&src)?)
-            .context("the bypass src pad")?;
+        bin.add_pad(&gst::GhostPad::with_target(&sink)?).context("the bypass sink pad")?;
+        bin.add_pad(&gst::GhostPad::with_target(&src)?).context("the bypass src pad")?;
         Ok(bin.upcast())
     }
 }
@@ -163,10 +143,7 @@ impl Filter for SidecarFilter {
     }
 
     fn build(&mut self, canvas: &CanvasCaps, params: &Params) -> Result<gst::Element> {
-        match self
-            .start(canvas, params)
-            .and_then(|t| self.round_trip(t, canvas))
-        {
+        match self.start(canvas, params).and_then(|t| self.round_trip(t, canvas)) {
             Ok(bin) => Ok(bin),
             Err(e) => {
                 // The programme never waits for a plugin. A filter that cannot
@@ -188,11 +165,7 @@ impl Filter for SidecarFilter {
             ));
         };
         let answer = child.call("configure", json!({ "params": params_json(params) }))?;
-        if answer
-            .get("applied")
-            .and_then(Value::as_bool)
-            .unwrap_or(false)
-        {
+        if answer.get("applied").and_then(Value::as_bool).unwrap_or(false) {
             return Ok(Configure::Applied);
         }
         Ok(Configure::RestartRequired(

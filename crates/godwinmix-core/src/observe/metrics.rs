@@ -38,13 +38,9 @@ impl Kind {
 /// Frame intervals for a programme that is meant to be running at 25, 30, 50
 /// or 60 frames a second. The buckets straddle every one of those periods so
 /// that "most frames landed late" is visible without knowing the canvas rate.
-const FRAME_MS: &[f64] = &[
-    8.0, 16.0, 20.0, 25.0, 33.0, 40.0, 50.0, 66.0, 100.0, 250.0, 1000.0,
-];
+const FRAME_MS: &[f64] = &[8.0, 16.0, 20.0, 25.0, 33.0, 40.0, 50.0, 66.0, 100.0, 250.0, 1000.0];
 /// Call latency. A control call that takes a second is already a bug report.
-const CALL_MS: &[f64] = &[
-    1.0, 2.0, 5.0, 10.0, 25.0, 50.0, 100.0, 250.0, 500.0, 1000.0, 5000.0,
-];
+const CALL_MS: &[f64] = &[1.0, 2.0, 5.0, 10.0, 25.0, 50.0, 100.0, 250.0, 500.0, 1000.0, 5000.0];
 
 /// Every metric the observability contract names, declared up front so that a
 /// scrape of a freshly started mixer lists them all with zero values. A
@@ -52,109 +48,44 @@ const CALL_MS: &[f64] = &[
 /// and `curl /metrics | grep gmx_programme_frame_interval_ms` answers before
 /// the first frame.
 const DEFS: &[(&str, Kind, &str, &[f64])] = &[
-    (
-        "gmx_programme_frames_total",
-        Kind::Counter,
-        "Frames leaving the programme mixer.",
-        &[],
-    ),
+    ("gmx_programme_frames_total", Kind::Counter, "Frames leaving the programme mixer.", &[]),
     (
         "gmx_programme_frame_interval_ms",
         Kind::Histogram,
         "Wall clock gap between two programme frames, in milliseconds.",
         FRAME_MS,
     ),
-    (
-        "gmx_source_buffers_total",
-        Kind::Counter,
-        "Buffers seen from a source.",
-        &[],
-    ),
+    ("gmx_source_buffers_total", Kind::Counter, "Buffers seen from a source.", &[]),
     (
         "gmx_source_video_behind_ms",
         Kind::Gauge,
         "Milliseconds since the last video buffer from a source.",
         &[],
     ),
-    (
-        "gmx_source_queue_buffers",
-        Kind::Gauge,
-        "Buffers waiting in a source's queues.",
-        &[],
-    ),
+    ("gmx_source_queue_buffers", Kind::Gauge, "Buffers waiting in a source's queues.", &[]),
     (
         "gmx_source_state",
         Kind::Gauge,
         "Source state: 0 connecting, 1 live, 2 stalled, 3 failed.",
         &[],
     ),
-    (
-        "gmx_output_bytes_total",
-        Kind::Counter,
-        "Bytes written by an output.",
-        &[],
-    ),
-    (
-        "gmx_output_reconnects_total",
-        Kind::Counter,
-        "Times an output has reconnected.",
-        &[],
-    ),
-    (
-        "gmx_output_queue_secs",
-        Kind::Gauge,
-        "Seconds of encoded data waiting for an output.",
-        &[],
-    ),
+    ("gmx_output_bytes_total", Kind::Counter, "Bytes written by an output.", &[]),
+    ("gmx_output_reconnects_total", Kind::Counter, "Times an output has reconnected.", &[]),
+    ("gmx_output_queue_secs", Kind::Gauge, "Seconds of encoded data waiting for an output.", &[]),
     (
         "gmx_output_state",
         Kind::Gauge,
         "Output state: 0 connecting, 1 live, 2 reconnecting, 3 failed.",
         &[],
     ),
-    (
-        "gmx_rpc_calls_total",
-        Kind::Counter,
-        "Control calls answered.",
-        &[],
-    ),
-    (
-        "gmx_rpc_duration_ms",
-        Kind::Histogram,
-        "Time to answer a control call.",
-        CALL_MS,
-    ),
-    (
-        "gmx_take_ack_ms",
-        Kind::Histogram,
-        "Time from a take being asked for to it landing.",
-        CALL_MS,
-    ),
+    ("gmx_rpc_calls_total", Kind::Counter, "Control calls answered.", &[]),
+    ("gmx_rpc_duration_ms", Kind::Histogram, "Time to answer a control call.", CALL_MS),
+    ("gmx_take_ack_ms", Kind::Histogram, "Time from a take being asked for to it landing.", CALL_MS),
     ("gmx_takes_total", Kind::Counter, "Takes that landed.", &[]),
-    (
-        "gmx_takes_refused_total",
-        Kind::Counter,
-        "Takes refused, by reason.",
-        &[],
-    ),
-    (
-        "gmx_multiview_fps",
-        Kind::Gauge,
-        "Configured mosaic frame rate. Zero when disabled.",
-        &[],
-    ),
-    (
-        "gmx_multiview_subscribers",
-        Kind::Gauge,
-        "Clients receiving mosaic frames.",
-        &[],
-    ),
-    (
-        "gmx_plugin_restarts_total",
-        Kind::Counter,
-        "Times a plugin instance was rebuilt.",
-        &[],
-    ),
+    ("gmx_takes_refused_total", Kind::Counter, "Takes refused, by reason.", &[]),
+    ("gmx_multiview_fps", Kind::Gauge, "Configured mosaic frame rate. Zero when disabled.", &[]),
+    ("gmx_multiview_subscribers", Kind::Gauge, "Clients receiving mosaic frames.", &[]),
+    ("gmx_plugin_restarts_total", Kind::Counter, "Times a plugin instance was rebuilt.", &[]),
     (
         "gmx_stream_clients",
         Kind::Gauge,
@@ -214,18 +145,12 @@ impl Series {
 static REGISTRY: LazyLock<RwLock<BTreeMap<&'static str, Family>>> = LazyLock::new(|| {
     let mut m = BTreeMap::new();
     for (name, kind, help, buckets) in DEFS {
-        let mut family = Family {
-            kind: *kind,
-            help,
-            buckets,
-            series: BTreeMap::new(),
-        };
+        let mut family =
+            Family { kind: *kind, help, buckets, series: BTreeMap::new() };
         // An unlabelled family gets its one series now, so it renders at zero
         // rather than not at all.
         if !takes_labels(name) {
-            family
-                .series
-                .insert(Vec::new(), Arc::new(Series::new(buckets.len())));
+            family.series.insert(Vec::new(), Arc::new(Series::new(buckets.len())));
         }
         m.insert(*name, family);
     }
@@ -246,17 +171,10 @@ fn series(name: &'static str, kind: Kind, labels: &[(&str, &str)]) -> Arc<Series
     // Sorted, so that a caller who writes the labels in a different order
     // still reaches the same series rather than silently starting a second one
     // that counts half the events.
-    let mut key: Labels = labels
-        .iter()
-        .map(|(k, v)| ((*k).to_string(), (*v).to_string()))
-        .collect();
+    let mut key: Labels =
+        labels.iter().map(|(k, v)| ((*k).to_string(), (*v).to_string())).collect();
     key.sort();
-    if let Some(s) = REGISTRY
-        .read()
-        .get(name)
-        .and_then(|f| f.series.get(&key))
-        .cloned()
-    {
+    if let Some(s) = REGISTRY.read().get(name).and_then(|f| f.series.get(&key)).cloned() {
         return s;
     }
     let mut reg = REGISTRY.write();
@@ -267,11 +185,7 @@ fn series(name: &'static str, kind: Kind, labels: &[(&str, &str)]) -> Arc<Series
         series: BTreeMap::new(),
     });
     let width = family.buckets.len();
-    family
-        .series
-        .entry(key)
-        .or_insert_with(|| Arc::new(Series::new(width)))
-        .clone()
+    family.series.entry(key).or_insert_with(|| Arc::new(Series::new(width))).clone()
 }
 
 #[derive(Clone)]
@@ -351,10 +265,7 @@ pub fn gauge(name: &'static str, labels: &[(&str, &str)]) -> Gauge {
 
 pub fn histogram(name: &'static str, labels: &[(&str, &str)]) -> Histogram {
     let bounds = REGISTRY.read().get(name).map(|f| f.buckets).unwrap_or(&[]);
-    Histogram {
-        series: series(name, Kind::Histogram, labels),
-        bounds,
-    }
+    Histogram { series: series(name, Kind::Histogram, labels), bounds }
 }
 
 /// The whole registry in Prometheus text exposition format.
@@ -393,18 +304,9 @@ fn render_histogram(out: &mut String, name: &str, family: &Family, labels: &Labe
         let _ = writeln!(out, "{name}_bucket{} {n}", render_labels(labels, Some(&le)));
     }
     let count = s.count.load(Ordering::Relaxed);
-    let _ = writeln!(
-        out,
-        "{name}_bucket{} {count}",
-        render_labels(labels, Some("+Inf"))
-    );
+    let _ = writeln!(out, "{name}_bucket{} {count}", render_labels(labels, Some("+Inf")));
     let sum = f64::from_bits(s.sum.load(Ordering::Relaxed));
-    let _ = writeln!(
-        out,
-        "{name}_sum{} {}",
-        render_labels(labels, None),
-        number(sum)
-    );
+    let _ = writeln!(out, "{name}_sum{} {}", render_labels(labels, None), number(sum));
     let _ = writeln!(out, "{name}_count{} {count}", render_labels(labels, None));
 }
 
@@ -446,11 +348,7 @@ fn number(v: f64) -> String {
         return "NaN".into();
     }
     if v.is_infinite() {
-        return if v > 0.0 {
-            "+Inf".into()
-        } else {
-            "-Inf".into()
-        };
+        return if v > 0.0 { "+Inf".into() } else { "-Inf".into() };
     }
     if v == v.trunc() && v.abs() < 1e15 {
         format!("{}", v as i64)
@@ -519,13 +417,10 @@ pub fn observe_event(event: &Event) {
         Event::SourceStateChanged { source, state } => {
             gauge("gmx_source_state", &[("instance", source)]).set(source_state_code(*state));
         }
-        Event::OutputStateChanged {
-            output,
-            state,
-            reconnects,
-        } => {
+        Event::OutputStateChanged { output, state, reconnects } => {
             gauge("gmx_output_state", &[("instance", output)]).set(output_state_code(*state));
-            counter("gmx_output_reconnects_total", &[("instance", output)]).set(*reconnects as u64);
+            counter("gmx_output_reconnects_total", &[("instance", output)])
+                .set(*reconnects as u64);
         }
         _ => {}
     }
@@ -548,11 +443,7 @@ pub fn observe_status(status: &MixerStatus) {
         gauge("gmx_output_queue_secs", &labels).set(o.queue_secs);
         counter("gmx_output_reconnects_total", &labels).set(o.reconnects as u64);
     }
-    let fps = if status.multiview.enabled {
-        status.multiview.fps as f64
-    } else {
-        0.0
-    };
+    let fps = if status.multiview.enabled { status.multiview.fps as f64 } else { 0.0 };
     gauge("gmx_multiview_fps", &[]).set(fps);
 }
 
@@ -609,12 +500,8 @@ pub fn set_encoder(stats: &crate::encoder::EncoderStats) {
 /// this is the number that shows it before the supervisor acts.
 pub fn sample_source_queues() {
     for name in crate::observe::introspect::names() {
-        let Some(instance) = name.strip_prefix("input-") else {
-            continue;
-        };
-        let Ok(queues) = crate::observe::introspect::queues(&name) else {
-            continue;
-        };
+        let Some(instance) = name.strip_prefix("input-") else { continue };
+        let Ok(queues) = crate::observe::introspect::queues(&name) else { continue };
         let buffers: u32 = queues.iter().map(|q| q.buffers).sum();
         gauge("gmx_source_queue_buffers", &[("instance", instance)]).set(buffers as f64);
     }
@@ -645,18 +532,9 @@ mod tests {
     #[test]
     fn a_fresh_registry_already_lists_the_programme_frame_interval_histogram() {
         let text = render();
-        assert!(
-            text.contains("# TYPE gmx_programme_frame_interval_ms histogram"),
-            "{text}"
-        );
-        assert!(
-            text.contains("gmx_programme_frame_interval_ms_bucket{le=\"33\"}"),
-            "{text}"
-        );
-        assert!(
-            text.contains("gmx_programme_frame_interval_ms_count"),
-            "{text}"
-        );
+        assert!(text.contains("# TYPE gmx_programme_frame_interval_ms histogram"), "{text}");
+        assert!(text.contains("gmx_programme_frame_interval_ms_bucket{le=\"33\"}"), "{text}");
+        assert!(text.contains("gmx_programme_frame_interval_ms_count"), "{text}");
         assert!(text.contains("gmx_programme_frames_total"), "{text}");
     }
 
@@ -679,10 +557,7 @@ mod tests {
             .find(|l| l.starts_with("gmx_take_ack_ms_bucket{le=\"+Inf\"}"))
             .expect("an overflow bucket");
         let total: u64 = inf.rsplit(' ').next().unwrap().parse().unwrap();
-        assert!(
-            total >= n,
-            "a cumulative histogram never shrinks: {inf} against {line}"
-        );
+        assert!(total >= n, "a cumulative histogram never shrinks: {inf} against {line}");
     }
 
     #[test]
@@ -690,10 +565,7 @@ mod tests {
         record_rpc("program.take", "ok", 4.0);
         record_rpc("source.add\"odd", "-32602", 9.0);
         let text = render();
-        assert!(
-            text.contains("gmx_rpc_calls_total{code=\"ok\",method=\"program.take\"}"),
-            "{text}"
-        );
+        assert!(text.contains("gmx_rpc_calls_total{code=\"ok\",method=\"program.take\"}"), "{text}");
         assert!(text.contains("method=\"source.add\\\"odd\""), "{text}");
     }
 

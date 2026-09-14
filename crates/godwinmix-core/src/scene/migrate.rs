@@ -28,10 +28,7 @@ fn v0_to_v1(_doc: &mut Value) -> Result<()> {
 /// Bring a document up to `SCHEMA_VERSION`, in place.
 pub fn migrate(doc: &mut Value) -> Result<()> {
     let Some(object) = doc.as_object_mut() else {
-        bail!(
-            "a scene document is a JSON object, and this file holds a {}",
-            kind_of(doc)
-        );
+        bail!("a scene document is a JSON object, and this file holds a {}", kind_of(doc));
     };
     let mut version = object
         .get("schemaVersion")
@@ -101,10 +98,7 @@ mod tests {
     #[test]
     fn every_version_below_the_current_one_has_a_step() {
         for v in 0..SCHEMA_VERSION {
-            assert!(
-                STEPS.iter().any(|(from, _)| *from == v),
-                "no migration step from version {v}"
-            );
+            assert!(STEPS.iter().any(|(from, _)| *from == v), "no migration step from version {v}");
         }
     }
 

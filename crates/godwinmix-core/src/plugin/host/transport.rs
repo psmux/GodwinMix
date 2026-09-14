@@ -121,10 +121,7 @@ pub fn usable(transport: Transport) -> Result<()> {
 /// The transports this build can actually carry, for an error message and for
 /// `plugin.describe`.
 pub fn available() -> Vec<Transport> {
-    Transport::ORDER
-        .into_iter()
-        .filter(|t| usable(*t).is_ok())
-        .collect()
+    Transport::ORDER.into_iter().filter(|t| usable(*t).is_ok()).collect()
 }
 
 /// A raw video source on a socket, already capped at the canvas contract.
@@ -214,10 +211,7 @@ mod tests {
             assert!(dir.base().contains("cam1"));
             dir.path().to_path_buf()
         };
-        assert!(
-            !path.exists(),
-            "dropping the instance takes its sockets with it"
-        );
+        assert!(!path.exists(), "dropping the instance takes its sockets with it");
         let _ = std::fs::remove_dir_all(&runtime);
     }
 }

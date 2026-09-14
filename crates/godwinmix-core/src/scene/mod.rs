@@ -37,30 +37,16 @@ mod doc_tests {
     use std::path::PathBuf;
 
     fn doc(path: &str) -> String {
-        let full = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            .join("../..")
-            .join(path);
-        std::fs::read_to_string(&full).unwrap_or_else(|e| {
-            panic!("{}: {e}. The docs are part of the feature.", full.display())
-        })
+        let full = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..").join(path);
+        std::fs::read_to_string(&full)
+            .unwrap_or_else(|e| panic!("{}: {e}. The docs are part of the feature.", full.display()))
     }
 
     #[test]
     fn the_reference_names_every_fit_and_align_keyword() {
         let text = doc("docs/reference/scene-document.md");
-        for fit in [
-            "none",
-            "stretch",
-            "contain",
-            "cover",
-            "fit-width",
-            "fit-height",
-            "max",
-        ] {
-            assert!(
-                text.contains(&format!("`{fit}`")),
-                "the fit {fit:?} is not documented"
-            );
+        for fit in ["none", "stretch", "contain", "cover", "fit-width", "fit-height", "max"] {
+            assert!(text.contains(&format!("`{fit}`")), "the fit {fit:?} is not documented");
         }
         for align in [
             "top-left",
@@ -73,15 +59,9 @@ mod doc_tests {
             "bottom-center",
             "bottom-right",
         ] {
-            assert!(
-                text.contains(align),
-                "the alignment {align:?} is not documented"
-            );
+            assert!(text.contains(align), "the alignment {align:?} is not documented");
         }
-        assert!(
-            text.contains(super::schema::PATH),
-            "the reference does not point at the schema"
-        );
+        assert!(text.contains(super::schema::PATH), "the reference does not point at the schema");
     }
 
     #[test]
@@ -96,10 +76,7 @@ mod doc_tests {
             "scene.action_safe",
             "scene.title_safe",
         ] {
-            assert!(
-                text.contains(code),
-                "the finding {code:?} is not documented"
-            );
+            assert!(text.contains(code), "the finding {code:?} is not documented");
         }
     }
 
@@ -107,22 +84,13 @@ mod doc_tests {
     fn the_preset_guide_names_every_layout_slot_panel_and_preset() {
         let text = doc("docs/how-to/make-a-preset.md");
         for name in super::presets::NAMES {
-            assert!(
-                text.contains(&format!("`{name}`")),
-                "the preset {name:?} is not in the guide"
-            );
+            assert!(text.contains(&format!("`{name}`")), "the preset {name:?} is not in the guide");
         }
         for slot in super::presets::SLOTS {
-            assert!(
-                text.contains(&format!("`{slot}`")),
-                "the slot {slot:?} is not in the guide"
-            );
+            assert!(text.contains(&format!("`{slot}`")), "the slot {slot:?} is not in the guide");
         }
         for panel in super::presets::PANELS {
-            assert!(
-                text.contains(&format!("`{panel}`")),
-                "the panel {panel:?} is not in the guide"
-            );
+            assert!(text.contains(&format!("`{panel}`")), "the panel {panel:?} is not in the guide");
         }
     }
 
@@ -144,38 +112,19 @@ mod doc_tests {
             "text_ft2_source",
             "color_source",
         ] {
-            assert!(
-                text.contains(obs),
-                "the OBS type {obs:?} is not in the import guide"
-            );
+            assert!(text.contains(obs), "the OBS type {obs:?} is not in the import guide");
         }
         // Where the file is on each platform is the first thing anybody needs.
-        for place in [
-            "%APPDATA%",
-            "Library/Application Support",
-            ".config/obs-studio",
-        ] {
-            assert!(
-                text.contains(place),
-                "the guide does not say where OBS keeps its files on {place}"
-            );
+        for place in ["%APPDATA%", "Library/Application Support", ".config/obs-studio"] {
+            assert!(text.contains(place), "the guide does not say where OBS keeps its files on {place}");
         }
     }
 
     #[test]
     fn the_import_guide_says_what_the_report_means() {
         let text = doc("docs/how-to/import-from-obs.md");
-        for phrase in [
-            "imported as",
-            "needs the",
-            "skipped, because",
-            "--report json",
-            "--source-size",
-        ] {
-            assert!(
-                text.contains(phrase),
-                "{phrase:?} is not explained in the import guide"
-            );
+        for phrase in ["imported as", "needs the", "skipped, because", "--report json", "--source-size"] {
+            assert!(text.contains(phrase), "{phrase:?} is not explained in the import guide");
         }
     }
 }

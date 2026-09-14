@@ -47,34 +47,18 @@ pub const MANIFEST: Manifest = Manifest {
     tier: Tier::Core,
 };
 
-pub const PROVIDE: OutputProvide = OutputProvide {
-    manifest: MANIFEST,
-    claims,
-    make: new,
-};
+pub const PROVIDE: OutputProvide = OutputProvide { manifest: MANIFEST, claims, make: new };
 
 /// Fields on `srtsink`'s stats structure that mean "somebody is there", tried
 /// in order.
-const LIVE_FIELDS: &[&str] = &[
-    "packets-sent",
-    "bytes-sent",
-    "bytes-sent-total",
-    "packets-sent-total",
-];
+const LIVE_FIELDS: &[&str] = &["packets-sent", "bytes-sent", "bytes-sent-total", "packets-sent-total"];
 
 fn claims(uri: &str) -> Option<u16> {
-    uri.trim()
-        .to_lowercase()
-        .starts_with("srt://")
-        .then_some(MANIFEST.rank)
+    uri.trim().to_lowercase().starts_with("srt://").then_some(MANIFEST.rank)
 }
 
 fn new(cfg: &OutputConfig) -> Result<Box<dyn Output>> {
-    Ok(Box::new(SrtOutput {
-        uri: cfg.uri.clone(),
-        latency_ms: None,
-        sink: Mutex::new(None),
-    }))
+    Ok(Box::new(SrtOutput { uri: cfg.uri.clone(), latency_ms: None, sink: Mutex::new(None) }))
 }
 
 pub struct SrtOutput {
@@ -99,16 +83,9 @@ impl Output for SrtOutput {
             self.uri = u.to_string();
         }
         self.latency_ms = hello.params.get("latency_ms").and_then(|v| v.as_integer());
-        anyhow::ensure!(
-            !self.uri.trim().is_empty(),
-            "srt/output needs an address in params.uri"
-        );
+        anyhow::ensure!(!self.uri.trim().is_empty(), "srt/output needs an address in params.uri");
         let latency_ms = self.latency_ms.unwrap_or(MANIFEST.latency_ms as i64).max(0) as u32;
-        Ok(Ready {
-            manifest: MANIFEST,
-            latency_ms,
-            capabilities: MANIFEST.capabilities,
-        })
+        Ok(Ready { manifest: MANIFEST, latency_ms, capabilities: MANIFEST.capabilities })
     }
 
     fn build(
@@ -138,9 +115,7 @@ impl Output for SrtOutput {
         crate::probe::set_bool(&sink, "sync", false);
         crate::probe::set_bool(&sink, "async", false);
 
-        ctx.pipeline
-            .add_many([&mux, &sink])
-            .context("adding the srt muxer and sink")?;
+        ctx.pipeline.add_many([&mux, &sink]).context("adding the srt muxer and sink")?;
         // `mpegtsmux` names both its request pads `sink_%d`; older builds spell
         // it `sink_%u`. Both are asked for.
         link_to_mux(video, &mux, &["sink_%d", "sink_%u"])?;
@@ -152,9 +127,7 @@ impl Output for SrtOutput {
 
     fn connected(&self) -> bool {
         let held = self.sink.lock();
-        let Some(sink) = held.as_ref() else {
-            return false;
-        };
+        let Some(sink) = held.as_ref() else { return false };
         let stats = sink.property::<Option<gst::Structure>>("stats");
         if let Some(s) = stats {
             // Caller mode puts the numbers at the top level; listener mode puts
@@ -164,11 +137,7 @@ impl Output for SrtOutput {
             }
             if let Ok(callers) = s.get::<gst::List>("callers") {
                 return callers.iter().any(|v| {
-                    v.get::<gst::Structure>()
-                        .ok()
-                        .and_then(|c| first_number(&c))
-                        .unwrap_or(0)
-                        > 0
+                    v.get::<gst::Structure>().ok().and_then(|c| first_number(&c)).unwrap_or(0) > 0
                 });
             }
         }
@@ -179,17 +148,11 @@ impl Output for SrtOutput {
 
     fn configure(&mut self, params: &Params) -> Result<Configure> {
         validate(params)?;
-        Ok(Configure::RestartRequired(
-            "an srt output takes a new address by reconnecting".into(),
-        ))
+        Ok(Configure::RestartRequired("an srt output takes a new address by reconnecting".into()))
     }
 
     fn health(&self) -> Health {
-        Health::of(if self.connected() {
-            PluginState::Running
-        } else {
-            PluginState::Starting
-        })
+        Health::of(if self.connected() { PluginState::Running } else { PluginState::Starting })
     }
 
     fn call(&mut self, method: &str, _params: Value) -> Result<Value> {

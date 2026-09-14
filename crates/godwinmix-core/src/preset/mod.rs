@@ -89,12 +89,7 @@ mod tests {
                 .unwrap_or_else(|| panic!("{name} is not listed"));
             assert!(row.official);
             assert!(!row.theme.is_empty(), "{name} names no theme");
-            assert_eq!(
-                row.steps.len(),
-                3,
-                "{name} has {} steps, wanted three",
-                row.steps.len()
-            );
+            assert_eq!(row.steps.len(), 3, "{name} has {} steps, wanted three", row.steps.len());
             for step in &row.steps {
                 assert!(step.len() > 10, "{name}: {step:?} is not a step");
             }

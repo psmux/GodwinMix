@@ -45,20 +45,15 @@ pub fn default_dir(name: &str) -> PathBuf {
 pub fn run(name: &str, config_path: &Path, out: &Path) -> Result<Saved> {
     anyhow::ensure!(
         !name.is_empty()
-            && name
-                .chars()
-                .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-'),
+            && name.chars().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-'),
         "a preset name is a slug: lower case letters, digits and hyphens. {name:?} is not one"
     );
     let real = crate::config::path_in_force(config_path);
     let config = Config::load(&real).with_context(|| {
-        format!(
-            "{} does not load, so there is nothing worth saving",
-            real.display()
-        )
+        format!("{} does not load, so there is nothing worth saving", real.display())
     })?;
-    let original =
-        std::fs::read_to_string(&real).with_context(|| format!("reading {}", real.display()))?;
+    let original = std::fs::read_to_string(&real)
+        .with_context(|| format!("reading {}", real.display()))?;
 
     std::fs::create_dir_all(out.join("config"))
         .with_context(|| format!("making {}", out.join("config").display()))?;
@@ -71,11 +66,7 @@ pub fn run(name: &str, config_path: &Path, out: &Path) -> Result<Saved> {
 
     let mut ui = config.ui.clone();
     let theme_css = carry_theme(&mut ui, out, &mut wrote)?;
-    let layout = if ui.layout.is_empty() {
-        default_layout()
-    } else {
-        ui.layout.clone()
-    };
+    let layout = if ui.layout.is_empty() { default_layout() } else { ui.layout.clone() };
     write(
         out.join("config/layout.json"),
         &serde_json::to_string_pretty(&layout).context("writing the layout")?,
@@ -89,19 +80,9 @@ pub fn run(name: &str, config_path: &Path, out: &Path) -> Result<Saved> {
         &manifest_text(name, &plugins, &ui, theme_css),
         &mut wrote,
     )?;
-    write(
-        out.join("README.md"),
-        &readme(name, &config, scenes),
-        &mut wrote,
-    )?;
+    write(out.join("README.md"), &readme(name, &config, scenes), &mut wrote)?;
 
-    Ok(Saved {
-        name: name.to_string(),
-        dir: out.to_path_buf(),
-        wrote,
-        redacted,
-        plugins,
-    })
+    Ok(Saved { name: name.to_string(), dir: out.to_path_buf(), wrote, redacted, plugins })
 }
 
 fn write(path: PathBuf, body: &str, wrote: &mut Vec<PathBuf>) -> Result<()> {
@@ -159,11 +140,7 @@ fn redact(original: &str, config: &Config) -> (String, Vec<String>) {
 
 /// `uri = "rtmp://host/app/secret"` becomes the same with a placeholder tail.
 fn stream_key(line: &str) -> Option<String> {
-    let rest = line
-        .strip_prefix("uri")?
-        .trim_start()
-        .strip_prefix('=')?
-        .trim();
+    let rest = line.strip_prefix("uri")?.trim_start().strip_prefix('=')?.trim();
     let value = rest.trim_matches('"');
     if !(value.starts_with("rtmp://")
         || value.starts_with("rtmps://")
@@ -185,9 +162,7 @@ fn stream_key(line: &str) -> Option<String> {
 /// beside the manifest, or fall back to the default theme and say nothing more
 /// about it: a saved preset must be one that applies.
 fn carry_theme(ui: &mut UiDefaults, out: &Path, wrote: &mut Vec<PathBuf>) -> Result<bool> {
-    let Some(theme) = ui.theme.clone() else {
-        return Ok(false);
-    };
+    let Some(theme) = ui.theme.clone() else { return Ok(false) };
     if super::manifest::BUILT_IN_THEMES.contains(&theme.as_str()) {
         return Ok(false);
     }
@@ -214,15 +189,9 @@ fn carry_theme(ui: &mut UiDefaults, out: &Path, wrote: &mut Vec<PathBuf>) -> Res
 fn default_layout() -> BTreeMap<String, Vec<String>> {
     BTreeMap::from([
         ("header".to_string(), vec!["header".to_string()]),
-        (
-            "main".to_string(),
-            vec!["scenes".to_string(), "multiview".to_string()],
-        ),
+        ("main".to_string(), vec!["scenes".to_string(), "multiview".to_string()]),
         ("sidebar".to_string(), vec!["sources".to_string()]),
-        (
-            "footer".to_string(),
-            vec!["alerts".to_string(), "outputs".to_string()],
-        ),
+        ("footer".to_string(), vec!["alerts".to_string(), "outputs".to_string()]),
     ])
 }
 
@@ -232,9 +201,7 @@ fn default_layout() -> BTreeMap<String, Vec<String>> {
 /// presets applied to the same core would collide. Every id in the document is
 /// mapped to a new one, references included.
 fn copy_scenes(collection: &Path, out: &Path, wrote: &mut Vec<PathBuf>) -> Result<usize> {
-    let Ok(text) = std::fs::read_to_string(collection) else {
-        return Ok(0);
-    };
+    let Ok(text) = std::fs::read_to_string(collection) else { return Ok(0) };
     let doc = Collection::from_json(&text)
         .with_context(|| format!("{} is not a scene collection", collection.display()))?;
     let mut count = 0;
@@ -252,12 +219,7 @@ fn copy_scenes(collection: &Path, out: &Path, wrote: &mut Vec<PathBuf>) -> Resul
         let mut value = serde_json::to_value(&one).context("writing a scene")?;
         refresh_ids(&mut value, &mut BTreeMap::new());
         let body = serde_json::to_string_pretty(&value).context("writing a scene")?;
-        write(
-            out.join("scenes")
-                .join(format!("{}.json", slug(&scene.name))),
-            &body,
-            wrote,
-        )?;
+        write(out.join("scenes").join(format!("{}.json", slug(&scene.name))), &body, wrote)?;
         count += 1;
     }
     Ok(count)
@@ -300,11 +262,7 @@ fn slug(name: &str) -> String {
         }
     }
     let trimmed = out.trim_matches('-').to_string();
-    if trimmed.is_empty() {
-        "scene".into()
-    } else {
-        trimmed
-    }
+    if trimmed.is_empty() { "scene".into() } else { trimmed }
 }
 
 /// The plugins a config needs, from the kinds its sources and outputs name.
@@ -316,9 +274,7 @@ fn plugins_in_use(config: &Config) -> Vec<String> {
         .filter_map(|s| s.type_id.clone())
         .chain(config.outputs.iter().filter_map(|o| o.type_id.clone()));
     for kind in kinds {
-        let Some(plugin) = kind.split('/').next() else {
-            continue;
-        };
+        let Some(plugin) = kind.split('/').next() else { continue };
         if plugin.is_empty() || names.iter().any(|n| n == plugin) {
             continue;
         }
@@ -329,21 +285,13 @@ fn plugins_in_use(config: &Config) -> Vec<String> {
 }
 
 fn manifest_text(name: &str, plugins: &[String], ui: &UiDefaults, theme_css: bool) -> String {
-    let list = plugins
-        .iter()
-        .map(|p| format!("{p:?}"))
-        .collect::<Vec<_>>()
-        .join(", ");
+    let list = plugins.iter().map(|p| format!("{p:?}")).collect::<Vec<_>>().join(", ");
     let theme = ui.theme.clone().unwrap_or_else(|| "dark".into());
     let gallery = match &ui.gallery {
         Some(mode) => format!("gallery = {mode:?}\n"),
         None => String::new(),
     };
-    let css = if theme_css {
-        "theme_css = \"theme.css\"\n"
-    } else {
-        ""
-    };
+    let css = if theme_css { "theme_css = \"theme.css\"\n" } else { "" };
     format!(
         "[plugin]\n\
          name = {name:?}\n\
@@ -418,11 +366,7 @@ mod tests {
 
         let out = dir.join("mine");
         let saved = run("my-church", &config, &out).unwrap();
-        assert_eq!(
-            saved.wrote.len(),
-            5 + 4,
-            "config, layout, theme, manifest, README and four scenes"
-        );
+        assert_eq!(saved.wrote.len(), 5 + 4, "config, layout, theme, manifest, README and four scenes");
 
         let preset = crate::preset::manifest::load(&out).unwrap();
         assert_eq!(preset.name, "my-church");
@@ -462,12 +406,7 @@ mod tests {
         run("one", &config, &dir.join("one")).unwrap();
         run("two", &config, &dir.join("two")).unwrap();
         let first = std::fs::read_to_string(
-            std::fs::read_dir(dir.join("one/scenes"))
-                .unwrap()
-                .next()
-                .unwrap()
-                .unwrap()
-                .path(),
+            std::fs::read_dir(dir.join("one/scenes")).unwrap().next().unwrap().unwrap().path(),
         )
         .unwrap();
         let second_dir = std::fs::read_dir(dir.join("two/scenes")).unwrap();
@@ -482,13 +421,9 @@ mod tests {
 
     #[test]
     fn a_name_that_is_not_a_slug_is_refused_with_the_rule() {
-        let e = run(
-            "My Church",
-            Path::new("godwinmix.toml"),
-            Path::new("/tmp/x"),
-        )
-        .unwrap_err()
-        .to_string();
+        let e = run("My Church", Path::new("godwinmix.toml"), Path::new("/tmp/x"))
+            .unwrap_err()
+            .to_string();
         assert!(e.contains("slug"), "{e}");
     }
 }

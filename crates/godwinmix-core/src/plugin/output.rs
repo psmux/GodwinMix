@@ -140,15 +140,10 @@ pub fn link_to_mux(
         .iter()
         .find_map(|t| mux.request_pad_simple(t))
         .with_context(|| {
-            format!(
-                "{} refused a pad; tried {}",
-                mux.name(),
-                templates.join(", ")
-            )
+            format!("{} refused a pad; tried {}", mux.name(), templates.join(", "))
         })?;
     let src = queue.static_pad("src").context("queue has no src pad")?;
-    src.link(&pad)
-        .with_context(|| format!("linking {} into {}", queue.name(), mux.name()))?;
+    src.link(&pad).with_context(|| format!("linking {} into {}", queue.name(), mux.name()))?;
     Ok(pad)
 }
 
@@ -173,10 +168,7 @@ mod tests {
     fn an_unknown_destination_names_what_the_build_can_send_to() {
         let cfg = OutputConfig::bare("x", "whip://example.com/ingest");
         let err = match resolve_config(&cfg) {
-            Ok(p) => panic!(
-                "this build should not send to whip, but {} claimed it",
-                p.manifest.provide_id()
-            ),
+            Ok(p) => panic!("this build should not send to whip, but {} claimed it", p.manifest.provide_id()),
             Err(e) => e,
         };
         let text = format!("{err}");

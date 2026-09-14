@@ -43,26 +43,13 @@ pub const HEALTH_TIMEOUT: Duration = Duration::from_millis(900);
 /// inside the reader thread, so nothing a plugin says can block its own pipe.
 #[derive(Debug, Clone)]
 pub enum Notice {
-    Log {
-        level: LogLevel,
-        message: String,
-    },
-    Event {
-        name: String,
-        params: Value,
-    },
+    Log { level: LogLevel, message: String },
+    Event { name: String, params: Value },
     MediaReport(Value),
-    HealthChanged {
-        state: String,
-        detail: Option<String>,
-    },
+    HealthChanged { state: String, detail: Option<String> },
     /// The plugin made a request of the core. Answered by the supervisor,
     /// which is the only part that can reach a mixer.
-    Request {
-        id: Value,
-        method: String,
-        params: Value,
-    },
+    Request { id: Value, method: String, params: Value },
     /// The channel broke. The instance goes to `failed` with this reason.
     Broken(String),
 }
@@ -99,11 +86,7 @@ impl Sidecar {
     pub fn spawn(instance: &str, launch: &Launch) -> Result<Self> {
         let spec = ExecSpec {
             argv: launch.argv.clone(),
-            env: launch
-                .env
-                .iter()
-                .map(|(k, v)| (k.clone(), v.clone()))
-                .collect(),
+            env: launch.env.iter().map(|(k, v)| (k.clone(), v.clone())).collect(),
             pipe_stdin: true,
             cwd: Some(launch.cwd.clone()),
         };
@@ -117,20 +100,14 @@ impl Sidecar {
             // only exists once the process is up. So the process is started
             // with no reader and one is attached below.
             let mut child = crate::input::spawn_child(&spec)?;
-            let stdout_handle = child
-                .stdout
-                .take()
-                .context("the plugin produced no stdout")?;
+            let stdout_handle = child.stdout.take().context("the plugin produced no stdout")?;
             #[cfg(unix)]
             let out = ExecStdout::Fd(std::os::fd::OwnedFd::from(stdout_handle));
             #[cfg(not(unix))]
             let out = ExecStdout::Pipe(stdout_handle);
             (out, child, ())
         };
-        let stdin = child
-            .stdin
-            .take()
-            .context("the plugin was given no stdin to read")?;
+        let stdin = child.stdin.take().context("the plugin was given no stdin to read")?;
         let stderr = child.stderr.take();
         let pid = child.id();
         let shared = Arc::new(Shared {
@@ -185,10 +162,7 @@ impl Sidecar {
     }
 
     pub fn media_address(&self) -> &str {
-        self.negotiated
-            .as_ref()
-            .map(|n| n.media.as_str())
-            .unwrap_or("")
+        self.negotiated.as_ref().map(|n| n.media.as_str()).unwrap_or("")
     }
 
     /// Take the child's stdout, for a container transport to attach.
@@ -233,12 +207,7 @@ impl Sidecar {
                 self.shared.instance
             );
         }
-        let hello = self
-            .shared
-            .hello
-            .lock()
-            .clone()
-            .context("the handshake vanished")?;
+        let hello = self.shared.hello.lock().clone().context("the handshake vanished")?;
         let negotiated = handshake::negotiate(
             &hello,
             manifest,
@@ -337,10 +306,7 @@ impl Sidecar {
             }
         }
         if self.life.may_call("shutdown") {
-            let _ = self
-                .shared
-                .channel
-                .notify("shutdown", json!({ "reason": reason }));
+            let _ = self.shared.channel.notify("shutdown", json!({ "reason": reason }));
         }
         let deadline = Instant::now() + Duration::from_secs(SHUTDOWN_GRACE_SECS);
         while Instant::now() < deadline {
@@ -358,8 +324,7 @@ impl Sidecar {
         self.child.take();
         self.stdout.take();
         self.stdout_held.take();
-        self.life
-            .to(InstanceState::Stopped, Some(reason.to_string()));
+        self.life.to(InstanceState::Stopped, Some(reason.to_string()));
         info!(%instance, %reason, "stopped a plugin process");
     }
 
@@ -396,10 +361,7 @@ fn absorb(shared: &Arc<Shared>, line: &str) {
         Ok(frame) => frame,
         Err(LineError::TooLong { bytes }) => {
             warn!(instance = %shared.instance, bytes, "a plugin line was over the 4 MiB limit");
-            push(
-                shared,
-                Notice::Broken(LineError::TooLong { bytes }.to_string()),
-            );
+            push(shared, Notice::Broken(LineError::TooLong { bytes }.to_string()));
             return;
         }
     };
@@ -423,10 +385,7 @@ fn absorb(shared: &Arc<Shared>, line: &str) {
                 let hello: Initialize = match serde_json::from_value(params) {
                     Ok(h) => h,
                     Err(e) => {
-                        push(
-                            shared,
-                            Notice::Broken(format!("its `initialize` did not parse: {e}")),
-                        );
+                        push(shared, Notice::Broken(format!("its `initialize` did not parse: {e}")));
                         return;
                     }
                 };
@@ -473,10 +432,7 @@ fn notice(shared: &Arc<Shared>, method: &str, params: Value) {
                 .and_then(Value::as_str)
                 .unwrap_or("ok")
                 .to_string();
-            let detail = params
-                .get("detail")
-                .and_then(Value::as_str)
-                .map(str::to_string);
+            let detail = params.get("detail").and_then(Value::as_str).map(str::to_string);
             push(shared, Notice::HealthChanged { state, detail });
         }
         other => {
