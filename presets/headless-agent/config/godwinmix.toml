@@ -1,6 +1,15 @@
 # The headless agent preset: nobody is at the machine. An agent connects
 # over MCP and drives it, a web page is the picture, and the whole thing runs
 # unattended.
+#
+# Point an agent at it with:
+#
+#   gmx mcp --url http://localhost:8080 --token "$GODWINMIX_TOKEN"
+#
+# which speaks Model Context Protocol on stdio, twelve tools on the standard
+# profile and five on `--profile minimal` for a model with a small context.
+# `examples/ai-director.py` is the worked example: a loop that reads `agent.state`,
+# decides, and calls `program.take`. See docs/how-to/use-with-an-ai-agent.md.
 
 [canvas]
 width = 1920
@@ -16,7 +25,8 @@ keyframe_interval_secs = 2
 audio_ramp_ms = 180
 
 # Nothing renders the multiview until a client asks for it, and on a headless
-# box nothing asks. Leaving it off saves the memory outright.
+# box nothing asks. Leaving it off saves the memory outright, and an agent
+# that wants to see something asks for a snapshot instead.
 [multiview]
 enabled = false
 width = 960
@@ -24,6 +34,16 @@ height = 540
 fps = 5
 jpeg_quality = 55
 include_program = true
+
+# Snapshots stay on, because they are how an agent looks at the programme
+# without a mosaic running: one JPEG, 320 wide, about 84 tokens to a vision
+# model against 2,691 for a 1080p frame.
+[snapshot]
+enabled = true
+default_width = 320
+min_interval_secs = 5
+max_width = 1280
+idle_secs = 15
 
 [media]
 dir = "media"

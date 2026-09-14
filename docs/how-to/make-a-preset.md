@@ -7,12 +7,22 @@ machine is configured the way yours is:
 gmx preset apply church
 ```
 
-`gmx preset apply` and `gmx build` are not in this release yet; the presets and
-everything below are, so a preset you write now is ready for the command that
-installs it.
-
 It is data, not code. You do not write any Rust to make one, and you do not
 need the GodwinMix source to publish one.
+
+The fastest way to your first one is not this page at all. Get a machine
+working, then:
+
+```sh
+gmx preset save my-church
+```
+
+which writes the whole directory from what is running, with the stream keys and
+the control token taken out. Read on when you want to know what it wrote, or
+when you would rather start from one of the six.
+
+[The presets reference](../reference/presets.md) is every manifest key, the
+merge rules and the six official presets in a table.
 
 ## Copy the closest one
 
@@ -69,7 +79,14 @@ config = "config/godwinmix.toml"
 layout = "config/layout.json"
 surface = "web"
 theme = "calm"
+theme_css = "theme.css"            # when the theme is your own
 scenes = "scenes"
+gallery = "icon"                   # live, snapshot, icon or label
+steps = [                          # the three things the person does next
+  "Run `gmx ctl device list` and put your cameras' names into [[sources]].",
+  "Put your stream key into the [[outputs]] block.",
+  "Run `gmx`, open http://localhost:8080, and press Wide.",
+]
 ```
 
 `plugins` is a list of `name@range`, semver ranges. `gmx preset apply` installs
@@ -78,8 +95,19 @@ Naming a plugin that does not exist yet is allowed: the preset is the target
 the plugin gets written towards.
 
 `surface` is `web`, `none` for a headless box, or the name of a surface plugin.
-`theme` is a theme name your surface resolves. The three paths are relative to
-this directory.
+`theme` is a theme name your surface resolves: one of `dark`, `light`,
+`high-contrast` and `system`, or your own with `theme_css` beside it. The paths
+are relative to this directory.
+
+`gallery` fixes what the input tiles show for your audience: `live` for a
+producer, `icon` for a volunteer on a modest machine, `snapshot` for a laptop on
+battery, `label` for a headless box. Leave it out and the surface asks the
+machine, which is what `gmx doctor` proposes.
+
+`steps` is three sentences, in order. They are what the welcome panel in the web
+UI shows straight after your preset is applied, with any missing plugin named
+alongside, and they are the same three that go in the README. Three, not five:
+somebody is reading them with a service starting.
 
 ### `config/godwinmix.toml`
 
@@ -120,8 +148,13 @@ Which panels go in which slot of the web UI, in order, top to bottom.
 
 Slots: `header`, `main`, `sidebar`, `strip`, `footer`, `modal`.
 Panels the first party UI ships: `header`, `multiview`, `sources`, `outputs`,
-`media`, `alerts`, `scenes`. A panel from a plugin is named
+`media`, `alerts`, `scenes`, `welcome`. A panel from a plugin is named
 `<plugin>/<panel id>`.
+
+`welcome` is the first five minutes: the three large tiles a person picks a
+preset from. The shell puts it up on its own when the core has no sources and
+no preset has been applied, so a layout never has to name it. Naming it anyway
+pins it to a slot, which is what a kiosk build wants.
 
 Leave out a slot you do not want to fill.
 
@@ -153,16 +186,29 @@ read anything else. Four headings, in this order, and nothing between them:
 
 ## Test it before you publish it
 
-Check each piece on its own:
+The one command that checks the whole of it:
 
 ```
-gmx scene validate presets/my-church/scenes/two-box.json
-gmx --config presets/my-church/config/godwinmix.toml
+gmx preset apply ./presets/my-church --dry-run --config /tmp/try.toml
 ```
 
-The first reports anything wrong with the scene. The second starts the mixer on
-your config, which is the only real check that the config is right; stop it with
-Ctrl-C once it comes up.
+It reads the manifest, checks every file it names exists, loads the config under
+the same rules the mixer does, parses and validates every scene and resolves its
+bindings against your own sources, checks the layout names real slots and
+panels, checks the theme is one somebody has, and prints the plan: the plugins
+that are missing, the keys it would set, the sources and outputs it would add,
+and what is left for the person. It writes nothing.
+
+Then apply it for real into a scratch directory and start the mixer on what it
+wrote, which is the only check that matters:
+
+```
+gmx preset apply ./presets/my-church --config /tmp/try.toml
+gmx --config /tmp/try.toml
+```
+
+Ctrl-C once it comes up. `gmx scene validate presets/my-church/scenes/two-box.json`
+checks one scene on its own when the plan says something about it.
 
 The repository's own tests check every preset in `presets/`: that the manifest
 parses and names its files, that the config loads, that every source has a
@@ -182,9 +228,40 @@ has the index, the signing and the quality scale.
 
 Two commands make a preset into a product:
 
-* `gmx preset apply my-church` on a fresh machine: installs the plugins, merges
-  the config, sets the layout and the surface.
-* `gmx build --preset my-church --name "MyChurchMix" --icon icon.png`: a
-  distributable bundle with your branding, installers for three platforms, and
-  nothing forked, so `gmx build` after the next core release produces the next
-  version.
+* `gmx preset apply my-church` on a fresh machine merges the config, writes the
+  scenes, sets the layout, the theme and the gallery mode, and names any plugin
+  it could not find rather than failing.
+* `gmx build --preset my-church --name "MyChurchMix" --icon icon.png` assembles
+  a distributable directory with your branding and nothing forked, so `gmx
+  build` after the next core release produces the next version. See
+  [Make a custom build](custom-build.md).
+
+## Starting from a machine instead
+
+`gmx preset save my-church` writes the whole directory from what is running:
+
+```
+saved my-church to /home/you/.godwinmix/presets/my-church
+  wrote    config/godwinmix.toml
+  wrote    theme.css
+  wrote    config/layout.json
+  wrote    scenes/full-screen.json
+  wrote    scenes/two-boxes-side-by-side.json
+  wrote    gmx-plugin.toml
+  wrote    README.md
+
+taken out
+  the control token was replaced with change-me
+  a stream key in uri = "rtmp://a.rtmp.youtube.com/live2/..." was replaced
+```
+
+It works out the `plugins` list from the kinds your sources and outputs
+actually use, carries the theme across, gives every scene fresh ids, and leaves
+a README with the four headings for you to fill in. Three things it cannot do
+for you, and you have to: write the description somebody browsing the index
+will read, write the `steps`, and write the "when it does not work" section from
+what has actually gone wrong for you.
+
+Read the config it wrote before you publish it. The redaction covers the control
+token, the `[[tokens]]` table and the tail of every RTMP and SRT output URL, and
+nothing else knows what a secret looks like in your deployment.

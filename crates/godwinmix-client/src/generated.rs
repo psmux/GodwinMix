@@ -122,6 +122,38 @@ pub struct AddSourceRequest {
     pub extra: BTreeMap<String, Value>,
 }
 
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct ApplyRequest {
+    /// Work out the plan and write nothing.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub dry_run: Option<bool>,
+    /// Take the preset's value wherever the operator already has one.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub force: Option<bool>,
+    /// Leave the operator's sources and outputs alone.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub keep_sources: Option<bool>,
+    /// A preset name, or a path to a directory holding `gmx-plugin.toml`.
+    pub name: String,
+}
+
+/// What `preset.apply` answers with.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct ApplyResult {
+    /// Present when the preset was actually applied.
+    pub applied: Value,
+    /// True when nothing was written because `dry_run` was set.
+    pub dry_run: bool,
+    /// The sources and outputs this core picked up without a restart.
+    pub live: Vec<String>,
+    /// What still needs a restart, in plain words. Empty is the good case.
+    pub needs_restart: Vec<String>,
+    /// The whole plan, as JSON. The same object `preset.list` rows point at.
+    pub plan: Value,
+}
+
 /// `source.audio.set` takes an id as well as the levels: the id comes off the
 /// path on REST and out of the params on `/rpc`, and both land in one object.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
@@ -217,6 +249,11 @@ pub struct CoreInfo {
     /// Present when the request carried a token the core recognises.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub token: Option<TokenInfo>,
+    /// What a surface should start with, when a preset chose it. Absent on a
+    /// core no preset has been applied to, which is what puts the welcome
+    /// panel up in the reference UI.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub ui: Option<UiDefaults>,
     /// The build's own version, as in Cargo.toml.
     pub version: String,
 }
@@ -591,6 +628,16 @@ pub struct Resync {
     pub from_seq: u64,
 }
 
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct SaveRequest {
+    /// The new preset's name. A slug: lower case letters, digits and hyphens.
+    pub name: String,
+    /// Where to write it. Defaults to `~/.godwinmix/presets/<name>`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub out: Option<String>,
+}
+
 /// `source.seek`.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
@@ -819,6 +866,30 @@ pub struct TokenInfo {
     pub scopes: Vec<String>,
 }
 
+/// What a surface starts with: the layout, the theme and the gallery mode.
+///
+/// Chosen by a preset (`preset.apply`), carried in `core.info` and pushed as
+/// `event/ui.changed`. None of it changes what the core does. It exists so the
+/// first page a volunteer sees is the one their preset chose rather than the
+/// one the last person to use this browser chose. 05 section 3b is where the
+/// four gallery modes are defined.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct UiDefaults {
+    /// `live`, `snapshot`, `icon` or `label`. Absent means the surface asks
+    /// the machine, which is what `gmx doctor` proposes.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub gallery: Option<String>,
+    /// Slot to panels, top to bottom. Empty means the surface's own default.
+    pub layout: BTreeMap<String, Value>,
+    /// The preset that set these, so a surface knows one has been applied.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub preset: Option<String>,
+    /// A theme id the surface resolves, for example `dark` or `calm`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub theme: Option<String>,
+}
+
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct ProgramTookEvent {
@@ -876,6 +947,13 @@ pub struct AdbreakChangedEvent {
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
+pub struct UiChangedEvent {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub ui: Option<UiDefaults>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
 pub struct MediaChangedEvent {
     pub conversion: Value,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -902,7 +980,7 @@ pub struct MethodInfo {
     pub rest: Option<(&'static str, &'static str)>,
 }
 
-pub const METHODS: [MethodInfo; 45] = [
+pub const METHODS: [MethodInfo; 48] = [
     MethodInfo { name: "adbreak.end", summary: "Cut a running ad short, or disarm one that is scheduled.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/adbreak/end")) },
     MethodInfo { name: "adbreak.start", summary: "Interrupt the programme with a clip, then rejoin live when it ends.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/adbreak/start")) },
     MethodInfo { name: "agent.state", summary: "The compact document written for agents: the programme, each source's state and a motion score saying how much its picture is changing.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/agent/state")) },
@@ -936,6 +1014,9 @@ pub const METHODS: [MethodInfo; 45] = [
     MethodInfo { name: "pipeline.latency", summary: "How much delay one pipeline is carrying, and which stage put it there.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/pipeline/latency")) },
     MethodInfo { name: "pipeline.list", summary: "Every pipeline running right now, by the name the other pipeline methods accept.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/pipeline/list")) },
     MethodInfo { name: "pipeline.queues", summary: "Every queue in one pipeline with how full it is, fullest first. A queue that stays full is where the trouble is.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/pipeline/queues")) },
+    MethodInfo { name: "preset.apply", summary: "Put a preset on this core: its config, its scenes, its layout, its theme and its gallery mode. Pass dry_run to get the plan and write nothing.", scope: "admin", mutating: true, destructive: true, rest: Some(("POST", "/api/v1/preset/apply")) },
+    MethodInfo { name: "preset.list", summary: "Every preset this core can apply: the six built in, plus anything installed beside the binary or under ~/.godwinmix/presets.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/preset/list")) },
+    MethodInfo { name: "preset.save", summary: "Turn this core's working setup into a preset directory somebody else can apply. Stream keys and the control token are replaced with placeholders.", scope: "admin", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/preset/save")) },
     MethodInfo { name: "program.get", summary: "What is on air, the programme running time, and what revert would go back to.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/program")) },
     MethodInfo { name: "program.golive", summary: "One call to put a web page on air: add the page, add the destination, and take the page as soon as it renders.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/program/golive")) },
     MethodInfo { name: "program.history", summary: "The last hundred takes, newest first, with the token that asked for each.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/program/history")) },
@@ -950,13 +1031,14 @@ pub const METHODS: [MethodInfo; 45] = [
     MethodInfo { name: "source.seek", summary: "Move a seekable source to a position. Answers with where it actually landed.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/sources/{id}/seek")) },
 ];
 
-pub const EVENT_NAMES: [&str; 14] = [
+pub const EVENT_NAMES: [&str; 15] = [
     "snapshot",
     "program.took",
     "source.state",
     "source.position",
     "output.state",
     "adbreak.changed",
+    "ui.changed",
     "media.changed",
     "meters",
     "tally",
@@ -996,6 +1078,8 @@ pub enum Event {
     OutputState(OutputStateEvent),
     /// An ad break was armed, went on air, or ended.
     AdbreakChanged(AdbreakChangedEvent),
+    /// The surface defaults changed: a preset was applied, or an operator set the layout, theme or gallery mode by hand. Nothing on air moves.
+    UiChanged(UiChangedEvent),
     /// A file in the library was uploaded, deleted, or its conversion moved on.
     MediaChanged(MediaChangedEvent),
     /// Peak dBFS for the programme bus and every source, in one message at 10 per second. Replaces the two separate meter events on /ws.
@@ -1046,6 +1130,10 @@ impl Event {
                 Ok(payload) => Event::AdbreakChanged(payload),
                 Err(_) => Event::Other { name: pattern.to_string(), params },
             },
+            "ui.changed" => match serde_json::from_value(params.clone()) {
+                Ok(payload) => Event::UiChanged(payload),
+                Err(_) => Event::Other { name: pattern.to_string(), params },
+            },
             "media.changed" => match serde_json::from_value(params.clone()) {
                 Ok(payload) => Event::MediaChanged(payload),
                 Err(_) => Event::Other { name: pattern.to_string(), params },
@@ -1087,6 +1175,7 @@ impl Event {
             Event::SourcePosition(_) => "source.position",
             Event::OutputState(_) => "output.state",
             Event::AdbreakChanged(_) => "adbreak.changed",
+            Event::UiChanged(_) => "ui.changed",
             Event::MediaChanged(_) => "media.changed",
             Event::Meters(_) => "meters",
             Event::Tally(_) => "tally",
@@ -1266,6 +1355,21 @@ impl Client {
     /// Every queue in one pipeline with how full it is, fullest first. A queue that stays full is where the trouble is.
     pub async fn pipeline_queues(&self, params: &PipelineRequest) -> Result<BTreeMap<String, Value>> {
         self.call("pipeline.queues", params).await
+    }
+
+    /// Put a preset on this core: its config, its scenes, its layout, its theme and its gallery mode. Pass dry_run to get the plan and write nothing.
+    pub async fn preset_apply(&self, params: &ApplyRequest) -> Result<ApplyResult> {
+        self.call("preset.apply", params).await
+    }
+
+    /// Every preset this core can apply: the six built in, plus anything installed beside the binary or under ~/.godwinmix/presets.
+    pub async fn preset_list(&self) -> Result<BTreeMap<String, Value>> {
+        self.call("preset.list", &serde_json::json!({})).await
+    }
+
+    /// Turn this core's working setup into a preset directory somebody else can apply. Stream keys and the control token are replaced with placeholders.
+    pub async fn preset_save(&self, params: &SaveRequest) -> Result<BTreeMap<String, Value>> {
+        self.call("preset.save", params).await
     }
 
     /// What is on air, the programme running time, and what revert would go back to.

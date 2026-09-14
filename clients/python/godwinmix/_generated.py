@@ -80,6 +80,30 @@ class AddSourceRequest(TypedDict, total=False):
     uri: str
     # Stream URL, file path, or with kind "web" the address of a page.
 
+class ApplyRequest(TypedDict, total=False):
+    dry_run: bool
+    # Work out the plan and write nothing.
+    force: bool
+    # Take the preset's value wherever the operator already has one.
+    keep_sources: bool
+    # Leave the operator's sources and outputs alone.
+    name: str
+    # A preset name, or a path to a directory holding `gmx-plugin.toml`.
+
+class ApplyResult(TypedDict, total=False):
+    """What `preset.apply` answers with."""
+
+    applied: Any
+    # Present when the preset was actually applied.
+    dry_run: bool
+    # True when nothing was written because `dry_run` was set.
+    live: List[str]
+    # The sources and outputs this core picked up without a restart.
+    needs_restart: List[str]
+    # What still needs a restart, in plain words. Empty is the good case.
+    plan: Any
+    # The whole plan, as JSON. The same object `preset.list` rows point at.
+
 class AudioSetParams(TypedDict, total=False):
     """`source.audio.set` takes an id as well as the levels: the id comes off the path on REST and out of the params on `/rpc`, and both land in one object."""
 
@@ -145,6 +169,8 @@ class CoreInfo(TypedDict, total=False):
     # True when the core was started with `--rehearsal`, which refuses `output.add` and accepts rehearsal tokens.
     token: Union[TokenInfo, None]
     # Present when the request carried a token the core recognises.
+    ui: Union[UiDefaults, None]
+    # What a surface should start with, when a preset chose it. Absent on a core no preset has been applied to, which is what puts the welcome panel up in the reference UI.
     version: str
     # The build's own version, as in Cargo.toml.
 
@@ -382,6 +408,12 @@ class Resync(TypedDict, total=False):
     from_seq: int
     # The last sequence number the client is known to have. Everything after it was dropped; re-subscribe for a fresh snapshot.
 
+class SaveRequest(TypedDict, total=False):
+    name: str
+    # The new preset's name. A slug: lower case letters, digits and hyphens.
+    out: Optional[str]
+    # Where to write it. Defaults to `~/.godwinmix/presets/<name>`.
+
 class SeekParams(TypedDict, total=False):
     """`source.seek`."""
 
@@ -521,6 +553,18 @@ class TokenInfo(TypedDict, total=False):
     rehearsal: bool
     scopes: List[str]
 
+class UiDefaults(TypedDict, total=False):
+    """What a surface starts with: the layout, the theme and the gallery mode. Chosen by a preset (`preset.apply`), carried in `core.info` and pushed as `event/ui.changed`. None of it changes what the core does. It exists so the first page a volunteer sees is the one their preset chose rather than the one the last person to use this browser chose. 05 section 3b is where the four gallery modes are defined."""
+
+    gallery: Optional[str]
+    # `live`, `snapshot`, `icon` or `label`. Absent means the surface asks the machine, which is what `gmx doctor` proposes.
+    layout: Dict[str, Any]
+    # Slot to panels, top to bottom. Empty means the surface's own default.
+    preset: Optional[str]
+    # The preset that set these, so a surface knows one has been applied.
+    theme: Optional[str]
+    # A theme id the surface resolves, for example `dark` or `calm`.
+
 class ProgramTookEvent(TypedDict, total=False):
     at_running_time_ms: int
     duration_ms: int
@@ -545,6 +589,9 @@ class OutputStateEvent(TypedDict, total=False):
 
 class AdbreakChangedEvent(TypedDict, total=False):
     ad: Union[AdStatus, None]
+
+class UiChangedEvent(TypedDict, total=False):
+    ui: UiDefaults
 
 class MediaChangedEvent(TypedDict, total=False):
     conversion: Any
@@ -588,6 +635,9 @@ METHODS = (
     {"name": "pipeline.latency", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/pipeline/latency"), "summary": 'How much delay one pipeline is carrying, and which stage put it there.'},
     {"name": "pipeline.list", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/pipeline/list"), "summary": 'Every pipeline running right now, by the name the other pipeline methods accept.'},
     {"name": "pipeline.queues", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/pipeline/queues"), "summary": 'Every queue in one pipeline with how full it is, fullest first. A queue that stays full is where the trouble is.'},
+    {"name": "preset.apply", "scope": "admin", "mutating": True, "destructive": True, "rest": ("POST", "/api/v1/preset/apply"), "summary": 'Put a preset on this core: its config, its scenes, its layout, its theme and its gallery mode. Pass dry_run to get the plan and write nothing.'},
+    {"name": "preset.list", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/preset/list"), "summary": 'Every preset this core can apply: the six built in, plus anything installed beside the binary or under ~/.godwinmix/presets.'},
+    {"name": "preset.save", "scope": "admin", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/preset/save"), "summary": "Turn this core's working setup into a preset directory somebody else can apply. Stream keys and the control token are replaced with placeholders."},
     {"name": "program.get", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/program"), "summary": 'What is on air, the programme running time, and what revert would go back to.'},
     {"name": "program.golive", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/program/golive"), "summary": 'One call to put a web page on air: add the page, add the destination, and take the page as soon as it renders.'},
     {"name": "program.history", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/program/history"), "summary": 'The last hundred takes, newest first, with the token that asked for each.'},
@@ -609,6 +659,7 @@ EVENT_NAMES = (
     "source.position",
     "output.state",
     "adbreak.changed",
+    "ui.changed",
     "media.changed",
     "meters",
     "tally",
@@ -968,6 +1019,45 @@ class GeneratedMethods:
         if name is not None:
             params["name"] = name
         return await self._call("pipeline.queues", params)
+
+    async def preset_apply(
+        self,
+        name: str,
+        *,
+        dry_run: Optional[bool] = None,
+        force: Optional[bool] = None,
+        keep_sources: Optional[bool] = None,
+    ) -> ApplyResult:
+        """Put a preset on this core: its config, its scenes, its layout, its theme and its gallery mode. Pass dry_run to get the plan and write nothing."""
+        params: Dict[str, Any] = {}
+        params["name"] = name
+        if dry_run is not None:
+            params["dry_run"] = dry_run
+        if force is not None:
+            params["force"] = force
+        if keep_sources is not None:
+            params["keep_sources"] = keep_sources
+        return await self._call("preset.apply", params)
+
+    async def preset_list(
+        self,
+    ) -> Dict[str, Any]:
+        """Every preset this core can apply: the six built in, plus anything installed beside the binary or under ~/.godwinmix/presets."""
+        params: Dict[str, Any] = {}
+        return await self._call("preset.list", params)
+
+    async def preset_save(
+        self,
+        name: str,
+        *,
+        out: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Turn this core's working setup into a preset directory somebody else can apply. Stream keys and the control token are replaced with placeholders."""
+        params: Dict[str, Any] = {}
+        params["name"] = name
+        if out is not None:
+            params["out"] = out
+        return await self._call("preset.save", params)
 
     async def program_get(
         self,

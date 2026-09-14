@@ -56,11 +56,21 @@ pub struct Config {
     /// remove. See `api::scope` and `Config::tokens`.
     #[serde(default)]
     pub tokens: Vec<TokenConfig>,
+    /// What a surface starts with: the layout, the theme and the gallery mode.
+    /// Written by `gmx preset apply` into the runtime store, and readable here
+    /// so an operator can set it by hand. See `crate::preset`.
+    #[serde(default)]
+    pub ui: UiDefaults,
     /// Every other top level table. Without this a plugin's section was
     /// silently dropped, which is the closed schema the audit named.
     #[serde(flatten, default)]
     pub extra: std::collections::BTreeMap<String, toml::Value>,
 }
+
+/// What a surface starts with. The type lives in the protocol crate because
+/// `core.info` returns it and `event/ui.changed` carries it; here it is the
+/// `[ui]` table of the config file and of the runtime store.
+pub use godwinmix_protocol::types::UiDefaults;
 
 /// A plugin's own settings, as written in `params = { .. }` or in
 /// `[plugins.<name>]`. A TOML table, uninterpreted by the core.
@@ -988,6 +998,10 @@ struct StoredRuntime {
     sources: Option<Vec<SourceConfig>>,
     #[serde(default)]
     outputs: Option<Vec<OutputConfig>>,
+    /// What `gmx preset apply` chose for the surface. Absent means the config
+    /// file's own `[ui]` section stands.
+    #[serde(default)]
+    ui: Option<UiDefaults>,
 }
 
 /// The value of a `GODWINMIX_*` variable, accepting the `LIVEBOXMIX_*` name
@@ -1116,8 +1130,25 @@ impl Config {
                 );
                 cfg.outputs = outputs;
             }
+            if let Some(ui) = stored.ui {
+                if !ui.is_empty() {
+                    cfg.ui = ui;
+                }
+            }
         }
 
+        cfg.validate()?;
+        Ok(cfg)
+    }
+
+    /// Parse a configuration from text, with no runtime store beside it.
+    ///
+    /// The same rules `load` applies, for a config that is not a file on this
+    /// machine: a preset's, checked before it is written anywhere, or one that
+    /// arrived over the wire. `label` is what an error names.
+    pub fn from_toml(text: &str, label: &str) -> Result<Self> {
+        let cfg: Config =
+            toml::from_str(text).with_context(|| format!("parsing {label}"))?;
         cfg.validate()?;
         Ok(cfg)
     }
@@ -1547,6 +1578,7 @@ sidecar = \"/opt/b\"\n").unwrap();
             filters: vec![],
             plugins: Default::default(),
             tokens: vec![],
+            ui: Default::default(),
             extra: Default::default(),
         };
         assert!(cfg.validate().is_err());
