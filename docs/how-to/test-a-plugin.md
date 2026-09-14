@@ -135,18 +135,26 @@ stop takes eight seconds.
 
 ### kill
 
-The core kills your process mid stream and watches the picture. Two things must
-be true: the frames come back within the restart backoff, and the interval
-between programme frames never reaches 34 milliseconds, which is one frame at 30
-fps plus the slack a scheduler is allowed.
+The core kills your process mid stream and watches what your media does. What
+has to be true is that it comes back within the restart backoff.
 
-    FAIL kill   the frame interval reached 340 ms across the kill; the limit is 34 ms
+    ok   kill   killed mid stream, back in 43 frames, away for 380 ms at this source's own
+                end (the programme's own interval is not measured here; see check_kill)
 
-This one is usually not your fault: the freeze frame is the core's job and it is
-the core's bug if it gaps. What is your fault is a plugin that cannot be
-restarted, which shows as the picture never coming back. If restarting in place
-does not work for you, drop `restart-in-place` from your capabilities and the
-supervisor rebuilds you from nothing instead, which is slower and always works.
+    FAIL kill   the picture did not come back within 12 s of the process being killed
+
+The number it reports is the gap at your own media end, and it is normally a
+second or so: your process was replaced, so of course your frames stopped. The
+rule that matters, that the programme's frame interval never reaches 34
+milliseconds, is about the picture the audience sees, and the compositor's
+freeze frame is what keeps it true while you are away. This harness builds one
+source with no compositor and no encoder behind it, so it cannot measure that
+yet; a test core that can is the next thing to build here.
+
+A picture that never comes back is your problem. If restarting in place does
+not work for you, drop `restart-in-place` from your capabilities and the
+supervisor rebuilds you from nothing instead, which is slower and always
+works.
 
 Reproduce it by hand against a running mixer with `gmx chaos kill <instance>`.
 

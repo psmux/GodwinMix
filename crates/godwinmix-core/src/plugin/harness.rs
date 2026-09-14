@@ -336,6 +336,11 @@ pub const RESTART_TIMEOUT: Duration = Duration::from_secs(12);
 /// The programme's frame interval must never exceed this. 34 ms is one frame
 /// at 30 fps plus the slack a scheduler is allowed; the number is the one in
 /// the 02 appendix and the roadmap's acceptance.
+///
+/// Not applied by `check_kill`, which watches one source's own media end and
+/// has no programme to measure. It is here because the number is the contract
+/// and a test core that can measure it is the next thing to build. See the
+/// comment on `check_kill`.
 pub const MAX_FRAME_INTERVAL: Duration = Duration::from_millis(34);
 
 /// Check 7: the manifest, the tool schemas and every SKILL.md.
@@ -616,12 +621,21 @@ impl Default for Intervals {
     }
 }
 
-/// Check 6: kill the process mid stream and watch what the picture does.
+/// Check 6: kill the process mid stream and watch what the media does.
 ///
-/// The freeze frame is the core's, not the plugin's: the compositor keeps the
-/// last frame on the pad while the source is rebuilt, and the encoder never
-/// stops. So the measurement is on the source's own media end, which is where
-/// a gap would show first and largest.
+/// What this can answer is whether the media comes back, and how long it was
+/// away. What it cannot answer is the thing 03 section 11 asks for, the
+/// programme's frame interval across the kill, because there is no programme
+/// here: this builds one source and watches its own media end, with no
+/// compositor and no encoder behind it.
+///
+/// Those are different measurements and the difference is the point of the
+/// freeze frame. A source whose process is replaced must gap at its own end,
+/// by however long the process takes to come back; the compositor holds the
+/// last frame on the pad so the programme does not. Failing a plugin for the
+/// first would fail every sidecar source there will ever be, so the gap is
+/// reported and the check passes on the media returning. Measuring the
+/// programme needs a test core with one, which is the thing to build next.
 pub fn check_kill(cfg: &SourceConfig, allow_exec: bool) -> CheckResult {
     let canvas = test_canvas();
     let backends = match Backends::probe(crate::config::Accel::Auto, crate::config::Accel::Auto) {
@@ -660,7 +674,12 @@ pub fn check_kill(cfg: &SourceConfig, allow_exec: bool) -> CheckResult {
         Err(e) => return CheckResult::fail("kill", format!("{e:#}")),
     };
     let watch = Arc::new(Intervals::default());
-    if let Err(e) = watch.install(&ends.video) {
+    // A source with no picture is watched on its sound instead. The question
+    // this check asks is whether the media comes back after the process dies,
+    // and for a microphone the media is audio.
+    let carries_video = provide.manifest.media.video != StreamMode::None;
+    let watched = if carries_video { &ends.video } else { &ends.audio };
+    if let Err(e) = watch.install(watched) {
         return CheckResult::fail("kill", format!("{e}"));
     }
     let _ = ends.pipeline.set_state(gst::State::Playing);
@@ -671,8 +690,11 @@ pub fn check_kill(cfg: &SourceConfig, allow_exec: bool) -> CheckResult {
     if before == 0 {
         let _ = ends.pipeline.set_state(gst::State::Null);
         let _ = source.stop();
-        return CheckResult::fail("kill", "no frames arrived before the kill, so there was \
-                                          nothing to interrupt");
+        let what = if carries_video { "frames" } else { "audio buffers" };
+        return CheckResult::fail(
+            "kill",
+            format!("no {what} arrived before the kill, so there was nothing to interrupt"),
+        );
     }
     watch.reset();
     let killed = kill_behind(&mut source);
@@ -692,23 +714,14 @@ pub fn check_kill(cfg: &SourceConfig, allow_exec: bool) -> CheckResult {
             ),
         );
     }
-    if longest > MAX_FRAME_INTERVAL {
-        return CheckResult::fail(
-            "kill",
-            format!(
-                "the frame interval reached {} ms across the kill; the limit is {} ms",
-                longest.as_millis(),
-                MAX_FRAME_INTERVAL.as_millis()
-            ),
-        );
-    }
+    let what = if carries_video { "frames" } else { "audio buffers" };
     CheckResult::pass(
         "kill",
         format!(
-            "killed mid stream, back in {} frames, longest interval {:.1} ms (limit {} ms)",
+            "killed mid stream, back in {} {what}, away for {:.0} ms at this source's own end \
+             (the programme's own interval is not measured here; see check_kill)",
             outcome.frames,
             longest.as_secs_f64() * 1000.0,
-            MAX_FRAME_INTERVAL.as_millis()
         ),
     )
 }

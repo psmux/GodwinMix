@@ -1,0 +1,8 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "list_recordings arguments",
+  "description": "No arguments. The folder in the current settings is read each time.",
+  "type": "object",
+  "properties": {},
+  "additionalProperties": false
+}

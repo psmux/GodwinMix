@@ -1,0 +1,8 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Screen discovery",
+  "description": "Finding what this machine can capture. There is nothing to set.",
+  "type": "object",
+  "properties": {},
+  "additionalProperties": false
+}

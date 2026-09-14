@@ -843,6 +843,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "gmx-audio-device"
+version = "0.1.0"
+dependencies = [
+ "godwinmix-capture-common",
+ "godwinmix-sdk",
+ "gstreamer",
+ "serde_json",
+]
+
+[[package]]
+name = "gmx-camera"
+version = "0.1.0"
+dependencies = [
+ "godwinmix-capture-common",
+ "godwinmix-sdk",
+ "gstreamer",
+ "serde_json",
+]
+
+[[package]]
 name = "gmx-director"
 version = "0.2.0"
 dependencies = [
@@ -850,6 +870,16 @@ dependencies = [
  "godwinmix-sdk",
  "serde_json",
  "tokio",
+]
+
+[[package]]
+name = "gmx-file-record"
+version = "0.1.0"
+dependencies = [
+ "godwinmix-capture-common",
+ "godwinmix-sdk",
+ "gstreamer",
+ "serde_json",
 ]
 
 [[package]]
@@ -894,6 +924,16 @@ dependencies = [
  "godwinmix-sdk",
  "serde_json",
  "tokio",
+]
+
+[[package]]
+name = "gmx-screen"
+version = "0.1.0"
+dependencies = [
+ "godwinmix-capture-common",
+ "godwinmix-sdk",
+ "gstreamer",
+ "serde_json",
 ]
 
 [[package]]
@@ -962,6 +1002,16 @@ dependencies = [
  "toml 0.9.12+spec-1.1.0",
  "tower-http",
  "tracing",
+]
+
+[[package]]
+name = "godwinmix-capture-common"
+version = "0.1.0"
+dependencies = [
+ "godwinmix-sdk",
+ "gstreamer",
+ "libc",
+ "serde_json",
 ]
 
 [[package]]

@@ -1,0 +1,8 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "list_screens arguments",
+  "description": "No arguments. The machine is asked each time.",
+  "type": "object",
+  "properties": {},
+  "additionalProperties": false
+}

@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Camera discovery",
+  "description": "Finding the cameras attached to this machine. There is nothing to set: the operating system is asked each time `discover` is called.",
+  "type": "object",
+  "properties": {
+    "include_screens": {
+      "type": "boolean",
+      "title": "Include screen capture devices",
+      "description": "Some platforms present a screen as a video device. Off by default, because the screen plugin captures a screen better than a camera driver pretending to be one.",
+      "default": false,
+      "examples": [false, true]
+    }
+  },
+  "additionalProperties": false
+}

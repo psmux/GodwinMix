@@ -1,0 +1,49 @@
+#!/bin/sh
+# Everything that can be checked without a core.
+#
+#   ./check
+#
+# What the core's harness adds on top (`gmx plugin test ./plugins/camera`):
+# real caps at the media end, ninety percent of the expected frames in three
+# seconds, a kill mid stream with a restart, and the footprint.
+
+set -eu
+cd "$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
+failed=0
+
+step() {
+    printf '%-34s' "$1"
+    shift
+    if output=$("$@" 2>&1); then
+        echo "ok"
+    else
+        echo "FAILED"
+        echo "$output" | sed 's/^/    /'
+        failed=1
+    fi
+}
+
+echo "checking camera with $(cargo --version)"
+
+if cargo fmt --version >/dev/null 2>&1; then
+    step "cargo fmt" cargo fmt -p gmx-camera -- --check
+else
+    printf '%-34s%s\n' "cargo fmt" "skipped (rustup component add rustfmt)"
+fi
+if cargo clippy --version >/dev/null 2>&1; then
+    step "cargo clippy" cargo clippy -p gmx-camera --all-targets --quiet -- -D warnings
+else
+    printf '%-34s%s\n' "cargo clippy" "skipped (rustup component add clippy)"
+fi
+
+step "unit tests" cargo test -p gmx-camera --bins --quiet
+step "gmx-plugin.toml" cargo run --quiet -p gmx-camera --bin check-manifest
+step "offline transcript" cargo test -p gmx-camera --test offline --quiet
+step "staged binary" ./build
+
+if [ "$failed" -eq 0 ]; then
+    echo "all checks passed"
+else
+    echo "something failed. Fix it, then run ./check again."
+fi
+exit "$failed"
