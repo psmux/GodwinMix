@@ -1,0 +1,71 @@
+# The broadcast preset: SRT in from the venue, SRT out to the network, tally
+# to the camera operators and a Companion surface on the desk.
+
+[canvas]
+width = 1920
+height = 1080
+fps = 50
+sample_rate = 48000
+channels = 2
+
+[program]
+video_bitrate_kbps = 12000
+audio_bitrate_kbps = 256
+keyframe_interval_secs = 1
+audio_ramp_ms = 100
+
+[multiview]
+enabled = true
+width = 1280
+height = 720
+fps = 12
+jpeg_quality = 70
+include_program = true
+
+[media]
+dir = "media"
+
+[control]
+bind = "0.0.0.0:8080"
+# token = "change-me"
+
+[hardware]
+decode = "auto"
+encode = "auto"
+
+[[sources]]
+id = "venue-a"
+name = "Venue A"
+type = "srt/source"
+uri = "srt://0.0.0.0:9001?mode=listener&latency=200"
+params = { latency_ms = 200, passphrase = "" }
+stall_timeout_secs = 4.0
+
+[[sources]]
+id = "venue-b"
+name = "Venue B"
+type = "srt/source"
+uri = "srt://0.0.0.0:9002?mode=listener&latency=200"
+params = { latency_ms = 200, passphrase = "" }
+stall_timeout_secs = 4.0
+
+[[sources]]
+id = "studio"
+name = "Studio"
+type = "ndi/source"
+uri = "ndi://STUDIO (Cam 1)"
+params = { name = "STUDIO (Cam 1)" }
+
+[[outputs]]
+id = "network"
+type = "srt/output"
+uri = "srt://network.example.com:9100?mode=caller&latency=300"
+policy = "own"
+queue_secs = 3.0
+
+[[outputs]]
+id = "backup"
+type = "rtmp/output"
+uri = "rtmp://backup.example.com/live/programme"
+policy = "own"
+queue_secs = 8.0

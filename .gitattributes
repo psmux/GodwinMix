@@ -1,0 +1,7 @@
+# Fixtures, layouts, presets and the published schema are compared and edited as
+# text by the tests, so they are LF on every platform. A CRLF checkout would
+# otherwise fail the OBS importer tests on Windows.
+*.json text eol=lf
+*.toml text eol=lf
+*.md text eol=lf
+*.rs text eol=lf

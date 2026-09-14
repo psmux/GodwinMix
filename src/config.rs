@@ -689,7 +689,19 @@ impl SourceConfig {
     /// names the field and what it accepts, rather than failing at build time
     /// inside GStreamer.
     pub fn validate_params(&self) -> anyhow::Result<()> {
-        let provide = crate::plugin::source::resolve_config(self)?;
+        let provide = match crate::plugin::source::resolve_config(self) {
+            Ok(p) => p,
+            Err(e) if names_a_plugin(self.type_id.as_deref()) => {
+                // A type from a plugin this build does not carry is not a
+                // config error: the plugin loader supplies it, or the source
+                // is reported as needing that plugin when it is built. A
+                // preset written for a plugin must load on a core that has
+                // not installed it yet.
+                tracing::warn!(source = %self.id, "{e}; the source will need that plugin installed");
+                return Ok(());
+            }
+            Err(e) => return Err(e),
+        };
         let params = self.effective_params();
         match provide.manifest.plugin {
             "rtmp" => crate::plugin::kinds::rtmp::validate(&params),
@@ -701,6 +713,17 @@ impl SourceConfig {
             _ => Ok(()),
         }
     }
+}
+
+/// Whether a `type` names a plugin provide (`ndi/source`) rather than nothing
+/// at all. A bare word with no slash is a typo; a qualified id is a plugin
+/// this build may not carry, which the loader decides, not the parser.
+fn names_a_plugin(type_id: Option<&str>) -> bool {
+    type_id
+        .map(|t| t.trim())
+        .filter(|t| !t.is_empty())
+        .map(|t| t.contains('/'))
+        .unwrap_or(false)
 }
 
 /// Reconnect behaviour differs sharply between an RTMP server you own and a
@@ -944,8 +967,14 @@ impl Config {
                 .with_context(|| format!("source {}", s.id))?;
         }
         for o in &self.outputs {
-            let provide = crate::plugin::output::resolve_config(o)
-                .with_context(|| format!("output {}", o.id))?;
+            let provide = match crate::plugin::output::resolve_config(o) {
+                Ok(p) => p,
+                Err(e) if names_a_plugin(o.type_id.as_deref()) => {
+                    tracing::warn!(output = %o.id, "{e}; the output will need that plugin installed");
+                    continue;
+                }
+                Err(e) => return Err(e).with_context(|| format!("output {}", o.id)),
+            };
             let params = o.effective_params();
             let checked = match provide.manifest.plugin {
                 "rtmp" => crate::plugin::outputs::rtmp::validate(&params),

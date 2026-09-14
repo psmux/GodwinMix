@@ -1,0 +1,38 @@
+# The broadcast preset
+
+A contribution feed: SRT in and SRT out, hardware tally over TSL, a Companion surface, and nodes joined with mTLS.
+
+## What it gives you
+
+Two venues arriving over SRT and the studio camera over NDI, going out over SRT with an RTMP backup, with tally lights on the cameras and a Companion surface on the desk.
+
+## What you need
+
+The venues' encoders pointed at this machine's ports 9001 and 9002, an SRT address to deliver to, and a TSL tally device or Companion on the same network.
+
+## Three steps
+
+1. `gmx preset apply broadcast`.
+2. Open the two listener ports on the firewall, put your delivery address into the `[[outputs]]` block, and set a passphrase on each SRT source if the venues use one.
+3. `gmx`. The venues connect on their own as soon as their encoders start; `gmx ctl source list` says which have arrived.
+
+## When it does not work
+
+**A venue never connects.** Usually the port is not open, or the encoder is in listener mode too. One end calls and one end listens; these two listen.
+
+**The picture breaks up under load.** Usually SRT latency is too low for the link. Raise `latency_ms` to three times the round trip time and have the venue do the same.
+
+**Tally lights are on the wrong camera.** Usually the tally plugin maps source ids to addresses, and the ids here are `venue-a`, `venue-b` and `studio`. Check that map before the cameras.
+
+
+## What is in this directory
+
+| File | What it is |
+|---|---|
+| `gmx-plugin.toml` | the manifest: the plugins this preset needs, and where its config, layout and scenes are |
+| `config/godwinmix.toml` | the mixer's configuration, with every line you have to change near the top |
+| `config/layout.json` | which panels go in which slot of the web UI |
+| `scenes/` | the scene documents this preset uses, one file each |
+| `README.md` | this page |
+
+Copy this whole directory to make your own. `presets/README.md` says how.

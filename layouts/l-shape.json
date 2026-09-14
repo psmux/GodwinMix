@@ -1,0 +1,171 @@
+{
+  "schemaVersion": 1,
+  "id": "0199b000-0000-7026-8000-de5157ed0026",
+  "name": "l-shape",
+  "canvas": {
+    "width": 1920,
+    "height": 1080,
+    "fps": 30
+  },
+  "params": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "required": [
+      "a"
+    ],
+    "properties": {
+      "a": {
+        "type": "string",
+        "default": "",
+        "title": "Source",
+        "x-gmx-kind": "source"
+      },
+      "sidebar": {
+        "type": "string",
+        "default": "",
+        "title": "Side bar graphic",
+        "x-gmx-kind": "graphic"
+      },
+      "ticker": {
+        "type": "string",
+        "default": "",
+        "title": "Ticker graphic",
+        "x-gmx-kind": "graphic"
+      },
+      "headline": {
+        "type": "string",
+        "default": "",
+        "title": "Ticker text"
+      },
+      "side": {
+        "type": "number",
+        "default": 0.25,
+        "minimum": 0.1,
+        "maximum": 0.5,
+        "title": "Side bar width",
+        "description": "The side bar's width, as a fraction of the canvas."
+      },
+      "bar": {
+        "type": "number",
+        "default": 0.18,
+        "minimum": 0.05,
+        "maximum": 0.4,
+        "title": "Ticker height",
+        "description": "The ticker's height, as a fraction of the canvas."
+      }
+    }
+  },
+  "scenes": [
+    {
+      "id": "0199b000-0000-7027-8000-de5157ed0027",
+      "name": "L shape: source, side bar, ticker",
+      "items": [
+        {
+          "id": "0199b000-0000-7023-8000-de5157ed0023",
+          "name": "main",
+          "content": {
+            "source": "{{a}}"
+          },
+          "transform": {
+            "position": {
+              "x": 0,
+              "y": 0
+            },
+            "rotation": 0,
+            "scale": {
+              "x": 1,
+              "y": 1
+            },
+            "anchor": {
+              "x": 0,
+              "y": 0
+            },
+            "frame": {
+              "w": 0,
+              "h": 0
+            },
+            "fit": "cover",
+            "align": "center"
+          },
+          "bind": {
+            "position.x": "0",
+            "position.y": "0",
+            "frame.w": "W - side*W",
+            "frame.h": "H - bar*H"
+          }
+        },
+        {
+          "id": "0199b000-0000-7024-8000-de5157ed0024",
+          "name": "side bar",
+          "content": {
+            "graphic": "{{sidebar}}"
+          },
+          "transform": {
+            "position": {
+              "x": 0,
+              "y": 0
+            },
+            "rotation": 0,
+            "scale": {
+              "x": 1,
+              "y": 1
+            },
+            "anchor": {
+              "x": 0,
+              "y": 0
+            },
+            "frame": {
+              "w": 0,
+              "h": 0
+            },
+            "fit": "stretch",
+            "align": "center"
+          },
+          "bind": {
+            "position.x": "W - side*W",
+            "position.y": "0",
+            "frame.w": "side*W",
+            "frame.h": "H - bar*H"
+          }
+        },
+        {
+          "id": "0199b000-0000-7025-8000-de5157ed0025",
+          "name": "ticker",
+          "content": {
+            "graphic": "{{ticker}}",
+            "params": {
+              "text": "{{headline}}"
+            }
+          },
+          "transform": {
+            "position": {
+              "x": 0,
+              "y": 0
+            },
+            "rotation": 0,
+            "scale": {
+              "x": 1,
+              "y": 1
+            },
+            "anchor": {
+              "x": 0,
+              "y": 0
+            },
+            "frame": {
+              "w": 0,
+              "h": 0
+            },
+            "fit": "stretch",
+            "align": "center"
+          },
+          "bind": {
+            "position.x": "0",
+            "position.y": "H - bar*H",
+            "frame.w": "W",
+            "frame.h": "bar*H"
+          }
+        }
+      ]
+    }
+  ]
+}

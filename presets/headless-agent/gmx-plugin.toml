@@ -1,0 +1,22 @@
+[plugin]
+name = "headless-agent"
+version = "1.0.0"
+api = 1
+description = "No screen: the mixer runs on a server, an agent directs it over MCP, and the only surface is the API."
+license = "Apache-2.0"
+authors = ["The GodwinMix authors"]
+repository = "https://github.com/psmux/GodwinMix"
+platforms = ["linux-x86_64", "linux-aarch64", "macos-aarch64", "macos-x86_64", "windows-x86_64"]
+placements = ["core"]
+
+[[provides]]
+kind = "preset"
+id = "headless-agent"
+
+[provides.preset]
+plugins = ["browser@^1", "rtmp@^1", "director@^1"]
+config = "config/godwinmix.toml"
+layout = "config/layout.json"
+surface = "none"
+theme = "none"
+scenes = "scenes"

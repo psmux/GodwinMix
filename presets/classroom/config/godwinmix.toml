@@ -1,0 +1,63 @@
+# The classroom preset: a camera on the teacher, the teacher's screen beside
+# it, recorded to this machine and streamed to one address.
+
+[canvas]
+width = 1280
+height = 720
+fps = 25
+sample_rate = 48000
+channels = 2
+
+[program]
+# 720p25 is enough for a lesson and it runs on the laptop that is already in
+# the room.
+video_bitrate_kbps = 2500
+audio_bitrate_kbps = 128
+keyframe_interval_secs = 2
+audio_ramp_ms = 180
+
+[multiview]
+enabled = true
+width = 640
+height = 360
+fps = 5
+jpeg_quality = 55
+include_program = true
+
+[media]
+dir = "media"
+
+[control]
+bind = "127.0.0.1:8080"
+
+[hardware]
+decode = "auto"
+encode = "auto"
+
+[[sources]]
+id = "teacher"
+name = "Teacher"
+type = "camera/source"
+uri = "camera:///dev/video0"
+params = { device = "/dev/video0", width = 1280, height = 720 }
+
+[[sources]]
+id = "screen"
+name = "Screen"
+type = "screen/source"
+uri = "screen://0"
+params = { monitor = "0" }
+
+[[outputs]]
+id = "recording"
+type = "file-record/output"
+uri = "file:///var/lib/godwinmix/recordings/lesson.mkv"
+policy = "own"
+queue_secs = 2.0
+
+[[outputs]]
+id = "stream"
+type = "rtmp/output"
+uri = "rtmp://127.0.0.1:1935/live/lesson"
+policy = "own"
+queue_secs = 4.0
