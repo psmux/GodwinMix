@@ -2477,6 +2477,8 @@ mod tests {
             ..Default::default()
         };
         let mut spec = ExecSpec {
+            pipe_stdin: false,
+            cwd: None,
             argv: vec![
                 "godwinmix-browser".into(),
                 "--fps".into(),
@@ -2596,7 +2598,12 @@ mod tests {
         std::fs::create_dir_all(&tmp).unwrap();
         let mut env = std::collections::BTreeMap::new();
         env.insert("TMPDIR".to_string(), tmp.to_string_lossy().to_string());
-        let spec = ExecSpec { argv: shell_words::split("sh -c 'sleep 120'").unwrap(), env };
+        let spec = ExecSpec {
+            argv: shell_words::split("sh -c 'sleep 120'").unwrap(),
+            env,
+            pipe_stdin: false,
+            cwd: None,
+        };
 
         let (_src, child) = make_exec_source("drop-test", &spec).unwrap();
         let pid = child.child.as_ref().expect("a freshly built child holds its process").id();

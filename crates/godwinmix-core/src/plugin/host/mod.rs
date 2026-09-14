@@ -33,3 +33,45 @@ pub use process::{Notice, Sidecar};
 pub use service::{SidecarDevice, SidecarService};
 pub use source::{SidecarSource, SidecarSpec};
 pub use transport::MediaDir;
+
+use crate::plugin::source::{Source, SourceRequest};
+use anyhow::{Context, Result};
+
+/// Make a sidecar source for whatever `type` the config named.
+///
+/// The `make` half of every loaded provide's registry entry. It is a plain
+/// function pointer, the same shape a built in kind's is, because the thing it
+/// needs to tell one plugin from another is already on the request: the config
+/// carries the `type`, and the loader knows the rest.
+pub fn make_source(req: SourceRequest<'_>) -> Result<Box<dyn Source>> {
+    let type_id = match req.cfg.type_id.as_deref().filter(|t| !t.trim().is_empty()) {
+        Some(t) => t.trim().to_string(),
+        None => crate::plugin::loader::source_for_uri(&req.cfg.uri)
+            .map(|p| p.manifest.provide_id())
+            .with_context(|| {
+                format!("nothing installed opens `{}`; write `type` to say what it is", req.cfg.uri)
+            })?,
+    };
+    let instance = req.cfg.id.clone();
+    let launched = crate::plugin::loader::launch_for(
+        &type_id,
+        &instance,
+        crate::plugin::loader::mint_token(&type_id, &instance),
+        crate::plugin::loader::rpc_url(),
+    )?;
+    let manifest = crate::plugin::loader::source_provide(&type_id)
+        .map(|p| p.manifest)
+        .with_context(|| format!("`{type_id}` is not a loaded source provide"))?;
+    let spec = SidecarSpec {
+        plugin: launched.plugin,
+        provide: launched.provide,
+        manifest,
+        launch: launched.launch,
+        ctx: launched.ctx,
+        canvas: req.canvas.clone(),
+        runtime: crate::plugin::loader::runtime_dir(),
+    };
+    let mut build = req.ctx();
+    build.tier = crate::plugin::Tier::Sidecar;
+    Ok(Box::new(SidecarSource::new(spec, build)))
+}
