@@ -82,6 +82,7 @@ with a letter. It becomes the namespace of every id the plugin registers, so
 ```
 checking my-cam with Python 3.9.6
 compile                           ok
+stdout is media                   ok
 pyflakes                          skipped (pip install pyflakes)
 gmx-plugin.toml                   ok
 offline transcript                ok
@@ -220,6 +221,7 @@ Run the check and the handshake again:
 ```
 checking my-cam with Python 3.9.6
 compile                           ok
+stdout is media                   ok
 pyflakes                          skipped (pip install pyflakes)
 gmx-plugin.toml                   ok
 offline transcript                ok
@@ -262,6 +264,7 @@ Now run the check without `--quick`:
 ```
 checking my-cam with Python 3.9.6
 compile                           ok
+stdout is media                   ok
 pyflakes                          skipped (pip install pyflakes)
 gmx-plugin.toml                   ok
 offline transcript                ok
