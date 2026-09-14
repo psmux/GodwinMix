@@ -190,7 +190,8 @@ sum(rate(gmx_rpc_calls_total{code!~"2.."}[5m])) by (method, code)
 
 ## Adding one
 
-The registry is `src/observe/metrics.rs`, about three hundred lines including
+The registry is `crates/godwinmix-core/src/observe/metrics.rs`, about three
+hundred lines including
 its tests, with no metrics crate behind it. To add a metric, put it in the
 `DEFS` table with its type, help text and buckets, then take a handle where you
 need it:

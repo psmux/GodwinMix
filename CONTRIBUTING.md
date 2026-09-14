@@ -15,8 +15,8 @@ intend to do. It saves you writing code that goes the wrong way.
 ## Build
 
 GodwinMix is Rust on top of GStreamer. You need a Rust toolchain (the version
-in `rust-version` in `Cargo.toml` or newer) and GStreamer with its development
-headers.
+in `rust-version` in the root `Cargo.toml` or newer) and GStreamer with its
+development headers.
 
 ```sh
 brew install gstreamer                  # macOS
@@ -27,7 +27,30 @@ cargo build
 cargo build --release
 ```
 
-Two more crates live beside the mixer and are built separately:
+### The crates
+
+The repository is a Cargo workspace. `cargo build` at the root builds all of
+it; `cargo run -- --probe` still reaches the `godwinmix` binary.
+
+| Crate | What belongs there |
+|---|---|
+| `crates/godwinmix-protocol` | The wire contract: request, response, event and status types, error codes, scopes, the method table's descriptions, and the generators behind `protocol.json`, `protocol.md` and `openapi.json`. serde and schemars underneath it, nothing else. No GStreamer, no server. |
+| `crates/godwinmix-core` | The mixing engine as a library: the mixer thread, sources, outputs, the plugin traits and built in kinds, the catalogue, scenes, multiview, snapshots, and the instrumentation. No HTTP server, no MCP, no command line. `cargo add godwinmix-core` is meant to give somebody this and nothing else. |
+| `crates/godwinmix-host` | The tier 2 plugin host: manifest, handshake, transports, loader. Empty so far. |
+| `crates/godwinmix` | The binaries. The axum control plane, `/rpc`, `/api/v1`, the WebSocket layer, the method handlers, `gmx ctl`, the MCP server, the web UI, bench, and the clap definition. |
+
+[The crate map](docs/explanation/architecture.md) says what does not belong in
+each and where to put a new module. Two rules that catch most mistakes: if a
+module needs axum, clap or reqwest it is not engine code, and a `use` line
+names the crate that owns the item rather than a re-export through a nearer
+one.
+
+`codecs.toml`, `layouts/`, `presets/`, `schemas/` and `ui/` stay at the
+repository root and the crates reach out to them with a relative path.
+
+Two more crates live beside the mixer and are outside the workspace, because
+they have their own lockfiles and their own heavy dependency trees. They are
+built separately:
 
 * `browser/` is the web page sidecar. It links against CEF and needs the CEF
   distribution in place first (`browser/dev/install-cef-dist.sh`). Most changes
@@ -46,7 +69,7 @@ cargo run --release -- --config godwinmix.toml
 ## Test
 
 ```sh
-cargo test
+cargo test --workspace
 ```
 
 The tests build real GStreamer pipelines, so GStreamer has to be installed for
@@ -54,8 +77,8 @@ them to pass. They run in a few seconds and they are expected to be green on
 Linux, macOS and Windows before you open a pull request. The GitHub Actions
 workflow in `.github/workflows/build.yml` builds and tests on all three.
 
-Also run `cargo clippy --all-targets` and do not add a warning that was not
-there before. A handful are outstanding and they are noted as such.
+Also run `cargo clippy --workspace --all-targets` and do not add a warning that
+was not there before. A handful are outstanding and they are noted as such.
 
 The tree is not `cargo fmt` clean and running it would reformat most of the
 repository, so do not. Match the style of the file you are editing: wider lines
@@ -66,6 +89,10 @@ camera) for anything that needs a real RTMP endpoint. `dev/harness/up.sh`
 downloads mediamtx on first run, starts the RTMP server, a test page server and
 a mixer on a test config, and `dev/harness/down.sh` stops all of it. A
 `gmx harness up` that does the same thing without a shell script is planned.
+
+A change to the engine should also keep `cargo build -p godwinmix-core
+--example embed` working. That example is what `cargo add godwinmix-core` buys,
+and `crates/godwinmix-core/tests/embed.rs` runs it.
 
 A change to the mixing, the source lifecycle or the output path should come
 with a test that fails without it. A change that cannot be tested without

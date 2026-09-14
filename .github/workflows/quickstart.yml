@@ -28,7 +28,7 @@ on:
       - "deploy/docker/**"
       - ".github/workflows/quickstart.yml"
       - "README.md"
-      - "src/**"
+      - "crates/**"
       - "Cargo.*"
   workflow_dispatch:
   # Weekly, so a broken base image or a changed Debian package is found before

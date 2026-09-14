@@ -1,0 +1,42 @@
+[package]
+name = "godwinmix-core"
+description = "The GodwinMix mixing engine as a library: pipeline, sources, outputs, plugins and scenes, with no server and no CLI"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+godwinmix-protocol = { workspace = true }
+
+gstreamer = { workspace = true }
+gstreamer-video = { workspace = true }
+gstreamer-audio = { workspace = true }
+gstreamer-app = { workspace = true }
+gstreamer-pbutils = { workspace = true }
+glib = { workspace = true }
+
+tokio = { workspace = true, features = ["rt-multi-thread", "macros", "sync", "signal", "time", "io-std", "io-util", "fs"] }
+
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
+toml = { workspace = true }
+schemars = { workspace = true }
+
+anyhow = { workspace = true }
+tracing = { workspace = true }
+# No `env-filter`: `observe::logs` reads RUST_LOG itself, into the same
+# level tables `log.set` moves at runtime, so the feature was carrying a
+# regex engine that nothing called.
+tracing-subscriber = { workspace = true }
+parking_lot = { workspace = true }
+shell-words = { workspace = true }
+libc = { workspace = true }
+image = { workspace = true }
+getrandom = { workspace = true }
+
+[dev-dependencies]
+# Paused time, so the multiview linger tests assert on two seconds without
+# waiting two seconds. Test only: the shipped binary does not carry it.
+tokio = { workspace = true, features = ["test-util", "macros", "rt-multi-thread"] }

@@ -81,7 +81,26 @@ jobs:
       # appears in the committed schema runs here, so a schema change without a
       # regenerated protocol.json fails this job on every platform.
       - name: Test
-        run: cargo test --release --locked
+        run: cargo test --release --locked --workspace
+
+      # `cargo add godwinmix-core` has to give somebody the engine inside their
+      # own program, so the example that shows it is built here. The test that
+      # runs it is in the line above; this catches a missing dependency rather
+      # than a missing behaviour.
+      - name: The embedding example builds
+        run: cargo build --release --locked -p godwinmix-core --example embed
+
+      # The layering, checked rather than asserted in a document: the engine
+      # carries no HTTP server, and the protocol carries no media stack. A
+      # module put in the wrong crate fails here.
+      - name: The crates stay in their layers
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          test "$(cargo tree -p godwinmix-core -e normal | grep -c axum)" = 0 \
+            || { echo "godwinmix-core has grown an axum dependency" >&2; exit 1; }
+          test "$(cargo tree -p godwinmix-protocol -e normal | grep -c gstreamer)" = 0 \
+            || { echo "godwinmix-protocol has grown a GStreamer dependency" >&2; exit 1; }
 
       # A second belt on the same trousers, and the one that names the problem
       # in the log rather than in a test assertion. Only where the file exists,
@@ -167,7 +186,7 @@ jobs:
           # rasteriser is what a five year old laptop without drivers gets too.
           LIBGL_ALWAYS_SOFTWARE: 1
           GST_GL_DISABLED: 1
-        run: cargo test --locked
+        run: cargo test --locked --workspace
 
       - name: What the probe picked
         run: |
@@ -250,4 +269,4 @@ jobs:
       # Not -D warnings: a handful are outstanding and are noted as such in
       # CONTRIBUTING.md. This job exists so the count is visible in the log and
       # a reviewer can see a new one arrive.
-      - run: cargo clippy --all-targets --locked
+      - run: cargo clippy --workspace --all-targets --locked

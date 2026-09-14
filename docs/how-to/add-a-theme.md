@@ -13,7 +13,8 @@ preprocessor and no JavaScript in it. Copy a file, change some colours, done.
    { id: "midnight", title: "Midnight", href: "themes/midnight.css" },
    ```
 
-4. Add the file to the `ASSETS` table in `src/ui.rs` so it ships in the binary.
+4. Add the file to the `ASSETS` table in `crates/godwinmix/src/ui.rs` so it
+   ships in the binary.
 
 Reload. It is in the theme picker under Settings, and the choice is remembered
 per device.
