@@ -2728,6 +2728,16 @@ impl Mixer {
             .map(|t| (t.window.0.nseconds(), t.window.1.nseconds()))
     }
 
+    /// The canvas this mixer was built for.
+    pub fn canvas(&self) -> &CanvasCaps {
+        &self.canvas
+    }
+
+    /// The slot pool, for a test that has to read what is on the pads.
+    pub fn pool_for_tests(&self) -> &SlotPool {
+        &self.pool
+    }
+
     /// The transition id of the take on air. `event/program.took` carries the
     /// same number.
     pub fn transition_id(&self) -> u64 {

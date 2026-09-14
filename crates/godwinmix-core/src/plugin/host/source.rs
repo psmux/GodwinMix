@@ -237,9 +237,37 @@ impl SidecarSource {
                     crate::probe::set_int(&src, "blocksize", 4 * 1024 * 1024);
                 }
                 let decode = transport::decoder(&id)?;
+                // A hardware decoder may hand out frames in device memory, and
+                // the normaliser wants them in system memory. `decodebin`
+                // usually inserts the download itself, and on macOS with an FLV
+                // it does not: it autoplugs `vtdec_hw`, which negotiates GL
+                // memory against the normaliser and then never produces a
+                // frame. Measured with gst-launch alone, so it is the elements
+                // and not the core. Matroska and MPEG-TS are unaffected, which
+                // is why this was invisible until a plugin wrote FLV.
+                //
+                // The built in `rtmp/source` has always put one here for the
+                // same reason. Absent is not fatal: caps negotiation inserts
+                // one for the containers it can.
+                let download = match self.build.backends.video_decode.download {
+                    Some(f) if crate::probe::exists(f) => {
+                        Some(crate::gstutil::make(f, &format!("{id}-vdl"))?)
+                    }
+                    Some(f) => {
+                        debug!(
+                            source = %id,
+                            element = f,
+                            "no download element on this machine; relying on caps negotiation"
+                        );
+                        None
+                    }
+                    None => None,
+                };
+                let mut elements = vec![src.clone(), decode.clone()];
+                elements.extend(download.clone());
                 Ok((
-                    Ingest::default().with([src.clone(), decode.clone()]).livesync(false),
-                    Wire::Container { src, decode },
+                    Ingest::default().with(elements).livesync(false),
+                    Wire::Container { src, decode, download },
                 ))
             }
             socket => {
@@ -266,7 +294,7 @@ impl SidecarSource {
 
 /// What has to be linked once everything is in one pipeline.
 enum Wire {
-    Container { src: gst::Element, decode: gst::Element },
+    Container { src: gst::Element, decode: gst::Element, download: Option<gst::Element> },
     Socket { video: Vec<gst::Element>, audio: Option<Vec<gst::Element>> },
 }
 
@@ -294,9 +322,16 @@ impl Source for SidecarSource {
         let id = self.build.id.clone();
         let (ingest, wire) = self.ingest()?;
         let ends = assemble(&self.build, thumb, ingest, |w: &Wiring| match &wire {
-            Wire::Container { src, decode } => {
+            Wire::Container { src, decode, download } => {
                 gst::Element::link(src, decode).context("linking the plugin's pipe to decodebin")?;
-                w.route(decode, w.norm.video_entry(), w.norm.audio_entry());
+                match download {
+                    Some(d) => {
+                        gst::Element::link(d, &w.norm.video_entry())
+                            .context("linking the download to the normaliser")?;
+                        w.route(decode, d.clone(), w.norm.audio_entry());
+                    }
+                    None => w.route(decode, w.norm.video_entry(), w.norm.audio_entry()),
+                }
                 Ok(KindParts::default())
             }
             Wire::Socket { video, audio } => {
