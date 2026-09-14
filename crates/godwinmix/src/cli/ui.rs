@@ -293,7 +293,7 @@ fn list(json: bool) -> Result<()> {
     }
 
     let width = surfaces.iter().map(|s| s.name.len()).max().unwrap_or(4).max(4);
-    println!("  {:<width$}  {:<5} {}", "NAME", "API", "COMMAND", width = width);
+    println!("  {:<width$}  {:<5} COMMAND", "NAME", "API", width = width);
     for surface in &surfaces {
         let command = match &surface.found {
             Ok(path) => path.display().to_string(),
@@ -309,7 +309,7 @@ fn list(json: bool) -> Result<()> {
             width = width
         );
         if !surface.description.is_empty() {
-            println!("  {:<width$}  {:<5} {}", "", "", surface.description, width = width);
+            println!("  {:<width$}  {:<5} {}", " ", " ", surface.description, width = width);
         }
     }
     match chose {
