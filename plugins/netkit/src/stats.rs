@@ -120,31 +120,81 @@ pub mod srt {
     pub const BANDWIDTH_MBPS: &[&str] = &["bandwidth-mbps", "mbpsBandwidth"];
 }
 
-/// The SRT numbers a `health` answer carries, as JSON, with the fields that
-/// this build does not publish left out rather than reported as zero.
-pub fn srt_health_detail(element: &gstreamer::Element) -> Option<serde_json::Value> {
-    let top = of(element)?;
-    let level = srt_level(&top, srt::MOVING).unwrap_or(top);
-    let mut out = serde_json::Map::new();
-    if let Some(v) = first_float(level.as_ref(), srt::RTT_MS) {
-        out.insert("rtt_ms".into(), round1(v).into());
+/// The SRT numbers a person actually wants, with the fields this build does
+/// not publish left absent rather than reported as zero.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct SrtNumbers {
+    pub rtt_ms: Option<f64>,
+    pub packets_lost: Option<i64>,
+    pub packets_retransmitted: Option<i64>,
+    pub bandwidth_mbps: Option<f64>,
+    pub negotiated_latency_ms: Option<i64>,
+    /// Anything that proves bytes are moving. Zero means nobody is there yet.
+    pub moving: i64,
+}
+
+impl SrtNumbers {
+    /// Read them off an `srtsrc` or `srtsink`, following a listener's `callers`
+    /// list down to the peer that has the numbers.
+    pub fn read(element: &gstreamer::Element) -> Option<SrtNumbers> {
+        let top = of(element)?;
+        let level = srt_level(&top, srt::MOVING).unwrap_or(top);
+        let s = level.as_ref();
+        Some(SrtNumbers {
+            rtt_ms: first_float(s, srt::RTT_MS).map(round1),
+            packets_lost: first_number(s, srt::LOST),
+            packets_retransmitted: first_number(s, srt::RETRANSMITTED),
+            bandwidth_mbps: first_float(s, srt::BANDWIDTH_MBPS).map(round1),
+            negotiated_latency_ms: first_number(s, srt::NEGOTIATED_LATENCY_MS),
+            moving: first_number(s, srt::MOVING).unwrap_or(0),
+        })
     }
-    if let Some(v) = first_number(level.as_ref(), srt::LOST) {
-        out.insert("packets_lost".into(), v.into());
+
+    /// One line for a `health` detail. Only the numbers this build publishes.
+    pub fn phrase(&self) -> String {
+        let mut parts: Vec<String> = Vec::new();
+        if let Some(v) = self.rtt_ms {
+            parts.push(format!("rtt {v} ms"));
+        }
+        if let Some(v) = self.packets_lost {
+            parts.push(format!("{v} lost"));
+        }
+        if let Some(v) = self.packets_retransmitted {
+            parts.push(format!("{v} retransmitted"));
+        }
+        if let Some(v) = self.bandwidth_mbps {
+            parts.push(format!("{v} Mbit/s link"));
+        }
+        if let Some(v) = self.negotiated_latency_ms {
+            parts.push(format!("{v} ms negotiated"));
+        }
+        if parts.is_empty() {
+            return "this build of srtsrc publishes no statistics".into();
+        }
+        parts.join(", ")
     }
-    if let Some(v) = first_number(level.as_ref(), srt::RETRANSMITTED) {
-        out.insert("packets_retransmitted".into(), v.into());
+
+    /// The same numbers as JSON, for a `stats` call.
+    pub fn json(&self) -> serde_json::Value {
+        let mut out = serde_json::Map::new();
+        if let Some(v) = self.rtt_ms {
+            out.insert("rtt_ms".into(), v.into());
+        }
+        if let Some(v) = self.packets_lost {
+            out.insert("packets_lost".into(), v.into());
+        }
+        if let Some(v) = self.packets_retransmitted {
+            out.insert("packets_retransmitted".into(), v.into());
+        }
+        if let Some(v) = self.bandwidth_mbps {
+            out.insert("bandwidth_mbps".into(), v.into());
+        }
+        if let Some(v) = self.negotiated_latency_ms {
+            out.insert("negotiated_latency_ms".into(), v.into());
+        }
+        out.insert("moving".into(), self.moving.into());
+        serde_json::Value::Object(out)
     }
-    if let Some(v) = first_float(level.as_ref(), srt::BANDWIDTH_MBPS) {
-        out.insert("bandwidth_mbps".into(), round1(v).into());
-    }
-    if let Some(v) = first_number(level.as_ref(), srt::NEGOTIATED_LATENCY_MS) {
-        out.insert("negotiated_latency_ms".into(), v.into());
-    }
-    if out.is_empty() {
-        return None;
-    }
-    Some(serde_json::Value::Object(out))
 }
 
 fn round1(v: f64) -> f64 {
@@ -203,5 +253,42 @@ mod tests {
         crate::init().expect("gstreamer");
         let top = Structure::builder("application/x-srt-statistics").build();
         assert!(srt_level(&top, srt::MOVING).is_none());
+    }
+
+    #[test]
+    fn an_element_with_no_stats_property_yields_nothing() {
+        crate::init().expect("gstreamer");
+        let filter = gstreamer::ElementFactory::make("capsfilter").build().expect("capsfilter");
+        assert!(of(&filter).is_none());
+        assert!(SrtNumbers::read(&filter).is_none());
+    }
+
+    #[test]
+    fn an_element_whose_stats_are_not_srt_reports_no_srt_numbers() {
+        crate::init().expect("gstreamer");
+        // GstBaseSink publishes its own `stats` structure, which carries none
+        // of the SRT field names. Reading it must yield an empty answer rather
+        // than a wrong one.
+        let sink = gstreamer::ElementFactory::make("fakesink").build().expect("fakesink");
+        let numbers = SrtNumbers::read(&sink).expect("fakesink has a stats property");
+        assert_eq!(numbers.moving, 0);
+        assert_eq!(numbers.rtt_ms, None);
+        assert!(numbers.phrase().contains("no statistics"));
+    }
+
+    #[test]
+    fn a_phrase_names_only_the_numbers_that_are_there() {
+        let n = SrtNumbers { rtt_ms: Some(12.5), packets_lost: Some(3), ..Default::default() };
+        let phrase = n.phrase();
+        assert!(phrase.contains("rtt 12.5 ms"), "{phrase}");
+        assert!(phrase.contains("3 lost"), "{phrase}");
+        assert!(!phrase.contains("retransmitted"), "{phrase}");
+        assert_eq!(n.json()["rtt_ms"], 12.5);
+        assert_eq!(n.json()["moving"], 0);
+    }
+
+    #[test]
+    fn a_build_with_no_statistics_at_all_says_so_rather_than_reporting_zeros() {
+        assert!(SrtNumbers::default().phrase().contains("no statistics"));
     }
 }
