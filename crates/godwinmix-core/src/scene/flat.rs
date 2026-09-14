@@ -36,6 +36,8 @@ pub struct FlatDocument {
     pub transitions: Vec<Transition>,
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub assets: BTreeMap<Id, Asset>,
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub sources: BTreeMap<String, SourceMeta>,
     /// Scenes and items together, in no particular order: `order` decides.
     pub records: Vec<Record>,
 }
@@ -135,6 +137,7 @@ impl Collection {
             params: self.params.clone(),
             transitions: self.transitions.clone(),
             assets: self.assets.clone(),
+            sources: self.sources.clone(),
             records,
         }
     }
@@ -252,6 +255,7 @@ impl FlatDocument {
             scenes,
             transitions: self.transitions.clone(),
             assets: self.assets.clone(),
+            sources: self.sources.clone(),
         };
         doc.check_refs()?;
         Ok(doc)

@@ -44,6 +44,28 @@ pub struct Collection {
     /// scene bundle ships a relink wizard.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub assets: BTreeMap<Id, Asset>,
+    /// What this collection calls the sources it refers to: a name, a colour
+    /// and a tray folder each (11 section 6b). Not a source list, which the
+    /// mixer owns; a place for the labels every client, the tally, the Stream
+    /// Deck and an agent have to agree on.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub sources: BTreeMap<String, SourceMeta>,
+}
+
+/// A source's name, colour and tray folder, as this collection has them.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct SourceMeta {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+    /// Free text so a client can use whatever it draws with. Absent means the
+    /// client picks one by kind.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub color: Option<String>,
+    /// A tray folder: a tag on the source, purely for finding things. Not a
+    /// scene group, which is a thing on the canvas.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub group: Option<String>,
 }
 
 /// An empty but valid params block.
@@ -493,6 +515,7 @@ impl Collection {
             scenes: Vec::new(),
             transitions: Vec::new(),
             assets: BTreeMap::new(),
+            sources: BTreeMap::new(),
         }
     }
 
