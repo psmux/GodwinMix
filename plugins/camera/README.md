@@ -21,7 +21,7 @@ It captures picture only. Sound from a camera is a separate source: see
 ```sh
 ./plugins/camera/build                     # stage the binary
 gmx plugin add ./plugins/camera            # install it
-gmx ctl source add cam1 camera/source      # a live camera called cam1
+gmx ctl source add cam1 --type camera/source      # a live camera called cam1
 ```
 
 `gmx ctl status` shows `cam1` going live. `gmx take cam1` puts it on the
@@ -29,8 +29,11 @@ programme.
 
 To pick a particular camera, ask the machine what it has first:
 
-```sh
-gmx ctl source add cam1 camera/source --set device=/dev/video0
+```toml
+[[sources]]
+id = "cam1"
+type = "camera/source"
+params = { device = "/dev/video0" }
 ```
 
 The ids come from the `list_cameras` tool, which an agent can call and which
@@ -73,8 +76,11 @@ including Windows. The core chooses; you do not have to.
 A webcam with a microphone in it shows up twice: once as a camera and once as a
 sound input. This plugin is the camera. For the microphone, add a second source:
 
-```sh
-gmx ctl source add cam1mic audio-device/source --set device="HD Pro Webcam C920"
+```toml
+[[sources]]
+id = "cam1mic"
+type = "audio-device/source"
+params = { device = "HD Pro Webcam C920" }
 ```
 
 They are separate on purpose. It is what lets you take the picture from the
