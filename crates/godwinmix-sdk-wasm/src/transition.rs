@@ -7,6 +7,8 @@
 //! nothing at all.
 
 use crate::Hello;
+#[allow(unused_imports)]
+use crate::{Configured, Health};
 use serde_json::Value;
 
 /// What `render` answers with.
@@ -49,6 +51,20 @@ pub trait Transition: Sized {
 
     /// `request` is `{from, to, progress, running_time_ns, duration_ms}`.
     fn render(&mut self, request: &Value) -> Result<Answer, String>;
+
+    /// New params, the whole validated object. The default takes them and
+    /// does nothing, which is right for a transition that reads its settings
+    /// off the request each time.
+    fn configure(&mut self, _params: &Value) -> Result<crate::Configured, String> {
+        Ok(crate::Configured::applied())
+    }
+
+    /// How it is. The default is well.
+    fn health(&mut self) -> crate::Health {
+        crate::Health::default()
+    }
+
+    fn shutdown(&mut self, _reason: &str) {}
 }
 
 /// Export a [`Transition`] as a component.

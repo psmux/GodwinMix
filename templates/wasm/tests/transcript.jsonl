@@ -1,0 +1,16 @@
+# One recorded conversation with the core, replayed through the component in
+# this process: no core, no sockets, no clock.
+#
+#   gmx plugin test --offline .
+#
+# `core` lines are calls into the component; `plugin` lines are what it must
+# answer, matched as a subset of the real answer. "*" matches any value.
+#
+# `initialize` does not appear: a component hand shakes when it is loaded, not
+# over a pipe, so the replay does it before the first line here.
+{"core": {"jsonrpc": "2.0", "id": 1, "method": "health", "params": {}}}
+{"plugin": {"jsonrpc": "2.0", "id": 1, "result": {"state": "ok"}}}
+{"core": {"jsonrpc": "2.0", "id": 2, "method": "configure", "params": {"params": {"example_ms": 250}}}}
+{"plugin": {"jsonrpc": "2.0", "id": 2, "result": {"applied": true}}}
+{"core": {"jsonrpc": "2.0", "id": 3, "method": "hook", "params": {"hook": "take.before", "payload": {"source": "cam1"}}}}
+{"plugin": {"jsonrpc": "2.0", "id": 3, "result": {"allow": true}}}

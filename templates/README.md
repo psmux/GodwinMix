@@ -73,3 +73,12 @@ than failed, because Go is not installed everywhere and neither is cargo.
 
 The details are in [docs/reference/plugin-protocol.md](../docs/reference/plugin-protocol.md)
 and [docs/reference/plugin-manifest.md](../docs/reference/plugin-manifest.md).
+
+## wasm
+
+`gmx plugin new <name> --lang wasm` writes a tier W plugin: a WebAssembly
+component that runs inside the core, sandboxed, with no media. Its `check`
+script builds for `wasm32-wasip2` and copies the component to `plugin.wasm`,
+which is the file `[run] wasm` names. `--kind` defaults to `service` there,
+because a component carries no media and a `source` at that placement is
+refused with -32005.

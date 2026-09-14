@@ -106,6 +106,21 @@ macro_rules! __stub_transition {
                     "this component is a service and answers no `render`".to_string(),
                 ))
             }
+
+            fn configure(
+                _params_json: String,
+            ) -> Result<
+                $crate::bindings::godwinmix::plugin::types::Configured,
+                $crate::bindings::godwinmix::plugin::types::Error,
+            > {
+                Ok($crate::wire::configured(&$crate::Configured::applied()))
+            }
+
+            fn health() -> $crate::bindings::godwinmix::plugin::types::HealthReport {
+                $crate::wire::health(&$crate::Health::default())
+            }
+
+            fn shutdown(_reason: String) {}
         }
     };
 }
@@ -287,6 +302,37 @@ macro_rules! __glue {
                         Err(why) => Err($crate::wire::error(-32001, why)),
                     }
                 })
+            }
+
+            fn configure(
+                params_json: String,
+            ) -> Result<
+                $crate::bindings::godwinmix::plugin::types::Configured,
+                $crate::bindings::godwinmix::plugin::types::Error,
+            > {
+                let params = $crate::wire::json(&params_json);
+                $crate::__with!(|state: &mut $t| {
+                    match $crate::Transition::configure(state, &params) {
+                        Ok(c) => Ok($crate::wire::configured(&c)),
+                        Err(why) => Err($crate::wire::error(-32602, why)),
+                    }
+                })
+            }
+
+            fn health() -> $crate::bindings::godwinmix::plugin::types::HealthReport {
+                $crate::__with_or!(
+                    |state: &mut $t| $crate::wire::health(&$crate::Transition::health(state)),
+                    $crate::wire::health(&$crate::Health::degraded(
+                        "the plugin has not finished its handshake"
+                    ))
+                )
+            }
+
+            fn shutdown(reason: String) {
+                let _ = $crate::__with!(|state: &mut $t| {
+                    $crate::Transition::shutdown(state, &reason);
+                    Ok::<(), $crate::bindings::godwinmix::plugin::types::Error>(())
+                });
             }
         }
 

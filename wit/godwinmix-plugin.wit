@@ -180,7 +180,7 @@ interface service {
 
 /// The `transition` kind: the logic of a wipe, never its pixels.
 interface transition {
-    use types.{hello, ready, error};
+    use types.{hello, ready, health-report, configured, error};
 
     /// What `render` answers with.
     ///
@@ -202,6 +202,15 @@ interface transition {
     /// "running_time_ns": ..., "duration_ms": ...}`, the stdio `render`
     /// params unchanged.
     render: func(request-json: string) -> result<answer, error>;
+
+    /// The same three every kind answers (03 section 6): a transition is
+    /// configured, asked how it is, and told when the core is going away,
+    /// exactly as a service is.
+    configure: func(params-json: string) -> result<configured, error>;
+
+    health: func() -> health-report;
+
+    shutdown: func(reason: string);
 }
 
 /// A plugin that provides a `service` (and therefore tools and hooks).

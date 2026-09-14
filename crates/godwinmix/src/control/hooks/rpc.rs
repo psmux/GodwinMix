@@ -55,6 +55,12 @@ pub struct Sidecars {
 impl Sidecars {
     /// Call one hook on a plugin, starting the plugin if this is the first.
     pub async fn call(&self, plugin: &str, hook: &Hook, body: Value) -> anyhow::Result<Decision> {
+        // Tier W first. A component is already running as the supervisor's
+        // singleton, so the hook goes to that one instance rather than
+        // starting a second copy of the plugin the way the process path does.
+        if let Some(component) = godwinmix_core::plugin::wasm::live(plugin) {
+            return component_hook(component, hook, body).await;
+        }
         let child = self.get_or_start(plugin).await?;
         let within = hook.timeout;
         let event = hook.event.clone();
@@ -96,6 +102,30 @@ impl Sidecars {
         let child = Arc::new(Mutex::new(started));
         live.insert(plugin.to_string(), child.clone());
         Ok(child)
+    }
+}
+
+/// One hook on a tier W plugin.
+///
+/// Off the Tokio thread, the same as the process path and for the same
+/// reason: a component call blocks on a channel until its own deadline, and
+/// `take.before` has to be able to abandon it and let the take through.
+async fn component_hook(
+    component: Arc<dyn godwinmix_core::plugin::wasm::Instance>,
+    hook: &Hook,
+    body: Value,
+) -> anyhow::Result<Decision> {
+    let within = hook.timeout;
+    let event = hook.event.clone();
+    let answer = tokio::task::spawn_blocking(move || {
+        component.call_within(super::rpc::METHOD, body, within)
+    })
+    .await
+    .context("the hook call was dropped")?;
+    match answer {
+        Ok(value) if blocks(&event) => Ok(Decision::parse(&value)),
+        Ok(_) => Ok(Decision::Allow),
+        Err(e) => Err(e),
     }
 }
 

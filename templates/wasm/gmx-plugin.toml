@@ -1,0 +1,30 @@
+[plugin]
+name = "{{name}}"
+version = "0.1.0"
+api = 1
+description = "{{description}}"
+license = "{{license}}"
+authors = ["{{author}}"]
+# A component is the same bytes on every machine, so every platform is listed
+# and none of them has a binary.
+platforms = ["linux-x86_64", "linux-aarch64", "macos-aarch64", "macos-x86_64", "windows-x86_64"]
+placements = ["wasm"]
+process = "singleton"
+
+# Uncomment to ask for WASI. The operator has to allow it too, with
+# `[plugins] allow_wasi = ["{{name}}"]`; without both you get neither.
+# wasi = ["filesystem"]
+
+[run]
+wasm = "plugin.wasm"
+
+[[provides]]
+kind = "{{kind}}"
+id = "{{kind}}"
+settings = "schemas/settings.json"
+skill = "skills/{{kind}}/SKILL.md"
+
+# A service may ask to be called on any of the hooks in 03 section 8. Only
+# `take.before` can change a decision; the rest observe.
+[hooks]
+"take.before" = { mode = "rpc", timeout_ms = 20 }

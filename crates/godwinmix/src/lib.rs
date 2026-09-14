@@ -412,6 +412,13 @@ fn local_info(config: &std::path::Path) -> String {
 pub async fn run() -> Result<()> {
     let args = Args::parse();
 
+    // Tier W, before anything else. Registered here rather than beside the
+    // supervisor because `gmx plugin test`, `gmx plugin new` and `gmx doctor`
+    // all want to know whether this build carries a WebAssembly host, and
+    // none of them starts a mixer.
+    #[cfg(feature = "wasm")]
+    godwinmix_wasm::install();
+
     core_observe::introspect::begin();
     // Every log line goes to stderr, which keeps stdout clean for the things
     // that are meant to be piped: MCP's protocol, and `gmx dot | dot -Tsvg`.
@@ -585,6 +592,12 @@ pub async fn run() -> Result<()> {
     // The supervisor is built here, before the mixer, because the transition
     // renderer has to be installed on the mixer at build time and because
     // `plugin.add` later needs something to hand a new plugin to.
+    // What the operator allowed a component, read once. The runner itself was
+    // registered at the top of `run`, because the CLI wants it too.
+    godwinmix_core::plugin::wasm::set_config(
+        cfg.plugins.settings.clone(),
+        cfg.plugins.allow_wasi.clone(),
+    );
     let supervisor = godwinmix_core::plugin::supervisor::Supervisor::new(
         godwinmix_core::caps::CanvasCaps::new(&cfg.canvas),
         cfg.plugins.settings.clone(),
