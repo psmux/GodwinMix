@@ -206,3 +206,39 @@ fn a_component_file_that_is_not_one_is_refused_with_the_build_line() {
     let said = format!("{e:#}");
     assert!(said.contains("wasm32-wasip2"), "the message must name the build target: {said}");
 }
+
+#[test]
+fn a_component_that_trapped_says_what_it_can_do_next_rather_than_answering_oddly() {
+    // What happens to the store after a trap decides how the supervisor has to
+    // treat one. If the next call works, a cut is a cut and nothing else needs
+    // doing; if it does not, the instance is spent and has to be said to be.
+    let mut spec = spec(
+        "min-hold",
+        "hold",
+        ProvideKind::Service,
+        "plugins/min-hold",
+        json!({ "min_hold_ms": 8000 }),
+    );
+    spec.grant.fuel_per_call = 1_000;
+    let hold = Component::start(spec).expect("it loads");
+    let first = hold.call("hook", take_before()).expect_err("out of fuel");
+    let second = hold.call("health", json!({}));
+    println!("after a trap: {second:?}");
+    assert!(
+        format!("{first:#}").contains("fuel") || format!("{first:#}").contains("trap"),
+        "{first:#}"
+    );
+    // wasmtime marks a trapped component instance unusable, so the honest
+    // answer is that the instance is spent and something will build another.
+    // Anything else here would mean an operator reading "cannot enter
+    // component instance" for the rest of the show.
+    let Err(e) = second else { panic!("a trapped component cannot be entered again") };
+    let said = format!("{e:#}");
+    assert!(said.contains("trapped"), "the error must say what happened: {said}");
+    assert!(said.contains("fresh one"), "and what happens next: {said}");
+    assert_eq!(
+        hold.state(),
+        godwinmix_protocol::plugin::wire::InstanceState::Failed,
+        "a spent instance reads failed, which is what the supervisor restarts"
+    );
+}

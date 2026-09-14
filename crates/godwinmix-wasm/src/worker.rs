@@ -11,7 +11,7 @@ use crate::instance::{self, Handshake, Job};
 use anyhow::{Context, Result};
 use godwinmix_core::plugin::wasm::Spec;
 use serde_json::{json, Value};
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::mpsc;
 use std::sync::Arc;
 use std::time::Duration;
@@ -110,6 +110,7 @@ pub(crate) fn run(
     inbox: mpsc::Receiver<Job>,
     ready: mpsc::Sender<Result<Handshake>>,
     memory: Arc<AtomicU64>,
+    spent: Arc<AtomicBool>,
 ) {
     let name = spec.instance.clone();
     let fuel = spec.grant.fuel_per_call;
@@ -120,7 +121,7 @@ pub(crate) fn run(
                 // Nobody is waiting: the caller gave up while we compiled.
                 return;
             }
-            serve(&name, &mut store, &exports, inbox, fuel, deadline, &memory);
+            serve(&name, &mut store, &exports, inbox, fuel, deadline, &memory, &spent);
         }
         Err(e) => {
             let _ = ready.send(Err(e));
@@ -259,7 +260,19 @@ fn hello_of(spec: &Spec) -> bindings::types::Hello {
     }
 }
 
-/// Answer jobs until the channel closes or a shutdown arrives.
+/// Whether an error is the runtime cutting the component off, rather than the
+/// component answering with one.
+///
+/// A trap is fuel, an epoch deadline, a refused allocation, an unreachable, or
+/// any of the other ways wasm stops. All of them leave the instance unable to
+/// be entered again. An error the plugin itself returned is an ordinary value
+/// and leaves it perfectly well.
+fn is_trap(e: &anyhow::Error) -> bool {
+    e.downcast_ref::<wasmtime::Trap>().is_some()
+}
+
+/// Answer jobs until the channel closes, a shutdown arrives, or the component
+/// traps and cannot be entered again.
 fn serve(
     name: &str,
     store: &mut Store<Ctx>,
@@ -268,6 +281,7 @@ fn serve(
     fuel: u64,
     deadline: Duration,
     memory: &Arc<AtomicU64>,
+    spent: &Arc<AtomicBool>,
 ) {
     while let Ok(job) = inbox.recv() {
         match job {
@@ -296,7 +310,23 @@ fn serve(
                 store.set_epoch_deadline(budget.as_millis() as u64);
                 let answer = dispatch(store, exports, &method, params);
                 memory.store(used(store), Ordering::Relaxed);
+                let trapped = answer.as_ref().err().is_some_and(is_trap);
                 let _ = reply.send(answer.with_context(|| format!("`{method}` on `{name}`")));
+                if trapped {
+                    // A component that traps cannot be entered again: the next
+                    // call would answer "cannot enter component instance",
+                    // which is a worse error than the one that caused it. So
+                    // the worker ends here, the instance reads `failed`, and
+                    // the supervisor builds a fresh one on its next pass. The
+                    // store is dropped with the thread, which is the whole of
+                    // the cleanup a component needs.
+                    spent.store(true, Ordering::Relaxed);
+                    tracing::warn!(
+                        instance = %name, %method,
+                        "a component trapped and is spent; it will be started again"
+                    );
+                    return;
+                }
             }
         }
     }
