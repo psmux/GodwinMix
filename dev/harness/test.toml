@@ -42,8 +42,10 @@ uri = "rtmp://127.0.0.1:1935/live/cam1"
 id = "primary"
 uri = "rtmp://127.0.0.1:1935/live/program"
 
-# web+ sources render in the containerised sidecar (the CEF build with H.264
-# and AAC); the native .app next to the mixer is the codec-less official CEF.
-[browser]
-sidecar = "/home/dev/workspace/GodwinMix/browser/dev/sidecar-docker.sh"
-env = { DOCKER_HOST = "unix:///home/dev/.colima/default/docker.sock", GMX_SIDECAR_LOG = "/home/dev/workspace/GodwinMix/dev/harness/logs/sidecar.log" }
+# No sidecar path, so `web+` looks next to the binary and then on PATH, and
+# falls back to wpesrc when it finds neither. Point it at your own build if you
+# have one; do not commit a path from your machine back into this file.
+#
+# [browser]
+# sidecar = "../../browser/dev/sidecar-docker.sh"
+# env = { GMX_SIDECAR_LOG = "logs/sidecar.log" }
