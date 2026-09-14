@@ -874,6 +874,41 @@ impl Config {
             "multiview.jpeg_quality must be between 1 and 100"
         );
         anyhow::ensure!(self.multiview.fps > 0, "multiview.fps must be positive");
+        // Per kind validation of `params`. A bad param names the field and the
+        // values it accepts, at startup, rather than failing somewhere inside
+        // GStreamer once the show has begun.
+        for s in &self.sources {
+            s.validate_params()
+                .with_context(|| format!("source {}", s.id))?;
+        }
+        for o in &self.outputs {
+            let provide = crate::plugin::output::resolve_config(o)
+                .with_context(|| format!("output {}", o.id))?;
+            let params = o.effective_params();
+            let checked = match provide.manifest.plugin {
+                "rtmp" => crate::plugin::outputs::rtmp::validate(&params),
+                "srt" => crate::plugin::outputs::srt::validate(&params),
+                _ => Ok(()),
+            };
+            checked.with_context(|| format!("output {}", o.id))?;
+        }
+        for f in &self.filters {
+            anyhow::ensure!(
+                f.attach.source.is_some() || f.attach.programme,
+                "filter {} must say where it goes: attach = {{ source = \"cam1\" }} \
+                 or attach = {{ programme = true }}",
+                f.id
+            );
+            anyhow::ensure!(
+                !(f.attach.source.is_some() && f.attach.programme),
+                "filter {} names a source and the programme; it can only go on one",
+                f.id
+            );
+            if f.type_id == crate::plugin::filters::chroma::MANIFEST.provide_id() {
+                crate::plugin::filters::chroma::validate(&f.params)
+                    .with_context(|| format!("filter {}", f.id))?;
+            }
+        }
 
         let mut seen = std::collections::HashSet::new();
         for s in &self.sources {
@@ -1047,6 +1082,132 @@ sidecar = \"/opt/b\"\n").unwrap();
         let missing: Config = toml::from_str("").unwrap();
         assert_eq!(missing.stall.restart_after_secs, default_restart_after_stall_secs());
         assert!(missing.stall.hold_last_frame);
+    }
+
+    #[test]
+    fn a_plugins_table_and_an_unknown_section_both_survive_the_load() {
+        let cfg: Config = toml::from_str(
+            r#"
+            [plugins.ndi]
+            discovery_interval_secs = 5
+
+            [something_no_core_version_knows]
+            a = 1
+            "#,
+        )
+        .expect("unknown sections are kept, not refused");
+        assert_eq!(
+            cfg.plugins["ndi"]["discovery_interval_secs"].as_integer(),
+            Some(5),
+            "a plugin's own settings must reach it"
+        );
+        assert!(
+            cfg.extra.contains_key("something_no_core_version_knows"),
+            "an unknown top level table must not be dropped on the floor"
+        );
+    }
+
+    #[test]
+    fn the_old_field_names_are_carried_into_params() {
+        let cfg: Config = toml::from_str(
+            r#"
+            [[sources]]
+            id = "cam1"
+            uri = "rtmp://host/live/cam1"
+            rtmp_client = "librtmp"
+
+            [[sources]]
+            id = "page"
+            uri = "web+https://example.com/score"
+            superimpose = "auto"
+            "#,
+        )
+        .unwrap();
+        let cam = cfg.sources[0].effective_params();
+        assert_eq!(cam["uri"].as_str(), Some("rtmp://host/live/cam1"));
+        assert_eq!(cam["client"].as_str(), Some("rtmpsrc"));
+        let page = cfg.sources[1].effective_params();
+        assert_eq!(page["superimpose"].as_str(), Some("auto"));
+    }
+
+    #[test]
+    fn a_source_can_be_written_as_a_type_and_params_with_no_uri_field() {
+        let cfg: Config = toml::from_str(
+            r#"
+            [[sources]]
+            id = "bars"
+            type = "test/source"
+            params = { uri = "test://smpte" }
+            "#,
+        )
+        .unwrap();
+        let src = &cfg.sources[0];
+        assert_eq!(src.type_id.as_deref(), Some("test/source"));
+        assert_eq!(src.effective_params()["uri"].as_str(), Some("test://smpte"));
+        cfg.validate().expect("test/source takes these params");
+    }
+
+    #[test]
+    fn an_unknown_key_on_a_source_reaches_the_kind_rather_than_vanishing() {
+        let cfg: Config = toml::from_str(
+            r#"
+            [[sources]]
+            id = "cam1"
+            uri = "rtmp://host/live/cam1"
+            something_a_plugin_knows = "yes"
+            "#,
+        )
+        .unwrap();
+        assert_eq!(
+            cfg.sources[0].effective_params()["something_a_plugin_knows"].as_str(),
+            Some("yes")
+        );
+    }
+
+    #[test]
+    fn a_filter_has_to_say_where_it_goes() {
+        let cfg: Config = toml::from_str(
+            r#"
+            [[filters]]
+            id = "key"
+            type = "chroma/filter"
+            attach = { programme = true }
+            params = { method = "green" }
+            "#,
+        )
+        .unwrap();
+        assert_eq!(cfg.filters[0].type_id, "chroma/filter");
+        assert!(cfg.filters[0].attach.programme);
+        cfg.validate().expect("a programme filter with good params is accepted");
+
+        let nowhere: Config = toml::from_str(
+            r#"
+            [[filters]]
+            id = "key"
+            type = "chroma/filter"
+            "#,
+        )
+        .unwrap();
+        let err = nowhere.validate().expect_err("a filter with no attachment is refused");
+        assert!(format!("{err:#}").contains("where it goes"), "{err:#}");
+    }
+
+    #[test]
+    fn a_bad_param_names_the_field_and_what_it_takes() {
+        let cfg: Config = toml::from_str(
+            r#"
+            [[filters]]
+            id = "key"
+            type = "chroma/filter"
+            attach = { programme = true }
+            params = { method = "puce" }
+            "#,
+        )
+        .unwrap();
+        let err = cfg.validate().expect_err("puce is not a keying method");
+        let text = format!("{err:#}");
+        assert!(text.contains("params.method"), "{text}");
+        assert!(text.contains("green"), "{text}");
     }
 
     #[test]

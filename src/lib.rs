@@ -62,6 +62,16 @@ struct Args {
     #[arg(long)]
     probe: bool,
 
+    /// Run the conformance harness against every built in source kind that
+    /// needs no network, print a report, and exit non-zero if any check fails.
+    ///
+    /// A core with no outputs, no multiview and a 1280x720x30 canvas, which is
+    /// what 03 section 11 calls the test core. It is what `gmx plugin test`
+    /// will spawn, and it is here so the same checks a plugin author runs are
+    /// the ones the core runs against itself.
+    #[arg(long)]
+    test_core: bool,
+
     #[command(subcommand)]
     command: Option<Command>,
 }
@@ -92,6 +102,38 @@ enum Command {
         #[arg(long, env = "GODWINMIX_TOKEN")]
         token: Option<String>,
     },
+}
+
+/// Run the conformance harness and print what it found.
+///
+/// One block per kind, `ok` or `FAIL` per check. Exits non-zero on any
+/// failure, so CI and `gmx plugin test` can both read the exit code.
+fn run_test_core() -> Result<()> {
+    println!("godwinmix test core: 1280x720x30, no outputs, no multiview");
+    let mut failures = 0usize;
+    for outcome in plugin::harness::check_offline_kinds() {
+        match outcome {
+            Ok(report) => {
+                println!("\n{}", report.type_id);
+                for line in report.lines() {
+                    println!("  {line}");
+                }
+                if !report.passed() {
+                    failures += 1;
+                }
+            }
+            Err(e) => {
+                println!("\nharness could not run: {e:#}");
+                failures += 1;
+            }
+        }
+    }
+    println!();
+    if failures > 0 {
+        anyhow::bail!("{failures} of the built in kinds failed the harness");
+    }
+    println!("every built in kind that runs without a network is conformant");
+    Ok(())
 }
 
 /// Parse the command line and do what it says. Both binaries call this.
@@ -136,6 +178,10 @@ pub async fn run() -> Result<()> {
     input::reap_orphans_if_init();
 
     gstreamer::init().context("initialising GStreamer")?;
+
+    if args.test_core {
+        return run_test_core();
+    }
 
     if args.probe {
         let b = probe::Backends::probe(config::Accel::Auto, config::Accel::Auto)?;
