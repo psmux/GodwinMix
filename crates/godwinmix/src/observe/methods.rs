@@ -357,7 +357,9 @@ fn register_core(reg: &mut Registry<Call>) {
             "The append only record of everything that happened, back as far as you ask.",
             handler(|call: Call, params| async move {
                 let req: SessionLogRequest = call.params(&params)?;
-                let lines = godwinmix_core::observe::session::session().tail_since(req.secs.min(86_400));
+                let lines = godwinmix_core::observe::session::session()
+                    .tail_since_async(req.secs.min(86_400))
+                    .await;
                 Ok(json!({ "secs": req.secs, "lines": lines }))
             }),
         )

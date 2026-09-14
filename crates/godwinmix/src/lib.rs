@@ -21,6 +21,7 @@ pub mod cli;
 pub mod control;
 pub mod ctl;
 pub mod mcp;
+pub mod mcp_http;
 pub mod observe;
 pub mod ui;
 
@@ -36,7 +37,7 @@ use tracing::{error, info, warn};
 const EXAMPLE_CONFIG: &str = include_str!("../../../godwinmix.example.toml");
 
 /// Where a client subcommand looks for a mixer when nothing says otherwise.
-const DEFAULT_URL: &str = "http://127.0.0.1:8080";
+pub const DEFAULT_URL: &str = "http://127.0.0.1:8080";
 
 #[derive(Parser, Debug)]
 #[command(name = "godwinmix", about = "Live RTMP video mixer with hot source switching")]
@@ -177,6 +178,14 @@ enum Command {
         /// callable by name and findable with `search_tools`.
         #[arg(long, env = "GODWINMIX_MCP_PROFILE", default_value = "standard")]
         profile: McpProfile,
+        /// Serve MCP over Streamable HTTP at this address instead of stdio.
+        ///
+        /// `--http 127.0.0.1:8765` puts the same tools on `POST /mcp`, with
+        /// server initiated messages on `GET /mcp`. Bind to a loopback
+        /// address unless something in front of it is doing the
+        /// authentication.
+        #[arg(long, value_name = "ADDR")]
+        http: Option<String>,
     },
     /// Presets: list, show, apply, save and diff.
     ///
@@ -193,6 +202,19 @@ enum Command {
     /// The local half of 06 section 5. It writes the directory that CI turns
     /// into signed installers, and the README saying how.
     Build(cli::build::BuildArgs),
+    /// What an agent pays to look at this mixer, and the skills it reads.
+    ///
+    /// `gmx agent cost` prints the size of `agent.state`, of the MCP hot tool
+    /// list and of a snapshot, in bytes and in tokens. The budgets are in
+    /// `docs/reference/agent-state.md`.
+    Agent(cli::agent::AgentArgs),
+
+    /// Install the GodwinMix skills into an AI coding tool's directory.
+    ///
+    /// `gmx skill install --for claude` drops `godwinmix-operate` and
+    /// `godwinmix-develop` where that tool reads them. `--print` shows what it
+    /// would write and writes nothing.
+    Skill(cli::skill::SkillArgs),
 
     /// Inspect and test the codec catalogue.
     ///
@@ -296,10 +318,10 @@ pub async fn run() -> Result<()> {
             gstreamer::init().context("initialising GStreamer")?;
             return bench::run(b).await;
         }
-        Some(Command::Mcp { url, token, profile }) => {
+        Some(Command::Mcp { url, token, profile, http }) => {
             let url = url.or_else(|| config::env_var("URL")).unwrap_or_else(|| DEFAULT_URL.into());
             let token = token.or_else(|| config::env_var("TOKEN"));
-            return mcp::run(&url, token, profile.into()).await;
+            return mcp::run(&url, token, profile.into(), http).await;
         }
         Some(Command::Codec { cmd }) => {
             gstreamer::init().context("initialising GStreamer")?;
@@ -316,6 +338,8 @@ pub async fn run() -> Result<()> {
             gstreamer::init().context("initialising GStreamer")?;
             return cli::build::run(args);
         }
+        Some(Command::Agent(args)) => return cli::agent::run(args.cmd).await,
+        Some(Command::Skill(args)) => return cli::skill::run(args.cmd),
         Some(Command::Import { cmd }) => return cli::scene::run_import(cmd),
         Some(Command::Scene { cmd }) => return cli::scene::run_scene(cmd),
         Some(Command::Observe(cmd)) => {

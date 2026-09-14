@@ -218,6 +218,15 @@
         ],
         "type": "object"
       },
+      "AgentStateRequest": {
+        "properties": {
+          "response_format": {
+            "$ref": "#/components/schemas/ResponseFormat",
+            "default": "concise"
+          }
+        },
+        "type": "object"
+      },
       "ApplyRequest": {
         "properties": {
           "dry_run": {
@@ -1165,6 +1174,13 @@
         ],
         "type": "object"
       },
+      "ResponseFormat": {
+        "enum": [
+          "concise",
+          "detailed"
+        ],
+        "type": "string"
+      },
       "SaveRequest": {
         "properties": {
           "name": {
@@ -1500,6 +1516,81 @@
             ]
           }
         },
+        "type": "object"
+      },
+      "TaskRequest": {
+        "properties": {
+          "task_id": {
+            "description": "The id a long running method answered with. Spelled `id` on the REST\nroute, where it is in the path, and `task_id` everywhere else, which\nis what 03 section 6 calls it.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "task_id"
+        ],
+        "type": "object"
+      },
+      "TaskState": {
+        "enum": [
+          "running",
+          "completed",
+          "failed",
+          "cancelled"
+        ],
+        "type": "string"
+      },
+      "TaskView": {
+        "description": "What `task.get` answers with.",
+        "properties": {
+          "age_secs": {
+            "description": "Seconds since the task was started.",
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "error": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "kind": {
+            "description": "The method that started it, so a client reading a list knows what it is\nlooking at.",
+            "type": "string"
+          },
+          "poll_interval_ms": {
+            "description": "How long to wait before asking again, while it is still running.",
+            "format": "uint64",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "progress": {
+            "description": "0 to 1 where the work can say, absent where it cannot.",
+            "format": "double",
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "result": {
+            "description": "The body the method would have answered with, once it is done."
+          },
+          "state": {
+            "$ref": "#/components/schemas/TaskState"
+          },
+          "task_id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "task_id",
+          "kind",
+          "state",
+          "age_secs"
+        ],
         "type": "object"
       },
       "TokenInfo": {
@@ -3275,6 +3366,103 @@
         "x-destructive": false,
         "x-idempotent": true,
         "x-scope": "operate"
+      }
+    },
+    "/api/v1/task": {
+      "get": {
+        "description": "JSON-RPC method `task.get`. Needs the `read` scope.",
+        "operationId": "task.get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TaskView"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "How a piece of long running work is getting on, and its answer once it has one.",
+        "tags": [
+          "task"
+        ],
+        "x-destructive": false,
+        "x-idempotent": true,
+        "x-scope": "read"
+      }
+    },
+    "/api/v1/task/cancel": {
+      "post": {
+        "description": "JSON-RPC method `task.cancel`. Needs the `operate` scope. Accepts `idempotency_key`, honoured for 24 hours.",
+        "operationId": "task.cancel",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TaskRequest"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Ask a piece of long running work to stop. Cooperative: the answer says the request landed, not that the work has stopped yet.",
+        "tags": [
+          "task"
+        ],
+        "x-destructive": false,
+        "x-idempotent": true,
+        "x-scope": "operate"
+      }
+    },
+    "/api/v1/task/list": {
+      "get": {
+        "description": "JSON-RPC method `task.list`. Needs the `read` scope.",
+        "operationId": "task.list",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/TaskView"
+                  },
+                  "type": "array"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Every background job this core knows about, newest first.",
+        "tags": [
+          "task"
+        ],
+        "x-destructive": false,
+        "x-idempotent": true,
+        "x-scope": "read"
       }
     }
   },

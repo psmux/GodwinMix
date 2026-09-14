@@ -43,6 +43,9 @@ Start here if you have never run it.
 ## Reference
 
 * [The HTTP API](reference/http-api.md)
+* [Safety: the minimum hold, the rate limit, the flash guard](reference/safety.md)
+* [`agent.state`, both formats and their sizes](reference/agent-state.md)
+* [Tasks: work that outlives the call that started it](reference/tasks.md)
 * [The command line](reference/cli.md)
 * [The keyboard](reference/keyboard.md)
 * [Configuration, every key](reference/configuration.md)

@@ -80,6 +80,12 @@ class AddSourceRequest(TypedDict, total=False):
     uri: str
     # Stream URL, file path, or with kind "web" the address of a page.
 
+# `ext.agent`. `true` takes the default thresholds; an object moves them.
+AgentExt = Union[bool, Dict[str, Any]]
+
+class AgentStateRequest(TypedDict, total=False):
+    response_format: ResponseFormat
+
 class ApplyRequest(TypedDict, total=False):
     dry_run: bool
     # Work out the plan and write nothing.
@@ -177,6 +183,8 @@ class CoreInfo(TypedDict, total=False):
 class Ext(TypedDict, total=False):
     """The `ext` table from 03 section 6. Every key is off by default. A terminal UI takes meters and tally and declines multiview; a Stream Deck takes tally only; an agent takes nothing."""
 
+    agent: Union[AgentExt, None]
+    # `event/agent.state` when a threshold crosses or a state flips, with a snapshot URL. `true` takes the defaults from 09 section 5 item 12.
     meters: bool
     # `event/meters` at 10 per second.
     multiview: Union[MultiviewExt, None]
@@ -185,6 +193,8 @@ class Ext(TypedDict, total=False):
     # `event/source.position` for seekable sources.
     tally: bool
     # `event/tally`.
+    telemetry: Union[TelemetryExt, None]
+    # `event/telemetry`: a line of numbers per tick, at 1 to 10 per second. This is what turns the probes on; nothing measures until it is here.
 
 class FilterIdRequest(TypedDict, total=False):
     """`filter.remove`, and anything else that names one filter."""
@@ -400,6 +410,8 @@ class ProgramState(TypedDict, total=False):
     running_time_ms: int
     # Programme pipeline running time, in milliseconds.
 
+ResponseFormat = Literal['concise', 'detailed']
+
 class Resync(TypedDict, total=False):
     """`event/resync`: the client fell behind and the stream has a hole in it."""
 
@@ -542,6 +554,32 @@ class Tally(TypedDict, total=False):
     sources: Dict[str, Any]
     # Source id to "program", "preview" or "off".
 
+class TaskRequest(TypedDict, total=False):
+    task_id: str
+    # The id a long running method answered with. Spelled `id` on the REST route, where it is in the path, and `task_id` everywhere else, which is what 03 section 6 calls it.
+
+TaskState = Literal['running', 'completed', 'failed', 'cancelled']
+
+class TaskView(TypedDict, total=False):
+    """What `task.get` answers with."""
+
+    age_secs: int
+    # Seconds since the task was started.
+    error: Optional[str]
+    kind: str
+    # The method that started it, so a client reading a list knows what it is looking at.
+    poll_interval_ms: Optional[int]
+    # How long to wait before asking again, while it is still running.
+    progress: Optional[float]
+    # 0 to 1 where the work can say, absent where it cannot.
+    result: Any
+    # The body the method would have answered with, once it is done.
+    state: TaskState
+    task_id: str
+
+# `ext.telemetry`. Accepts `false` to mean off, `true` for the default rate, or an object naming it.
+TelemetryExt = Union[bool, Dict[str, Any]]
+
 class TokenInfo(TypedDict, total=False):
     """What the calling token is allowed to do, echoed back so a surface can grey out what it cannot reach instead of discovering it at the first refusal."""
 
@@ -601,6 +639,21 @@ class AlertEvent(TypedDict, total=False):
     message: str
     severity: Severity
 
+class TelemetryEvent(TypedDict, total=False):
+    black: float
+    # fraction of the picture at or below black, 0 to 1
+    freeze: bool
+    lufs_i: Optional[float]
+    lufs_s: Optional[float]
+    # short term loudness over three seconds, approximated from the programme meter
+    shot: float
+    # how much the picture changed since the last frame, 0 to 1
+    silence: bool
+    sources: Dict[str, Any]
+    # source id to 1 when it is live and 0 otherwise
+    ts: int
+    # milliseconds since the Unix epoch
+
 METHODS = (
     {"name": "adbreak.end", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/adbreak/end"), "summary": 'Cut a running ad short, or disarm one that is scheduled.'},
     {"name": "adbreak.start", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/adbreak/start"), "summary": 'Interrupt the programme with a clip, then rejoin live when it ends.'},
@@ -650,6 +703,9 @@ METHODS = (
     {"name": "source.list", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/sources"), "summary": 'Every source, with its state, whether it has video and audio, and its fader.'},
     {"name": "source.remove", "scope": "operate", "mutating": True, "destructive": True, "rest": ("DELETE", "/api/v1/sources/{id}"), "summary": 'Remove a source. If it is on programme the mixer cuts to the slate first.'},
     {"name": "source.seek", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/sources/{id}/seek"), "summary": 'Move a seekable source to a position. Answers with where it actually landed.'},
+    {"name": "task.cancel", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/task/cancel"), "summary": 'Ask a piece of long running work to stop. Cooperative: the answer says the request landed, not that the work has stopped yet.'},
+    {"name": "task.get", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/task"), "summary": 'How a piece of long running work is getting on, and its answer once it has one.'},
+    {"name": "task.list", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/task/list"), "summary": 'Every background job this core knows about, newest first.'},
 )
 
 EVENT_NAMES = (
@@ -664,6 +720,8 @@ EVENT_NAMES = (
     "meters",
     "tally",
     "alert",
+    "telemetry",
+    "agent.state",
     "multiview.layout",
     "multiview.frame",
     "resync",
@@ -719,9 +777,13 @@ class GeneratedMethods:
 
     async def agent_state(
         self,
+        *,
+        response_format: Optional[ResponseFormat] = None,
     ) -> Dict[str, Any]:
         """The compact document written for agents: the programme, each source's state and a motion score saying how much its picture is changing."""
         params: Dict[str, Any] = {}
+        if response_format is not None:
+            params["response_format"] = response_format
         return await self._call("agent.state", params)
 
     async def codec_list(
@@ -1220,3 +1282,28 @@ class GeneratedMethods:
         params["id"] = id
         params["position_ms"] = position_ms
         return await self._call("source.seek", params)
+
+    async def task_cancel(
+        self,
+        task_id: str,
+    ) -> Dict[str, Any]:
+        """Ask a piece of long running work to stop. Cooperative: the answer says the request landed, not that the work has stopped yet."""
+        params: Dict[str, Any] = {}
+        params["task_id"] = task_id
+        return await self._call("task.cancel", params)
+
+    async def task_get(
+        self,
+        task_id: str,
+    ) -> TaskView:
+        """How a piece of long running work is getting on, and its answer once it has one."""
+        params: Dict[str, Any] = {}
+        params["task_id"] = task_id
+        return await self._call("task.get", params)
+
+    async def task_list(
+        self,
+    ) -> List[TaskView]:
+        """Every background job this core knows about, newest first."""
+        params: Dict[str, Any] = {}
+        return await self._call("task.list", params)

@@ -10,6 +10,7 @@
 
 use godwinmix_protocol::requests::TakeRecord;
 use parking_lot::Mutex;
+use std::collections::BTreeMap;
 use std::time::{Duration, Instant};
 
 /// Enough to see a whole show's worth of decisions without holding anything
@@ -168,5 +169,81 @@ mod tests {
         assert_eq!(h.previous(None), Some(Some("cam2".into())));
         // And reverting to the slate is a real answer, not "nothing to do".
         assert_eq!(h.previous(Some("cam2")), Some(None));
+    }
+}
+
+/// The last audio peak seen on each source, for `agent.state` detailed.
+///
+/// The audit noted that an agent could not find out whether a source was
+/// making a sound. The meters carry it ten times a second and nothing kept
+/// it, so this does: one number per source, bounded by the sources that
+/// exist, fed from the same event task that writes the take history.
+#[derive(Debug, Default)]
+pub struct Peaks {
+    inner: Mutex<BTreeMap<String, f64>>,
+}
+
+impl Peaks {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// The loudest channel of one meter reading, rounded to a tenth of a
+    /// decibel, which is finer than anybody can hear and shorter to write.
+    pub fn note(&self, source: &str, peak_db: &[f64]) {
+        let Some(peak) = peak_db.iter().copied().fold(None::<f64>, |m, v| {
+            Some(m.map_or(v, |m: f64| m.max(v)))
+        }) else {
+            return;
+        };
+        let mut inner = self.inner.lock();
+        // Bounded by what a mixer can hold anyway, and a source removed and
+        // re-added keeps its slot rather than adding one.
+        if inner.len() >= 512 && !inner.contains_key(source) {
+            return;
+        }
+        inner.insert(source.to_string(), (peak * 10.0).round() / 10.0);
+    }
+
+    pub fn get(&self, source: &str) -> Option<f64> {
+        self.inner.lock().get(source).copied()
+    }
+
+    /// Forget sources that are no longer configured.
+    pub fn retain(&self, ids: &[String]) {
+        self.inner.lock().retain(|k, _| ids.iter().any(|id| id == k));
+    }
+
+    pub fn len(&self) -> usize {
+        self.inner.lock().len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+}
+
+#[cfg(test)]
+mod peak_tests {
+    use super::*;
+
+    #[test]
+    fn the_loudest_channel_is_what_is_kept_and_the_map_is_bounded() {
+        let p = Peaks::new();
+        assert_eq!(p.get("cam1"), None);
+        p.note("cam1", &[-21.04, -18.37]);
+        assert_eq!(p.get("cam1"), Some(-18.4));
+        // An empty reading is not a reading.
+        p.note("cam2", &[]);
+        assert_eq!(p.get("cam2"), None);
+
+        for i in 0..600 {
+            p.note(&format!("cam{i}"), &[-6.0]);
+        }
+        assert!(p.len() <= 512, "held {}", p.len());
+
+        p.retain(&["cam1".to_string()]);
+        assert_eq!(p.len(), 1);
+        assert!(p.get("cam1").is_some());
     }
 }
