@@ -85,10 +85,35 @@ build on the same contract.
 | Only `source` provides are registered | a `device` or `output` provide in a manifest registers nothing, so `camera/devices` and `file-record/output` cannot be reached through the core today | `crates/godwinmix-core/src/plugin/loader.rs`, `intern_all` |
 | `discover` has no caller | the `device` provides answer it correctly and nothing asks | `crates/godwinmix-core/src/plugin/host/service.rs` |
 | `tool.call` has no route | the MCP server resolves `gmx_<plugin>_<tool>` and posts to `/api/v1/tool/call`, which is not a registered method | `crates/godwinmix/src/mcp.rs` |
+| Only a `source` can be placed on a node | `place = "node:<name>"` builds a remote source; an output, a filter or a service on a node parses and is validated and has no host behind it yet | `crates/godwinmix-core/src/plugin/host/bridged.rs` |
 
 Every plugin here implements its side of all three, so they work the day the
 core's side lands. `gmx plugin test --offline` exercises `tool.call` against
 each of them now.
+
+## Running one on another machine
+
+Every plugin here declares `placements = ["sidecar", "node"]`, which means it
+can run on this machine or on a node. Nothing in the plugin changes: install it
+on the node, and place the source there.
+
+```toml
+[[sources]]
+id = "cam1"
+type = "srt/source"
+place = "node:studio-b"
+latency_ms = 150
+```
+
+`type` names a plugin installed on the node, not on the core. The core reads
+its manifest and its settings schema out of the node's hello, so the settings
+form, the tools and the health are the ones the plugin declares, and
+`plugin.list` shows it with `root` naming the node it is on.
+
+A plugin whose manifest does not declare `node` is refused that placement with
+error `-32005`, listing the placements it did declare. See
+[Nodes](nodes.md) and
+[Add a second machine](../how-to/add-a-node.md).
 
 ## Building and installing
 
