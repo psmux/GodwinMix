@@ -382,10 +382,33 @@ pub fn attach_programme_probe(tee: &gstreamer::Element) {
         let now = base.elapsed().as_nanos() as u64;
         let prev = last.swap(now, Ordering::Relaxed);
         if prev != 0 {
-            intervals.observe((now - prev) as f64 / 1_000_000.0);
+            let gap = now - prev;
+            intervals.observe(gap as f64 / 1_000_000.0);
+            LONGEST_GAP_NS.fetch_max(gap, Ordering::Relaxed);
         }
         gstreamer::PadProbeReturn::Ok
     });
+}
+
+/// The longest gap between two programme frames since the last reset.
+///
+/// The histogram above answers "how were the frame intervals distributed",
+/// which is the question a dashboard asks. This answers "did any frame ever
+/// land late", which is the question the acceptance criteria ask, and a
+/// histogram cannot answer it because its buckets straddle the limit. One
+/// relaxed `fetch_max` on the probe, which allocates nothing and takes no
+/// lock; see the note on the probe above.
+static LONGEST_GAP_NS: AtomicU64 = AtomicU64::new(0);
+
+/// The longest programme frame interval since [`reset_longest_frame_gap`].
+pub fn longest_frame_gap() -> std::time::Duration {
+    std::time::Duration::from_nanos(LONGEST_GAP_NS.load(Ordering::Relaxed))
+}
+
+/// Start measuring again. A test calls this before the thing it is measuring
+/// so that the pipeline coming up does not count against it.
+pub fn reset_longest_frame_gap() {
+    LONGEST_GAP_NS.store(0, Ordering::Relaxed);
 }
 
 /// Record a control call. The api agent's router gets this through

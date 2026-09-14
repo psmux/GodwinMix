@@ -1192,6 +1192,17 @@ pub struct UiChangedEvent {
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
+pub struct HookBlockedEvent {
+    /// The hook name, for example take.before.
+    pub hook: String,
+    /// The plugin that owns it, or the URL or command when it came from [[hooks]] in the config.
+    pub plugin: String,
+    /// What went wrong and what to do about it.
+    pub reason: String,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
 pub struct MediaChangedEvent {
     pub conversion: Value,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -1304,7 +1315,7 @@ pub const METHODS: [MethodInfo; 63] = [
     MethodInfo { name: "task.list", summary: "Every background job this core knows about, newest first.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/task/list")) },
 ];
 
-pub const EVENT_NAMES: [&str; 17] = [
+pub const EVENT_NAMES: [&str; 18] = [
     "snapshot",
     "program.took",
     "source.state",
@@ -1312,6 +1323,7 @@ pub const EVENT_NAMES: [&str; 17] = [
     "output.state",
     "adbreak.changed",
     "ui.changed",
+    "hook.blocked",
     "media.changed",
     "meters",
     "tally",
@@ -1355,6 +1367,8 @@ pub enum Event {
     AdbreakChanged(AdbreakChangedEvent),
     /// The surface defaults changed: a preset was applied, or an operator set the layout, theme or gallery mode by hand. Nothing on air moves.
     UiChanged(UiChangedEvent),
+    /// A hook did not get its say: it did not answer inside its timeout, or the thing behind it could not be reached. Whatever the hook was attached to went ahead anyway, which is the rule that keeps a slow hook off the frame path. See 03 section 8.
+    HookBlocked(HookBlockedEvent),
     /// A file in the library was uploaded, deleted, or its conversion moved on.
     MediaChanged(MediaChangedEvent),
     /// Peak dBFS for the programme bus and every source, in one message at 10 per second. Replaces the two separate meter events on /ws.
@@ -1413,6 +1427,10 @@ impl Event {
                 Ok(payload) => Event::UiChanged(payload),
                 Err(_) => Event::Other { name: pattern.to_string(), params },
             },
+            "hook.blocked" => match serde_json::from_value(params.clone()) {
+                Ok(payload) => Event::HookBlocked(payload),
+                Err(_) => Event::Other { name: pattern.to_string(), params },
+            },
             "media.changed" => match serde_json::from_value(params.clone()) {
                 Ok(payload) => Event::MediaChanged(payload),
                 Err(_) => Event::Other { name: pattern.to_string(), params },
@@ -1463,6 +1481,7 @@ impl Event {
             Event::OutputState(_) => "output.state",
             Event::AdbreakChanged(_) => "adbreak.changed",
             Event::UiChanged(_) => "ui.changed",
+            Event::HookBlocked(_) => "hook.blocked",
             Event::MediaChanged(_) => "media.changed",
             Event::Meters(_) => "meters",
             Event::Tally(_) => "tally",

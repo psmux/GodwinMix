@@ -21,6 +21,7 @@
 
 pub mod call;
 pub mod history;
+pub mod hooks;
 pub mod methods;
 pub mod push;
 pub mod rest;
@@ -115,6 +116,10 @@ pub struct AppState {
     /// Where the config was read from, so a settings change can be written
     /// back to the file a restart will read.
     pub config_path: Arc<std::path::PathBuf>,
+    /// Somebody else's code, told that a thing happened, and in one case asked
+    /// first. Empty on a core nobody has configured a hook on, and then every
+    /// call site costs one atomic read. See `control/hooks/`.
+    pub hooks: Arc<hooks::Hooks>,
 }
 
 /// The handles onto one running engine, gathered so `AppState::new` takes a
@@ -141,6 +146,10 @@ impl AppState {
         // lets the guard tell a flash from a dissolve while a client is
         // subscribed, and fall back to the stricter rule while none is.
         godwinmix_core::telemetry::telemetry().bind_guard(safety.clone());
+        let hooks = {
+            let bus = mixer.clone();
+            hooks::Hooks::new(&cfg.hooks, Arc::new(move |event| bus.emit(event)))
+        };
         Self {
             mixer,
             multiview,
@@ -173,6 +182,7 @@ impl AppState {
             rehearsal,
             plugin_settings: Arc::new(cfg.plugins.clone()),
             config_path: Arc::new(cfg.source_path.clone()),
+            hooks,
         }
     }
 
@@ -1289,6 +1299,9 @@ impl RunningTime {
 /// with "nothing to go back to" however many takes it has had.
 pub fn spawn_background(app: AppState) {
     spawn_history(app.clone());
+    // One subscriber turns source.state, output.state, alert.raised and
+    // plugin.state into hooks. It returns at once on a core with none.
+    hooks::spawn_watch(app.hooks.clone(), app.mixer.subscribe());
     spawn_operator_watchdog(app);
 }
 

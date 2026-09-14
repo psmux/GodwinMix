@@ -465,17 +465,21 @@ pub fn envelope(event: &str, payload: Value) -> Value {
 }
 
 /// `take.before` and `take.after`: what is being put on air, and who asked.
+///
+/// `revert` is true when this is `program.revert` rather than
+/// `program.take`, because a policy hook usually wants to let an undo through
+/// even when it would have refused the take.
 pub fn take_payload(
     source: Option<&str>,
     at_running_time_ms: Option<u64>,
     by: &str,
-    live: &[String],
+    revert: bool,
 ) -> Value {
     json!({
         "source": source,
         "at_running_time_ms": at_running_time_ms,
         "by": by,
-        "live": live,
+        "revert": revert,
     })
 }
 
@@ -623,7 +627,7 @@ mod tests {
 
     #[test]
     fn the_envelope_carries_the_hook_name_as_well_as_the_payload() {
-        let body = envelope("take.after", take_payload(Some("cam1"), None, "desk", &[]));
+        let body = envelope("take.after", take_payload(Some("cam1"), None, "desk", false));
         assert_eq!(body["hook"], "take.after");
         assert_eq!(body["payload"]["source"], "cam1");
         assert_eq!(body["payload"]["by"], "desk");
