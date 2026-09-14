@@ -209,7 +209,18 @@ fn the_table_matches_the_scopes_in_the_protocol_document() {
         reg.iter().filter(|m| m.destructive).map(|m| m.name).collect();
     assert_eq!(
         destructive,
-        vec!["core.shutdown", "filter.remove", "media.remove", "output.remove", "source.remove"],
+        vec![
+            "core.shutdown",
+            "filter.remove",
+            "media.remove",
+            "output.remove",
+            // A scene and an item are documents: deleting one cannot be undone
+            // by repeating the call, so both are confirmed like the rest.
+            "scene.item.filter.remove",
+            "scene.item.remove",
+            "scene.remove",
+            "source.remove",
+        ],
         "the destructive set is the one 03 section 6 marks, plus filter.remove: taking a \
          filter out changes the picture and cannot be undone by repeating it"
     );

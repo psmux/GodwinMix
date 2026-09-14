@@ -22,6 +22,7 @@ mod filters;
 mod media;
 mod outputs;
 mod program;
+mod scenes;
 mod sources;
 
 /// Wrap an async function as a handler, so a registration reads as one thing.
@@ -52,6 +53,7 @@ pub fn registry() -> Registry<Call> {
     outputs::register(&mut reg);
     media::register(&mut reg);
     filters::register(&mut reg);
+    scenes::register(&mut reg);
     crate::observe::register(&mut reg);
     // Other modules add their own here. One line each, and they land on
     // /rpc, /api/v1, protocol.json and the tool list together. See

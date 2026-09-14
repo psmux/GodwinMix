@@ -70,14 +70,61 @@ Keys accepted on every method, handled before a method runs.
 | `program.golive` | `POST /api/v1/program/golive` | operate |  | 1 | One call to put a web page on air: add the page, add the destination, and take the page as soon as it renders. |
 | `program.history` | `GET /api/v1/program/history` | read |  | 1 | The last hundred takes, newest first, with the token that asked for each. |
 | `program.revert` | `POST /api/v1/program/revert` | operate |  | 1 | Take back to the shot before this one. |
-| `program.take` | `POST /api/v1/program/take` | operate |  | 1 | Put a source on programme. The cut is instant and the outgoing stream is not disturbed. |
+| `program.take` | `POST /api/v1/program/take` | operate |  | 1 | Put a scene or a source on programme. The cut is instant and the outgoing stream is not disturbed. |
+| `scene.add` | `POST /api/v1/scenes` | operate |  | 1 | Make an empty scene, or one built from a set of sources. |
+| `scene.apply_layout` | `POST /api/v1/scenes/apply_layout` | operate |  | 1 | Apply a layout, making a scene or reshaping one that exists. Applying onto an existing scene keeps the item ids, so the change is a ramp and not a cut. |
+| `scene.create_from` | `POST /api/v1/scenes/create_from` | operate |  | 1 | A scene from a set of sources, laid out by the built in layout for that count (full, two-box, three-box, quad, then a grid) or by a named one. |
+| `scene.duplicate` | `POST /api/v1/scenes/{id}/duplicate` | operate |  | 1 | A copy of a scene with new ids throughout, so editing the copy cannot touch the original. |
+| `scene.edit.apply` | `POST /api/v1/scenes/edit/apply` | operate |  | 1 | Write a draft back into the live document. |
+| `scene.edit.begin` | `POST /api/v1/scenes/edit/begin` | operate |  | 1 | Take a working copy of a scene. Editing is off air by default: the draft is written back on the next take of that scene, or when you apply it. |
+| `scene.edit.discard` | `POST /api/v1/scenes/edit/discard` | operate |  | 1 | Throw a draft away. The live document is untouched. |
+| `scene.export` | `GET /api/v1/scenes/export` | read |  | 1 | The whole collection as JSON. The zip bundle with assets is Phase 5. |
+| `scene.get` | `GET /api/v1/scenes/{id}` | read |  | 1 | One scene: its records and where every item actually lands on the canvas. |
+| `scene.history.mark` | `POST /api/v1/scenes/history/mark` | operate |  | 1 | Group the changes that follow into one undo step, until the next mark. This is what makes a drag of forty moves one Ctrl+Z. |
+| `scene.import.obs` | `POST /api/v1/scenes/import/obs` | operate |  | 1 | Read an OBS Studio scene collection and add its scenes to this one. |
+| `scene.item.add` | `POST /api/v1/scenes/item/add` | operate |  | 1 | Put something on a scene's canvas. With no transform it lands in the next free cell, so a drop never needs a dialog. |
+| `scene.item.align` | `POST /api/v1/scenes/item/align` | operate |  | 1 | Line items up on an edge: left, right, top, bottom, center-x or center-y. |
+| `scene.item.arrange_grid` | `POST /api/v1/scenes/item/arrange_grid` | operate |  | 1 | Lay items out in a grid of `cols` columns. |
+| `scene.item.bind` | `POST /api/v1/scenes/item/bind` | operate |  | 1 | Bind a geometry property to an expression over the collection's parameters, so changing a number moves everything that follows it. |
+| `scene.item.copy` | `GET /api/v1/scenes/item/copy` | operate |  | 1 | Copy an item into another scene. The copy keeps the transform and the filters and gets a new id. |
+| `scene.item.cover_canvas` | `POST /api/v1/scenes/item/cover_canvas` | operate |  | 1 | Put items over the whole canvas, filling it and letting the overflow go. |
+| `scene.item.distribute` | `POST /api/v1/scenes/item/distribute` | operate |  | 1 | Space items evenly between the two on the ends, horizontally or vertically. |
+| `scene.item.filter.add` | `POST /api/v1/scenes/item/filter/add` | operate |  | 1 | Hang a filter on one item, so a camera keyed in one scene is not keyed in all of them. |
+| `scene.item.filter.remove` | `POST /api/v1/scenes/item/filter/remove` | operate | yes | 1 | Take a filter off an item. |
+| `scene.item.filter.set` | `POST /api/v1/scenes/item/filter/set` | operate |  | 1 | Change one of an item's filters, or turn it off without taking it out. |
+| `scene.item.fit_to_canvas` | `POST /api/v1/scenes/item/fit_to_canvas` | operate |  | 1 | Put items over the whole canvas, keeping their aspect ratio inside it. |
+| `scene.item.group` | `POST /api/v1/scenes/item/group` | operate |  | 1 | Put items into a group. The picture does not change. |
+| `scene.item.match_size` | `POST /api/v1/scenes/item/match_size` | operate |  | 1 | Make items the same size as another one. |
+| `scene.item.move` | `POST /api/v1/scenes/item/move` | operate |  | 1 | Move an item to another scene, keeping its transform and filters. |
+| `scene.item.remove` | `POST /api/v1/scenes/item/remove` | operate | yes | 1 | Take an item off a scene. |
+| `scene.item.reorder` | `POST /api/v1/scenes/item/reorder` | operate |  | 1 | Move an item up or down the stack, between two named neighbours. |
+| `scene.item.set` | `POST /api/v1/scenes/item/set` | operate |  | 1 | Assign an item's properties. Only the keys named move; the rest are left alone, so calling it twice with the same body changes nothing the second time. |
+| `scene.item.ungroup` | `POST /api/v1/scenes/item/ungroup` | operate |  | 1 | Take a group apart, leaving every child exactly where it looked. |
+| `scene.layout.copy` | `GET /api/v1/scenes/layout/copy` | read |  | 1 | Read one scene's geometry, to paste onto another. |
+| `scene.layout.list` | `GET /api/v1/scenes/layout/list` | read |  | 1 | The layouts that ship with the core, with the parameters each one takes. |
+| `scene.layout.paste` | `POST /api/v1/scenes/layout/paste` | operate |  | 1 | Put one scene's geometry onto another's items, matched by name first and slot order second. Items that match nothing are left alone. |
+| `scene.list` | `GET /api/v1/scenes` | read |  | 1 | Every scene in the collection, with how many items it has, the sources it draws and whether it is armed. |
+| `scene.params.get` | `GET /api/v1/scenes/params/get` | read |  | 1 | The collection's typed parameters, readable without their values, so a client discovers what is fillable before filling it. |
+| `scene.params.set` | `POST /api/v1/scenes/params/set` | operate |  | 1 | Set the collection's parameter values. A `{{name}}` in a string property follows them. |
+| `scene.preview.frame` | `GET /api/v1/scenes/preview/frame` | read |  | 1 | A still of the armed scene as base64 JPEG, the floor every client has. |
+| `scene.preview.set` | `POST /api/v1/scenes/preview/set` | operate |  | 1 | Arm a scene. The armed scene is the preview, and program.take with no argument takes it. |
+| `scene.redo` | `POST /api/v1/scenes/redo` | operate |  | 1 | Put back what undo took away. |
+| `scene.remove` | `DELETE /api/v1/scenes/{id}` | operate | yes | 1 | Delete a scene. What is on air is not touched. |
+| `scene.rename` | `POST /api/v1/scenes/{id}/rename` | operate |  | 1 | Change a scene's name, its colour, or both. Names and colours live on the document, so every client, the tally and an agent see the same ones. |
+| `scene.transaction.abort` | `POST /api/v1/scenes/transaction/abort` | operate |  | 1 | Throw the batch away. The document goes back to where it was when the batch opened. |
+| `scene.transaction.begin` | `POST /api/v1/scenes/transaction/begin` | operate |  | 1 | Start a batch. Everything until the commit applies on one frame or not at all, and undoes in one step. |
+| `scene.transaction.commit` | `POST /api/v1/scenes/transaction/commit` | operate |  | 1 | Apply the batch. |
+| `scene.undo` | `POST /api/v1/scenes/undo` | operate |  | 1 | Undo the last change. A drag marked with scene.history.mark undoes as one step. |
+| `scene.validate` | `GET /api/v1/scenes/validate` | read |  | 1 | Overlaps, items off the canvas, safe area breaches and missing sources: what to fix before saying a scene is done. |
 | `snapshot.get` | `GET /api/v1/snapshot/{id}` | read |  | 1 | One JPEG: the whole contact sheet, the programme, or one source cut out of the mosaic. |
 | `source.add` | `POST /api/v1/sources` | operate |  | 1 | Add a source while the mixer runs. Answers with the id it got and the whole source record. |
 | `source.audio.set` | `POST /api/v1/sources/{id}/audio` | operate |  | 1 | Move a source's audio: the fader, the mute, and for a superimposed page the balance between its own sound and the videos under it. |
 | `source.get` | `GET /api/v1/sources/{id}` | read |  | 1 | One source. Refused with the ids that exist when there is no such source. |
+| `source.group` | `POST /api/v1/sources/{id}/group` | operate |  | 1 | Put sources in a tray folder. A tag for finding things, not a group on the canvas. |
 | `source.list` | `GET /api/v1/sources` | read |  | 1 | Every source, with its state, whether it has video and audio, and its fader. |
 | `source.remove` | `DELETE /api/v1/sources/{id}` | operate | yes | 1 | Remove a source. If it is on programme the mixer cuts to the slate first. |
 | `source.seek` | `POST /api/v1/sources/{id}/seek` | operate |  | 1 | Move a seekable source to a position. Answers with where it actually landed. |
+| `source.set` | `POST /api/v1/sources/{id}/set` | operate |  | 1 | Name and colour a source. Both live on the scene document, so every client, the tally and an agent see the same ones. |
 
 ### Params and results
 
@@ -718,7 +765,7 @@ MCP tool `revert` in the `standard` profile: readOnlyHint false, destructiveHint
 
 #### `program.take`
 
-Put a source on programme. The cut is instant and the outgoing stream is not disturbed.
+Put a scene or a source on programme. The cut is instant and the outgoing stream is not disturbed.
 
 MCP tool `take` in the `minimal` profile: readOnlyHint false, destructiveHint false, idempotentHint true.
 
@@ -729,6 +776,717 @@ MCP tool `take` in the `minimal` profile: readOnlyHint false, destructiveHint fa
   },
   "result": {
     "$ref": "#/$defs/ProgramState"
+  }
+}
+```
+
+#### `scene.add`
+
+Make an empty scene, or one built from a set of sources.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/AddSceneRequest"
+  },
+  "result": {
+    "$ref": "#/$defs/SceneView"
+  }
+}
+```
+
+#### `scene.apply_layout`
+
+Apply a layout, making a scene or reshaping one that exists. Applying onto an existing scene keeps the item ids, so the change is a ramp and not a cut.
+
+MCP tool `apply_layout` in the `search` profile: readOnlyHint false, destructiveHint false, idempotentHint true.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/ApplyLayoutRequest"
+  },
+  "result": {
+    "type": "object"
+  }
+}
+```
+
+#### `scene.create_from`
+
+A scene from a set of sources, laid out by the built in layout for that count (full, two-box, three-box, quad, then a grid) or by a named one.
+
+MCP tool `create_scene_from` in the `search` profile: readOnlyHint false, destructiveHint false, idempotentHint true.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/CreateFromRequest"
+  },
+  "result": {
+    "$ref": "#/$defs/SceneView"
+  }
+}
+```
+
+#### `scene.duplicate`
+
+A copy of a scene with new ids throughout, so editing the copy cannot touch the original.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/DuplicateSceneRequest"
+  },
+  "result": {
+    "$ref": "#/$defs/SceneView"
+  }
+}
+```
+
+#### `scene.edit.apply`
+
+Write a draft back into the live document.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/DraftRequest"
+  },
+  "result": {
+    "type": "object"
+  }
+}
+```
+
+#### `scene.edit.begin`
+
+Take a working copy of a scene. Editing is off air by default: the draft is written back on the next take of that scene, or when you apply it.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/EditBeginRequest"
+  },
+  "result": {
+    "$ref": "#/$defs/DraftRecord"
+  }
+}
+```
+
+#### `scene.edit.discard`
+
+Throw a draft away. The live document is untouched.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/DraftRequest"
+  },
+  "result": {
+    "type": "object"
+  }
+}
+```
+
+#### `scene.export`
+
+The whole collection as JSON. The zip bundle with assets is Phase 5.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/ExportRequest"
+  },
+  "result": {
+    "type": "object"
+  }
+}
+```
+
+#### `scene.get`
+
+One scene: its records and where every item actually lands on the canvas.
+
+MCP tool `get_scene` in the `search` profile: readOnlyHint true, destructiveHint false, idempotentHint true.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/SceneRequest"
+  },
+  "result": {
+    "$ref": "#/$defs/SceneView"
+  }
+}
+```
+
+#### `scene.history.mark`
+
+Group the changes that follow into one undo step, until the next mark. This is what makes a drag of forty moves one Ctrl+Z.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/MarkRequest"
+  },
+  "result": {
+    "type": "object"
+  }
+}
+```
+
+#### `scene.import.obs`
+
+Read an OBS Studio scene collection and add its scenes to this one.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/ImportObsRequest"
+  },
+  "result": {
+    "$ref": "#/$defs/ImportReport"
+  }
+}
+```
+
+#### `scene.item.add`
+
+Put something on a scene's canvas. With no transform it lands in the next free cell, so a drop never needs a dialog.
+
+MCP tool `add_scene_item` in the `search` profile: readOnlyHint false, destructiveHint false, idempotentHint true.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/AddItemRequest"
+  },
+  "result": {
+    "type": "object"
+  }
+}
+```
+
+#### `scene.item.align`
+
+Line items up on an edge: left, right, top, bottom, center-x or center-y.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/ItemsRequest"
+  },
+  "result": {
+    "type": "object"
+  }
+}
+```
+
+#### `scene.item.arrange_grid`
+
+Lay items out in a grid of `cols` columns.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/ItemsRequest"
+  },
+  "result": {
+    "type": "object"
+  }
+}
+```
+
+#### `scene.item.bind`
+
+Bind a geometry property to an expression over the collection's parameters, so changing a number moves everything that follows it.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/BindRequest"
+  },
+  "result": {
+    "type": "object"
+  }
+}
+```
+
+#### `scene.item.copy`
+
+Copy an item into another scene. The copy keeps the transform and the filters and gets a new id.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/MoveItemRequest"
+  },
+  "result": {
+    "type": "object"
+  }
+}
+```
+
+#### `scene.item.cover_canvas`
+
+Put items over the whole canvas, filling it and letting the overflow go.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/ItemsRequest"
+  },
+  "result": {
+    "type": "object"
+  }
+}
+```
+
+#### `scene.item.distribute`
+
+Space items evenly between the two on the ends, horizontally or vertically.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/ItemsRequest"
+  },
+  "result": {
+    "type": "object"
+  }
+}
+```
+
+#### `scene.item.filter.add`
+
+Hang a filter on one item, so a camera keyed in one scene is not keyed in all of them.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/AddItemFilterRequest"
+  },
+  "result": {
+    "type": "object"
+  }
+}
+```
+
+#### `scene.item.filter.remove`
+
+Take a filter off an item.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/ItemFilterRequest"
+  },
+  "result": {
+    "type": "object"
+  }
+}
+```
+
+#### `scene.item.filter.set`
+
+Change one of an item's filters, or turn it off without taking it out.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/ItemFilterRequest"
+  },
+  "result": {
+    "type": "object"
+  }
+}
+```
+
+#### `scene.item.fit_to_canvas`
+
+Put items over the whole canvas, keeping their aspect ratio inside it.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/ItemsRequest"
+  },
+  "result": {
+    "type": "object"
+  }
+}
+```
+
+#### `scene.item.group`
+
+Put items into a group. The picture does not change.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/ItemsRequest"
+  },
+  "result": {
+    "type": "object"
+  }
+}
+```
+
+#### `scene.item.match_size`
+
+Make items the same size as another one.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/ItemsRequest"
+  },
+  "result": {
+    "type": "object"
+  }
+}
+```
+
+#### `scene.item.move`
+
+Move an item to another scene, keeping its transform and filters.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/MoveItemRequest"
+  },
+  "result": {
+    "type": "object"
+  }
+}
+```
+
+#### `scene.item.remove`
+
+Take an item off a scene.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/ItemRequest"
+  },
+  "result": {
+    "type": "object"
+  }
+}
+```
+
+#### `scene.item.reorder`
+
+Move an item up or down the stack, between two named neighbours.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/ReorderRequest"
+  },
+  "result": {
+    "type": "object"
+  }
+}
+```
+
+#### `scene.item.set`
+
+Assign an item's properties. Only the keys named move; the rest are left alone, so calling it twice with the same body changes nothing the second time.
+
+MCP tool `set_scene_item` in the `search` profile: readOnlyHint false, destructiveHint false, idempotentHint true.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/SetItemRequest"
+  },
+  "result": {
+    "type": "object"
+  }
+}
+```
+
+#### `scene.item.ungroup`
+
+Take a group apart, leaving every child exactly where it looked.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/ItemRequest"
+  },
+  "result": {
+    "type": "object"
+  }
+}
+```
+
+#### `scene.layout.copy`
+
+Read one scene's geometry, to paste onto another.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/SceneRequest"
+  },
+  "result": {
+    "$ref": "#/$defs/Layout"
+  }
+}
+```
+
+#### `scene.layout.list`
+
+The layouts that ship with the core, with the parameters each one takes.
+
+MCP tool `list_layouts` in the `search` profile: readOnlyHint true, destructiveHint false, idempotentHint true.
+
+```json
+{
+  "params": {
+    "additionalProperties": false,
+    "properties": {},
+    "type": "object"
+  },
+  "result": {
+    "$ref": "#/$defs/LayoutListing"
+  }
+}
+```
+
+#### `scene.layout.paste`
+
+Put one scene's geometry onto another's items, matched by name first and slot order second. Items that match nothing are left alone.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/LayoutClipboardRequest"
+  },
+  "result": {
+    "type": "object"
+  }
+}
+```
+
+#### `scene.list`
+
+Every scene in the collection, with how many items it has, the sources it draws and whether it is armed.
+
+MCP tool `list_scenes` in the `search` profile: readOnlyHint true, destructiveHint false, idempotentHint true.
+
+```json
+{
+  "params": {
+    "additionalProperties": false,
+    "properties": {},
+    "type": "object"
+  },
+  "result": {
+    "$ref": "#/$defs/SceneListing"
+  }
+}
+```
+
+#### `scene.params.get`
+
+The collection's typed parameters, readable without their values, so a client discovers what is fillable before filling it.
+
+```json
+{
+  "params": {
+    "additionalProperties": false,
+    "properties": {},
+    "type": "object"
+  },
+  "result": {
+    "type": "object"
+  }
+}
+```
+
+#### `scene.params.set`
+
+Set the collection's parameter values. A `{{name}}` in a string property follows them.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/ParamsRequest"
+  },
+  "result": {
+    "type": "object"
+  }
+}
+```
+
+#### `scene.preview.frame`
+
+A still of the armed scene as base64 JPEG, the floor every client has.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/PreviewFrameRequest"
+  },
+  "result": {
+    "type": "object"
+  }
+}
+```
+
+#### `scene.preview.set`
+
+Arm a scene. The armed scene is the preview, and program.take with no argument takes it.
+
+MCP tool `arm_preview` in the `search` profile: readOnlyHint false, destructiveHint false, idempotentHint true.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/PreviewRequest"
+  },
+  "result": {
+    "type": "object"
+  }
+}
+```
+
+#### `scene.redo`
+
+Put back what undo took away.
+
+```json
+{
+  "params": {
+    "additionalProperties": false,
+    "properties": {},
+    "type": "object"
+  },
+  "result": {
+    "$ref": "#/$defs/HistoryStep"
+  }
+}
+```
+
+#### `scene.remove`
+
+Delete a scene. What is on air is not touched.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/SceneRequest"
+  },
+  "result": {
+    "$ref": "#/$defs/SceneRemoved"
+  }
+}
+```
+
+#### `scene.rename`
+
+Change a scene's name, its colour, or both. Names and colours live on the document, so every client, the tally and an agent see the same ones.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/RenameSceneRequest"
+  },
+  "result": {
+    "$ref": "#/$defs/SceneView"
+  }
+}
+```
+
+#### `scene.transaction.abort`
+
+Throw the batch away. The document goes back to where it was when the batch opened.
+
+```json
+{
+  "params": {
+    "additionalProperties": false,
+    "properties": {},
+    "type": "object"
+  },
+  "result": {
+    "type": "object"
+  }
+}
+```
+
+#### `scene.transaction.begin`
+
+Start a batch. Everything until the commit applies on one frame or not at all, and undoes in one step.
+
+```json
+{
+  "params": {
+    "additionalProperties": false,
+    "properties": {},
+    "type": "object"
+  },
+  "result": {
+    "type": "object"
+  }
+}
+```
+
+#### `scene.transaction.commit`
+
+Apply the batch.
+
+```json
+{
+  "params": {
+    "additionalProperties": false,
+    "properties": {},
+    "type": "object"
+  },
+  "result": {
+    "type": "object"
+  }
+}
+```
+
+#### `scene.undo`
+
+Undo the last change. A drag marked with scene.history.mark undoes as one step.
+
+MCP tool `undo_scene_edit` in the `search` profile: readOnlyHint false, destructiveHint false, idempotentHint true.
+
+```json
+{
+  "params": {
+    "additionalProperties": false,
+    "properties": {},
+    "type": "object"
+  },
+  "result": {
+    "$ref": "#/$defs/HistoryStep"
+  }
+}
+```
+
+#### `scene.validate`
+
+Overlaps, items off the canvas, safe area breaches and missing sources: what to fix before saying a scene is done.
+
+MCP tool `validate_scene` in the `search` profile: readOnlyHint true, destructiveHint false, idempotentHint true.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/ValidateRequest"
+  },
+  "result": {
+    "$ref": "#/$defs/Validation"
   }
 }
 ```
@@ -799,6 +1557,21 @@ One source. Refused with the ids that exist when there is no such source.
 }
 ```
 
+#### `source.group`
+
+Put sources in a tray folder. A tag for finding things, not a group on the canvas.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/GroupSourcesRequest"
+  },
+  "result": {
+    "type": "object"
+  }
+}
+```
+
 #### `source.list`
 
 Every source, with its state, whether it has video and audio, and its fader.
@@ -851,6 +1624,21 @@ MCP tool `seek_source` in the `search` profile: readOnlyHint false, destructiveH
   },
   "result": {
     "$ref": "#/$defs/SourcePositionState"
+  }
+}
+```
+
+#### `source.set`
+
+Name and colour a source. Both live on the scene document, so every client, the tally and an agent see the same ones.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/SetSourceMetaRequest"
+  },
+  "result": {
+    "type": "object"
   }
 }
 ```

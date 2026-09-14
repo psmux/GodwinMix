@@ -7,7 +7,7 @@ use godwinmix_protocol::requests::*;
 use godwinmix_protocol::scope::Scope;
 use crate::control::call::Call;
 use godwinmix_core::mixer::Command;
-use serde_json::Value;
+use serde_json::{json, Value};
 
 pub fn register(reg: &mut Registry<Call>) {
     reg.register(
@@ -24,8 +24,8 @@ pub fn register(reg: &mut Registry<Call>) {
         MethodDef::new(
             "program.take",
             Scope::Operate,
-            "Put a source on programme. The cut is instant and the outgoing stream is not \
-             disturbed.",
+            "Put a scene or a source on programme. The cut is instant and the outgoing \
+             stream is not disturbed.",
             handler(take),
         )
         .params(schema_of::<TakeRequest>)
@@ -33,11 +33,10 @@ pub fn register(reg: &mut Registry<Call>) {
         .tool(
             "take",
             Tier::Minimal,
-            "Put a source on programme. The cut is instant and the outgoing stream is not \
-             disturbed. Pass the source id from `agent_state`; omit it or pass null to cut \
-             to the slate. `at_running_time_ms` schedules the cut on a frame instead of \
-             now. Returns the new programme state, so no follow up read is needed. An \
-             unknown id is refused with the ids that would have worked.",
+            "Put a scene or a source on programme. The cut is instant and the outgoing \
+             stream is not disturbed. Pass `source` with an id from `agent_state`, or \
+             `scene` with a name, or neither to take the armed scene. Returns the new \
+             programme state. An unknown id is refused with the ids that work.",
         ),
     );
 
@@ -110,21 +109,104 @@ async fn state(call: &Call) -> Result<ProgramState, RpcError> {
     Ok(ProgramState {
         previous: call.app.history.previous(status.program.as_deref()).flatten(),
         program: status.program,
+        scene: status.scene,
+        preview: call
+            .app
+            .scenes
+            .armed()
+            .and_then(|id| call.app.scenes.scene(&id.to_string()).ok())
+            .map(|s| s.name),
         running_time_ms: status.running_time_ms,
         ad: status.ad,
     })
 }
 
+/// The take, widened for scenes.
+///
+/// Four shapes, in the order they are decided: a source id is shorthand for a
+/// one item full canvas scene and is taken as it always was; a scene name is
+/// taken as a scene; neither, with a scene armed, takes the armed one; neither
+/// with nothing armed cuts to the slate. A name that is both a source id and a
+/// scene name is read as the source, because `source` is the older word and
+/// everything built on it has to keep working.
 async fn take(call: Call, params: Value) -> Result<Value, RpcError> {
     let req: TakeRequest = call.params(&params)?;
-    let target = req.target();
-    if let Some(id) = &target {
+    req.check_transition().map_err(|e| {
+        RpcError::invalid_params(e).with("transitions", json!(godwinmix_protocol::requests::TRANSITIONS))
+    })?;
+
+    if let Some(id) = req.source_id() {
         let ids = call.source_ids().await;
-        if !ids.contains(id) {
-            return Err(RpcError::not_found("source", id, &ids));
+        if !ids.contains(&id) {
+            return Err(RpcError::not_found("source", &id, &ids));
         }
+        return cut(&call, Some(id), req.at_running_time_ms).await;
     }
-    cut(&call, target, req.at_running_time_ms).await
+
+    // A scene by name, or the armed one when nothing was named.
+    let named = match req.scene_name() {
+        Some(name) => Some(name),
+        None => call.app.scenes.armed().map(|id| id.to_string()),
+    };
+    let Some(which) = named else {
+        // Nothing named and nothing armed: the slate, which is what
+        // `program.take {}` has always meant.
+        return cut(&call, None, req.at_running_time_ms).await;
+    };
+    take_scene(&call, &which, req.at_running_time_ms).await
+}
+
+/// Put a whole scene on air.
+async fn take_scene(
+    call: &Call,
+    which: &str,
+    at_running_time_ms: Option<u64>,
+) -> Result<Value, RpcError> {
+    // A draft of this scene taken off air is written back now, which is what
+    // "applied on the next take" means.
+    if let Ok(view) = call.app.scenes.scene(which) {
+        call.app.scenes.apply_drafts_of(Some(&call.token.id), view.id);
+    }
+    let (name, placements) = call
+        .app
+        .scenes
+        .placements(which)
+        .map_err(|e| super::scenes::scene_error(call, e))?;
+    // Every source the scene draws has to be here, or it is a composition with
+    // holes in it and the caller should know before it is on air.
+    let ids = call.source_ids().await;
+    let missing: Vec<String> = {
+        let mut m: Vec<String> =
+            placements.iter().map(|p| p.source.clone()).filter(|s| !ids.contains(s)).collect();
+        m.sort();
+        m.dedup();
+        m
+    };
+    if !missing.is_empty() {
+        return Err(RpcError::new(
+            ErrorCode::NotFound,
+            format!(
+                "the scene {name:?} draws {} this mixer does not have. Add {} with \
+                 source.add, or take a scene whose sources are all here. Sources here: {}",
+                if missing.len() == 1 { "a source" } else { "sources" },
+                missing.join(", "),
+                if ids.is_empty() { "none".into() } else { ids.join(", ") }
+            ),
+        )
+        .with("missing", json!(missing))
+        .with("scene", name));
+    }
+    call.app.history.expect(&call.token.id);
+    call.app
+        .mixer
+        .request(|ack| Command::TakeScene {
+            scene: Box::new(godwinmix_core::mixer::ProgramScene { name: name.clone(), placements }),
+            at_running_time_ms,
+            ack: Some(ack),
+        })
+        .await
+        .map_err(|e| call.mixer_error(e))?;
+    body(state(call).await?)
 }
 
 async fn revert(call: Call, _params: Value) -> Result<Value, RpcError> {
