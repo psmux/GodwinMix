@@ -147,20 +147,24 @@ MacBook Pro with its built in camera:
 ```
 $ gmx plugin test ./plugins/camera
   ok   manifest               camera v0.1.0: 2 provide(s), 1 tool(s), every path and schema in place
-  ok   spawn                  hello in 7 ms (the limit is 5 s), api 1, transport unixfd
+  ok   spawn                  hello in 9 ms (the limit is 5 s), api 1, transport unixfd
   ok   playing                reached PLAYING within the timeout
   ok   video caps             video/x-raw, format=(string)I420, width=(int)1280, height=(int)720, ...
-  ok   video buffers          90 buffers, none out of order
+  ok   video buffers          89 buffers, none out of order
   ok   audio buffers          not declared, not expected
   ok   stop                   the pipeline is in NULL and the kind let go
   ok   configure              19 example(s), every one answered
-  ok   kill                   this kind has no process to kill
+  ok   kill                   killed mid stream, back in 242 frames, away for 102 ms at this
+                              source's own end
   ok   footprint              no process, so nothing to measure
 camera/source is conformant
 ```
 
 Ninety buffers in three seconds at thirty frames a second is every frame, and
-`unixfd` means the picture reaches the core without being copied.
+`unixfd` means the picture reaches the core without being copied. The kill
+check replaces the process under a running pipeline and the picture comes
+back; the gap it reports is at the camera's own end, and the compositor's
+freeze frame is what keeps the programme steady while it happens.
 
 ## Taking it off again
 
