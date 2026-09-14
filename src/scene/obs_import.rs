@@ -26,6 +26,9 @@ use super::document::*;
 mod build;
 use build::Importer;
 
+#[cfg(test)]
+mod import_tests;
+
 /// What became of one OBS source.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "outcome", rename_all = "snake_case")]

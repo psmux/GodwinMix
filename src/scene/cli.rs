@@ -232,6 +232,10 @@ fn render_report(
             n => format!("in {n} items"),
         };
         let line = match &source.outcome {
+            // A scene is not placed in anything, it holds the placements.
+            Outcome::Imported { r#type, .. } if r#type == "scene" => {
+                "imported as a scene of its own".to_string()
+            }
             Outcome::Imported { r#type, id } => format!("imported as {type} {id:?}, {used}"),
             Outcome::NeedsPlugin { r#type, plugin, id } => {
                 format!("imported as {type} {id:?}, {used}: needs the {plugin} plugin")
