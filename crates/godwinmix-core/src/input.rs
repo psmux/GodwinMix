@@ -256,6 +256,15 @@ pub struct InputPipeline {
 pub struct ExecSpec {
     pub argv: Vec<String>,
     pub env: std::collections::BTreeMap<String, String>,
+    /// Give the child a stdin we can write to. A tier 2 plugin's control
+    /// channel is the core writing JSON lines on it; an `exec:` source and the
+    /// browser sidecar inherit ours as they always have, because a child that
+    /// reads a terminal it did not expect is worse than one with no stdin.
+    pub pipe_stdin: bool,
+    /// Where the child runs. `None` is the core's own directory, which is what
+    /// every `exec:` source has always had; a plugin runs in its own root so a
+    /// relative path in its code means what the author meant.
+    pub cwd: Option<std::path::PathBuf>,
 }
 
 impl ExecSpec {
@@ -272,7 +281,7 @@ impl ExecSpec {
         let argv = shell_words::split(command)
             .with_context(|| format!("parsing command: {command}"))?;
         anyhow::ensure!(!argv.is_empty(), "exec source has an empty command");
-        Ok(Self { argv, env: Default::default() })
+        Ok(Self { argv, env: Default::default(), pipe_stdin: false, cwd: None })
     }
 
     /// The CEF sidecar rendering `uri`'s page at the canvas size, or `None`
@@ -297,7 +306,7 @@ impl ExecSpec {
             canvas.fps.numer().to_string(),
         ];
         argv.extend(browser.args.iter().cloned());
-        Ok(Some(Self { argv, env: browser.env.clone() }))
+        Ok(Some(Self { argv, env: browser.env.clone(), pipe_stdin: false, cwd: None }))
     }
 
     /// Rewrite the `--fps` this spec was built with.
@@ -1517,7 +1526,7 @@ pub struct StderrReader {
 impl StderrReader {
     /// Read `err` line by line, handing each to `on_line`, until the pipe ends
     /// or `stop` is called.
-    fn spawn(
+    pub(crate) fn spawn(
         name: String,
         err: std::process::ChildStderr,
         mut on_line: impl FnMut(&str) + Send + 'static,
@@ -1532,7 +1541,7 @@ impl StderrReader {
     }
 
     /// End the thread and close the pipe. Blocks for up to one poll interval.
-    fn stop(&mut self) {
+    pub(crate) fn stop(&mut self) {
         self.stop.store(true, Ordering::SeqCst);
         if let Some(j) = self.join.take() {
             let _ = j.join();
@@ -1683,6 +1692,12 @@ fn exec_process(spec: &ExecSpec, stdout: std::process::Stdio) -> Result<std::pro
         .stdout(stdout)
         // Keep the child's noise out of our own stderr; it is logged separately.
         .stderr(std::process::Stdio::piped());
+    if spec.pipe_stdin {
+        cmd.stdin(std::process::Stdio::piped());
+    }
+    if let Some(dir) = &spec.cwd {
+        cmd.current_dir(dir);
+    }
 
     #[cfg(unix)]
     {
@@ -1916,6 +1931,42 @@ pub fn attach_exec_stdout(id: &str, src: &gst::Element, out: ExecStdout) -> Exec
     // The thread owns the pipe, so there is no descriptor left for the caller
     // to hold. `ExecStdoutHeld` is `Option<Infallible>` here for that reason.
     None
+}
+
+/// Start a child with its stdout piped and hand it over before anything has
+/// been attached to it.
+///
+/// `spawn_exec` above is the whole story for an `exec:` source: it starts the
+/// process, takes the stdout and puts a logging reader on the stderr. A tier 2
+/// plugin cannot use it, because its stderr handler needs the control channel
+/// and the control channel needs the child's stdin, which does not exist until
+/// the process is up. So the host starts the process here and does the rest
+/// itself, over the same `exec_process` with the same process group.
+pub fn spawn_child(spec: &ExecSpec) -> Result<std::process::Child> {
+    exec_process(spec, std::process::Stdio::piped())
+}
+
+/// Is a process still there? One non blocking probe, no reaping.
+///
+/// `kill(pid, 0)` on unix answers for a zombie as well as a live process,
+/// which is the answer wanted here: the supervisor is asking whether the
+/// child has finished, and `ExecChild`'s drop is what collects it.
+pub fn process_alive(pid: u32) -> bool {
+    #[cfg(unix)]
+    {
+        unsafe { libc::kill(pid as i32, 0) == 0 }
+    }
+    #[cfg(not(unix))]
+    {
+        // No portable cheap probe. `tasklist` is what the footprint sampler
+        // uses and it is the same answer; asking for one pid is one process
+        // once a second at most, which is what the supervisor does.
+        std::process::Command::new("tasklist")
+            .args(["/FI", &format!("PID eq {pid}"), "/FO", "CSV", "/NH"])
+            .output()
+            .map(|o| String::from_utf8_lossy(&o.stdout).contains(&pid.to_string()))
+            .unwrap_or(false)
+    }
 }
 
 pub fn make_exec_source(id: &str, spec: &ExecSpec) -> Result<(gst::Element, ExecChild)> {

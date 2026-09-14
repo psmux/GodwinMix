@@ -574,6 +574,7 @@ dependencies = [
  "anyhow",
  "getrandom 0.3.4",
  "glib",
+ "godwinmix-host",
  "godwinmix-protocol",
  "gstreamer",
  "gstreamer-app",
