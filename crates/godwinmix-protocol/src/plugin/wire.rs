@@ -277,6 +277,20 @@ pub struct Configure {
     pub reason: Option<String>,
 }
 
+impl Configure {
+    pub fn applied() -> Self {
+        Configure { applied: true, restart_required: None, reason: None }
+    }
+
+    pub fn restart_required(reason: impl Into<String>) -> Self {
+        Configure {
+            applied: false,
+            restart_required: Some(true),
+            reason: Some(reason.into()),
+        }
+    }
+}
+
 /// The three health states the `health` method answers with.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
@@ -300,12 +314,128 @@ impl Health {
     pub fn ok() -> Self {
         Health { state: HealthState::Ok, detail: None, latency_ms: None }
     }
+
+    pub fn degraded(detail: impl Into<String>) -> Self {
+        Health {
+            state: HealthState::Degraded,
+            detail: Some(detail.into()),
+            latency_ms: None,
+        }
+    }
+
+    pub fn failing(detail: impl Into<String>) -> Self {
+        Health {
+            state: HealthState::Failing,
+            detail: Some(detail.into()),
+            latency_ms: None,
+        }
+    }
 }
 
 impl Default for Health {
     fn default() -> Self {
         Health::ok()
     }
+}
+
+impl Ready {
+    /// A `Ready` good enough for an offline test or a template's own harness.
+    pub fn for_test(canvas: Canvas) -> Self {
+        Ready {
+            core: "godwinmix".into(),
+            version: "0.0.0".into(),
+            api_level: crate::API_LEVEL,
+            api_compatible: crate::API_COMPATIBLE,
+            canvas,
+            transport: Transport::Container,
+            media: String::new(),
+            instance: "test".into(),
+            provide: "source".into(),
+            params: Value::Object(Default::default()),
+        }
+    }
+}
+
+/// The result of `initialize` as a plugin returns it: its measured latency.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct InitializeResult {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub latency_ms: Option<u32>,
+}
+
+/// Params of `seek`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Seek {
+    pub position_ms: u64,
+}
+
+/// Params of `audio.set`. Gain is decibels, 0 is unity.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct AudioSet {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub gain_db: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub muted: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub layers: Option<AudioLayers>,
+}
+
+/// Page and media levels, for a plugin declaring `audio-layers`.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct AudioLayers {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub page: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub media: Option<Vec<Option<f64>>>,
+}
+
+/// The full audio state, read back by `audio.set`.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct AudioState {
+    pub gain_db: f64,
+    pub muted: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub layers: Option<AudioLayers>,
+}
+
+/// Params of `shutdown`.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct Shutdown {
+    #[serde(default)]
+    pub reason: String,
+}
+
+/// Params of `tool.call`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ToolCall {
+    pub name: String,
+    #[serde(default)]
+    pub arguments: Value,
+}
+
+/// Result of `tool.call`, in MCP's shape.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ToolResult {
+    pub content: Value,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub structured_content: Option<Value>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub is_error: Option<bool>,
+}
+
+/// Params of `discover`, for a device provide.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Discover {
+    pub timeout_ms: u64,
+}
+
+/// Params of `render`, for a transition provide.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Render {
+    pub from: Vec<String>,
+    pub to: Vec<String>,
+    pub progress: f64,
+    pub running_time_ns: u64,
 }
 
 /// Result of `position`, and of `seek`.

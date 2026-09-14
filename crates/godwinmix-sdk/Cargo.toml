@@ -11,6 +11,11 @@ license = "Apache-2.0"
 repository = "https://github.com/psmux/godwinmix"
 
 [dependencies]
+# The shared half of the contract: the manifest, the handshake, SKILL.md and
+# the transcript format. Both sides read one description of the protocol, which
+# is the only way it cannot drift. It pulls in no media stack and no server.
+godwinmix-protocol = { path = "../godwinmix-protocol", version = "0.2.0" }
+
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 toml = "0.9"
