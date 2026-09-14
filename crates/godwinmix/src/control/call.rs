@@ -177,6 +177,19 @@ pub async fn dispatch(
         dry_run,
         method: def.name,
     };
+    // The session log's command records, from the one place every surface's
+    // calls pass through. Only the mutating ones: a log with a UI's status
+    // polls in it buries the take that went wrong, and a read is not a
+    // command. This is what `gmx session replay` re-issues.
+    if def.mutating && !dry_run {
+        godwinmix_core::observe::session::session().record_command(
+            method,
+            None,
+            Some(&token.id),
+            key.as_deref(),
+            params.clone(),
+        );
+    }
     let started = std::time::Instant::now();
     let result = (def.handler)(call, params.clone()).await;
     let elapsed_ms = started.elapsed().as_millis() as u64;

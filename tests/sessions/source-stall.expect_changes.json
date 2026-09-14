@@ -1,0 +1,47 @@
+{
+  "changes": [
+    {
+      "what": "source",
+      "id": "cam1",
+      "to": "connecting"
+    },
+    {
+      "what": "program",
+      "to": "cam1"
+    },
+    {
+      "what": "source",
+      "id": "cam1",
+      "to": "live"
+    },
+    {
+      "what": "source",
+      "id": "hall",
+      "to": "connecting"
+    },
+    {
+      "what": "source",
+      "id": "hall",
+      "to": "failed"
+    },
+    {
+      "what": "source",
+      "id": "hall",
+      "to": "removed"
+    },
+    {
+      "what": "source",
+      "id": "hall",
+      "to": "connecting"
+    },
+    {
+      "what": "program",
+      "to": "hall"
+    },
+    {
+      "what": "source",
+      "id": "hall",
+      "to": "live"
+    }
+  ]
+}
