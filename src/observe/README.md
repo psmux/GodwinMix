@@ -13,6 +13,7 @@ today's architecture and none of it waits for the traits.
 | `doctor.rs` | the environment checks |
 | `trace.rs` | `TraceId`, W3C `traceparent`, the task local |
 | `bundle.rs` | the store only zip writer, config redaction, `gmx support-bundle` |
+| `methods.rs` | the rows this module puts in the control plane's method table |
 | `routes.rs` | the axum router the control plane merges |
 | `cli.rs` | `gmx doctor`, `logs`, `trace`, `dot`, `support-bundle` |
 
@@ -21,7 +22,7 @@ Operator documentation is in `docs/how-to/debug-a-show.md`; the metric list is
 
 ## What other modules call
 
-Five entry points, and nothing else in this module is meant to be called from
+Six entry points, and nothing else in this module is meant to be called from
 outside it.
 
 ```rust
@@ -29,7 +30,12 @@ outside it.
 // session log, and starts the task that records every event.
 observe::start(&handle, &observe::Options { config_path, startup_report })?;
 
+// One line in `control::methods::registry`. Puts the eleven methods below on
+// /rpc, on /api/v1, in protocol.json and in the MCP tool list.
+observe::register(&mut reg);
+
 // Merged into the control plane's router. One line in `control::serve`.
+// Serves /metrics, and the REST form of the methods whose answer is not JSON.
 router.merge(observe::router(observe::ObserveState { .. }))
 
 // Around the api agent's `/rpc` router. Counts and times every call.
@@ -44,7 +50,7 @@ let id: Option<observe::TraceId> = observe::current_trace_id();
 
 ## Introspection signatures
 
-The api agent wires the RPC names; these are the functions behind them. All of
+`methods.rs` wires the RPC names; these are the functions behind them. All of
 them take the name a caller typed, which may be a source id, an output id,
 `programme` or `multiview`, and resolve it against the pipelines that are
 actually running.
@@ -101,6 +107,11 @@ found", because the caller's next question is always "well what is there".
 
 ## Log control signatures
 
+The REST paths are the ones `api::method::rest_transform` gives those names,
+and `routes::served_paths` and `methods::PATHS` are held to the same list by a
+test, so a route cannot answer at one address while `protocol.json` publishes
+another.
+
 ```rust
 // log.set {instance, level} and log.set {target, level}.
 // `None` for the level removes the override.
@@ -155,7 +166,8 @@ Six lines, all of them a call into here.
 | `output.rs` | `OutputSlot::spin_up` | `crate::observe::register_pipeline(&format!("output-{id}"), &pipeline);` |
 | `multiview.rs` | `Multiview::build` | `crate::observe::register_pipeline("multiview", &pipeline);` |
 
-Plus one merge in `control::serve` and the module's own wiring in `lib.rs`.
+Plus one merge in `control::serve`, one `observe::register` line in
+`control::methods::registry`, and the module's own wiring in `lib.rs`.
 
 `source_span` and `output_span` return a guard that does two things: it enters
 a `tracing` span carrying `instance`, which is what makes `log.set {instance}`

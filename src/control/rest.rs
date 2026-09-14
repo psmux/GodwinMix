@@ -9,7 +9,7 @@
 use crate::api::error::{ErrorCode, RpcError};
 use crate::api::method::Registry;
 use crate::control::call::dispatch;
-use crate::control::{trace_of, Ctx};
+use crate::control::{trace_id_of, trace_of, Ctx};
 use axum::body::Body;
 use axum::extract::{DefaultBodyLimit, Query, Request, State};
 use axum::http::{header, HeaderMap, Method, StatusCode, Uri};
@@ -230,20 +230,26 @@ async fn generic(State(ctx): State<Ctx>, request: Request) -> Response {
         Err(e) => return error_response(&e, &trace_id),
     };
     let params = params_from(body, parts.uri.query().unwrap_or_default(), captures);
-    let trace_id = trace_of(&parts.headers, params.get("trace_id").and_then(Value::as_str));
+    let id = trace_id_of(&parts.headers, params.get("trace_id").and_then(Value::as_str));
+    let trace_id = id.to_string();
 
     let token = match ctx.app.tokens.authenticate(bearer(&parts.headers).as_deref()) {
         Ok(t) => t,
         Err(f) => return unauthorised(f.message(), &trace_id),
     };
-    match dispatch(
-        &ctx.registry,
-        &ctx.app,
-        &ctx.snapshots,
-        &token,
-        &trace_id,
-        route.method,
-        params,
+    // Inside the task local, so every log line this call produces carries the
+    // same id the caller is holding. See `src/observe/trace.rs`.
+    match crate::observe::with_trace_id(
+        id,
+        dispatch(
+            &ctx.registry,
+            &ctx.app,
+            &ctx.snapshots,
+            &token,
+            &trace_id,
+            route.method,
+            params,
+        ),
     )
     .await
     {
