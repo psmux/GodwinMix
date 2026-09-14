@@ -44,10 +44,10 @@ Labelled `instance`, which is the source id.
 
 | Metric | Type | What it is |
 |---|---|---|
-| `gmx_source_buffers_total` | counter | Buffers seen from this source. |
 | `gmx_source_video_behind_ms` | gauge | Milliseconds since its last video buffer. |
-| `gmx_source_queue_buffers` | gauge | Buffers waiting in its queues. |
+| `gmx_source_queue_buffers` | gauge | Buffers waiting in its queues, summed. |
 | `gmx_source_state` | gauge | 0 connecting, 1 live, 2 stalled, 3 failed. |
+| `gmx_source_buffers_total` | counter | Buffers seen from this source. Declared, not yet filled: counting them needs a probe on each source's own pad, which arrives with the `Source` trait. |
 
 ## Outputs
 
@@ -55,10 +55,10 @@ Labelled `instance`, which is the output id.
 
 | Metric | Type | What it is |
 |---|---|---|
-| `gmx_output_bytes_total` | counter | Bytes written. |
 | `gmx_output_reconnects_total` | counter | Times this output has reconnected. |
 | `gmx_output_queue_secs` | gauge | Seconds of encoded data waiting for it. |
 | `gmx_output_state` | gauge | 0 connecting, 1 live, 2 reconnecting, 3 failed. |
+| `gmx_output_bytes_total` | counter | Bytes written. Declared, not yet filled, for the same reason as `gmx_source_buffers_total`. |
 
 A `gmx_output_queue_secs` that climbs and stays high means the destination
 cannot keep up. It is the earliest warning of an uplink that has gone bad, and
@@ -82,8 +82,8 @@ memory. `code` is the HTTP status.
 | Metric | Type | Labels | What it is |
 |---|---|---|---|
 | `gmx_takes_total` | counter | | Takes that landed. |
-| `gmx_takes_refused_total` | counter | `reason` | Takes refused, by reason. |
-| `gmx_take_ack_ms` | histogram | | From the take being asked for to it landing. |
+| `gmx_take_ack_ms` | histogram | | From the take being asked for to it landing. Filled by whoever answers the call: `observe::metrics::record_take_ack`. |
+| `gmx_takes_refused_total` | counter | `reason` | Takes refused, by reason. Filled through `observe::metrics::record_take_refused`, once there is a safety rule that refuses one. |
 
 Buckets as for `gmx_rpc_duration_ms`. `reason` is a short slug, never a
 sentence, for the same label cardinality reason as `method`.
@@ -120,7 +120,8 @@ three different routes:
 * Source, output and take metrics come off the state event broadcast, which
   already exists. One task subscribes to it, folds each event into the registry
   and writes the session log. Nothing else in the mixer knows metrics exist.
-* The status gauges and the mosaic subscriber count are read at scrape time. A
+* The status gauges, the mosaic subscriber count and each source's queue depth
+  are read at scrape time. A
   mixer nobody is scraping does no work for them at all.
 
 ## Reading one without Prometheus

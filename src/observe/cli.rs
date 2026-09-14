@@ -87,6 +87,20 @@ pub enum ObserveCmd {
 /// The default mixer address, matching the one `gmx ctl` uses.
 const DEFAULT_URL: &str = "http://127.0.0.1:8080";
 
+/// A reader that has gone away is not an error.
+///
+/// `gmx dot cam1 | dot -Tsvg` and `gmx logs -f | head` both close the pipe
+/// while we are still writing, and the default behaviour is a panic from
+/// inside `print!`. Every one of these commands is meant to be piped, so a
+/// broken pipe ends the command quietly, the way every other command line tool
+/// behaves.
+fn quiet_on_broken_pipe(result: std::io::Result<()>) -> Result<()> {
+    match result {
+        Err(e) if e.kind() == std::io::ErrorKind::BrokenPipe => Ok(()),
+        other => Ok(other?),
+    }
+}
+
 pub async fn run(cmd: ObserveCmd) -> Result<()> {
     match cmd {
         ObserveCmd::Doctor { config, json } => doctor(&config, json),
@@ -188,10 +202,13 @@ async fn logs(dir: &Path, follow: bool, filter: Filter, lines: usize) -> Result<
     let kept: Vec<&str> = history.lines().filter(|l| filter.keeps(l)).collect();
     let start = kept.len().saturating_sub(lines);
     let mut out = std::io::stdout().lock();
-    for line in &kept[start..] {
-        writeln!(out, "{}", human(line))?;
-    }
-    out.flush()?;
+    let printed = (|| {
+        for line in &kept[start..] {
+            writeln!(out, "{}", human(line))?;
+        }
+        out.flush()
+    })();
+    quiet_on_broken_pipe(printed)?;
     if !follow {
         return Ok(());
     }
@@ -210,10 +227,13 @@ async fn logs(dir: &Path, follow: bool, filter: Filter, lines: usize) -> Result<
         }
         let text = std::fs::read_to_string(&core).unwrap_or_default();
         let fresh: String = text.chars().skip(at as usize).collect();
-        for line in fresh.lines().filter(|l| filter.keeps(l)) {
-            writeln!(out, "{}", human(line))?;
-        }
-        out.flush()?;
+        let printed = (|| {
+            for line in fresh.lines().filter(|l| filter.keeps(l)) {
+                writeln!(out, "{}", human(line))?;
+            }
+            out.flush()
+        })();
+        quiet_on_broken_pipe(printed)?;
         at = size;
     }
 }
@@ -225,6 +245,14 @@ fn human(line: &str) -> String {
     let Ok(v) = serde_json::from_str::<serde_json::Value>(line) else {
         return line.to_string();
     };
+    // A session log record and a log line are both JSON objects with a `ts`,
+    // and `gmx trace` reads both. Telling them apart matters: a session record
+    // carries a `kind` and a `seq` and no `message`, and rendering one as a log
+    // line puts the target it was *setting* in the column where a reader
+    // expects the target it came *from*.
+    if v.get("message").is_none() && v.get("kind").is_some() && v.get("seq").is_some() {
+        return human_session_record(&v);
+    }
     let mut out = format!(
         "{} {:>5} {}",
         v["ts"].as_str().unwrap_or("-"),
@@ -238,6 +266,26 @@ fn human(line: &str) -> String {
     if let Some(obj) = v.as_object() {
         for (k, value) in obj {
             if matches!(k.as_str(), "ts" | "level" | "target" | "instance" | "message") {
+                continue;
+            }
+            out.push_str(&format!(" {k}={value}"));
+        }
+    }
+    out
+}
+
+/// One session log record: what happened, not where it was logged from.
+fn human_session_record(v: &serde_json::Value) -> String {
+    let mut out = format!(
+        "{} {:>5} session[{}] {}",
+        v["ts"].as_str().unwrap_or("-"),
+        "rec",
+        v["seq"].as_u64().unwrap_or(0),
+        v["kind"].as_str().unwrap_or("-")
+    );
+    if let Some(obj) = v.as_object() {
+        for (k, value) in obj {
+            if matches!(k.as_str(), "ts" | "kind" | "seq") {
                 continue;
             }
             out.push_str(&format!(" {k}={value}"));
@@ -292,10 +340,12 @@ fn trace(dir: &Path, id: &str) -> Result<()> {
     }
     lines.sort_by(|a, b| a.0.cmp(&b.0));
     let mut out = std::io::stdout().lock();
-    for (_, line) in lines {
-        writeln!(out, "{}", human(&line))?;
-    }
-    Ok(())
+    quiet_on_broken_pipe((|| {
+        for (_, line) in lines {
+            writeln!(out, "{}", human(&line))?;
+        }
+        out.flush()
+    })())
 }
 
 async fn dot(name: &str, url: Option<String>, token: Option<String>) -> Result<()> {
@@ -317,8 +367,7 @@ async fn dot(name: &str, url: Option<String>, token: Option<String>) -> Result<(
     let body = response.text().await.unwrap_or_default();
     anyhow::ensure!(status.is_success(), "{status}: {body}");
     // Straight to stdout, unwrapped, so the pipe into `dot -Tsvg` works.
-    print!("{body}");
-    Ok(())
+    quiet_on_broken_pipe(std::io::stdout().lock().write_all(body.as_bytes()))
 }
 
 async fn support_bundle(
@@ -412,6 +461,23 @@ mod tests {
         let text = human(&line("2026-09-14T20:10:00.000Z", "warn", Some("cam1"), None));
         assert!(text.starts_with("2026-09-14T20:10:00.000Z  warn godwinmix::mixer [cam1]"), "{text}");
         assert!(text.contains("a thing"), "{text}");
+    }
+
+    #[test]
+    fn a_session_record_is_not_printed_as_though_it_were_a_log_line() {
+        let record = serde_json::json!({
+            "ts": "2026-09-14T20:10:00.000Z",
+            "seq": 7,
+            "kind": "log.set",
+            "target": "godwinmix::mixer",
+            "level": "debug",
+        })
+        .to_string();
+        let text = human(&record);
+        assert!(text.contains("session[7] log.set"), "{text}");
+        // The target being set must not sit in the column that names where the
+        // line came from.
+        assert!(!text.starts_with("2026-09-14T20:10:00.000Z debug godwinmix::mixer"), "{text}");
     }
 
     #[test]

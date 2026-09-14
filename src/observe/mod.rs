@@ -138,6 +138,23 @@ impl InstanceGuard {
     }
 }
 
+/// Run `f` with everything it logs tagged as this instance.
+///
+/// For a callback that runs on a thread of its own, where there is no build to
+/// hang a span on: the thread draining a sidecar's stderr is the one that
+/// matters today. Its lines then carry the instance tag and obey
+/// `log.set {instance, level}`, which is what puts a Python traceback from a
+/// sidecar in the same file as the core's decision about it, at the same
+/// level the operator asked for.
+///
+/// The span is created per call rather than held, because these callbacks are
+/// `FnMut` and a held `EnteredSpan` would have to cross the closure's
+/// boundary. A sidecar writing enough stderr for that allocation to matter has
+/// a problem the log is about to tell you about.
+pub fn in_instance<R>(instance: &str, f: impl FnOnce() -> R) -> R {
+    tracing::info_span!("instance", instance = instance).in_scope(f)
+}
+
 /// Middleware that counts and times every call, for the api agent's `/rpc`
 /// router.
 ///

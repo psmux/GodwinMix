@@ -108,10 +108,11 @@ pub fn run(config_path: &Path) -> Vec<Check> {
     checks.push(encoder("video encoder", VIDEO_ENCODERS));
     checks.push(encoder("audio encoder", AUDIO_ENCODERS));
 
-    let cfg = config_check(config_path);
-    let parsed = Config::load(config_path).ok();
-    checks.push(cfg);
-    if let Some(cfg) = &parsed {
+    // Loaded once. `Config::load` logs what it found, and loading twice put
+    // every one of those lines on the screen twice.
+    let loaded = config_path.exists().then(|| Config::load(config_path));
+    checks.push(config_check(config_path, loaded.as_ref()));
+    if let Some(Ok(cfg)) = &loaded {
         checks.push(port_free(&cfg.control.bind));
     }
     let dir = crate::observe::runtime_dir(config_path);
@@ -164,7 +165,7 @@ fn gstreamer_version() -> Check {
             format!("{found} is too old. 1.20 or newer is needed; 1.28 is what this is tested on"),
         )
     } else {
-        Check::new("gstreamer", Verdict::Ok, format!("{found}"))
+        Check::new("gstreamer", Verdict::Ok, found)
     }
 }
 
@@ -247,7 +248,7 @@ fn encoder(name: &str, candidates: &[&str]) -> Check {
         ),
         // A machine with only the software encoder runs, and says so, because
         // the person choosing a board should choose knowing.
-        Some((first, rest)) if rest.is_empty() => Check::new(
+        Some((first, [])) => Check::new(
             name,
             Verdict::Warn,
             format!("{first} only, which is software. Expect a core per 1080p30 encode"),
@@ -258,8 +259,11 @@ fn encoder(name: &str, candidates: &[&str]) -> Check {
     }
 }
 
-fn config_check(path: &Path) -> Check {
-    if !path.exists() {
+/// `loaded` is `None` when the file is not there, and otherwise the one result
+/// of loading it. `Config::load` validates as well as parses, so a single call
+/// answers both "does it parse" and "does it mean anything".
+fn config_check(path: &Path, loaded: Option<&anyhow::Result<Config>>) -> Check {
+    let Some(loaded) = loaded else {
         return Check::new(
             "config",
             Verdict::Warn,
@@ -269,10 +273,8 @@ fn config_check(path: &Path) -> Check {
                 path.display()
             ),
         );
-    }
-    // `Config::load` validates as well as parses, so one call answers both
-    // "does it parse" and "does it mean anything".
-    match Config::load(path) {
+    };
+    match loaded {
         Ok(cfg) => Check::new(
             "config",
             Verdict::Ok,
@@ -286,8 +288,24 @@ fn config_check(path: &Path) -> Check {
                 cfg.canvas.fps
             ),
         ),
-        Err(e) => Check::new("config", Verdict::Fail, format!("{e:#}").replace('\n', "; ")),
+        Err(e) => Check::new("config", Verdict::Fail, one_line(&format!("{e:#}"))),
     }
+}
+
+/// A multi line error as one line.
+///
+/// `toml` draws the offending line with a caret under it, which is the right
+/// thing in a terminal and the wrong thing in a table of one line verdicts.
+/// The drawing is dropped and the sentences are kept.
+fn one_line(text: &str) -> String {
+    text.lines()
+        .map(str::trim)
+        .filter(|l| {
+            !l.is_empty()
+                && !l.chars().all(|c| matches!(c, '|' | '^' | '-' | ' ' | '0'..='9'))
+        })
+        .collect::<Vec<_>>()
+        .join("; ")
 }
 
 fn port_free(bind: &str) -> Check {
@@ -563,13 +581,27 @@ mod tests {
         let dir = crate::observe::tempdir("doctor-config");
         let path = dir.join("godwinmix.toml");
         std::fs::write(&path, "this is not toml = = =").unwrap();
-        let check = config_check(&path);
+        let check = config_check(&path, Some(&Config::load(&path)));
         assert_eq!(check.verdict, Verdict::Fail);
         assert!(check.detail.contains("godwinmix.toml"), "{check:?}");
 
         std::fs::write(&path, "[canvas]\nwidth = 1280\nheight = 720\nfps = 30\nsample_rate = 48000\nchannels = 2\n").unwrap();
-        assert_eq!(config_check(&path).verdict, Verdict::Ok);
+        assert_eq!(config_check(&path, Some(&Config::load(&path))).verdict, Verdict::Ok);
+        // And a file that is not there is a warning, not a failure: an
+        // operator checking a machine before writing one is doing it right.
+        assert_eq!(config_check(&dir.join("absent.toml"), None).verdict, Verdict::Warn);
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_multi_line_parse_error_becomes_one_readable_line() {
+        let drawn = "TOML parse error at line 11, column 1\n   |\n11 | [multiview]\n   | ^^^^^^^^^^^\nmissing field `width`\n";
+        let out = one_line(drawn);
+        assert_eq!(
+            out,
+            "TOML parse error at line 11, column 1; 11 | [multiview]; missing field `width`"
+        );
+        assert!(!out.contains('\n'));
     }
 
     #[test]

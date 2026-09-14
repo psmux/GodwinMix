@@ -42,8 +42,15 @@ impl Zip {
 
     /// Add one file. `name` is the path inside the archive, forward slashes,
     /// as the zip format requires on every platform including Windows.
-    pub fn add(&mut self, name: &str, data: &[u8]) {
+    ///
+    /// A name already in the archive is refused and the first one stands.
+    /// `unzip` asks the operator what to do about a duplicate, and a support
+    /// bundle is a thing people unpack in a script.
+    pub fn add(&mut self, name: &str, data: &[u8]) -> bool {
         let name = name.replace('\\', "/");
+        if self.entries.iter().any(|e| e.name == name) {
+            return false;
+        }
         let crc = crc32(data);
         let offset = self.out.len() as u32;
         self.out.extend_from_slice(&0x0403_4b50u32.to_le_bytes()); // local header
@@ -60,6 +67,7 @@ impl Zip {
         self.out.extend_from_slice(name.as_bytes());
         self.out.extend_from_slice(data);
         self.entries.push(Entry { name, crc, size: data.len() as u32, offset });
+        true
     }
 
     /// The finished archive.
@@ -216,8 +224,9 @@ pub async fn build(options: &BundleOptions) -> Result<(PathBuf, Vec<String>)> {
     let mut zip = Zip::new();
     let mut included = Vec::new();
     let add = |zip: &mut Zip, name: &str, data: Vec<u8>, included: &mut Vec<String>| {
-        included.push(format!("{name} ({} bytes)", data.len()));
-        zip.add(name, &data);
+        if zip.add(name, &data) {
+            included.push(format!("{name} ({} bytes)", data.len()));
+        }
     };
 
     add(&mut zip, "versions.txt", versions().into_bytes(), &mut included);
@@ -232,14 +241,20 @@ pub async fn build(options: &BundleOptions) -> Result<(PathBuf, Vec<String>)> {
     let checks = super::doctor::run(&options.config_path);
     add(&mut zip, "doctor.txt", super::doctor::format(&checks).into_bytes(), &mut included);
 
-    let session = super::session::session().tail_since(3600).join("\n");
-    if !session.is_empty() {
-        add(&mut zip, "session-last-hour.jsonl", session.into_bytes(), &mut included);
-    } else if let Ok(text) = std::fs::read_to_string(super::session::path_in(&options.runtime_dir)) {
-        // A bundle taken from another process reads the file directly, and
-        // keeps the tail of it.
-        let tail: String = tail_lines(&text, 20_000);
-        add(&mut zip, "session-last-hour.jsonl", tail.into_bytes(), &mut included);
+    // A running mixer answers with its own last hour, which is authoritative
+    // and is fetched below. Without one, the file on disk is what there is.
+    if options.url.is_none() {
+        let session = super::session::session().tail_since(3600).join("\n");
+        let session = if session.is_empty() {
+            std::fs::read_to_string(super::session::path_in(&options.runtime_dir))
+                .map(|text| tail_lines(&text, 20_000))
+                .unwrap_or_default()
+        } else {
+            session
+        };
+        if !session.is_empty() {
+            add(&mut zip, "session-last-hour.jsonl", session.into_bytes(), &mut included);
+        }
     }
 
     for path in super::logs::log_files(&options.runtime_dir) {
@@ -378,6 +393,16 @@ mod tests {
         assert!(bytes.windows(4).any(|w| w == b"PK\x01\x02"), "no central directory");
     }
 
+    #[test]
+    fn a_name_already_in_the_archive_is_refused_rather_than_written_twice() {
+        let mut zip = Zip::new();
+        assert!(zip.add("a.txt", b"first"));
+        assert!(!zip.add("a.txt", b"second"));
+        let bytes = zip.finish();
+        let end = &bytes[bytes.len() - 22..];
+        assert_eq!(u16::from_le_bytes([end[10], end[11]]), 1, "the duplicate was written");
+    }
+
     /// The CRC is the one thing in a zip that cannot be checked by looking at
     /// it, so it is checked against the value every CRC-32 implementation
     /// agrees on for this input.
@@ -397,15 +422,15 @@ mod tests {
         zip.add("nested/b.txt", b"world");
         let path = dir.join("test.zip");
         std::fs::write(&path, zip.finish()).unwrap();
-        match std::process::Command::new("unzip").arg("-t").arg(&path).output() {
-            Ok(out) => assert!(
+        // No unzip on this runner means no assertion; the structural test
+        // above still holds.
+        if let Ok(out) = std::process::Command::new("unzip").arg("-t").arg(&path).output() {
+            assert!(
                 out.status.success(),
                 "unzip refused the archive: {}{}",
                 String::from_utf8_lossy(&out.stdout),
                 String::from_utf8_lossy(&out.stderr)
-            ),
-            // No unzip on this runner. The structural test above still holds.
-            Err(_) => {}
+            );
         }
         let _ = std::fs::remove_dir_all(&dir);
     }

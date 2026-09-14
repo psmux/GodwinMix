@@ -3040,7 +3040,9 @@ fn spawn_exec(id: &str, spec: &ExecSpec) -> Result<(ExecStdout, std::process::Ch
     let stderr = child.stderr.take().map(|err| {
         let name = id.to_string();
         StderrReader::spawn(format!("exec-stderr-{id}"), err, move |line| {
-            debug!(source = %name, "{line}");
+            // Inside the instance's span, so `log.set {instance, level}`
+            // reaches a sidecar's own output. See `observe::in_instance`.
+            crate::observe::in_instance(&name, || debug!(source = %name, "{line}"));
         })
     });
 
