@@ -330,6 +330,33 @@ async fn preview_frame(call: Call, params: Value) -> Result<Value, RpcError> {
 /// is well inside the five second ceiling every method is held to.
 const FRAME_WAIT: std::time::Duration = std::time::Duration::from_secs(2);
 
+/// Push a scene that is on air again, as a cut.
+///
+/// What a filter change needs: `scene.item.filter.add` writes the filter onto
+/// the item, and the slot pool puts it on that item's chain the next time the
+/// scene is applied. Without this the filter would be in the document and not
+/// in the picture until somebody took the scene again, which is the gap the
+/// comment on those methods used to paper over.
+///
+/// A no op off air, and a property write on air: the pads are already drawing
+/// these items, so the apply binds nothing and relinks nothing except the
+/// filter chain that actually changed.
+pub(crate) async fn reapply_if_on_air(call: &Call, view: &SceneView) {
+    let Ok(status) = call.app.mixer.status().await else { return };
+    if status.scene.as_deref() != Some(view.name.as_str()) {
+        return;
+    }
+    let Ok((name, placements)) = server(call).placements(&view.name) else { return };
+    let _ = call.app.mixer.send(Command::TakeScene {
+        scene: Box::new(ProgramScene { name, placements }),
+        at_running_time_ms: None,
+        duration_ms: None,
+        transition: None,
+        ack: None,
+    });
+    tracing::debug!(scene = %view.name, "a change to the scene on air was pushed to the pipeline");
+}
+
 /// Ramp the pads of a scene that is on air towards what the document now says.
 ///
 /// A geometry command with a duration on a scene nobody is looking at is a

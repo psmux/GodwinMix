@@ -171,6 +171,11 @@ pub struct Placement {
     /// chain, above the compositor pad, so the same camera can be keyed in one
     /// item and clean in another.
     pub filters: Vec<ItemFilter>,
+    /// The children this placement composites, for a group that carries a
+    /// filter and therefore cannot be flattened. Empty for every ordinary
+    /// item, which is every item that is not a filtered group. See
+    /// `mixer::group`: this is the expensive path and is built on demand.
+    pub group: Vec<Placement>,
     pub xpos: i32,
     pub ypos: i32,
     pub width: i32,
@@ -195,6 +200,7 @@ impl Placement {
             source,
             item: None,
             filters: Vec::new(),
+            group: Vec::new(),
             xpos: 0,
             ypos: 0,
             width: canvas.width,
@@ -328,9 +334,22 @@ pub struct Slot {
     filter_shape: Vec<ItemFilter>,
 }
 
-struct Bound {
-    source: SourceId,
-    tee_pad: gst::Pad,
+/// What a slot's chain is fed from.
+enum Bound {
+    /// A source's programme tee, which is every ordinary item.
+    Source { source: SourceId, tee_pad: gst::Pad },
+    /// A group composited on its own, because a filter over it cannot be
+    /// expressed by flattening. See `mixer::group`.
+    Group { item: Id, sub: Box<super::group::SubCompositor> },
+}
+
+impl Bound {
+    fn source(&self) -> Option<&SourceId> {
+        match self {
+            Bound::Source { source, .. } => Some(source),
+            Bound::Group { .. } => None,
+        }
+    }
 }
 
 impl Slot {
@@ -342,11 +361,26 @@ impl Slot {
     /// True when this slot already carries that source's picture, so binding
     /// it costs nothing.
     fn holds(&self, source: &SourceId) -> bool {
-        self.bound.as_ref().is_some_and(|b| &b.source == source)
+        self.bound.as_ref().and_then(Bound::source).is_some_and(|s| s == source)
+    }
+
+    /// True when this slot is already compositing that group.
+    fn holds_group(&self, item: Option<Id>) -> bool {
+        matches!((&self.bound, item), (Some(Bound::Group { item: have, .. }), Some(want)) if *have == want)
     }
 
     pub fn source(&self) -> Option<&SourceId> {
-        self.bound.as_ref().map(|b| &b.source)
+        self.bound.as_ref().and_then(Bound::source)
+    }
+
+    /// The sources a group slot is compositing, or the one source an ordinary
+    /// slot is bound to.
+    pub fn sources(&self) -> Vec<SourceId> {
+        match &self.bound {
+            Some(Bound::Group { sub, .. }) => sub.sources(),
+            Some(Bound::Source { source, .. }) => vec![source.clone()],
+            None => Vec::new(),
+        }
     }
 
     /// Everything a placement decides, written straight onto the pad and the
@@ -705,6 +739,29 @@ impl SlotPool {
         let mut drawn = 0usize;
 
         for (i, p) in placements.iter().enumerate() {
+            // A group carrying a filter is composited on its own, so it is
+            // bound to a sub compositor rather than to one source's tee. See
+            // `mixer::group`: the expensive path, taken only when a scene asks
+            // for it.
+            if !p.group.is_empty() {
+                let index = match self.pick_group(p.item, &claimed) {
+                    Some(index) => index,
+                    None => self.free_slot(&p.source, &claimed)?,
+                };
+                if let Err(e) = self.bind_group(index, p, branches) {
+                    warn!(?e, "a filtered group could not be composited; it was left out");
+                    continue;
+                }
+                self.slots[index].open();
+                if let Err(e) = self.sync_filters(index, &p.filters) {
+                    warn!(slot = index, ?e, "a group's filter could not go on");
+                }
+                ramps.push(self.slots[index].draw(p, Z_LIVE + i as u32, write));
+                self.slots[index].drawn = p.item;
+                claimed.push(index);
+                drawn += 1;
+                continue;
+            }
             let Some((_, branch)) = branches.iter().find(|(id, _)| *id == &p.source) else {
                 if !missing.contains(&p.source) {
                     missing.push(p.source.clone());
@@ -738,6 +795,20 @@ impl SlotPool {
                 slot.hide();
             }
         }
+        // A binding to a source is kept whatever the scene says, because it is
+        // free and because keeping it is what makes the next take a property
+        // write. A sub compositor is neither: it is a compositor, a queue and
+        // a chain per child, so a group nobody is drawing gives them all back.
+        let stale: Vec<usize> = self
+            .slots
+            .iter()
+            .filter(|s| !s.retired && !claimed.contains(&s.index) && !held.contains(&s.index))
+            .filter(|s| matches!(s.bound, Some(Bound::Group { .. })))
+            .map(|s| s.index)
+            .collect();
+        for index in stale {
+            self.unbind(index);
+        }
         Ok(Applied { drawn, missing, slots: claimed, ramps })
     }
 
@@ -760,6 +831,15 @@ impl SlotPool {
             }
         }
         self.slots.iter().find(|s| free(s) && s.holds(source)).map(|s| s.index)
+    }
+
+    /// The slot already compositing this group, so a group whose children only
+    /// moved costs property writes and nothing else.
+    fn pick_group(&self, item: Option<Id>, claimed: &[usize]) -> Option<usize> {
+        self.slots
+            .iter()
+            .find(|s| self.usable(s.index) && !claimed.contains(&s.index) && s.holds_group(item))
+            .map(|s| s.index)
     }
 
     /// True when a slot can be handed to a placement: not held with a freeze
@@ -904,9 +984,57 @@ impl SlotPool {
         for el in &self.slots[index].elements {
             el.sync_state_with_parent().ok();
         }
-        self.slots[index].bound = Some(Bound { source: branch.id.clone(), tee_pad });
+        self.slots[index].bound =
+            Some(Bound::Source { source: branch.id.clone(), tee_pad });
         debug!(slot = index, source = %branch.id, "slot bound");
         Ok(())
+    }
+
+    /// Bind a slot to a group composited on its own.
+    ///
+    /// The one path that adds elements to a running programme on purpose, and
+    /// the reason it is worth it: a filter over a group cannot be expressed by
+    /// flattening, so either the group gets its own compositor or a blur over
+    /// three items is three blurs. Built only for a group that carries a
+    /// filter, and taken down the moment it does not. See `mixer::group`.
+    fn bind_group<'a>(
+        &mut self,
+        index: usize,
+        p: &Placement,
+        branches: &[(&'a SourceId, &'a ProgrammeBranch)],
+    ) -> Result<()> {
+        let item = p.item.context("a group placement with no item id cannot be bound")?;
+        if !self.slots[index].holds_group(p.item) {
+            self.unbind(index);
+            let mut sub = super::group::SubCompositor::build(
+                &self.program,
+                &self.canvas,
+                &format!("{index}"),
+            )?;
+            let sink = self.slots[index]
+                .gate
+                .static_pad("sink")
+                .context("a slot's valve has no sink pad")?;
+            let src = sub
+                .output()
+                .static_pad("src")
+                .context("a sub compositor has no src pad")?;
+            self.slots[index].hide();
+            if let Err(e) = src.link(&sink) {
+                sub.teardown();
+                return Err(e.into());
+            }
+            for el in &self.slots[index].elements {
+                el.sync_state_with_parent().ok();
+            }
+            self.slots[index].bound = Some(Bound::Group { item, sub: Box::new(sub) });
+            self.misses += 1;
+            info!(slot = index, "a group carrying a filter is being composited on its own");
+        }
+        let Some(Bound::Group { sub, .. }) = self.slots[index].bound.as_mut() else {
+            anyhow::bail!("the slot did not take the group")
+        };
+        sub.apply(&p.group, branches)
     }
 
     /// Take a slot off whatever it was showing. The tee pad goes back so a
@@ -921,11 +1049,22 @@ impl SlotPool {
         slot.home = false;
         slot.drawn = None;
         slot.hide();
-        if let Some(sink) = slot.gate.static_pad("sink") {
-            let _ = bound.tee_pad.unlink(&sink);
-        }
-        if let Some(tee) = bound.tee_pad.parent_element() {
-            tee.release_request_pad(&bound.tee_pad);
+        let sink = slot.gate.static_pad("sink");
+        match bound {
+            Bound::Source { tee_pad, .. } => {
+                if let Some(sink) = sink {
+                    let _ = tee_pad.unlink(&sink);
+                }
+                if let Some(tee) = tee_pad.parent_element() {
+                    tee.release_request_pad(&tee_pad);
+                }
+            }
+            Bound::Group { mut sub, .. } => {
+                if let (Some(sink), Some(src)) = (sink, sub.output().static_pad("src")) {
+                    let _ = src.unlink(&sink);
+                }
+                sub.teardown();
+            }
         }
     }
 
@@ -979,6 +1118,24 @@ impl SlotPool {
         }
     }
 
+    /// What is on one slot's chain right now, by filter id. For the status,
+    /// for `gmx dot`, and for the test that proves a per item filter is in the
+    /// pipeline rather than only in the document.
+    pub fn filters_on(&self, index: usize) -> Vec<String> {
+        self.slots
+            .get(index)
+            .map(|s| s.filters.iter().map(|f| f.spec.type_id.clone()).collect())
+            .unwrap_or_default()
+    }
+
+    /// Every per item filter in the pool, as `(slot, type)`.
+    pub fn item_filters(&self) -> Vec<(usize, String)> {
+        self.slots
+            .iter()
+            .flat_map(|s| s.filters.iter().map(move |f| (s.index, f.spec.type_id.clone())))
+            .collect()
+    }
+
     /// The compositor itself, for a probe that has to read its output.
     pub fn compositor(&self) -> &gst::Element {
         &self.vmix
@@ -991,7 +1148,21 @@ impl SlotPool {
 
     /// The slots a source is drawn in right now.
     pub fn slots_of(&self, source: &SourceId) -> Vec<usize> {
-        self.slots.iter().filter(|s| s.holds(source)).map(|s| s.index).collect()
+        self.slots
+            .iter()
+            .filter(|s| s.holds(source) || s.sources().iter().any(|id| id == source))
+            .map(|s| s.index)
+            .collect()
+    }
+
+    /// Every group being composited on its own, as `(slot, children)`. What
+    /// the status and `gmx dot` read, and what a test counts.
+    pub fn sub_compositors(&self) -> Vec<(usize, Vec<SourceId>)> {
+        self.slots
+            .iter()
+            .filter(|s| matches!(s.bound, Some(Bound::Group { .. })))
+            .map(|s| (s.index, s.sources()))
+            .collect()
     }
 
     /// How many slots are visible. What the compositor is actually paying for.
@@ -1042,6 +1213,48 @@ pub struct Applied {
     /// Where each claimed slot was and where the scene wants it. Empty on the
     /// ordinary path, where the pad is already where it is going.
     pub ramps: Vec<Ramp>,
+}
+
+/// Everything a placement decides, onto a pad that is not a slot's.
+///
+/// The sub compositor's children want exactly what a slot wants, and the
+/// arithmetic is the same arithmetic, so it lives here once rather than in two
+/// places that could drift.
+pub(crate) fn write_pad(
+    pad: &gst::Pad,
+    p: &Placement,
+    canvas: &CanvasCaps,
+    crop: &gst::Element,
+    flip: &gst::Element,
+) {
+    PadState::of(p).write(pad);
+    set_sizing(pad, p.sizing);
+    for (name, v) in [("xalign", p.align.0), ("yalign", p.align.1)] {
+        if pad.has_property(name) {
+            set_f64(pad, name, v.clamp(0.0, 1.0));
+        }
+    }
+    // The child's own size is the canvas, because every input is normalised to
+    // the canvas contract before it reaches the programme pipeline.
+    let px = |f: f64, of: i32| (f.clamp(0.0, 0.95) * of as f64).round() as i32;
+    for (name, value, of) in [
+        ("left", p.crop.0, canvas.width),
+        ("top", p.crop.1, canvas.height),
+        ("right", p.crop.2, canvas.width),
+        ("bottom", p.crop.3, canvas.height),
+    ] {
+        set_i32_on(crop, name, px(value, of));
+    }
+    let quarters = (p.rotation.rem_euclid(360.0) / 90.0).round() as i64 % 4;
+    flip.set_property_from_str(
+        "method",
+        match quarters {
+            1 => "clockwise",
+            2 => "rotate-180",
+            3 => "counterclockwise",
+            _ => "none",
+        },
+    );
 }
 
 /// Write `sizing-policy`, if this pad has it and has a value it understands.
