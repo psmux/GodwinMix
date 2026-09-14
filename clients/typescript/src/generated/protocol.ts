@@ -672,7 +672,7 @@ export interface ParamsRequest {
 
 /** What changed in one transaction. */
 export interface Patch {
-  added?: Record[];
+  added?: ProtocolRecord[];
   label?: string | null;
   removed?: Id[];
   scope: string;
@@ -820,11 +820,12 @@ export interface ProgramState {
 }
 
 /** One scene or one item. */
-export interface Record {
+export interface ProtocolRecord {
   id: Id;
   order: string;
   parent?: Id | null;
 }
+export type { ProtocolRecord as Record };
 
 export interface RenameSceneRequest {
   color?: string | null;
@@ -886,7 +887,7 @@ export interface SceneView {
   geometry: Geometry[];
   id: Id;
   name: string;
-  records: Record[];
+  records: ProtocolRecord[];
 }
 
 /** `plugin.search`. */
@@ -1130,8 +1131,8 @@ export interface UiDefaults {
 
 /** One record as it was and as it is. */
 export interface Update {
-  after: Record;
-  before: Record;
+  after: ProtocolRecord;
+  before: ProtocolRecord;
 }
 
 /** `plugin.update`. */
