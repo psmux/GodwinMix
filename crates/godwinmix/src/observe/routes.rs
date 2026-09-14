@@ -375,7 +375,10 @@ fn default_session_secs() -> u64 {
 /// The recent session log as JSON lines, for `gmx support-bundle` against a
 /// mixer on another machine.
 async fn session_log(Query(q): Query<SessionQuery>) -> Response {
-    let lines = session::session().tail_since(q.secs.min(86_400));
+    // On a blocking worker: the file is tens of megabytes on a long show
+    // and reading it on the runtime is how one slow disk becomes everyone's
+    // latency.
+    let lines = session::session().tail_since_async(q.secs.min(86_400)).await;
     (
         StatusCode::OK,
         [(header::CONTENT_TYPE, "application/x-ndjson; charset=utf-8")],

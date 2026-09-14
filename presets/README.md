@@ -10,19 +10,24 @@ gmx preset apply church
 
 Six ship with GodwinMix. Each is a directory here.
 
-| Preset | For | Plugins it names |
-|---|---|---|
-| `default` | what GodwinMix does out of the box: two RTMP cameras, one destination | rtmp |
-| `church` | a Sunday service: two cameras, lyrics, slides, two destinations | ndi, browser, rtmp, lowerthird, tally |
-| `classroom` | a lesson: camera, screen, a recording and a stream | camera, screen, rtmp, file-record |
-| `esports` | a match: four player feeds, a caster, an overlay, replays | ndi, browser, rtmp, screen, replay |
-| `headless-agent` | a channel nobody watches: MCP on, no UI | browser, rtmp, director |
-| `broadcast` | a contribution feed: SRT in and out, tally, Companion | srt, ndi, tally, companion |
+| Preset | For | Gallery | Plugins it names |
+|---|---|---|---|
+| `default` | what GodwinMix does out of the box: two RTMP cameras, one destination | live | rtmp |
+| `church` | a Sunday service: two cameras, lyrics, slides, two destinations | icon | camera, browser, rtmp |
+| `classroom` | a lesson: camera, screen, slides, a recording and a stream | snapshot | camera, screen, rtmp |
+| `esports` | a match: four player feeds, a caster, an overlay, replays | live | ndi, browser, rtmp, screen, replay |
+| `headless-agent` | a channel nobody watches: MCP documented, no UI | label | browser, rtmp, director |
+| `broadcast` | a contribution feed: SRT in and out, tally, Companion | live | srt, ndi, tally, companion |
 
 Some of those plugins do not exist yet. That is expected and it is not a
-mistake in the preset: `gmx preset apply` installs what it can find and names
-what it cannot, so the preset is a working target the plugins are written
-towards.
+mistake in the preset: `gmx preset apply` applies what it can and names what it
+cannot, so the preset is a working target the plugins are written towards.
+`church` and `classroom` use built in kinds for everything they can, which is
+why they put a picture on air today with the camera plugin still missing.
+
+The six ship inside the binary, so `gmx preset apply church` works on a machine
+that downloaded one file. A directory of the same name here wins over the built
+in one, so editing these needs no rebuild.
 
 ## What is in a preset
 
@@ -35,6 +40,7 @@ church/
   scenes/
     full.json            one scene document per file
     two-box.json
+  theme.css              optional: the preset's own theme, served by the core
   README.md              for the person who has four hours and a service on Sunday
 ```
 
@@ -46,17 +52,31 @@ kind = "preset"
 id = "church"
 
 [provides.preset]
-plugins = ["ndi@^1", "browser@^1", "rtmp@^1", "lowerthird@^2", "tally@^1"]
+plugins = ["camera@^1", "browser@^1", "rtmp@^1"]
 config = "config/godwinmix.toml"
 layout = "config/layout.json"
 surface = "web"
 theme = "calm"
+theme_css = "theme.css"
 scenes = "scenes"
+gallery = "icon"
+steps = [
+  "Put your two stream keys into the [[outputs]] blocks of godwinmix.toml.",
+  "Run `gmx` and open http://localhost:8080.",
+  "Press Wide to put a picture on air.",
+]
 ```
 
 `plugins` are semver ranges. `surface` is `web`, `none`, or the name of a
-surface plugin. `theme` is a theme name the surface resolves. The three paths
-are relative to the preset directory.
+surface plugin. `theme` is a theme name the surface resolves: one of `dark`,
+`light`, `high-contrast` and `system`, or your own with `theme_css` beside it.
+`gallery` fixes what the input tiles show (`live`, `snapshot`, `icon`,
+`label`); leave it out and the surface asks the machine. `steps` is the three
+things the person does next, which the welcome panel in the web UI shows
+straight after the preset is applied. The paths are relative to the preset
+directory.
+
+`docs/reference/presets.md` is every key and the merge rules.
 
 `layout.json` maps a UI slot to the panels in it, top to bottom:
 
@@ -88,8 +108,15 @@ its plugin name.
 5. Rewrite `README.md` for the person who will use it. Four hours, on a
    Sunday, with no time to read anything else. What it gives them, what they
    need, three steps, and what to do when each of the usual things goes wrong.
-6. `gmx preset apply ./presets/my-church` to try it from the directory before
-   you publish it anywhere.
+   Under 300 words, which the tests check.
+6. `gmx preset apply ./presets/my-church --dry-run` checks the whole of it and
+   writes nothing: every file it names, the config under the mixer's own
+   loading rules, every scene parsed, validated and resolved, the layout, the
+   theme, and the plugins that are missing.
+
+Or skip all of that: get a machine working and run `gmx preset save my-church`,
+which writes the directory from what is running with the stream keys and the
+control token taken out. `docs/how-to/make-a-preset.md` has both paths.
 
 ## Publishing one
 

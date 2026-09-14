@@ -1,0 +1,25 @@
+/* broadcast: the contribution preset's own theme. A gallery with the lights
+   down, greys that do not tint a picture next to them, and amber for warnings
+   because that is what the rest of the rack uses. */
+
+:root {
+  --bg: #0b0c0d;
+  --panel: #141618;
+  --panel2: #1a1d20;
+  --raise: #23272b;
+  --overlay: rgba(5, 6, 7, 0.76);
+  --line: #2c3136;
+  --line-soft: #1d2124;
+  --text: #eceef0;
+  --dim: #8a9097;
+  --faint: #5a6167;
+  --on-accent: #0b0c0d;
+  --live: #ff2a36;
+  --bad: #d9584c;
+  --ok: #2fbf71;
+  --warn: #f2a413;
+  --accent: #b9bfc6;
+  --select: #f2a413;
+  --select-fill: rgba(242, 164, 19, 0.16);
+  --shadow: 0 8px 28px rgba(0, 0, 0, 0.6);
+}

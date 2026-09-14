@@ -99,6 +99,43 @@ operator in another city cannot hand the mixer a file from their own laptop.
 | `max_upload_bytes` | 2147483648 | largest upload accepted. The body streams to disk, so this is about disk, not memory |
 | `convert_threads` | 2 | x264 threads for a conversion, capped so a transcode cannot take every core from the live programme encoder |
 
+## `[safety]`
+
+The rules that stand in front of every take, for every caller through every
+door. Enforced in `program.take`, not in a plugin and not in an agent's
+prompt. [`docs/reference/safety.md`](safety.md) has the whole story.
+
+| Key | Default | Meaning |
+|---|---|---|
+| `min_hold_ms` | 8000 | a take within this window of the last one is refused with -32003 and the milliseconds left |
+| `max_takes_per_minute` | 12 | takes allowed in any rolling minute, counted per core |
+| `flash_guard` | true | the ITU-R BT.1702-3 hold: a cut changing luminance by 20 cd/m2 over more than a quarter of the frame is held 360 ms from the next one (334 above 50 Hz), at most three in a second |
+| `on_operator_silence` | `{ after_secs = 120, action = "alert" }` | what happens when the token that made the last take stops calling |
+
+`action` is `"alert"`, `"hold"`, `"slate"` or `"fallback:<source id>"`. The
+default is `alert` because a programme that keeps running is the safe state.
+A misspelt action is a startup error rather than a silent `alert`.
+
+`min_hold_ms` is a default, not a standard: no standards body publishes a
+minimum shot length. The flash guard is the one hold that is regulated, and it
+is on by default.
+
+## `[[tokens]]`
+
+Several credentials, each with its own scopes, beside the single
+`[control] token` which still works and still carries everything.
+
+| Key | Default | Meaning |
+|---|---|---|
+| `id` | required | legible, and recorded against every take in `program.history` |
+| `secret` | required | the bearer token |
+| `scopes` | `["read"]` | `read`, `operate`, `admin`. Anything more than read has to be asked for |
+| `confirm` | `"none"` | `"required"` makes a destructive call answer -32020 with a confirm token first |
+| `rehearsal` | false | accepted only by a core started with `--rehearsal` |
+| `profile` | `"standard"` | which MCP tool surface this credential is meant for: `standard` or `minimal` |
+| `agent` | false | this credential belongs to an unattended agent, so its `safety` override may only tighten |
+| `safety` | none | `{ min_hold_ms, max_takes_per_minute, flash_guard }`, overriding `[safety]` for this token |
+
 ## `[security]`
 
 | Key | Default | Meaning |

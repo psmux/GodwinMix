@@ -218,6 +218,78 @@
         ],
         "type": "object"
       },
+      "AgentStateRequest": {
+        "properties": {
+          "response_format": {
+            "$ref": "#/components/schemas/ResponseFormat",
+            "default": "concise"
+          }
+        },
+        "type": "object"
+      },
+      "ApplyRequest": {
+        "properties": {
+          "dry_run": {
+            "default": false,
+            "description": "Work out the plan and write nothing.",
+            "type": "boolean"
+          },
+          "force": {
+            "default": false,
+            "description": "Take the preset's value wherever the operator already has one.",
+            "type": "boolean"
+          },
+          "keep_sources": {
+            "default": false,
+            "description": "Leave the operator's sources and outputs alone.",
+            "type": "boolean"
+          },
+          "name": {
+            "description": "A preset name, or a path to a directory holding `gmx-plugin.toml`.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "type": "object"
+      },
+      "ApplyResult": {
+        "description": "What `preset.apply` answers with.",
+        "properties": {
+          "applied": {
+            "description": "Present when the preset was actually applied."
+          },
+          "dry_run": {
+            "description": "True when nothing was written because `dry_run` was set.",
+            "type": "boolean"
+          },
+          "live": {
+            "description": "The sources and outputs this core picked up without a restart.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "needs_restart": {
+            "description": "What still needs a restart, in plain words. Empty is the good case.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "plan": {
+            "description": "The whole plan, as JSON. The same object `preset.list` rows point at."
+          }
+        },
+        "required": [
+          "dry_run",
+          "plan",
+          "live",
+          "needs_restart"
+        ],
+        "type": "object"
+      },
       "AudioSetParams": {
         "description": "`source.audio.set` takes an id as well as the levels: the id comes off the\npath on REST and out of the params on `/rpc`, and both land in one object.",
         "properties": {
@@ -439,6 +511,17 @@
               }
             ],
             "description": "Present when the request carried a token the core recognises."
+          },
+          "ui": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/UiDefaults"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "What a surface should start with, when a preset chose it. Absent on a\ncore no preset has been applied to, which is what puts the welcome\npanel up in the reference UI."
           },
           "version": {
             "description": "The build's own version, as in Cargo.toml.",
@@ -1142,6 +1225,33 @@
         ],
         "type": "object"
       },
+      "ResponseFormat": {
+        "enum": [
+          "concise",
+          "detailed"
+        ],
+        "type": "string"
+      },
+      "SaveRequest": {
+        "properties": {
+          "name": {
+            "description": "The new preset's name. A slug: lower case letters, digits and hyphens.",
+            "type": "string"
+          },
+          "out": {
+            "default": null,
+            "description": "Where to write it. Defaults to `~/.godwinmix/presets/<name>`.",
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "type": "object"
+      },
       "SeekParams": {
         "description": "`source.seek`.",
         "properties": {
@@ -1459,6 +1569,81 @@
         },
         "type": "object"
       },
+      "TaskRequest": {
+        "properties": {
+          "task_id": {
+            "description": "The id a long running method answered with. Spelled `id` on the REST\nroute, where it is in the path, and `task_id` everywhere else, which\nis what 03 section 6 calls it.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "task_id"
+        ],
+        "type": "object"
+      },
+      "TaskState": {
+        "enum": [
+          "running",
+          "completed",
+          "failed",
+          "cancelled"
+        ],
+        "type": "string"
+      },
+      "TaskView": {
+        "description": "What `task.get` answers with.",
+        "properties": {
+          "age_secs": {
+            "description": "Seconds since the task was started.",
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "error": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "kind": {
+            "description": "The method that started it, so a client reading a list knows what it is\nlooking at.",
+            "type": "string"
+          },
+          "poll_interval_ms": {
+            "description": "How long to wait before asking again, while it is still running.",
+            "format": "uint64",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "progress": {
+            "description": "0 to 1 where the work can say, absent where it cannot.",
+            "format": "double",
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "result": {
+            "description": "The body the method would have answered with, once it is done."
+          },
+          "state": {
+            "$ref": "#/components/schemas/TaskState"
+          },
+          "task_id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "task_id",
+          "kind",
+          "state",
+          "age_secs"
+        ],
+        "type": "object"
+      },
       "TokenInfo": {
         "description": "What the calling token is allowed to do, echoed back so a surface can grey\nout what it cannot reach instead of discovering it at the first refusal.",
         "properties": {
@@ -1490,6 +1675,43 @@
           "rehearsal",
           "profile"
         ],
+        "type": "object"
+      },
+      "UiDefaults": {
+        "description": "What a surface starts with: the layout, the theme and the gallery mode.\n\nChosen by a preset (`preset.apply`), carried in `core.info` and pushed as\n`event/ui.changed`. None of it changes what the core does. It exists so the\nfirst page a volunteer sees is the one their preset chose rather than the\none the last person to use this browser chose. 05 section 3b is where the\nfour gallery modes are defined.",
+        "properties": {
+          "gallery": {
+            "description": "`live`, `snapshot`, `icon` or `label`. Absent means the surface asks\nthe machine, which is what `gmx doctor` proposes.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "layout": {
+            "additionalProperties": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "description": "Slot to panels, top to bottom. Empty means the surface's own default.",
+            "type": "object"
+          },
+          "preset": {
+            "description": "The preset that set these, so a surface knows one has been applied.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "theme": {
+            "description": "A theme id the surface resolves, for example `dark` or `calm`.",
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
         "type": "object"
       }
     },
@@ -2628,6 +2850,110 @@
         "x-scope": "read"
       }
     },
+    "/api/v1/preset/apply": {
+      "post": {
+        "description": "JSON-RPC method `preset.apply`. Needs the `admin` scope. Destructive: accepts `dry_run: true`, and on a token whose policy is `confirm = required` it is refused once with -32020 and a confirm token. Accepts `idempotency_key`, honoured for 24 hours.",
+        "operationId": "preset.apply",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ApplyRequest"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplyResult"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Put a preset on this core: its config, its scenes, its layout, its theme and its gallery mode. Pass dry_run to get the plan and write nothing.",
+        "tags": [
+          "preset"
+        ],
+        "x-destructive": true,
+        "x-idempotent": true,
+        "x-scope": "admin"
+      }
+    },
+    "/api/v1/preset/list": {
+      "get": {
+        "description": "JSON-RPC method `preset.list`. Needs the `read` scope.",
+        "operationId": "preset.list",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Every preset this core can apply: the six built in, plus anything installed beside the binary or under ~/.godwinmix/presets.",
+        "tags": [
+          "preset"
+        ],
+        "x-destructive": false,
+        "x-idempotent": true,
+        "x-scope": "read"
+      }
+    },
+    "/api/v1/preset/save": {
+      "post": {
+        "description": "JSON-RPC method `preset.save`. Needs the `admin` scope. Accepts `idempotency_key`, honoured for 24 hours.",
+        "operationId": "preset.save",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SaveRequest"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Turn this core's working setup into a preset directory somebody else can apply. Stream keys and the control token are replaced with placeholders.",
+        "tags": [
+          "preset"
+        ],
+        "x-destructive": false,
+        "x-idempotent": true,
+        "x-scope": "admin"
+      }
+    },
     "/api/v1/preview/close": {
       "post": {
         "description": "JSON-RPC method `preview.close`. Needs the `read` scope.",
@@ -3167,6 +3493,103 @@
         "x-destructive": false,
         "x-idempotent": true,
         "x-scope": "operate"
+      }
+    },
+    "/api/v1/task": {
+      "get": {
+        "description": "JSON-RPC method `task.get`. Needs the `read` scope.",
+        "operationId": "task.get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TaskView"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "How a piece of long running work is getting on, and its answer once it has one.",
+        "tags": [
+          "task"
+        ],
+        "x-destructive": false,
+        "x-idempotent": true,
+        "x-scope": "read"
+      }
+    },
+    "/api/v1/task/cancel": {
+      "post": {
+        "description": "JSON-RPC method `task.cancel`. Needs the `operate` scope. Accepts `idempotency_key`, honoured for 24 hours.",
+        "operationId": "task.cancel",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TaskRequest"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Ask a piece of long running work to stop. Cooperative: the answer says the request landed, not that the work has stopped yet.",
+        "tags": [
+          "task"
+        ],
+        "x-destructive": false,
+        "x-idempotent": true,
+        "x-scope": "operate"
+      }
+    },
+    "/api/v1/task/list": {
+      "get": {
+        "description": "JSON-RPC method `task.list`. Needs the `read` scope.",
+        "operationId": "task.list",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/TaskView"
+                  },
+                  "type": "array"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Every background job this core knows about, newest first.",
+        "tags": [
+          "task"
+        ],
+        "x-destructive": false,
+        "x-idempotent": true,
+        "x-scope": "read"
       }
     }
   },

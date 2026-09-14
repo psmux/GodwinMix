@@ -1,0 +1,35 @@
+[package]
+name = "godwinmix-client"
+version = "1.0.0"
+edition = "2021"
+rust-version = "1.82"
+description = "Client for the GodwinMix control protocol: connect, subscribe, a state store, typed calls and the multiview frame decoder"
+license = "Apache-2.0"
+repository = "https://github.com/psmux/modulargodwinmix"
+keywords = ["video", "mixer", "broadcast", "jsonrpc", "client"]
+categories = ["api-bindings", "multimedia::video"]
+
+# The major version is the api_level this library speaks. 1.x talks to any core
+# whose core.info reports api_compatible <= 1 <= api_level.
+
+[dependencies]
+tokio = { version = "1", features = ["rt", "macros", "sync", "time", "net"] }
+# rustls rather than the platform's TLS, for the same reason the core uses it:
+# one binary reaches an https mixer on all three platforms with no OpenSSL
+# headers anywhere.
+tokio-tungstenite = { version = "0.28", default-features = false, features = ["connect", "handshake", "rustls-tls-webpki-roots"] }
+futures-util = { version = "0.3", default-features = false, features = ["sink", "std"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+[dev-dependencies]
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "time", "net", "io-util"] }
+# The fake server in tests/ is a real WebSocket server, so the client is
+# exercised over a real socket rather than against a mock of its own transport.
+tokio-tungstenite = { version = "0.28", default-features = false, features = ["handshake"] }
+
+[[example]]
+name = "take"
+
+[[example]]
+name = "e2e"

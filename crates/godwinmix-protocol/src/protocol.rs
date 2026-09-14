@@ -35,7 +35,7 @@ fn inline(value: Value) -> Value {
 
 /// The event table from 03 section 6, as far as this build implements it.
 ///
-/// Events the plan names but that nothing raises yet (`scene.*`, `telemetry`,
+/// Events the plan names but that nothing raises yet (`scene.*`,
 /// `plugin.state`, `hook.blocked`) are deliberately absent: publishing a
 /// schema for something that never arrives teaches a client to wait for it.
 pub fn events() -> Vec<EventDef> {
@@ -143,6 +143,20 @@ fn state_events() -> Vec<EventDef> {
             },
         },
         EventDef {
+            name: "ui.changed",
+            since: "1",
+            summary: "The surface defaults changed: a preset was applied, or an operator set \
+                      the layout, theme or gallery mode by hand. Nothing on air moves.",
+            ext: None,
+            legacy: None,
+            payload: |g| {
+                json!({
+                    "type": "object",
+                    "properties": { "ui": schema_of::<types::UiDefaults>(g) }
+                })
+            },
+        },
+        EventDef {
             name: "media.changed",
             since: "1",
             summary: "A file in the library was uploaded, deleted, or its conversion moved on.",
@@ -195,6 +209,55 @@ fn stream_events() -> Vec<EventDef> {
                         "message": { "type": "string" }
                     }
                 })
+            },
+        },
+        EventDef {
+            name: "telemetry",
+            since: "1",
+            summary: "Numbers instead of a picture, up to ten times a second and under 200 \
+                      bytes: the shot change score, the black ratio, a freeze flag, short \
+                      term and integrated loudness, a silence flag and which sources are \
+                      live. From cheap probes on the raw programme frames, which run only \
+                      while a client is subscribed.",
+            ext: Some("telemetry"),
+            legacy: None,
+            payload: |_| {
+                inline(json!({
+                    "type": "object",
+                    "properties": {
+                        "ts": { "type": "integer", "description": "milliseconds since the Unix epoch" },
+                        "shot": { "type": "number", "description": "how much the picture changed since the last frame, 0 to 1" },
+                        "black": { "type": "number", "description": "fraction of the picture at or below black, 0 to 1" },
+                        "freeze": { "type": "boolean" },
+                        "lufs_s": { "type": ["number", "null"], "description": "short term loudness over three seconds, approximated from the programme meter" },
+                        "lufs_i": { "type": ["number", "null"] },
+                        "silence": { "type": "boolean" },
+                        "sources": {
+                            "type": "object",
+                            "additionalProperties": { "type": "integer" },
+                            "description": "source id to 1 when it is live and 0 otherwise"
+                        }
+                    },
+                    "required": ["ts", "shot", "black", "freeze", "silence", "sources"]
+                }))
+            },
+        },
+        EventDef {
+            name: "agent.state",
+            since: "1",
+            summary: "The agent.state document, pushed when a telemetry threshold crosses or \
+                      a take lands, with `why` naming which and a snapshot URL beside it. \
+                      Edge triggered and at most one a second, so a picture that stays black \
+                      is one message rather than one a tick.",
+            ext: Some("agent"),
+            legacy: None,
+            payload: |_| {
+                inline(json!({
+                    "type": "object",
+                    "description": "The concise agent.state document, plus `why` (one of \
+                                    program, black, freeze, silence, shot) and `snapshot`.",
+                    "additionalProperties": true
+                }))
             },
         },
         EventDef {

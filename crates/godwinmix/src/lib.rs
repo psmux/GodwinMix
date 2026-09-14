@@ -21,6 +21,7 @@ pub mod cli;
 pub mod control;
 pub mod ctl;
 pub mod mcp;
+pub mod mcp_http;
 pub mod observe;
 pub mod ui;
 
@@ -36,7 +37,7 @@ use tracing::{error, info, warn};
 const EXAMPLE_CONFIG: &str = include_str!("../../../godwinmix.example.toml");
 
 /// Where a client subcommand looks for a mixer when nothing says otherwise.
-const DEFAULT_URL: &str = "http://127.0.0.1:8080";
+pub const DEFAULT_URL: &str = "http://127.0.0.1:8080";
 
 #[derive(Parser, Debug)]
 #[command(name = "godwinmix", about = "Live RTMP video mixer with hot source switching")]
@@ -185,7 +186,44 @@ enum Command {
         /// callable by name and findable with `search_tools`.
         #[arg(long, env = "GODWINMIX_MCP_PROFILE", default_value = "standard")]
         profile: McpProfile,
+        /// Serve MCP over Streamable HTTP at this address instead of stdio.
+        ///
+        /// `--http 127.0.0.1:8765` puts the same tools on `POST /mcp`, with
+        /// server initiated messages on `GET /mcp`. Bind to a loopback
+        /// address unless something in front of it is doing the
+        /// authentication.
+        #[arg(long, value_name = "ADDR")]
+        http: Option<String>,
     },
+    /// Presets: list, show, apply, save and diff.
+    ///
+    /// A preset is a name for a working setup: the plugins it needs, a
+    /// configuration, a UI layout, a theme and the scenes. `gmx preset apply
+    /// church` is meant to be the whole of a volunteer's install.
+    Preset {
+        #[command(subcommand)]
+        cmd: cli::preset::Preset,
+    },
+
+    /// Assemble a custom build: the core, a preset, and your branding.
+    ///
+    /// The local half of 06 section 5. It writes the directory that CI turns
+    /// into signed installers, and the README saying how.
+    Build(cli::build::BuildArgs),
+    /// What an agent pays to look at this mixer, and the skills it reads.
+    ///
+    /// `gmx agent cost` prints the size of `agent.state`, of the MCP hot tool
+    /// list and of a snapshot, in bytes and in tokens. The budgets are in
+    /// `docs/reference/agent-state.md`.
+    Agent(cli::agent::AgentArgs),
+
+    /// Install the GodwinMix skills into an AI coding tool's directory.
+    ///
+    /// `gmx skill install --for claude` drops `godwinmix-operate` and
+    /// `godwinmix-develop` where that tool reads them. `--print` shows what it
+    /// would write and writes nothing.
+    Skill(cli::skill::SkillArgs),
+
     /// Inspect and test the codec catalogue.
     ///
     /// The catalogue is `codecs.toml`: which codec the programme is encoded
@@ -341,16 +379,28 @@ pub async fn run() -> Result<()> {
             gstreamer::init().context("initialising GStreamer")?;
             return bench::run(b).await;
         }
-        Some(Command::Mcp { url, token, profile }) => {
+        Some(Command::Mcp { url, token, profile, http }) => {
             let url = url.or_else(|| config::env_var("URL")).unwrap_or_else(|| DEFAULT_URL.into());
             let token = token.or_else(|| config::env_var("TOKEN"));
-            return mcp::run(&url, token, profile.into()).await;
+            return mcp::run(&url, token, profile.into(), http).await;
         }
         Some(Command::Codec { cmd }) => {
             gstreamer::init().context("initialising GStreamer")?;
             let cfg = Config::load(&config::path_in_force(&args.config)).ok();
             return cli::codec::run(cmd, cfg.as_ref(), args.codecs.as_deref());
         }
+        Some(Command::Preset { cmd }) => {
+            // Validating a preset's config asks each built in kind what its
+            // element accepts, and that needs the registry.
+            gstreamer::init().context("initialising GStreamer")?;
+            return cli::preset::run(cmd);
+        }
+        Some(Command::Build(args)) => {
+            gstreamer::init().context("initialising GStreamer")?;
+            return cli::build::run(args);
+        }
+        Some(Command::Agent(args)) => return cli::agent::run(args.cmd).await,
+        Some(Command::Skill(args)) => return cli::skill::run(args.cmd),
         Some(Command::Import { cmd }) => return cli::scene::run_import(cmd),
         Some(Command::Scene { cmd }) => return cli::scene::run_scene(cmd),
         Some(Command::Observe(cmd)) => {
@@ -428,6 +478,8 @@ pub async fn run() -> Result<()> {
     let cfg_media = cfg.media.clone();
     // Where the web UI and any plugin panels are read from.
     ui::configure(cfg.control.ui_dir.as_deref(), cfg.control.plugins_dir.as_deref());
+    // Which config `preset.apply` writes to, and what the surface starts with.
+    control::methods::presets::configure(&config_path, cfg.ui.clone());
     // Kept for the control plane, which reads the canvas, the snapshot limits,
     // the feature list and the token table off it once at startup.
     let cfg_for_control = cfg.clone();
