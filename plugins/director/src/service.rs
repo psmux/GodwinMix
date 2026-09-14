@@ -317,8 +317,10 @@ mod tests {
 
     #[test]
     fn the_first_cycle_is_free_to_act() {
-        let mut memory = Memory::default();
-        memory.last_program = None;
+        let mut memory = Memory {
+            last_program: None,
+            ..Memory::default()
+        };
         assert!(memory.held_secs(None) > 3_000.0, "nothing has been on air yet");
     }
 }
