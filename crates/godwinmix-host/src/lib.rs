@@ -1,35 +1,57 @@
-//! The tier 2 plugin host: nothing yet.
+//! The tier 2 plugin host: everything about running a plugin beside the core
+//! that is not a pipeline.
 //!
-//! A tier 2 plugin is a separate process that the core starts and supervises.
-//! It speaks the same JSON-RPC control protocol as every other client, over a
-//! pipe rather than a socket, and it hands media across the process boundary
-//! through a transport the two agree on at handshake. A crash costs one
-//! source and never the programme output.
+//! A tier 2 plugin is a separate process. It speaks the same JSON-RPC control
+//! protocol as every other client, over a pipe rather than a socket, and it
+//! hands media across the process boundary through a transport the two agree
+//! on at the handshake. A crash costs one source and never the programme
+//! output.
 //!
-//! What lands here, in the order 03 section 5 builds it:
-//!
-//! * `manifest`: reading and validating `gmx-plugin.toml`.
-//! * `handshake`: the version and capability exchange that picks a transport.
-//! * `transport`: unixfd on Linux and macOS, a container on a pipe everywhere.
-//! * `loader`: start, supervise, restart, budget and kill.
+//! ```text
+//!   launch.rs     [run] and [build] turned into argv, an environment and a cwd
+//!   channel.rs    JSON lines with the 4 MiB limit, and ids in flight per direction
+//!   handshake.rs  the transport negotiation and the api range check
+//!   lifecycle.rs  the state machine of 03 section 7 and the restart backoff
+//!   budget.rs     [plugins.<name>] limits, and what happens on a breach
+//!   sampler.rs    cpu and rss per process, read cheaply once a second
+//!   offline.rs    `gmx plugin test --offline`: a transcript, a binary, no core
+//! ```
 //!
 //! It is a crate of its own rather than a module of `godwinmix-core` because
 //! the engine must be embeddable without a plugin loader linked in, and
 //! because a plugin author's own host process wants this without the engine.
+//! The one thing it does not own is the child process itself: the core already
+//! has the process group teardown, the orphan reaper and the Windows stdout
+//! reader that a sidecar needs, and a second copy of those would be a second
+//! set of bugs.
 //!
 //! See `README.md` beside this file.
 
-/// What the host will answer when it is asked what it can do.
-///
-/// A placeholder with a real meaning: the tier this crate implements. It is
-/// here so the crate has a target, compiles, and is a workspace member from
-/// the day the layout lands rather than the day the loader does.
+pub mod budget;
+pub mod channel;
+pub mod handshake;
+pub mod launch;
+pub mod lifecycle;
+pub mod offline;
+pub mod sampler;
+
+pub use budget::{Budget, OverBudget, Stats};
+pub use channel::{Channel, LineError, Pending};
+pub use handshake::{negotiate, Negotiated, HANDSHAKE_TIMEOUT};
+pub use launch::{Launch, LaunchCtx, Runtime};
+pub use lifecycle::{Backoff, Lifecycle};
+
+/// The tier this crate implements.
 pub const TIER: u8 = 2;
 
 /// The protocol level this host speaks, which is the core's.
 pub fn api_level() -> u32 {
     godwinmix_protocol::API_LEVEL
 }
+
+/// How long a plugin has to answer `shutdown` before its process group is
+/// killed. 03 section 7: stop, then shutdown, then the group after 8 seconds.
+pub const SHUTDOWN_GRACE_SECS: u64 = 8;
 
 #[cfg(test)]
 mod tests {

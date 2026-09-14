@@ -597,7 +597,11 @@ dependencies = [
 name = "godwinmix-host"
 version = "0.2.0"
 dependencies = [
+ "anyhow",
  "godwinmix-protocol",
+ "serde",
+ "serde_json",
+ "tracing",
 ]
 
 [[package]]
