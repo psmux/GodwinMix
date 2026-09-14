@@ -3440,11 +3440,6 @@ impl Mixer {
                 self.mv.mark_built(None);
                 let mut mv = Multiview::build(&self.mv, shape, &self.pgm_video_proxy)
                     .context("building multiview")?;
-                // After the mosaic exists, not before: the branch ends at a
-                // `proxysink`, and a proxysink with no `proxysrc` on the other
-                // side has nowhere to put a buffer.
-                self.attach_programme_return()
-                    .context("attaching the programme return branch for the mosaic")?;
                 mv.attach_watch(gstutil::watch_bus(
                     mv.pipeline(),
                     gstutil::BusOwner::Multiview,
@@ -3468,6 +3463,13 @@ impl Mixer {
                 mv.start().context("starting multiview")?;
                 self.multiview = Some(mv);
                 self.mv.mark_built(Some(shape));
+                // Last, once the mosaic is running. The branch ends at a
+                // `proxysink`, and a proxysink pushing into a `proxysrc` whose
+                // pipeline has not started yet has nowhere to put the buffer:
+                // it waits, holding the tee branch, and the mosaic's return
+                // cell never fills.
+                self.attach_programme_return()
+                    .context("attaching the programme return branch for the mosaic")?;
                 info!(?shape, "multiview built for a subscriber");
             }
             Demand::Teardown => {
