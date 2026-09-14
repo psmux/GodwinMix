@@ -202,7 +202,9 @@ pub struct ToInstance {
 }
 
 /// How media crosses between a node and the core.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize, schemars::JsonSchema,
+)]
 #[serde(rename_all = "lowercase")]
 pub enum BridgeTransport {
     /// RTP over UDP with RFC 6051 header extensions. The default: the receiver

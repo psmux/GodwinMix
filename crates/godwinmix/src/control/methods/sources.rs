@@ -68,6 +68,8 @@ pub fn register(reg: &mut Registry<Call>) {
         ),
     );
 
+    register_set(reg);
+
     reg.register(
         MethodDef::new(
             "source.remove",
@@ -259,4 +261,208 @@ async fn seek(call: Call, params: Value) -> Result<Value, RpcError> {
 
 fn refuse(e: anyhow::Error) -> RpcError {
     RpcError::invalid_params(e.to_string())
+}
+
+// ---------------------------------------------------------------------------
+// source.set: changing a source while it runs, including where it runs
+// ---------------------------------------------------------------------------
+
+/// `source.set`: a full state assignment for one source.
+///
+/// Every field is optional and only what is named moves, which is how every
+/// other setter in this protocol works. The one that matters here is `place`:
+/// it moves a running source between the core, a sidecar and a node.
+#[derive(Debug, serde::Serialize, serde::Deserialize, schemars::JsonSchema)]
+pub struct SetSourceRequest {
+    /// Source id.
+    pub id: String,
+    /// What to call it in the UI.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+    /// Where it runs: `core`, `in-process`, `sidecar` or `node:<name>`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub place: Option<godwinmix_core::node::Place>,
+    /// How a remote source's media travels: `rtp`, `srt` or `whip`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub transport: Option<godwinmix_core::node::BridgeTransport>,
+    /// The latency budget in milliseconds, answered on the LATENCY query.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub latency_ms: Option<u32>,
+    /// Params for the source's own kind. Merged over what it has.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub params: Option<std::collections::BTreeMap<String, Value>>,
+}
+
+pub(crate) fn register_set(reg: &mut Registry<Call>) {
+    reg.register(
+        MethodDef::new(
+            "source.set",
+            Scope::Operate,
+            "Change a running source: its name, its params, or where it runs. Moving a \
+             source between the core, a sidecar and a node is `place`; the programme keeps \
+             its frame rate across the move and the compositor covers the swap.",
+            handler(set),
+        )
+        .params(schema_of::<SetSourceRequest>)
+        .result(schema_of::<SourceStatus>)
+        .tool(
+            "set_source",
+            Tier::Search,
+            "Change a running source in place: rename it, change its params, or move it \
+             between the core, a sidecar process and a node on another machine with \
+             `place`. Only the fields you name change. Moving a source rebuilds it where \
+             you asked for it; the programme's frame rate is not affected, and a source \
+             that is on air holds its picture while the new instance comes up. A plugin \
+             that did not declare the placement is refused with the placements it did \
+             declare.",
+        ),
+    );
+}
+
+async fn set(call: Call, params: Value) -> Result<Value, RpcError> {
+    let req: SetSourceRequest = call.params(&params)?;
+    let configs = call.app.mixer.configs().await.map_err(|e| call.mixer_error(e))?;
+    let Some(current) = configs.sources.iter().find(|s| s.id == req.id).cloned() else {
+        return Err(RpcError::not_found("source", &req.id, &call.source_ids().await));
+    };
+
+    let mut wanted = current.clone();
+    if let Some(name) = req.name.clone() {
+        wanted.name = Some(name);
+    }
+    if let Some(place) = req.place.clone() {
+        wanted.place = Some(place);
+    }
+    if let Some(transport) = req.transport {
+        wanted.transport = Some(transport);
+    }
+    if let Some(ms) = req.latency_ms {
+        wanted.latency_ms = Some(ms);
+    }
+    if let Some(extra) = &req.params {
+        for (key, value) in extra {
+            match toml::Value::try_from(value) {
+                Ok(v) => {
+                    wanted.params.insert(key.clone(), v);
+                }
+                Err(e) => {
+                    return Err(RpcError::invalid_params(format!(
+                        "`params.{key}` is not something a config can hold: {e}"
+                    )))
+                }
+            }
+        }
+    }
+    let moving = wanted.placement() != current.placement();
+    if moving {
+        check_move(&call, &current, &wanted)?;
+    }
+    if call.dry_run {
+        let mut diff = Vec::new();
+        if moving {
+            diff.push(format!(
+                "move {} from {} to {}",
+                req.id,
+                current.placement(),
+                wanted.placement()
+            ));
+        }
+        if req.name.is_some() {
+            diff.push(format!("rename {} to {}", req.id, wanted.display_name()));
+        }
+        if req.params.is_some() {
+            diff.push(format!("change the params of {}", req.id));
+        }
+        return Ok(call.dry_run_answer(!diff.is_empty(), diff));
+    }
+    if !moving && req.params.is_none() && req.name.is_none() {
+        // Nothing to do, and saying so is better than rebuilding a live source
+        // for no reason (Kubernetes server side dry run's `would_change`).
+        return body(find(&call, &req.id).await?);
+    }
+
+    // The move itself. Both commands go on the same queue, in order, with
+    // nothing between them: the mixer serialises every request through one
+    // path, so no take can land in the middle. The compositor is `force-live`
+    // and the slate sits under every pad, so the programme keeps producing
+    // frames at the canvas rate throughout and the frame interval does not
+    // change. The source's own picture is held by the compositor pad until the
+    // new instance's first frame replaces it.
+    if let Some(runtime) = godwinmix_core::node::runtime::get() {
+        // The reconciler's desired state moves first, so a tick landing during
+        // the swap does not try to put the old instance back.
+        match wanted.placement().node() {
+            Some(node) => runtime.reconciler.want(godwinmix_core::node::reconcile::Desired {
+                instance: wanted.id.clone(),
+                type_id: wanted.type_id.clone().unwrap_or_default(),
+                place: wanted.placement(),
+                params: serde_json::to_value(wanted.effective_params()).unwrap_or(Value::Null),
+                transport: wanted.bridge_transport(),
+                latency_ms: wanted.latency_ms,
+            }),
+            None => {
+                runtime.reconciler.forget(&wanted.id);
+            }
+        }
+    }
+    call.app
+        .mixer
+        .request(|ack| Command::RemoveSource(req.id.clone(), Some(ack)))
+        .await
+        .map_err(|e| call.mixer_error(e))?;
+    call.app
+        .mixer
+        .request(|ack| Command::AddSource(Box::new(wanted.clone()), Some(ack)))
+        .await
+        .map_err(|e| call.mixer_error(e))?;
+    let record = find(&call, &req.id).await?;
+    call.app.hooks.fire(godwinmix_core::hooks::name::SOURCE_ADDED, || {
+        serde_json::json!({
+            "source": record.id,
+            "uri": record.uri,
+            "state": record.state,
+            "place": wanted.placement().as_config(),
+        })
+    });
+    body(record)
+}
+
+/// Refuse a move the plugin did not declare, before anything is torn down.
+///
+/// Error -32005, with `data.placements` listing what it did declare, so a
+/// caller can offer the operator the ones that would work.
+fn check_move(
+    call: &Call,
+    current: &godwinmix_core::config::SourceConfig,
+    wanted: &godwinmix_core::config::SourceConfig,
+) -> Result<(), RpcError> {
+    let _ = call;
+    let Some(type_id) = wanted.type_id.as_deref() else {
+        // A source written as a bare URI has no plugin to ask, and the built
+        // in kinds are all `core`. Moving one is a configuration mistake
+        // rather than a placement refusal.
+        return Err(RpcError::new(
+            godwinmix_protocol::error::ErrorCode::Placement,
+            format!(
+                "`{}` is written as a bare URI, so it has no plugin to place. Write `type` \
+                 saying which plugin it is, then set `place`.",
+                current.id
+            ),
+        ));
+    };
+    let place = wanted.placement();
+    let declared = godwinmix_core::plugin::remote::plugin_manifest(type_id, place.node())
+        .map(|m| m.plugin.placements)
+        .or_else(|| {
+            godwinmix_core::plugin::loader::get(type_id.split('/').next().unwrap_or(type_id))
+                .map(|p| p.manifest.plugin.placements)
+        })
+        // A built in kind declares nothing and runs in the core, which is the
+        // one placement it has.
+        .unwrap_or_else(|| vec!["core".to_string()]);
+    godwinmix_core::node::check_placement(type_id, &place, &declared).map_err(|e| {
+        RpcError::new(godwinmix_protocol::error::ErrorCode::Placement, format!("{e:#}"))
+            .with("placements", serde_json::json!(declared))
+            .with("retryable", serde_json::json!(false))
+    })
 }
