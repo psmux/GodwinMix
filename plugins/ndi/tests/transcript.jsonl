@@ -1,0 +1,27 @@
+# One recorded conversation with the core, for `ndi/discover`. `core` lines are
+# written to the plugin's stdin; `plugin` lines must appear on its stderr, in
+# this order, as a subset of the real line. "*" matches any value.
+#
+#   gmx plugin test plugins/ndi --offline --provide discover
+#
+# The device provide is the one recorded here on purpose: it is the only one
+# that works with no NDI runtime on the machine, and most machines running this
+# test have none. ndi/source and ndi/output refuse at initialize with a message
+# naming the download page, which is the behaviour the unit tests check.
+{"plugin": {"jsonrpc": "2.0", "id": 0, "method": "initialize", "params": {"plugin": "ndi", "api": 1}}}
+{"core": {"jsonrpc": "2.0", "id": 0, "result": {"core": "godwinmix", "version": "0.2.0", "api_level": 1, "api_compatible": 1, "canvas": {"width": 1280, "height": 720, "fps": 30}, "transport": "container", "media": "", "instance": "ndi-discover", "provide": "discover", "params": {}}}}
+{"plugin": {"jsonrpc": "2.0", "method": "initialized"}}
+{"core": {"jsonrpc": "2.0", "id": 1, "method": "health", "params": {}}}
+{"plugin": {"jsonrpc": "2.0", "id": 1, "result": {"state": "*"}}}
+# With a runtime this lists what is on the network; without one it is an empty
+# list rather than an error, because a machine with no NDI on it is not broken.
+{"core": {"jsonrpc": "2.0", "id": 2, "method": "discover", "params": {"timeout_ms": 300}}}
+{"plugin": {"jsonrpc": "2.0", "id": 2, "result": {"candidates": "*"}}}
+{"core": {"jsonrpc": "2.0", "id": 3, "method": "tool.call", "params": {"name": "ndi/list_senders", "arguments": {"timeout_ms": 300}}}}
+{"plugin": {"jsonrpc": "2.0", "id": 3, "result": {"content": "*", "structured_content": {"senders": "*"}}}}
+{"core": {"jsonrpc": "2.0", "id": 4, "method": "tool.call", "params": {"name": "ndi/burn_it_down", "arguments": {}}}}
+{"plugin": {"jsonrpc": "2.0", "id": 4, "error": {"code": -32601, "message": "*"}}}
+{"core": {"jsonrpc": "2.0", "id": 5, "method": "configure", "params": {"params": {}}}}
+{"plugin": {"jsonrpc": "2.0", "id": 5, "result": {"applied": true}}}
+{"core": {"jsonrpc": "2.0", "id": 6, "method": "shutdown", "params": {"reason": "offline test"}}}
+{"plugin": {"jsonrpc": "2.0", "id": 6, "result": {}}}
