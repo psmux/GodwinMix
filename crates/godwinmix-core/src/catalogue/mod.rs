@@ -43,13 +43,17 @@ const SHIPPED: &str = include_str!("../../../../codecs.toml");
 
 #[derive(Debug, Clone, Default, Deserialize, Serialize, PartialEq)]
 pub struct Catalogue {
-    #[serde(default)]
+    // An empty list is written out as nothing rather than as `audio = []`. A
+    // catalogue overlay usually carries one entry, and three empty arrays above
+    // it is noise in a file somebody is meant to read and send in a pull
+    // request.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub video: Vec<VideoEntry>,
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub audio: Vec<AudioEntry>,
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub graphics: Vec<GraphicsEntry>,
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub container: Vec<ContainerEntry>,
     /// The container the programme is muxed into, and so the codecs selection
     /// keeps to. `flv` is what RTMP wants and is the default.
