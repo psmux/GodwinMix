@@ -243,6 +243,7 @@ mod tests {
         let mut params = Params::new();
         params.insert("method".into(), toml::Value::String("green".into()));
         let filter = crate::config::FilterConfig {
+            place: None,
             id: "key".into(),
             type_id: MANIFEST.provide_id(),
             attach: crate::config::FilterAttach {

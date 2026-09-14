@@ -62,6 +62,7 @@ pub mod preset;
 pub mod probe;
 pub mod safety;
 pub mod scene;
+pub mod secrets;
 pub mod snapshot;
 pub mod telemetry;
 pub mod state;

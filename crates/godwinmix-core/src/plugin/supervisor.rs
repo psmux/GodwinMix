@@ -380,6 +380,35 @@ impl Supervisor {
         }
     }
 
+    /// Which plugin contributed the tool called `name`.
+    ///
+    /// The same resolution `tool_call` does, without making the call, so the
+    /// control plane can check a plugin's own token against the tool's owner
+    /// before anything is dispatched. A name nobody answers to has no owner,
+    /// and `tool_call` produces the message that lists what there is.
+    pub fn tool_owner(&self, name: &str) -> Option<String> {
+        let parts: Vec<&str> = name.split('/').collect();
+        if let [plugin, ..] = parts.as_slice() {
+            if parts.len() > 1 {
+                return Some((*plugin).to_string());
+            }
+        }
+        let tool = parts.first()?;
+        let inner = self.inner.lock();
+        let mut owners: Vec<String> = inner
+            .instances
+            .values()
+            .filter(|i| i.child.tools().iter().any(|t| t == tool))
+            .map(|i| i.plugin.clone())
+            .collect();
+        owners.sort();
+        owners.dedup();
+        match owners.as_slice() {
+            [one] => Some(one.clone()),
+            _ => None,
+        }
+    }
+
     fn tool_names_locked(&self, inner: &Inner) -> Vec<String> {
         inner
             .instances

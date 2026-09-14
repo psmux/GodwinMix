@@ -4687,6 +4687,7 @@ mod tests {
     fn building_outside_a_runtime_fails_with_a_clear_message() {
         let _ = gst::init();
         let err = Mixer::build(crate::config::Config {
+            nodes: Default::default(),
             canvas: Default::default(),
             program: Default::default(),
             multiview: Default::default(),
@@ -4718,6 +4719,7 @@ mod tests {
 
     fn programme_config(graphics: crate::config::Accel) -> crate::config::Config {
         let mut cfg = crate::config::Config {
+            nodes: Default::default(),
             canvas: crate::config::Canvas {
                 width: 320,
                 height: 180,
