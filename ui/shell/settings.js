@@ -117,7 +117,7 @@ export function openSettings(client, opts = {}) {
     field(
       "Tile pictures",
       select(GALLERY_MODES.map(([id, title]) => [id, title]), s.gallery, (v) => setSetting("gallery", v)),
-      GALLERY_MODES.find(([id]) => id === s.gallery)[2]
+      (GALLERY_MODES.find(([id]) => id === s.gallery) || GALLERY_MODES[0])[2]
     )
   );
 
