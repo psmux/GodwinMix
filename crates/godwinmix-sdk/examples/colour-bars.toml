@@ -23,4 +23,4 @@ media = { video = "raw", audio = "none", alpha = false, thumb = true }
 transports = ["container"]
 capabilities = ["restart-in-place", "health"]
 latency_ms = 0
-settings = "settings.json"
+settings = "colour-bars.settings.json"

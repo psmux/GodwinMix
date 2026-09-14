@@ -40,9 +40,12 @@ const tests = {
   // vint is the one place JavaScript's 32 bit bitwise operators would bite, so
   // the sizes a real canvas produces are checked here. Keep this one.
   "vint holds a 1080p frame": () => {
-    assert.deepStrictEqual([...main.vint(127)], [0x80 | 127]);
     assert.deepStrictEqual([...main.vint(1)], [0x81]);
-    assert.deepStrictEqual([...main.vint(3110404)], [0x20 | 0x2f, 0x72, 0x44]);
+    assert.deepStrictEqual([...main.vint(127)], [0x40, 0x7f]);
+    // 1920 * 1080 * 3 / 2, plus the four byte SimpleBlock head: four vint bytes
+    // with the marker in bit 4 of the first, which is where `1 << 35` would go
+    // wrong if this used a shift.
+    assert.deepStrictEqual([...main.vint(3110404)], [0x10, 0x2f, 0x76, 0x04]);
   },
 };
 
