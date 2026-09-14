@@ -211,6 +211,10 @@ pub struct InputPipeline {
     vcaps: gst::Element,
     acaps: gst::Element,
     vtee: gst::Element,
+    /// The raw audio tee, where an audio monitoring branch hangs off. The
+    /// counterpart of `vtee`, and the reason `/pcm/cam1` costs nothing until
+    /// somebody opens it.
+    atee: gst::Element,
     has_video: Arc<AtomicBool>,
     has_audio: Arc<AtomicBool>,
     /// Whether the page's media ended up being decoded outside the browser.
@@ -770,6 +774,7 @@ impl InputPipeline {
             vcaps: ends.vcaps,
             acaps: ends.acaps,
             vtee: ends.vtee,
+            atee: ends.atee,
             has_video: parts.has_video.unwrap_or_default(),
             has_audio: parts.has_audio.unwrap_or_default(),
             superimposed: parts.superimposed,
@@ -810,6 +815,15 @@ impl InputPipeline {
     /// client swap, a tool a plugin contributes.
     pub fn call(&self, method: &str, params: serde_json::Value) -> Result<serde_json::Value> {
         self.kind.lock().call(method, params)
+    }
+
+    /// This source's raw video tee and raw audio tee, and the pipeline they
+    /// live in, for a preview or monitoring branch to hang off.
+    ///
+    /// Both carry `allow-not-linked`, so a branch that comes and goes is
+    /// nothing to the programme side beside it.
+    pub fn taps(&self) -> (gst::Pipeline, gst::Element, gst::Element) {
+        (self.pipeline.clone(), self.vtee.clone(), self.atee.clone())
     }
 
     /// The thumbnail proxy, when this source has a thumbnail end.

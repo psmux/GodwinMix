@@ -29,9 +29,12 @@
 //! is the same isolation boundary the mosaic has always had.
 
 pub mod audio;
+pub mod hub;
 pub mod local;
 pub mod mjpeg;
 pub mod whep;
+
+pub use hub::{AudioStream, LocalStream, PreviewDemand, PreviewHandle};
 
 use parking_lot::Mutex;
 use std::collections::BTreeMap;

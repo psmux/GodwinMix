@@ -183,7 +183,7 @@ impl AudioTap {
         )?;
 
         let sink = gst_app::AppSink::builder()
-            .name(&format!("mon-sink-{tag}"))
+            .name(format!("mon-sink-{tag}"))
             .max_buffers(8)
             .drop(true)
             .sync(false)
@@ -347,6 +347,163 @@ pub fn parse_header(frame: &[u8]) -> Option<(u32, u64)> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A mixer small enough to start inside a test.
+    fn mixer_cfg() -> crate::config::Config {
+        let mut cfg: crate::config::Config = toml::from_str("").unwrap();
+        cfg.canvas = crate::config::Canvas {
+            width: 320,
+            height: 180,
+            fps: 15,
+            sample_rate: 48000,
+            channels: 2,
+        };
+        cfg.multiview.enabled = false;
+        cfg
+    }
+
+    /// How many monitoring branches this pipeline has right now. What proves
+    /// the branch really went and not merely that a count was decremented.
+    fn branches(pipeline: &gst::Pipeline) -> usize {
+        pipeline
+            .iterate_elements()
+            .into_iter()
+            .flatten()
+            .filter(|e| e.name().starts_with("mon-sink-"))
+            .count()
+    }
+
+    /// The acceptance test for audio monitoring: a client opens
+    /// `/pcm/program`, gets frames of the right size with monotonic running
+    /// times, closes, and the branch is gone.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn a_pcm_client_gets_frames_and_leaving_removes_the_branch() {
+        let _ = gst::init();
+        let (mut mix, handle, cmd_rx, _bus_rx) = crate::mixer::Mixer::build(mixer_cfg()).unwrap();
+        mix.start().unwrap();
+        let preview = mix.preview_handle();
+        let pipeline = mix.program_pipeline().clone();
+        assert_eq!(branches(&pipeline), 0, "a monitoring branch before anybody asked");
+        let thread = crate::mixer::spawn(mix, cmd_rx, handle.clone());
+
+        let req = AudioRequest::default().clamped();
+        let (stream, mut frames) = tokio::time::timeout(
+            std::time::Duration::from_secs(5),
+            preview.open_audio("program", req),
+        )
+        .await
+        .expect("opening /pcm/program timed out")
+        .unwrap_or_else(|e| panic!("the mixer refused /pcm/program: {e}"));
+        assert_eq!(preview.clients().count("pcm"), 1);
+        assert_eq!(branches(&pipeline), 1, "no branch was built");
+
+        let mut last_seq = None;
+        let mut last_at = None;
+        for i in 0..10 {
+            let frame = tokio::time::timeout(std::time::Duration::from_secs(5), frames.recv())
+                .await
+                .unwrap_or_else(|_| panic!("no frame {i} within five seconds"))
+                .expect("the frame channel closed");
+            assert_eq!(
+                frame.len(),
+                HEADER_BYTES + req.frame_bytes(),
+                "frame {i} is not ten milliseconds of F32LE stereo plus a header"
+            );
+            let (seq, at) = parse_header(&frame).expect("a frame with no readable header");
+            if let Some(prev) = last_seq {
+                assert_eq!(seq, prev + 1, "the sequence skipped at frame {i}");
+            }
+            if let Some(prev) = last_at {
+                assert!(at > prev, "running time went backwards at frame {i}: {prev} then {at}");
+                assert_eq!(
+                    at - prev,
+                    10_000_000,
+                    "frames must be ten milliseconds apart on the timeline"
+                );
+            }
+            last_seq = Some(seq);
+            last_at = Some(at);
+        }
+
+        drop(stream);
+        for _ in 0..50 {
+            if branches(&pipeline) == 0 {
+                break;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        }
+        assert_eq!(branches(&pipeline), 0, "the branch outlived its last client");
+        assert_eq!(preview.clients().count("pcm"), 0);
+
+        let _ = handle.send(crate::mixer::Command::Shutdown);
+        tokio::task::spawn_blocking(move || thread.join()).await.unwrap().unwrap();
+    }
+
+    /// Two clients asking for the same shape share one branch.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn two_clients_at_the_same_shape_share_one_branch() {
+        let _ = gst::init();
+        let (mut mix, handle, cmd_rx, _bus_rx) = crate::mixer::Mixer::build(mixer_cfg()).unwrap();
+        mix.start().unwrap();
+        let preview = mix.preview_handle();
+        let pipeline = mix.program_pipeline().clone();
+        let thread = crate::mixer::spawn(mix, cmd_rx, handle.clone());
+
+        let open = |req| {
+            let preview = preview.clone();
+            async move {
+                match preview.open_audio("program", req).await {
+                    Ok(pair) => pair,
+                    Err(e) => panic!("open_audio refused: {e}"),
+                }
+            }
+        };
+        let (a, _ra) = open(AudioRequest::default()).await;
+        let (b, _rb) = open(AudioRequest::default()).await;
+        assert_eq!(branches(&pipeline), 1, "two clients at one shape built two branches");
+        assert_eq!(preview.clients().count("pcm"), 2);
+
+        // A different shape is a second branch.
+        let narrow = AudioRequest { channels: 1, rate: 16_000, ..Default::default() };
+        let (c, _rc) = open(narrow).await;
+        assert_eq!(branches(&pipeline), 2);
+
+        drop(a);
+        tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+        assert_eq!(branches(&pipeline), 2, "a branch went while a client was still on it");
+        drop(b);
+        drop(c);
+        for _ in 0..50 {
+            if branches(&pipeline) == 0 {
+                break;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        }
+        assert_eq!(branches(&pipeline), 0);
+
+        let _ = handle.send(crate::mixer::Command::Shutdown);
+        tokio::task::spawn_blocking(move || thread.join()).await.unwrap().unwrap();
+    }
+
+    /// A target that is not here says what is, rather than a bare not found.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn a_source_that_is_not_here_names_the_ones_that_are() {
+        let _ = gst::init();
+        let (mut mix, handle, cmd_rx, _bus_rx) = crate::mixer::Mixer::build(mixer_cfg()).unwrap();
+        mix.start().unwrap();
+        let preview = mix.preview_handle();
+        let thread = crate::mixer::spawn(mix, cmd_rx, handle.clone());
+
+        let e = match preview.open_audio("cam9", AudioRequest::default()).await {
+            Ok(_) => panic!("a source that is not here must be refused"),
+            Err(e) => e,
+        };
+        assert!(e.contains("cam9"), "{e}");
+        assert!(e.contains("program"), "the refusal must name the next step: {e}");
+
+        let _ = handle.send(crate::mixer::Command::Shutdown);
+        tokio::task::spawn_blocking(move || thread.join()).await.unwrap().unwrap();
+    }
 
     #[test]
     fn a_request_is_clamped_and_opus_is_always_48k() {
