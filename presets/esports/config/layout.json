@@ -1,0 +1,17 @@
+{
+  "header": [
+    "header"
+  ],
+  "main": [
+    "multiview",
+    "scenes"
+  ],
+  "sidebar": [
+    "sources",
+    "media"
+  ],
+  "footer": [
+    "alerts",
+    "outputs"
+  ]
+}

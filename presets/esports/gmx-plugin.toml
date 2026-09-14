@@ -1,0 +1,22 @@
+[plugin]
+name = "esports"
+version = "1.0.0"
+api = 1
+description = "A match: four player feeds on a node, the caster's camera, an overlay from a page, replays, and one destination."
+license = "Apache-2.0"
+authors = ["The GodwinMix authors"]
+repository = "https://github.com/psmux/GodwinMix"
+platforms = ["linux-x86_64", "linux-aarch64", "macos-aarch64", "macos-x86_64", "windows-x86_64"]
+placements = ["core"]
+
+[[provides]]
+kind = "preset"
+id = "esports"
+
+[provides.preset]
+plugins = ["ndi@^1", "browser@^1", "rtmp@^1", "screen@^1", "replay@^1"]
+config = "config/godwinmix.toml"
+layout = "config/layout.json"
+surface = "web"
+theme = "neon"
+scenes = "scenes"

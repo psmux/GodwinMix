@@ -1,0 +1,22 @@
+[plugin]
+name = "classroom"
+version = "1.0.0"
+api = 1
+description = "A lesson recorded and streamed: one camera, the teacher's screen beside it, a local recording and one destination."
+license = "Apache-2.0"
+authors = ["The GodwinMix authors"]
+repository = "https://github.com/psmux/GodwinMix"
+platforms = ["linux-x86_64", "linux-aarch64", "macos-aarch64", "macos-x86_64", "windows-x86_64"]
+placements = ["core"]
+
+[[provides]]
+kind = "preset"
+id = "classroom"
+
+[provides.preset]
+plugins = ["camera@^1", "screen@^1", "rtmp@^1", "file-record@^1"]
+config = "config/godwinmix.toml"
+layout = "config/layout.json"
+surface = "web"
+theme = "daylight"
+scenes = "scenes"
