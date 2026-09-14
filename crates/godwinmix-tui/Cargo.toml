@@ -1,0 +1,66 @@
+[package]
+name = "godwinmix-tui"
+version = "0.2.0"
+edition = "2021"
+rust-version = "1.88"
+description = "The reference terminal UI for GodwinMix: a plain client of /rpc"
+license = "AGPL-3.0-or-later"
+
+# One binary. `gmx-tui` is what an operator types over SSH.
+[[bin]]
+name = "gmx-tui"
+path = "src/main.rs"
+
+[lib]
+name = "godwinmix_tui"
+path = "src/lib.rs"
+
+[dependencies]
+# The screen. ratatui carries crossterm 0.29 as its default backend, and the
+# crossterm entry below is pinned to the same version so there is one copy of
+# it in the tree.
+ratatui = "0.30"
+crossterm = { version = "0.29", features = ["event-stream"] }
+
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "sync", "time", "net", "io-util", "signal"] }
+# rustls rather than the platform's TLS, for the same reason the core uses it:
+# one binary reaches a wss:// mixer on Linux, macOS and Windows with no OpenSSL
+# headers in the way.
+tokio-tungstenite = { version = "0.29", default-features = false, features = ["connect", "rustls-tls-webpki-roots"] }
+# tokio-tungstenite takes rustls with no crypto provider, and rustls 0.23 will
+# not build a client config without one. This names ring and the binary
+# installs it as the process default at start. Without it every wss:// URL
+# fails at connect, which is the bug the core already fixed for reqwest.
+rustls = { version = "0.23", default-features = false, features = ["ring"] }
+# The Stream and Sink halves of the WebSocket. tokio-tungstenite hands back a
+# futures Stream and there is no way to read it without this.
+futures-util = { version = "0.3", default-features = false, features = ["sink", "std"] }
+
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+# Mosaic frames arrive as JPEG and every picture path (kitty, sixel, blocks)
+# needs them as pixels first. jpeg-decoder is pure Rust with no dependencies of
+# its own, which is why it is here rather than `image`. Only built with the
+# `picture` feature, which is on by default and can be turned off for a smaller
+# binary on a machine that will never pass --multiview.
+# default-features off drops rayon: a 320 pixel wide mosaic is not worth a
+# thread pool.
+jpeg-decoder = { version = "0.3", default-features = false, optional = true }
+
+[features]
+default = ["picture"]
+picture = ["dep:jpeg-decoder"]
+
+[dev-dependencies]
+# The fake core in tests/ is a WebSocket server on a loopback port. The server
+# half of the same crate the client uses, so the two cannot drift.
+tokio-tungstenite = { version = "0.29", default-features = false, features = ["connect", "handshake"] }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "sync", "time", "net"] }
+
+[profile.release]
+opt-level = 3
+lto = "thin"
+codegen-units = 1
+strip = true
+panic = "abort"
