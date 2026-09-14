@@ -83,6 +83,18 @@ const DEFS: &[(&str, Kind, &str, &[f64])] = &[
     ("gmx_take_ack_ms", Kind::Histogram, "Time from a take being asked for to it landing.", CALL_MS),
     ("gmx_takes_total", Kind::Counter, "Takes that landed.", &[]),
     ("gmx_takes_refused_total", Kind::Counter, "Takes refused, by reason.", &[]),
+    (
+        "gmx_node_clock_offset_ms",
+        Kind::Gauge,
+        "How far one node's clock sits from the programme clock, in milliseconds.",
+        &[],
+    ),
+    (
+        "gmx_node_heartbeat_age_ms",
+        Kind::Gauge,
+        "Milliseconds since one node's last heartbeat. Above 3000 the node is treated as gone.",
+        &[],
+    ),
     ("gmx_multiview_fps", Kind::Gauge, "Configured mosaic frame rate. Zero when disabled.", &[]),
     ("gmx_multiview_subscribers", Kind::Gauge, "Clients receiving mosaic frames.", &[]),
     ("gmx_plugin_restarts_total", Kind::Counter, "Times a plugin instance was rebuilt.", &[]),
@@ -163,6 +175,7 @@ fn takes_labels(name: &str) -> bool {
     name.starts_with("gmx_source_")
         || name.starts_with("gmx_output_")
         || name.starts_with("gmx_plugin_")
+        || name.starts_with("gmx_node_")
         || name.starts_with("gmx_rpc_")
         || name == "gmx_takes_refused_total"
 }

@@ -1879,6 +1879,11 @@ sidecar = \"/opt/b\"\n").unwrap();
 
     #[test]
     fn a_source_can_be_written_as_a_type_and_params_with_no_uri_field() {
+        // Validating this one asks `test/source` what patterns its element
+        // takes, which is a registry lookup. Every other test in this module
+        // validates a config that never reaches an element, so this is the one
+        // that needs the registry up.
+        gstreamer::init().unwrap();
         let cfg: Config = toml::from_str(
             r#"
             [[sources]]

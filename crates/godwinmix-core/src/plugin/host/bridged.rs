@@ -423,7 +423,7 @@ mod tests {
                 },
             },
             BuildCtx {
-                id: cfg.id.clone().into(),
+                id: cfg.id.clone(),
                 cfg,
                 canvas,
                 backends: crate::probe::Backends::from_selection(
