@@ -229,9 +229,19 @@ async fn apply(
         .map_err(|e| scene_error(call, e))?;
     // A duration only means anything on a scene that is on air: there is
     // nothing to ramp on pads nobody is drawing.
-    if let (Some(ms), Some(view)) = (over.filter(|ms| *ms > 0), outcome.scene.as_ref()) {
-        super::edit::ramp_if_on_air(call, view, ms, easing).await;
+    match (over.filter(|ms| *ms > 0), outcome.scene.as_ref()) {
+        (Some(ms), Some(view)) => super::edit::ramp_if_on_air(call, view, ms, easing).await,
+        // Everything else that changed a scene on air is pushed as a cut. A
+        // filter going on or off an item, a source swapped under one, an item
+        // hidden: the pads are already drawing these items and there is
+        // nothing to ease, but the pipeline has to hear about it or the change
+        // would sit in the document until the next take.
+        (None, Some(view)) => super::edit::reapply_if_on_air(call, view).await,
+        _ => {}
     }
+    // The preview draws the armed scene, so an edit to it has to reach the
+    // preview compositor as well as the programme.
+    super::edit::push_preview(call);
     answered(outcome)
 }
 

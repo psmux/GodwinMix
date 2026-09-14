@@ -239,6 +239,7 @@ fn needs_superimposed(page: Option<f64>, media: &[Option<f64>]) -> bool {
 /// Attribution compares whole names instead.
 use crate::plugin::branch::{BranchCtx, ProgrammeBranch, VideoPads};
 
+pub mod group;
 pub mod slots;
 pub mod transition;
 pub use slots::{Placement, SlotPool};
@@ -2877,9 +2878,23 @@ impl Mixer {
                 .any(|s| &s.input.id == id && matches!(s.input.observed_state(), SourceState::Live))
         };
         match &self.program_scene {
-            Some(scene) => {
-                scene.placements.iter().filter(|p| live(&p.source)).cloned().collect()
-            }
+            Some(scene) => scene
+                .placements
+                .iter()
+                .filter_map(|p| match p.group.is_empty() {
+                    // An ordinary item is drawn while its source is live.
+                    true => live(&p.source).then(|| p.clone()),
+                    // A group composited on its own is drawn while any child
+                    // is: the children that are not live simply do not appear
+                    // in it, exactly as they would not appear on the canvas.
+                    false => {
+                        let children: Vec<Placement> =
+                            p.group.iter().filter(|c| live(&c.source)).cloned().collect();
+                        (!children.is_empty())
+                            .then(|| Placement { group: children, ..p.clone() })
+                    }
+                })
+                .collect(),
             None => self
                 .program_source
                 .iter()
@@ -5341,6 +5356,124 @@ mod tests {
         );
         assert_eq!(mix.pool.misses(), 0, "an animated layout change relinked the graph");
         let _ = before;
+        mix.shutdown();
+    }
+
+    /// A filter on one item reaches that item's chain and nothing else's.
+    ///
+    /// The thing this buys over a source filter: the same camera drawn twice
+    /// can be keyed in one place and clean in the other, because the chain
+    /// belongs to the item and not to the source.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn a_per_item_filter_goes_on_that_items_chain_alone() {
+        let mut mix = with_sources(&["cam1"]).await;
+        let canvas = mix.canvas.clone();
+        let keyed = |on: bool| {
+            let mut clean = Placement::full_canvas("cam1".into(), &canvas);
+            clean.item = Some(crate::scene::id::Id::new());
+            let mut inset = Placement {
+                xpos: 10,
+                ypos: 10,
+                width: 100,
+                height: 60,
+                item: Some(crate::scene::id::Id::new()),
+                ..Placement::full_canvas("cam1".into(), &canvas)
+            };
+            if on {
+                inset.filters = vec![slots::ItemFilter {
+                    type_id: "chroma/filter".into(),
+                    name: Some("key".into()),
+                    params: Default::default(),
+                }];
+            }
+            scene("double", vec![clean, inset])
+        };
+
+        mix.take_scene(keyed(false), None).expect("the scene with no filter");
+        assert!(mix.pool.item_filters().is_empty(), "nothing asked for a filter");
+
+        mix.take_scene(keyed(true), None).expect("the same scene, one item keyed");
+        let on = mix.pool.item_filters();
+        assert_eq!(on.len(), 1, "one item asked for one filter, not {on:?}");
+        assert_eq!(on[0].1, "chroma/filter");
+        // And it is on the slot the inset is drawn in, not the full canvas one.
+        let inset_slot = on[0].0;
+        assert_eq!(mix.pool.filters_on(inset_slot).len(), 1);
+        assert!(
+            mix.pool
+                .slots()
+                .iter()
+                .filter(|s| s.index != inset_slot)
+                .all(|s| mix.pool.filters_on(s.index).is_empty()),
+            "the filter reached a slot that did not ask for it"
+        );
+
+        // Applying the same scene again must not take the chain apart and put
+        // it back: that would be a pad block twice a second under the
+        // visibility tick.
+        mix.take_scene(keyed(true), None).expect("the same scene again");
+        assert_eq!(mix.pool.item_filters().len(), 1);
+
+        mix.take_scene(keyed(false), None).expect("the filter taken off again");
+        assert!(mix.pool.item_filters().is_empty(), "removing it left something behind");
+        mix.shutdown();
+    }
+
+    /// A filter over a group is the one thing flattening cannot express, so
+    /// the group gets a compositor of its own. Built on demand, and gone the
+    /// moment the filter is.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn a_filter_over_a_group_gets_a_compositor_of_its_own() {
+        let mut mix = with_sources(&["cam1", "cam2"]).await;
+        let canvas = mix.canvas.clone();
+        let group_id = crate::scene::id::Id::new();
+        let child = |source: &str, x: i32| Placement {
+            xpos: x,
+            ypos: 0,
+            width: canvas.width / 2,
+            height: canvas.height,
+            ..Placement::full_canvas(source.into(), &canvas)
+        };
+        let blurred = |on: bool| {
+            let mut group = Placement::full_canvas("__group__".into(), &canvas);
+            group.item = Some(group_id);
+            group.group = vec![child("cam1", 0), child("cam2", canvas.width / 2)];
+            if on {
+                group.filters = vec![slots::ItemFilter {
+                    type_id: "chroma/filter".into(),
+                    name: Some("over the pair".into()),
+                    params: Default::default(),
+                }];
+            }
+            scene("pair", vec![group])
+        };
+
+        mix.take_scene(blurred(true), None).expect("a filtered group");
+        let subs = mix.pool.sub_compositors();
+        assert_eq!(subs.len(), 1, "a filtered group needs one compositor of its own");
+        assert_eq!(subs[0].1, vec!["cam1".to_string(), "cam2".to_string()]);
+        assert_eq!(mix.pool.filters_on(subs[0].0).len(), 1, "the filter sits below the group");
+        // The group's slot reports both its children, so the freeze frame and
+        // `release_retired` find it when one of them is rebuilt.
+        assert!(!mix.pool.slots_of(&"cam1".to_string()).is_empty());
+
+        // Applying the same scene again must not take it apart and build it
+        // back: that is an element change on a running programme.
+        let before = mix.pool.misses();
+        mix.take_scene(blurred(true), None).expect("the same scene again");
+        assert_eq!(mix.pool.misses(), before, "a reapply rebuilt the sub compositor");
+        assert_eq!(mix.pool.sub_compositors().len(), 1);
+
+        // And taking the filter off puts the group back on the cheap path.
+        let flat = scene(
+            "pair",
+            vec![child("cam1", 0), child("cam2", canvas.width / 2)],
+        );
+        mix.take_scene(flat, None).expect("the group flattened again");
+        assert!(
+            mix.pool.sub_compositors().is_empty(),
+            "the expensive path must not outlive the filter that needed it"
+        );
         mix.shutdown();
     }
 
