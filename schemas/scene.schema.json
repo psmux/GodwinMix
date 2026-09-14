@@ -349,6 +349,13 @@
           "format": "double",
           "type": "number"
         },
+        "order": {
+          "description": "Where this item sits among its siblings. See `Scene::order`: the same\nkey, for the same reason, and what makes a drag one record on the wire.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
         "transform": {
           "$ref": "#/$defs/Transform",
           "default": {
@@ -444,6 +451,13 @@
         },
         "name": {
           "type": "string"
+        },
+        "order": {
+          "description": "Where this scene sits among its siblings, as a sort key rather than an\narray index. Stored so that inserting a scene changes one key on the\nwire instead of renumbering every other one; assigned by\n`Collection::renumber_order` when it is missing, so a document written\nby hand or by an older build needs nothing.",
+          "type": [
+            "string",
+            "null"
+          ]
         }
       },
       "required": [

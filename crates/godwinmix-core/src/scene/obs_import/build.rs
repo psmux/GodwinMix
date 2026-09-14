@@ -186,7 +186,7 @@ impl<'a> Importer<'a> {
                     source.filters.len()
                 ));
             }
-            scenes.push(Scene { id, name: source.name.clone(), items, color: None });
+            scenes.push(Scene { id, order: None, name: source.name.clone(), items, color: None });
         }
         scenes
     }

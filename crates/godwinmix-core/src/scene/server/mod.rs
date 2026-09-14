@@ -290,6 +290,10 @@ impl SceneServer {
         let mut working = inner.doc.clone();
         let value = f(&mut working)?;
         working.check_refs().context("the change would make a scene contain itself")?;
+        // Anything the change added has no order key yet. Giving it one here,
+        // between its neighbours, is what makes the patch below name the one
+        // record that moved instead of every sibling.
+        working.renumber_order();
         let after = working.to_flat();
         let mut p = patch::diff(&before, &after);
         if p.is_empty() {
