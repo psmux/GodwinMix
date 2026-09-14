@@ -98,6 +98,12 @@ struct Counter {
     buffers: AtomicU64,
     /// Buffers whose PTS went backwards against the one before.
     regressions: AtomicU64,
+    /// How much media arrived, in nanoseconds of buffer duration. Counted
+    /// because a buffer is not a fixed amount of audio: the canvas contract
+    /// asks a plugin for ten millisecond buffers, but a source handing the core
+    /// a container is demuxed into whatever the muxer chose, and counting those
+    /// would fail a source that delivered every sample.
+    nanos: AtomicU64,
 }
 
 impl Counter {
@@ -108,6 +114,9 @@ impl Counter {
         pad.add_probe(gst::PadProbeType::BUFFER, move |_pad, info| {
             if let Some(gst::PadProbeData::Buffer(b)) = &info.data {
                 me.buffers.fetch_add(1, Ordering::Relaxed);
+                if let Some(d) = b.duration() {
+                    me.nanos.fetch_add(d.nseconds(), Ordering::Relaxed);
+                }
                 if let Some(pts) = b.pts() {
                     let mut held = last.lock().expect("the counter mutex is never poisoned");
                     if held.is_some_and(|prev| pts < prev) {
@@ -176,12 +185,7 @@ pub fn check_source(cfg: &SourceConfig, allow_exec: bool) -> Result<Report> {
         expected_video(&canvas),
         declared.video,
     ));
-    report.checks.push(enough_buffers(
-        "audio buffers",
-        &audio,
-        expected_audio(),
-        declared.audio,
-    ));
+    report.checks.push(enough_audio(&audio, declared.audio));
 
     let _ = ends.pipeline.set_state(gst::State::Null);
     source.stop()?;
@@ -194,12 +198,43 @@ fn expected_video(canvas: &CanvasCaps) -> u64 {
     (fps * SAMPLE.as_secs_f64()) as u64
 }
 
-/// Ten milliseconds of audio per buffer is the canvas contract, so three
-/// seconds is 300 buffers. Elements that pick their own buffer size deliver
-/// fewer and larger ones, so this is a floor on the count only when the kind
-/// declared raw audio.
-fn expected_audio() -> u64 {
-    (SAMPLE.as_millis() / 10) as u64
+/// Check 3 for audio, measured in time rather than in buffers.
+///
+/// The question is whether ninety percent of the sound arrived, and a count of
+/// buffers cannot answer it: the canvas contract asks a plugin for ten
+/// millisecond buffers, but a source handing the core a container is demuxed
+/// into whatever the muxer chose, and a perfectly conformant one delivered 133
+/// buffers where the count wanted 270.
+fn enough_audio(counter: &Counter, mode: StreamMode) -> CheckResult {
+    const NAME: &str = "audio";
+    if !mode.present() {
+        return CheckResult::pass("audio buffers", "not declared, not expected");
+    }
+    let back = counter.regressions.load(Ordering::Relaxed);
+    if back > 0 {
+        return CheckResult::fail("audio buffers", format!("{back} buffers went backwards in time"));
+    }
+    let got = counter.nanos.load(Ordering::Relaxed);
+    let want = (SAMPLE.as_nanos() as f64 * EXPECTED_SHARE) as u64;
+    if got < want {
+        return CheckResult::fail(
+            "audio buffers",
+            format!(
+                "{} ms of {NAME} in {} s, wanted at least {} ms",
+                got / 1_000_000,
+                SAMPLE.as_secs(),
+                want / 1_000_000
+            ),
+        );
+    }
+    CheckResult::pass(
+        "audio buffers",
+        format!(
+            "{} ms in {} buffers, none out of order",
+            got / 1_000_000,
+            counter.buffers.load(Ordering::Relaxed)
+        ),
+    )
 }
 
 fn reaches_playing(ends: &MediaEnds) -> CheckResult {
@@ -335,6 +370,42 @@ mod tests {
         let outcome = report.into_result();
         let _ = std::fs::remove_file(&path);
         outcome.expect("file/source is conformant");
+    }
+
+    /// The exec kind needs no network either: a command writing a container to
+    /// stdout is the whole contract, and `gst-launch-1.0` writes one.
+    ///
+    /// Skipped where that binary is not on PATH, and on Windows, where the
+    /// shell form of an exec source is refused: the pipe transport is the same
+    /// but the command line is not portable, so the check would be testing the
+    /// shell rather than the kind.
+    #[cfg(unix)]
+    #[test]
+    fn an_exec_source_passes_the_same_checks() {
+        init();
+        if which("gst-launch-1.0").is_none() {
+            println!("skipping: gst-launch-1.0 is not on PATH");
+            return;
+        }
+        let cfg = SourceConfig::bare(
+            "harness-exec",
+            "exec:gst-launch-1.0 -q videotestsrc is-live=true ! video/x-raw,width=640,height=360,framerate=30/1              ! matroskamux streamable=true name=mux ! fdsink fd=1              audiotestsrc is-live=true ! audioconvert ! mux.",
+        );
+        let report = check_source(&cfg, true).expect("the harness runs");
+        for line in report.lines() {
+            println!("{line}");
+        }
+        report.into_result().expect("exec/source is conformant");
+    }
+
+    /// Where a binary is, without a crate for it.
+    #[cfg(unix)]
+    fn which(name: &str) -> Option<std::path::PathBuf> {
+        std::env::var_os("PATH").and_then(|paths| {
+            std::env::split_paths(&paths)
+                .map(|dir| dir.join(name))
+                .find(|p| p.is_file())
+        })
     }
 
     /// Ten seconds of colour bars and a tone in Matroska, so the file check

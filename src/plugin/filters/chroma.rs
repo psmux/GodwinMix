@@ -212,6 +212,67 @@ mod tests {
         assert!(format!("{err}").contains("method"), "{err}");
     }
 
+    /// The other half of the acceptance: a chroma key written in config, on one
+    /// source, built into that source's own pipeline before it starts, with the
+    /// canvas contract unchanged below it.
+    #[test]
+    fn a_configured_chroma_key_goes_on_one_source_and_keeps_the_canvas_contract() {
+        let _ = gstreamer::init();
+        if !crate::probe::exists("alpha") {
+            println!("skipping: this build of GStreamer has no `alpha` element");
+            return;
+        }
+        let canvas = crate::plugin::harness::test_canvas();
+        let backends =
+            crate::probe::Backends::probe(crate::config::Accel::Auto, crate::config::Accel::Auto)
+                .unwrap();
+        let cfg = crate::config::SourceConfig::bare("keyed", "test://smpte");
+        let input = crate::input::InputPipeline::build_kind(
+            &cfg,
+            &canvas,
+            &backends,
+            8,
+            std::time::Instant::now(),
+            false,
+            &crate::config::BrowserConfig::default(),
+            None,
+            false,
+        )
+        .expect("a test source builds");
+
+        let mut params = Params::new();
+        params.insert("method".into(), toml::Value::String("green".into()));
+        let filter = crate::config::FilterConfig {
+            id: "key".into(),
+            type_id: MANIFEST.provide_id(),
+            attach: crate::config::FilterAttach {
+                source: Some("keyed".into()),
+                side: crate::config::FilterAttachSide::Input,
+                programme: false,
+            },
+            params,
+        };
+        input.attach_filter(&filter, &canvas, false).expect("a filter goes on at build time");
+        assert_eq!(input.filter_ids(), vec!["key".to_string()]);
+
+        input.start().expect("the source starts with the key on it");
+        std::thread::sleep(std::time::Duration::from_millis(800));
+
+        // The contract below the filter is untouched: what leaves this source
+        // is still exactly what every other source produces.
+        let pad = input.video_proxy.static_pad("sink").unwrap();
+        let have = pad.current_caps().expect("caps reached the proxy sink");
+        assert!(
+            have.is_subset(&canvas.video()),
+            "a filter changed the canvas contract: {have}"
+        );
+        assert!(input.health.saw_video(), "no frames came through the key");
+
+        input.remove_filter("key").expect("and comes off again");
+        assert!(input.filter_ids().is_empty());
+        input.stop();
+    }
+
     #[test]
     fn the_defaults_and_the_ranges_are_accepted() {
         validate(&params(&[
