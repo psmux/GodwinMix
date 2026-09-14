@@ -45,7 +45,12 @@ impl History {
         if takes.last().is_some_and(|t| t.seq == seq) {
             return;
         }
-        takes.push(TakeRecord { source, at_running_time_ms, by: by.to_string(), seq });
+        takes.push(TakeRecord {
+            source,
+            at_running_time_ms,
+            by: by.to_string(),
+            seq,
+        });
         let len = takes.len();
         if len > KEEP {
             takes.drain(0..len - KEEP);
@@ -73,7 +78,12 @@ impl History {
     /// Newest first, which is the order a person reads a log in.
     pub fn recent(&self, limit: usize) -> Vec<TakeRecord> {
         let takes = self.takes.lock();
-        takes.iter().rev().take(limit.clamp(1, KEEP)).cloned().collect()
+        takes
+            .iter()
+            .rev()
+            .take(limit.clamp(1, KEEP))
+            .cloned()
+            .collect()
     }
 
     /// What `program.revert` takes back to: the last source that is not the

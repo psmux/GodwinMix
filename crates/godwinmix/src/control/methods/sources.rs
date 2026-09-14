@@ -1,13 +1,13 @@
 //! Sources: list, get, add, remove, the faders and the scrubber.
 
 use super::{body, handler};
+use crate::control::call::Call;
+use godwinmix_core::mixer::{AudioOutcome, Command, SeekOutcome};
 use godwinmix_protocol::error::RpcError;
 use godwinmix_protocol::method::{schema_of, MethodDef, Registry, Tier};
 use godwinmix_protocol::requests::*;
 use godwinmix_protocol::scope::Scope;
 use godwinmix_protocol::types::*;
-use crate::control::call::Call;
-use godwinmix_core::mixer::{AudioOutcome, Command, SeekOutcome};
 use serde_json::Value;
 
 pub fn register(reg: &mut Registry<Call>) {
@@ -17,7 +17,12 @@ pub fn register(reg: &mut Registry<Call>) {
             Scope::Read,
             "Every source, with its state, whether it has video and audio, and its fader.",
             handler(|call: Call, _| async move {
-                let status = call.app.mixer.status().await.map_err(|e| call.mixer_error(e))?;
+                let status = call
+                    .app
+                    .mixer
+                    .status()
+                    .await
+                    .map_err(|e| call.mixer_error(e))?;
                 body(status.sources)
             }),
         )
@@ -150,14 +155,23 @@ pub struct SeekParams {
 }
 
 async fn find(call: &Call, id: &str) -> Result<SourceStatus, RpcError> {
-    let status = call.app.mixer.status().await.map_err(|e| call.mixer_error(e))?;
+    let status = call
+        .app
+        .mixer
+        .status()
+        .await
+        .map_err(|e| call.mixer_error(e))?;
     status
         .sources
         .iter()
         .find(|s| s.id == id)
         .cloned()
         .ok_or_else(|| {
-            let ids = status.sources.iter().map(|s| s.id.clone()).collect::<Vec<_>>();
+            let ids = status
+                .sources
+                .iter()
+                .map(|s| s.id.clone())
+                .collect::<Vec<_>>();
             RpcError::not_found("source", id, &ids)
         })
 }
@@ -174,7 +188,12 @@ async fn add(call: Call, params: Value) -> Result<Value, RpcError> {
 async fn remove(call: Call, params: Value) -> Result<Value, RpcError> {
     let req: IdRequest = call.params(&params)?;
     let source = find(&call, &req.id).await?;
-    let status = call.app.mixer.status().await.map_err(|e| call.mixer_error(e))?;
+    let status = call
+        .app
+        .mixer
+        .status()
+        .await
+        .map_err(|e| call.mixer_error(e))?;
     if call.dry_run {
         let mut diff = vec![format!("remove source {} ({})", source.id, source.uri)];
         if status.program.as_deref() == Some(source.id.as_str()) {
@@ -187,7 +206,12 @@ async fn remove(call: Call, params: Value) -> Result<Value, RpcError> {
         .request(|ack| Command::RemoveSource(req.id.clone(), Some(ack)))
         .await
         .map_err(|e| call.mixer_error(e))?;
-    let after = call.app.mixer.status().await.map_err(|e| call.mixer_error(e))?;
+    let after = call
+        .app
+        .mixer
+        .status()
+        .await
+        .map_err(|e| call.mixer_error(e))?;
     Ok(serde_json::json!({
         "removed": req.id,
         "program": after.program,
@@ -197,8 +221,18 @@ async fn remove(call: Call, params: Value) -> Result<Value, RpcError> {
 
 async fn set_audio(call: Call, params: Value) -> Result<Value, RpcError> {
     let req: AudioSetParams = call.params(&params)?;
-    let gain = req.audio.gain.map(crate::control::checked_gain).transpose().map_err(refuse)?;
-    let page = req.audio.page.map(crate::control::checked_gain).transpose().map_err(refuse)?;
+    let gain = req
+        .audio
+        .gain
+        .map(crate::control::checked_gain)
+        .transpose()
+        .map_err(refuse)?;
+    let page = req
+        .audio
+        .page
+        .map(crate::control::checked_gain)
+        .transpose()
+        .map_err(refuse)?;
     let media = req
         .audio
         .media
@@ -214,9 +248,11 @@ async fn set_audio(call: Call, params: Value) -> Result<Value, RpcError> {
         .map_err(|e| call.mixer_error(e))?;
     match outcome {
         AudioOutcome::Set(state) => body(state),
-        AudioOutcome::NoSuchSource => {
-            Err(RpcError::not_found("source", &req.id, &call.source_ids().await))
-        }
+        AudioOutcome::NoSuchSource => Err(RpcError::not_found(
+            "source",
+            &req.id,
+            &call.source_ids().await,
+        )),
         AudioOutcome::NotSuperimposed => Err(RpcError::not_in_state(format!(
             "source {} is not superimposed, so its sounds arrive already mixed and there is \
              nothing to balance. Its gain and mute still work: send those without page or media.",
@@ -236,9 +272,11 @@ async fn seek(call: Call, params: Value) -> Result<Value, RpcError> {
         .map_err(|e| call.mixer_error(e))?;
     match outcome {
         SeekOutcome::Moved(at) => body(at),
-        SeekOutcome::NoSuchSource => {
-            Err(RpcError::not_found("source", &req.id, &call.source_ids().await))
-        }
+        SeekOutcome::NoSuchSource => Err(RpcError::not_found(
+            "source",
+            &req.id,
+            &call.source_ids().await,
+        )),
         SeekOutcome::NotSeekable => Err(RpcError::not_in_state(format!(
             "source {} cannot be scrubbed: a live feed has no position to move to, it is \
              wherever it is now. Call source.list and seek one whose seekable is true.",

@@ -61,12 +61,12 @@ fn draw(frame: &mut [u8], canvas: Canvas, settings: Settings, _pts_ns: u64) {
 
     // One row of each plane, then copied down. The bars do not change with the
     // row, so drawing 1,080 of them would be 1,080 times the work.
-    for x in 0..width {
-        luma[x] = bar_at(x)[0];
+    for (x, pixel) in luma.iter_mut().take(width).enumerate() {
+        *pixel = bar_at(x)[0];
     }
-    for x in 0..cw {
-        u[x] = bar_at(x * 2)[1];
-        v[x] = bar_at(x * 2)[2];
+    for (x, (u, v)) in u.iter_mut().zip(v.iter_mut()).take(cw).enumerate() {
+        *u = bar_at(x * 2)[1];
+        *v = bar_at(x * 2)[2];
     }
     for row in 1..height {
         luma.copy_within(0..width, row * width);

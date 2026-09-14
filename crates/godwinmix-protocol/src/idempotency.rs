@@ -57,7 +57,9 @@ impl Cache {
     pub fn lookup(&self, key: &str, method: &str, params: &Value) -> Result<Lookup, RpcError> {
         let mut entries = self.entries.lock();
         prune(&mut entries);
-        let Some(entry) = entries.get(key) else { return Ok(Lookup::Fresh) };
+        let Some(entry) = entries.get(key) else {
+            return Ok(Lookup::Fresh);
+        };
         if entry.method != method {
             return Err(mismatch(key, &entry.method, method));
         }
@@ -155,8 +157,16 @@ mod tests {
     fn the_same_call_twice_replays_the_first_answer() {
         let c = Cache::default();
         let params = json!({ "uri": "rtmp://h/l/k", "id": "cam1" });
-        assert!(matches!(c.lookup("k1", "source.add", &params).unwrap(), Lookup::Fresh));
-        c.store("k1", "source.add", &params, &json!({ "id": "cam1", "should_retry": false }));
+        assert!(matches!(
+            c.lookup("k1", "source.add", &params).unwrap(),
+            Lookup::Fresh
+        ));
+        c.store(
+            "k1",
+            "source.add",
+            &params,
+            &json!({ "id": "cam1", "should_retry": false }),
+        );
 
         let Lookup::Replay(body) = c.lookup("k1", "source.add", &params).unwrap() else {
             panic!("the second call has to replay");
@@ -173,7 +183,10 @@ mod tests {
         let first = json!({ "id": "cam1", "uri": "rtmp://h/l/k", "trace_id": "aaa" });
         c.store("k1", "source.add", &first, &json!({ "id": "cam1" }));
         let again = json!({ "uri": "rtmp://h/l/k", "id": "cam1", "trace_id": "bbb" });
-        assert!(matches!(c.lookup("k1", "source.add", &again).unwrap(), Lookup::Replay(_)));
+        assert!(matches!(
+            c.lookup("k1", "source.add", &again).unwrap(),
+            Lookup::Replay(_)
+        ));
     }
 
     #[test]
@@ -181,7 +194,9 @@ mod tests {
         let c = Cache::default();
         let first = json!({ "uri": "rtmp://h/l/one" });
         c.store("k1", "source.add", &first, &json!({ "id": "one" }));
-        let e = c.lookup("k1", "source.add", &json!({ "uri": "rtmp://h/l/two" })).unwrap_err();
+        let e = c
+            .lookup("k1", "source.add", &json!({ "uri": "rtmp://h/l/two" }))
+            .unwrap_err();
         assert_eq!(e.code, ErrorCode::InvalidParams.number());
         assert_eq!(e.data["idempotency"], "mismatch");
         assert!(e.message.contains("k1"), "{}", e.message);
@@ -196,7 +211,12 @@ mod tests {
     fn the_cache_does_not_grow_without_end() {
         let c = Cache::default();
         for i in 0..(MAX_KEYS + 50) {
-            c.store(&format!("k{i}"), "source.add", &json!({ "i": i }), &json!({ "ok": true }));
+            c.store(
+                &format!("k{i}"),
+                "source.add",
+                &json!({ "i": i }),
+                &json!({ "ok": true }),
+            );
         }
         assert!(c.len() <= MAX_KEYS, "held {} keys", c.len());
     }

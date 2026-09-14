@@ -45,7 +45,11 @@ pub const MANIFEST: Manifest = Manifest {
     tier: Tier::Core,
 };
 
-pub const PROVIDE: Provide = Provide { manifest: MANIFEST, claims, make: new };
+pub const PROVIDE: Provide = Provide {
+    manifest: MANIFEST,
+    claims,
+    make: new,
+};
 
 fn claims(uri: &str) -> Option<u16> {
     crate::input::web_url(uri).map(|_| MANIFEST.rank)
@@ -81,7 +85,9 @@ impl BrowserSource {
         assemble(
             &self.ctx,
             thumb,
-            Ingest::default().with([src.clone(), decode.clone()]).livesync(false),
+            Ingest::default()
+                .with([src.clone(), decode.clone()])
+                .livesync(false),
             |w: &Wiring| {
                 gst::Element::link(&src, &decode).context("linking the sidecar to the decoder")?;
                 w.route(&decode, w.norm.video_entry(), w.norm.audio_entry());
@@ -112,7 +118,12 @@ impl BrowserSource {
             ctx,
             thumb,
             Ingest::default()
-                .with([src.clone(), gl_convert.clone(), gl_download.clone(), web_caps.clone()])
+                .with([
+                    src.clone(),
+                    gl_convert.clone(),
+                    gl_download.clone(),
+                    web_caps.clone(),
+                ])
                 .livesync(true),
             |w: &Wiring| {
                 gst::Element::link_many([
@@ -128,9 +139,12 @@ impl BrowserSource {
                 let out = src
                     .static_pad("video")
                     .context("wpesrc has no `video` pad; the plugin version may differ")?;
-                let entry = gl_convert.static_pad("sink").context("gl chain has no sink pad")?;
+                let entry = gl_convert
+                    .static_pad("sink")
+                    .context("gl chain has no sink pad")?;
                 out.link(&entry).context("linking web source video")?;
-                w.has_video.store(true, std::sync::atomic::Ordering::Relaxed);
+                w.has_video
+                    .store(true, std::sync::atomic::Ordering::Relaxed);
                 w.route(&src, gl_convert.clone(), w.norm.audio_entry());
                 Ok(KindParts::default())
             },
@@ -151,13 +165,20 @@ impl Source for BrowserSource {
         // not: brought back in place its audio mixer spun on a failing latency
         // query, so it is rebuilt from nothing instead.
         capabilities.set(Capability::RestartInPlace, self.process.is_none());
-        Ok(Ready { manifest: MANIFEST, latency_ms: MANIFEST.latency_ms, capabilities })
+        Ok(Ready {
+            manifest: MANIFEST,
+            latency_ms: MANIFEST.latency_ms,
+            capabilities,
+        })
     }
 
     fn start(&mut self, canvas: &CanvasCaps, thumb: bool) -> Result<MediaEnds> {
         self.ctx.canvas = canvas.clone();
-        let ends =
-            if self.process.is_some() { self.start_sidecar(thumb)? } else { self.start_wpe(thumb)? };
+        let ends = if self.process.is_some() {
+            self.start_sidecar(thumb)?
+        } else {
+            self.start_wpe(thumb)?
+        };
         self.running = true;
         Ok(ends)
     }
@@ -172,11 +193,17 @@ impl Source for BrowserSource {
 
     fn configure(&mut self, params: &Params) -> Result<Configure> {
         validate(params)?;
-        Ok(Configure::RestartRequired("a page takes a new address by being loaded again".into()))
+        Ok(Configure::RestartRequired(
+            "a page takes a new address by being loaded again".into(),
+        ))
     }
 
     fn health(&self) -> Health {
-        Health::of(if self.running { PluginState::Running } else { PluginState::Starting })
+        Health::of(if self.running {
+            PluginState::Running
+        } else {
+            PluginState::Starting
+        })
     }
 
     fn call(&mut self, method: &str, _params: Value) -> Result<Value> {
@@ -198,7 +225,10 @@ pub fn validate(params: &Params) -> Result<()> {
     for (key, value) in params {
         match key.as_str() {
             "uri" | "url" => {
-                anyhow::ensure!(value.is_str(), "browser/source params.{key} must be a string");
+                anyhow::ensure!(
+                    value.is_str(),
+                    "browser/source params.{key} must be a string"
+                );
             }
             "superimpose" => {
                 let s = value.as_str().unwrap_or_default();

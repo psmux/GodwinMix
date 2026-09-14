@@ -39,7 +39,10 @@ const EXAMPLE_CONFIG: &str = include_str!("../../../godwinmix.example.toml");
 const DEFAULT_URL: &str = "http://127.0.0.1:8080";
 
 #[derive(Parser, Debug)]
-#[command(name = "godwinmix", about = "Live RTMP video mixer with hot source switching")]
+#[command(
+    name = "godwinmix",
+    about = "Live RTMP video mixer with hot source switching"
+)]
 struct Args {
     /// Path to the TOML configuration file.
     #[arg(short, long, default_value = "godwinmix.toml")]
@@ -271,7 +274,9 @@ pub async fn run() -> Result<()> {
     // are picked up here, with the warning, for one release. See `config::env_var`.
     match args.command {
         Some(Command::Ctl { url, token, cmd }) => {
-            let url = url.or_else(|| config::env_var("URL")).unwrap_or_else(|| DEFAULT_URL.into());
+            let url = url
+                .or_else(|| config::env_var("URL"))
+                .unwrap_or_else(|| DEFAULT_URL.into());
             let token = token.or_else(|| config::env_var("TOKEN"));
             return ctl::run(&url, token.as_deref(), cmd).await;
         }
@@ -280,8 +285,14 @@ pub async fn run() -> Result<()> {
             gstreamer::init().context("initialising GStreamer")?;
             return bench::run(b).await;
         }
-        Some(Command::Mcp { url, token, profile }) => {
-            let url = url.or_else(|| config::env_var("URL")).unwrap_or_else(|| DEFAULT_URL.into());
+        Some(Command::Mcp {
+            url,
+            token,
+            profile,
+        }) => {
+            let url = url
+                .or_else(|| config::env_var("URL"))
+                .unwrap_or_else(|| DEFAULT_URL.into());
             let token = token.or_else(|| config::env_var("TOKEN"));
             return mcp::run(&url, token, profile.into()).await;
         }
@@ -308,11 +319,20 @@ pub async fn run() -> Result<()> {
     // regenerates it on a box with no media stack installed.
     if args.api_info {
         if args.openapi {
-            print!("{}", godwinmix_protocol::openapi::json_text(control::openapi()));
+            print!(
+                "{}",
+                godwinmix_protocol::openapi::json_text(control::openapi())
+            );
         } else if args.markdown {
-            print!("{}", godwinmix_protocol::protocol::markdown(control::descriptor()));
+            print!(
+                "{}",
+                godwinmix_protocol::protocol::markdown(control::descriptor())
+            );
         } else {
-            print!("{}", godwinmix_protocol::protocol::json_text(control::descriptor()));
+            print!(
+                "{}",
+                godwinmix_protocol::protocol::json_text(control::descriptor())
+            );
         }
         return Ok(());
     }
@@ -361,7 +381,10 @@ pub async fn run() -> Result<()> {
     }
     let cfg_media = cfg.media.clone();
     // Where the web UI and any plugin panels are read from.
-    ui::configure(cfg.control.ui_dir.as_deref(), cfg.control.plugins_dir.as_deref());
+    ui::configure(
+        cfg.control.ui_dir.as_deref(),
+        cfg.control.plugins_dir.as_deref(),
+    );
     // Kept for the control plane, which reads the canvas, the snapshot limits,
     // the feature list and the token table off it once at startup.
     let cfg_for_control = cfg.clone();
@@ -433,7 +456,10 @@ pub async fn run() -> Result<()> {
 
     if args.startup_report {
         // stdout, because it is a report somebody asked for, not a log line.
-        print!("{}", core_observe::introspect::format_startup_report(&core_observe::startup_report()));
+        print!(
+            "{}",
+            core_observe::introspect::format_startup_report(&core_observe::startup_report())
+        );
     }
 
     tokio::select! {

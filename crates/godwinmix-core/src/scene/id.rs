@@ -53,7 +53,11 @@ impl Id {
     fn next_stamp(ms: u64) -> u64 {
         let mut prev = LAST.load(Ordering::Relaxed);
         loop {
-            let next = if ms > (prev >> 12) { ms << 12 } else { prev + 1 };
+            let next = if ms > (prev >> 12) {
+                ms << 12
+            } else {
+                prev + 1
+            };
             match LAST.compare_exchange_weak(prev, next, Ordering::Relaxed, Ordering::Relaxed) {
                 Ok(_) => return next,
                 Err(seen) => prev = seen,
@@ -100,7 +104,9 @@ impl Id {
             if matches!(i, 8 | 13 | 18 | 23) {
                 continue;
             }
-            let d = (*c as char).to_digit(16).ok_or_else(|| IdError(s.to_string()))?;
+            let d = (*c as char)
+                .to_digit(16)
+                .ok_or_else(|| IdError(s.to_string()))?;
             n = (n << 4) | d as u128;
         }
         Ok(Id(n))
@@ -127,7 +133,15 @@ impl std::error::Error for IdError {}
 impl fmt::Display for Id {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let h = format!("{:032x}", self.0);
-        write!(f, "{}-{}-{}-{}-{}", &h[0..8], &h[8..12], &h[12..16], &h[16..20], &h[20..32])
+        write!(
+            f,
+            "{}-{}-{}-{}-{}",
+            &h[0..8],
+            &h[8..12],
+            &h[12..16],
+            &h[16..20],
+            &h[20..32]
+        )
     }
 }
 
@@ -200,7 +214,12 @@ mod tests {
 
     #[test]
     fn a_near_miss_is_refused_with_an_example_in_the_message() {
-        for bad in ["", "cam1", "0192f3a41b2c7d3e8f4051a2b3c4d5e6", "0192f3a4-1b2c-7d3e-8f40-51a2b3c4d5eZ"] {
+        for bad in [
+            "",
+            "cam1",
+            "0192f3a41b2c7d3e8f4051a2b3c4d5e6",
+            "0192f3a4-1b2c-7d3e-8f40-51a2b3c4d5eZ",
+        ] {
             let e = Id::parse(bad).unwrap_err();
             assert!(e.to_string().contains("hyphenated UUID"), "{e}");
         }

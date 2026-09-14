@@ -74,9 +74,21 @@ impl PluginEnv {
     pub fn describe(&self) -> String {
         format!(
             "{}/{} instance '{}' at api {}",
-            if self.plugin.is_empty() { "?" } else { &self.plugin },
-            if self.provide.is_empty() { "?" } else { &self.provide },
-            if self.instance.is_empty() { "?" } else { &self.instance },
+            if self.plugin.is_empty() {
+                "?"
+            } else {
+                &self.plugin
+            },
+            if self.provide.is_empty() {
+                "?"
+            } else {
+                &self.provide
+            },
+            if self.instance.is_empty() {
+                "?"
+            } else {
+                &self.instance
+            },
             self.api_level
         )
     }

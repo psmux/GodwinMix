@@ -74,7 +74,11 @@ impl VideoLoop {
                     let mut frame = pool.take();
                     draw(&mut frame, pts);
                     if let Err(e) = writer.write_video(pts, &frame, true) {
-                        report(&reporter, LogLevel::Error, format!("the media pipe closed: {e}"));
+                        report(
+                            &reporter,
+                            LogLevel::Error,
+                            format!("the media pipe closed: {e}"),
+                        );
                         break;
                     }
                     thread_frames.fetch_add(1, Ordering::Relaxed);
@@ -87,7 +91,11 @@ impl VideoLoop {
                             let apts = audio.next_pts_ns();
                             fill(&mut audio_buffer, apts);
                             if let Err(e) = writer.write_audio(apts, &audio_buffer) {
-                                report(&reporter, LogLevel::Error, format!("the audio pipe closed: {e}"));
+                                report(
+                                    &reporter,
+                                    LogLevel::Error,
+                                    format!("the audio pipe closed: {e}"),
+                                );
                                 return;
                             }
                             audio_written += 1;
@@ -179,7 +187,11 @@ mod tests {
         std::thread::sleep(std::time::Duration::from_millis(60));
         looper.stop();
         let pts = seen.lock().unwrap().clone();
-        assert!(pts.len() >= 5, "only {} frames in 60 ms at 200 fps", pts.len());
+        assert!(
+            pts.len() >= 5,
+            "only {} frames in 60 ms at 200 fps",
+            pts.len()
+        );
         assert_eq!(pts[0], 0);
         for pair in pts.windows(2) {
             assert!(pair[1] > pair[0], "PTS must climb: {pair:?}");

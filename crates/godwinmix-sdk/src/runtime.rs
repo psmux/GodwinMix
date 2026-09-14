@@ -88,10 +88,7 @@ pub fn run_on<H: Handler + 'static, R: std::io::BufRead>(
         .on_initialize(&ready, reporter)
         .map_err(RunError::Refused)?;
     if let Some(latency) = result.latency_ms {
-        let _ = writer.notify(
-            "media.report",
-            serde_json::json!({"latency_ms": latency}),
-        );
+        let _ = writer.notify("media.report", serde_json::json!({"latency_ms": latency}));
     }
     // The handshake is complete only once this notification is out.
     writer
@@ -102,15 +99,13 @@ pub fn run_on<H: Handler + 'static, R: std::io::BufRead>(
     machine.lock().unwrap().initialized();
     let has_media = handler.starts("start");
 
-    let (jobs, worker) = spawn_worker(handler, Arc::clone(&writer), Arc::clone(&health), Arc::clone(&machine));
-    let outcome = read_loop(
-        &mut reader,
-        &writer,
-        &health,
-        &machine,
-        &jobs,
-        has_media,
+    let (jobs, worker) = spawn_worker(
+        handler,
+        Arc::clone(&writer),
+        Arc::clone(&health),
+        Arc::clone(&machine),
     );
+    let outcome = read_loop(&mut reader, &writer, &health, &machine, &jobs, has_media);
     drop(jobs);
     let _ = worker.join();
     outcome
@@ -227,7 +222,10 @@ fn respond(writer: &Arc<Writer>, id: Option<Id>, outcome: Result<Value, RpcError
         // A notification wants nothing back, but an error in one is worth a log
         // line rather than silence.
         if let Err(e) = outcome {
-            let _ = writer.log(crate::wire::LogLevel::Warn, &format!("notification failed: {e}"));
+            let _ = writer.log(
+                crate::wire::LogLevel::Warn,
+                &format!("notification failed: {e}"),
+            );
         }
         return;
     };
@@ -289,10 +287,7 @@ fn read_loop<R: std::io::BufRead>(
         if method == "health" {
             let current = health.lock().unwrap_or_else(|e| e.into_inner()).clone();
             if let Some(id) = request.id {
-                let _ = writer.respond(
-                    id,
-                    serde_json::to_value(&current).unwrap_or(Value::Null),
-                );
+                let _ = writer.respond(id, serde_json::to_value(&current).unwrap_or(Value::Null));
             }
             continue;
         }
@@ -412,7 +407,10 @@ settings = "settings.json"
             ready: &Ready,
             reporter: Reporter,
         ) -> Result<InitializeResult, RpcError> {
-            reporter.info(format!("canvas {}x{}", ready.canvas.width, ready.canvas.height));
+            reporter.info(format!(
+                "canvas {}x{}",
+                ready.canvas.width, ready.canvas.height
+            ));
             Ok(InitializeResult {
                 latency_ms: Some(0),
             })
@@ -496,7 +494,9 @@ settings = "settings.json"
         let lines = sink.lines();
         for id in [1, 2, 3] {
             assert!(
-                lines.iter().any(|l| l["id"] == id && l.get("result").is_some()),
+                lines
+                    .iter()
+                    .any(|l| l["id"] == id && l.get("result").is_some()),
                 "no result for id {id} in {lines:#?}"
             );
         }
@@ -561,9 +561,11 @@ settings = "settings.json"
     fn a_non_json_line_on_stdin_is_a_log_not_a_crash() {
         let (sink, _, _) = drive(&[ready_line(0), "this is not JSON".into()], false);
         let lines = sink.lines();
-        assert!(lines
-            .iter()
-            .any(|l| l["method"] == "log" && l["params"]["message"].as_str().unwrap().contains("not JSON")));
+        assert!(lines.iter().any(|l| l["method"] == "log"
+            && l["params"]["message"]
+                .as_str()
+                .unwrap()
+                .contains("not JSON")));
     }
 
     #[test]

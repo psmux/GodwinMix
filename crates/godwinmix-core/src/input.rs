@@ -13,10 +13,10 @@
 //! which is what makes a take a property change rather than a renegotiation.
 
 use crate::caps::CanvasCaps;
-use crate::plugin::kinds::layered::{cache_media, Fetched, LayerCounts, Placement};
-pub use crate::plugin::kinds::layered::AudioLevels;
 use crate::config::{BrowserConfig, SourceConfig, Superimpose};
 use crate::gstutil::{self, make};
+pub use crate::plugin::kinds::layered::AudioLevels;
+use crate::plugin::kinds::layered::{cache_media, Fetched, LayerCounts, Placement};
 use crate::probe::Backends;
 use crate::state::{SourceHealth, SourceId, SourceState};
 use anyhow::{Context, Result};
@@ -269,10 +269,13 @@ impl ExecSpec {
              security.allow_exec_sources = true only if that port is on a trusted network."
         );
         anyhow::ensure!(!command.is_empty(), "exec source has an empty command");
-        let argv = shell_words::split(command)
-            .with_context(|| format!("parsing command: {command}"))?;
+        let argv =
+            shell_words::split(command).with_context(|| format!("parsing command: {command}"))?;
         anyhow::ensure!(!argv.is_empty(), "exec source has an empty command");
-        Ok(Self { argv, env: Default::default() })
+        Ok(Self {
+            argv,
+            env: Default::default(),
+        })
     }
 
     /// The CEF sidecar rendering `uri`'s page at the canvas size, or `None`
@@ -280,7 +283,11 @@ impl ExecSpec {
     ///
     /// This is not gated by `allow_exec_sources`: the program is ours and the
     /// page URL travels as one argument, never through a shell.
-    pub fn browser(uri: &str, canvas: &CanvasCaps, browser: &BrowserConfig) -> Result<Option<Self>> {
+    pub fn browser(
+        uri: &str,
+        canvas: &CanvasCaps,
+        browser: &BrowserConfig,
+    ) -> Result<Option<Self>> {
         let url = web_url(uri).context("not a web source url")?;
         let Some(sidecar) = find_browser_sidecar(browser)? else {
             return Ok(None);
@@ -297,7 +304,10 @@ impl ExecSpec {
             canvas.fps.numer().to_string(),
         ];
         argv.extend(browser.args.iter().cloned());
-        Ok(Some(Self { argv, env: browser.env.clone() }))
+        Ok(Some(Self {
+            argv,
+            env: browser.env.clone(),
+        }))
     }
 
     /// Rewrite the `--fps` this spec was built with.
@@ -329,12 +339,17 @@ fn find_browser_sidecar(browser: &BrowserConfig) -> Result<Option<std::path::Pat
         );
         return Ok(Some(p));
     }
-    if let Some(dir) = std::env::current_exe().ok().and_then(|e| e.parent().map(|d| d.to_path_buf())) {
+    if let Some(dir) = std::env::current_exe()
+        .ok()
+        .and_then(|e| e.parent().map(|d| d.to_path_buf()))
+    {
         // On macOS CEF only runs from an app bundle, so that is what sits
         // next to the mixer there.
         let candidates = [
             dir.join(format!("{NAME}{}", std::env::consts::EXE_SUFFIX)),
-            dir.join(format!("{NAME}.app")).join("Contents/MacOS").join(NAME),
+            dir.join(format!("{NAME}.app"))
+                .join("Contents/MacOS")
+                .join(NAME),
         ];
         if let Some(p) = candidates.into_iter().find(|p| p.is_file()) {
             return Ok(Some(p));
@@ -518,7 +533,6 @@ const MEDIA_LINE: &str = "[browser] media ";
 /// handed over ends the wait as soon as it says so.
 pub const MEDIA_PROBE_TIMEOUT: Duration = Duration::from_secs(20);
 
-
 /// The report line's payload, if this is one.
 fn media_report(line: &str) -> Option<MediaReport> {
     let (_, json) = line.split_once(MEDIA_LINE)?;
@@ -650,9 +664,6 @@ pub fn probe_page_media(id: &SourceId, spec: &ExecSpec, timeout: Duration) -> Op
     }
     found
 }
-
-
-
 
 impl InputPipeline {
     /// The sidecar command that would ask this source's page what it plays.
@@ -844,7 +855,9 @@ impl InputPipeline {
         let proxy = make("proxysink", &format!("{id}-tproxy"))?;
         let _ = canvas;
         let branch = [&queue, &rate, &scale, &caps, &proxy];
-        self.pipeline.add_many(branch).context("adding a thumbnail end")?;
+        self.pipeline
+            .add_many(branch)
+            .context("adding a thumbnail end")?;
         gst::Element::link_many([&self.vtee, &queue, &rate, &scale, &caps, &proxy])
             .context("linking a thumbnail end")?;
         for el in branch {
@@ -857,10 +870,16 @@ impl InputPipeline {
 
     /// Take the thumbnail end back out, for a source nobody is looking at.
     pub fn detach_thumb_end(&self) {
-        let Some(proxy) = self.thumb_proxy.lock().take() else { return };
+        let Some(proxy) = self.thumb_proxy.lock().take() else {
+            return;
+        };
         let name = format!("{}-vthumb-q", self.id);
-        let Some(queue) = self.pipeline.by_name(&name) else { return };
-        let Some(sink) = queue.static_pad("sink") else { return };
+        let Some(queue) = self.pipeline.by_name(&name) else {
+            return;
+        };
+        let Some(sink) = queue.static_pad("sink") else {
+            return;
+        };
         let Some(teepad) = sink.peer() else { return };
         let _ = gstutil::with_pad_blocked(&teepad, std::time::Duration::from_secs(2), || {});
         for part in ["vthumb-q", "trate", "tscale", "tcaps", "tproxy"] {
@@ -906,9 +925,9 @@ impl InputPipeline {
             _ => (self.vcaps.clone(), self.vtee.clone()),
         };
         let mut params = cfg.params.clone();
-        params.entry("id".to_string()).or_insert_with(|| {
-            toml::Value::String(format!("{}-{}", self.id, cfg.id))
-        });
+        params
+            .entry("id".to_string())
+            .or_insert_with(|| toml::Value::String(format!("{}-{}", self.id, cfg.id)));
         let slot = crate::plugin::filter::insert(
             crate::plugin::Insertion::between(&self.pipeline, &upstream, &downstream),
             crate::plugin::FilterSpec {
@@ -951,7 +970,11 @@ impl InputPipeline {
 
     /// The filters on this source, in the order they were added.
     pub fn filter_ids(&self) -> Vec<String> {
-        self.filters.lock().iter().map(|f| f.id().to_string()).collect()
+        self.filters
+            .lock()
+            .iter()
+            .map(|f| f.id().to_string())
+            .collect()
     }
 
     /// Each filter's id, type and side, for a listing.
@@ -960,7 +983,11 @@ impl InputPipeline {
             .lock()
             .iter()
             .map(|f| {
-                (f.id().to_string(), f.spec.type_id.clone(), f.spec.side.as_str().to_string())
+                (
+                    f.id().to_string(),
+                    f.spec.type_id.clone(),
+                    f.spec.side.as_str().to_string(),
+                )
             })
             .collect()
     }
@@ -1021,7 +1048,11 @@ impl InputPipeline {
     /// every kind but one. Called only for a source that has produced no media
     /// at all, so nothing downstream has state to lose.
     pub fn try_fallback_client(&self) -> Result<bool> {
-        let swapped = match self.kind.lock().call("client.fallback", serde_json::Value::Null) {
+        let swapped = match self
+            .kind
+            .lock()
+            .call("client.fallback", serde_json::Value::Null)
+        {
             Ok(v) => v.get("swapped").and_then(|b| b.as_bool()).unwrap_or(false),
             // A kind with no such method is not a failure, it is a kind with
             // no such method.
@@ -1096,7 +1127,8 @@ impl InputPipeline {
     /// Whether the supervisor may NULL this pipeline and start it again, or
     /// must build the source from nothing.
     pub fn restarts_in_place(&self) -> bool {
-        self.capabilities.has(crate::plugin::Capability::RestartInPlace)
+        self.capabilities
+            .has(crate::plugin::Capability::RestartInPlace)
     }
 
     /// Whether this source puts its own output on the programme's timeline
@@ -1168,13 +1200,17 @@ impl InputPipeline {
     /// How far through this source is, in milliseconds. `None` while nothing
     /// upstream can say, which covers a pipeline that has not started yet.
     pub fn position_ms(&self) -> Option<u64> {
-        self.pipeline.query_position::<gst::ClockTime>().map(|t| t.mseconds())
+        self.pipeline
+            .query_position::<gst::ClockTime>()
+            .map(|t| t.mseconds())
     }
 
     /// How long this source runs, in milliseconds. `None` on a live feed, which
     /// has no end, and on a file whose demuxer has not worked it out yet.
     pub fn duration_ms(&self) -> Option<u64> {
-        self.pipeline.query_duration::<gst::ClockTime>().map(|t| t.mseconds())
+        self.pipeline
+            .query_duration::<gst::ClockTime>()
+            .map(|t| t.mseconds())
     }
 
     /// Move this source to `position_ms` and answer with where it landed.
@@ -1222,7 +1258,6 @@ impl InputPipeline {
     }
 }
 
-
 /// Send a decoder's pads to the branches that want them, as they appear.
 ///
 /// `flvdemux` names its pads; `uridecodebin` does not, so the media type on the
@@ -1264,7 +1299,9 @@ pub fn route_pads(
             return;
         };
 
-        let Some(sink) = target.static_pad("sink") else { return };
+        let Some(sink) = target.static_pad("sink") else {
+            return;
+        };
         if sink.is_linked() {
             debug!(source = %id, pad = %name, "entry already linked, ignoring extra stream");
             return;
@@ -1304,7 +1341,10 @@ fn browser_profile_dirs(
         .get("TMPDIR")
         .map(std::path::PathBuf::from)
         .unwrap_or_else(std::env::temp_dir);
-    ["gmx-browser", "lbx-browser"].iter().map(|p| base.join(format!("{p}-{pid}"))).collect()
+    ["gmx-browser", "lbx-browser"]
+        .iter()
+        .map(|p| base.join(format!("{p}-{pid}")))
+        .collect()
 }
 
 /// How long a child is given to stop on its own before it is killed.
@@ -1372,10 +1412,17 @@ fn remove_profile_dir(dir: &std::path::Path) {
 #[cfg(target_os = "linux")]
 fn descendants(pid: u32) -> Vec<u32> {
     fn children_of(pid: u32, out: &mut Vec<u32>) {
-        let Ok(tasks) = std::fs::read_dir(format!("/proc/{pid}/task")) else { return };
+        let Ok(tasks) = std::fs::read_dir(format!("/proc/{pid}/task")) else {
+            return;
+        };
         for task in tasks.flatten() {
-            let Ok(text) = std::fs::read_to_string(task.path().join("children")) else { continue };
-            for kid in text.split_ascii_whitespace().filter_map(|t| t.parse::<u32>().ok()) {
+            let Ok(text) = std::fs::read_to_string(task.path().join("children")) else {
+                continue;
+            };
+            for kid in text
+                .split_ascii_whitespace()
+                .filter_map(|t| t.parse::<u32>().ok())
+            {
                 if out.contains(&kid) {
                     continue;
                 }
@@ -1453,9 +1500,8 @@ fn take_down(mut child: std::process::Child, env: std::collections::BTreeMap<Str
         #[cfg(unix)]
         {
             let mut status = 0i32;
-            let seen = unsafe {
-                libc::waitpid(pid as i32, &mut status, libc::WNOHANG | libc::WNOWAIT)
-            };
+            let seen =
+                unsafe { libc::waitpid(pid as i32, &mut status, libc::WNOHANG | libc::WNOWAIT) };
             if seen > 0 {
                 clean = true;
                 break;
@@ -1570,7 +1616,11 @@ fn drain_stderr(
     let mut pending: Vec<u8> = Vec::new();
     let mut buf = [0u8; 8192];
     while !stop.load(Ordering::SeqCst) {
-        let mut pfd = libc::pollfd { fd, events: libc::POLLIN, revents: 0 };
+        let mut pfd = libc::pollfd {
+            fd,
+            events: libc::POLLIN,
+            revents: 0,
+        };
         let ready = unsafe { libc::poll(&mut pfd, 1, STDERR_POLL_MS) };
         if ready < 0 {
             let e = std::io::Error::last_os_error();
@@ -1675,7 +1725,10 @@ pub fn reap_orphans_if_init() {}
 /// Callers choose what happens to stdout, because a source reads it and the
 /// media probe must throw it away.
 fn exec_process(spec: &ExecSpec, stdout: std::process::Stdio) -> Result<std::process::Child> {
-    let (program, args) = spec.argv.split_first().context("exec source has an empty command")?;
+    let (program, args) = spec
+        .argv
+        .split_first()
+        .context("exec source has an empty command")?;
 
     let mut cmd = std::process::Command::new(program);
     cmd.args(args)
@@ -1726,7 +1779,12 @@ impl ExecChild {
         stdout: ExecStdoutHeld,
         stderr: Option<StderrReader>,
     ) -> Self {
-        Self { child: Some(child), env, stdout, stderr }
+        Self {
+            child: Some(child),
+            env,
+            stdout,
+            stderr,
+        }
     }
 }
 
@@ -1790,7 +1848,10 @@ pub enum ExecStdout {
 /// `decodebin`, which picks up the raised ranks of whatever hardware decoder
 /// this machine has, so an exec source is accelerated on a GPU box and falls
 /// back to software on one without, exactly like every other source.
-pub fn spawn_exec(id: &str, spec: &ExecSpec) -> Result<(ExecStdout, std::process::Child, Option<StderrReader>)> {
+pub fn spawn_exec(
+    id: &str,
+    spec: &ExecSpec,
+) -> Result<(ExecStdout, std::process::Child, Option<StderrReader>)> {
     let mut child = exec_process(spec, std::process::Stdio::piped())?;
 
     let stderr = child.stderr.take().map(|err| {
@@ -1916,7 +1977,12 @@ pub fn attach_exec_stdout(id: &str, src: &gst::Element, out: ExecStdout) -> Exec
 pub fn make_exec_source(id: &str, spec: &ExecSpec) -> Result<(gst::Element, ExecChild)> {
     let (out, child, stderr) = spawn_exec(id, spec)?;
     // Owned from here on, so that a failure below takes the process with it.
-    let mut held = ExecChild { child: Some(child), env: spec.env.clone(), stdout: None, stderr };
+    let mut held = ExecChild {
+        child: Some(child),
+        env: spec.env.clone(),
+        stdout: None,
+        stderr,
+    };
     let src = new_exec_source(id)?;
     held.stdout = attach_exec_stdout(id, &src, out);
     Ok((src, held))
@@ -2019,7 +2085,11 @@ impl LastBuffer {
 /// arrives as an event, so both are watched on the one probe. The segment is
 /// cached under a lock that is taken once per buffer and is never contended:
 /// one thread pushes this pad.
-pub fn install_timeline_probe(element: &gst::Element, pad: &str, seen: &Arc<LastBuffer>) -> Result<()> {
+pub fn install_timeline_probe(
+    element: &gst::Element,
+    pad: &str,
+    seen: &Arc<LastBuffer>,
+) -> Result<()> {
     let pad = element
         .static_pad(pad)
         .with_context(|| format!("{} has no {pad} pad", element.name()))?;
@@ -2090,9 +2160,9 @@ pub fn optional_livesync(name: &str) -> Result<Option<gst::Element>> {
 
 #[cfg(test)]
 mod tests {
-    use crate::state::SourceAudio;
     use super::*;
     use crate::config::{Accel, Canvas, RtmpClient, Superimpose};
+    use crate::state::SourceAudio;
 
     fn init() {
         let _ = gst::init();
@@ -2119,7 +2189,12 @@ mod tests {
         // could not allocate its pads until a camera connected.
         assert_eq!(input.video_proxy.factory().unwrap().name(), "proxysink");
         assert_eq!(
-            input.thumb_proxy().expect("built with a thumbnail end").factory().unwrap().name(),
+            input
+                .thumb_proxy()
+                .expect("built with a thumbnail end")
+                .factory()
+                .unwrap()
+                .name(),
             "proxysink"
         );
         assert_eq!(input.audio_proxy.factory().unwrap().name(), "proxysink");
@@ -2220,22 +2295,40 @@ mod tests {
 
     #[test]
     fn web_urls_are_recognised_and_unwrapped() {
-        assert_eq!(web_url("web+https://example.com/game"), Some("https://example.com/game".into()));
-        assert_eq!(web_url("web+http://example.com/x"), Some("http://example.com/x".into()));
+        assert_eq!(
+            web_url("web+https://example.com/game"),
+            Some("https://example.com/game".into())
+        );
+        assert_eq!(
+            web_url("web+http://example.com/x"),
+            Some("http://example.com/x".into())
+        );
         // Bare web:// is shorthand for https.
-        assert_eq!(web_url("web://example.com/x"), Some("https://example.com/x".into()));
-        assert_eq!(web_url("WEB://Example.com/X"), Some("https://Example.com/X".into()));
+        assert_eq!(
+            web_url("web://example.com/x"),
+            Some("https://example.com/x".into())
+        );
+        assert_eq!(
+            web_url("WEB://Example.com/X"),
+            Some("https://Example.com/X".into())
+        );
         // Everything else is left alone.
         assert_eq!(web_url("https://example.com/x"), None);
         assert_eq!(web_url("rtmp://host/live/x"), None);
         assert_eq!(web_url("/srv/ads/clip.mp4"), None);
 
-        assert_eq!(SourceKind::detect("web+https://example.com/game"), SourceKind::Web);
+        assert_eq!(
+            SourceKind::detect("web+https://example.com/game"),
+            SourceKind::Web
+        );
         assert_eq!(SourceKind::detect("web://example.com"), SourceKind::Web);
         // A web page is continuous, so it is re-timed and restarted like a camera.
         assert!(SourceKind::Web.is_continuous());
         // Without the marker the same URL is not treated as a page.
-        assert_ne!(SourceKind::detect("https://example.com/game"), SourceKind::Web);
+        assert_ne!(
+            SourceKind::detect("https://example.com/game"),
+            SourceKind::Web
+        );
     }
 
     /// The renderer is Linux-only. Where it is missing, adding a web source has
@@ -2250,7 +2343,10 @@ mod tests {
         let err = make_web_source("s", "web+https://example.com").unwrap_err();
         let msg = format!("{err:#}");
         assert!(msg.contains("wpesrc"), "should name the element: {msg}");
-        assert!(msg.contains("gstreamer1.0-wpe"), "should name the package: {msg}");
+        assert!(
+            msg.contains("gstreamer1.0-wpe"),
+            "should name the package: {msg}"
+        );
     }
 
     /// The sidecar's report is the whole basis for taking the layered path, so
@@ -2267,7 +2363,11 @@ mod tests {
         let mse = r#"[browser] media {"found":true,"count":1,"src":"blob:https://x/1","usable":false,"mse":true}"#;
         assert!(!media_report(mse).expect("an mse report parses").usable);
         // And a page with no media at all reports that much.
-        assert!(!media_report(r#"[browser] media {"found":false,"count":0}"#).unwrap().usable);
+        assert!(
+            !media_report(r#"[browser] media {"found":false,"count":0}"#)
+                .unwrap()
+                .usable
+        );
 
         // Anything else on stderr is the browser's own noise.
         assert!(media_report("[browser] painted 30 frames").is_none());
@@ -2292,14 +2392,29 @@ mod tests {
 
         // A video filling its viewport fills the canvas, whatever size the
         // page was rendered at.
-        assert_eq!(report(0, 0, 1280, 720, 1280, 720).placement(&canvas), (0, 0, 1920, 1080));
-        assert_eq!(report(0, 0, 1920, 1080, 1920, 1080).placement(&canvas), (0, 0, 1920, 1080));
+        assert_eq!(
+            report(0, 0, 1280, 720, 1280, 720).placement(&canvas),
+            (0, 0, 1920, 1080)
+        );
+        assert_eq!(
+            report(0, 0, 1920, 1080, 1920, 1080).placement(&canvas),
+            (0, 0, 1920, 1080)
+        );
         // A quarter of the viewport, in its middle, is a quarter of the canvas.
-        assert_eq!(report(160, 90, 320, 180, 640, 360).placement(&canvas), (480, 270, 960, 540));
+        assert_eq!(
+            report(160, 90, 320, 180, 640, 360).placement(&canvas),
+            (480, 270, 960, 540)
+        );
         // A rectangle from a page still laying itself out is not usable
         // geometry, so the video takes the whole canvas rather than vanishing.
-        assert_eq!(report(0, 0, 0, 0, 1280, 720).placement(&canvas), (0, 0, 1920, 1080));
-        assert_eq!(report(0, 0, 640, 360, 0, 0).placement(&canvas), (0, 0, 1920, 1080));
+        assert_eq!(
+            report(0, 0, 0, 0, 1280, 720).placement(&canvas),
+            (0, 0, 1920, 1080)
+        );
+        assert_eq!(
+            report(0, 0, 640, 360, 0, 0).placement(&canvas),
+            (0, 0, 1920, 1080)
+        );
     }
 
     /// End to end against a stand-in sidecar: the probe must return on the
@@ -2361,7 +2476,10 @@ mod tests {
 
     #[test]
     fn exec_commands_are_recognised_and_unwrapped() {
-        assert_eq!(exec_command("exec:ffmpeg -i x -f mpegts -"), Some("ffmpeg -i x -f mpegts -"));
+        assert_eq!(
+            exec_command("exec:ffmpeg -i x -f mpegts -"),
+            Some("ffmpeg -i x -f mpegts -")
+        );
         assert_eq!(exec_command("exec://ffmpeg -i x"), Some("ffmpeg -i x"));
         assert_eq!(exec_command("EXEC:  ffmpeg -i x  "), Some("ffmpeg -i x"));
         assert_eq!(exec_command("rtmp://host/live/x"), None);
@@ -2438,7 +2556,11 @@ mod tests {
             .filter(|(i, _)| *i > 0 && spec.argv[i - 1] == "--fps")
             .map(|(_, v)| v)
             .collect();
-        assert_eq!(fps, ["10", "60"], "ours is lowered, the operator's still wins");
+        assert_eq!(
+            fps,
+            ["10", "60"],
+            "ours is lowered, the operator's still wins"
+        );
     }
 
     /// Kept next to the test so a change to the default is noticed here.
@@ -2451,7 +2573,10 @@ mod tests {
         let err = ExecSpec::from_uri("exec:echo hi", false).unwrap_err();
         let msg = format!("{err:#}");
         assert!(msg.contains("disabled"), "should say it is off: {msg}");
-        assert!(msg.contains("allow_exec_sources"), "should name the setting: {msg}");
+        assert!(
+            msg.contains("allow_exec_sources"),
+            "should name the setting: {msg}"
+        );
 
         // And an empty command is refused even when enabled.
         assert!(ExecSpec::from_uri("exec:", true).is_err());
@@ -2465,12 +2590,17 @@ mod tests {
         let tmp = std::env::temp_dir().join(format!("gmx-profile-test-{}", std::process::id()));
         std::fs::create_dir_all(&tmp).unwrap();
         let env: std::collections::BTreeMap<String, String> =
-            [("TMPDIR".to_string(), tmp.to_string_lossy().to_string())].into_iter().collect();
+            [("TMPDIR".to_string(), tmp.to_string_lossy().to_string())]
+                .into_iter()
+                .collect();
 
         // Both prefixes, because a sidecar left over from LiveboxMix still
         // names its profile the old way. The new one comes first.
         let dirs = browser_profile_dirs(&env, 4242);
-        assert_eq!(dirs, vec![tmp.join("gmx-browser-4242"), tmp.join("lbx-browser-4242")]);
+        assert_eq!(
+            dirs,
+            vec![tmp.join("gmx-browser-4242"), tmp.join("lbx-browser-4242")]
+        );
         // A profile is a tree, not a file, and CEF leaves it locked open until
         // the process goes; nothing here may assume it is empty.
         for dir in &dirs {
@@ -2540,10 +2670,17 @@ mod tests {
         std::fs::create_dir_all(&tmp).unwrap();
         let mut env = std::collections::BTreeMap::new();
         env.insert("TMPDIR".to_string(), tmp.to_string_lossy().to_string());
-        let spec = ExecSpec { argv: shell_words::split("sh -c 'sleep 120'").unwrap(), env };
+        let spec = ExecSpec {
+            argv: shell_words::split("sh -c 'sleep 120'").unwrap(),
+            env,
+        };
 
         let (_src, child) = make_exec_source("drop-test", &spec).unwrap();
-        let pid = child.child.as_ref().expect("a freshly built child holds its process").id();
+        let pid = child
+            .child
+            .as_ref()
+            .expect("a freshly built child holds its process")
+            .id();
         // The directory the sidecar of this pid would have made for itself.
         let profile = browser_profile_dirs(&spec.env, pid).remove(0);
         std::fs::create_dir_all(&profile).unwrap();
@@ -2574,7 +2711,10 @@ mod tests {
         let spec = ExecSpec::from_uri("exec:sh -c 'printf hello; sleep 5'", true).unwrap();
         let (ExecStdout::Fd(fd), mut child, _err) = spawn_exec("s", &spec).unwrap();
         use std::os::fd::AsRawFd;
-        assert!(fd.as_raw_fd() > 2, "should hand back a real pipe descriptor");
+        assert!(
+            fd.as_raw_fd() > 2,
+            "should hand back a real pipe descriptor"
+        );
         // The element reads this descriptor but does not own it; read it back
         // here to prove it is live, without taking it away.
         use std::io::Read;
@@ -2599,7 +2739,10 @@ mod tests {
         // enough to kill the process.
         assert!(input.try_arm_restart(), "first error should arm a restart");
         for _ in 0..20 {
-            assert!(!input.try_arm_restart(), "a burst of errors must arm only one restart");
+            assert!(
+                !input.try_arm_restart(),
+                "a burst of errors must arm only one restart"
+            );
         }
         input.restart().unwrap();
         assert!(input.try_arm_restart(), "a later failure may arm again");
@@ -2620,14 +2763,20 @@ mod tests {
         // being a server at the other end, which a unit test must not require.
         // The invariant being asserted is that the swap is one-shot.
         let _ = input.try_fallback_client();
-        assert!(!input.try_fallback_client().unwrap(), "it must not swap repeatedly");
+        assert!(
+            !input.try_fallback_client().unwrap(),
+            "it must not swap repeatedly"
+        );
         input.stop();
 
         // A pinned client is the operator's decision; never second-guess it.
         let mut pinned = test_source();
         pinned.rtmp_client = RtmpClient::Rtmp2;
         let input = InputPipeline::build(&pinned, &canvas, &backends, 15, Instant::now()).unwrap();
-        assert!(!input.try_fallback_client().unwrap(), "a pinned client must not be swapped");
+        assert!(
+            !input.try_fallback_client().unwrap(),
+            "a pinned client must not be swapped"
+        );
         input.stop();
     }
 
@@ -2688,24 +2837,54 @@ mod tests {
     fn a_partial_balance_leaves_the_other_channels_alone() {
         let levels = test_levels(2);
         let all = levels.apply(Some(0.5), &[Some(0.25), Some(0.75)]);
-        assert_eq!(all, SourceAudio { page: 0.5, media: vec![0.25, 0.75] });
+        assert_eq!(
+            all,
+            SourceAudio {
+                page: 0.5,
+                media: vec![0.25, 0.75]
+            }
+        );
 
         let page_only = levels.apply(Some(0.125), &[]);
-        assert_eq!(page_only, SourceAudio { page: 0.125, media: vec![0.25, 0.75] });
+        assert_eq!(
+            page_only,
+            SourceAudio {
+                page: 0.125,
+                media: vec![0.25, 0.75]
+            }
+        );
 
         // A list shorter than the number of videos stops where it stops.
         let first_only = levels.apply(None, &[Some(1.0)]);
-        assert_eq!(first_only, SourceAudio { page: 0.125, media: vec![1.0, 0.75] });
+        assert_eq!(
+            first_only,
+            SourceAudio {
+                page: 0.125,
+                media: vec![1.0, 0.75]
+            }
+        );
 
         // A null holds that channel. This is how the UI moves the second
         // video without restating the first, which a short list cannot do.
         let second_only = levels.apply(None, &[None, Some(0.25)]);
-        assert_eq!(second_only, SourceAudio { page: 0.125, media: vec![1.0, 0.25] });
+        assert_eq!(
+            second_only,
+            SourceAudio {
+                page: 0.125,
+                media: vec![1.0, 0.25]
+            }
+        );
 
         // A list longer than the number of videos is not an error, and the
         // report says how many there really are.
         let too_many = levels.apply(None, &[Some(0.5), Some(0.5), Some(0.5), Some(0.5)]);
-        assert_eq!(too_many, SourceAudio { page: 0.125, media: vec![0.5, 0.5] });
+        assert_eq!(
+            too_many,
+            SourceAudio {
+                page: 0.125,
+                media: vec![0.5, 0.5]
+            }
+        );
 
         // An empty request reads the balance without moving anything.
         assert_eq!(levels.apply(None, &[]), too_many);

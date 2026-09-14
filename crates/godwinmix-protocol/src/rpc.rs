@@ -38,7 +38,10 @@ pub struct Malformed {
 pub fn parse(line: &str) -> Result<Request, Malformed> {
     let value: Value = serde_json::from_str(line).map_err(|e| Malformed {
         id: Value::Null,
-        error: RpcError::new(ErrorCode::ParseError, format!("the frame was not JSON: {e}")),
+        error: RpcError::new(
+            ErrorCode::ParseError,
+            format!("the frame was not JSON: {e}"),
+        ),
     })?;
     if value.is_array() {
         return Err(Malformed {
@@ -72,7 +75,11 @@ pub fn parse(line: &str) -> Result<Request, Malformed> {
             })
         }
     };
-    Ok(Request { id, method: method.to_string(), params })
+    Ok(Request {
+        id,
+        method: method.to_string(),
+        params,
+    })
 }
 
 pub fn result_frame(id: &Value, result: Value) -> Value {
@@ -113,12 +120,20 @@ impl CallEnvelope {
     /// the client sent.
     pub fn read(params: &Value) -> Self {
         let s = |k: &str| {
-            params.get(k).and_then(Value::as_str).map(str::trim).filter(|v| !v.is_empty()).map(String::from)
+            params
+                .get(k)
+                .and_then(Value::as_str)
+                .map(str::trim)
+                .filter(|v| !v.is_empty())
+                .map(String::from)
         };
         Self {
             trace_id: s("trace_id"),
             idempotency_key: s("idempotency_key"),
-            dry_run: params.get("dry_run").and_then(Value::as_bool).unwrap_or(false),
+            dry_run: params
+                .get("dry_run")
+                .and_then(Value::as_bool)
+                .unwrap_or(false),
             confirm: s("confirm"),
         }
     }
@@ -169,9 +184,7 @@ pub fn pattern_matches(pattern: &str, name: &str) -> bool {
     match pattern.split_once('*') {
         None => pattern == name,
         Some((head, tail)) => {
-            name.len() >= head.len() + tail.len()
-                && name.starts_with(head)
-                && name.ends_with(tail)
+            name.len() >= head.len() + tail.len() && name.starts_with(head) && name.ends_with(tail)
         }
     }
 }
@@ -186,7 +199,10 @@ pub fn event_name_and_payload(event: &Event) -> Option<(&'static str, Value)> {
     let payload = |v: Value| v;
     Some(match event {
         Event::Status(_) => return None,
-        Event::Took { source, at_running_time_ms } => (
+        Event::Took {
+            source,
+            at_running_time_ms,
+        } => (
             "program.took",
             payload(json!({
                 "source": source,
@@ -200,12 +216,20 @@ pub fn event_name_and_payload(event: &Event) -> Option<(&'static str, Value)> {
             "source.state",
             payload(json!({ "source": source, "state": state, "detail": Value::Null })),
         ),
-        Event::OutputStateChanged { output, state, reconnects } => (
+        Event::OutputStateChanged {
+            output,
+            state,
+            reconnects,
+        } => (
             "output.state",
             payload(json!({ "output": output, "state": state, "reconnects": reconnects })),
         ),
         Event::AdBreakChanged { ad } => ("adbreak.changed", payload(json!({ "ad": ad }))),
-        Event::SourcePosition { source, position_ms, duration_ms } => (
+        Event::SourcePosition {
+            source,
+            position_ms,
+            duration_ms,
+        } => (
             "source.position",
             payload(json!({
                 "source": source, "position_ms": position_ms, "duration_ms": duration_ms
@@ -305,7 +329,13 @@ pub fn layout_id(cells: &[crate::types::CellAssignment]) -> u32 {
         hash = hash.wrapping_mul(0x0100_0193);
     };
     for c in cells {
-        for n in [c.index as i64, c.x as i64, c.y as i64, c.w as i64, c.h as i64] {
+        for n in [
+            c.index as i64,
+            c.x as i64,
+            c.y as i64,
+            c.w as i64,
+            c.h as i64,
+        ] {
             for byte in n.to_le_bytes() {
                 eat(byte);
             }
@@ -325,8 +355,9 @@ mod tests {
 
     #[test]
     fn a_request_and_a_notification_are_told_apart_by_the_id() {
-        let r = parse(r#"{"jsonrpc":"2.0","id":1,"method":"program.take","params":{"source":"cam1"}}"#)
-            .unwrap();
+        let r =
+            parse(r#"{"jsonrpc":"2.0","id":1,"method":"program.take","params":{"source":"cam1"}}"#)
+                .unwrap();
         assert_eq!(r.id, Some(json!(1)));
         assert_eq!(r.method, "program.take");
         assert_eq!(r.params["source"], "cam1");
@@ -336,7 +367,12 @@ mod tests {
         assert_eq!(n.params, json!({}));
 
         // A null id is a notification, not an id of null.
-        assert_eq!(parse(r#"{"jsonrpc":"2.0","id":null,"method":"x"}"#).unwrap().id, None);
+        assert_eq!(
+            parse(r#"{"jsonrpc":"2.0","id":null,"method":"x"}"#)
+                .unwrap()
+                .id,
+            None
+        );
     }
 
     #[test]
@@ -345,13 +381,21 @@ mod tests {
         assert_eq!(e.error.code, ErrorCode::ParseError.number());
         let e = parse(r#"{"jsonrpc":"2.0","id":3}"#).unwrap_err();
         assert_eq!(e.error.code, ErrorCode::InvalidRequest.number());
-        assert_eq!(e.id, json!(3), "the id has to come back so a client can match it");
+        assert_eq!(
+            e.id,
+            json!(3),
+            "the id has to come back so a client can match it"
+        );
         assert!(e.error.message.contains("core.api"), "{}", e.error.message);
         // Positional params and batches, both refused in words.
         let e = parse(r#"{"jsonrpc":"2.0","id":4,"method":"x","params":[1]}"#).unwrap_err();
         assert_eq!(e.error.code, ErrorCode::InvalidParams.number());
         let e = parse(r#"[{"jsonrpc":"2.0","id":5,"method":"x"}]"#).unwrap_err();
-        assert!(e.error.message.contains("one request per frame"), "{}", e.error.message);
+        assert!(
+            e.error.message.contains("one request per frame"),
+            "{}",
+            e.error.message
+        );
     }
 
     #[test]
@@ -384,7 +428,10 @@ mod tests {
     /// everything still gets nothing expensive unless it asked by name.
     #[test]
     fn ext_gates_the_expensive_streams_even_under_a_star() {
-        let everything = Subscription { patterns: vec!["*".into()], ext: Ext::default() };
+        let everything = Subscription {
+            patterns: vec!["*".into()],
+            ext: Ext::default(),
+        };
         assert!(everything.wants("program.took"));
         assert!(!everything.wants("meters"));
         assert!(!everything.wants("tally"));
@@ -400,7 +447,10 @@ mod tests {
         // stream.
         let deck = Subscription {
             patterns: vec!["program.*".into()],
-            ext: Ext { tally: true, ..Ext::default() },
+            ext: Ext {
+                tally: true,
+                ..Ext::default()
+            },
         };
         assert!(deck.wants("tally"));
         assert!(deck.wants("program.took"));
@@ -416,9 +466,16 @@ mod tests {
                 "output.*".into(),
                 "alert".into(),
             ],
-            ext: Ext { meters: true, tally: true, ..Ext::default() },
+            ext: Ext {
+                meters: true,
+                tally: true,
+                ..Ext::default()
+            },
         };
-        assert!(ui.wants("meters"), "the attach in 05 section 2 has to get its meters");
+        assert!(
+            ui.wants("meters"),
+            "the attach in 05 section 2 has to get its meters"
+        );
         assert!(ui.wants("tally"));
         assert!(ui.wants("program.took"));
         assert!(!ui.wants("multiview.frame"));
@@ -430,25 +487,47 @@ mod tests {
     #[test]
     fn legacy_events_are_renamed_onto_the_published_table() {
         let name = |e: Event| event_name_and_payload(&e).map(|(n, _)| n);
-        assert_eq!(name(Event::Took { source: None, at_running_time_ms: 1 }), Some("program.took"));
         assert_eq!(
-            name(Event::SourceStateChanged { source: "cam1".into(), state: SourceState::Live }),
+            name(Event::Took {
+                source: None,
+                at_running_time_ms: 1
+            }),
+            Some("program.took")
+        );
+        assert_eq!(
+            name(Event::SourceStateChanged {
+                source: "cam1".into(),
+                state: SourceState::Live
+            }),
             Some("source.state")
         );
         assert_eq!(
-            name(Event::Alert { severity: Severity::Warning, message: "x".into() }),
+            name(Event::Alert {
+                severity: Severity::Warning,
+                message: "x".into()
+            }),
             Some("alert")
         );
         // Meters are coalesced by the connection, not published one per meter.
-        assert_eq!(name(Event::AudioLevel { peak_db: vec![-6.0] }), None);
         assert_eq!(
-            name(Event::SourceAudioLevel { source: "cam1".into(), peak_db: vec![-6.0] }),
+            name(Event::AudioLevel {
+                peak_db: vec![-6.0]
+            }),
+            None
+        );
+        assert_eq!(
+            name(Event::SourceAudioLevel {
+                source: "cam1".into(),
+                peak_db: vec![-6.0]
+            }),
             None
         );
 
-        let (_, payload) =
-            event_name_and_payload(&Event::Took { source: Some("cam1".into()), at_running_time_ms: 42 })
-                .unwrap();
+        let (_, payload) = event_name_and_payload(&Event::Took {
+            source: Some("cam1".into()),
+            at_running_time_ms: 42,
+        })
+        .unwrap();
         assert_eq!(payload["source"], "cam1");
         assert_eq!(payload["at_running_time_ms"], 42);
     }
@@ -457,12 +536,17 @@ mod tests {
     fn a_batch_of_meters_becomes_one_message() {
         let mut batch = MeterBatch::default();
         assert!(batch.take().is_none());
-        assert!(batch.absorb(&Event::AudioLevel { peak_db: vec![-6.0, -6.5] }));
+        assert!(batch.absorb(&Event::AudioLevel {
+            peak_db: vec![-6.0, -6.5]
+        }));
         assert!(batch.absorb(&Event::SourceAudioLevel {
             source: "cam1".into(),
             peak_db: vec![-12.0]
         }));
-        assert!(!batch.absorb(&Event::Took { source: None, at_running_time_ms: 0 }));
+        assert!(!batch.absorb(&Event::Took {
+            source: None,
+            at_running_time_ms: 0
+        }));
         let m = batch.take().unwrap();
         assert_eq!(m.program, vec![-6.0, -6.5]);
         assert_eq!(m.sources["cam1"][0], -12.0);

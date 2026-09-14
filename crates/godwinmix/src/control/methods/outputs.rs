@@ -1,13 +1,13 @@
 //! Destinations: list, get, add, remove, reconnect.
 
 use super::{body, handler};
+use crate::control::call::Call;
+use godwinmix_core::mixer::Command;
 use godwinmix_protocol::error::RpcError;
 use godwinmix_protocol::method::{schema_of, MethodDef, Registry, Tier};
 use godwinmix_protocol::requests::*;
 use godwinmix_protocol::scope::Scope;
 use godwinmix_protocol::types::*;
-use crate::control::call::Call;
-use godwinmix_core::mixer::Command;
 use serde_json::Value;
 
 pub fn register(reg: &mut Registry<Call>) {
@@ -17,7 +17,12 @@ pub fn register(reg: &mut Registry<Call>) {
             Scope::Read,
             "Every destination, with its state, reconnect count and how much is buffered.",
             handler(|call: Call, _| async move {
-                let status = call.app.mixer.status().await.map_err(|e| call.mixer_error(e))?;
+                let status = call
+                    .app
+                    .mixer
+                    .status()
+                    .await
+                    .map_err(|e| call.mixer_error(e))?;
                 body(status.outputs)
             }),
         )
@@ -118,11 +123,25 @@ pub fn register(reg: &mut Registry<Call>) {
 }
 
 async fn find(call: &Call, id: &str) -> Result<OutputStatus, RpcError> {
-    let status = call.app.mixer.status().await.map_err(|e| call.mixer_error(e))?;
-    status.outputs.iter().find(|o| o.id == id).cloned().ok_or_else(|| {
-        let ids = status.outputs.iter().map(|o| o.id.clone()).collect::<Vec<_>>();
-        RpcError::not_found("output", id, &ids)
-    })
+    let status = call
+        .app
+        .mixer
+        .status()
+        .await
+        .map_err(|e| call.mixer_error(e))?;
+    status
+        .outputs
+        .iter()
+        .find(|o| o.id == id)
+        .cloned()
+        .ok_or_else(|| {
+            let ids = status
+                .outputs
+                .iter()
+                .map(|o| o.id.clone())
+                .collect::<Vec<_>>();
+            RpcError::not_found("output", id, &ids)
+        })
 }
 
 async fn add(call: Call, params: Value) -> Result<Value, RpcError> {
@@ -144,7 +163,10 @@ async fn remove(call: Call, params: Value) -> Result<Value, RpcError> {
     if call.dry_run {
         return Ok(call.dry_run_answer(
             true,
-            vec![format!("stop sending the programme to {} ({})", output.id, output.uri_host)],
+            vec![format!(
+                "stop sending the programme to {} ({})",
+                output.id, output.uri_host
+            )],
         ));
     }
     call.app
@@ -152,7 +174,12 @@ async fn remove(call: Call, params: Value) -> Result<Value, RpcError> {
         .request(|ack| Command::RemoveOutput(req.id.clone(), Some(ack)))
         .await
         .map_err(|e| call.mixer_error(e))?;
-    let after = call.app.mixer.status().await.map_err(|e| call.mixer_error(e))?;
+    let after = call
+        .app
+        .mixer
+        .status()
+        .await
+        .map_err(|e| call.mixer_error(e))?;
     Ok(serde_json::json!({
         "removed": req.id,
         "outputs": after.outputs.iter().map(|o| o.id.clone()).collect::<Vec<_>>(),

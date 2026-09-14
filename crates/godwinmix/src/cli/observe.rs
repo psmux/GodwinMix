@@ -104,20 +104,41 @@ fn quiet_on_broken_pipe(result: std::io::Result<()>) -> Result<()> {
 pub async fn run(cmd: ObserveCmd) -> Result<()> {
     match cmd {
         ObserveCmd::Doctor { config, json } => doctor(&config, json),
-        ObserveCmd::Logs { config, follow, instance, level, since, trace, lines } => {
+        ObserveCmd::Logs {
+            config,
+            follow,
+            instance,
+            level,
+            since,
+            trace,
+            lines,
+        } => {
             let filter = Filter {
                 instance,
-                level: level.as_deref().and_then(godwinmix_core::observe::logs::LevelCode::parse),
+                level: level
+                    .as_deref()
+                    .and_then(godwinmix_core::observe::logs::LevelCode::parse),
                 since: since.map(normalise_since),
                 trace,
             };
-            logs(&godwinmix_core::observe::runtime_dir(&config), follow, filter, lines).await
+            logs(
+                &godwinmix_core::observe::runtime_dir(&config),
+                follow,
+                filter,
+                lines,
+            )
+            .await
         }
-        ObserveCmd::Trace { id, config } => trace(&godwinmix_core::observe::runtime_dir(&config), &id),
+        ObserveCmd::Trace { id, config } => {
+            trace(&godwinmix_core::observe::runtime_dir(&config), &id)
+        }
         ObserveCmd::Dot { name, url, token } => dot(&name, url, token).await,
-        ObserveCmd::SupportBundle { config, out, url, token } => {
-            support_bundle(config, out, url, token).await
-        }
+        ObserveCmd::SupportBundle {
+            config,
+            out,
+            url,
+            token,
+        } => support_bundle(config, out, url, token).await,
     }
 }
 
@@ -147,14 +168,19 @@ struct Filter {
 
 impl Filter {
     fn keeps(&self, line: &str) -> bool {
-        let Ok(v) = serde_json::from_str::<serde_json::Value>(line) else { return false };
+        let Ok(v) = serde_json::from_str::<serde_json::Value>(line) else {
+            return false;
+        };
         if let Some(want) = &self.instance {
             if v["instance"].as_str() != Some(want.as_str()) {
                 return false;
             }
         }
         if let Some(want) = self.level {
-            let Some(level) = v["level"].as_str().and_then(godwinmix_core::observe::logs::LevelCode::parse) else {
+            let Some(level) = v["level"]
+                .as_str()
+                .and_then(godwinmix_core::observe::logs::LevelCode::parse)
+            else {
                 return false;
             };
             if level > want {
@@ -265,7 +291,10 @@ fn human(line: &str) -> String {
     out.push_str(&format!(": {}", v["message"].as_str().unwrap_or("")));
     if let Some(obj) = v.as_object() {
         for (k, value) in obj {
-            if matches!(k.as_str(), "ts" | "level" | "target" | "instance" | "message") {
+            if matches!(
+                k.as_str(),
+                "ts" | "level" | "target" | "instance" | "message"
+            ) {
                 continue;
             }
             out.push_str(&format!(" {k}={value}"));
@@ -306,12 +335,16 @@ fn trace(dir: &Path, id: &str) -> Result<()> {
     let mut lines: Vec<(String, String)> = Vec::new();
     let mut seen = std::collections::HashSet::new();
     for path in files {
-        let Ok(text) = std::fs::read_to_string(&path) else { continue };
+        let Ok(text) = std::fs::read_to_string(&path) else {
+            continue;
+        };
         for line in text.lines() {
             if !line.contains(id) {
                 continue;
             }
-            let Ok(v) = serde_json::from_str::<serde_json::Value>(line) else { continue };
+            let Ok(v) = serde_json::from_str::<serde_json::Value>(line) else {
+                continue;
+            };
             if v["trace_id"].as_str() != Some(id) {
                 continue;
             }
@@ -325,7 +358,9 @@ fn trace(dir: &Path, id: &str) -> Result<()> {
     // line a reader wants first.
     if let Ok(text) = std::fs::read_to_string(godwinmix_core::observe::session::path_in(dir)) {
         for line in text.lines().filter(|l| l.contains(id)) {
-            let Ok(v) = serde_json::from_str::<serde_json::Value>(line) else { continue };
+            let Ok(v) = serde_json::from_str::<serde_json::Value>(line) else {
+                continue;
+            };
             if v["trace_id"].as_str() == Some(id) && seen.insert(line.to_string()) {
                 lines.push((v["ts"].as_str().unwrap_or("").to_string(), line.to_string()));
             }
@@ -379,7 +414,9 @@ async fn support_bundle(
     let runtime_dir = godwinmix_core::observe::runtime_dir(&config);
     // Read the session log from the file, since this process is not the one
     // that wrote it.
-    godwinmix_core::observe::session::session().open(godwinmix_core::observe::session::path_in(&runtime_dir)).ok();
+    godwinmix_core::observe::session::session()
+        .open(godwinmix_core::observe::session::path_in(&runtime_dir))
+        .ok();
     let options = super::bundle::BundleOptions {
         config_path: config,
         runtime_dir,
@@ -419,16 +456,31 @@ mod tests {
 
     #[test]
     fn the_instance_filter_keeps_one_sources_lines() {
-        let filter = Filter { instance: Some("cam1".into()), ..Default::default() };
-        assert!(filter.keeps(&line("2026-09-14T20:10:00.000Z", "info", Some("cam1"), None)));
-        assert!(!filter.keeps(&line("2026-09-14T20:10:00.000Z", "info", Some("cam2"), None)));
+        let filter = Filter {
+            instance: Some("cam1".into()),
+            ..Default::default()
+        };
+        assert!(filter.keeps(&line(
+            "2026-09-14T20:10:00.000Z",
+            "info",
+            Some("cam1"),
+            None
+        )));
+        assert!(!filter.keeps(&line(
+            "2026-09-14T20:10:00.000Z",
+            "info",
+            Some("cam2"),
+            None
+        )));
         assert!(!filter.keeps(&line("2026-09-14T20:10:00.000Z", "info", None, None)));
     }
 
     #[test]
     fn the_level_filter_keeps_that_level_and_above() {
-        let filter =
-            Filter { level: Some(godwinmix_core::observe::logs::LevelCode::WARN), ..Default::default() };
+        let filter = Filter {
+            level: Some(godwinmix_core::observe::logs::LevelCode::WARN),
+            ..Default::default()
+        };
         assert!(filter.keeps(&line("2026-09-14T20:10:00.000Z", "error", None, None)));
         assert!(filter.keeps(&line("2026-09-14T20:10:00.000Z", "warn", None, None)));
         assert!(!filter.keeps(&line("2026-09-14T20:10:00.000Z", "info", None, None)));
@@ -458,8 +510,16 @@ mod tests {
 
     #[test]
     fn the_human_form_leads_with_time_level_target_and_instance() {
-        let text = human(&line("2026-09-14T20:10:00.000Z", "warn", Some("cam1"), None));
-        assert!(text.starts_with("2026-09-14T20:10:00.000Z  warn godwinmix::mixer [cam1]"), "{text}");
+        let text = human(&line(
+            "2026-09-14T20:10:00.000Z",
+            "warn",
+            Some("cam1"),
+            None,
+        ));
+        assert!(
+            text.starts_with("2026-09-14T20:10:00.000Z  warn godwinmix::mixer [cam1]"),
+            "{text}"
+        );
         assert!(text.contains("a thing"), "{text}");
     }
 
@@ -477,7 +537,10 @@ mod tests {
         assert!(text.contains("session[7] log.set"), "{text}");
         // The target being set must not sit in the column that names where the
         // line came from.
-        assert!(!text.starts_with("2026-09-14T20:10:00.000Z debug godwinmix::mixer"), "{text}");
+        assert!(
+            !text.starts_with("2026-09-14T20:10:00.000Z debug godwinmix::mixer"),
+            "{text}"
+        );
     }
 
     #[test]
@@ -487,7 +550,12 @@ mod tests {
         std::fs::create_dir_all(dir.join("plugins")).unwrap();
         let later = line("2026-09-14T20:10:02.000Z", "info", Some("cam1"), Some(id));
         let earlier = line("2026-09-14T20:10:01.000Z", "info", None, Some(id));
-        let other = line("2026-09-14T20:10:03.000Z", "info", None, Some("0000000000000000000000000000beef"));
+        let other = line(
+            "2026-09-14T20:10:03.000Z",
+            "info",
+            None,
+            Some("0000000000000000000000000000beef"),
+        );
         std::fs::write(
             dir.join("godwinmix.log"),
             format!("{earlier}\n{later}\n{other}\n"),
@@ -507,7 +575,10 @@ mod tests {
     #[tokio::test]
     async fn logs_says_where_it_looked_when_there_is_nothing_there() {
         let dir = crate::observe::tempdir("cli-logs-empty");
-        let e = logs(&dir, false, Filter::default(), 10).await.unwrap_err().to_string();
+        let e = logs(&dir, false, Filter::default(), 10)
+            .await
+            .unwrap_err()
+            .to_string();
         assert!(e.contains("no log files"), "{e}");
         assert!(e.contains("GODWINMIX_RUNTIME_DIR"), "{e}");
         let _ = std::fs::remove_dir_all(&dir);
@@ -527,7 +598,10 @@ mod tests {
             text.push('\n');
         }
         std::fs::write(dir.join("godwinmix.log"), text).unwrap();
-        let filter = Filter { instance: Some("cam1".into()), ..Default::default() };
+        let filter = Filter {
+            instance: Some("cam1".into()),
+            ..Default::default()
+        };
         logs(&dir, false, filter, 3).await.expect("should print");
         let _ = std::fs::remove_dir_all(&dir);
     }

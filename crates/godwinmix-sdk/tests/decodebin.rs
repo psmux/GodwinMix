@@ -153,7 +153,11 @@ fn a_stream_with_sound_carries_both_tracks() {
     write_one_second(&path, true);
     let (video_caps, video_frames) = decode(&path, "video");
     assert_eq!(
-        video_caps.structure(0).unwrap().get::<String>("format").unwrap(),
+        video_caps
+            .structure(0)
+            .unwrap()
+            .get::<String>("format")
+            .unwrap(),
         "I420"
     );
     assert_eq!(video_frames, CANVAS.fps as usize);

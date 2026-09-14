@@ -95,7 +95,10 @@ fn accel_of(name: &str) -> Accel {
             // A catalogue the operator extended with a vendor this build has
             // no variant for. It still gets selected by rank; it just cannot
             // be pinned by name from `[hardware]`.
-            debug!(accel = other, "catalogue accel has no config variant; treated as auto");
+            debug!(
+                accel = other,
+                "catalogue accel has no config variant; treated as auto"
+            );
             Accel::Auto
         }
     }
@@ -114,7 +117,9 @@ pub fn best_audio_encoder() -> Option<&'static str> {
         if e.disabled || e.codec != "aac" {
             continue;
         }
-        let Some(enc) = e.encoder.as_deref() else { continue };
+        let Some(enc) = e.encoder.as_deref() else {
+            continue;
+        };
         if !exists(enc) {
             continue;
         }
@@ -130,7 +135,10 @@ impl Backends {
     pub fn probe(decode_pref: Accel, encode_pref: Accel) -> Result<Self> {
         let cat = catalogue::global();
         let req = Request {
-            container: cat.programme_container.clone().or_else(|| Some("flv".into())),
+            container: cat
+                .programme_container
+                .clone()
+                .or_else(|| Some("flv".into())),
             decode: decode_pref,
             encode: encode_pref,
             graphics: Accel::Auto,
@@ -171,7 +179,10 @@ impl Backends {
     pub fn apply_decoder_ranks(&self) {
         if let Some(f) = gst::ElementFactory::find(self.video_decode.element) {
             f.set_rank(gst::Rank::PRIMARY + 256);
-            debug!(element = self.video_decode.element, "raised decoder rank for autoplugging");
+            debug!(
+                element = self.video_decode.element,
+                "raised decoder rank for autoplugging"
+            );
         }
         if let Some(f) = gst::ElementFactory::find(self.audio_decode) {
             f.set_rank(gst::Rank::PRIMARY + 256);
@@ -284,7 +295,11 @@ pub fn enum_nicks(el: &gst::Element, prop: &str) -> Vec<String> {
         return Vec::new();
     }
     match glib::EnumClass::with_type(t) {
-        Some(class) => class.values().iter().map(|v| v.nick().to_string()).collect(),
+        Some(class) => class
+            .values()
+            .iter()
+            .map(|v| v.nick().to_string())
+            .collect(),
         None => Vec::new(),
     }
 }
@@ -310,7 +325,9 @@ pub fn try_set_enum(el: &gst::Element, prop: &str, nick: &str) -> Result<()> {
     if nicks.is_empty() {
         anyhow::bail!(
             "{} has no enum property `{prop}` on this build of GStreamer",
-            el.factory().map(|f| f.name().to_string()).unwrap_or_else(|| el.name().to_string())
+            el.factory()
+                .map(|f| f.name().to_string())
+                .unwrap_or_else(|| el.name().to_string())
         );
     }
     anyhow::ensure!(
@@ -338,7 +355,10 @@ pub fn set_enum(el: &gst::Element, prop: &str, nick: &str) {
     if t.is_a(glib::Type::ENUM) {
         let class = glib::EnumClass::with_type(t);
         if class.as_ref().and_then(|c| c.value_by_nick(nick)).is_none()
-            && class.as_ref().and_then(|c| c.value(nick.parse::<i32>().unwrap_or(i32::MIN))).is_none()
+            && class
+                .as_ref()
+                .and_then(|c| c.value(nick.parse::<i32>().unwrap_or(i32::MIN)))
+                .is_none()
         {
             warn!(element = %el.name(), prop, nick, "this element version has no such value, skipping");
             return;
@@ -423,7 +443,13 @@ mod tests {
         // No machine has every backend, so at least one forced request must
         // fail. Assert on whichever is genuinely missing here.
         let cat = catalogue::global();
-        for want in [Accel::Nvidia, Accel::Va, Accel::VideoToolbox, Accel::D3d11, Accel::Amf] {
+        for want in [
+            Accel::Nvidia,
+            Accel::Va,
+            Accel::VideoToolbox,
+            Accel::D3d11,
+            Accel::Amf,
+        ] {
             let name = want.name().unwrap();
             let installed = cat
                 .video
@@ -434,7 +460,10 @@ mod tests {
             }
             let err = Backends::probe(want, Accel::Auto).expect_err("{want:?} should be absent");
             let text = format!("{err:#}");
-            assert!(text.contains(name), "the error should name the accel: {text}");
+            assert!(
+                text.contains(name),
+                "the error should name the accel: {text}"
+            );
             assert!(
                 text.contains("rank"),
                 "the error should list the entries that were available: {text}"
@@ -470,7 +499,10 @@ mod tests {
             "an unknown nickname must leave the property alone"
         );
         set_enum(&el, "pattern", "ball");
-        assert_ne!(format!("{:?}", el.property_value("pattern")), format!("{before:?}"));
+        assert_ne!(
+            format!("{:?}", el.property_value("pattern")),
+            format!("{before:?}")
+        );
     }
 
     #[test]
@@ -482,7 +514,10 @@ mod tests {
         assert!(el.find_property("force-live").is_some());
         assert!(writable_property(&el, "force-live").is_none());
         set_bool(&el, "force-live", true);
-        assert!(!el.property::<bool>("force-live"), "value should not have changed");
+        assert!(
+            !el.property::<bool>("force-live"),
+            "value should not have changed"
+        );
 
         // A construct-time builder is the supported way to set it.
         let live = crate::gstutil::make_live_aggregator("compositor", "c").unwrap();

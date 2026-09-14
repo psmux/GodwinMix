@@ -406,10 +406,18 @@ mod tests {
     #[test]
     fn a_take_reads_a_scene_as_a_one_item_scene() {
         let parse = |v: Value| serde_json::from_value::<TakeRequest>(v).unwrap();
-        assert_eq!(parse(json!({ "source": "cam1" })).target().as_deref(), Some("cam1"));
-        assert_eq!(parse(json!({ "scene": "cam2" })).target().as_deref(), Some("cam2"));
         assert_eq!(
-            parse(json!({ "source": "cam1", "scene": "cam2" })).target().as_deref(),
+            parse(json!({ "source": "cam1" })).target().as_deref(),
+            Some("cam1")
+        );
+        assert_eq!(
+            parse(json!({ "scene": "cam2" })).target().as_deref(),
+            Some("cam2")
+        );
+        assert_eq!(
+            parse(json!({ "source": "cam1", "scene": "cam2" }))
+                .target()
+                .as_deref(),
             Some("cam1")
         );
         assert_eq!(parse(json!({})).target(), None);
@@ -427,7 +435,10 @@ mod tests {
         assert_eq!(r.uri, "ndi://studio");
         assert_eq!(r.id.as_deref(), Some("ndi1"));
         assert_eq!(r.params["channel"], 3);
-        assert!(!r.params.contains_key("uri"), "a known key must not be duplicated");
+        assert!(
+            !r.params.contains_key("uri"),
+            "a known key must not be duplicated"
+        );
     }
 
     #[test]
@@ -436,7 +447,9 @@ mod tests {
             id: "yt".into(),
             uri: "rtmp://a/b".into(),
             policy: Some("cdn".into()),
-            params: [("bitrate_kbps".to_string(), json!(4500))].into_iter().collect(),
+            params: [("bitrate_kbps".to_string(), json!(4500))]
+                .into_iter()
+                .collect(),
         };
         let v = r.to_config_json();
         assert_eq!(v["id"], "yt");
@@ -445,7 +458,11 @@ mod tests {
         assert_eq!(v["bitrate_kbps"], 4500);
         // No policy means the config's own default, not a null that serde
         // would refuse.
-        let bare = AddOutputRequest { policy: None, params: Map::new(), ..r };
+        let bare = AddOutputRequest {
+            policy: None,
+            params: Map::new(),
+            ..r
+        };
         assert!(bare.to_config_json().get("policy").is_none());
     }
 

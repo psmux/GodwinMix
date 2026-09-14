@@ -147,9 +147,15 @@ impl Tracker {
     #[cfg(test)]
     pub fn disabled() -> Arc<Self> {
         Self::build(
-            SnapshotConfig { enabled: false, ..Default::default() },
+            SnapshotConfig {
+                enabled: false,
+                ..Default::default()
+            },
             MultiviewHandle::detached(
-                crate::config::MultiviewConfig { enabled: false, ..Default::default() },
+                crate::config::MultiviewConfig {
+                    enabled: false,
+                    ..Default::default()
+                },
                 tokio::runtime::Handle::current(),
             ),
             None,
@@ -253,7 +259,10 @@ impl Tracker {
         };
         if let Some(w) = width {
             if w > self.cfg.max_width && !ask.allow_large {
-                return Err(Refusal::TooWide { asked: w, max: self.cfg.max_width });
+                return Err(Refusal::TooWide {
+                    asked: w,
+                    max: self.cfg.max_width,
+                });
             }
         }
         let interval = Duration::from_secs(self.cfg.min_interval_secs);
@@ -282,7 +291,9 @@ impl Tracker {
     }
 
     async fn follow(self: Arc<Self>) {
-        let Some(mixer) = self.mixer.clone() else { return };
+        let Some(mixer) = self.mixer.clone() else {
+            return;
+        };
         // The subscription is what holds the mosaic up. Dropping it at the end
         // of this function is what lets the mosaic go.
         let mut sub = self.mv.subscribe(MultiviewRequest::configured());
@@ -345,7 +356,11 @@ impl Tracker {
             match scored {
                 Ok(Ok((cur, cells, motion))) => {
                     prev = Some(cur);
-                    *self.latest.write() = Some(Latest { jpeg, cells, motion });
+                    *self.latest.write() = Some(Latest {
+                        jpeg,
+                        cells,
+                        motion,
+                    });
                 }
                 Ok(Err(e)) => {
                     // A frame that does not decode is skipped. The raw bytes
@@ -390,7 +405,11 @@ pub fn crop_cell(mosaic: &RgbImage, c: &CellAssignment) -> RgbImage {
 /// picture scores about zero even through JPEG noise; full frame video sits
 /// somewhere between 0.02 and 0.2; a cut to a different shot spikes higher.
 pub fn cell_motion(prev: &GrayImage, cur: &GrayImage, c: &CellAssignment) -> f64 {
-    let (x, y, w, h) = cell_rect(cur.width().min(prev.width()), cur.height().min(prev.height()), c);
+    let (x, y, w, h) = cell_rect(
+        cur.width().min(prev.width()),
+        cur.height().min(prev.height()),
+        c,
+    );
     if w == 0 || h == 0 {
         return 0.0;
     }
@@ -456,7 +475,9 @@ pub fn find_cell<'a>(cells: &'a [CellAssignment], pick: &Pick) -> Option<&'a Cel
     match pick {
         Pick::Sheet => None,
         Pick::Program => cells.iter().find(|c| c.source.is_none()),
-        Pick::Source(id) => cells.iter().find(|c| c.source.as_deref() == Some(id.as_str())),
+        Pick::Source(id) => cells
+            .iter()
+            .find(|c| c.source.as_deref() == Some(id.as_str())),
     }
 }
 
@@ -546,7 +567,11 @@ pub fn agent_state(status: &MixerStatus, latest: Option<&Latest>, stills: bool) 
         outputs: status
             .outputs
             .iter()
-            .map(|o| AgentOutput { id: o.id.clone(), state: o.state, reconnects: o.reconnects })
+            .map(|o| AgentOutput {
+                id: o.id.clone(),
+                state: o.state,
+                reconnects: o.reconnects,
+            })
             .collect(),
         backend: status.backend.clone(),
         snapshots: (stills && status.multiview.enabled).then_some(SnapshotUrls {
@@ -570,7 +595,14 @@ mod tests {
     use image::{Luma, Rgb};
 
     fn cell(index: u32, source: Option<&str>, x: i32, y: i32, w: i32, h: i32) -> CellAssignment {
-        CellAssignment { index, source: source.map(str::to_string), x, y, w, h }
+        CellAssignment {
+            index,
+            source: source.map(str::to_string),
+            x,
+            y,
+            w,
+            h,
+        }
     }
 
     /// A mosaic with a distinct flat colour in each quadrant.
@@ -753,7 +785,15 @@ mod tests {
         let keys: Vec<_> = v.as_object().unwrap().keys().cloned().collect();
         assert_eq!(
             keys,
-            ["backend", "outputs", "program", "program_motion", "snapshots", "sources", "uptime_secs"]
+            [
+                "backend",
+                "outputs",
+                "program",
+                "program_motion",
+                "snapshots",
+                "sources",
+                "uptime_secs"
+            ]
         );
     }
 
@@ -802,25 +842,52 @@ mod tests {
         assert_eq!(t.resolve("a", &Ask::default()).unwrap(), Some(320));
         // Zero is how a client says "as it comes".
         assert_eq!(
-            t.resolve("b", &Ask { width: Some(0), ..Default::default() }).unwrap(),
+            t.resolve(
+                "b",
+                &Ask {
+                    width: Some(0),
+                    ..Default::default()
+                }
+            )
+            .unwrap(),
             None
         );
         assert_eq!(
-            t.resolve("c", &Ask { width: Some(640), ..Default::default() }).unwrap(),
+            t.resolve(
+                "c",
+                &Ask {
+                    width: Some(640),
+                    ..Default::default()
+                }
+            )
+            .unwrap(),
             Some(640)
         );
         // Above the ceiling without the flag, refused, and the message says
         // both ways out.
         let err = t
-            .resolve("d", &Ask { width: Some(1920), ..Default::default() })
+            .resolve(
+                "d",
+                &Ask {
+                    width: Some(1920),
+                    ..Default::default()
+                },
+            )
             .expect_err("1920 must be refused")
             .message();
         assert!(err.contains("1280"), "{err}");
         assert!(err.contains("allow_large"), "{err}");
         // With the flag, allowed.
         assert_eq!(
-            t.resolve("e", &Ask { width: Some(1920), allow_large: true, ..Default::default() })
-                .unwrap(),
+            t.resolve(
+                "e",
+                &Ask {
+                    width: Some(1920),
+                    allow_large: true,
+                    ..Default::default()
+                }
+            )
+            .unwrap(),
             Some(1920)
         );
     }
@@ -829,24 +896,40 @@ mod tests {
     async fn one_snapshot_per_client_per_interval_unless_forced() {
         let t = tracker_with(SnapshotConfig::default());
         assert!(t.resolve("10.0.0.1", &Ask::default()).is_ok());
-        let err = t.resolve("10.0.0.1", &Ask::default()).expect_err("the second is too soon");
+        let err = t
+            .resolve("10.0.0.1", &Ask::default())
+            .expect_err("the second is too soon");
         let msg = err.message();
         assert!(matches!(err, Refusal::TooSoon { .. }));
         assert!(msg.contains("force=true"), "{msg}");
         // Another client is another bucket.
         assert!(t.resolve("10.0.0.2", &Ask::default()).is_ok());
         // And force gets through.
-        assert!(t.resolve("10.0.0.1", &Ask { force: true, ..Default::default() }).is_ok());
+        assert!(t
+            .resolve(
+                "10.0.0.1",
+                &Ask {
+                    force: true,
+                    ..Default::default()
+                }
+            )
+            .is_ok());
 
         // Zero turns the limit off for an operator who does not want it.
-        let t = tracker_with(SnapshotConfig { min_interval_secs: 0, ..Default::default() });
+        let t = tracker_with(SnapshotConfig {
+            min_interval_secs: 0,
+            ..Default::default()
+        });
         assert!(t.resolve("10.0.0.1", &Ask::default()).is_ok());
         assert!(t.resolve("10.0.0.1", &Ask::default()).is_ok());
     }
 
     #[tokio::test]
     async fn a_switched_off_snapshot_says_which_switch_did_it() {
-        let off = tracker_with(SnapshotConfig { enabled: false, ..Default::default() });
+        let off = tracker_with(SnapshotConfig {
+            enabled: false,
+            ..Default::default()
+        });
         let why = off.disabled_reason().expect("must refuse");
         assert!(why.contains("[snapshot] enabled = false"), "{why}");
         assert!(!off.enabled());
@@ -854,7 +937,10 @@ mod tests {
         let no_mosaic = Tracker::build(
             SnapshotConfig::default(),
             MultiviewHandle::detached(
-                crate::config::MultiviewConfig { enabled: false, ..Default::default() },
+                crate::config::MultiviewConfig {
+                    enabled: false,
+                    ..Default::default()
+                },
                 tokio::runtime::Handle::current(),
             ),
             None,
@@ -902,11 +988,17 @@ mod tests {
         let thread = crate::mixer::spawn(mix, cmd_rx, handle.clone());
 
         let tracker = Tracker::new(
-            SnapshotConfig { idle_secs: 1, ..Default::default() },
+            SnapshotConfig {
+                idle_secs: 1,
+                ..Default::default()
+            },
             mv.clone(),
             handle.clone(),
         );
-        assert!(!tracker.following(), "the tracker is running before anybody asked");
+        assert!(
+            !tracker.following(),
+            "the tracker is running before anybody asked"
+        );
         assert_eq!(mv.live_pipelines(), 0, "a mosaic before anybody asked");
         assert!(tracker.latest().is_none());
 
@@ -927,11 +1019,17 @@ mod tests {
             }
             tokio::time::sleep(Duration::from_millis(100)).await;
         }
-        assert!(!tracker.following(), "the tracker kept decoding with nobody asking");
+        assert!(
+            !tracker.following(),
+            "the tracker kept decoding with nobody asking"
+        );
         assert!(tracker.latest().is_none(), "a frame is still being held");
         assert_eq!(mv.live_pipelines(), 0, "the mosaic outlived the tracker");
 
         let _ = handle.send(crate::mixer::Command::Shutdown);
-        tokio::task::spawn_blocking(move || thread.join()).await.unwrap().unwrap();
+        tokio::task::spawn_blocking(move || thread.join())
+            .await
+            .unwrap()
+            .unwrap();
     }
 }

@@ -43,7 +43,11 @@ pub const MANIFEST: Manifest = Manifest {
     tier: Tier::Core,
 };
 
-pub const PROVIDE: Provide = Provide { manifest: MANIFEST, claims, make: new };
+pub const PROVIDE: Provide = Provide {
+    manifest: MANIFEST,
+    claims,
+    make: new,
+};
 
 fn claims(uri: &str) -> Option<u16> {
     let lower = uri.trim().to_lowercase();
@@ -169,7 +173,11 @@ impl Source for RtmpSource {
             // starts it again.
             "restart" => Ok(Value::Null),
             "client.fallback" => Ok(json!({ "swapped": self.swap_client()? })),
-            other => Err(unknown_method(&MANIFEST, other, &["restart", "client.fallback"])),
+            other => Err(unknown_method(
+                &MANIFEST,
+                other,
+                &["restart", "client.fallback"],
+            )),
         }
     }
 }
@@ -200,10 +208,16 @@ impl RtmpSource {
         let fresh = make_rtmp_source(element, &self.ctx.id, &self.ctx.cfg.uri)?;
         let mut current = self.src.lock();
         if let Some(old) = current.as_ref() {
-            pipeline.remove(old).context("removing the old rtmp source")?;
+            pipeline
+                .remove(old)
+                .context("removing the old rtmp source")?;
         }
-        pipeline.add(&fresh).context("adding the replacement rtmp source")?;
-        fresh.link(queue).context("linking the replacement rtmp source")?;
+        pipeline
+            .add(&fresh)
+            .context("adding the replacement rtmp source")?;
+        fresh
+            .link(queue)
+            .context("linking the replacement rtmp source")?;
         *current = Some(fresh);
         Ok(true)
     }

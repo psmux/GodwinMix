@@ -230,7 +230,13 @@ impl ContainerEntry {
 
 impl VideoEntry {
     pub fn id(&self) -> String {
-        derived_id(&self.id, &self.codec, &self.accel, &self.encoder, &self.decoder)
+        derived_id(
+            &self.id,
+            &self.codec,
+            &self.accel,
+            &self.encoder,
+            &self.decoder,
+        )
     }
     pub fn element(&self, role: Role) -> Option<&str> {
         match role {
@@ -257,7 +263,13 @@ impl VideoEntry {
 
 impl AudioEntry {
     pub fn id(&self) -> String {
-        derived_id(&self.id, &self.codec, &self.accel, &self.encoder, &self.decoder)
+        derived_id(
+            &self.id,
+            &self.codec,
+            &self.accel,
+            &self.encoder,
+            &self.decoder,
+        )
     }
     pub fn element(&self, role: Role) -> Option<&str> {
         match role {

@@ -11,12 +11,26 @@ use anyhow::{Context, Result};
 use serde::Deserialize;
 
 /// The six presets that ship with GodwinMix (06 section 5).
-pub const NAMES: &[&str] = &["default", "church", "classroom", "esports", "headless-agent", "broadcast"];
+pub const NAMES: &[&str] = &[
+    "default",
+    "church",
+    "classroom",
+    "esports",
+    "headless-agent",
+    "broadcast",
+];
 
 /// The panels the first party UI ships (05 section 3). A preset's layout may
 /// also name a panel a plugin provides, which is prefixed with its plugin name.
-pub const PANELS: &[&str] =
-    &["header", "multiview", "sources", "outputs", "media", "alerts", "scenes"];
+pub const PANELS: &[&str] = &[
+    "header",
+    "multiview",
+    "sources",
+    "outputs",
+    "media",
+    "alerts",
+    "scenes",
+];
 
 /// The UI slots a layout may fill (05 section 3).
 pub const SLOTS: &[&str] = &["header", "main", "sidebar", "strip", "footer", "modal"];
@@ -64,14 +78,20 @@ pub struct PresetBlock {
 
 /// Where the presets live, relative to the repository root.
 pub fn directory() -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR")).join("../..").join("presets")
+    Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../..")
+        .join("presets")
 }
 
 /// Read one preset's manifest.
 pub fn manifest(name: &str) -> Result<Manifest> {
     let path = directory().join(name).join("gmx-plugin.toml");
-    let text = std::fs::read_to_string(&path)
-        .with_context(|| format!("there is no preset called {name:?}: {} is missing", path.display()))?;
+    let text = std::fs::read_to_string(&path).with_context(|| {
+        format!(
+            "there is no preset called {name:?}: {} is missing",
+            path.display()
+        )
+    })?;
     toml::from_str(&text).with_context(|| format!("reading {}", path.display()))
 }
 
@@ -91,7 +111,10 @@ mod tests {
     fn every_official_preset_has_a_manifest_that_says_what_it_is() {
         for name in NAMES {
             let manifest = manifest(name).unwrap_or_else(|e| panic!("{name}: {e:#}"));
-            assert_eq!(&manifest.plugin.name, name, "a preset's name is its directory");
+            assert_eq!(
+                &manifest.plugin.name, name,
+                "a preset's name is its directory"
+            );
             assert_eq!(manifest.plugin.api, 1);
             assert!(!manifest.plugin.version.is_empty());
             assert!(
@@ -107,10 +130,16 @@ mod tests {
             let block = preset.preset.as_ref().expect("a [provides.preset] table");
             assert!(!block.theme.is_empty(), "{name} names no theme");
             for path in [&block.config, &block.layout, &block.scenes] {
-                assert!(preset_dir(name).join(path).exists(), "{name}: {path} is missing");
+                assert!(
+                    preset_dir(name).join(path).exists(),
+                    "{name}: {path} is missing"
+                );
             }
             for plugin in &block.plugins {
-                assert!(plugin.contains('@'), "{name}: {plugin:?} needs a version range");
+                assert!(
+                    plugin.contains('@'),
+                    "{name}: {plugin:?} needs a version range"
+                );
             }
         }
     }
@@ -126,7 +155,10 @@ mod tests {
             // hand.
             for source in &config.sources {
                 assert!(
-                    source.id.chars().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-'),
+                    source
+                        .id
+                        .chars()
+                        .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-'),
                     "{name}: the source id {:?} is not a slug",
                     source.id
                 );
@@ -139,17 +171,29 @@ mod tests {
         // The `type` and `params` form of 03 section 3. Today's loader ignores
         // both, which is why this reads the file rather than the struct.
         for name in NAMES {
-            let text = std::fs::read_to_string(preset_dir(name).join("config/godwinmix.toml")).unwrap();
+            let text =
+                std::fs::read_to_string(preset_dir(name).join("config/godwinmix.toml")).unwrap();
             let raw: toml::Value = toml::from_str(&text).unwrap();
             for source in raw["sources"].as_array().unwrap() {
                 let id = source["id"].as_str().unwrap();
-                let kind = source["type"].as_str().unwrap_or_else(|| panic!("{name}: {id} has no type"));
-                assert!(kind.contains('/'), "{name}: {id} has type {kind:?}, which is not plugin/provide");
-                assert!(source.get("params").is_some(), "{name}: {id} has no params table");
+                let kind = source["type"]
+                    .as_str()
+                    .unwrap_or_else(|| panic!("{name}: {id} has no type"));
+                assert!(
+                    kind.contains('/'),
+                    "{name}: {id} has type {kind:?}, which is not plugin/provide"
+                );
+                assert!(
+                    source.get("params").is_some(),
+                    "{name}: {id} has no params table"
+                );
             }
             for output in raw["outputs"].as_array().unwrap() {
                 let id = output["id"].as_str().unwrap();
-                assert!(output["type"].as_str().is_some_and(|k| k.contains('/')), "{name}: the output {id} has no plugin qualified type");
+                assert!(
+                    output["type"].as_str().is_some_and(|k| k.contains('/')),
+                    "{name}: the output {id} has no plugin qualified type"
+                );
             }
         }
     }
@@ -157,12 +201,16 @@ mod tests {
     #[test]
     fn every_preset_ui_layout_names_real_slots_and_panels() {
         for name in NAMES {
-            let text = std::fs::read_to_string(preset_dir(name).join("config/layout.json")).unwrap();
+            let text =
+                std::fs::read_to_string(preset_dir(name).join("config/layout.json")).unwrap();
             let layout: BTreeMap<String, Vec<String>> =
                 serde_json::from_str(&text).unwrap_or_else(|e| panic!("{name}: {e}"));
             assert!(!layout.is_empty(), "{name} has an empty layout");
             for (slot, panels) in &layout {
-                assert!(SLOTS.contains(&slot.as_str()), "{name}: {slot:?} is not a UI slot");
+                assert!(
+                    SLOTS.contains(&slot.as_str()),
+                    "{name}: {slot:?} is not a UI slot"
+                );
                 for panel in panels {
                     // A plugin's panel is prefixed with its plugin name.
                     let known = PANELS.contains(&panel.as_str()) || panel.contains('/');
@@ -198,7 +246,11 @@ mod tests {
                 let scene = layout::apply(&doc, &values, doc.canvas)
                     .unwrap_or_else(|e| panic!("{name}/{}: {e:#}", path.display()));
                 let text = serde_json::to_string(&scene).unwrap();
-                assert!(!text.contains("{{"), "{name}/{}: a binding was left over", path.display());
+                assert!(
+                    !text.contains("{{"),
+                    "{name}/{}: a binding was left over",
+                    path.display()
+                );
             }
             assert!(found > 0, "{name} ships no scenes");
         }
@@ -209,7 +261,10 @@ mod tests {
         let config = Config::load(&preset_dir(name).join("config/godwinmix.toml")).unwrap();
         let mut ids = config.sources.iter().map(|s| s.id.clone()).cycle();
         let mut values = layout::Values::new();
-        let properties = doc.params.get("properties").and_then(serde_json::Value::as_object);
+        let properties = doc
+            .params
+            .get("properties")
+            .and_then(serde_json::Value::as_object);
         for (key, schema) in properties.into_iter().flatten() {
             match schema.get("x-gmx-kind").and_then(serde_json::Value::as_str) {
                 Some("source") => {
@@ -232,15 +287,20 @@ mod tests {
         for name in NAMES {
             for entry in std::fs::read_dir(preset_dir(name).join("scenes")).unwrap() {
                 let path = entry.unwrap().path();
-                let Ok(text) = std::fs::read_to_string(&path) else { continue };
-                let Ok(doc) = Collection::from_json(&text) else { continue };
+                let Ok(text) = std::fs::read_to_string(&path) else {
+                    continue;
+                };
+                let Ok(doc) = Collection::from_json(&text) else {
+                    continue;
+                };
                 let mut ids = vec![doc.id.to_string()];
                 for scene in &doc.scenes {
                     ids.push(scene.id.to_string());
                     ids.extend(scene.walk().iter().map(|i| i.id.to_string()));
                 }
                 for id in ids {
-                    let where_now = format!("{name}/{}", path.file_name().unwrap().to_string_lossy());
+                    let where_now =
+                        format!("{name}/{}", path.file_name().unwrap().to_string_lossy());
                     if let Some(before) = seen.insert(id.clone(), where_now.clone()) {
                         panic!("{id} is in both {before} and {where_now}");
                     }
@@ -253,8 +313,16 @@ mod tests {
     fn every_preset_readme_answers_the_four_questions() {
         for name in NAMES {
             let text = std::fs::read_to_string(preset_dir(name).join("README.md")).unwrap();
-            for heading in ["What it gives you", "What you need", "Three steps", "When it does not work"] {
-                assert!(text.contains(heading), "{name}'s README has no {heading:?} section");
+            for heading in [
+                "What it gives you",
+                "What you need",
+                "Three steps",
+                "When it does not work",
+            ] {
+                assert!(
+                    text.contains(heading),
+                    "{name}'s README has no {heading:?} section"
+                );
             }
             assert!(
                 text.contains("gmx preset apply"),
@@ -268,7 +336,10 @@ mod tests {
         let text = std::fs::read_to_string(directory().join("README.md")).unwrap();
         assert!(text.contains("cp -r presets/"), "no copy instruction");
         for name in NAMES {
-            assert!(text.contains(&format!("`{name}`")), "{name} is not in the table");
+            assert!(
+                text.contains(&format!("`{name}`")),
+                "{name} is not in the table"
+            );
         }
     }
 }

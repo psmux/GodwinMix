@@ -11,17 +11,17 @@
 //! not, there were no sequence numbers, and a client that fell behind was
 //! told nothing.
 
-use godwinmix_protocol::rpc::{self, MeterBatch, Subscription};
-use godwinmix_protocol::scope::Token;
-use godwinmix_protocol::{Flush, Resync, Snapshot, SubscribeRequest, SubscribeResult, Tally};
-use godwinmix_protocol::types::Event;
 use crate::control::call::dispatch;
 use crate::control::{Ctx, RunningTime};
-use godwinmix_core::multiview::{MultiviewRequest, MultiviewSubscription};
-use godwinmix_core::state::Envelope;
 use axum::extract::ws::{Message, WebSocket};
 use futures_util::stream::{SplitSink, StreamExt};
 use futures_util::SinkExt;
+use godwinmix_core::multiview::{MultiviewRequest, MultiviewSubscription};
+use godwinmix_core::state::Envelope;
+use godwinmix_protocol::rpc::{self, MeterBatch, Subscription};
+use godwinmix_protocol::scope::Token;
+use godwinmix_protocol::types::Event;
+use godwinmix_protocol::{Flush, Resync, Snapshot, SubscribeRequest, SubscribeResult, Tally};
 use serde_json::{json, Map, Value};
 use tokio::sync::broadcast;
 use tracing::{debug, warn};
@@ -148,7 +148,9 @@ pub async fn serve_rpc(socket: WebSocket, ctx: Ctx, token: Token) {
 
 impl Connection {
     fn wants_frames(&self) -> bool {
-        self.sub.as_ref().is_some_and(|s| s.wants("multiview.frame"))
+        self.sub
+            .as_ref()
+            .is_some_and(|s| s.wants("multiview.frame"))
     }
 
     /// One mosaic frame out, with the 16 byte header in front of it.
@@ -165,12 +167,18 @@ impl Connection {
         let mut out = Vec::with_capacity(header.len() + jpeg.len());
         out.extend_from_slice(&header);
         out.extend_from_slice(jpeg);
-        self.tx.send(Message::Binary(out.into())).await.map_err(|_| ())
+        self.tx
+            .send(Message::Binary(out.into()))
+            .await
+            .map_err(|_| ())
     }
 
     async fn send(&mut self, value: Value) -> Result<(), ()> {
         let text = serde_json::to_string(&value).map_err(|_| ())?;
-        self.tx.send(Message::Text(text.into())).await.map_err(|_| ())
+        self.tx
+            .send(Message::Text(text.into()))
+            .await
+            .map_err(|_| ())
     }
 
     /// One text frame in: a request, a notification, or nonsense.
@@ -179,7 +187,9 @@ impl Connection {
             Ok(r) => r,
             Err(bad) => {
                 let trace = godwinmix_protocol::trace::new_id();
-                return self.send(rpc::error_frame(&bad.id, &bad.error, &trace)).await;
+                return self
+                    .send(rpc::error_frame(&bad.id, &bad.error, &trace))
+                    .await;
             }
         };
         let id = godwinmix_protocol::trace::incoming(
@@ -230,16 +240,24 @@ impl Connection {
         // What the mosaic is asked to run at. Zero on either means "whatever
         // is configured", which is what the clamp in multiview.rs reads it as.
         self.wants_mosaic = match (&request.ext.multiview, wants_multiview) {
-            (Some(godwinmix_protocol::MultiviewExt::On { fps, width }), true) => Some(MultiviewRequest {
-                fps: fps.unwrap_or(0) as i32,
-                width: width.unwrap_or(0) as i32,
-            }),
+            (Some(godwinmix_protocol::MultiviewExt::On { fps, width }), true) => {
+                Some(MultiviewRequest {
+                    fps: fps.unwrap_or(0) as i32,
+                    width: width.unwrap_or(0) as i32,
+                })
+            }
             (_, true) => Some(MultiviewRequest::configured()),
             _ => None,
         };
-        let patterns =
-            if request.events.is_empty() { vec!["*".to_string()] } else { request.events.clone() };
-        self.sub = Some(Subscription { patterns: patterns.clone(), ext: request.ext });
+        let patterns = if request.events.is_empty() {
+            vec!["*".to_string()]
+        } else {
+            request.events.clone()
+        };
+        self.sub = Some(Subscription {
+            patterns: patterns.clone(),
+            ext: request.ext,
+        });
         self.seq = self.ctx.app.mixer.event_seq();
         // A client re-subscribing is rebuilding from nothing, so the grid it
         // was told about last time counts for nothing either.
@@ -255,14 +273,19 @@ impl Connection {
     /// The snapshot, the layout and a flush, in that order, so a client has a
     /// whole view before the first delta lands.
     async fn after_subscribe(&mut self) -> Result<(), ()> {
-        let Ok(status) = self.ctx.app.mixer.status().await else { return Ok(()) };
+        let Ok(status) = self.ctx.app.mixer.status().await else {
+            return Ok(());
+        };
         // Seed the frame clock from this read rather than waiting for the next
         // status event, so the first frame header carries a running time and a
         // layout that match what the client has just been sent.
         self.clock.observe(&Event::Status(Box::new(status.clone())));
         self.program = status.program.clone();
         self.sources = status.sources.iter().map(|s| s.id.clone()).collect();
-        let snapshot = Snapshot { seq: self.seq, state: Box::new(status.clone()) };
+        let snapshot = Snapshot {
+            seq: self.seq,
+            state: Box::new(status.clone()),
+        };
         self.send(rpc::notification(
             "event/snapshot",
             serde_json::to_value(snapshot).map_err(|_| ())?,
@@ -275,8 +298,15 @@ impl Connection {
 
     /// Tell the client about the grid, when it wants the mosaic and the grid
     /// is not the one it already has.
-    async fn send_layout(&mut self, multiview: &godwinmix_protocol::MultiviewStatus) -> Result<(), ()> {
-        if !self.sub.as_ref().is_some_and(|s| s.wants("multiview.layout")) {
+    async fn send_layout(
+        &mut self,
+        multiview: &godwinmix_protocol::MultiviewStatus,
+    ) -> Result<(), ()> {
+        if !self
+            .sub
+            .as_ref()
+            .is_some_and(|s| s.wants("multiview.layout"))
+        {
             return Ok(());
         }
         let layout = crate::control::layout_of(multiview);
@@ -285,7 +315,8 @@ impl Connection {
         }
         self.layout = layout.id;
         let value = serde_json::to_value(layout).map_err(|_| ())?;
-        self.send(rpc::notification("event/multiview.layout", value)).await
+        self.send(rpc::notification("event/multiview.layout", value))
+            .await
     }
 
     /// One event: remember what it says, then write it out if this client
@@ -297,7 +328,9 @@ impl Connection {
     async fn absorb(&mut self, envelope: Envelope) -> Result<(), ()> {
         self.seq = envelope.seq;
         self.remember(&envelope.event);
-        let Some(sub) = self.sub.as_ref() else { return Ok(()) };
+        let Some(sub) = self.sub.as_ref() else {
+            return Ok(());
+        };
         if self.meters.absorb(&envelope.event) {
             return Ok(());
         }
@@ -305,9 +338,13 @@ impl Connection {
         // removed reshuffles the mosaic, so the new grid goes out with it.
         if let Event::Status(status) = &envelope.event {
             let multiview = status.multiview.clone();
-            let snapshot = Snapshot { seq: envelope.seq, state: status.clone() };
+            let snapshot = Snapshot {
+                seq: envelope.seq,
+                state: status.clone(),
+            };
             let value = serde_json::to_value(snapshot).map_err(|_| ())?;
-            self.send(rpc::notification("event/snapshot", value)).await?;
+            self.send(rpc::notification("event/snapshot", value))
+                .await?;
             return self.send_layout(&multiview).await;
         }
         let Some((name, mut payload)) = rpc::event_name_and_payload(&envelope.event) else {
@@ -319,7 +356,8 @@ impl Connection {
         if let Some(map) = payload.as_object_mut() {
             map.insert("seq".into(), json!(envelope.seq));
         }
-        self.send(rpc::notification(&format!("event/{name}"), payload)).await?;
+        self.send(rpc::notification(&format!("event/{name}"), payload))
+            .await?;
         if name == "program.took" {
             self.send_tally().await?;
         }
@@ -350,7 +388,11 @@ impl Connection {
         }
         let mut sources = Map::new();
         for id in &self.sources {
-            let state = if Some(id) == self.program.as_ref() { "program" } else { "off" };
+            let state = if Some(id) == self.program.as_ref() {
+                "program"
+            } else {
+                "off"
+            };
             sources.insert(id.clone(), Value::String(state.into()));
         }
         let mut value = serde_json::to_value(Tally { sources }).map_err(|_| ())?;
@@ -386,8 +428,11 @@ impl Connection {
         if self.sub.is_none() {
             return Ok(());
         }
-        let value =
-            serde_json::to_value(Resync { from_seq: self.seq, dropped }).map_err(|_| ())?;
+        let value = serde_json::to_value(Resync {
+            from_seq: self.seq,
+            dropped,
+        })
+        .map_err(|_| ())?;
         self.send(rpc::notification("event/resync", value)).await?;
         self.seq = self.ctx.app.mixer.event_seq();
         self.layout = 0;
@@ -402,7 +447,9 @@ pub async fn serve_legacy(socket: WebSocket, ctx: Ctx) {
     match ctx.app.mixer.status().await {
         Ok(s) => {
             let ev = Event::Status(Box::new(s));
-            let Ok(json) = serde_json::to_string(&ev) else { return };
+            let Ok(json) = serde_json::to_string(&ev) else {
+                return;
+            };
             if tx.send(Message::Text(json.into())).await.is_err() {
                 return;
             }
