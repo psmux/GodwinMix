@@ -3428,6 +3428,7 @@ mod tests {
             outputs: vec![],
             filters: vec![],
             plugins: Default::default(),
+            source_path: Default::default(),
             tokens: vec![],
             extra: Default::default(),
         })
@@ -3462,6 +3463,7 @@ mod tests {
             outputs: vec![],
             filters: vec![],
             plugins: Default::default(),
+            source_path: Default::default(),
             tokens: vec![],
             extra: Default::default(),
         };
