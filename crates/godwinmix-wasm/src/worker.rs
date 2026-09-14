@@ -117,6 +117,10 @@ pub(crate) fn run(
     let deadline = spec.grant.deadline;
     match load(spec) {
         Ok((mut store, exports, handshake)) => {
+            // What the handshake allocated, so `plugin.list` has a number for
+            // an instance that has not been called yet rather than a zero that
+            // looks like a bug.
+            memory.store(used(&mut store), Ordering::Relaxed);
             if ready.send(Ok(handshake)).is_err() {
                 // Nobody is waiting: the caller gave up while we compiled.
                 return;
