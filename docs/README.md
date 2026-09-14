@@ -25,6 +25,7 @@ Start here if you have never run it.
 * [Run it on a Raspberry Pi](how-to/raspberry-pi.md)
 * [Choose a hardware encoder](how-to/choose-a-hardware-encoder.md)
 * [Roll an ad break](how-to/ad-breaks.md)
+* [Run the terminal UI](how-to/terminal-ui.md)
 * [Add a theme](how-to/add-a-theme.md) (planned)
 * [Write a preset](how-to/write-a-preset.md) (planned)
 * [Upgrade from LiveboxMix](how-to/upgrade-from-liveboxmix.md)
@@ -35,6 +36,7 @@ Start here if you have never run it.
 
 * [The HTTP API](reference/http-api.md)
 * [The command line](reference/cli.md)
+* [The keyboard](reference/keyboard.md)
 * [Configuration, every key](reference/configuration.md)
 * [Sources](reference/sources.md)
 * [Web page sources](reference/web-page-sources.md)

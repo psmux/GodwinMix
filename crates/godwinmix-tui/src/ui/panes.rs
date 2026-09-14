@@ -47,7 +47,7 @@ fn source_row<'a>(app: &App, index: usize, source: &'a SourceStatus, width: usiz
     let view = app.view();
     let slot = if index < 9 { format!("{} ", index + 1) } else { "  ".to_string() };
     let tally = view.tally_of(&source.id);
-    let name_width = width.saturating_sub(34).max(8);
+    let name_width = width.saturating_sub(38).max(8);
     let mut spans = vec![
         Span::styled(slot, Style::default().fg(Color::DarkGray)),
         Span::styled("● ", Style::default().fg(colour_of(source))),
