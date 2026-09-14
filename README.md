@@ -1,15 +1,163 @@
 # GodwinMix
 
 [![build](https://github.com/psmux/GodwinMix/actions/workflows/build.yml/badge.svg)](https://github.com/psmux/GodwinMix/actions/workflows/build.yml)
+[![quickstart](https://github.com/psmux/GodwinMix/actions/workflows/quickstart.yml/badge.svg)](https://github.com/psmux/GodwinMix/actions/workflows/quickstart.yml)
 
-A live RTMP video mixer. Several RTMP sources come in, one of them is on
-program at a time, and the program feed goes out to one or more RTMP
-destinations without ever stopping. Switching source is instant and does not
-disturb the outgoing stream.
+GodwinMix is a live video mixer. Several sources come in (cameras over RTMP,
+files, HLS, SRT, a web page), one of them is on programme at a time, and the
+programme goes out to one or more RTMP destinations without ever stopping, not
+even while sources are added, removed, taken or dying.
 
-Written in Rust on GStreamer. One binary, one port. Runs with a GPU or without.
+It is one Rust binary on GStreamer with one HTTP port. The same binary is the
+headless server, the command line client and the MCP server an AI agent talks
+to, and the web UI it serves is a client of the same public API as everything
+else.
 
-## The idea in one paragraph
+## Start here
+
+| If you want | Go to |
+|---|---|
+| A mixer on a server, nothing installed on the host | [Docker, headless](#docker-headless) |
+| A window on your own machine | [the desktop app](#the-desktop-app) |
+| To build it, change it, or read the code | [from source](#from-source) |
+
+### Docker, headless
+
+This puts a web page on air to an RTMP destination. It is timed in CI on every
+push, on a runner with no GPU, and the measured number is printed in the
+[quickstart job's summary](https://github.com/psmux/GodwinMix/actions/workflows/quickstart.yml).
+The claim is under five minutes on a clean machine, and if it stops being true
+that job fails.
+
+```sh
+git clone https://github.com/psmux/GodwinMix && cd GodwinMix
+
+# The mixer, plus mediamtx as a local RTMP destination so this needs no
+# stream key anywhere.
+docker compose -f deploy/docker/docker-compose.yml up -d --build
+
+export TOKEN=change-me   # what docker-compose.yml passes as GODWINMIX_TOKEN
+api() { curl -sf -X "$1" "http://localhost:8080$2" -H "Authorization: Bearer $TOKEN" \
+          -H 'content-type: application/json' ${3:+-d "$3"}; }
+
+# Where the programme goes.
+api POST /api/outputs '{"id":"primary","uri":"rtmp://rtmp:1935/live/program","policy":"own"}'
+
+# A page as a source, then take it to programme once it is live (5 to 20s).
+api POST /api/sources '{"id":"page","uri":"web+https://example.com/","name":"Page"}'
+api GET  /api/status | jq '.sources[] | {id, state}'
+api POST /api/take '{"source":"page"}'
+```
+
+Open <http://localhost:8080> for the UI and
+<http://localhost:8888/live/program> to watch what went out. To send it
+somewhere real, use your own RTMP address instead of the local one:
+
+```sh
+docker run -d --name godwinmix --shm-size 1g \
+  -p 127.0.0.1:8080:8080 -e GODWINMIX_TOKEN="$TOKEN" \
+  ghcr.io/psmux/godwinmix:latest
+```
+
+Then [deploy/README.md](deploy/README.md) for the token, a reverse proxy with
+TLS, and the firewall, before that port is reachable from anywhere else.
+
+### The desktop app
+
+Download the installer for your platform from the
+[latest release](https://github.com/psmux/GodwinMix/releases/latest): `.dmg` on
+macOS, `.msi` on Windows, `.deb` on Debian and Ubuntu. Every tag builds all
+three.
+
+GStreamer is not bundled in the installer yet and has to be installed
+separately (see [Platforms](#platforms)). Bundling a trimmed GStreamer inside
+the app is planned, with a target of a 150 MB Windows installer; the stock
+GStreamer runtime installer alone is 527 MB and should never be a user's
+problem.
+
+The app is a window onto the same web UI, local or remote, so there is no
+second implementation to keep in step. It can point at a mixer on another
+machine by changing the address.
+
+### From source
+
+```sh
+brew install gstreamer          # or your distro's gstreamer + plugins base/good/bad/ugly/libav
+cargo install --git https://github.com/psmux/GodwinMix godwinmix
+
+godwinmix --probe                              # what codecs this machine will use
+godwinmix --example-config > godwinmix.toml
+godwinmix --config godwinmix.toml
+```
+
+`cargo install` leaves two binaries with the same code behind them: `godwinmix`,
+the name a service unit and a package use, and `gmx`, the short one to type.
+`gmx ctl status` and `godwinmix ctl status` are one command. A crates.io
+release is planned; until then `--git` is the install.
+
+Open <http://localhost:8080>. Click a cell to take that camera. Number keys 1
+to 9 take directly, 0 or Escape cuts to black.
+
+To work on it rather than run it, see [CONTRIBUTING.md](CONTRIBUTING.md) and
+`dev/harness/up.sh`, which brings up an RTMP server, a synthetic camera and a
+mixer in one command.
+
+## What has been verified
+
+Tested against two independent RTMP servers, **mediamtx** and **node-media-server
+v4**, with 720p30 sources. Sources were generated with ffmpeg and the output was
+measured with ffmpeg, so the verification does not share a code path with the
+mixer's own GStreamer stack.
+
+| | result |
+|---|---|
+| takes on both servers | program output stayed at exactly 30 frames per second, min and max both 30, no gap at any take |
+| the server's own record | 1 publish event for the program path, **0 disconnects**, across repeated takes |
+| cut to slate | true black (uniform luma 16 video range) |
+| output connection killed repeatedly | one reconnect each, recovered every time, about 2s |
+| whole RTMP server killed for 15s | 12 retries with backoff, no storm; output live 5s after the server returned, sources 10s |
+| throughout all failures | 0 program pipeline errors, 0 panics, process survived |
+| both cameras dead | program output still live and decodable, showing the slate |
+| ad break, immediate and scheduled | full 8s file played (240/240 frames), 30 fps in every second, auto-return to the right camera |
+| scheduled cue accuracy | +4 ms against the requested running time (one frame is 33 ms) |
+| audio through a break | measured by spectral centroid: 440 Hz camera, 1000 Hz ad, 0 A/V mismatches across every take and break |
+| ad file missing | break refused, programme untouched, later breaks still work |
+| HLS source added at runtime | live with audio, taken to programme and back with no gap, 30 fps throughout |
+| source list across a restart | runtime additions reload from the sidecar and come back live |
+| rejected requests | duplicate id, empty id, empty URL, reserved id and missing ad file all answer 400 with the reason |
+| adding and removing outputs while live | second destination carried H.264 + AAC; programme stayed at 30 fps, largest gap 34 ms (one frame) |
+| full headless operation | every take, source, output, ad and media operation driven from `ctl` with no desktop app running |
+| adding or removing a source at runtime | no gap, largest inter-frame interval 34 ms (one frame at 30 fps) |
+| multiview over WebSocket | 8.0 fps, 22.7 KB/frame, about 1.5 Mbit/s |
+
+123 unit tests, including a regression for every bug found during that testing.
+They build real GStreamer pipelines; there are no mocks.
+
+* **Superimpose on air, indistinguishable from the whole page.** A demo page
+  with three videos (a lead clip with sound and two muted sidebar clips) was
+  taken to programme with `superimpose = "auto"`. All three played in place,
+  the header, clock, captions, sidebar labels and body text stayed visible over
+  them, and the lead clip's sound came through at its own level. On this Mac the
+  browser side of that page fell from about 130% CPU rendering the whole page to
+  about 28% superimposed, with the three decodes moving to the hardware decoder.
+* **Browser source at full quality.** The CEF sidecar's raw frames arrive on air
+  sample for sample (background Y 35, orange 146, white 235 in capture and
+  programme), after fixing the colorimetry drift described under Colour.
+
+### RTMP client interoperability
+
+GStreamer ships two RTMP client implementations and they do not work with the
+same servers. Against node-media-server, `rtmp2src` connects, is accepted by the
+server, and then delivers **nothing at all**, with no error: 0 buffers where the
+librtmp based `rtmpsrc` delivered 250 from the same stream. ffmpeg reads that
+same stream fine, so it is a client problem, not a server one.
+
+Because the failure is silent, `rtmp_client = "auto"` starts with the modern
+client and switches once after six seconds without media. Pin `rtmp2` or
+`librtmp` per source to skip the wait. The publish direction (`rtmp2sink`) works
+with both servers and is not affected.
+
+## How it works
 
 An RTMP output has to look like a single unbroken stream: monotonic timestamps,
 no gaps, codec parameters that never change. So the output encoder is started
@@ -18,7 +166,7 @@ broadcast happens upstream of it, in raw video and raw audio, where switching
 source is a property change on a compositor pad. The encoder cannot tell that
 anything happened, so nothing downstream reconnects.
 
-## Architecture
+### The pipeline
 
 ```
  source 1 ──┐ own pipeline                      program pipeline
@@ -55,78 +203,6 @@ program side of the proxy boundary, so it survives a reconnect that rebuilds the
 output pipeline. It leaks downstream rather than blocking, so a slow destination
 cannot apply backpressure to the encoder that every other output shares.
 
-## What has been verified
-
-Tested against two independent RTMP servers, **mediamtx** and **node-media-server
-v4**, with 720p30 sources. Sources were generated with ffmpeg and the output was
-measured with ffmpeg, so the verification does not share a code path with the
-mixer's own GStreamer stack.
-
-| | result |
-|---|---|
-| takes on both servers | program output stayed at exactly 30 frames per second, min and max both 30, no gap at any take |
-| the server's own record | 1 publish event for the program path, **0 disconnects**, across repeated takes |
-| cut to slate | true black (uniform luma 16 video range) |
-| output connection killed repeatedly | one reconnect each, recovered every time, about 2s |
-| whole RTMP server killed for 15s | 12 retries with backoff, no storm; output live 5s after the server returned, sources 10s |
-| throughout all failures | 0 program pipeline errors, 0 panics, process survived |
-| both cameras dead | program output still live and decodable, showing the slate |
-| ad break, immediate and scheduled | full 8s file played (240/240 frames), 30 fps in every second, auto-return to the right camera |
-| scheduled cue accuracy | +4 ms against the requested running time (one frame is 33 ms) |
-| audio through a break | measured by spectral centroid: 440 Hz camera, 1000 Hz ad, 0 A/V mismatches across every take and break |
-| ad file missing | break refused, programme untouched, later breaks still work |
-| HLS source added at runtime | live with audio, taken to programme and back with no gap, 30 fps throughout |
-| source list across a restart | runtime additions reload from the sidecar and come back live |
-| rejected requests | duplicate id, empty id, empty URL, reserved id and missing ad file all answer 400 with the reason |
-| adding and removing outputs while live | second destination carried H.264 + AAC; programme stayed at 30 fps, largest gap 34 ms (one frame) |
-| full headless operation | every take, source, output, ad and media operation driven from `ctl` with no desktop app running |
-| adding or removing a source at runtime | no gap, largest inter-frame interval 34 ms (one frame at 30 fps) |
-| multiview over WebSocket | 8.0 fps, 22.7 KB/frame, about 1.5 Mbit/s |
-
-123 unit tests, including a regression for every bug found during that testing.
-
-* **Superimpose on air, indistinguishable from the whole page.** A demo page
-  with three videos (a lead clip with sound and two muted sidebar clips) was
-  taken to programme with `superimpose = "auto"`. All three played in place,
-  the header, clock, captions, sidebar labels and body text stayed visible over
-  them, and the lead clip's sound came through at its own level. On this Mac the
-  browser side of that page fell from about 130% CPU rendering the whole page to
-  about 28% superimposed, with the three decodes moving to the hardware decoder.
-* **Browser source at full quality.** The CEF sidecar's raw frames arrive on air
-  sample for sample (background Y 35, orange 146, white 235 in capture and
-  programme), after fixing the colorimetry drift described under Colour.
-
-### RTMP client interoperability
-
-GStreamer ships two RTMP client implementations and they do not work with the
-same servers. Against node-media-server, `rtmp2src` connects, is accepted by the
-server, and then delivers **nothing at all**, with no error: 0 buffers where the
-librtmp based `rtmpsrc` delivered 250 from the same stream. ffmpeg reads that
-same stream fine, so it is a client problem, not a server one.
-
-Because the failure is silent, `rtmp_client = "auto"` starts with the modern
-client and switches once after six seconds without media. Pin `rtmp2` or
-`librtmp` per source to skip the wait. The publish direction (`rtmp2sink`) works
-with both servers and is not affected.
-
-## Quick start
-
-```sh
-brew install gstreamer          # or your distro's gstreamer + plugins base/good/bad/ugly/libav/rs
-cargo build --release
-
-./target/release/godwinmix --probe            # what codecs will be used here
-./target/release/godwinmix --example-config > godwinmix.toml
-./target/release/godwinmix --config godwinmix.toml
-```
-
-The build leaves two binaries with the same code behind them: `godwinmix`, the
-name a service unit and a package use, and `gmx`, the short one to type.
-`gmx --config godwinmix.toml` is the line above.
-
-Open `http://localhost:8080`. Click a cell to take that camera. Number keys 1
-to 9 take directly, 0 or Escape cuts to black.
-
 ## Platforms
 
 Linux, macOS and Windows, the same code on all three. The mixer, its tests and
@@ -136,7 +212,7 @@ behind as artifacts. What differs by platform:
 
 | | GStreamer | hardware codecs | browser sidecar | desktop app |
 |---|---|---|---|---|
-| Linux | distro packages | NVIDIA, VA | native, with H.264 from a prebuilt CEF (see Codecs) | `.deb`, AppImage |
+| Linux | distro packages | NVIDIA, VA | native, with H.264 from a prebuilt CEF ([codecs](docs/reference/web-page-sources.md)) | `.deb`, AppImage |
 | macOS | `brew install gstreamer` | VideoToolbox | `.app` bundle from `browser/dev/mac-bundle.sh`, or the Linux one in a container | `.app` |
 | Windows | the MSVC runtime and development MSIs from gstreamer.freedesktop.org, or `choco install gstreamer gstreamer-devel`; put `C:\gstreamer\1.0\msvc_x86_64\bin` on `PATH` | Media Foundation, NVIDIA | `godwinmix-browser.exe` next to the mixer, from `cd browser; cargo build --release` | `.msi`, NSIS |
 
@@ -169,41 +245,10 @@ what you want on a server you control. Every property is set defensively:
 backends disagree about names, units and integer widths, and a property that
 does not exist on one of them is a logged warning rather than a crash.
 
-## HTTP API
+## What it can mix
 
-| | |
-|---|---|
-| `GET /api/status` | full snapshot |
-| `GET /api/media` | ad clips found in the configured library |
-| `POST /api/take` | `{"source": "cam1"}`, or `{"source": null}` for black |
-| `POST /api/sources` | add a source at runtime: `{"id","uri","name","kind","superimpose"}` |
-| `DELETE /api/sources/{id}` | remove one |
-| `POST /api/sources/{id}/audio` | `{"gain","muted"}` on any source; `{"page","media"}` only on a superimposed one, 409 otherwise. Every field optional, and only what is named moves. Answers with every value read back off the elements |
-| `POST /api/adbreak` | `{"uri": "/path/to/ad.mp4"}`, optional `at_running_time_ms` and `return_to` |
-| `POST /api/adbreak/end` | cut the ad short and return early |
-| `GET /api/outputs` | destinations and their state |
-| `POST /api/outputs` | add a destination: `{"id","uri","policy"}` |
-| `DELETE /api/outputs/{id}` | stop sending to one |
-| `POST /api/outputs/{id}/reconnect` | force a reconnect |
-| `POST /api/shutdown` | stop the mixer; what the desktop app's "Quit and stop the mixer" sends |
-| `GET /api/agent/state` | the state a language model needs, compact: programme, sources with motion and audio, outputs, snapshot URLs |
-| `GET /api/snapshot/sheet.jpg` | every source and the programme in one mosaic JPEG; `?width=N` scales it |
-| `GET /api/snapshot/program.jpg` | the programme alone |
-| `GET /api/snapshot/{source_id}.jpg` | one source alone |
-| `POST /api/golive` | `{"url", "rtmp", "superimpose", "id"}`: add a page as a source, add the destination, take it once live; answers 202 |
-| `GET /ws` | JSON events and state, plus mosaic JPEGs as binary frames |
-
-A scheduled take takes `at_running_time_ms`, armed on the pipeline clock so it
-lands on the intended frame rather than whenever the request happened to arrive.
-
-With `[control] token` set (or `GODWINMIX_TOKEN` in the environment) every
-request carries `Authorization: Bearer <token>`. `GET` requests and the
-WebSocket also accept `?token=`, so an `<img>` tag can fetch a snapshot.
-
-## Sources
-
-Add and remove sources from the UI, or over the API. The protocol is worked out
-from the URL, so there is nothing to configure beyond the address:
+The protocol is worked out from the URL, so there is nothing to configure
+beyond the address:
 
 | URL | opened as |
 |---|---|
@@ -211,795 +256,186 @@ from the URL, so there is nothing to configure beyond the address:
 | `https://host/stream.m3u8` | HLS |
 | `https://host/manifest.mpd` | DASH |
 | `rtsp://…`, `srt://…`, `udp://…`, `rtp://…` | continuous stream |
-| `web+https://host/page`, `web://host/page` | the page rendered by a real Chromium, with its audio, see the browser sidecar |
-| `exec:<command line>` | whatever the process writes to stdout, including `tools/browser-source.sh` |
+| `web+https://host/page` | the page rendered by a real browser, with its audio |
+| `exec:<command line>` | whatever the process writes to stdout |
 | a path, `file://…`, `https://host/clip.mp4` | file |
 
-The distinction that matters is continuous versus finite rather than the
-protocol. A continuous source is re-timed onto programme time and restarted when
-it drops; a finite one is expected to end.
+[docs/reference/sources.md](docs/reference/sources.md) is the detail: what
+happens when a source stops delivering, how `exec:` sources work, and the
+supervisor's restart and backoff rules.
+[docs/reference/web-page-sources.md](docs/reference/web-page-sources.md) is the
+browser, including `superimpose`, which hands a page's video to the mixer's own
+hardware decoder and leaves the browser drawing only the page over it.
 
-Sources added or removed from the UI are written to `<config>.runtime.toml`
-beside the config file. Once that file exists it is the authoritative list:
-merging it with the config's own `[[sources]]` would mean a source deleted in the
-UI reappearing at the next restart. Delete the file to go back to the config.
+## Driving it
 
-### When a source stops delivering
-
-The supervisor watches every source's own output. A source that has produced
-nothing for `stall_timeout_secs` reads as stalled; one that stays stalled for
-`stall.restart_after_secs` (10 by default) has its pipeline restarted, and a
-superimposed source, which cannot be restarted in place, is built again from
-nothing: page probe, clip fetch, browser start, about ten seconds.
-
-Two things about that, both learned on air on 2026-09-11 and 2026-09-12, when a
-superimposed source started coming up dead and was rebuilt 485 times one night
-and 1174 the next.
-
-**The programme keeps its picture.** A rebuild removes the source, and removing
-the source that is on programme used to take the programme to None, so the
-output sat on the slate for as long as the rebuild took. The branch is now left
-in the programme pipeline with its compositor pad still at alpha 1, under the
-programme layer and over the slate: a compositor keeps drawing a pad's last
-buffer for as long as the pad is there, so that is a freeze frame with no
-element added and no picture copied. Measured on a Mac with the mosaic's
-programme cell: before the kill the picture read mean luma 39 and changed every
-frame; through the whole rebuild it read exactly 22.35, byte for byte the same
-JPEG each time; when the hold ran out it dropped to 16, which is video black.
-The hold is released as soon as the replacement is taken, or after 45 seconds,
-after which the programme does go to the slate and an alert says so.
-
-**The loop ends.** Rebuilding is free for the first `stall.rebuild_attempts`
-consecutive failures (3) and then waits `stall.rebuild_backoff_secs` (30),
-doubling to `stall.rebuild_backoff_max_secs` (300), with an alert on the UI for
-each wait. Two hours of that is under 40 attempts rather than 600. The count is
-cleared the moment the source delivers a frame, so a source that recovers is
-back on the fast path at once, and it is cleared when the source is removed,
-because the ids are reused: a director alternating `event-a` and `event-b` one
-per match must not have one match's failures charged to the next.
-
-Every rebuild used to leak. The browser sidecar names its private profile
-directory after its own pid and removes it when its message loop ends, which a
-killed sidecar never reaches: 1084 directories and 18 GB of a container's /tmp.
-The mixer removes it now, wherever it kills a sidecar. Two descriptors a build
-went the same way: the read end of the child's stdout, handed to `fdsrc` with
-`into_raw_fd` and never closed again, and the read end of its stderr, held by a
-reader thread that never saw an end of file because Chromium's helper processes
-inherit the write end and outlive the kill. And when the mixer is PID 1 in its
-container it inherits every orphan on the box, which was 19,138 zombies after
-two hours; it reaps them itself now, so the container is correct with or
-without an init.
-
-When a source is judged stalled, again just before it is rebuilt, and once when
-its first picture arrives, the mixer writes down where that source's last
-buffers sat on the programme's timeline: their running time, the programme's
-own, the difference, and the fill of the programme-side queues `pgm-vq-<id>`
-and `pgm-aq-<id>`. A probe on each proxy sink keeps the last running time in an
-atomic, so nothing is logged per buffer. `video_behind_ms` is the number to
-read: positive means the buffer was behind the programme, which is ordinary,
-and negative means it was in the programme's future, which is the fault, since
-a compositor holds what it is not ready to consume, the pad queue then fills and
-the push into it never returns. Measured here on a Mac, a healthy build and a
-blocked one side by side:
-
-```
-why="first picture"    video_behind_ms=70     vq_buffers=0   vq_time_ms=0
-why="about to rebuild" video_behind_ms=-2427  vq_buffers=30  vq_time_ms=1000  aq_buffers=100
-```
-
-A source that has merely stopped producing looks different again: behind by
-seconds and with nothing queued at all, which is what a suspended browser gives.
-
-Measured on a Mac over 30 add and remove cycles of a superimposed web page:
-open descriptors, pipes, regular files, cached clips and profile directories
-all flat, with memory steady. Two caveats found while measuring, both macOS
-only. VideoToolbox's decoder leaks a pipe pair per instance, which shows as two
-descriptors a build for any source it decodes, a plain mp4 file included, and
-goes away with `hardware.decode = "software"`. And every input pipeline used to
-make its own `GstGLDisplay` and never free it, 31 `gldisplay-event` threads
-after 34 cycles; the bus watch now answers `need-context` with the first
-display any pipeline made, which is what GStreamer says an application hosting
-several pipelines should do.
-
-### Anything as a source
-
-`exec:` makes a source out of a command line. The process writes a container to
-stdout, MPEG-TS being the usual choice, and the mixer demuxes and decodes it
-through the same hardware-aware path as everything else. That means an `exec:`
-source is GPU accelerated on a machine with a GPU and falls back to software on
-one without, with no change to the command.
+Everything the UI can do is one HTTP call, and `gmx ctl` is a thin client for
+the same API so scripting it does not mean assembling JSON by hand.
 
 ```sh
-godwinmix ctl source add gen \
-  "exec:ffmpeg -re -f lavfi -i testsrc2=size=1280x720:rate=30 \
-   -f lavfi -i sine=frequency=440 -c:v libx264 -preset veryfast -tune zerolatency \
-   -c:a aac -ar 48000 -ac 2 -f mpegts -"
+gmx ctl status
+gmx ctl take cam2                       # or: take   (with no id, cuts to black)
+gmx ctl source add hls1 https://host/stream.m3u8 --name "Roof camera"
+gmx ctl output add youtube rtmp://a.rtmp.youtube.com/live2/KEY --policy cdn
+gmx ctl golive https://example.com/event/42 --rtmp rtmp://a.rtmp.youtube.com/live2/KEY
 ```
 
-This is the escape hatch for everything GStreamer does not do well. ffmpeg
-filters, a capture tool with no GStreamer element, a Python script, a
-purpose-built browser binary: if it can write to a pipe, it is a source. A
-command that exits is restarted, so a finite input loops.
-
-**It is off by default and must be enabled deliberately:**
-
-```toml
-[security]
-allow_exec_sources = true
-```
-
-An `exec:` source is arbitrary code execution for anyone who can reach the
-control port, which is a far bigger grant than "can switch cameras". Only turn
-it on when that port is on a network you trust.
-
-Two things this got wrong during development, both worth knowing if you write a
-similar bridge. Do not set `do-timestamp` on `fdsrc`: the process is writing a
-container, and stamping buffers with their arrival time before the demuxer sees
-them destroys the timing the container carries, which showed up as a source that
-ran for a few seconds and then stalled. And kill the child on stop and restart,
-or a rebuilt pipeline leaves an orphan writing into a pipe nobody reads.
-
-### Browser capture
-
-A real Chromium renders the page on a virtual display while its audio plays into
-a null sink that gets recorded alongside. Everything Chrome can do works,
-including DRM players, WebGL and WebAudio, which is the reason for using a whole
-browser rather than a lighter renderer.
-
-```sh
-godwinmix ctl source add site \
-  "exec:/opt/godwinmix/tools/browser-source.sh https://example.com/page 1280 720 30"
-```
-
-Needs `xvfb`, `chromium`, `pulseaudio` and `ffmpeg`, and `security.allow_exec_sources`.
-Linux only, which is where production runs; workstations drive it remotely.
-
-It costs one encode in the script and one decode in the mixer. That round trip
-is the price of the process boundary, and it buys the thing that matters here:
-a browser crash cannot reach the encoder, exactly like a dead camera cannot.
-
-**GPU is optional and needs no change.** Chromium falls back to software
-rendering by itself, and decoding in the mixer goes through the usual
-hardware-aware path. Where a GPU is present, pass it through:
-
-```sh
-CHROME_FLAGS="--enable-gpu --use-gl=egl" VIDEO_BITRATE=8000k browser-source.sh ...
-```
-
-Tuning knobs, all environment variables: `CHROME_BIN`, `CHROME_FLAGS`,
-`VIDEO_BITRATE`, `X264_PRESET`, `BROWSER_SOURCE_SETTLE` (seconds to let the page
-lay out before the first frame), `BROWSER_SOURCE_DISPLAY`.
-
-Verified in a Debian container with no GPU: valid MPEG-TS on stdout, H.264
-1280x720 with AAC 48 kHz, 413 video frames, and an audio spectral centroid of
-673 Hz against the test page's 660 Hz WebAudio tone, so the sound is genuinely
-the page's rather than silence. Signalling the process group leaves zero
-chromium and zero Xvfb processes behind.
-
-Two bugs found getting there, both worth knowing if you write a similar script.
-Do not `exec` the final ffmpeg: it replaces the shell and discards the cleanup
-trap, so the browser and X server outlive the source and every add or remove
-leaks a Chromium. And `Child::kill` sends SIGKILL to one process, which a script
-cannot trap and which orphans its children, so the mixer starts exec sources in
-their own process group and signals the group.
-
-### Web pages as sources: the browser sidecar
-
-Adding a page by URL renders it in a real Chromium and puts what it draws and
-plays on the canvas like any other source. No tricks with screen capture, no
-encoder in between.
-
-Three ways a page can reach the canvas, from most to least expensive:
-
-1. **The sidecar renders the whole page.** What every `web+` source does when
-   `godwinmix-browser` is found. Works everywhere, and a page playing video
-   costs about a CPU core, because Chromium decodes the video in software and
-   repaints the whole page around it thirty times a second.
-2. **A renderer inside GStreamer, or a screen grab.** Without a sidecar the
-   mixer falls back to `wpesrc`, and there is the older `browser-source.sh`
-   under `exec:`. Both Linux only. See the sections above and below.
-3. **Superimpose.** The sidecar finds the video the page is playing, the mixer
-   decodes that itself on the GPU, and the browser draws only the page over it,
-   transparent where the video was. Opt in, per source, and the cheap one. See
-   "Handing the video over" below.
-
-In the UI, "Add a source" starts on **Website**: paste the address as it is
-in your browser's address bar and click Add. The type lights up by itself
-from what was pasted (an `rtmp://` or `.m3u8` address switches to "Camera or
-stream"), the name defaults to the site's host, and the id is derived from
-the name. Nobody types a prefix. The same holds for the API and the CLI:
-
-```sh
-godwinmix ctl source add - https://www.youtube.com/watch?v=aqz-KE-bpKQ --web --name YouTube
-godwinmix ctl take youtube
-curl -X POST localhost:8080/api/sources -H 'content-type: application/json' \
-  -d '{"uri":"https://www.youtube.com/watch?v=aqz-KE-bpKQ","kind":"web","name":"YouTube"}'
-
-# Let the mixer decode the page's own video where it can. See superimpose below.
-godwinmix ctl source add game https://example.com/live-game --web --superimpose auto
-curl -X POST localhost:8080/api/sources -H 'content-type: application/json' \
-  -d '{"uri":"https://example.com/live-game","kind":"web","superimpose":"auto"}'
-```
-
-`kind: "web"` (or `--web`) says "this is a website"; `id` may be omitted and
-is then derived from the name or host, made unique with a suffix. The
-`web+https://…` form still works everywhere and is what the mixer stores.
-Two things about sites: players that autoplay start on their own (the
-browser is told no gesture is needed); a player that waits for a click shows
-its poster. And YouTube's `/embed/` URLs refuse to load as a top level page
-(Error 153); paste the normal `/watch?v=` address.
-
-`superimpose` is described further down. It is `"off"` unless you ask for it,
-and a source that is not a website accepts the field and never looks at it.
-
-`browser/` holds the renderer, `godwinmix-browser`. It embeds Chromium
-through CEF with off screen rendering: Chromium paints each frame into memory
-and hands the audio over as float PCM through its audio handler. The frames
-leave the process as raw I420 and the audio as 48 kHz float, in a Matroska
-stream on stdout, and the mixer reads that as an `exec:` source. The page's
-content reaches the programme encoder sample for sample: on air the test
-page measures black 16, white 235, exactly what it painted.
-
-The mixer runs it for every `web+` source when it can find it: at
-`browser.sidecar` in the config, else next to its own executable (as
-`godwinmix-browser` on Linux, `godwinmix-browser.app` on macOS), else on
-`PATH`. Without one, `web+` falls back to GStreamer's `wpesrc`, described
-below. `[browser]` also takes extra `args` and `env` for the sidecar.
-
-```toml
-[browser]
-# sidecar = "/opt/godwinmix/godwinmix-browser"
-# args = ["--audio-offset-ms", "0"]
-# env = { GMX_BROWSER_SWITCHES = "enable-gpu" }
-```
-
-#### Finding the media a page is playing
-
-`--detect-media` injects a small script that watches the page and reports what
-it is really playing, on stderr, once per change:
-
-```
-[browser] media {"found":true,"count":3,"tag":"video",
-                 "src":"http://host/lead.mp4","usable":true,"mse":false,
-                 "drm":false,"paused":false,"rect":{"x":50,"y":80,"w":890,"h":501},
-                 "intrinsic":{"w":960,"h":540},"viewport":{"w":1280,"h":720},
-                 "media":[ {"index":0,"src":"http://host/lead.mp4","muted":false,...},
-                           {"index":1,"src":"http://host/side1.mp4","muted":true,...},
-                           {"index":2,"src":"http://host/side2.mp4","muted":true,...} ]}
-```
-
-The top-level fields describe the first video, for readers that only want one;
-`media` is the full list, one entry per `<video>` on the page, each with its own
-`rect`, `usable`, `muted` and the rest. `superimpose` acts on the whole list.
-
-`usable` is the field that matters: it says a decoder outside the browser could
-open this URL. That is the case for a plain `<video src>` and for an HLS or DASH
-address, and it is not the case for the two things worth knowing about:
-
-* **Media Source Extensions.** The page feeds segments to the decoder from
-  JavaScript and the element's `src` is a `blob:` URL that only exists inside
-  that renderer. YouTube works this way, and reports `"mse":true`.
-* **Encrypted Media Extensions.** Frames are decrypted inside the browser and
-  by design never leave it. Reports `"drm":true`.
-
-`rect` is where the element sits in the viewport and `intrinsic` is the coded
-size the decoder would produce, both of which the mixer needs to put a directly
-decoded picture exactly where the page had it.
-
-#### Handing the video over: `superimpose`
-
-`--detect-media` only reports. `superimpose` is the per-source option that acts
-on the report, in the config file, over the API, or from the CLI:
-
-```toml
-[[sources]]
-id = "game"
-uri = "web+https://example.com/live-game"
-superimpose = "auto"   # "off" is the default and is what every web source did before
-```
-
-`auto` means: when the page's media has an address a decoder can open, the
-mixer decodes it on the GPU like any other source and the browser draws only
-the page over the top, transparent where the video was. `off` renders the
-whole page in the browser.
-
-Every `<video>` on the page is handed over, not just one. A page with a lead
-clip and two sidebar clips has all three decoded by the mixer, each placed at
-the rectangle the page gave it, each looped or streamed on its own, and the
-lead clip's sound mixed in while the muted ones stay muted, exactly as the
-page had them. The page is drawn over all of them at once.
-
-What the page draws over its videos survives the hand-over. A caption, a
-lower third, a logo, a headline, an animation: anything the page paints on top
-of a video, at any transparency, comes through as it looked in the browser.
-The page paints a key colour where each taken-over video sat, and the sidecar
-both removes that key and recovers the real colour of whatever the page
-blended over it, so a caption's dark gradient or a control's soft edge is not
-lost with the key. The one thing it cannot keep is page content that is itself
-the key colour, a near-pure magenta, which is taken for the key; nothing else
-is affected. The intent is that a viewer cannot tell a superimposed page from
-the same page rendered whole.
-
-The saving is the reason to bother. A page playing video costs about a whole
-CPU core. Chromium decodes every frame in software, repaints the page around
-it, and the result crosses to the mixer as raw frames, which is three jobs to
-put one video on the canvas. Decoding that video on the GPU and painting a
-nearly static page over it is a fraction of the same work.
-
-It does not always apply, and `auto` falls back rather than failing:
-
-* Media Source Extensions. The page feeds its player from JavaScript and the
-  element's `src` is a `blob:` URL that exists only inside that renderer, so
-  there is no address to hand over. **YouTube is MSE**, and so are most
-  streaming sites. Those keep rendering in the browser and cost what they
-  always cost.
-* DRM. Frames are decrypted inside the browser and by design never leave it.
-* A page with no media element at all, which is most pages, and which is why
-  `off` remains the default.
-
-The trade-off where it does apply is the page's own player UI. The element the
-mixer takes over is paused as well as hidden, because hiding alone leaves
-Chromium decoding every frame into a surface nobody looks at and the decode is
-the whole cost. Paused means the page's progress bar stops filling and its
-running time stops counting, while the video itself, now the mixer's, plays
-normally. On a page whose player chrome is part of what you are broadcasting,
-leave this `off`.
-
-How it happens, because three of the details show:
-
-* **Adding takes a few seconds longer.** The page is loaded once first, just to
-  ask what it plays, and the source is built only when the answer is in. That
-  took 1 to 6 seconds against the local pages when the video was found, less
-  when the page said straight away that its video cannot be handed over (MSE,
-  DRM), and up to 20 when there was nothing to find. It runs on its own
-  thread, so the API and the UI keep answering meanwhile; only the add call
-  itself waits.
-* **The page's video is looped by the mixer.** A page that loops a background
-  video does it in the browser, and the browser's copy is now paused, so the
-  mixer loops its own copy. A clip is fetched once to a temporary file when
-  the source is added, so going round again costs an open and a decoder start
-  rather than a connection and an index read, and the join does not show. A
-  stream (HLS, DASH, or anything still arriving after 60 seconds) is played
-  from its address and never loops; one that ends leaves the page over its
-  last frame.
-* **The page draws at `browser.overlay_fps`, default 10,** not the canvas rate.
-  It is drawing chrome, not video, and its frames now carry an alpha channel at
-  4 bytes a pixel against I420's 1.5: a 720p page at 30 fps measured 110 MB/s
-  down a pipe that carries 41 MB/s for an ordinary source, and 36.9 MB/s at 10.
-  The compositor holds the last page frame between updates, so the output still
-  leaves at the canvas rate with the video moving underneath. Raise it for a
-  page with real animation in it, and expect to pay for that.
-
-If the sidecar runs in a container through `browser/dev/sidecar-docker.sh`,
-the mixer must be able to open the media address the page reports. That is
-automatic when both run on one machine, which is the production arrangement.
-On a laptop with Docker in a VM, a page reached as `host.docker.internal` hands
-back a `host.docker.internal` media URL that the host itself cannot resolve; use
-an address both sides can reach.
-
-Since the fallback is silent, the mixer reports what actually happened rather
-than what was asked for. `GET /api/status` carries `superimposed` on every
-source, `godwinmix ctl status` and `ctl source list` mark those sources
-`(superimposed)`, and the UI puts a green `direct` badge on the row. A website
-source set to `auto` with no badge is working normally; it simply had nothing
-to give.
-
-Building it. Linux: `cd browser && cargo build --release`, which downloads the
-CEF distribution and stages it next to the binary (`CEF_PATH` picks where the
-download is cached); the binary finds the libraries and resources next to
-itself, no `LD_LIBRARY_PATH`. It needs an X display to start against even
-though nothing is drawn on it, `Xvfb :99` is enough, and nothing else: no
-PulseAudio, no sound card. macOS: `browser/dev/mac-bundle.sh` builds the app
-bundle CEF requires there (framework plus one helper app per Chromium process
-type, ad hoc signed). The mixer launches the binary inside the bundle.
-
-Runs with or without a GPU. Chromium rasterises in software by default here
-(`--disable-gpu`); the switches Chromium is started with can be extended
-with `GMX_BROWSER_SWITCHES="a,b=c"` in the sidecar's environment.
-
-**Codecs.** Everything Chromium does: WebAudio, WebGL, canvas, HTML5 video
-in VP8, VP9, AV1 and Opus. H.264 and AAC depend on which CEF binary sits
-next to the sidecar. The official CEF binaries the crate downloads are built
-without them, for patent licensing reasons, and a `<video>` with an H.264
-file then reports `MEDIA_ERR_SRC_NOT_SUPPORTED` (checked with
-`browser/test/video-mp4.html`). So the sidecar is built against a CEF that
-has them:
-
-* **Linux, x86_64 and arm64: a prebuilt distribution with codecs.** The
-  [Karere](https://github.com/tobagin/karere/releases) project publishes
-  standard CEF minimal distributions built with `proprietary_codecs=true`,
-  for `linux64` and `linuxarm64`, and the `cef` crate has a release for the
-  same CEF version. `browser/Cargo.toml` pins both `cef` and `cef-dll-sys` to
-  `=150.0.0`, which is CEF 150.0.10; `browser/dev/install-cef-dist.sh` puts
-  the downloaded archive where the crate looks, in the layout the crate's own
-  downloader produces, and `cargo build` then links against it instead of
-  fetching the official one. Nothing else changes: same binary layout, same
-  Debian based image, same `exec:` source.
-
-  ```sh
-  gh release download cef-150.0.10-proprietary-codecs -R tobagin/karere --pattern '*linux64*'
-  browser/dev/install-cef-dist.sh cef_binary_150.0.10+*_linux64_minimal.zip ~/.cache/gmx-cef
-  cd browser && CEF_PATH=~/.cache/gmx-cef cargo build --release
-  ```
-
-  Verified on the plain Debian image (arm64): the H.264/AAC `<video>` page
-  plays, six flashes and five beeps found in a 12 s capture, audio +29 ms
-  (+18 to +38), and the other pages unchanged (WebAudio +9 ms, VP9 video
-  −3 ms). Shutdown on SIGTERM still 500 ms with nothing left behind.
-
-  Both crates are pinned because the sys crate is the one that downloads and
-  checks the distribution, and its own version metadata names the CEF
-  version; with only `cef` pinned, cargo picked a newer sys crate and quietly
-  fetched the codec-less 150.0.14.
-* **Linux x86_64, alternative: Arch Linux's `cef` package**, also built with
-  proprietary codecs. `browser/dev/Dockerfile.arch` and
-  `browser/dev/linux-arch-codecs.sh` build against it, and
-  `Dockerfile.arch-runtime` plus `sidecar-docker.sh` package the result as a
-  container the mixer runs through Docker (the wrapper forwards the stop
-  signal; the container is gone 0.9 s after `source remove`;
-  `GMX_SIDECAR_LOG=<file>` in `browser.env` keeps the sidecar's log). The
-  wrapper runs the container with `--log-driver none`, and that is not
-  optional: Docker's default log driver copies everything a container writes
-  to stdout into a JSON file on disk, so each sidecar's 41 MB/s of raw video
-  was also being written to the VM's disk. It filled 30 GB in minutes, the
-  players inside stalled on the full disk, and the symptom on air was a frozen
-  picture with silent audio and a container using a fifth of a core. With the
-  driver off the same two sites play with sound, zero dropouts, 65 percent of
-  a core each.
-  `browser/dev/Dockerfile.runtime` builds the same kind of container from the
-  drop-in distribution above, which is what a macOS workstation uses to get
-  the codecs today. Give the Linux VM CPU: on this laptop a 4 vCPU VM starved
-  the sidecar under a 720p30 H.264 page (irregular frames, 21 audio dropouts
-  in 15 s); with 8 vCPUs the same page went to air clean, six of six flashes
-  and beeps, audio −28 ms, no dropouts. The sidecar logs every dropout as
-  `audio re-anchored`, so a starved box shows itself. It also shows the
-  ceiling of a VM on a laptop: the YouTube watch page (VP9 or AV1 at 60 fps,
-  decoded in software) rendered and played with sound in that 8 vCPU VM, but
-  with 32 dropouts in 25 s and a stuttering picture. That is CPU, not the
-  sidecar: the same page on a Linux server runs natively with the whole
-  machine, and with a GPU Chromium can be given hardware decoding
-  (`GMX_BROWSER_SWITCHES="enable-features=VaapiVideoDecoder"` without
-  `disable-gpu`, untested here). On a Mac, the native codec-less `.app` plays
-  YouTube smoothly, because YouTube does not need H.264. Verified the
-  same way: the H.264/AAC page on air through the mixer at 30.0 fps, six of six
-  flashes and beeps, audio +17 ms, black 16, white 235. It is more moving
-  parts than the drop-in distribution, and its `libcef.so` links Arch's
-  system libraries, so it only runs in an Arch based image.
-* **macOS and Windows: build CEF with codecs.** Nobody publishes those.
-  `browser/dev/build-cef-codecs.sh` is CEF's own automated build pinned to the
-  crate's exact commit with `proprietary_codecs=true ffmpeg_branding=Chrome`.
-  It is a Chromium build: hours, 100 GB of disk. Until then a workstation
-  runs the containerised Linux sidecar through Docker, which is what the Arch
-  route above was measured with, from this Mac.
-
-Shipping a software H.264 or AAC decoder is what the licensing is about;
-that is a decision for whoever distributes the build, not something the code
-can settle.
-
-**Sync.** Video and audio are stamped against one clock in the sidecar: a
-frame with the pacer tick that sends it, an audio packet with the presentation
-time Chromium attaches to it. Getting there took measuring: the obvious
-scheme, arrival time for audio and the previous tick for video, put audio
-60 ms late. `browser/test/sync.html` flashes and beeps together every two
-seconds, scheduled on the page's audio clock, `video-webm.html` plays a
-`<video>` with the pattern baked in, and `browser/dev/measure-sync.py` reads
-where the flashes and beeps land in any capture.
-
-Measured, sidecar alone: Linux, WebAudio page, mean +14 ms (range −29 to
-+79, one frame); Linux, VP9 video, −4 ms (−13 to +2); macOS, WebAudio page,
-−10 ms (−20 to +30); macOS, VP9 video, +5 ms (−5 to +15). Positive is audio
-late. `--audio-offset-ms` exists for a page where a measurement says
-otherwise.
-
-On air through the mixer the first result was +44 ms, and a known good file
-through an `exec:` source gave the same, so the mixer was adding it. It was
-the AAC encoder: fdkaacenc leaves its 2048 samples of priming delay in the
-timestamps (43 ms), avenc_aac 1024 (21 ms), measured in
-`browser/dev/tail-offset.sh` with every video encoder and with and without
-the mixers in the path. The mixer now holds video back at the programme
-encoder by the delay of the AAC encoder in use, `program.av_offset_ms`
-overrides it, and the test page measures −4 ms on air. Repeat runs land
-anywhere within one frame of that (the VP9 page +37 ms, a synced file
-through `exec:` −22 ms): the compositor shows a source frame on whichever of
-its own 33 ms ticks covers it, so where a flash lands depends on the phase
-between the source and the canvas. A 30 fps canvas cannot do better than a
-frame; a 60 fps one halves it.
-
-One more thing the page found. Every `exec:` source used to go through
-`livesync`, and the sidecar's frames all came out black on air while the
-audio played: the sidecar stamps time from its own start, half a second
-after the pipeline reading it, and livesync judged every frame late against
-the mixer's clock, dropped it, and repeated the first one. A process paces
-its own output, so exec sources skip livesync now; the pad offset and the
-compositor's latency place them.
-
-Shutdown is clean: on `source remove` the mixer signals the process group,
-the sidecar quits its message loop, and no Chromium process is left behind
-(checked on both platforms). The sidecar also stops itself when the mixer
-goes away and its stdout closes.
-
-### Web pages as sources (wpesrc)
-
-The fallback when no sidecar is installed. A page is rendered by WPE WebKit
-inside the mixer's own process:
-
-```sh
-godwinmix ctl source add game web+https://example.com/live-game
-```
-
-* It needs GStreamer's `wpesrc` (WPE WebKit): `gstreamer1.0-wpe` on Debian and
-  Ubuntu, `gst-plugins-bad` built with `wpewebkit` elsewhere. **There is no
-  macOS build of it.**
-* Audio needs a recent enough `wpesrc`; older builds expose video only.
-* **It needs OpenGL, not just a CPU.** `wpesrc` draws into GL memory, and the
-  mixer downloads it from there. On a headless box that means an EGL capable
-  stack (Mesa's llvmpipe will do without a GPU, but it must be present).
-* It has not been verified end to end here: the element negotiates and the
-  chain builds, but the machines this was developed on had no WPE with EGL.
-  The sidecar has, on both platforms, which is why it comes first.
-
-## Ad breaks
-
-Clips live in a directory on the machine running the mixer, set by `media.dir`.
-The UI lists them with their durations and marks any without an audio track;
-click one to arm it, double-click to roll it straight away.
-
-The library is server side on purpose. A browser file picker returns a file from
-the operator's own machine with no usable path, and the mixer needs something it
-can open itself, so a picker would only ever work when the operator happened to
-be sitting at the server. Listing a directory works identically over the network.
-
-Interrupt the programme with a file, then rejoin live:
-
-```sh
-curl -X POST -H 'Content-Type: application/json' \
-  -d '{"uri": "/path/to/ad.mp4"}' http://localhost:8080/api/adbreak
-```
-
-There is no time shift buffer, by design. The source keeps running behind the ad
-and the mixer rejoins it live, so whatever played during the break is not shown.
-
-An ad is just another source as far as the mixer is concerned. It is decoded and
-normalised to the same canvas contract as a camera, which is why it reuses the
-same take, the same audio crossfade and the same slate behaviour, and why
-switching to and from it costs the output nothing.
-
-Five things had to be handled to make this work inside a live programme:
-
-* **A shared clock.** Every source pipeline is put on the program pipeline's
-  clock and base time. Live RTMP inputs get away without it because their timing
-  comes from arrival, but a file's timestamps start at zero.
-* **Rebasing.** The ad's pads are offset onto programme time when it rolls, with
-  the same offset on video and audio so it stays in lip sync.
-* **Ending on the clock, not on end-of-stream.** EOS arrives while more than a
-  second of already-decoded ad is still in flight through the queues. Returning
-  to live at that moment truncates the ad: an eight second file played for 6.6
-  seconds. The return is scheduled from the file's own duration instead, and now
-  plays all 240 frames.
-
-* **Aligning every source's timeline.** Each input lives in its own pipeline, so
-  its segment starts when that source starts and its buffers carry running times
-  beginning near zero while the programme may be hours in. A compositor hides
-  this by reusing the frame it holds, so video looked right; an audiomixer
-  cannot place samples it has no valid position for and discarded every one.
-  Cameras appeared perfectly live and carried **no sound at all**. Each source's
-  mixer pads now take an offset, computed from its first segment and shared
-  between video and audio so lip sync is preserved.
-* **Declaring the mixers' upstream latency up front.** Attaching a branch to a
-  running aggregator otherwise makes the whole pipeline recalculate its latency,
-  and output pauses while it settles. Rolling an ad cost about a second of
-  programme that way.
-
-Pass `at_running_time_ms` to place the break on a specific frame. A scheduled
-break only arms a timer: its pipeline is built shortly before the cue, because
-one held paused for six seconds rolled to black for its whole duration.
-
-## Command line
-
-The daemon is headless and controlled entirely over HTTP. `godwinmix ctl` is a
-thin client for that same API, so scripting it does not mean assembling JSON by
-hand. Point it elsewhere with `--url` or `GODWINMIX_URL`, and pass `--token`
-when the mixer has one. `gmx` is the same binary under a shorter name, so
-`gmx ctl status` and `godwinmix ctl status` are one command.
-
-```sh
-godwinmix ctl status
-godwinmix ctl take cam2                 # or: take   (with no id, cuts to black)
-godwinmix ctl source add hls1 https://host/stream.m3u8 --name "Roof camera"
-godwinmix ctl source remove hls1
-godwinmix ctl output add youtube rtmp://a.rtmp.youtube.com/live2/KEY --policy cdn
-godwinmix ctl output list
-godwinmix ctl ad /srv/ads/spot.mp4 --return-to cam1
-godwinmix ctl media
-godwinmix ctl golive https://example.com/event/42 --rtmp rtmp://a.rtmp.youtube.com/live2/KEY --superimpose auto
-```
-
-`golive` is `POST /api/golive`: the page becomes a web source, the destination
-is added if given, and the mixer takes the page to programme by itself once it
-is live. It is the call a customer's backend makes behind a "Go Live" button.
-
-`godwinmix mcp` is the same client dressed as an MCP server over stdio, for a
-model rather than a shell:
-
-```sh
-godwinmix mcp --url http://127.0.0.1:8080 --token TOKEN
-```
-
-Requests answer with the mixer's own reason for refusing rather than a bare
-status code:
-
-```
-$ godwinmix ctl source add cam1 rtmp://host/live/x
-Error: 400 Bad Request: source cam1 already exists
-```
-
-Nothing here needs the desktop app; it is only a window onto the same API.
-
-### Token
-
-Set `[control] token = "..."` in the config, or `GODWINMIX_TOKEN` in the
-environment, and every `/api/*` route and `/ws` demand
-`Authorization: Bearer <token>`. A GET, which is what a WebSocket upgrade is,
-may send `?token=<token>` instead, because a browser cannot put a header on a
-socket. Missing or wrong is a 401 with a one line JSON body. With no token
-configured nothing changes and the port is open, as it always was.
-
-The UI at `/` asks for the token once when it meets a 401 and keeps it in the
-browser's localStorage. `ctl` takes `--token` or reads `GODWINMIX_TOKEN`:
-
-```sh
-GODWINMIX_TOKEN=change-me godwinmix ctl status
-curl -H 'Authorization: Bearer change-me' http://mixer:8080/api/status
-```
-
-### Go live in one call
-
-`POST /api/golive` is the "Go Live" button: a customer's page asks their
-backend, the backend makes one request, and the page is on air as soon as it
-renders. It adds the URL as a web source (id from the host unless `id` is
-given; a source that already shows that URL is reused), adds an output for
-`rtmp` unless one already sends there, and takes the source to programme the
-moment it is live, waiting up to a minute before it gives up with a log line.
-The reply is an immediate 202.
-
-```sh
-godwinmix ctl golive https://example.com/live-game --rtmp rtmp://a.rtmp.youtube.com/live2/KEY
-curl -X POST localhost:8080/api/golive -H 'content-type: application/json' \
-  -H 'Authorization: Bearer change-me' \
-  -d '{"url": "https://example.com/live-game", "rtmp": "rtmp://a.rtmp.youtube.com/live2/KEY"}'
-# {"source":"example-com","output":"a-rtmp-youtube-com","state":"connecting"}
-```
-
-`superimpose` defaults to `"auto"` here, the opposite of `/api/sources`,
-because the caller is a machine and the saving is a CPU core. Pass `"off"`
-to render the whole page in the browser.
-
-## Desktop app
-
-The UI is a plain web app served by the binary, so a Tauri shell is a webview
-pointed at the same URL, local or remote. There is no second implementation to
-keep in step, and remote operation is the default case with the address changed.
-
-To open it:
-
-```sh
-dev/desktop.sh              # starts the test rig if no mixer answers on 8080, then the app
-dev/desktop.sh mine.toml    # same, but the mixer runs on your own config
-```
-
-Two ways out, as buttons at the top right of the window and as items in the
-application menu. **Close window** (or the window's close button, or Quit)
-leaves the mixer running: the stream does not live in this window and closing
-it by accident must not take the programme down. **Stop everything** asks
-twice, then has the mixer shut down over `POST /api/shutdown` and exits with
-status 2, which `dev/desktop.sh` takes as the cue to stop the rest of the rig
-as well: mediamtx, the camera and the page server. Nothing is left running.
-The buttons appear only inside the desktop shell, which announces itself in
-the user agent; in a browser the same page does not show them.
-
-The window has nothing to show until a mixer answers on `localhost:8080`,
-which is why the script starts one first. It opens the bundle at
-`tauri-app/target/release/bundle/macos/GodwinMix.app` when one has been
-built (`cd tauri-app && cargo tauri build --bundles app`), else the bare
-binary from `cargo build --release` in `tauri-app/`.
-
-## For AI agents
-
-Nothing in the API assumes a human operator. Three endpoints exist for the case
-where the operator is a language model. `GET /api/agent/state` is the state cut
-down to what a director needs: what is on programme, every source with its
-state, whether it has audio, how long since its last frame and a `motion` number
-from 0.0 to 1.0 for how much its picture is changing, plus the outputs.
-`GET /api/snapshot/sheet.jpg` is every source and the programme in one labelled
-mosaic, so a model compares them in a single image. `POST /api/take` is the
-take the UI makes.
-
-The loop: read the state, look at the sheet only when the numbers do not settle
-it (a scoreboard's `motion` spiking, a source going quiet), decide, take if the
-answer differs from what is on air, wait 1 to 3 seconds. A take lands on the
-next frame; a new web source needs 5 to 20 seconds, a superimposed one a few
-more for the probe. Never take a source that is not `live`, poll faster than
-the frame rate, or remove the source on programme without taking another first.
-
-`godwinmix mcp` serves the same API as MCP tools over stdio, so Claude Code
-gets the mixer with one line:
+| | |
+|---|---|
+| `GET /api/status` | full snapshot |
+| `POST /api/take` | `{"source": "cam1"}`, or `{"source": null}` for black |
+| `POST /api/sources`, `DELETE /api/sources/{id}` | add and remove sources while live |
+| `POST /api/outputs`, `DELETE /api/outputs/{id}` | add and remove destinations while live |
+| `POST /api/adbreak` | roll a clip, immediately or on a given frame |
+| `GET /api/agent/state` | the state a language model needs, compact |
+| `GET /api/snapshot/sheet.jpg` | every source and the programme in one mosaic |
+| `POST /api/golive` | page plus destination plus take, in one call |
+| `GET /ws` | events and state, plus mosaic frames as binary messages |
+
+The whole surface is in [docs/reference/http-api.md](docs/reference/http-api.md)
+and every `ctl` subcommand is in [docs/reference/cli.md](docs/reference/cli.md).
+A generated `protocol.md` and `openapi.json` are planned, from
+`godwinmix --api-info`, so that reference is produced from the code rather than
+typed twice.
+
+## For developers
+
+The point of this project is that other people can build on it, so the
+commitments below are written down rather than implied.
+
+**One executable, no interpreter.** The core, the CLI and the MCP server are
+one binary. The only external dependency is the platform's GStreamer.
+
+**One protocol, no private doors.** The web UI, `gmx ctl`, the MCP server and
+the desktop app all use the public HTTP API. There is no faster internal path
+that a third party cannot use, because a reference implementation that cheats
+never grows an ecosystem.
+
+**A compatibility promise.** `api_level` 1 is frozen for breaking changes.
+Additions bump the level. `api_compatible` moves only at an announced major,
+at most once a year, and the previous level is supported for a year after that.
+That promise is here on the front page rather than in a changelog, because it is
+the thing you are trusting when you write against this.
+
+**Extension points, honestly labelled.** Today they are `exec:` sources (any
+process that writes a container to stdout) and the browser sidecar protocol.
+The full plugin model, where a plugin runs in process, beside the core or on
+another machine without being rewritten, is being built: `gmx plugin new`,
+`gmx plugin test` and `gmx plugin add` are the commands it lands as. Presets
+(a scene layout and a set of defaults, shared as a file) and themes (the UI
+restyled without forking it) are planned behind `gmx preset` and the UI's
+theme directory. Nothing in this paragraph exists yet, and the pages under
+[docs/](docs/) say so where they describe it.
+
+Where to start reading: [CONTRIBUTING.md](CONTRIBUTING.md) for the build and
+the house style, [docs/explanation/](docs/explanation/) for why the thing is
+shaped the way it is, and `src/mixer.rs` for the pipeline everything else
+exists to protect.
+
+## For agents
+
+An AI agent operates this mixer through the same API as everyone else, and
+`godwinmix mcp` dresses that API as an MCP server over stdio:
 
 ```sh
 claude mcp add godwinmix -- godwinmix mcp --url http://HOST:8080 --token TOKEN
 ```
 
-`POST /api/golive` is for a customer's "Go Live" button: their backend sends
-the URL and destination with the token, gets a 202, and the mixer puts the page
-on programme once it is live. `docs/agents.md` is the playbook, and
-`examples/ai-director.py` is a working director on the `anthropic` SDK that
-runs the loop above against a Claude model.
+`GET /api/agent/state` is the state cut down to what a director needs: what is
+on programme, every source with its state, whether it has audio, how long since
+its last frame, and a `motion` number from 0.0 to 1.0 for how much its picture
+is changing. `GET /api/snapshot/sheet.jpg` is every source and the programme in
+one labelled mosaic, so a model compares them in a single image rather than
+paying for one image per source.
+
+[docs/agents.md](docs/agents.md) is the playbook: the decision loop, the
+timings, and the things an agent must not do. `examples/ai-director.py` is a
+working director on the `anthropic` SDK.
+
+## What this is not
+
+Stated up front, because finding out later is worse.
+
+* **No game capture on Windows.** Not in the first year. Capturing a fullscreen
+  exclusive game is a hooking problem with a decade of OBS work behind it, and
+  pretending otherwise would waste your afternoon. Desktop and window capture
+  are planned; game capture is not.
+* **A browser source with H.264 or AAC inside the page needs a codec enabled
+  CEF build.** The official CEF binaries omit both. Linux has prebuilt ones;
+  macOS and Windows do not, and the project is building and publishing one.
+  Until it does, `superimpose` is the way round it on those platforms: the
+  mixer decodes the page's video itself and the browser draws only the page.
+* **No vertical and horizontal output at the same time.** One canvas, one
+  encoder chain. A second canvas is a second compositor and a second encoder,
+  and it is not in the first year.
+* **No hosted service.** This is a program you run. There is no account.
+* **No plugin marketplace yet.** The plugin protocol comes first. A directory
+  that lists nothing is a trap the research on ecosystems named explicitly.
 
 ## Known limitations
+
+Measured, not guessed. These are the things that will surprise you.
 
 * **Superimpose cannot take over MSE or DRM playback**, and YouTube is MSE.
   Those pages fall back to full rendering, which is reported rather than
   failed. The page's own player UI freezes on pages it does apply to, because
-  the browser's copy of each taken-over video is paused; and a superimposed
-  live stream that ends leaves the page over its last frame rather than
-  restarting the source.
-* **A superimposed source whose browser dies is rebuilt, not restarted.** The
-  page is probed again, its clips fetched again and a new pipeline built, and
-  the source goes back on programme if it was there. Measured at 14 seconds
-  from the browser being killed to the page back on air with sound; the
-  programme shows the slate meanwhile. Every other kind of source restarts in
-  place in about two seconds. The difference is deliberate: brought back in
-  place, the layered pipeline did not recover reliably.
+  the browser's copy of each taken-over video is paused.
+* **A superimposed source whose browser dies is rebuilt, not restarted.**
+  Measured at 14 seconds from the browser being killed to the page back on air
+  with sound; the programme shows the slate meanwhile. Every other kind of
+  source restarts in place in about two seconds.
 * **Page content in the key colour is treated as spill.** The page paints a
-  near-pure magenta where each video sat, and the sidecar removes it. A page
-  element that is itself that magenta would be removed with it. Nothing else is
-  affected, and no ordinary page uses that colour, but it is the one thing that
-  does not survive the hand-over.
-
+  near-pure magenta where each video sat and the sidecar removes it. A page
+  element that is itself that magenta would go with it.
+* **Reconnect takes about 2 seconds**, not milliseconds. Tearing down the
+  output pipeline, swapping the proxy pair, rebuilding and completing a fresh
+  RTMP handshake costs that much. A viewer with a normal buffer should not see
+  it, and it has not been measured against a real CDN.
+* **The mosaic carries no audio.** Programme audio meters are in the UI
+  instead. WebRTC would fix it properly; `whepserversink` in GStreamer 1.28.6
+  returned 405 on every method and path tried, so MJPEG is what ships.
+* **Multiview cost scales with source count** on the decode side, not the
+  encode side. Each source is decoded once and tee'd to a full resolution
+  branch for programme and a small one for the mosaic.
 * **An ad whose duration cannot be queried** (a live URI rather than a file)
-  ends on end-of-stream instead, which truncates the tail as described above.
-  Files are fine; streams as ad sources are not really supported.
+  ends on end-of-stream instead, which truncates the tail. Files are fine.
 * **A failed ad is reported over the event stream, not in the HTTP response.**
-  `POST /api/adbreak` returns 202 as soon as the command is queued, so a missing
-  file shows up as an alert in the UI rather than a 4xx. The programme is not
-  disturbed either way.
-* **Reconnect takes about 2 seconds**, not milliseconds. Tearing down the output
-  pipeline, swapping the proxy pair, rebuilding, and completing a fresh RTMP
-  handshake costs that much. Viewers with a normal player buffer should not see
-  it, but it is not instant and I have not measured it against a real CDN.
-* **The mosaic carries no audio.** Program audio level meters are on the UI
-  instead. WebRTC would fix this properly; `whepserversink` in GStreamer 1.28.6
-  returned 405 on every method and path I tried, so MJPEG is what ships.
-* **Multiview cost scales with source count** on the decode side, not the encode
-  side. Each source is decoded once and tee'd to a full resolution branch for
-  program and a small one for the mosaic.
-* **H.264 and AAC in the browser sidecar need a CEF build that has them.**
-  Linux has prebuilt ones (Karere's releases, Arch's package); macOS and
-  Windows need your own build. The official binaries omit them. See Codecs.
-* Sources are assumed to be H.264 and AAC, which is what RTMP carries in
+  `POST /api/adbreak` returns 202 as soon as the command is queued, so a
+  missing file shows up as an alert in the UI rather than a 4xx. The programme
+  is not disturbed either way.
+* **Sources are assumed to be H.264 and AAC**, which is what RTMP carries in
   practice. Anything else is reported as a failed source rather than decoded.
 
-## Upgrading from LiveboxMix
+**No footprint numbers are published yet.** CPU and memory on the reference
+machines (a Raspberry Pi 4 and 5, an Intel N100, a laptop with no GPU, a
+desktop with an NVIDIA card) have not been measured, so this README claims
+none. `gmx bench` will print them per release with the command that produced
+them. Until then, the honest answer to "will it run on my box" is to try it.
 
-The product was called LiveboxMix until 0.2. The binaries, the config file, the
-environment variables and the desktop app's URL scheme all carry the new name
-now. A box that was running 0.1 keeps working for this one release, with a
-warning in the log each time it uses an old name:
+## Documentation
 
-| Old | New | For how long |
-|---|---|---|
-| `liveboxmix`, `liveboxmix-browser` | `godwinmix` (and `gmx`), `godwinmix-browser` | replace the binaries at the same time |
-| `liveboxmix.toml` | `godwinmix.toml` | the old name is read when the new one is absent, until 0.3 |
-| `LIVEBOXMIX_TOKEN`, `LIVEBOXMIX_URL` | `GODWINMIX_TOKEN`, `GODWINMIX_URL` | the old names are read, until 0.3 |
-| `lbx-browser-<pid>` profile directories | `gmx-browser-<pid>` | both are cleaned up, until 0.3 |
-| `liveboxmix://quit` from a cached page | `godwinmix://quit` | the desktop app answers both, until 0.3 |
-| `lbx.token` in the browser | `gmx.token` | moved across once on first load |
+[docs/](docs/) is organised the way Diátaxis suggests, because "how do I" and
+"why is it like this" are different questions and mixing them serves neither.
 
-The runtime store still follows the config file's stem, so a mixer that falls
-back to `liveboxmix.toml` keeps reading and writing `liveboxmix.runtime.toml`
-and the sources it was given stay where they are. Rename both files together
-when you rename anything.
+| | |
+|---|---|
+| [Tutorials](docs/tutorials/) | your first stream, with Docker or with the desktop app; your first plugin |
+| [How to](docs/how-to/) | a headless server, a reverse proxy, a Raspberry Pi, a hardware encoder, ad breaks |
+| [Reference](docs/reference/) | the HTTP API, the CLI, sources, web pages, every config key |
+| [Explanation](docs/explanation/) | why the programme never stops, why plugins are processes, why the UI is a client |
+| [docs/agents.md](docs/agents.md) | the playbook for an AI operator |
+| [docs/friction-log.md](docs/friction-log.md) | every place someone got stuck, and what was done about it |
 
-Two names in the sidecar's environment changed without a fallback, because they
-are development switches rather than deployment contracts:
-`LBX_BROWSER_SWITCHES` is now `GMX_BROWSER_SWITCHES` and `LBX_SIDECAR_LOG` is
-now `GMX_SIDECAR_LOG`.
+## Licence
+
+Apache 2.0, in [LICENSE](LICENSE). Contributions are under the
+[CLA](CLA.md) and the [code of conduct](CODE_OF_CONDUCT.md). Security reports
+go to the address in [SECURITY.md](SECURITY.md), not to a public issue.
+
+GodwinMix is not affiliated with, endorsed by or connected to the OBS Project.
+OBS, OBS Studio, Open Broadcaster Software and the OBS Studio logo are
+registered trademarks of Wizards of OBS LLC, and are used here only to describe
+what this software reads.
+
+Upgrading from LiveboxMix, which is what this was called until 0.2:
+[docs/how-to/upgrade-from-liveboxmix.md](docs/how-to/upgrade-from-liveboxmix.md).
