@@ -1,0 +1,73 @@
+# ndi. The one plugin whose runtime cannot be shipped.
+#
+# The NDI runtime's licence forbids redistribution and NDI is a trademark of
+# Vizrt Group, so this plugin links nothing NDI at build time, dlopens the
+# runtime to see whether it is there, and refuses with the download page when it
+# is not. The attribution is in README.md.
+#
+# Note on the core as it stands: ndi/output and ndi/discover are written to the
+# contract and not reachable yet. The output registry in
+# crates/godwinmix-core/src/plugin/output.rs is a static list that does not
+# consult the loader, and a device provide is interned by nothing. ndi/source
+# works today.
+
+[plugin]
+name = "ndi"
+version = "0.1.0"
+api = 1
+description = "NDI sources and outputs, with mDNS discovery of every NDI sender on the network. The NDI runtime is loaded at run time and never linked, so the plugin builds and runs on a machine that has never had it and says where to get it."
+license = "Apache-2.0"
+authors = ["GodwinMix"]
+repository = "https://github.com/psmux/godwinmix"
+platforms = ["linux-x86_64", "linux-aarch64", "macos-aarch64", "macos-x86_64", "windows-x86_64"]
+placements = ["sidecar", "node"]
+process = "per-instance"
+
+[run]
+bin = { "linux-x86_64" = "bin/gmx-ndi", "linux-aarch64" = "bin/gmx-ndi", "macos-aarch64" = "bin/gmx-ndi", "macos-x86_64" = "bin/gmx-ndi", "windows-x86_64" = "bin/gmx-ndi.exe" }
+
+[[provides]]
+kind = "source"
+id = "source"
+uri_schemes = ["ndi://"]
+rank = 200
+# NDI's codec is SpeedHQ and only the runtime decodes it, so ndisrc hands over
+# raw frames and raw frames are what cross to the core, in a container on a
+# pipe: one memcpy per frame, no encode and no decode. README.md prices it.
+media = { video = "raw", audio = "raw", alpha = false, thumb = true }
+transports = ["container"]
+capabilities = ["restart-in-place", "health", "latency-report", "idle"]
+latency_ms = 40
+settings = "schemas/source.json"
+skill = "skills/source/SKILL.md"
+
+[provides.designer]
+icon = "designer/icon.svg"
+
+[[provides]]
+kind = "output"
+id = "output"
+media = { video = "container", audio = "container", alpha = false, thumb = false }
+capabilities = ["restart-in-place", "health"]
+settings = "schemas/output.json"
+skill = "skills/output/SKILL.md"
+
+[[provides]]
+kind = "device"
+id = "discover"
+discovery = { mdns = ["_ndi._tcp"] }
+settings = "schemas/discover.json"
+skill = "skills/discover/SKILL.md"
+
+[[tools]]
+name = "list_senders"
+description = "List every NDI sender visible on the network with its resolution and frame rate. Use before adding an NDI source when the operator names a camera rather than an address. Example: list_senders {} returns {senders: [{id: 'studio-cam-1', name: 'STUDIO (CAM 1)', address: '10.0.0.21:5961', width: 1920, height: 1080, fps: 30}]}."
+input = "schemas/tools/list_senders.json"
+output = "schemas/tools/list_senders.out.json"
+annotations = { readOnlyHint = true, destructiveHint = false, idempotentHint = true, openWorldHint = true }
+user_invocable = true
+model_invocable = true
+
+[build]
+command = "cargo build --release -p gmx-ndi"
+output = "bin/gmx-ndi"
