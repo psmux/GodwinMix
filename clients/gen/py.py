@@ -1,6 +1,7 @@
 """Python output: TypedDicts, the tables, and one coroutine per protocol method."""
 
-from model import Ref
+from model import keyword
+import Ref
 from names import python_arg, snake
 
 HEADER = '''"""Generated from protocol.json by clients/gen/generate.py. Do not edit.
@@ -102,7 +103,9 @@ def _types(model):
         is_object = kinds == "object" or (isinstance(kinds, list) and "object" in kinds)
         props = schema.get("properties") or {}
         if is_object and props:
-            if not all(k.isidentifier() for k in props):
+            # A key that is not an identifier, or is a Python keyword (the
+            # `plugin.update` result has a `from`), cannot sit in a class body.
+            if not all(k.isidentifier() and not keyword.iskeyword(k) for k in props):
                 out.append(f'{name} = TypedDict("{name}", {{')
                 for key, sub in props.items():
                     out.append(f'    "{key}": {py_type(model, sub)},')
