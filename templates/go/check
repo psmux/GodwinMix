@@ -40,6 +40,13 @@ formatted() {
     return 0
 }
 
+if ! command -v "$go" >/dev/null 2>&1; then
+    echo "checking {{name}}: there is no Go toolchain on PATH."
+    echo "Install Go 1.21 or later from https://go.dev/dl/, then run ./check again."
+    echo "Set GMX_GO if your go binary is somewhere this script cannot see."
+    exit 1
+fi
+
 echo "checking {{name}} with $("$go" version)"
 
 # 1. Formatting, then the vet checks, then a build of every package.
