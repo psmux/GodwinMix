@@ -54,6 +54,11 @@ cleanup() {
     stop_plugin
     if [[ -n "$CORE_PID" ]] && kill -0 "$CORE_PID" 2>/dev/null; then
         kill "$CORE_PID" 2>/dev/null
+        for _ in 1 2 3 4 5 6 7 8 9 10; do
+            kill -0 "$CORE_PID" 2>/dev/null || break
+            sleep 0.5
+        done
+        kill -9 "$CORE_PID" 2>/dev/null
         wait "$CORE_PID" 2>/dev/null
     fi
     if [[ $KEEP -eq 1 ]]; then echo "kept: $WORK"; else rm -rf "$WORK"; fi
@@ -111,7 +116,10 @@ PY
 grep -q "^token = " "$WORK/godwinmix.toml" && ok || { bad "the config was not rewritten"; exit 1; }
 
 step "core starts"
-(cd "$WORK" && "$REPO/target/debug/godwinmix" --config "$WORK/godwinmix.toml") >"$LOG" 2>&1 &
+# `exec`, so `$!` names the core and not the subshell around it. Without it
+# the cleanup below kills the subshell and leaves the mixer running with its
+# port held. See the same line in dev/smoke.sh.
+(cd "$WORK" && exec "$REPO/target/debug/godwinmix" --config "$WORK/godwinmix.toml") >"$LOG" 2>&1 &
 CORE_PID=$!
 for _ in $(seq 1 100); do
     curl -fsS "$BASE/api/v1/core/info" "${AUTH[@]}" >/dev/null 2>&1 && break
