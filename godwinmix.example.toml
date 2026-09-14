@@ -1,4 +1,4 @@
-# LiveboxMix configuration.
+# GodwinMix configuration.
 #
 # The canvas section is the contract every source is normalised to. It cannot
 # change while a broadcast is running, because the output encoder is started
@@ -43,14 +43,14 @@ include_program = true
 [security]
 allow_exec_sources = false
 
-# How `web+` sources are rendered. The CEF sidecar (`liveboxmix-browser`, see
+# How `web+` sources are rendered. The CEF sidecar (`godwinmix-browser`, see
 # browser/) is used when found: here, next to this executable, or on PATH.
 # Without one, `web+` falls back to GStreamer's wpesrc. Not gated by
 # allow_exec_sources: the program is ours and the URL never meets a shell.
 [browser]
-# sidecar = "/opt/liveboxmix/liveboxmix-browser"
+# sidecar = "/opt/godwinmix/godwinmix-browser"
 # args = ["--audio-offset-ms", "0"]
-# env = { LBX_BROWSER_SWITCHES = "enable-gpu" }
+# env = { GMX_BROWSER_SWITCHES = "enable-gpu" }
 #
 # How fast the browser draws when a source is superimposing, which is when it
 # is only drawing the page over video the mixer decodes itself. Those frames
@@ -99,7 +99,7 @@ bind = "0.0.0.0:8080"
 # With a token set, every /api/* request needs `Authorization: Bearer <token>`
 # (a GET, and so the WebSocket, may send `?token=<token>` instead), and a
 # missing or wrong one is a 401. The UI asks for it once and remembers it in
-# the browser. The LIVEBOXMIX_TOKEN environment variable overrides this line,
+# the browser. The GODWINMIX_TOKEN environment variable overrides this line,
 # for deployments that keep secrets out of config files.
 # token = "change-me"
 
@@ -160,7 +160,7 @@ rtmp_client = "auto"
 # is what YouTube and most streaming sites do, has no address to hand over, and
 # neither has anything behind DRM. "auto" looks, takes it when it is there, and
 # renders the whole page in the browser when it is not, without complaining.
-# `liveboxmix ctl source list` marks the sources where it actually happened.
+# `godwinmix ctl source list` marks the sources where it actually happened.
 #
 # The page's own player UI freezes when this applies, because the element the
 # mixer took over is paused: a progress bar stops filling, a running time stops

@@ -322,10 +322,10 @@ impl ExecSpec {
     }
 }
 
-/// Where `liveboxmix-browser` is: the configured path, else next to this
+/// Where `godwinmix-browser` is: the configured path, else next to this
 /// executable, else on PATH.
 fn find_browser_sidecar(browser: &BrowserConfig) -> Result<Option<std::path::PathBuf>> {
-    const NAME: &str = "liveboxmix-browser";
+    const NAME: &str = "godwinmix-browser";
     if let Some(p) = &browser.sidecar {
         let p = std::path::PathBuf::from(p);
         anyhow::ensure!(
@@ -750,7 +750,7 @@ fn cache_media(id: &SourceId, src: &mut String) -> Fetched {
     // copy would go with the old.
     static FETCHES: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
     let n = FETCHES.fetch_add(1, Ordering::SeqCst);
-    let file = std::env::temp_dir().join(format!("lbx-media-{id}-{}-{n}-{stem}", std::process::id()));
+    let file = std::env::temp_dir().join(format!("gmx-media-{id}-{}-{n}-{stem}", std::process::id()));
     let fetch = || -> Result<()> {
         let pipeline = gst::Pipeline::with_name(&format!("fetch-{id}"));
         let http = make(factory, &format!("{id}-fetch-src"))?;
@@ -2545,15 +2545,18 @@ fn route_pads(
 /// ours. An operator who passes `--cache-dir` in `browser.args` puts the
 /// profile somewhere this cannot predict, and then this is a no-op and the
 /// sidecar's own cleanup is all there is.
-fn browser_profile_dir(
+/// Both names are answered for: `gmx-browser-` is what this release's sidecar
+/// makes, `lbx-browser-` is what a LiveboxMix sidecar an operator has not
+/// replaced yet still makes. The old prefix goes away in the release after 0.2.
+fn browser_profile_dirs(
     env: &std::collections::BTreeMap<String, String>,
     pid: u32,
-) -> std::path::PathBuf {
+) -> Vec<std::path::PathBuf> {
     let base = env
         .get("TMPDIR")
         .map(std::path::PathBuf::from)
         .unwrap_or_else(std::env::temp_dir);
-    base.join(format!("lbx-browser-{pid}"))
+    ["gmx-browser", "lbx-browser"].iter().map(|p| base.join(format!("{p}-{pid}"))).collect()
 }
 
 /// How long a child is given to stop on its own before it is killed.
@@ -2582,17 +2585,24 @@ const CHILD_EXIT_GRACE: Duration = Duration::from_secs(8);
 /// into a race that fails with ENOTEMPTY. A few tries over a second is enough
 /// for the kernel to have finished with them.
 fn remove_browser_profile(env: &std::collections::BTreeMap<String, String>, pid: u32) {
-    let dir = browser_profile_dir(env, pid);
+    for dir in browser_profile_dirs(env, pid) {
+        remove_profile_dir(&dir);
+    }
+}
+
+/// One profile directory, with the retries.
+fn remove_profile_dir(dir: &std::path::Path) {
     let mut last = None;
     for i in 0..10 {
-        match std::fs::remove_dir_all(&dir) {
+        match std::fs::remove_dir_all(dir) {
             Ok(()) => {
                 debug!(path = %dir.display(), tries = i + 1, "removed the sidecar's profile directory");
                 return;
             }
-            // Not a browser source, or the sidecar got there first. Either is
-            // fine; anything else is worth knowing about, because it is disk
-            // that will not come back on its own.
+            // Not a browser source, the prefix this sidecar does not use, or
+            // the sidecar got there first. Any of those is fine; anything else
+            // is worth knowing about, because it is disk that will not come
+            // back on its own.
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => return,
             Err(e) => last = Some(e),
         }
@@ -2951,7 +2961,7 @@ struct ExecChild {
     child: Option<std::process::Child>,
     /// The environment the child was started with, kept because it is what
     /// says where the sidecar put its profile directory. See
-    /// `browser_profile_dir`.
+    /// `browser_profile_dirs`.
     env: std::collections::BTreeMap<String, String>,
     /// The read end of the child's stdout, held for as long as the element
     /// reads it. See `ExecStdout`.
@@ -3605,9 +3615,9 @@ mod tests {
     /// so it must stay shut unless the operator opened it deliberately.
     #[test]
     fn a_page_runs_through_the_sidecar_when_one_is_configured() {
-        let dir = std::env::temp_dir().join(format!("lbx-sidecar-test-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("gmx-sidecar-test-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
-        let bin = dir.join("liveboxmix-browser");
+        let bin = dir.join("godwinmix-browser");
         std::fs::write(&bin, "#!/bin/sh\n").unwrap();
         let canvas = CanvasCaps::new(&crate::config::Canvas::default());
         let mut browser = BrowserConfig {
@@ -3615,7 +3625,7 @@ mod tests {
             args: vec!["--verbose".into()],
             ..Default::default()
         };
-        browser.env.insert("PULSE_SINK".into(), "lbx".into());
+        browser.env.insert("PULSE_SINK".into(), "gmx".into());
 
         let spec = ExecSpec::browser("web+https://example.com/x?a=1 b", &canvas, &browser)
             .unwrap()
@@ -3624,7 +3634,7 @@ mod tests {
         assert_eq!(&spec.argv[1..3], ["--url", "https://example.com/x?a=1 b"]);
         assert!(spec.argv.contains(&"--width".to_string()));
         assert_eq!(spec.argv.last().unwrap(), "--verbose");
-        assert_eq!(spec.env.get("PULSE_SINK").unwrap(), "lbx");
+        assert_eq!(spec.env.get("PULSE_SINK").unwrap(), "gmx");
 
         // A configured path that is missing is an error, not a silent fallback.
         browser.sidecar = Some(dir.join("nope").to_string_lossy().to_string());
@@ -3649,7 +3659,7 @@ mod tests {
         };
         let mut spec = ExecSpec {
             argv: vec![
-                "liveboxmix-browser".into(),
+                "godwinmix-browser".into(),
                 "--fps".into(),
                 canvas.fps.numer().to_string(),
             ],
@@ -3689,19 +3699,25 @@ mod tests {
     /// were left in a container's /tmp on 2026-09-12, 18 GB of it.
     #[test]
     fn a_killed_sidecars_profile_directory_is_taken_with_it() {
-        let tmp = std::env::temp_dir().join(format!("lbx-profile-test-{}", std::process::id()));
+        let tmp = std::env::temp_dir().join(format!("gmx-profile-test-{}", std::process::id()));
         std::fs::create_dir_all(&tmp).unwrap();
         let env: std::collections::BTreeMap<String, String> =
             [("TMPDIR".to_string(), tmp.to_string_lossy().to_string())].into_iter().collect();
 
-        let dir = browser_profile_dir(&env, 4242);
-        assert_eq!(dir, tmp.join("lbx-browser-4242"));
+        // Both prefixes, because a sidecar left over from LiveboxMix still
+        // names its profile the old way. The new one comes first.
+        let dirs = browser_profile_dirs(&env, 4242);
+        assert_eq!(dirs, vec![tmp.join("gmx-browser-4242"), tmp.join("lbx-browser-4242")]);
         // A profile is a tree, not a file, and CEF leaves it locked open until
         // the process goes; nothing here may assume it is empty.
-        std::fs::create_dir_all(dir.join("Default/Cache")).unwrap();
-        std::fs::write(dir.join("Default/Cache/data_0"), vec![0u8; 4096]).unwrap();
+        for dir in &dirs {
+            std::fs::create_dir_all(dir.join("Default/Cache")).unwrap();
+            std::fs::write(dir.join("Default/Cache/data_0"), vec![0u8; 4096]).unwrap();
+        }
         remove_browser_profile(&env, 4242);
-        assert!(!dir.exists(), "the profile directory should be gone");
+        for dir in &dirs {
+            assert!(!dir.exists(), "{} should be gone", dir.display());
+        }
 
         // And doing it again, or for a source that never had one, is quiet.
         remove_browser_profile(&env, 4242);
@@ -3757,7 +3773,7 @@ mod tests {
     #[cfg(unix)]
     fn an_abandoned_exec_child_takes_its_process_and_its_profile_with_it() {
         let _ = gst::init();
-        let tmp = std::env::temp_dir().join(format!("lbx-drop-{}", std::process::id()));
+        let tmp = std::env::temp_dir().join(format!("gmx-drop-{}", std::process::id()));
         std::fs::create_dir_all(&tmp).unwrap();
         let mut env = std::collections::BTreeMap::new();
         env.insert("TMPDIR".to_string(), tmp.to_string_lossy().to_string());
@@ -3766,7 +3782,7 @@ mod tests {
         let (_src, child) = make_exec_source("drop-test", &spec).unwrap();
         let pid = child.child.as_ref().expect("a freshly built child holds its process").id();
         // The directory the sidecar of this pid would have made for itself.
-        let profile = browser_profile_dir(&spec.env, pid);
+        let profile = browser_profile_dirs(&spec.env, pid).remove(0);
         std::fs::create_dir_all(&profile).unwrap();
         std::fs::write(profile.join("filler"), b"x").unwrap();
 

@@ -87,13 +87,15 @@ jobs:
         shell: bash
         run: |
           mkdir -p dist
-          cp target/release/liveboxmix* dist/ 2>/dev/null || true
-          cp tauri-app/target/release/liveboxmix-desktop* dist/ 2>/dev/null || true
-          cp browser/target/release/liveboxmix-browser dist/ 2>/dev/null || true
+          cp target/release/godwinmix* dist/ 2>/dev/null || true
+          cp target/release/gmx dist/ 2>/dev/null || true
+          cp target/release/gmx.exe dist/ 2>/dev/null || true
+          cp tauri-app/target/release/godwinmix-desktop* dist/ 2>/dev/null || true
+          cp browser/target/release/godwinmix-browser dist/ 2>/dev/null || true
           rm -f dist/*.d dist/*.pdb
           ls -la dist
 
       - uses: actions/upload-artifact@v4
         with:
-          name: liveboxmix-${{ runner.os }}
+          name: godwinmix-${{ runner.os }}
           path: dist/

@@ -2,7 +2,7 @@
 # Bring the rig up: RTMP server, cam1, then the mixer. Logs land in logs/.
 #   GST_DEBUG="..." dev/harness/up.sh      (extra GStreamer logging goes to logs/gst.log)
 export PATH="/home/dev/.cargo/bin:/opt/homebrew/bin:/usr/bin:/bin"
-H="$(cd "$(dirname "$0")" && pwd)"; LB="$H/../../target/release/liveboxmix"
+H="$(cd "$(dirname "$0")" && pwd)"; LB="$H/../../target/release/godwinmix"
 "$H/down.sh" >/dev/null 2>&1
 nohup mediamtx "$H/mediamtx.yml" > "$H/logs/mediamtx.log" 2>&1 &
 sleep 1

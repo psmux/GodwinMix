@@ -7,14 +7,14 @@ set -e
 cd /work/browser
 export CEF_PATH=/cefcache
 cargo build --release 2>&1 | grep -E '^(error|\s+-->)' -A6 | head -20 || true
-BIN=/work/browser/target/release/liveboxmix-browser
+BIN=/work/browser/target/release/godwinmix-browser
 OUT=/work/browser/dev/out; mkdir -p "$OUT"
 Xvfb :99 -screen 0 1280x720x24 -nolisten tcp >/dev/null 2>&1 &
 sleep 1
 export XDG_RUNTIME_DIR=/tmp/xdg; mkdir -p $XDG_RUNTIME_DIR; chmod 700 $XDG_RUNTIME_DIR
 pulseaudio --start --exit-idle-time=-1 >/dev/null 2>&1 || true
-pactl load-module module-null-sink sink_name=lbx >/dev/null 2>&1 || true
-export DISPLAY=:99 PULSE_SINK=lbx
+pactl load-module module-null-sink sink_name=gmx >/dev/null 2>&1 || true
+export DISPLAY=:99 PULSE_SINK=gmx
 echo "rpath: $(ldd $BIN | grep libcef | head -1)"
 
 for page in sync video-webm video-mp4; do
@@ -29,7 +29,7 @@ echo "=== SIGTERM shutdown ==="
 PID=$!; sleep 6
 kill -TERM $PID; for i in $(seq 1 40); do kill -0 $PID 2>/dev/null || break; sleep 0.1; done
 if kill -0 $PID 2>/dev/null; then echo "still running after 4 s: FAIL"; kill -9 $PID; else echo "exited within $((i*100)) ms after SIGTERM"; fi
-sleep 1; echo "leftover browser processes: $(pgrep -fc liveboxmix-browser || true)"
+sleep 1; echo "leftover browser processes: $(pgrep -fc godwinmix-browser || true)"
 grep '\[browser\]' "$OUT/term.log" | tail -3
 
 echo "=== measurement ==="

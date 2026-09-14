@@ -120,8 +120,9 @@ pub struct ControlConfig {
     /// Bearer token every `/api/*` request and the WebSocket must carry.
     /// Unset means the control port is open to whoever can reach it, which is
     /// how it has always worked and is fine behind a firewall. The
-    /// `LIVEBOXMIX_TOKEN` environment variable overrides this, so a deployment
-    /// can keep the secret out of the config file. See `Config::token`.
+    /// `GODWINMIX_TOKEN` environment variable overrides this, so a deployment
+    /// can keep the secret out of the config file. `LIVEBOXMIX_TOKEN` is
+    /// accepted for one release and warns. See `Config::token`.
     #[serde(default)]
     pub token: Option<String>,
 }
@@ -211,13 +212,13 @@ pub struct SecurityConfig {
 
 /// How `web+` sources are rendered.
 ///
-/// The preferred renderer is `liveboxmix-browser`, the CEF sidecar in
+/// The preferred renderer is `godwinmix-browser`, the CEF sidecar in
 /// `browser/`: a full Chromium drawing off screen, handing over raw frames and
 /// PCM with no encoder in between. When it is found, every `web+` source runs
 /// through it. When it is not, `web+` falls back to GStreamer's `wpesrc`.
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct BrowserConfig {
-    /// Path to `liveboxmix-browser`. Unset means: look next to this executable,
+    /// Path to `godwinmix-browser`. Unset means: look next to this executable,
     /// then on PATH. Set to a path that does not exist and `web+` sources fail
     /// with a clear message rather than silently falling back.
     #[serde(default)]
@@ -557,6 +558,60 @@ struct StoredRuntime {
     outputs: Option<Vec<OutputConfig>>,
 }
 
+/// The value of a `GODWINMIX_*` variable, accepting the `LIVEBOXMIX_*` name
+/// the product carried before the rename.
+///
+/// The old name works for one release and says so in the log the first time it
+/// is used, because a deployment that sets it in a unit file or a container's
+/// environment should not lose its token to a rename it did not make. Both
+/// this function and the fallback go away in the release after 0.2.
+pub fn env_var(suffix: &str) -> Option<String> {
+    if let Ok(v) = std::env::var(format!("GODWINMIX_{suffix}")) {
+        return Some(v);
+    }
+    match std::env::var(format!("LIVEBOXMIX_{suffix}")) {
+        Ok(v) => {
+            tracing::warn!(
+                "LIVEBOXMIX_{suffix} is the old name and will stop working after this release: \
+                 set GODWINMIX_{suffix} instead"
+            );
+            Some(v)
+        }
+        Err(_) => None,
+    }
+}
+
+/// The config file to read, given the one that was asked for.
+///
+/// Normally that is the one that was asked for. The exception is the rename:
+/// a box that has `liveboxmix.toml` beside it and no `godwinmix.toml` is a box
+/// that was working yesterday, and it keeps working for one release. The
+/// runtime store follows the stem of whichever file is used, so a mixer that
+/// falls back keeps writing `liveboxmix.runtime.toml` and its sources stay
+/// where it left them. Dropped in the release after 0.2.
+pub fn path_in_force(asked: &Path) -> std::path::PathBuf {
+    if asked.exists() {
+        return asked.to_path_buf();
+    }
+    let Some(legacy) = asked
+        .file_name()
+        .and_then(|n| n.to_str())
+        .and_then(|n| n.strip_prefix("godwinmix"))
+        .map(|rest| asked.with_file_name(format!("liveboxmix{rest}")))
+    else {
+        return asked.to_path_buf();
+    };
+    if legacy.exists() {
+        tracing::warn!(
+            path = %legacy.display(),
+            "no {} here, reading the LiveboxMix config instead. Rename it: the old name will not be read after this release",
+            asked.display()
+        );
+        return legacy;
+    }
+    asked.to_path_buf()
+}
+
 impl Config {
     /// Where runtime source and output changes are saved for a config path.
     pub fn runtime_store_path(config: &Path) -> std::path::PathBuf {
@@ -566,15 +621,14 @@ impl Config {
     }
 
     /// The control token in force: the environment first, then the config
-    /// file. Empty strings count as unset, so `LIVEBOXMIX_TOKEN=` in a unit
+    /// file. Empty strings count as unset, so `GODWINMIX_TOKEN=` in a unit
     /// file does not lock everyone out with a token nobody can type.
     pub fn token(&self) -> Option<String> {
         let present = |t: String| {
             let t = t.trim().to_string();
             (!t.is_empty()).then_some(t)
         };
-        std::env::var("LIVEBOXMIX_TOKEN")
-            .ok()
+        env_var("TOKEN")
             .and_then(present)
             .or_else(|| self.control.token.clone().and_then(present))
     }
@@ -639,6 +693,37 @@ impl Config {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A box that was running LiveboxMix yesterday has `liveboxmix.toml` and
+    /// nothing else. It keeps running for one release, and its runtime store
+    /// keeps the same stem so the sources it was given are still found.
+    #[test]
+    fn the_old_config_name_is_read_when_the_new_one_is_absent() {
+        let dir = std::env::temp_dir().join(format!("gmx-config-test-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let asked = dir.join("godwinmix.toml");
+        let legacy = dir.join("liveboxmix.toml");
+
+        // Neither file: what was asked for, so the error names the new name.
+        assert_eq!(path_in_force(&asked), asked);
+
+        std::fs::write(&legacy, "").unwrap();
+        assert_eq!(path_in_force(&asked), legacy);
+        assert_eq!(
+            Config::runtime_store_path(&path_in_force(&asked)),
+            dir.join("liveboxmix.runtime.toml")
+        );
+
+        // Once the new name exists it wins, whatever is beside it.
+        std::fs::write(&asked, "").unwrap();
+        assert_eq!(path_in_force(&asked), asked);
+
+        // A path that is neither name is passed through untouched.
+        let other = dir.join("studio.toml");
+        assert_eq!(path_in_force(&other), other);
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 
     #[test]
     fn cdn_backoff_grows_and_saturates() {

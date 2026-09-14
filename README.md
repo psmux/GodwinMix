@@ -1,6 +1,6 @@
-# LiveboxMix
+# GodwinMix
 
-[![build](https://github.com/psmux/LiveboxMix/actions/workflows/build.yml/badge.svg)](https://github.com/psmux/LiveboxMix/actions/workflows/build.yml)
+[![build](https://github.com/psmux/GodwinMix/actions/workflows/build.yml/badge.svg)](https://github.com/psmux/GodwinMix/actions/workflows/build.yml)
 
 A live RTMP video mixer. Several RTMP sources come in, one of them is on
 program at a time, and the program feed goes out to one or more RTMP
@@ -83,7 +83,7 @@ mixer's own GStreamer stack.
 | adding or removing a source at runtime | no gap, largest inter-frame interval 34 ms (one frame at 30 fps) |
 | multiview over WebSocket | 8.0 fps, 22.7 KB/frame, about 1.5 Mbit/s |
 
-63 unit tests, including a regression for every bug found during that testing.
+123 unit tests, including a regression for every bug found during that testing.
 
 * **Superimpose on air, indistinguishable from the whole page.** A demo page
   with three videos (a lead clip with sound and two muted sidebar clips) was
@@ -115,10 +115,14 @@ with both servers and is not affected.
 brew install gstreamer          # or your distro's gstreamer + plugins base/good/bad/ugly/libav/rs
 cargo build --release
 
-./target/release/liveboxmix --probe            # what codecs will be used here
-./target/release/liveboxmix --example-config > liveboxmix.toml
-./target/release/liveboxmix --config liveboxmix.toml
+./target/release/godwinmix --probe            # what codecs will be used here
+./target/release/godwinmix --example-config > godwinmix.toml
+./target/release/godwinmix --config godwinmix.toml
 ```
+
+The build leaves two binaries with the same code behind them: `godwinmix`, the
+name a service unit and a package use, and `gmx`, the short one to type.
+`gmx --config godwinmix.toml` is the line above.
 
 Open `http://localhost:8080`. Click a cell to take that camera. Number keys 1
 to 9 take directly, 0 or Escape cuts to black.
@@ -134,7 +138,7 @@ behind as artifacts. What differs by platform:
 |---|---|---|---|---|
 | Linux | distro packages | NVIDIA, VA | native, with H.264 from a prebuilt CEF (see Codecs) | `.deb`, AppImage |
 | macOS | `brew install gstreamer` | VideoToolbox | `.app` bundle from `browser/dev/mac-bundle.sh`, or the Linux one in a container | `.app` |
-| Windows | the MSVC runtime and development MSIs from gstreamer.freedesktop.org, or `choco install gstreamer gstreamer-devel`; put `C:\gstreamer\1.0\msvc_x86_64\bin` on `PATH` | Media Foundation, NVIDIA | `liveboxmix-browser.exe` next to the mixer, from `cd browser; cargo build --release` | `.msi`, NSIS |
+| Windows | the MSVC runtime and development MSIs from gstreamer.freedesktop.org, or `choco install gstreamer gstreamer-devel`; put `C:\gstreamer\1.0\msvc_x86_64\bin` on `PATH` | Media Foundation, NVIDIA | `godwinmix-browser.exe` next to the mixer, from `cd browser; cargo build --release` | `.msi`, NSIS |
 
 Two things are worth knowing on Windows. Sources whose media arrives on a
 pipe (the browser sidecar, `exec:` sources) are read by a thread of the mixer
@@ -192,7 +196,7 @@ does not exist on one of them is a logged warning rather than a crash.
 A scheduled take takes `at_running_time_ms`, armed on the pipeline clock so it
 lands on the intended frame rather than whenever the request happened to arrive.
 
-With `[control] token` set (or `LIVEBOXMIX_TOKEN` in the environment) every
+With `[control] token` set (or `GODWINMIX_TOKEN` in the environment) every
 request carries `Authorization: Bearer <token>`. `GET` requests and the
 WebSocket also accept `?token=`, so an `<img>` tag can fetch a snapshot.
 
@@ -215,7 +219,7 @@ The distinction that matters is continuous versus finite rather than the
 protocol. A continuous source is re-timed onto programme time and restarted when
 it drops; a finite one is expected to end.
 
-Sources added or removed from the UI are written to `<config>.sources.toml`
+Sources added or removed from the UI are written to `<config>.runtime.toml`
 beside the config file. Once that file exists it is the authoritative list:
 merging it with the config's own `[[sources]]` would mean a source deleted in the
 UI reappearing at the next restart. Delete the file to go back to the config.
@@ -306,7 +310,7 @@ source is GPU accelerated on a machine with a GPU and falls back to software on
 one without, with no change to the command.
 
 ```sh
-liveboxmix ctl source add gen \
+godwinmix ctl source add gen \
   "exec:ffmpeg -re -f lavfi -i testsrc2=size=1280x720:rate=30 \
    -f lavfi -i sine=frequency=440 -c:v libx264 -preset veryfast -tune zerolatency \
    -c:a aac -ar 48000 -ac 2 -f mpegts -"
@@ -343,8 +347,8 @@ including DRM players, WebGL and WebAudio, which is the reason for using a whole
 browser rather than a lighter renderer.
 
 ```sh
-liveboxmix ctl source add site \
-  "exec:/opt/liveboxmix/tools/browser-source.sh https://example.com/page 1280 720 30"
+godwinmix ctl source add site \
+  "exec:/opt/godwinmix/tools/browser-source.sh https://example.com/page 1280 720 30"
 ```
 
 Needs `xvfb`, `chromium`, `pulseaudio` and `ffmpeg`, and `security.allow_exec_sources`.
@@ -388,7 +392,7 @@ encoder in between.
 Three ways a page can reach the canvas, from most to least expensive:
 
 1. **The sidecar renders the whole page.** What every `web+` source does when
-   `liveboxmix-browser` is found. Works everywhere, and a page playing video
+   `godwinmix-browser` is found. Works everywhere, and a page playing video
    costs about a CPU core, because Chromium decodes the video in software and
    repaints the whole page around it thirty times a second.
 2. **A renderer inside GStreamer, or a screen grab.** Without a sidecar the
@@ -406,13 +410,13 @@ stream"), the name defaults to the site's host, and the id is derived from
 the name. Nobody types a prefix. The same holds for the API and the CLI:
 
 ```sh
-liveboxmix ctl source add - https://www.youtube.com/watch?v=aqz-KE-bpKQ --web --name YouTube
-liveboxmix ctl take youtube
+godwinmix ctl source add - https://www.youtube.com/watch?v=aqz-KE-bpKQ --web --name YouTube
+godwinmix ctl take youtube
 curl -X POST localhost:8080/api/sources -H 'content-type: application/json' \
   -d '{"uri":"https://www.youtube.com/watch?v=aqz-KE-bpKQ","kind":"web","name":"YouTube"}'
 
 # Let the mixer decode the page's own video where it can. See superimpose below.
-liveboxmix ctl source add game https://example.com/live-game --web --superimpose auto
+godwinmix ctl source add game https://example.com/live-game --web --superimpose auto
 curl -X POST localhost:8080/api/sources -H 'content-type: application/json' \
   -d '{"uri":"https://example.com/live-game","kind":"web","superimpose":"auto"}'
 ```
@@ -428,7 +432,7 @@ its poster. And YouTube's `/embed/` URLs refuse to load as a top level page
 `superimpose` is described further down. It is `"off"` unless you ask for it,
 and a source that is not a website accepts the field and never looks at it.
 
-`browser/` holds the renderer, `liveboxmix-browser`. It embeds Chromium
+`browser/` holds the renderer, `godwinmix-browser`. It embeds Chromium
 through CEF with off screen rendering: Chromium paints each frame into memory
 and hands the audio over as float PCM through its audio handler. The frames
 leave the process as raw I420 and the audio as 48 kHz float, in a Matroska
@@ -438,15 +442,15 @@ page measures black 16, white 235, exactly what it painted.
 
 The mixer runs it for every `web+` source when it can find it: at
 `browser.sidecar` in the config, else next to its own executable (as
-`liveboxmix-browser` on Linux, `liveboxmix-browser.app` on macOS), else on
+`godwinmix-browser` on Linux, `godwinmix-browser.app` on macOS), else on
 `PATH`. Without one, `web+` falls back to GStreamer's `wpesrc`, described
 below. `[browser]` also takes extra `args` and `env` for the sidecar.
 
 ```toml
 [browser]
-# sidecar = "/opt/liveboxmix/liveboxmix-browser"
+# sidecar = "/opt/godwinmix/godwinmix-browser"
 # args = ["--audio-offset-ms", "0"]
-# env = { LBX_BROWSER_SWITCHES = "enable-gpu" }
+# env = { GMX_BROWSER_SWITCHES = "enable-gpu" }
 ```
 
 #### Finding the media a page is playing
@@ -575,7 +579,7 @@ an address both sides can reach.
 
 Since the fallback is silent, the mixer reports what actually happened rather
 than what was asked for. `GET /api/status` carries `superimposed` on every
-source, `liveboxmix ctl status` and `ctl source list` mark those sources
+source, `godwinmix ctl status` and `ctl source list` mark those sources
 `(superimposed)`, and the UI puts a green `direct` badge on the row. A website
 source set to `auto` with no badge is working normally; it simply had nothing
 to give.
@@ -591,7 +595,7 @@ type, ad hoc signed). The mixer launches the binary inside the bundle.
 
 Runs with or without a GPU. Chromium rasterises in software by default here
 (`--disable-gpu`); the switches Chromium is started with can be extended
-with `LBX_BROWSER_SWITCHES="a,b=c"` in the sidecar's environment.
+with `GMX_BROWSER_SWITCHES="a,b=c"` in the sidecar's environment.
 
 **Codecs.** Everything Chromium does: WebAudio, WebGL, canvas, HTML5 video
 in VP8, VP9, AV1 and Opus. H.264 and AAC depend on which CEF binary sits
@@ -614,8 +618,8 @@ has them:
 
   ```sh
   gh release download cef-150.0.10-proprietary-codecs -R tobagin/karere --pattern '*linux64*'
-  browser/dev/install-cef-dist.sh cef_binary_150.0.10+*_linux64_minimal.zip ~/.cache/lbx-cef
-  cd browser && CEF_PATH=~/.cache/lbx-cef cargo build --release
+  browser/dev/install-cef-dist.sh cef_binary_150.0.10+*_linux64_minimal.zip ~/.cache/gmx-cef
+  cd browser && CEF_PATH=~/.cache/gmx-cef cargo build --release
   ```
 
   Verified on the plain Debian image (arm64): the H.264/AAC `<video>` page
@@ -633,7 +637,7 @@ has them:
   `Dockerfile.arch-runtime` plus `sidecar-docker.sh` package the result as a
   container the mixer runs through Docker (the wrapper forwards the stop
   signal; the container is gone 0.9 s after `source remove`;
-  `LBX_SIDECAR_LOG=<file>` in `browser.env` keeps the sidecar's log). The
+  `GMX_SIDECAR_LOG=<file>` in `browser.env` keeps the sidecar's log). The
   wrapper runs the container with `--log-driver none`, and that is not
   optional: Docker's default log driver copies everything a container writes
   to stdout into a JSON file on disk, so each sidecar's 41 MB/s of raw video
@@ -654,7 +658,7 @@ has them:
   with 32 dropouts in 25 s and a stuttering picture. That is CPU, not the
   sidecar: the same page on a Linux server runs natively with the whole
   machine, and with a GPU Chromium can be given hardware decoding
-  (`LBX_BROWSER_SWITCHES="enable-features=VaapiVideoDecoder"` without
+  (`GMX_BROWSER_SWITCHES="enable-features=VaapiVideoDecoder"` without
   `disable-gpu`, untested here). On a Mac, the native codec-less `.app` plays
   YouTube smoothly, because YouTube does not need H.264. Verified the
   same way: the H.264/AAC page on air through the mixer at 30.0 fps, six of six
@@ -720,7 +724,7 @@ The fallback when no sidecar is installed. A page is rendered by WPE WebKit
 inside the mixer's own process:
 
 ```sh
-liveboxmix ctl source add game web+https://example.com/live-game
+godwinmix ctl source add game web+https://example.com/live-game
 ```
 
 * It needs GStreamer's `wpesrc` (WPE WebKit): `gstreamer1.0-wpe` on Debian and
@@ -792,39 +796,40 @@ one held paused for six seconds rolled to black for its whole duration.
 
 ## Command line
 
-The daemon is headless and controlled entirely over HTTP. `liveboxmix ctl` is a
+The daemon is headless and controlled entirely over HTTP. `godwinmix ctl` is a
 thin client for that same API, so scripting it does not mean assembling JSON by
-hand. Point it elsewhere with `--url` or `LIVEBOXMIX_URL`, and pass `--token`
-when the mixer has one.
+hand. Point it elsewhere with `--url` or `GODWINMIX_URL`, and pass `--token`
+when the mixer has one. `gmx` is the same binary under a shorter name, so
+`gmx ctl status` and `godwinmix ctl status` are one command.
 
 ```sh
-liveboxmix ctl status
-liveboxmix ctl take cam2                 # or: take   (with no id, cuts to black)
-liveboxmix ctl source add hls1 https://host/stream.m3u8 --name "Roof camera"
-liveboxmix ctl source remove hls1
-liveboxmix ctl output add youtube rtmp://a.rtmp.youtube.com/live2/KEY --policy cdn
-liveboxmix ctl output list
-liveboxmix ctl ad /srv/ads/spot.mp4 --return-to cam1
-liveboxmix ctl media
-liveboxmix ctl golive https://example.com/event/42 --rtmp rtmp://a.rtmp.youtube.com/live2/KEY --superimpose auto
+godwinmix ctl status
+godwinmix ctl take cam2                 # or: take   (with no id, cuts to black)
+godwinmix ctl source add hls1 https://host/stream.m3u8 --name "Roof camera"
+godwinmix ctl source remove hls1
+godwinmix ctl output add youtube rtmp://a.rtmp.youtube.com/live2/KEY --policy cdn
+godwinmix ctl output list
+godwinmix ctl ad /srv/ads/spot.mp4 --return-to cam1
+godwinmix ctl media
+godwinmix ctl golive https://example.com/event/42 --rtmp rtmp://a.rtmp.youtube.com/live2/KEY --superimpose auto
 ```
 
 `golive` is `POST /api/golive`: the page becomes a web source, the destination
 is added if given, and the mixer takes the page to programme by itself once it
 is live. It is the call a customer's backend makes behind a "Go Live" button.
 
-`liveboxmix mcp` is the same client dressed as an MCP server over stdio, for a
+`godwinmix mcp` is the same client dressed as an MCP server over stdio, for a
 model rather than a shell:
 
 ```sh
-liveboxmix mcp --url http://127.0.0.1:8080 --token TOKEN
+godwinmix mcp --url http://127.0.0.1:8080 --token TOKEN
 ```
 
 Requests answer with the mixer's own reason for refusing rather than a bare
 status code:
 
 ```
-$ liveboxmix ctl source add cam1 rtmp://host/live/x
+$ godwinmix ctl source add cam1 rtmp://host/live/x
 Error: 400 Bad Request: source cam1 already exists
 ```
 
@@ -832,7 +837,7 @@ Nothing here needs the desktop app; it is only a window onto the same API.
 
 ### Token
 
-Set `[control] token = "..."` in the config, or `LIVEBOXMIX_TOKEN` in the
+Set `[control] token = "..."` in the config, or `GODWINMIX_TOKEN` in the
 environment, and every `/api/*` route and `/ws` demand
 `Authorization: Bearer <token>`. A GET, which is what a WebSocket upgrade is,
 may send `?token=<token>` instead, because a browser cannot put a header on a
@@ -840,10 +845,10 @@ socket. Missing or wrong is a 401 with a one line JSON body. With no token
 configured nothing changes and the port is open, as it always was.
 
 The UI at `/` asks for the token once when it meets a 401 and keeps it in the
-browser's localStorage. `ctl` takes `--token` or reads `LIVEBOXMIX_TOKEN`:
+browser's localStorage. `ctl` takes `--token` or reads `GODWINMIX_TOKEN`:
 
 ```sh
-LIVEBOXMIX_TOKEN=change-me liveboxmix ctl status
+GODWINMIX_TOKEN=change-me godwinmix ctl status
 curl -H 'Authorization: Bearer change-me' http://mixer:8080/api/status
 ```
 
@@ -858,7 +863,7 @@ moment it is live, waiting up to a minute before it gives up with a log line.
 The reply is an immediate 202.
 
 ```sh
-liveboxmix ctl golive https://example.com/live-game --rtmp rtmp://a.rtmp.youtube.com/live2/KEY
+godwinmix ctl golive https://example.com/live-game --rtmp rtmp://a.rtmp.youtube.com/live2/KEY
 curl -X POST localhost:8080/api/golive -H 'content-type: application/json' \
   -H 'Authorization: Bearer change-me' \
   -d '{"url": "https://example.com/live-game", "rtmp": "rtmp://a.rtmp.youtube.com/live2/KEY"}'
@@ -894,7 +899,7 @@ the user agent; in a browser the same page does not show them.
 
 The window has nothing to show until a mixer answers on `localhost:8080`,
 which is why the script starts one first. It opens the bundle at
-`tauri-app/target/release/bundle/macos/LiveboxMix.app` when one has been
+`tauri-app/target/release/bundle/macos/GodwinMix.app` when one has been
 built (`cd tauri-app && cargo tauri build --bundles app`), else the bare
 binary from `cargo build --release` in `tauri-app/`.
 
@@ -916,11 +921,11 @@ next frame; a new web source needs 5 to 20 seconds, a superimposed one a few
 more for the probe. Never take a source that is not `live`, poll faster than
 the frame rate, or remove the source on programme without taking another first.
 
-`liveboxmix mcp` serves the same API as MCP tools over stdio, so Claude Code
+`godwinmix mcp` serves the same API as MCP tools over stdio, so Claude Code
 gets the mixer with one line:
 
 ```sh
-claude mcp add liveboxmix -- liveboxmix mcp --url http://HOST:8080 --token TOKEN
+claude mcp add godwinmix -- godwinmix mcp --url http://HOST:8080 --token TOKEN
 ```
 
 `POST /api/golive` is for a customer's "Go Live" button: their backend sends
@@ -972,3 +977,29 @@ runs the loop above against a Claude model.
   Windows need your own build. The official binaries omit them. See Codecs.
 * Sources are assumed to be H.264 and AAC, which is what RTMP carries in
   practice. Anything else is reported as a failed source rather than decoded.
+
+## Upgrading from LiveboxMix
+
+The product was called LiveboxMix until 0.2. The binaries, the config file, the
+environment variables and the desktop app's URL scheme all carry the new name
+now. A box that was running 0.1 keeps working for this one release, with a
+warning in the log each time it uses an old name:
+
+| Old | New | For how long |
+|---|---|---|
+| `liveboxmix`, `liveboxmix-browser` | `godwinmix` (and `gmx`), `godwinmix-browser` | replace the binaries at the same time |
+| `liveboxmix.toml` | `godwinmix.toml` | the old name is read when the new one is absent, until 0.3 |
+| `LIVEBOXMIX_TOKEN`, `LIVEBOXMIX_URL` | `GODWINMIX_TOKEN`, `GODWINMIX_URL` | the old names are read, until 0.3 |
+| `lbx-browser-<pid>` profile directories | `gmx-browser-<pid>` | both are cleaned up, until 0.3 |
+| `liveboxmix://quit` from a cached page | `godwinmix://quit` | the desktop app answers both, until 0.3 |
+| `lbx.token` in the browser | `gmx.token` | moved across once on first load |
+
+The runtime store still follows the config file's stem, so a mixer that falls
+back to `liveboxmix.toml` keeps reading and writing `liveboxmix.runtime.toml`
+and the sources it was given stay where they are. Rename both files together
+when you rename anything.
+
+Two names in the sidecar's environment changed without a fallback, because they
+are development switches rather than deployment contracts:
+`LBX_BROWSER_SWITCHES` is now `GMX_BROWSER_SWITCHES` and `LBX_SIDECAR_LOG` is
+now `GMX_SIDECAR_LOG`.

@@ -1,4 +1,4 @@
-# LiveboxMix in a container
+# GodwinMix in a container
 
 The mixer as shipped: binaries only, no source. `Dockerfile` builds a Debian
 trixie image with GStreamer (including `gstreamer1.0-wpe`), Xvfb for Chromium
@@ -11,23 +11,23 @@ deploy/docker/            (or wherever the recipe is copied)
   Dockerfile
   entrypoint.sh           Xvfb, then the wpesrc mixer on :8081 if wpe.toml exists, then the mixer on :8080
   bin/
-    liveboxmix            the CI artifact for Linux (built on Ubuntu 24.04, glibc 2.39)
-    liveboxmix-browser    the CEF sidecar, same artifact
+    godwinmix            the CI artifact for Linux (built on Ubuntu 24.04, glibc 2.39)
+    godwinmix-browser    the CEF sidecar, same artifact
     libcef.so, chrome-sandbox, *.pak, locales/, ...
                           a CEF 150.0.10 distribution with H.264 and AAC, flattened here
                           (Karere's cef-150.0.10-proprietary-codecs release, linux64 minimal)
 ```
 
-Mount a config directory at `/etc/liveboxmix` holding `liveboxmix.toml` (start
-from `liveboxmix.example.toml`; set `[control] token`) and, optionally,
+Mount a config directory at `/etc/godwinmix` holding `godwinmix.toml` (start
+from `godwinmix.example.toml`; set `[control] token`) and, optionally,
 `wpe.toml` for the wpesrc mixer, and a media directory at
-`/var/lib/liveboxmix/media`. The mixer writes the sources it is given to
-`liveboxmix.runtime.toml` next to its config and reloads them on restart.
+`/var/lib/godwinmix/media`. The mixer writes the sources it is given to
+`godwinmix.runtime.toml` next to its config and reloads them on restart.
 
 ```bash
-docker build -t liveboxmix deploy/docker
-docker run -d --name liveboxmix --shm-size 1g -p 127.0.0.1:8080:8080 \
-  -v $PWD/config:/etc/liveboxmix -v $PWD/media:/var/lib/liveboxmix/media liveboxmix
+docker build -t godwinmix deploy/docker
+docker run -d --name godwinmix --shm-size 1g -p 127.0.0.1:8080:8080 \
+  -v $PWD/config:/etc/godwinmix -v $PWD/media:/var/lib/godwinmix/media godwinmix
 ```
 
 ## GPU
@@ -73,7 +73,7 @@ Retrying…") is not the only way in.
 
 A page that plays video usually starts it muted and waits for a click. Nobody
 is at the mixer's browser to click, so the browser announces itself as
-`LiveboxMix/<version>` in its user agent (a page can start unmuted for it) and
+`GodwinMix/<version>` in its user agent (a page can start unmuted for it) and
 presses the page's own unmute for it: every whole page gets a small script on
 load (`browser/src/unmute.js`) that unmutes media elements and clicks a
 control whose label reads "Enable Sound", "Unmute", "Tap for sound" or the
@@ -82,7 +82,7 @@ are left alone: there the mixer plays the media itself.
 
 ## Updating
 
-Copy new `liveboxmix` and `liveboxmix-browser` into `bin/`, rebuild the image,
-restart the container. Sources come back from `liveboxmix.runtime.toml`.
+Copy new `godwinmix` and `godwinmix-browser` into `bin/`, rebuild the image,
+restart the container. Sources come back from `godwinmix.runtime.toml`.
 `dev/onair.sh <recording.flv>` measures what went on air (picture regions and
 audio level per 5 s) from an RTMP recording.

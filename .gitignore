@@ -12,7 +12,7 @@ dev/harness/*.runtime.toml
 browser/dev/out/
 browser/dev/out-arch/
 browser/dev/rt-ctx/
-browser/dev/liveboxmix-browser
+browser/dev/godwinmix-browser
 
 # Self-signed cert mediamtx generates on first run
 auto.crt

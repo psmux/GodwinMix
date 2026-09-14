@@ -5,7 +5,7 @@ set -e
 cd /work/browser
 export CEF_PATH=/cefcache
 cargo build --release 2>&1 | grep -E '^(error|warning: unused|\s+-->|\s+Finished)' -A6 | head -40
-BIN=/work/browser/target/release/liveboxmix-browser
+BIN=/work/browser/target/release/godwinmix-browser
 export LD_LIBRARY_PATH=/work/browser/target/release
 RES=/work/browser/target/release
 
@@ -15,10 +15,10 @@ Xvfb :99 -screen 0 1280x720x24 -nolisten tcp >/dev/null 2>&1 &
 sleep 1
 export XDG_RUNTIME_DIR=/tmp/xdg; mkdir -p $XDG_RUNTIME_DIR; chmod 700 $XDG_RUNTIME_DIR
 pulseaudio --start --exit-idle-time=-1 >/dev/null 2>&1 || true
-pactl load-module module-null-sink sink_name=lbx >/dev/null 2>&1 || true
+pactl load-module module-null-sink sink_name=gmx >/dev/null 2>&1 || true
 
 # stdout is the stream; stderr is the log. That separation is the contract.
-DISPLAY=:99 PULSE_SINK=lbx timeout 40 "$BIN" \
+DISPLAY=:99 PULSE_SINK=gmx timeout 40 "$BIN" \
   --url file:///work/browser/test/page.html --width 1280 --height 720 --fps 30 --seconds 8 \
   --resources-dir "$RES" --locales-dir "$RES/locales" > "$OUT/stream.mkv" 2> "$OUT/run.log"
 echo "exit=$?"

@@ -1,6 +1,6 @@
 [package]
-name = "liveboxmix-browser"
-version = "0.1.0"
+name = "godwinmix-browser"
+version = "0.2.0"
 edition = "2021"
 description = "Headless Chromium (CEF) rendering a page as a raw video and audio source"
 
@@ -27,10 +27,10 @@ objc2 = "0.6"
 objc2-app-kit = { version = "0.3", default-features = false, features = ["std", "NSApplication", "NSEvent", "NSResponder"] }
 
 [[bin]]
-name = "liveboxmix-browser"
+name = "godwinmix-browser"
 path = "src/main.rs"
 
 # macOS only: Chromium's renderer, GPU and utility processes run this.
 [[bin]]
-name = "liveboxmix-browser-helper"
+name = "godwinmix-browser-helper"
 path = "src/helper.rs"

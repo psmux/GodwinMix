@@ -1644,7 +1644,7 @@ impl Mixer {
         }
         let body = match toml::to_string_pretty(&Stored { sources: &live, outputs: &outputs }) {
             Ok(b) => format!(
-                "# Sources and outputs managed from the LiveboxMix UI or API.\n\
+                "# Sources and outputs managed from the GodwinMix UI or API.\n\
                  # These lists take precedence over the ones in the config file.\n\
                  # Delete this file to go back to the config file's lists.\n\n{b}"
             ),

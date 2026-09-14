@@ -11,7 +11,7 @@
 # H.264 and AAC built in, for linux64 and linuxarm64.
 set -e
 ARCHIVE="$(cd "$(dirname "$1")" && pwd)/$(basename "$1")"
-CEF_PATH="${2:-${CEF_PATH:-$HOME/.cache/lbx-cef}}"
+CEF_PATH="${2:-${CEF_PATH:-$HOME/.cache/gmx-cef}}"
 NAME="$(basename "$ARCHIVE")"; NAME="${NAME%.zip}"; NAME="${NAME%.tar.bz2}"
 # cef_binary_150.0.10+g8042e43+chromium-150.0.7871.101_linux64_minimal
 VERSION="$(echo "$NAME" | sed -E 's/^cef_binary_([^+]+)\+.*/\1/')"

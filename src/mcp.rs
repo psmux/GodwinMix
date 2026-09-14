@@ -1,4 +1,4 @@
-//! `liveboxmix mcp`: the mixer as a set of tools for an AI agent.
+//! `godwinmix mcp`: the mixer as a set of tools for an AI agent.
 //!
 //! A Model Context Protocol server over stdio. An MCP client (Claude Code,
 //! Claude Desktop, anything that speaks the protocol) starts this binary as a
@@ -20,7 +20,7 @@ use serde_json::{json, Value};
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tracing::{debug, warn};
 
-const SERVER_NAME: &str = "liveboxmix";
+const SERVER_NAME: &str = "godwinmix";
 /// Offered when the client asks for a revision we have not heard of. The
 /// client then either accepts it or disconnects; either is better than
 /// pretending to speak something we do not.
@@ -218,7 +218,7 @@ fn initialize_result(params: &Value) -> Value {
         "protocolVersion": version,
         "capabilities": { "tools": {} },
         "serverInfo": { "name": SERVER_NAME, "version": env!("CARGO_PKG_VERSION") },
-        "instructions": "LiveboxMix is a live video mixer: several sources come in, one is on \
+        "instructions": "GodwinMix is a live video mixer: several sources come in, one is on \
             program at a time, and the program goes out to RTMP destinations without \
             interruption. Start with `status` or `agent_state` to learn the source ids, then \
             `take` to switch what is on air. Use `snapshot` to look at the pictures before \
@@ -608,7 +608,7 @@ mod tests {
         assert_eq!(r["id"], 1);
         assert_eq!(r["result"]["protocolVersion"], "2025-03-26");
         assert!(r["result"]["capabilities"]["tools"].is_object());
-        assert_eq!(r["result"]["serverInfo"]["name"], "liveboxmix");
+        assert_eq!(r["result"]["serverInfo"]["name"], "godwinmix");
         assert!(r.get("error").is_none());
     }
 

@@ -4,18 +4,18 @@
 set -e
 cd /work/browser; export CEF_PATH=/cefcache
 cargo build --release 2>&1 | grep -E '^(error|\s+-->)' -A6 | head -20 || true
-BIN=/work/browser/target/release/liveboxmix-browser; OUT=/work/browser/dev/out
+BIN=/work/browser/target/release/godwinmix-browser; OUT=/work/browser/dev/out
 Xvfb :99 -screen 0 1280x720x24 -nolisten tcp >/dev/null 2>&1 &
 sleep 1; export DISPLAY=:99
 unset PULSE_SERVER PULSE_SINK; pkill pulseaudio || true
 echo "=== no pulse, --disable-audio-output ==="
-LBX_BROWSER_SWITCHES="disable-audio-output" timeout 60 "$BIN" --url file:///work/browser/test/sync.html --width 1280 --height 720 --fps 30 --seconds 10 > "$OUT/nopulse.mkv" 2> "$OUT/nopulse.log" || true
+GMX_BROWSER_SWITCHES="disable-audio-output" timeout 60 "$BIN" --url file:///work/browser/test/sync.html --width 1280 --height 720 --fps 30 --seconds 10 > "$OUT/nopulse.mkv" 2> "$OUT/nopulse.log" || true
 grep '\[browser\]' "$OUT/nopulse.log" | grep -E 'audio|done' | head -4
 echo "=== no pulse, default switches ==="
 timeout 60 "$BIN" --url file:///work/browser/test/sync.html --width 640 --height 360 --fps 30 --seconds 6 > /dev/null 2> "$OUT/nopulse2.log" || true
 grep '\[browser\]' "$OUT/nopulse2.log" | grep -E 'audio|done' | head -3
 echo "=== H.264 video element, console ==="
-LBX_BROWSER_SWITCHES="enable-logging=stderr,v=0" timeout 60 "$BIN" --url file:///work/browser/test/video-mp4.html --width 640 --height 360 --fps 30 --seconds 6 > /dev/null 2> "$OUT/mp4.log" || true
+GMX_BROWSER_SWITCHES="enable-logging=stderr,v=0" timeout 60 "$BIN" --url file:///work/browser/test/video-mp4.html --width 640 --height 360 --fps 30 --seconds 6 > /dev/null 2> "$OUT/mp4.log" || true
 grep -iE 'CONSOLE|video error|play failed|codec|not supported' "$OUT/mp4.log" | head -5
 echo "=== measurement of the no-pulse capture ==="
 python3 - "$OUT/nopulse.mkv" <<'PY'

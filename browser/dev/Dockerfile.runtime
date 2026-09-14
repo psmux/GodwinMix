@@ -2,10 +2,10 @@
 # built against (with dev/install-cef-dist.sh, the one with H.264 and AAC).
 # Context: dev/rt-ctx, filled from the build's target/release. stdout is the
 # stream; the mixer runs it through dev/sidecar-docker.sh.
-FROM lbx-cef-dev:gst
-RUN mkdir -p /opt/lbx
-COPY . /opt/lbx/
-COPY entrypoint.sh /opt/lbx/entrypoint.sh
-RUN chmod +x /opt/lbx/entrypoint.sh /opt/lbx/liveboxmix-browser
+FROM gmx-cef-dev:gst
+RUN mkdir -p /opt/gmx
+COPY . /opt/gmx/
+COPY entrypoint.sh /opt/gmx/entrypoint.sh
+RUN chmod +x /opt/gmx/entrypoint.sh /opt/gmx/godwinmix-browser
 ENV DISPLAY=:99
-ENTRYPOINT ["/opt/lbx/entrypoint.sh"]
+ENTRYPOINT ["/opt/gmx/entrypoint.sh"]

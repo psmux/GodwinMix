@@ -167,7 +167,7 @@ bind = "0.0.0.0:8080"
 token = "a-long-random-string"
 ```
 
-`LIVEBOXMIX_TOKEN` in the mixer's environment does the same and suits a
+`GODWINMIX_TOKEN` in the mixer's environment does the same and suits a
 container. With a token set, every request carries it:
 
 ```
@@ -183,13 +183,13 @@ laptop and wrong for one in a data centre.
 
 ## MCP: giving Claude Code the mixer as tools
 
-`liveboxmix mcp` is an MCP server over stdio. It is a client of the same HTTP
+`godwinmix mcp` is an MCP server over stdio. It is a client of the same HTTP
 API and exposes it as tools, so a model in Claude Code, Claude Desktop or any
 other MCP client can direct the mixer by name rather than by assembling
 requests.
 
 ```sh
-claude mcp add liveboxmix -- liveboxmix mcp --url http://HOST:8080 --token TOKEN
+claude mcp add godwinmix -- godwinmix mcp --url http://HOST:8080 --token TOKEN
 ```
 
 Drop `--token` when the mixer has none. The binary can run on the workstation
@@ -202,8 +202,8 @@ entry:
 ```json
 {
   "mcpServers": {
-    "liveboxmix": {
-      "command": "liveboxmix",
+    "godwinmix": {
+      "command": "godwinmix",
       "args": ["mcp", "--url", "http://HOST:8080", "--token", "TOKEN"]
     }
   }

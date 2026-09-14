@@ -15,7 +15,7 @@ if ! curl -sf "$API" >/dev/null 2>&1; then
   if [ -n "$1" ]; then
     echo "starting the mixer on $1"
     mkdir -p "$ROOT/dev/harness/logs"
-    nohup "$ROOT/target/release/liveboxmix" --config "$1" > "$ROOT/dev/harness/logs/mixer.log" 2>&1 &
+    nohup "$ROOT/target/release/godwinmix" --config "$1" > "$ROOT/dev/harness/logs/mixer.log" 2>&1 &
   else
     echo "starting the test rig"
     "$ROOT/dev/harness/up.sh"
@@ -29,8 +29,8 @@ fi
 # the app menu exits with 2 after stopping the mixer, and that is when the
 # rest of the rig (mediamtx, the camera, the page server) is stopped too.
 # Plain Quit, or closing the window, leaves everything running.
-APP="$ROOT/tauri-app/target/release/bundle/macos/LiveboxMix.app/Contents/MacOS/liveboxmix-desktop"
-BIN="$ROOT/tauri-app/target/release/liveboxmix-desktop"
+APP="$ROOT/tauri-app/target/release/bundle/macos/GodwinMix.app/Contents/MacOS/godwinmix-desktop"
+BIN="$ROOT/tauri-app/target/release/godwinmix-desktop"
 if [ -x "$APP" ]; then RUN="$APP"; elif [ -x "$BIN" ]; then RUN="$BIN"; else
   echo "no desktop build yet: cd tauri-app && cargo tauri build --bundles app"; exit 1
 fi

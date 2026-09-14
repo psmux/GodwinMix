@@ -4,7 +4,7 @@ set -e
 cd /work/browser
 export CEF_PATH=/cefcache
 cargo build --release 2>&1 | grep -E '^(error|warning: unused|\s+-->|\s+Finished)' -A6 | head -40
-BIN=/work/browser/target/release/liveboxmix-browser
+BIN=/work/browser/target/release/godwinmix-browser
 # Chromium needs libcef.so on the loader path and its resources findable.
 LIBDIR=$(dirname "$(find /cefcache /work/browser/target -name libcef.so 2>/dev/null | head -1)")
 RES=$(dirname "$(find /cefcache /work/browser/target -name icudtl.dat 2>/dev/null | head -1)")
@@ -20,9 +20,9 @@ sleep 1
 # output stream, and with no device at all there may be no stream to tap.
 export XDG_RUNTIME_DIR=/tmp/xdg; mkdir -p $XDG_RUNTIME_DIR; chmod 700 $XDG_RUNTIME_DIR
 pulseaudio --start --exit-idle-time=-1 >/dev/null 2>&1 || true
-pactl load-module module-null-sink sink_name=lbx >/dev/null 2>&1 || true
+pactl load-module module-null-sink sink_name=gmx >/dev/null 2>&1 || true
 # D-Bus errors are expected in a container with no session bus and are noise.
-DISPLAY=:99 PULSE_SINK=lbx timeout 90 "$BIN" \
+DISPLAY=:99 PULSE_SINK=gmx timeout 90 "$BIN" \
   --url file:///work/browser/test/page.html --width 1280 --height 720 --fps 30 --frames 150 \
   --out-dir "$OUT" --resources-dir "$RES" --locales-dir "$RES/locales" > "$OUT/run.log" 2>&1
 echo "exit=$?"

@@ -7,8 +7,8 @@
 // sound needs no gesture beyond that. Idempotent per load, and it tries
 // again for a while, because players are created after the page has loaded.
 (() => {
-  if (window.__lbxUnmuteInstalled) return;
-  window.__lbxUnmuteInstalled = true;
+  if (window.__gmxUnmuteInstalled) return;
+  window.__gmxUnmuteInstalled = true;
   const LABEL = /enable sound|unmute|sound on|tap for sound|turn on sound|click for sound/i;
   const pressed = new WeakSet();
   const pass = () => {

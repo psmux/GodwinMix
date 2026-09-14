@@ -17,14 +17,14 @@ if (-not (MixerUp)) {
   $cfg = $args[0]
   New-Item -ItemType Directory -Force -Path "$Root\dev\harness\logs" | Out-Null
   Write-Host "starting the mixer on $cfg"
-  Start-Process -FilePath "$Root\target\release\liveboxmix.exe" -ArgumentList @("--config", $cfg) `
+  Start-Process -FilePath "$Root\target\release\godwinmix.exe" -ArgumentList @("--config", $cfg) `
     -RedirectStandardOutput "$Root\dev\harness\logs\mixer.log" -RedirectStandardError "$Root\dev\harness\logs\mixer.err.log" -WindowStyle Hidden
   $waited = 0
   while (-not (MixerUp) -and $waited -lt 30) { Start-Sleep -Seconds 1; $waited++ }
   if (-not (MixerUp)) { Write-Error "the mixer did not come up; see dev\harness\logs\mixer.err.log"; exit 1 }
 }
 
-$App = "$Root\tauri-app\target\release\liveboxmix-desktop.exe"
+$App = "$Root\tauri-app\target\release\godwinmix-desktop.exe"
 if (-not (Test-Path $App)) { Write-Error "no desktop build yet: cd tauri-app; cargo build --release"; exit 1 }
 Write-Host "desktop app open against http://localhost:8080 (this waits until it quits)"
 $p = Start-Process -FilePath $App -PassThru -Wait

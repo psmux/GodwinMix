@@ -1,16 +1,16 @@
 #!/bin/bash
 # Build the macOS app bundle for the sidecar. CEF on macOS only runs from a
 # bundle: the framework in Contents/Frameworks, and one helper app per
-# Chromium process type next to it. Output: target/release/liveboxmix-browser.app
+# Chromium process type next to it. Output: target/release/godwinmix-browser.app
 #
-#   CEF_PATH=~/.cache/lbx-cef dev/mac-bundle.sh
+#   CEF_PATH=~/.cache/gmx-cef dev/mac-bundle.sh
 set -e
 export PATH="$HOME/.cargo/bin:/opt/homebrew/bin:/usr/bin:/bin"
 cd "$(dirname "$0")/.."
-: "${CEF_PATH:=$HOME/.cache/lbx-cef}"
+: "${CEF_PATH:=$HOME/.cache/gmx-cef}"
 export CEF_PATH
 cargo build --release 2>&1 | grep -E '^(error|\s+-->)' -A6 | head -20 || true
-NAME=liveboxmix-browser
+NAME=godwinmix-browser
 REL=target/release
 FW="$(find "$CEF_PATH" -maxdepth 3 -type d -name 'Chromium Embedded Framework.framework' | head -1)"
 [ -d "$FW" ] || { echo "no CEF framework under $CEF_PATH"; exit 1; }
@@ -40,14 +40,14 @@ PL
 }
 
 cp "$REL/$NAME" "$APP/Contents/MacOS/$NAME"
-plist "$APP/Contents/Info.plist" "$NAME" "io.github.psmux.liveboxmix.browser" 0
+plist "$APP/Contents/Info.plist" "$NAME" "mix.godwin.browser" 0
 cp -R "$FW" "$APP/Contents/Frameworks/"
 for kind in "" " (GPU)" " (Renderer)" " (Plugin)" " (Alerts)"; do
   H="$NAME Helper$kind"
   HAPP="$APP/Contents/Frameworks/$H.app"
   mkdir -p "$HAPP/Contents/MacOS"
   cp "$REL/$NAME-helper" "$HAPP/Contents/MacOS/$H"
-  id="io.github.psmux.liveboxmix.browser.helper$(echo "$kind" | tr -d ' ()' | tr 'A-Z' 'a-z')"
+  id="mix.godwin.browser.helper$(echo "$kind" | tr -d ' ()' | tr 'A-Z' 'a-z')"
   plist "$HAPP/Contents/Info.plist" "$H" "$id" 1
 done
 # Ad hoc signatures: arm64 refuses to run unsigned code, and the helpers must
