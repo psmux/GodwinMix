@@ -22,7 +22,10 @@ cargo build --release
 
 There is no GStreamer in it. The binary is 2.3 MB on macOS arm64 and it needs
 nothing on the machine it runs on but a terminal, which is the point: you can
-copy it to a jump host and leave the mixer where it is.
+copy it to a jump host and leave the mixer where it is. (Built as part of the
+repository's workspace rather than on its own, Cargo uses the workspace's
+release profile instead of the crate's, which leaves the symbols in and takes
+it to 3.4 MB. `strip` brings it back.)
 
 ## Connect
 
