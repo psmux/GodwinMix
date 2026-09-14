@@ -13,7 +13,13 @@ use gstreamer::glib;
 use gstreamer::prelude::*;
 
 /// Is this factory installed on this machine?
+///
+/// Starts GStreamer if nobody has yet. Reading the registry before `gst::init`
+/// aborts the process in the bindings, and "did you initialise first" is not a
+/// question a plugin author should have to hold in their head to ask whether
+/// an element exists.
 pub fn exists(factory: &str) -> bool {
+    let _ = crate::init();
     gst::ElementFactory::find(factory).is_some()
 }
 

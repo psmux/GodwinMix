@@ -800,6 +800,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "gmx-audio-device"
+version = "0.1.0"
+dependencies = [
+ "godwinmix-capture-common",
+ "godwinmix-sdk",
+ "gstreamer",
+ "serde_json",
+]
+
+[[package]]
 name = "gmx-camera"
 version = "0.1.0"
 dependencies = [
