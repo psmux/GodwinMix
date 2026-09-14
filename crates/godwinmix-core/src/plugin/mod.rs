@@ -19,6 +19,7 @@ pub mod filter;
 pub mod filters;
 pub mod harness;
 pub mod host;
+pub mod loader;
 pub mod kinds;
 pub mod output;
 pub mod outputs;

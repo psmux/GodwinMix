@@ -114,9 +114,17 @@ static REGISTRY: &[Provide] = &[
     kinds::testsrc::PROVIDE,
 ];
 
-/// The provide named by `type`, if the core has one.
+/// The provide named by `type`, if this core has one.
+///
+/// The built in registry first, then whatever the loader has installed. In
+/// that order on purpose: a plugin can add a kind and can never shadow one
+/// that ships with the core, so a config written against `file/source` means
+/// the same thing on every machine.
 pub fn by_type(type_id: &str) -> Option<&'static Provide> {
-    registry().iter().find(|p| p.manifest.is(type_id))
+    registry()
+        .iter()
+        .find(|p| p.manifest.is(type_id))
+        .or_else(|| super::loader::source_provide(type_id))
 }
 
 /// The provide a bare URI resolves to, by scheme and rank.
@@ -125,11 +133,20 @@ pub fn by_type(type_id: &str) -> Option<&'static Provide> {
 /// every kind says what it claims and how strongly, and the operator overrides
 /// the outcome by writing `type` explicitly.
 pub fn resolve(uri: &str) -> Option<&'static Provide> {
-    registry()
+    let built_in = registry()
         .iter()
         .filter_map(|p| (p.claims)(uri).map(|rank| (rank, p)))
-        .max_by_key(|(rank, _)| *rank)
-        .map(|(_, p)| p)
+        .max_by_key(|(rank, _)| *rank);
+    let loaded = super::loader::source_for_uri(uri).map(|p| (p.manifest.rank, p));
+    // One table, ranked together. A plugin that claims `rtmp://` at 240 beats
+    // the built in kind at 200, which is exactly what `rank` is for and what
+    // lets an operator install a better RTMP source without editing a config.
+    match (built_in, loaded) {
+        (Some((a, p)), Some((b, q))) => Some(if b > a { q } else { p }),
+        (Some((_, p)), None) => Some(p),
+        (None, Some((_, q))) => Some(q),
+        (None, None) => None,
+    }
 }
 
 /// The `type` a config entry means, whether it wrote one or only a URI.
@@ -157,12 +174,19 @@ pub fn resolve_config(cfg: &SourceConfig) -> Result<&'static Provide> {
 
 /// Every source type id this build carries, for an error message or a listing.
 pub fn available() -> Vec<String> {
-    registry().iter().map(|p| p.manifest.provide_id()).collect()
+    let mut all: Vec<String> = registry().iter().map(|p| p.manifest.provide_id()).collect();
+    all.extend(super::loader::available());
+    all
 }
 
 /// Every source kind this build carries, with what it is and what it claims.
 pub fn described() -> Vec<super::KindInfo> {
-    registry().iter().map(|p| p.manifest.describe()).collect()
+    let mut all: Vec<super::KindInfo> = registry().iter().map(|p| p.manifest.describe()).collect();
+    // A loaded plugin's provides are in the same table a picker reads, so a
+    // build with a plugin installed offers its tile without the page being
+    // redeployed.
+    all.extend(super::loader::described());
+    all
 }
 
 /// The capabilities a source ends up with, given what its manifest declared
