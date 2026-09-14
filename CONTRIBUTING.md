@@ -54,12 +54,12 @@ them to pass. They run in a few seconds and they are expected to be green on
 Linux, macOS and Windows before you open a pull request. The GitHub Actions
 workflow in `.github/workflows/build.yml` builds and tests on all three.
 
-Also run:
+Also run `cargo clippy --all-targets` and do not add a warning that was not
+there before. A handful are outstanding and they are noted as such.
 
-```sh
-cargo fmt
-cargo clippy --all-targets
-```
+The tree is not `cargo fmt` clean and running it would reformat most of the
+repository, so do not. Match the style of the file you are editing: wider lines
+than rustfmt's default, and a struct literal on one line when it fits.
 
 There is a local test rig under `dev/harness/` (mediamtx and a synthetic
 camera) for anything that needs a real RTMP endpoint. `dev/harness/up.sh`
