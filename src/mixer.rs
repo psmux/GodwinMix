@@ -2625,6 +2625,7 @@ impl Mixer {
                     mv.add_tile(Some(slot.input.id.clone()), &slot.input.thumb_proxy)
                         .context("adding multiview tile")?;
                 }
+                mv.follow_clock_of(&self.program);
                 mv.start().context("starting multiview")?;
                 self.multiview = Some(mv);
                 self.mv.mark_built(Some(shape));

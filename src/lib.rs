@@ -12,6 +12,7 @@
 //! `gmx`, because the short name is what an operator types and neither should
 //! be a copy of the other. `run` below is what both call.
 
+pub mod bench;
 pub mod caps;
 pub mod config;
 pub mod convert;
@@ -91,6 +92,12 @@ enum Command {
         #[arg(long, env = "GODWINMIX_TOKEN")]
         token: Option<String>,
     },
+    /// Measure this machine's footprint and print the budget table.
+    ///
+    /// Every performance number GodwinMix publishes comes from here, with the
+    /// machine, the commit and the command that produced each row. See
+    /// `docs/explanation/footprint.md`.
+    Bench(bench::BenchArgs),
 }
 
 /// Parse the command line and do what it says. Both binaries call this.
@@ -115,6 +122,11 @@ pub async fn run() -> Result<()> {
             let url = url.or_else(|| config::env_var("URL")).unwrap_or_else(|| DEFAULT_URL.into());
             let token = token.or_else(|| config::env_var("TOKEN"));
             return ctl::run(&url, token.as_deref(), cmd).await;
+        }
+        Some(Command::Bench(b)) => {
+            // Needs GStreamer, which the mixer path initialises further down.
+            gstreamer::init().context("initialising GStreamer")?;
+            return bench::run(b).await;
         }
         Some(Command::Mcp { url, token }) => {
             let url = url.or_else(|| config::env_var("URL")).unwrap_or_else(|| DEFAULT_URL.into());
