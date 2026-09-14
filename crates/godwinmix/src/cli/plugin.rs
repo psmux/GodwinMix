@@ -662,9 +662,30 @@ fn new_plugin(lang: &str, out: &Path, fields: &Fields) -> Result<()> {
     println!("wrote {written} file(s) to {}", out.display());
     println!("\nNext:");
     println!("  cd {}", out.display());
+    if lang == "wasm" {
+        // A component has to be built before anything can load it, and the
+        // template's own script is the one line that does it.
+        println!("  ./check");
+    }
     println!("  gmx plugin test . --quick");
     println!("  gmx plugin add .");
-    println!("  gmx source add {} --type {}/{}", fields.name, fields.name, fields.kind);
+    // What to do with it once it is installed, which is not the same sentence
+    // for every kind: only a source is added by `source.add`.
+    match fields.kind.as_str() {
+        "source" => {
+            println!("  gmx source add {} --type {}/{}", fields.name, fields.name, fields.kind)
+        }
+        "output" => {
+            println!("  gmx output add {} --type {}/{}", fields.name, fields.name, fields.kind)
+        }
+        "transition" => println!(
+            "  gmx ctl program.take '{{\"scene\": \"...\", \"transition\": {{\"type\": \"{}\"}}}}'",
+            fields.name
+        ),
+        // A service, a device and the surface kinds are started by the core
+        // rather than added: installing one is the whole of it.
+        _ => println!("  it starts with the core; `gmx plugin list` says when it is ready"),
+    }
     Ok(())
 }
 

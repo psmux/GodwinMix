@@ -18,6 +18,8 @@ authors = ["{{author}}"]
 crate-type = ["cdylib"]
 
 [dependencies]
+# The guest SDK. Until it is published, point this at the copy in a GodwinMix
+# checkout:  godwinmix-sdk-wasm = { path = "../godwinmix/crates/godwinmix-sdk-wasm" }
 godwinmix-sdk-wasm = "{{sdk}}"
 serde_json = "1"
 

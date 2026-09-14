@@ -28,7 +28,7 @@ pub struct {{name_snake}} {
 impl Service for {{name_snake}} {
     fn initialize(hello: &Hello) -> Result<(Self, Ready), String> {
         let example_ms = hello.param_u64("example_ms", 1_000);
-        log(Level::Info, format!("{{name}} starting on {}", hello.instance));
+        log(Level::Info, format!("starting on {}", hello.instance));
         Ok((
             {{name_snake}} { example_ms },
             // Name every hook and tool here. The core only calls what this
