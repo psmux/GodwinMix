@@ -234,6 +234,7 @@ fn needs_superimposed(page: Option<f64>, media: &[Option<f64>]) -> bool {
 use crate::plugin::branch::{BranchCtx, ProgrammeBranch, VideoPads};
 
 pub mod slots;
+pub mod transition;
 pub use slots::{Placement, SlotPool};
 
 pub enum Command {
