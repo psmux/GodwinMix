@@ -1,0 +1,75 @@
+# GodwinMix with a local RTMP server, for trying it without an account
+# anywhere. mediamtx takes the programme and plays it back over HLS and
+# WebRTC, so you can watch what went out in a browser tab.
+#
+#   docker compose -f deploy/docker/docker-compose.yml up --build
+#
+# Then open http://localhost:8080 for the mixer and
+# http://localhost:8888/live/program for the programme as HLS.
+#
+# The compose file builds from the repository root (`context: ../..`), so run
+# it from anywhere in a clone; there is no artifact to fetch first.
+
+name: godwinmix
+
+services:
+  # The RTMP destination. In a real deployment this is YouTube, Twitch, or a
+  # server of your own; here it is a container so the quickstart needs no
+  # stream key.
+  rtmp:
+    image: bluenviron/mediamtx:latest
+    container_name: godwinmix-rtmp
+    environment:
+      MTX_RTMP: "yes"
+      MTX_RTMPADDRESS: ":1935"
+      MTX_HLS: "yes"
+      MTX_HLSADDRESS: ":8888"
+      MTX_HLSVARIANT: lowLatency
+      MTX_WEBRTC: "no"
+      MTX_RTSP: "no"
+      MTX_SRT: "no"
+      MTX_LOGLEVEL: info
+    ports:
+      - "127.0.0.1:1935:1935"   # RTMP in, for the mixer and for anything else you publish
+      - "127.0.0.1:8888:8888"   # HLS out, to watch the programme
+    restart: unless-stopped
+
+  godwinmix:
+    build:
+      context: ../..
+      dockerfile: deploy/docker/Dockerfile
+    image: ghcr.io/psmux/godwinmix:dev
+    container_name: godwinmix
+    depends_on:
+      - rtmp
+    environment:
+      # Change this before the port is reachable from anywhere but this
+      # machine. The mixer reads it and demands it on every API call.
+      GODWINMIX_TOKEN: "${GODWINMIX_TOKEN:-change-me}"
+      # GStreamer logging, when something is wrong: GST_DEBUG=3
+      GST_DEBUG: "${GST_DEBUG:-1}"
+    ports:
+      # Bound to loopback. Put a reverse proxy with TLS in front of it before
+      # it answers the internet (deploy/README.md).
+      - "127.0.0.1:8080:8080"
+    volumes:
+      # Named volumes rather than bind mounts, so this works from a clone with
+      # no setup: Docker seeds a named volume from the image, which means these
+      # arrive owned by the container's non root user and writable by it. A
+      # bind mount of a directory that does not exist yet is created by the
+      # daemon as root, and the mixer then cannot write its config or its
+      # runtime source list.
+      #
+      # For a real deployment, where you want to edit the config with an
+      # editor, replace these with bind mounts and chown the directories to
+      # uid 10001 first. See deploy/docker/README.md.
+      - config:/etc/godwinmix
+      - media:/var/lib/godwinmix/media
+    # A page rendered by WebKit wants more than the 64 MB of shared memory
+    # Docker gives a container by default.
+    shm_size: 1g
+    restart: unless-stopped
+
+volumes:
+  config:
+  media:

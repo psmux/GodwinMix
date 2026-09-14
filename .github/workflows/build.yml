@@ -1,18 +1,31 @@
 name: build
 
-# The mixer, its tests and the desktop app on the three platforms it runs on.
-# Every push to main and every tag. GStreamer comes from each platform's usual
-# package source; the CEF sidecar is compiled (checked) separately because its
-# build downloads a Chromium distribution and is the slow part.
+# The mixer and its tests on the three platforms it runs on, plus two jobs that
+# exist because of what they catch rather than what they build: a Linux runner
+# with no GPU at all, which is the path most people are on and the one nobody
+# would otherwise run, and an aarch64 build, because a Raspberry Pi is a target
+# and cross compilation breaks quietly.
+#
+# GStreamer comes from each platform's usual package source. The CEF sidecar is
+# only checked, not built, because its build downloads a Chromium distribution
+# and would double the time of every run.
 
 on:
   push:
     branches: [main]
     tags: ["v*"]
   pull_request:
+  workflow_dispatch:
 
 env:
   CARGO_TERM_COLOR: always
+  # A backtrace costs nothing here and saves a re-run when a test panics.
+  RUST_BACKTRACE: 1
+
+# A new push to the same branch makes the run in flight pointless.
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   mixer:
@@ -43,12 +56,18 @@ jobs:
           brew install gstreamer
           echo "PKG_CONFIG_PATH=$(brew --prefix gstreamer)/lib/pkgconfig:$(brew --prefix)/lib/pkgconfig" >> "$GITHUB_ENV"
 
+      # Windows has no package of the MSVC runtime that cargo can find on its
+      # own. The chocolatey packages install the official MSIs under Program
+      # Files and the three variables below are what the gstreamer crate's
+      # build script looks at. This is also the step that will bundle a trimmed
+      # GStreamer into the Tauri .msi when Phase 3 lands: the target is a 150 MB
+      # installer against the 527 MB the stock runtime installer costs, and
+      # until then a Windows user installs GStreamer themselves.
       - name: GStreamer (Windows)
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
           choco install -y --no-progress gstreamer gstreamer-devel
-          # The chocolatey package installs the MSI under Program Files.
           $gst = "C:\Program Files\gstreamer\1.0\msvc_x86_64"
           "PKG_CONFIG_PATH=$gst\lib\pkgconfig" | Out-File -FilePath $env:GITHUB_ENV -Append
           "GSTREAMER_1_0_ROOT_MSVC_X86_64=$gst\" | Out-File -FilePath $env:GITHUB_ENV -Append
@@ -57,8 +76,29 @@ jobs:
       - name: Build
         run: cargo build --release --locked
 
+      # The tests build real GStreamer pipelines. They are the drift check for
+      # protocol.json as well: the test that asserts every route in control.rs
+      # appears in the committed schema runs here, so a schema change without a
+      # regenerated protocol.json fails this job on every platform.
       - name: Test
         run: cargo test --release --locked
+
+      # A second belt on the same trousers, and the one that names the problem
+      # in the log rather than in a test assertion. Only where the file exists,
+      # so this does not fail before --api-info lands.
+      - name: protocol.json is not stale
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          if [ -f protocol.json ]; then
+            ./target/release/godwinmix --api-info > /tmp/protocol.json
+            if ! diff -u protocol.json /tmp/protocol.json; then
+              echo "protocol.json is out of date. Run: godwinmix --api-info > protocol.json" >&2
+              exit 1
+            fi
+          else
+            echo "no protocol.json in the tree yet, nothing to check"
+          fi
 
       - name: Sidecar compiles (Windows; macOS is bundled by dev/mac-bundle.sh)
         if: runner.os == 'Windows'
@@ -66,9 +106,8 @@ jobs:
         run: cargo check --release
 
       # The Linux sidecar is what production runs, so it is built, not only
-      # checked, and shipped in the artifact. It links libcef.so by name with
-      # an $ORIGIN rpath; the CEF distribution with codecs is placed next to it
-      # on the server (see README, Codecs).
+      # checked, and shipped in the artifact. It links libcef.so by name with an
+      # $ORIGIN rpath; the CEF distribution with codecs is placed next to it.
       - name: Sidecar (Linux)
         if: runner.os == 'Linux'
         working-directory: browser
@@ -99,3 +138,116 @@ jobs:
         with:
           name: godwinmix-${{ runner.os }}
           path: dist/
+
+  # The software path is never the path nobody ran. A GitHub Linux runner has
+  # no GPU, so `hardware = "software"` is what the probe would pick anyway;
+  # naming it makes the job fail loudly if a change ever starts assuming a
+  # hardware element is present, instead of silently falling back.
+  linux-software:
+    name: linux, no GPU, software codecs
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+
+      # Deliberately not gstreamer1.0-vaapi and not the NVIDIA plugins. If the
+      # tests need a hardware element, they fail here, which is the point.
+      - name: GStreamer, software only
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev \
+            libgstreamer-plugins-bad1.0-dev gstreamer1.0-plugins-base gstreamer1.0-plugins-good \
+            gstreamer1.0-plugins-bad gstreamer1.0-plugins-ugly gstreamer1.0-libav gstreamer1.0-tools
+
+      - name: Test
+        env:
+          # No GL context on this runner, and no DRI device. Mesa's software
+          # rasteriser is what a five year old laptop without drivers gets too.
+          LIBGL_ALWAYS_SOFTWARE: 1
+          GST_GL_DISABLED: 1
+        run: cargo test --locked
+
+      - name: What the probe picked
+        run: |
+          cargo build --locked
+          ./target/debug/godwinmix --probe | tee probe.txt
+          # Recorded in the summary so a change of default codec is visible in
+          # the run rather than in someone's surprise on air.
+          {
+            echo '## Codecs on a machine with no GPU'
+            echo '```'
+            cat probe.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  # A Raspberry Pi is a target machine in the plan, so an aarch64 build is
+  # checked on every push to main. Cross compiling against GStreamer needs the
+  # arm64 development packages, and getting them onto an x86 runner through
+  # multiarch is more fragile than running an arm64 container under QEMU.
+  # It is slow (about 20 minutes) and it is not on the pull request path.
+  linux-aarch64:
+    name: linux-aarch64 (QEMU)
+    runs-on: ubuntu-latest
+    if: github.event_name != 'pull_request'
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: QEMU for arm64
+        uses: docker/setup-qemu-action@v3
+        with:
+          platforms: arm64
+
+      - name: Build in an arm64 container
+        run: |
+          docker run --rm --platform linux/arm64 \
+            -v "$PWD:/src" -w /src \
+            -e CARGO_TERM_COLOR=always \
+            rust:1-trixie \
+            bash -eux -c '
+              apt-get update
+              apt-get install -y --no-install-recommends \
+                libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev \
+                libgstreamer-plugins-bad1.0-dev pkg-config
+              cargo build --release --locked --bins
+              ls -la target/release/godwinmix target/release/gmx
+            '
+
+      - name: Size of the aarch64 binary
+        run: |
+          size_mb=$(du -m target/release/godwinmix | cut -f1)
+          echo "aarch64 core binary: ${size_mb} MB (budget: 30 MB)" >> "$GITHUB_STEP_SUMMARY"
+          # A warning, not a failure, until the budget in the plan is measured
+          # rather than guessed.
+          if [ "$size_mb" -gt 30 ]; then
+            echo "::warning::core binary is ${size_mb} MB, over the 30 MB budget"
+          fi
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: godwinmix-linux-aarch64
+          path: |
+            target/release/godwinmix
+            target/release/gmx
+
+  clippy:
+    name: clippy
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+      - name: GStreamer
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev \
+            libgstreamer-plugins-bad1.0-dev
+      # Not -D warnings: a handful are outstanding and are noted as such in
+      # CONTRIBUTING.md. This job exists so the count is visible in the log and
+      # a reviewer can see a new one arrive.
+      - run: cargo clippy --all-targets --locked

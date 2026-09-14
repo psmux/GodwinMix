@@ -1,0 +1,13 @@
+# A blank issue stays available: not everything fits a form, and a form that
+# refuses the report you wanted to make is worse than no form.
+blank_issues_enabled: true
+contact_links:
+  - name: Security problem
+    url: https://github.com/psmux/GodwinMix/security/advisories/new
+    about: Do not open a public issue. Report it privately here, or mail maintainers@example.invalid.
+  - name: Friction on the developer path
+    url: https://github.com/psmux/GodwinMix/blob/main/docs/friction-log.md
+    about: Got stuck for ten minutes on something that should have taken one? That goes in the friction log.
+  - name: Question about how to do something
+    url: https://github.com/psmux/GodwinMix/discussions
+    about: Ask here. If the answer should have been in the documentation, that is a bug and it will be treated as one.
