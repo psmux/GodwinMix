@@ -23,9 +23,11 @@ use serde_json::{json, Value};
 use std::sync::Arc;
 
 pub(crate) mod edit;
+mod graphics;
 mod items;
 mod layout;
 mod requests;
+mod share;
 
 pub use requests::*;
 
@@ -33,6 +35,8 @@ pub fn register(reg: &mut Registry<Call>) {
     scenes(reg);
     items::register(reg);
     layout::register(reg);
+    graphics::register(reg);
+    share::register(reg);
     edit::register(reg);
 }
 
@@ -181,11 +185,20 @@ fn scenes(reg: &mut Registry<Call>) {
         MethodDef::new(
             "scene.export",
             Scope::Read,
-            "The whole collection as JSON. The zip bundle with assets is Phase 5.",
-            handler(export),
+            "The whole collection: as JSON, or as a zip bundle carrying its assets with a \
+             hash each, which is what you send somebody.",
+            handler(share::export),
         )
-        .params(schema_of::<ExportRequest>)
-        .result(godwinmix_protocol::method::any_object),
+        .params(schema_of::<share::ExportRequest>)
+        .result(godwinmix_protocol::method::any_object)
+        .tool(
+            "export_collection",
+            Tier::Search,
+            "This mixer's whole collection, to keep or to send somebody. \
+             {format: \"json\"} is the scene document alone. {format: \"zip\", path: \
+             \"/tmp/show.zip\"} writes a bundle carrying the assets, which is what \
+             scene.import reads back.",
+        ),
     );
 
     reg.register(
@@ -321,19 +334,6 @@ async fn duplicate(call: Call, params: Value) -> Result<Value, RpcError> {
     body(server(&call).scene(&id.to_string()).map_err(|e| scene_error(&call, e))?)
 }
 
-async fn export(call: Call, params: Value) -> Result<Value, RpcError> {
-    let req: ExportRequest = call.params(&params)?;
-    let format = req.format.as_deref().unwrap_or("json");
-    if format != "json" {
-        return Err(RpcError::invalid_params(format!(
-            "scene.export writes {format:?} in a later release. This build writes \"json\". \
-             Ask for format: \"json\"."
-        )));
-    }
-    let doc = server(&call).document();
-    body(doc)
-}
-
 async fn import_obs(call: Call, params: Value) -> Result<Value, RpcError> {
     let req: ImportObsRequest = call.params(&params)?;
     let text = std::fs::read_to_string(&req.path).map_err(|e| {
@@ -353,15 +353,20 @@ async fn import_obs(call: Call, params: Value) -> Result<Value, RpcError> {
     };
     let imported = godwinmix_core::scene::obs_import::import(&text, &options)
         .map_err(|e| scene_error(&call, e))?;
-    let added: Vec<String> = imported.document.scenes.iter().map(|s| s.name.clone()).collect();
-    server(&call)
+    // The names the scenes end up with, not the ones they came with: a core
+    // that already has a "Main" gives the incoming one "Main 2", and a report
+    // that said "Main" would name a scene the caller cannot then address.
+    let incoming = imported.document.scenes.clone();
+    let (added, _) = server(&call)
         .edit(client(&call).as_deref(), |doc| {
-            for scene in &imported.document.scenes {
+            let mut names = Vec::new();
+            for scene in &incoming {
                 let mut scene = scene.clone();
                 scene.name = godwinmix_core::scene::server::find::free_scene_name(doc, &scene.name);
+                names.push(scene.name.clone());
                 doc.scenes.push(scene);
             }
-            Ok(())
+            Ok(names)
         })
         .map_err(|e| scene_error(&call, e))?;
     body(ImportReport {
@@ -369,6 +374,9 @@ async fn import_obs(call: Call, params: Value) -> Result<Value, RpcError> {
         items: imported.report.items,
         skipped: imported.report.notes.clone(),
         sources: imported.sources.iter().map(|s| s.id.clone()).collect(),
+        source_report: imported.report.sources.clone(),
+        filters_duplicated: imported.report.filters_duplicated.clone(),
+        config_toml: imported.to_config_toml().ok(),
     })
 }
 
@@ -400,4 +408,19 @@ pub struct ImportReport {
     pub skipped: Vec<String>,
     /// The sources the collection needs, which have to be added separately.
     pub sources: Vec<String>,
+    /// Every OBS source and what became of it: carried across, needing a
+    /// plugin that is not installed, or skipped with the reason.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub source_report: Vec<godwinmix_core::scene::obs_import::SourceReport>,
+    /// OBS attaches a filter to a source, so a camera keyed in one scene is
+    /// keyed in all of them. Here filters belong to the item, so a source
+    /// filter is copied onto each placement and each copy is named here. This
+    /// is the one thing an import changes the meaning of, so it is reported
+    /// rather than left for somebody to find on air.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub filters_duplicated: Vec<godwinmix_core::scene::obs_import::FilterReport>,
+    /// The `[[sources]]` block to paste into a config, so the sources the
+    /// scenes draw can be added in one edit rather than one call each.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub config_toml: Option<String>,
 }

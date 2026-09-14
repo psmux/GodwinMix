@@ -60,15 +60,6 @@ pub struct DuplicateSceneRequest {
     pub name: Option<String>,
 }
 
-#[derive(Debug, Clone, Default, Serialize, Deserialize, JsonSchema)]
-pub struct ExportRequest {
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub collection: Option<String>,
-    /// `json` in this build. `zip`, with the assets, is Phase 5.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub format: Option<String>,
-}
-
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 pub struct ImportObsRequest {
     /// The collection JSON exported from OBS (Scene Collection, Export), as a

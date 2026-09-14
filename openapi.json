@@ -343,6 +343,47 @@
         ],
         "type": "string"
       },
+      "ApplyGraphicRequest": {
+        "description": "`scene.apply_graphic`.",
+        "properties": {
+          "frame": {
+            "default": false,
+            "description": "Answer with a still of the armed scene as well as the records.",
+            "type": "boolean"
+          },
+          "graphic": {
+            "description": "The graphic to fill, `ograf/lower-third`.",
+            "type": "string"
+          },
+          "item": {
+            "description": "Which placement, by the name you gave the item or by its id. Left out,\nevery placement of this graphic is filled.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "play": {
+            "default": false,
+            "description": "Bring it on after filling it in.",
+            "type": "boolean"
+          },
+          "stop": {
+            "default": false,
+            "description": "Take it off.",
+            "type": "boolean"
+          },
+          "values": {
+            "additionalProperties": true,
+            "default": {},
+            "description": "The fields, by name. `scene.item.schema` says which there are.",
+            "type": "object"
+          }
+        },
+        "required": [
+          "graphic"
+        ],
+        "type": "object"
+      },
       "ApplyLayoutRequest": {
         "description": "`scene.apply_layout`.",
         "properties": {
@@ -591,6 +632,90 @@
           "subtract"
         ],
         "type": "string"
+      },
+      "Bundle": {
+        "description": "What an importer is told before it reads the document.",
+        "properties": {
+          "assets": {
+            "description": "Every file carried, by the path inside the bundle.",
+            "items": {
+              "$ref": "#/components/schemas/BundleAsset"
+            },
+            "type": "array"
+          },
+          "bundle_version": {
+            "description": "The envelope version. See [`BUNDLE_VERSION`].",
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "canvas": {
+            "$ref": "#/components/schemas/Canvas"
+          },
+          "id": {
+            "$ref": "#/components/schemas/Id",
+            "description": "The collection's own stable id, repeated here so a listing can be read\nwithout unpacking the document."
+          },
+          "name": {
+            "type": "string"
+          },
+          "requires": {
+            "description": "Every plugin this collection needs, with the version range that will\ndo. An importer that has none of them still gets the geometry.",
+            "items": {
+              "$ref": "#/components/schemas/Requirement"
+            },
+            "type": "array"
+          },
+          "skipped": {
+            "description": "What could not be carried, one line each, so a partial export is\nvisible rather than silent.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "written_by": {
+            "description": "The build that wrote it, for a bug report.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "bundle_version",
+          "id",
+          "name",
+          "canvas",
+          "written_by",
+          "requires",
+          "assets"
+        ],
+        "type": "object"
+      },
+      "BundleAsset": {
+        "description": "One file carried in the bundle.",
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/Id",
+            "description": "The asset id in the document."
+          },
+          "path": {
+            "description": "Relative to the bundle root, forward slashes. Never absolute: see the\nhead of this module.",
+            "type": "string"
+          },
+          "sha256": {
+            "type": "string"
+          },
+          "size": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "path",
+          "sha256",
+          "size"
+        ],
+        "type": "object"
       },
       "Canvas": {
         "additionalProperties": false,
@@ -948,6 +1073,7 @@
         "type": "object"
       },
       "ExportRequest": {
+        "description": "`scene.export`.",
         "properties": {
           "collection": {
             "type": [
@@ -956,7 +1082,14 @@
             ]
           },
           "format": {
-            "description": "`json` in this build. `zip`, with the assets, is Phase 5.",
+            "description": "`json` for the document alone, `zip` for a bundle with its assets, or\n`dir` for the same bundle unpacked.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "path": {
+            "description": "Where to write it, on the machine the mixer is running on. Required for\n`dir`. For `zip`, leaving it out hands the bytes back as base64.",
             "type": [
               "string",
               "null"
@@ -1053,6 +1186,34 @@
         },
         "required": [
           "removed"
+        ],
+        "type": "object"
+      },
+      "FilterReport": {
+        "description": "A source filter that had to be copied onto each placement.",
+        "properties": {
+          "filter": {
+            "type": "string"
+          },
+          "obs_type": {
+            "type": "string"
+          },
+          "placements": {
+            "description": "The items it was copied onto, by their path in the document.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "source": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "filter",
+          "obs_type",
+          "source",
+          "placements"
         ],
         "type": "object"
       },
@@ -1353,6 +1514,54 @@
         ],
         "type": "object"
       },
+      "GraphicListing": {
+        "description": "`scene.graphic.list`.",
+        "properties": {
+          "graphics": {
+            "items": {
+              "$ref": "#/components/schemas/GraphicType"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "graphics"
+        ],
+        "type": "object"
+      },
+      "GraphicType": {
+        "description": "One graphic this core can place, as the catalogue has it.",
+        "properties": {
+          "designer": {
+            "description": "The `[provides.designer]` block, when the plugin wrote one: the icon\nfor the add gallery, the UI schema, the default frame and the gizmos."
+          },
+          "manifest": {
+            "description": "The OGraf manifest's path inside the plugin, so a client can fetch it.",
+            "type": "string"
+          },
+          "ograf": {
+            "$ref": "#/components/schemas/Ograf"
+          },
+          "plugin": {
+            "type": "string"
+          },
+          "provide": {
+            "type": "string"
+          },
+          "type_id": {
+            "description": "The plugin qualified id an item's `content.graphic` names,\n`ograf/lower-third`.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type_id",
+          "plugin",
+          "provide",
+          "manifest",
+          "ograf"
+        ],
+        "type": "object"
+      },
       "GroupSourcesRequest": {
         "description": "`source.group`.",
         "properties": {
@@ -1447,6 +1656,20 @@
       },
       "ImportReport": {
         "properties": {
+          "config_toml": {
+            "description": "The `[[sources]]` block to paste into a config, so the sources the\nscenes draw can be added in one edit rather than one call each.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "filters_duplicated": {
+            "description": "OBS attaches a filter to a source, so a camera keyed in one scene is\nkeyed in all of them. Here filters belong to the item, so a source\nfilter is copied onto each placement and each copy is named here. This\nis the one thing an import changes the meaning of, so it is reported\nrather than left for somebody to find on air.",
+            "items": {
+              "$ref": "#/components/schemas/FilterReport"
+            },
+            "type": "array"
+          },
           "items": {
             "format": "uint",
             "minimum": 0,
@@ -1466,6 +1689,13 @@
             },
             "type": "array"
           },
+          "source_report": {
+            "description": "Every OBS source and what became of it: carried across, needing a\nplugin that is not installed, or skipped with the reason.",
+            "items": {
+              "$ref": "#/components/schemas/SourceReport"
+            },
+            "type": "array"
+          },
           "sources": {
             "description": "The sources the collection needs, which have to be added separately.",
             "items": {
@@ -1479,6 +1709,67 @@
           "items",
           "skipped",
           "sources"
+        ],
+        "type": "object"
+      },
+      "ImportRequest": {
+        "description": "`scene.import`.",
+        "properties": {
+          "path": {
+            "description": "The bundle: a `.zip` or the directory it unpacks to, as a path on the\nmachine the core is running on.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "path"
+        ],
+        "type": "object"
+      },
+      "ImportedReport": {
+        "description": "What `scene.import` answers with.",
+        "properties": {
+          "assets_at": {
+            "description": "Where the assets were written.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "bundle": {
+            "$ref": "#/components/schemas/Bundle",
+            "description": "What the bundle said about itself."
+          },
+          "items": {
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "missing_plugins": {
+            "description": "Plugins the collection needs that this core has not got. The scenes\nstill came across; those items will draw nothing until it does.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "relink": {
+            "description": "Assets that did not come across, with the items that draw them. Empty\nwhen everything landed.",
+            "items": {
+              "$ref": "#/components/schemas/Relink"
+            },
+            "type": "array"
+          },
+          "scenes": {
+            "description": "The scenes that were added, by the names they ended up with.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "scenes",
+          "items",
+          "bundle"
         ],
         "type": "object"
       },
@@ -1667,6 +1958,19 @@
         "required": [
           "scene",
           "item"
+        ],
+        "type": "object"
+      },
+      "ItemSchemaRequest": {
+        "description": "`scene.item.schema`.",
+        "properties": {
+          "type": {
+            "description": "The item type: a graphic id like `ograf/lower-third`, or a plugin\nprovide like `camera/source`.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type"
         ],
         "type": "object"
       },
@@ -2289,6 +2593,60 @@
         "required": [
           "name"
         ],
+        "type": "object"
+      },
+      "Ograf": {
+        "description": "The OGraf manifest, in the subset this host reads.\n\nEverything else the file carries is kept in `rest` and passed on: OGraf is\nan EBU specification that will grow, and a key this build has not heard of\nis a key a newer client may want. Dropping it here would make the core the\nthing that has to be upgraded first.",
+        "properties": {
+          "description": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "id": {
+            "default": "",
+            "description": "The graphic's own id, as the OGraf file gives it.",
+            "type": "string"
+          },
+          "main": {
+            "default": "",
+            "description": "The module the web component is in, relative to the manifest.",
+            "type": "string"
+          },
+          "name": {
+            "default": "",
+            "type": "string"
+          },
+          "schema": {
+            "default": {
+              "properties": {},
+              "type": "object"
+            },
+            "description": "The JSON Schema of the graphic's own data. What the inspector renders\nand what `scene.apply_graphic` fills by name."
+          },
+          "stepCount": {
+            "default": 1,
+            "description": "How many steps `playAction` walks through. One means in and out.",
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "supportsNonRealTime": {
+            "default": false,
+            "type": "boolean"
+          },
+          "supportsRealTime": {
+            "default": true,
+            "type": "boolean"
+          },
+          "version": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
         "type": "object"
       },
       "OutputState": {
@@ -2959,6 +3317,36 @@
         ],
         "type": "object"
       },
+      "Relink": {
+        "description": "One asset an import could not put back.",
+        "properties": {
+          "asset": {
+            "$ref": "#/components/schemas/Id"
+          },
+          "items": {
+            "description": "The items that draw it, by scene and item name, so the person fixing\nit knows what will be blank until they do.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "path": {
+            "description": "The path the document asks for.",
+            "type": "string"
+          },
+          "reason": {
+            "description": "Why it could not be used: missing, or a hash that does not match.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "asset",
+          "path",
+          "reason",
+          "items"
+        ],
+        "type": "object"
+      },
       "RenameSceneRequest": {
         "properties": {
           "color": {
@@ -3024,6 +3412,32 @@
         "required": [
           "scene",
           "item"
+        ],
+        "type": "object"
+      },
+      "Requirement": {
+        "description": "One plugin the collection needs.",
+        "properties": {
+          "plugin": {
+            "description": "The plugin name, `ograf`.",
+            "type": "string"
+          },
+          "provides": {
+            "description": "The provide ids used, `ograf/lower-third`, so a reader can see what the\ncollection actually asks the plugin for.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "versions": {
+            "description": "A semver range, `^0.2.0`, or `*` when the exporter had no version to\nname because the plugin was not installed where the export ran.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "plugin",
+          "versions",
+          "provides"
         ],
         "type": "object"
       },
@@ -3515,6 +3929,101 @@
         },
         "required": [
           "position_ms"
+        ],
+        "type": "object"
+      },
+      "SourceReport": {
+        "description": "One line of the report: an OBS source and what happened to it.",
+        "oneOf": [
+          {
+            "description": "It came across whole.",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "outcome": {
+                "const": "imported",
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "outcome",
+              "type",
+              "id"
+            ],
+            "type": "object"
+          },
+          {
+            "description": "It came across, and the plugin that plays it is not installed yet.",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "outcome": {
+                "const": "needs_plugin",
+                "type": "string"
+              },
+              "plugin": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "outcome",
+              "type",
+              "id",
+              "plugin"
+            ],
+            "type": "object"
+          },
+          {
+            "description": "It did not come across. `placeholder` names what was put in the scene\nin its place, when anything was.",
+            "properties": {
+              "outcome": {
+                "const": "skipped",
+                "type": "string"
+              },
+              "placeholder": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "reason": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "outcome",
+              "reason"
+            ],
+            "type": "object"
+          }
+        ],
+        "properties": {
+          "obs_name": {
+            "type": "string"
+          },
+          "obs_type": {
+            "description": "The OBS plugin type, for example `ffmpeg_source`.",
+            "type": "string"
+          },
+          "placements": {
+            "description": "How many items in the collection use it.",
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "obs_type",
+          "obs_name",
+          "placements"
         ],
         "type": "object"
       },
@@ -6198,6 +6707,44 @@
         "x-scope": "operate"
       }
     },
+    "/api/v1/scenes/apply_graphic": {
+      "post": {
+        "description": "JSON-RPC method `scene.apply_graphic`. Needs the `operate` scope. Accepts `idempotency_key`, honoured for 24 hours.",
+        "operationId": "scene.apply_graphic",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ApplyGraphicRequest"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Fill a graphic that is on a scene, by field name, and optionally play it on or take it off. Answers with the records and, if asked, a still.",
+        "tags": [
+          "scene"
+        ],
+        "x-destructive": false,
+        "x-idempotent": true,
+        "x-scope": "operate"
+      }
+    },
     "/api/v1/scenes/apply_layout": {
       "post": {
         "description": "JSON-RPC method `scene.apply_layout`. Needs the `operate` scope. Accepts `idempotency_key`, honoured for 24 hours.",
@@ -6407,7 +6954,35 @@
             "$ref": "#/components/responses/Error"
           }
         },
-        "summary": "The whole collection as JSON. The zip bundle with assets is Phase 5.",
+        "summary": "The whole collection: as JSON, or as a zip bundle carrying its assets with a hash each, which is what you send somebody.",
+        "tags": [
+          "scene"
+        ],
+        "x-destructive": false,
+        "x-idempotent": true,
+        "x-scope": "read"
+      }
+    },
+    "/api/v1/scenes/graphic/list": {
+      "get": {
+        "description": "JSON-RPC method `scene.graphic.list`. Needs the `read` scope.",
+        "operationId": "scene.graphic.list",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GraphicListing"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Every graphic template this core can place, with what each one takes.",
         "tags": [
           "scene"
         ],
@@ -6446,6 +7021,44 @@
           }
         },
         "summary": "Group the changes that follow into one undo step, until the next mark. This is what makes a drag of forty moves one Ctrl+Z.",
+        "tags": [
+          "scene"
+        ],
+        "x-destructive": false,
+        "x-idempotent": true,
+        "x-scope": "operate"
+      }
+    },
+    "/api/v1/scenes/import": {
+      "post": {
+        "description": "JSON-RPC method `scene.import`. Needs the `operate` scope. Accepts `idempotency_key`, honoured for 24 hours.",
+        "operationId": "scene.import",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ImportRequest"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImportedReport"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Read a collection bundle, a zip or the directory it unpacks to, and add its scenes to this one. Answers with a relink report for any asset that did not come across.",
         "tags": [
           "scene"
         ],
@@ -7088,6 +7701,34 @@
         "x-destructive": false,
         "x-idempotent": true,
         "x-scope": "operate"
+      }
+    },
+    "/api/v1/scenes/item/schema": {
+      "get": {
+        "description": "JSON-RPC method `scene.item.schema`. Needs the `read` scope.",
+        "operationId": "scene.item.schema",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "What one item type takes: a graphic's OGraf schema, or a source or filter plugin's settings schema. The same JSON Schema every client renders an inspector from.",
+        "tags": [
+          "scene"
+        ],
+        "x-destructive": false,
+        "x-idempotent": true,
+        "x-scope": "read"
       }
     },
     "/api/v1/scenes/item/set": {

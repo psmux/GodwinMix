@@ -8,7 +8,7 @@
 use super::{answered, client, scene_error, server};
 use crate::control::call::Call;
 use crate::control::methods::{body, handler};
-use godwinmix_core::scene::document::{Content, Item, Scene};
+use godwinmix_core::scene::document::{Content, Item, Scene, Transform};
 use godwinmix_core::scene::server::{find, ops, Outcome};
 use godwinmix_core::scene::Collection;
 use godwinmix_protocol::error::{ErrorCode, RpcError};
@@ -268,17 +268,57 @@ async fn add(call: Call, params: Value) -> Result<Value, RpcError> {
         })?),
         None => None,
     };
-    apply(&call, &req.scene, req.draft.as_deref(), None, None, None, move |doc, i| {
+    let added = std::sync::Arc::new(std::sync::Mutex::new(None));
+    let record = added.clone();
+    let answer = apply(&call, &req.scene, req.draft.as_deref(), None, None, None, move |doc, i| {
         let mut item = Item::new(content.clone());
         item.name = Some(find::free_name(
             &doc.scenes[i],
             req.name.as_deref().unwrap_or(&default_name(&content)),
         ));
-        item.transform = transform.unwrap_or_else(|| ops::next_free_cell(doc, &doc.scenes[i]));
+        // A graphic is placed in the frame its plugin's designer block asks
+        // for, because a lower third dropped into the next free cell of a grid
+        // is a lower third in the wrong place.
+        item.transform = transform
+            .or_else(|| graphic_frame(&content, doc))
+            .unwrap_or_else(|| ops::next_free_cell(doc, &doc.scenes[i]));
+        if let Content::Graphic { graphic, .. } = &item.content {
+            *record.lock().expect("a fresh mutex") = Some((graphic.clone(), item.id));
+        }
         doc.scenes[i].items.push(item);
         Ok(())
     })
-    .await
+    .await?;
+    // Adding a graphic starts its page. Done after the edit landed, and its
+    // failure is a warning and not a refusal: the item is on the scene either
+    // way, and it comes up the moment the host is running.
+    let placed = added.lock().expect("a fresh mutex").clone();
+    if let Some((graphic, item)) = placed {
+        let doc = server(&call).document();
+        if let Err(e) = super::graphics::place(&call, &doc, &graphic, &item, false, false).await {
+            tracing::warn!(%graphic, ?e, "the graphic is on the scene but its page is not up");
+        }
+    }
+    Ok(answer)
+}
+
+/// The frame a graphic's `[provides.designer]` block asks for, scaled to this
+/// canvas. The plugin writes it against the 16:9 canvas the document uses by
+/// default and a client scales it to its own, which is what this does.
+fn graphic_frame(content: &Content, doc: &Collection) -> Option<Transform> {
+    let Content::Graphic { graphic, .. } = content else { return None };
+    let found = godwinmix_core::scene::server::graphics::find(graphic).ok()?;
+    let block = found.designer.as_ref()?.get("default_frame")?;
+    let mut transform: Transform = serde_json::from_value(block.clone()).ok()?;
+    let (rx, ry) = (doc.canvas.width as f64 / 1920.0, doc.canvas.height as f64 / 1080.0);
+    transform.position = godwinmix_core::scene::document::Vec2::new(
+        transform.position.x * rx,
+        transform.position.y * ry,
+    );
+    transform.frame = transform
+        .frame
+        .map(|f| godwinmix_core::scene::document::Frame::new(f.w * rx, f.h * ry));
+    Some(transform)
 }
 
 /// What an item is called when nobody said: the source's own id, because a
@@ -303,12 +343,31 @@ async fn remove(call: Call, params: Value) -> Result<Value, RpcError> {
             vec![format!("take {:?} off the scene {:?}", req.item, view.name)],
         ));
     }
-    apply(&call, &req.scene, req.draft.as_deref(), None, None, None, move |doc, i| {
+    // Read before the edit: after it the item is gone and so is the graphic it
+    // was showing, which is what the host has to be told to forget.
+    let was = server(&call)
+        .document()
+        .scenes
+        .iter()
+        .flat_map(|s| s.walk())
+        .find(|i| {
+            i.name.as_deref().is_some_and(|n| n.eq_ignore_ascii_case(req.item.trim()))
+                || i.id.to_string() == req.item.trim()
+        })
+        .and_then(|i| match &i.content {
+            Content::Graphic { graphic, .. } => Some((graphic.clone(), i.id)),
+            _ => None,
+        });
+    let answer = apply(&call, &req.scene, req.draft.as_deref(), None, None, None, move |doc, i| {
         let id = find::item_id_in(&doc.scenes[i], &req.item)?;
         ops::take_item(&mut doc.scenes[i].items, id);
         Ok(())
     })
-    .await
+    .await?;
+    if let Some((graphic, item)) = was {
+        super::graphics::forget(&call, &graphic, &item).await;
+    }
+    Ok(answer)
 }
 
 async fn set(call: Call, params: Value) -> Result<Value, RpcError> {
