@@ -89,6 +89,19 @@ impl Instance {
 
 struct Inner {
     instances: BTreeMap<String, Instance>,
+    /// Which attempt each instance name is on.
+    ///
+    /// Bumped when a start begins and again when the instance is taken away,
+    /// and read when a start finishes. Starting a plugin is a process spawn
+    /// and a handshake, and none of that may happen with the table locked, so
+    /// there is a window in which a second start or a `plugin.remove` can
+    /// arrive. A start that comes back to find the number changed throws its
+    /// process away rather than inserting a singleton nobody asked for over
+    /// one somebody did.
+    generation: BTreeMap<String, u64>,
+    /// Instance names with a start in flight. One at a time per name: two
+    /// processes for one singleton is exactly what this prevents.
+    starting: std::collections::BTreeSet<String>,
     /// Sources added because a device said they appeared, with the instance
     /// that said so. Only these are taken away again: a device may not remove
     /// a camera an operator added by hand.
@@ -113,6 +126,8 @@ impl Supervisor {
             inner: Arc::new(Mutex::new(Inner {
                 instances: BTreeMap::new(),
                 adopted: BTreeMap::new(),
+                generation: BTreeMap::new(),
+                starting: std::collections::BTreeSet::new(),
             })),
             canvas,
             settings: Mutex::new(settings),
@@ -174,9 +189,34 @@ impl Supervisor {
             );
         }
         let instance = format!("{}-{}", manifest.plugin, manifest.id);
-        if self.inner.lock().instances.get(&instance).is_some_and(Instance::running) {
-            return Ok(());
-        }
+        let mine = {
+            let mut inner = self.inner.lock();
+            if inner.instances.get(&instance).is_some_and(Instance::running) {
+                return Ok(());
+            }
+            if inner.starting.contains(&instance) {
+                // Somebody is already starting this one and the spawn is not
+                // done. Answering yes is right: `start` means "make sure it is
+                // running", and it is being made sure of.
+                return Ok(());
+            }
+            inner.starting.insert(instance.clone());
+            let at = inner.generation.entry(instance.clone()).or_insert(0);
+            *at += 1;
+            *at
+        };
+        let started = self.start_now(provide, manifest, &instance);
+        self.settle_start(&instance, mine, started)
+    }
+
+    /// The part of a start that happens with nothing locked: a process spawn
+    /// and a handshake.
+    fn start_now(
+        &self,
+        provide: &str,
+        manifest: &'static crate::plugin::Manifest,
+        instance: &str,
+    ) -> Result<Instance> {
         let params = self.params_for(manifest.plugin);
         let child = self.build(provide, manifest)?;
         let mut entry = Instance {
@@ -190,8 +230,31 @@ impl Supervisor {
         entry.child.start(&self.canvas, &params).with_context(|| {
             format!("starting the {} `{instance}`", manifest.kind.as_str())
         })?;
-        info!(%instance, kind = manifest.kind.as_str(), "plugin singleton started");
-        self.inner.lock().instances.insert(instance, entry);
+        Ok(entry)
+    }
+
+    /// Put a started instance in the table, unless the world moved underneath
+    /// it. Clears the in flight marker whatever happened.
+    fn settle_start(&self, instance: &str, mine: u64, started: Result<Instance>) -> Result<()> {
+        let mut inner = self.inner.lock();
+        inner.starting.remove(instance);
+        let current = inner.generation.get(instance).copied().unwrap_or_default();
+        let mut entry = match started {
+            Ok(entry) => entry,
+            Err(e) => return Err(e),
+        };
+        if current != mine {
+            // Removed, or superseded by a newer start, while this one was
+            // spawning. Its process goes rather than landing on top of
+            // whatever the newer decision was.
+            drop(inner);
+            entry.child.stop("it was removed or restarted while it was starting");
+            debug!(%instance, mine, current, "a start was overtaken and threw its process away");
+            return Ok(());
+        }
+        let kind = entry.kind.as_str();
+        info!(%instance, kind, "plugin singleton started");
+        inner.instances.insert(instance.to_string(), entry);
         Ok(())
     }
 
@@ -235,6 +298,19 @@ impl Supervisor {
                 .filter(|(_, i)| i.plugin == plugin)
                 .map(|(k, _)| k.clone())
                 .collect();
+            // The generation moves whether or not there is an instance to
+            // take: a start already in flight for one of these names must not
+            // land after the removal. `starting` names them even when
+            // `instances` does not.
+            let in_flight: Vec<String> = inner
+                .starting
+                .iter()
+                .filter(|name| name.starts_with(&format!("{plugin}-")))
+                .cloned()
+                .collect();
+            for name in names.iter().chain(in_flight.iter()) {
+                *inner.generation.entry(name.clone()).or_insert(0) += 1;
+            }
             names
                 .into_iter()
                 .filter_map(|k| inner.instances.remove(&k).map(|i| (k, i)))
