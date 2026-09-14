@@ -957,7 +957,7 @@ impl Mixer {
         // same tee, so on a GPU entry it is the one branch that comes back to
         // system memory.
         let pgm_video_proxy = make("proxysink", "pgm-v-proxy")?;
-        let mut rchain: Vec<gst::Element> = vec![gstutil::queue_thread("pgm-v-q")?];
+        let mut rchain: Vec<gst::Element> = vec![gstutil::queue_preview("pgm-v-q")?];
         rchain.extend(download_bridge(gfx, "pgm-v")?);
         rchain.push(make("videorate", "pgm-v-rate")?);
         rchain.push(make("videoscale", "pgm-v-scale")?);
@@ -3180,8 +3180,7 @@ impl Mixer {
                 }
                 // A rebuild at another size drops the old one first, so there
                 // is never a moment with two mosaic encoders running.
-                self.multiview = None;
-                self.mv.mark_built(None);
+                self.drop_mosaic();
                 let mut mv = Multiview::build(&self.mv, shape, &self.pgm_video_proxy)
                     .context("building multiview")?;
                 mv.attach_watch(gstutil::watch_bus(
@@ -3209,15 +3208,27 @@ impl Mixer {
                 self.mv.mark_built(Some(shape));
                 info!(?shape, "multiview built for a subscriber");
             }
-            Demand::Teardown => {
-                self.multiview = None;
-                self.mv.mark_built(None);
-                for slot in &self.sources {
-                    slot.input.detach_thumb_end();
-                }
-            }
+            Demand::Teardown => self.drop_mosaic(),
         }
         Ok(())
+    }
+
+    /// Take the mosaic away, thumbnail ends first.
+    ///
+    /// The order is load bearing. A mosaic pipeline on its way to NULL stops
+    /// reading its `proxysrc`s, and the thumbnail branch still feeding it then
+    /// fills up. The queue at the head of that branch is leaky now, so the
+    /// worst case is dropped preview frames rather than a source's tee blocking
+    /// and the programme branch with it, but there is no reason to produce a
+    /// second of frames for a mosaic that has gone. Nothing here blocks: the
+    /// detach is an unlink and a pad release, and the mosaic pipeline has
+    /// nothing pushing into it by the time it is dropped.
+    fn drop_mosaic(&mut self) {
+        for slot in &self.sources {
+            slot.input.detach_thumb_end();
+        }
+        self.multiview = None;
+        self.mv.mark_built(None);
     }
 
     pub fn shutdown(&mut self) {
@@ -3231,8 +3242,7 @@ impl Mixer {
         for slot in &self.sources {
             slot.input.stop();
         }
-        self.multiview = None;
-        self.mv.mark_built(None);
+        self.drop_mosaic();
         self.output_leases.clear();
         self.encoder.shutdown();
         let _ = self.program.set_state(gst::State::Null);
