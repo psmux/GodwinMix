@@ -196,6 +196,23 @@ impl Sidecar {
         params: Value,
         media_for: impl FnOnce(Transport) -> Result<String>,
     ) -> Result<&Negotiated> {
+        self.handshake_for(manifest, canvas, provide, params, true, media_for)
+    }
+
+    /// The same, told whether this provide carries media at all.
+    ///
+    /// A service, a device and a transition carry none, so one that declares
+    /// no transports is right rather than broken and nothing makes it a
+    /// socket. See `handshake::negotiate_for`.
+    pub fn handshake_for(
+        &mut self,
+        manifest: Option<&PluginManifest>,
+        canvas: Canvas,
+        provide: &str,
+        params: Value,
+        carries_media: bool,
+        media_for: impl FnOnce(Transport) -> Result<String>,
+    ) -> Result<&Negotiated> {
         let (tx, rx) = mpsc::channel();
         *self.shared.hello_signal.lock() = Some(tx);
         if self.shared.hello.lock().is_none() && rx.recv_timeout(HANDSHAKE_TIMEOUT).is_err() {
@@ -208,11 +225,12 @@ impl Sidecar {
             );
         }
         let hello = self.shared.hello.lock().clone().context("the handshake vanished")?;
-        let negotiated = handshake::negotiate(
+        let negotiated = handshake::negotiate_for(
             &hello,
             manifest,
             super::super::API_LEVEL,
             super::super::API_COMPATIBLE,
+            carries_media,
             media_for,
         )?;
         let answer = handshake::ready(
