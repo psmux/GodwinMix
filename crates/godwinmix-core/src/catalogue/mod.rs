@@ -10,11 +10,13 @@
 //! The file ships embedded in the binary. Three things layer on top of it, in
 //! this order:
 //!
-//! 1. `[codecs]` in the operator's config, which adds entries or replaces
+//! 1. `~/.godwinmix/codecs.toml`, what `gmx codec update` installed from the
+//!    signed channel.
+//! 2. `[codecs]` in the operator's config, which adds entries or replaces
 //!    shipped ones by id.
-//! 2. `--codecs <file>`, the same shape in a file of its own, for trying a
+//! 3. `--codecs <file>`, the same shape in a file of its own, for trying a
 //!    catalogue update before it is installed.
-//! 3. `GMX_CODEC_RANK=id=rank,...` from the environment, which nudges the
+//! 4. `GMX_CODEC_RANK=id=rank,...` from the environment, which nudges the
 //!    order without restating an entry. `GMX_CODEC_DISABLE=id,...` takes one
 //!    out.
 //!
@@ -25,6 +27,7 @@ pub mod apply;
 pub mod check;
 pub mod model;
 pub mod select;
+pub mod update;
 
 use crate::config::Config;
 use anyhow::{Context, Result};
@@ -193,6 +196,23 @@ fn parse_rank_spec(spec: &str) -> Vec<(String, i32)> {
 /// `--codecs`, then the environment.
 pub fn load(cfg: Option<&Config>, extra: Option<&Path>) -> Result<Catalogue> {
     let mut cat = Catalogue::shipped()?;
+    // An installed catalogue update, from `gmx codec update`. It sits above
+    // the shipped file and below the operator's own `[codecs]` table, so a
+    // renamed element arrives without overriding a choice made on purpose.
+    let installed = update::installed_path();
+    if installed.is_file() {
+        match Catalogue::read(&installed) {
+            Ok(fresh) => {
+                info!(at = %installed.display(), "a catalogue update is installed");
+                cat.overlay(fresh);
+            }
+            Err(e) => warn!(
+                at = %installed.display(),
+                error = %e,
+                "the installed catalogue update does not parse and was skipped;                  delete it to be rid of it"
+            ),
+        }
+    }
     if let Some(cfg) = cfg {
         cat.overlay(cfg.codecs.clone());
     }

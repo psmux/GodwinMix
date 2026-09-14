@@ -78,6 +78,7 @@ pub enum Plugin {
     ///   gmx plugin add ./my-plugin             a directory you are working in
     ///
     /// The signature and the api level are checked before anything is copied.
+    #[command(verbatim_doc_comment)]
     Add {
         /// Where the plugin comes from.
         source: String,
