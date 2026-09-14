@@ -182,10 +182,11 @@ impl Connection {
                 return self.send(rpc::error_frame(&bad.id, &bad.error, &trace)).await;
             }
         };
-        let trace_id = crate::api::trace::from_parts(
+        let id = crate::api::trace::incoming(
             None,
             request.params.get("trace_id").and_then(Value::as_str),
         );
+        let trace_id = id.to_string();
         // Subscribing changes this connection rather than the mixer, so it is
         // answered here instead of going through the method table.
         if request.method == "core.subscribe" {
@@ -194,14 +195,19 @@ impl Connection {
             self.send(rpc::result_frame(&id, result)).await?;
             return self.after_subscribe().await;
         }
-        let answer = dispatch(
-            &self.ctx.registry,
-            &self.ctx.app,
-            &self.ctx.snapshots,
-            &self.token,
-            &trace_id,
-            &request.method,
-            request.params,
+        // Inside the task local, so the call's log lines carry the same id the
+        // client is holding, exactly as they do on /api/v1.
+        let answer = crate::observe::with_trace_id(
+            id,
+            dispatch(
+                &self.ctx.registry,
+                &self.ctx.app,
+                &self.ctx.snapshots,
+                &self.token,
+                &trace_id,
+                &request.method,
+                request.params,
+            ),
         )
         .await;
         let Some(id) = request.id else { return Ok(()) };

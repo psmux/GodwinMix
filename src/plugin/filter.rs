@@ -27,6 +27,8 @@ use crate::config::Params;
 use anyhow::{Context, Result};
 use gstreamer as gst;
 use gstreamer::prelude::*;
+use parking_lot::Mutex;
+use std::sync::Arc;
 use std::time::Duration;
 
 /// How long to wait for the pad to block before giving up on a live insert.
@@ -248,9 +250,19 @@ pub fn insert(
             .context("the element above a filter has no src pad")?;
         let (up, down, b) = (at.upstream.clone(), at.downstream.clone(), bin.clone());
         let src_for_link = src.clone();
-        // In NULL until it is in place, then brought up with the rest. An
-        // element added to a playing pipeline and linked before it is synced
-        // pushes buffers at a bin that is not ready for them.
+        // What went wrong inside the block, carried back out. The closure runs
+        // on the streaming thread and cannot return anything.
+        let failure: Arc<Mutex<Option<anyhow::Error>>> = Arc::new(Mutex::new(None));
+        let report = failure.clone();
+        // Linked and brought up to PLAYING while the pad above is still
+        // blocked, in that order.
+        //
+        // Syncing the bin after the block is released is a race, and under
+        // load the programme loses it: the first buffer reaches a bin that is
+        // still in READY, the chain refuses it, and the picture stops for as
+        // long as the filter is in. That is principle one, so it is done here
+        // where nothing is flowing rather than a line later where something
+        // is.
         crate::gstutil::with_pad_blocked(&src, BLOCK_TIMEOUT, move || {
             down.unlink_from(&src_for_link);
             let joined = up
@@ -259,13 +271,33 @@ pub fn insert(
                 .and_then(|_| match b.static_pad("src") {
                     Some(out) => down.link_from(&out),
                     None => Err(anyhow::anyhow!("the filter bin has no src pad")),
+                })
+                .and_then(|_| {
+                    b.sync_state_with_parent()
+                        .map(|_| ())
+                        .map_err(|e| anyhow::anyhow!("the filter would not start: {e}"))
                 });
             if let Err(e) = joined {
-                tracing::warn!(?e, "could not link a filter in");
+                // Put the programme back the way it was before letting go of
+                // the pad. A filter that will not start is a refused call, not
+                // a stopped output.
+                up.unlink(&b);
+                if let Some(out) = b.static_pad("src") {
+                    down.unlink_from(&out);
+                }
+                let _ = b.set_state(gst::State::Null);
+                if let Err(relink) = down.link_from(&src_for_link) {
+                    tracing::error!(?relink, "could not relink around a filter that failed to go in");
+                }
+                *report.lock() = Some(e);
             }
         })
         .context("inserting a filter while blocked")?;
-        bin.sync_state_with_parent().ok();
+        let failed = failure.lock().take();
+        if let Some(e) = failed {
+            let _ = at.pipeline.remove(&bin);
+            return Err(e).with_context(|| format!("putting the filter {} in", spec.id));
+        }
     } else {
         at.downstream.unlink_from(&src_at_build(at.upstream)?);
         at.upstream.link(&bin).context("linking a filter to what is above it")?;
@@ -425,6 +457,47 @@ mod tests {
             "largest gap was {largest} ns, more than two frames ({} ns)",
             frame * 2
         );
+    }
+
+    /// The invariant behind the gap measurement above, asserted directly.
+    ///
+    /// `insert` must not let go of the blocked pad until the filter bin is
+    /// playing. It used to sync the state one line after the block was
+    /// released, which worked on an idle machine and stalled the programme on
+    /// a busy one: the first buffer reached a bin still in READY and the chain
+    /// stopped. The gap test caught it about one run in four; this one cannot
+    /// miss it, because it does not depend on timing at all.
+    #[test]
+    fn a_live_filter_is_already_playing_when_insert_returns() {
+        init();
+        let canvas = crate::plugin::harness::test_canvas();
+        let (pipeline, caps, tee, _intervals) = programme_stand_in();
+        pipeline.set_state(gst::State::Playing).unwrap();
+
+        let mut params = Params::new();
+        params.insert("method".into(), toml::Value::String("green".into()));
+        let slot = insert(
+            Insertion::between(&pipeline, &caps, &tee),
+            FilterSpec {
+                id: "key".into(),
+                type_id: "chroma/filter".into(),
+                side: FilterSide::Programme,
+                params,
+            },
+            make("chroma/filter").unwrap(),
+            &canvas,
+            true,
+        )
+        .expect("a chroma key goes in live");
+
+        let (_, current, _) = slot.bin.state(gst::ClockTime::from_seconds(5));
+        assert_eq!(
+            current,
+            gst::State::Playing,
+            "the block was released before the filter was playing, which stalls the programme"
+        );
+        slot.remove().expect("and comes out again");
+        let _ = pipeline.set_state(gst::State::Null);
     }
 
     /// Wait for the frame count to move past `mark`, with a generous deadline.

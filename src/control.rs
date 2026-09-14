@@ -309,9 +309,15 @@ pub fn presented_token(method: &Method, headers: &HeaderMap, uri: &Uri) -> Optio
 
 /// The trace id in force for one HTTP request.
 pub fn trace_of(headers: &HeaderMap, explicit: Option<&str>) -> String {
+    trace_id_of(headers, explicit).to_string()
+}
+
+/// The same id, typed, for `observe::with_trace_id` so every log line a call
+/// produces carries it without being passed an argument.
+pub fn trace_id_of(headers: &HeaderMap, explicit: Option<&str>) -> crate::observe::TraceId {
     let traceparent =
         headers.get(crate::api::trace::TRACEPARENT).and_then(|v| v.to_str().ok());
-    crate::api::trace::from_parts(traceparent, explicit)
+    crate::api::trace::incoming(traceparent, explicit)
 }
 
 /// The whole protocol document, built once.
