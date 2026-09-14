@@ -25,11 +25,15 @@ pub struct TakeRequest {
     /// Id of the source to put on air. Null or omitted cuts to the slate.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub source: Option<String>,
-    /// The scene to take, once scenes exist (11). Today a scene name is read
-    /// as a one item scene, which is to say as a source id, and `source` wins
-    /// when both are given.
+    /// The scene to take, by name or by id. `source` is shorthand for a one
+    /// item full canvas scene and wins when both are given. With neither, the
+    /// armed scene (`scene.preview.set`) goes on air.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub scene: Option<String>,
+    /// Which transition to run. Transitions between scenes are Phase 6; this
+    /// build does `cut` and answers -32602 with the list for anything else.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub transition: Option<String>,
     /// Programme running time to land the cut on, in milliseconds. Omit for
     /// immediate. Read the current running time from `core.info` or a status
     /// snapshot first.
@@ -37,15 +41,35 @@ pub struct TakeRequest {
     pub at_running_time_ms: Option<u64>,
 }
 
+/// The transitions this build runs. Widening this list is Phase 6.
+pub const TRANSITIONS: &[&str] = &["cut"];
+
 impl TakeRequest {
-    /// What actually goes on air: `source` when given, otherwise the scene
-    /// name read as a one item scene.
+    /// The source named, if one was, trimmed.
+    pub fn source_id(&self) -> Option<String> {
+        self.source.clone().map(|s| s.trim().to_string()).filter(|s| !s.is_empty())
+    }
+
+    /// The scene named, if one was, trimmed.
+    pub fn scene_name(&self) -> Option<String> {
+        self.scene.clone().map(|s| s.trim().to_string()).filter(|s| !s.is_empty())
+    }
+
+    /// What a client written before scenes existed meant: `source` when given,
+    /// otherwise the scene name read as a source id.
     pub fn target(&self) -> Option<String> {
-        self.source
-            .clone()
-            .or_else(|| self.scene.clone())
-            .map(|s| s.trim().to_string())
-            .filter(|s| !s.is_empty())
+        self.source_id().or_else(|| self.scene_name())
+    }
+
+    /// `Ok` for a transition this build runs, or the list of the ones it does.
+    pub fn check_transition(&self) -> Result<(), String> {
+        match self.transition.as_deref().map(str::trim) {
+            None | Some("") | Some("cut") => Ok(()),
+            Some(other) => Err(format!(
+                "this build has no transition called {other:?}. It has: {}. Transitions                  between scenes land in a later release; leave `transition` out for a cut.",
+                TRANSITIONS.join(", ")
+            )),
+        }
     }
 }
 
@@ -222,8 +246,16 @@ pub struct TakeRecord {
 /// follow up read is needed.
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 pub struct ProgramState {
-    /// Source on air, or null for the slate.
+    /// Source on air, or null for the slate. A scene of one full canvas item
+    /// reports that item's source here too, so anything written against this
+    /// before scenes existed still reads.
     pub program: Option<String>,
+    /// The scene on air, when one was taken by name.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub scene: Option<String>,
+    /// The scene armed for the next `program.take` with no argument.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub preview: Option<String>,
     /// Programme pipeline running time, in milliseconds.
     pub running_time_ms: u64,
     /// The previous source, which is what `program.revert` would take back to.

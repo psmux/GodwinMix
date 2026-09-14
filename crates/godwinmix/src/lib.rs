@@ -416,6 +416,13 @@ pub async fn run() -> Result<()> {
         library.cfg().probe_timeout_secs,
     ));
     let quit = Arc::new(tokio::sync::Notify::new());
+    // The scene collection, beside the runtime store. A store that will not
+    // parse is a hard failure: somebody's show is in it.
+    let scenes = godwinmix_core::scene::server::SceneServer::open(
+        Some(Config::runtime_store_path(&config_path)),
+        godwinmix_core::caps::CanvasCaps::new(&cfg_for_control.canvas),
+    )
+    .context("opening the scene collection")?;
     let state = control::AppState::new(
         &cfg_for_control,
         handle.clone(),
@@ -424,6 +431,7 @@ pub async fn run() -> Result<()> {
         converter,
         quit.clone(),
         args.rehearsal,
+        scenes,
     );
     let server = tokio::spawn(async move {
         if let Err(e) = control::serve(&bind, state).await {

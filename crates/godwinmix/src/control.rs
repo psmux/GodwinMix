@@ -84,6 +84,9 @@ pub struct AppState {
     pub confirmations: Arc<Confirmations>,
     pub idempotency: Arc<idempotency::Cache>,
     pub history: Arc<History>,
+    /// The scene collection and everything true about it. See
+    /// `godwinmix_core::scene::server`.
+    pub scenes: Arc<godwinmix_core::scene::server::SceneServer>,
     pub features: Arc<Vec<String>>,
     pub limits: Limits,
     pub canvas: CanvasInfo,
@@ -101,6 +104,7 @@ impl AppState {
         converter: Arc<godwinmix_core::convert::Converter>,
         quit: Arc<tokio::sync::Notify>,
         rehearsal: bool,
+        scenes: Arc<godwinmix_core::scene::server::SceneServer>,
     ) -> Self {
         let tokens = cfg.tokens(rehearsal);
         Self {
@@ -127,6 +131,7 @@ impl AppState {
             confirmations: Confirmations::new(),
             idempotency: idempotency::Cache::new(),
             history: Arc::new(History::new()),
+            scenes,
             rehearsal,
         }
     }
