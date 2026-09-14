@@ -6,7 +6,7 @@ frame pool and the media transports, so what you write is the part that draws.
 
 The worked example on this page is
 [`crates/godwinmix-sdk/examples/colour-bars.rs`](../../crates/godwinmix-sdk/examples/colour-bars.rs),
-a complete source in about 170 lines. Every piece of code quoted here is from
+a complete source in 149 lines. Every piece of code quoted here is from
 that file or compiled against the crate.
 
 ## Add the dependency
@@ -27,6 +27,14 @@ One `use` brings in everything a source needs:
 ```rust
 use godwinmix_sdk::prelude::*;
 use serde_json::Value;
+```
+
+The example adds two more from the standard library, because it keeps its one
+setting in an atomic the media thread reads:
+
+```rust
+use std::sync::atomic::{AtomicI64, Ordering};
+use std::sync::Arc;
 ```
 
 ## The manifest you need
@@ -56,7 +64,7 @@ media = { video = "raw", audio = "none", alpha = false, thumb = true }
 transports = ["container"]
 capabilities = ["restart-in-place", "health"]
 latency_ms = 0
-settings = "settings.json"
+settings = "colour-bars.settings.json"
 ```
 
 A source provide must declare `media`, `transports` and `settings`; the
@@ -109,7 +117,7 @@ it. Declare `seek` in the manifest and implement `seek` and `position`; declare
 ```rust
 fn initialize(&mut self, ready: &Ready, reporter: Reporter) -> Result<InitializeResult, RpcError> {
     self.canvas = ready.canvas;
-    self.drift = Self::drift_from(&ready.params);
+    self.drift.store(drift_from(&ready.params), Ordering::Relaxed);
     reporter.info(format!(
         "colour bars at {}x{}@{} for instance '{}'",
         ready.canvas.width, ready.canvas.height, ready.canvas.fps, ready.instance
@@ -144,14 +152,15 @@ fn start(&mut self, params: &StartParams) -> Result<StartResult, RpcError> {
         media::Streams::video_only(media::VideoFormat::I420),
     )
     .map_err(|e| RpcError::new(codes::INTERNAL_ERROR, e.to_string()))?;
-    let drift = self.drift;
+    let drift = Arc::clone(&self.drift);
     self.media = Some(VideoLoop::spawn(
         canvas,
         writer,
         self.reporter.clone(),
         move |frame, pts| {
+            let px_per_sec = drift.load(Ordering::Relaxed) as f64 / 1000.0;
             let seconds = pts as f64 / 1_000_000_000.0;
-            draw_bars(frame, canvas, (drift * seconds) as i64);
+            draw_bars(frame, canvas, (px_per_sec * seconds) as i64);
         },
     ));
     Ok(StartResult { latency_ms: Some(0) })
@@ -250,24 +259,20 @@ with your reason in it, so the operator knows to call `plugin.reload` and why.
 Never panic here, and never return an error for a value the schema already
 allowed.
 
-The example restarts its own media loop rather than the process, because the
-drift is read once when the loop starts:
+The example keeps its one setting in an atomic that the media thread reads each
+frame, so a change lands on the next frame and nothing stops:
 
 ```rust
 fn configure(&mut self, params: Value) -> Result<Configure, RpcError> {
-    self.drift = Self::drift_from(&params);
-    if self.media.is_some() {
-        let start = StartParams {
-            canvas: self.canvas,
-            transport: Transport::Container,
-            media: String::new(),
-        };
-        self.stop()?;
-        self.start(&start)?;
-    }
+    self.drift.store(drift_from(&params), Ordering::Relaxed);
     Ok(Configure::applied())
 }
 ```
+
+That is the shape to copy where you can. Where a setting really does need the
+loop rebuilt, `stop()` then open it again and still answer `applied`; the core
+covers the gap with a freeze frame. Keep `restart_required` for the settings
+that need the process itself restarted.
 
 ## `health`, and why it must be fast
 
@@ -448,7 +453,7 @@ cat control.jsonl
 ```
 
 ```
-{"jsonrpc":"2.0","id":0,"method":"initialize","params":{"api":1,"plugin":"colour-bars","provides":[{"capabilities":["restart-in-place","health"],"id":"source","kind":"source","latency_ms":0,"media":{"alpha":false,"audio":"none","thumb":true,"video":"raw"},"settings":"settings.json","transports":["container"]}],"transports":["container"],"version":"0.1.0"}}
+{"jsonrpc":"2.0","id":0,"method":"initialize","params":{"api":1,"plugin":"colour-bars","provides":[{"capabilities":["restart-in-place","health"],"id":"source","kind":"source","latency_ms":0,"media":{"alpha":false,"audio":"none","thumb":true,"video":"raw"},"settings":"colour-bars.settings.json","transports":["container"]}],"transports":["container"],"version":"0.1.0"}}
 {"jsonrpc":"2.0","method":"log","params":{"level":"info","message":"colour bars at 320x180@30 for instance 'bars'"}}
 {"jsonrpc":"2.0","method":"media.report","params":{"latency_ms":0}}
 {"jsonrpc":"2.0","method":"initialized","params":{}}
