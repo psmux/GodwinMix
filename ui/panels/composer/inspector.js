@@ -27,6 +27,11 @@ export class Inspector {
   /** Draw for the current selection. Called on every selection change. */
   async show(records) {
     const record = records && records.length === 1 ? records[0] : null;
+    // A rebuild while somebody is typing into this panel would take the focus
+    // and the half typed word with it. The core's echo of their own edit is
+    // exactly when that would happen, so the same item with the hand still in
+    // it is left alone.
+    if (record && record.id === this.showing && this.el.contains(document.activeElement)) return;
     clear(this.el);
     if (!record) {
       this.showing = null;
@@ -151,7 +156,10 @@ export class Inspector {
 
     const picker = el("select", { "aria-label": "Add a filter" });
     picker.appendChild(el("option", { value: "", text: "Add a filter" }));
-    for (const type of await filterTypes(this.o.client)) {
+    // Asked once for the life of the composer: the filter list does not change
+    // while somebody is arranging a scene, and the inspector is rebuilt often.
+    if (!this.filterTypes) this.filterTypes = await filterTypes(this.o.client);
+    for (const type of this.filterTypes) {
       picker.appendChild(el("option", { value: type.id, text: type.title }));
     }
     on(picker, "change", async () => {

@@ -223,7 +223,7 @@ class ScenesPanel extends HTMLElement {
       this.render();
       return;
     }
-    this.scenes.take_(id).catch((e) => errorToast(e, "Take"));
+    this.scenes.take(id).catch((e) => errorToast(e, "Take"));
   }
 
   /** The composer, on a draft. Loaded on first open and never before. */
@@ -432,26 +432,24 @@ class ScenesPanel extends HTMLElement {
     const accel = e.ctrlKey || e.metaKey;
     const ids = this.selected();
     const one = ids.length === 1 ? ids[0] : null;
+    const chord = accel ? "Ctrl+" + e.key.toUpperCase() : e.key;
     const table = {
       F2: () => one && this.beginRename(one),
       Enter: () => one && this.open(one),
       Delete: () => ids.length && this.remove(ids),
-      Backspace: () => accel && ids.length && this.remove(ids),
+      "Ctrl+BACKSPACE": () => ids.length && this.remove(ids),
       Escape: () => {
         this.selection.clear();
         this.paintSelection();
       },
+      "Ctrl+A": () => {
+        this.selection.selectAll([...this.tiles.keys()]);
+        this.paintSelection();
+      },
+      "Ctrl+C": () => this.more().then((m) => m.copy(this, ids)),
+      "Ctrl+V": () => this.more().then((m) => m.paste(this)),
     };
-    const run = accel && e.key.toLowerCase() === "a"
-      ? () => {
-          this.selection.selectAll([...this.tiles.keys()]);
-          this.paintSelection();
-        }
-      : accel && e.key.toLowerCase() === "c"
-        ? () => this.more().then((m) => m.copy(this, ids))
-        : accel && e.key.toLowerCase() === "v"
-          ? () => this.more().then((m) => m.paste(this))
-          : table[e.key];
+    const run = table[chord];
     if (!run) return;
     e.preventDefault();
     e.stopPropagation();

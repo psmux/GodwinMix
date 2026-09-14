@@ -176,12 +176,12 @@ export class SceneClient {
    */
   async call(method, params) {
     const answer = await this.client.call(method, params || {});
-    this.take(answer);
+    this.absorb(answer);
     return answer;
   }
 
   /** File a view a command answered with. */
-  take(answer) {
+  absorb(answer) {
     if (!answer || !answer.id || !Array.isArray(answer.records)) return;
     this.views.set(answer.id, answer);
     this.mirror.applyView(answer);
@@ -194,7 +194,8 @@ export class SceneClient {
     this.changed();
   }
 
-  take_(scene) {
+  /** Put a scene on air. The one command the whole tile grammar is built for. */
+  take(scene) {
     return this.client.call("program.take", { scene });
   }
 
@@ -251,7 +252,7 @@ export class SceneClient {
       item,
       to_scene: toScene,
     });
-    this.take(answer);
+    this.absorb(answer);
     // Two scenes changed and the answer describes one of them.
     await this.reread([scene, toScene]);
     return answer;
@@ -269,7 +270,7 @@ export class SceneClient {
   async reread(ids) {
     for (const id of new Set(ids.filter(Boolean))) {
       try {
-        this.take(await this.client.call("scene.get", { scene: id }));
+        this.absorb(await this.client.call("scene.get", { scene: id }));
       } catch {
         /* gone, and the next refresh will say so */
       }
@@ -285,7 +286,7 @@ export class SceneClient {
 
   async editApply(draft) {
     const answer = await this.client.call("scene.edit.apply", { draft });
-    this.take(answer);
+    this.absorb(answer);
     return answer;
   }
 
