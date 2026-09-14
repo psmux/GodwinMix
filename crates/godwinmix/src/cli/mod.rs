@@ -6,7 +6,9 @@
 //! in. `crate::ctl`, `crate::mcp` and `crate::bench` are the same idea and are
 //! large enough to be files of their own.
 
+pub mod agent;
 pub mod bundle;
 pub mod codec;
 pub mod observe;
 pub mod scene;
+pub mod skill;

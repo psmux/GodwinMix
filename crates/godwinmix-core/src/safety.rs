@@ -602,7 +602,7 @@ mod tests {
             max_takes_per_minute: Some(120),
             flash_guard: Some(false),
         };
-        let vision_mixer = Token { id: "desk".into(), safety: Some(looser.clone()), ..Token::open() };
+        let vision_mixer = Token { id: "desk".into(), safety: Some(looser), ..Token::open() };
         let limits = cfg.for_token(&vision_mixer);
         assert_eq!(limits.min_hold_ms, 500);
         assert_eq!(limits.max_takes_per_minute, 120);
