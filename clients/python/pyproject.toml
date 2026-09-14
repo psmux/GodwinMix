@@ -33,7 +33,11 @@ Homepage = "https://github.com/psmux/modulargodwinmix"
 Source = "https://github.com/psmux/modulargodwinmix/tree/main/clients/python"
 
 [tool.setuptools]
-packages = ["godwinmix"]
+# `godwinmix.kits` is the designer kit: scene mirror, prediction, canvas
+# arithmetic and the UI schema layer. Its two Tkinter modules live in the same
+# package but are imported only by name, so installing it costs a headless
+# script nothing.
+packages = ["godwinmix", "godwinmix.kits"]
 
 [tool.setuptools.package-data]
 godwinmix = ["py.typed"]

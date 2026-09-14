@@ -1,0 +1,77 @@
+{
+  "note": "A plugin that ships a data schema and a designer block and no code at all. This is what `plugin.describe` answers for it, verbatim, and it is what the web composer and examples/tkinter-designer.py are both tested against: the same file, one acceptance, two toolkits. 07 Phase 3: 'a plugin that ships only a data schema and a designer block gets an inspector and handles in the web designer and the Tkinter example with no HTML in the plugin'.",
+  "plugin": {
+    "name": "lower-third",
+    "enabled": true,
+    "provides": ["lower-third/graphic"],
+    "instances": [
+      { "instance": "band", "plugin": "lower-third", "provide": "graphic", "restarts": 0 }
+    ]
+  },
+  "describe": {
+    "name": "lower-third",
+    "manifest": {
+      "plugin": { "name": "lower-third", "version": "1.0.0" },
+      "provides": [
+        {
+          "kind": "graphic",
+          "id": "graphic",
+          "title": "Lower third",
+          "settings": "schemas/graphic.json",
+          "designer": {
+            "icon": "ui/icon.svg",
+            "thumbnail": "ui/thumb.svg",
+            "default_frame": { "w": 960, "h": 200 },
+            "gizmos": ["corner", "rotate"],
+            "snap": { "bounds": true, "points": ["params.anchor_point"] }
+          }
+        }
+      ]
+    },
+    "schemas": {
+      "lower-third/graphic": {
+        "type": "object",
+        "title": "Lower third",
+        "required": ["name"],
+        "properties": {
+          "name": { "type": "string", "title": "Name", "examples": ["Jane Okonjo"] },
+          "role": { "type": "string", "title": "Role" },
+          "colour": { "type": "string", "title": "Bar colour", "default": "#2f6f4f" },
+          "hold_secs": {
+            "type": "number",
+            "title": "Hold",
+            "x-gmx-unit": "s",
+            "minimum": 1,
+            "maximum": 30,
+            "default": 6
+          },
+          "animate": { "type": "boolean", "title": "Slide in", "default": true },
+          "align": { "type": "string", "title": "Side", "enum": ["left", "right"], "default": "left" },
+          "font_size": { "type": "integer", "title": "Font size", "x-gmx-group": "Advanced", "default": 48 }
+        }
+      }
+    },
+    "skills": {}
+  },
+  "record": {
+    "id": "0199b000-0000-7016-8000-de5157ed9001",
+    "kind": "item",
+    "parent": "0199b000-0000-7016-8000-de5157ed9000",
+    "order": "a1",
+    "name": "band",
+    "content": { "type": "graphic", "graphic": "lower-third/graphic", "params": { "name": "Jane Okonjo", "hold_secs": 6 } },
+    "transform": { "position": { "x": 120, "y": 760 }, "frame": { "w": 960, "h": 200 } },
+    "crop": { "left": 0, "top": 0, "right": 0, "bottom": 0 },
+    "opacity": 1,
+    "blend": "normal",
+    "visible": true,
+    "locked": false,
+    "audio": "never"
+  },
+  "box": { "x": 120, "y": 760, "width": 960, "height": 200 },
+  "expect": {
+    "gizmo_kinds": ["cage", "corner", "corner", "corner", "corner", "rotate"],
+    "controls": ["name", "role", "colour", "hold_secs", "animate", "align", "font_size"],
+    "editor_mode": "schema"
+  }
+}

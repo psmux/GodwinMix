@@ -11,6 +11,11 @@
 // against ui/client's own files, so a change to either side that moves them
 // apart fails here. They skip themselves when the repository is not around,
 // which is the case when this package is installed from npm.
+//
+// The designer kits are guarded the same way, in kits.test.ts rather than here:
+// they are driven from ui/kits/fixtures.json, and the case runners that replay
+// that file are what the TypeScript and browser kits are compared over, so the
+// cross check sits beside them instead of being written out a second time.
 
 import assert from "node:assert/strict";
 import { existsSync } from "node:fs";

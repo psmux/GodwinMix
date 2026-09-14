@@ -18,7 +18,6 @@ import { settings, setSetting, onSettingsChanged, GALLERY_MODES } from "../../sh
 import { AudioGestures, ScrubGestures } from "../../shell/fader.js";
 import { addView, dropViews, takeMeters } from "../../shell/meter.js";
 import { sheetWidthFor } from "../../client/frames.js";
-import { SchemaForm } from "../../client/schema-form.js";
 import { SOURCE_KINDS, kindOfUri } from "../../client/kinds.js";
 import { buildTile, syncTile, setTileMode } from "./tile.js";
 import { setLocal, nameOf } from "./local.js";
@@ -300,6 +299,8 @@ class SourcesPanel extends HTMLElement {
   async openDrawer(id) {
     const source = this.client.store.source(id);
     if (!source) return;
+    // Fetched on the first gear click rather than with the page.
+    const { SchemaForm } = await import("../../client/schema-form.js");
     const kind = SOURCE_KINDS.find((k) => k.id === kindOfUri(source.uri)) || SOURCE_KINDS[0];
     let schema = kind.schema;
     try {
@@ -337,11 +338,22 @@ class SourcesPanel extends HTMLElement {
   }
 
   onDrop(info) {
-    // Tray folders are tags, not scenes, and the scene server does not exist
-    // yet, so a drop onto another tile is refused with a sentence rather than
+    const target = info.target ? String(info.target) : "";
+    // A drop that landed on the Scenes panel belongs to that panel: empty
+    // space there makes a scene from the selection, a scene tile adds them to
+    // it. The event is how two panels in two slots talk without importing each
+    // other, which is what keeps every panel replaceable.
+    if (target === "scenes:empty" || target.startsWith("scene:")) {
+      window.dispatchEvent(
+        new CustomEvent("gmx:tiles-dropped", { detail: Object.assign({}, info, { from: "sources" }) })
+      );
+      return;
+    }
+    // Tray folders are tags rather than scenes, and `source.group` is not
+    // wired to this panel yet, so a drop onto another tile says so rather than
     // silently doing nothing.
     if (info.target && info.targetId && !this.selection.has(info.targetId)) {
-      toast({ text: "Grouping tiles needs the scene server, which is not in this build yet." });
+      toast({ text: "Tray folders arrive with source.group. To build a scene, drag these onto Scenes." });
     }
   }
 
