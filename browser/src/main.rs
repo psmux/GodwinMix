@@ -524,6 +524,7 @@ wrap_task! {
 
 static STOP: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 
+#[cfg(unix)]
 extern "C" fn on_signal(_sig: libc::c_int) {
     STOP.store(true, std::sync::atomic::Ordering::SeqCst);
 }
@@ -659,6 +660,15 @@ fn main() {
     // Stop cleanly on SIGTERM and SIGINT: the mixer signals the process group
     // when a source is removed, and Chromium's helpers are in that group too.
     // quit_message_loop must run on CEF's UI thread, so a watcher posts it.
+    //
+    // Unix only, and deliberately. The Windows C runtime does define SIGTERM
+    // and would compile this, but nothing on Windows ever raises it: a console
+    // shutdown arrives through SetConsoleCtrlHandler instead. Registering the
+    // handler there would look like clean shutdown and never be clean
+    // shutdown, which is worse than not registering it. The watcher thread
+    // below stays, so the timeout path and a future console handler both have
+    // somewhere to set STOP.
+    #[cfg(unix)]
     unsafe {
         libc::signal(libc::SIGTERM, on_signal as *const () as libc::sighandler_t);
         libc::signal(libc::SIGINT, on_signal as *const () as libc::sighandler_t);

@@ -300,14 +300,99 @@ pub fn environment(app: &AppHandle) -> HashMap<String, String> {
     env
 }
 
-/// `resources/gstreamer` inside the installed app, when it is there.
-fn bundled_gstreamer(app: &AppHandle) -> Option<PathBuf> {
-    let dir = app.path().resource_dir().ok()?.join("gstreamer");
-    dir.is_dir().then_some(dir)
+/// `resources/gstreamer` inside the installed app, when there is really one
+/// there.
+///
+/// `dev/bundle-gstreamer.sh` writes one tree per platform, so the per platform
+/// directory is looked at first and the flat one after it, which is what a
+/// tree assembled by hand tends to look like. A directory with no plugins in
+/// it is not a runtime: the repository keeps `tauri-app/gstreamer/` with only
+/// a `.gitignore` in it so a build without a bundled runtime still works, and
+/// pointing GStreamer at that empty directory would be worse than pointing it
+/// at nothing, because it would hide the one on the machine as well.
+pub fn bundled_gstreamer(app: &AppHandle) -> Option<PathBuf> {
+    let root = app.path().resource_dir().ok()?.join("gstreamer");
+    let os = if cfg!(windows) {
+        "windows"
+    } else if cfg!(target_os = "macos") {
+        "macos"
+    } else {
+        "linux"
+    };
+    [root.join(os), root].into_iter().find(|dir| has_plugins(dir))
+}
+
+/// A directory is a GStreamer runtime when it has a plugin directory with at
+/// least one plugin in it.
+fn has_plugins(root: &Path) -> bool {
+    let Some(dir) = first_that_exists(root, &["lib/gstreamer-1.0", "lib64/gstreamer-1.0", "plugins"])
+    else {
+        return false;
+    };
+    fs::read_dir(dir)
+        .map(|mut entries| {
+            entries.any(|e| {
+                e.map(|e| {
+                    let name = e.file_name();
+                    let name = name.to_string_lossy();
+                    name.starts_with("libgst") || name.ends_with(".dll")
+                })
+                .unwrap_or(false)
+            })
+        })
+        .unwrap_or(false)
 }
 
 fn first_that_exists(root: &Path, candidates: &[&str]) -> Option<PathBuf> {
     candidates.iter().map(|c| root.join(c)).find(|p| p.is_dir())
+}
+
+/// Ask the bundled GStreamer where an element comes from.
+///
+/// This is the only honest way to prove a bundled runtime is the one being
+/// used. A tree of the right size that does not load, or a tree that loads
+/// while the plugins actually answering are a GStreamer someone installed on
+/// the machine, both look fine until the app reaches a computer that has no
+/// GStreamer on it. `gst-inspect-1.0` prints the file each element was found
+/// in, and that path either starts inside the bundle or it does not.
+///
+/// `Ok(path)` is the plugin file. `Err` says what went wrong in the words the
+/// person reading the check needs.
+pub fn inspect_element(app: &AppHandle, element: &str) -> Result<PathBuf, String> {
+    let root = bundled_gstreamer(app).ok_or("no GStreamer is bundled in this app")?;
+    let name = if cfg!(windows) { "gst-inspect-1.0.exe" } else { "gst-inspect-1.0" };
+    let exe = first_that_exists(&root, &["bin"])
+        .map(|bin| bin.join(name))
+        .filter(|p| p.is_file())
+        .ok_or_else(|| format!("no {name} in the bundled runtime at {}", root.display()))?;
+
+    let mut command = std::process::Command::new(&exe);
+    command.arg(element);
+    // Exactly the environment the daemon is started in, so this proves what
+    // the daemon will see and not what a shell happens to have.
+    for (key, value) in environment(app) {
+        command.env(key, value);
+    }
+    let out = command
+        .output()
+        .map_err(|e| format!("could not run {}: {e}", exe.display()))?;
+    if !out.status.success() {
+        return Err(format!("{element} is not in the bundled runtime"));
+    }
+    let text = String::from_utf8_lossy(&out.stdout);
+    let file = text
+        .lines()
+        .find_map(|line| line.trim().strip_prefix("Filename"))
+        .map(|rest| PathBuf::from(rest.trim_start_matches(':').trim()))
+        .ok_or_else(|| format!("gst-inspect said nothing about where {element} lives"))?;
+    if !file.starts_with(&root) {
+        return Err(format!(
+            "{element} came from {}, which is outside the bundle at {}",
+            file.display(),
+            root.display()
+        ));
+    }
+    Ok(file)
 }
 
 fn prepend(var: &str, dir: &Path) -> String {
@@ -346,6 +431,32 @@ mod tests {
         assert!(out.ends_with("/usr/bin:/bin"));
         std::env::remove_var("GMX_TEST_PATH");
         assert_eq!(prepend("GMX_TEST_PATH", Path::new("/opt/gst/bin")), "/opt/gst/bin");
+    }
+
+    #[test]
+    fn an_empty_directory_is_not_a_runtime() {
+        // The repository keeps tauri-app/gstreamer/ with nothing in it but a
+        // .gitignore, and the bundler copies that into every build. Treating
+        // it as a runtime would set GST_PLUGIN_SYSTEM_PATH to an empty
+        // directory, which hides the GStreamer on the machine as well and
+        // leaves the mixer with no elements at all.
+        let root = std::env::temp_dir().join("gmx-desktop-test-empty");
+        let _ = fs::remove_dir_all(&root);
+        fs::create_dir_all(root.join("lib/gstreamer-1.0")).unwrap();
+        assert!(!has_plugins(&root), "a plugin directory with no plugins in it");
+        fs::write(root.join("lib/gstreamer-1.0/libgstcoreelements.dylib"), b"x").unwrap();
+        assert!(has_plugins(&root), "one plugin is enough to count");
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn a_windows_runtime_counts_by_its_dll_names() {
+        let root = std::env::temp_dir().join("gmx-desktop-test-windows");
+        let _ = fs::remove_dir_all(&root);
+        fs::create_dir_all(root.join("lib/gstreamer-1.0")).unwrap();
+        fs::write(root.join("lib/gstreamer-1.0/gstcoreelements.dll"), b"x").unwrap();
+        assert!(has_plugins(&root), "the Windows files have no lib prefix");
+        let _ = fs::remove_dir_all(&root);
     }
 
     #[test]

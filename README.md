@@ -69,11 +69,19 @@ Download the installer for your platform from the
 macOS, `.msi` on Windows, `.deb` on Debian and Ubuntu. Every tag builds all
 three.
 
-GStreamer is not bundled in the installer yet and has to be installed
-separately (see [Platforms](#platforms)). Bundling a trimmed GStreamer inside
-the app is planned, with a target of a 150 MB Windows installer; the stock
-GStreamer runtime installer alone is 527 MB and should never be a user's
-problem.
+GStreamer travels inside the Windows and macOS installers and inside the
+AppImage, trimmed to what the codec catalogue and the pipelines actually name,
+so there is nothing else to install. Measured on an Apple M4 Pro, the trimmed
+runtime is 84 MB and `GodwinMix.app` is 108 MB; the budget for the Windows
+installer is 150 MB and CI fails a build that goes over it. The stock
+GStreamer runtime installer alone is 527 MB and is never a user's problem.
+
+The Debian package is the exception, on purpose: it depends on the
+distribution's GStreamer packages, which `apt` pulls in with it.
+
+Installing, per platform: [Windows](docs/how-to/install-on-windows.md),
+[macOS](docs/how-to/install-on-macos.md),
+[Linux](docs/how-to/install-on-linux.md).
 
 The app is a window onto the same web UI, local or remote, so there is no
 second implementation to keep in step. It can point at a mixer on another
@@ -212,9 +220,15 @@ behind as artifacts. What differs by platform:
 
 | | GStreamer | hardware codecs | browser sidecar | desktop app |
 |---|---|---|---|---|
-| Linux | distro packages | NVIDIA, VA | native, with H.264 from a prebuilt CEF ([codecs](docs/reference/web-page-sources.md)) | `.deb`, AppImage |
-| macOS | `brew install gstreamer` | VideoToolbox | `.app` bundle from `browser/dev/mac-bundle.sh`, or the Linux one in a container | `.app` |
-| Windows | the MSVC runtime and development MSIs from gstreamer.freedesktop.org, or `choco install gstreamer gstreamer-devel`; put `C:\gstreamer\1.0\msvc_x86_64\bin` on `PATH` | Media Foundation, NVIDIA | `godwinmix-browser.exe` next to the mixer, from `cd browser; cargo build --release` | `.msi`, NSIS |
+| Linux | distro packages for the `.deb` and for a server; bundled in the AppImage | NVIDIA, VA | native, with H.264 from a prebuilt CEF ([codecs](docs/reference/web-page-sources.md)) | `.deb`, AppImage |
+| macOS | bundled in the `.app`; `brew install gstreamer` to build from source | VideoToolbox | `.app` bundle from `browser/dev/mac-bundle.sh`, or the Linux one in a container | `.app` |
+| Windows | bundled in the installer; to build from source, the MSVC runtime and development MSIs from gstreamer.freedesktop.org, or `choco install gstreamer gstreamer-devel`, with `C:\gstreamer\1.0\msvc_x86_64\bin` on `PATH` | Media Foundation, NVIDIA | `godwinmix-browser.exe` next to the mixer, from `cd browser; cargo build --release` | `.msi`, NSIS |
+
+`dev/bundle-gstreamer.sh` and `dev/bundle-gstreamer.ps1` build the trimmed
+runtime; `.github/workflows/platforms.yml` runs the whole product on all three
+runners on every push, from a headless `test://` source through the smoke test
+to the installer's size. What differs between the platforms and why is
+[Cross platform](docs/explanation/cross-platform.md).
 
 Two things are worth knowing on Windows. Sources whose media arrives on a
 pipe (the browser sidecar, `exec:` sources) are read by a thread of the mixer
@@ -225,6 +239,7 @@ case `superimpose` is for: the mixer decodes the page's video with Media
 Foundation and the browser draws only the page. The development scripts under
 `dev/` are bash; `dev/desktop.ps1` is the Windows launcher for the desktop app,
 and the test rig (mediamtx, synthetic camera) runs under WSL if you want it.
+`dev/smoke.ps1` is the PowerShell port of `dev/smoke.sh`, step for step.
 
 ## Hardware
 

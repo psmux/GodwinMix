@@ -1,0 +1,15 @@
+# The trimmed GStreamer runtime, one directory per platform, is build output
+# and never source. It is eighty to a hundred megabytes and it is different on
+# every machine, so it is made rather than committed:
+#
+#   dev/bundle-gstreamer.sh          on macOS and Linux
+#   dev\bundle-gstreamer.ps1         on Windows
+#
+# tauri.conf.json lists gstreamer/ under bundle.resources, so whatever is here
+# when `cargo tauri build` runs goes inside the app, and the shell finds it at
+# resource_dir()/gstreamer. With nothing here the app falls back to the
+# GStreamer installed on the machine, which is how a developer build works.
+macos/
+windows/
+linux/
+!.gitignore
