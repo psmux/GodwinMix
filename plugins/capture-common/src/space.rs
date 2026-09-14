@@ -26,7 +26,11 @@ pub fn free_bytes(dir: &Path) -> Option<u64> {
         }
         // `f_frsize` is the fragment size and is what `f_bavail` counts. Some
         // platforms leave it zero, and then `f_bsize` is the answer.
-        let unit = if s.f_frsize > 0 { s.f_frsize as u64 } else { s.f_bsize as u64 };
+        let unit = if s.f_frsize > 0 {
+            s.f_frsize as u64
+        } else {
+            s.f_bsize as u64
+        };
         Some(unit.saturating_mul(s.f_bavail as u64))
     }
 }
@@ -43,13 +47,21 @@ pub fn free_bytes(dir: &Path) -> Option<u64> {
             total_free: *mut u64,
         ) -> i32;
     }
-    let wide: Vec<u16> = dir.as_os_str().encode_wide().chain(std::iter::once(0)).collect();
+    let wide: Vec<u16> = dir
+        .as_os_str()
+        .encode_wide()
+        .chain(std::iter::once(0))
+        .collect();
     let mut free = 0u64;
     // SAFETY: the path is NUL terminated and outlives the call; the three out
     // parameters are stack locals we own.
     unsafe {
-        let ok =
-            GetDiskFreeSpaceExW(wide.as_ptr(), &mut free, std::ptr::null_mut(), std::ptr::null_mut());
+        let ok = GetDiskFreeSpaceExW(
+            wide.as_ptr(),
+            &mut free,
+            std::ptr::null_mut(),
+            std::ptr::null_mut(),
+        );
         (ok != 0).then_some(free)
     }
 }
@@ -83,7 +95,10 @@ mod tests {
         // Every platform this ships on answers. If one does not, the plugin
         // still records, so this is an assertion about the platforms and not
         // about the plugin.
-        assert!(free.is_some_and(|b| b > 0), "no reading for the temp directory");
+        assert!(
+            free.is_some_and(|b| b > 0),
+            "no reading for the temp directory"
+        );
     }
 
     #[test]

@@ -1,0 +1,61 @@
+[plugin]
+name = "camera"
+version = "0.1.0"
+api = 1
+description = "A USB or built in camera as a source: v4l2 on Linux, AVFoundation on macOS, Media Foundation on Windows, with device discovery and a resolution and frame rate you can set."
+license = "Apache-2.0"
+authors = ["GodwinMix"]
+repository = "https://github.com/psmux/godwinmix"
+platforms = ["linux-x86_64", "linux-aarch64", "linux-armv7", "macos-aarch64", "macos-x86_64", "windows-x86_64"]
+placements = ["sidecar"]
+process = "per-instance"
+
+[run]
+bin = { "linux-x86_64" = "bin/gmx-camera", "linux-aarch64" = "bin/gmx-camera", "linux-armv7" = "bin/gmx-camera", "macos-aarch64" = "bin/gmx-camera", "macos-x86_64" = "bin/gmx-camera", "windows-x86_64" = "bin/gmx-camera.exe" }
+
+# `gmx plugin add` does not run this today; `./build` does the same thing.
+[build]
+command = "sh build"
+output = "bin/gmx-camera"
+
+[[provides]]
+kind = "source"
+id = "source"
+media = { video = "raw", audio = "none", alpha = false, thumb = true }
+# unixfd costs the core nothing per frame and exists on Linux and macOS. The
+# container is the fallback and is what Windows gets.
+transports = ["unixfd", "container"]
+capabilities = ["restart-in-place", "health"]
+# Not declared with `latency-report`, so the core treats it as 0 and the
+# aligner absorbs whatever the device really adds. A camera's latency is the
+# device's, it differs between two cameras on one machine, and a number we
+# guessed would be worse than no number at all.
+latency_ms = 0
+settings = "schemas/source.json"
+skill = "skills/source/SKILL.md"
+
+[provides.designer]
+icon = "ui/icons/camera.svg"
+thumbnail = "ui/thumbnails/camera.svg"
+gizmos = ["move", "resize", "crop"]
+# A camera fills the canvas and keeps its shape. The numbers are the 16:9
+# canvas the scene document uses by default; a client scales them to its own.
+default_frame = { position = { x = 0, y = 0 }, frame = { w = 1920, h = 1080 }, fit = "cover", align = "center", aspect = "16:9" }
+
+# Cameras are found rather than typed. This provide answers `discover` with one
+# candidate per camera, each carrying params `source.add` takes as they are.
+[[provides]]
+kind = "device"
+id = "devices"
+discovery = { local = ["Video/Source"] }
+settings = "schemas/devices.json"
+skill = "skills/source/SKILL.md"
+
+[[tools]]
+name = "list_cameras"
+description = "List every camera attached to this machine with its id, its name and the largest size it advertises. Use it before adding a camera source when the operator names a camera rather than an id, and to check a camera is visible at all when a source will not go live. Example: list_cameras {} returns {cameras: [{id: '/dev/video0', name: 'Logitech BRIO', width: 1920, height: 1080, api: 'v4l2'}]}."
+input = "schemas/tools/list_cameras.json"
+output = "schemas/tools/list_cameras.out.json"
+annotations = { readOnlyHint = true, destructiveHint = false, idempotentHint = false, openWorldHint = false }
+user_invocable = true
+model_invocable = true

@@ -55,9 +55,7 @@ pub fn build(description: &str) -> Result<gst::Pipeline, String> {
     crate::init()?;
     gst::parse::launch(description)
         .map_err(|e| {
-            format!(
-                "could not build the capture pipeline: {e}. The pipeline was: {description}"
-            )
+            format!("could not build the capture pipeline: {e}. The pipeline was: {description}")
         })?
         .downcast::<gst::Pipeline>()
         .map_err(|_| "the description did not produce a pipeline".to_string())
@@ -162,9 +160,8 @@ impl Capture {
                 ))
             };
         }
-        let quiet = elapsed.saturating_sub(Duration::from_millis(
-            self.last_ms.load(Ordering::Relaxed),
-        ));
+        let quiet =
+            elapsed.saturating_sub(Duration::from_millis(self.last_ms.load(Ordering::Relaxed)));
         if quiet > STALL_AFTER {
             return Health::degraded(format!(
                 "nothing from {what} for {:.1} s, after {buffers} buffers",
@@ -262,7 +259,7 @@ fn spawn_bus_watch(
                 };
                 match message.view() {
                     gst::MessageView::Error(e) => {
-                        let detail = describe(&e);
+                        let detail = describe(e);
                         if let Some(r) = &reporter {
                             r.error(&detail);
                         }
@@ -329,7 +326,10 @@ mod tests {
         )
         .expect("the description parses");
         let err = Capture::start(pipeline, None, None).expect_err("there is no such file");
-        assert!(err.to_lowercase().contains("playing") || err.contains("start"), "{err}");
+        assert!(
+            err.to_lowercase().contains("playing") || err.contains("start"),
+            "{err}"
+        );
     }
 
     #[test]
