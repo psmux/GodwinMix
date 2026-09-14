@@ -986,7 +986,7 @@ impl Supervisor {
 
     /// Every component, in the shape `instances()` uses.
     fn component_rows(&self) -> Vec<(String, String, String, String)> {
-        let taken: Vec<(String, Component2)> = {
+        let taken: Vec<(String, ComponentRow)> = {
             let inner = self.inner.lock();
             inner
                 .components
@@ -994,7 +994,7 @@ impl Supervisor {
                 .map(|(name, c)| {
                     (
                         name.clone(),
-                        Component2 {
+                        ComponentRow {
                             plugin: c.plugin.clone(),
                             provide: c.provide.clone(),
                             instance: c.instance.clone(),
@@ -1097,8 +1097,9 @@ impl Supervisor {
     }
 }
 
-/// The three fields `component_rows` carries out from under the lock.
-struct Component2 {
+/// The three fields `component_rows` carries out from under the lock, so the
+/// component's own `state()` is read with nothing held.
+struct ComponentRow {
     plugin: String,
     provide: String,
     instance: Arc<dyn crate::plugin::wasm::Instance>,
