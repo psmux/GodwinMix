@@ -155,20 +155,27 @@ class Core:
         them competing for the machine, and the timings it then measures are
         of the machine rather than of the mixer.
         """
+        import shutil
+        import signal
+
         try:
             self.post("core/shutdown", {})
         except Exception:
             pass
-        try:
-            self.process.wait(timeout=8)
-        except Exception:
-            self.process.kill()
+        # Graceful, then not. A suite that leaves a mixer behind on every case
+        # ends with thirty of them competing for the machine, and by then the
+        # numbers it reports are of the machine and not of the mixer.
+        for attempt in (signal.SIGTERM, signal.SIGKILL, signal.SIGKILL):
             try:
                 self.process.wait(timeout=5)
+                break
             except Exception:
-                pass
-        import shutil
-
+                try:
+                    self.process.send_signal(attempt)
+                except Exception:
+                    break
+        if self.process.poll() is None:
+            print(f"    {self.case['id']}: the core would not stop (pid {self.process.pid})")
         shutil.rmtree(self.dir, ignore_errors=True)
 
     # -- the protocol --------------------------------------------------
