@@ -28,6 +28,7 @@ Start here if you have never run it.
 * [Add a theme](how-to/add-a-theme.md) (planned)
 * [Write a preset](how-to/write-a-preset.md) (planned)
 * [Upgrade from LiveboxMix](how-to/upgrade-from-liveboxmix.md)
+* [Write a UI of your own](how-to/write-a-ui.md)
 * [Run the smoke test](how-to/smoke-test.md)
 
 ## Reference
@@ -38,6 +39,7 @@ Start here if you have never run it.
 * [Sources](reference/sources.md)
 * [Web page sources](reference/web-page-sources.md)
 * [The generated protocol reference](reference/protocol.md)
+* [The client libraries](reference/clients.md)
 
 ## Explanation
 

@@ -105,7 +105,8 @@ mod tests {
 
     #[test]
     fn widths_are_rounded_and_clamped() {
-        assert_eq!(sheet_width_for(100, 3), 304_u32.max(320));
+        // 100 * 3 rounds to 304, which the floor lifts to 320.
+        assert_eq!(sheet_width_for(100, 3), 320);
         assert_eq!(sheet_width_for(320, 3), 960);
         assert_eq!(sheet_width_for(1000, 4), 1920);
     }
