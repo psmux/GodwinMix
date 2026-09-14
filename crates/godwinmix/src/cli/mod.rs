@@ -12,6 +12,7 @@ pub mod bundle;
 pub mod chaos;
 pub mod codec;
 pub mod marketplace;
+pub mod node;
 pub mod observe;
 pub mod plugin;
 pub mod preset;

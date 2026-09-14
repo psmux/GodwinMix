@@ -55,6 +55,7 @@ pub mod enrol;
 pub mod media;
 pub mod reconcile;
 pub mod registry;
+pub mod runtime;
 pub mod server;
 pub mod wire;
 

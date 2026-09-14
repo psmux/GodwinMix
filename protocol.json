@@ -846,11 +846,39 @@
       ],
       "type": "object"
     },
+    "DiscoverAnswer": {
+      "properties": {
+        "found": {
+          "items": {
+            "$ref": "#/$defs/Found"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "found"
+      ],
+      "type": "object"
+    },
     "DiscoverRequest": {
       "description": "`device.discover`.",
       "properties": {
         "timeout_ms": {
           "description": "How long to look, shared between the devices. Two seconds by default,\nfour and a half at most, because no method blocks for five.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        }
+      },
+      "type": "object"
+    },
+    "DiscoverRequest2": {
+      "properties": {
+        "timeout_ms": {
+          "description": "How long to listen. Capped at 4.5 seconds, so the call stays inside the\nfive second ceiling every method is held to.",
           "format": "uint64",
           "minimum": 0,
           "type": [
@@ -938,6 +966,34 @@
       },
       "required": [
         "scene"
+      ],
+      "type": "object"
+    },
+    "EnrolRequest": {
+      "properties": {
+        "address": {
+          "description": "Where the node is, for the record. The node always dials the core, so\nthis is what `node.list` shows before it has.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "name": {
+          "description": "What the node will call itself. A slug: it goes in `place` and in the\nnode's certificate.",
+          "type": "string"
+        },
+        "ttl_secs": {
+          "description": "How long the token is good for. Default one hour.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "name"
       ],
       "type": "object"
     },
@@ -1283,6 +1339,36 @@
       },
       "required": [
         "seq"
+      ],
+      "type": "object"
+    },
+    "Found": {
+      "description": "One thing found on the network.",
+      "properties": {
+        "address": {
+          "description": "`host:port`, ready to hand to `godwinmix node --core`.",
+          "type": "string"
+        },
+        "api": {
+          "description": "The bridge version it speaks.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "name": {
+          "description": "The instance name, which is the node's name.",
+          "type": "string"
+        },
+        "role": {
+          "description": "`node` or `core`.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "address",
+        "role",
+        "api"
       ],
       "type": "object"
     },
@@ -2449,6 +2535,172 @@
       },
       "required": [
         "name"
+      ],
+      "type": "object"
+    },
+    "NodeInstance": {
+      "properties": {
+        "detail": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "instance": {
+          "type": "string"
+        },
+        "latency_ms": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "state": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "instance",
+        "state",
+        "latency_ms"
+      ],
+      "type": "object"
+    },
+    "NodeListing": {
+      "properties": {
+        "listening": {
+          "description": "Whether this core is listening for nodes at all.",
+          "type": "boolean"
+        },
+        "nodes": {
+          "items": {
+            "$ref": "#/$defs/NodeView"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "nodes",
+        "listening"
+      ],
+      "type": "object"
+    },
+    "NodeName": {
+      "properties": {
+        "id": {
+          "description": "The node's name, as it was enrolled.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "type": "object"
+    },
+    "NodePlugin": {
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "provides": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "version": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "version"
+      ],
+      "type": "object"
+    },
+    "NodeView": {
+      "description": "What `node.get` reports about one node, and what `node.list` reports about\nall of them.",
+      "properties": {
+        "address": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "clock_jitter_ms": {
+          "format": "double",
+          "type": "number"
+        },
+        "clock_offset_ms": {
+          "format": "double",
+          "type": "number"
+        },
+        "clock_synced": {
+          "type": "boolean"
+        },
+        "heartbeat_age_ms": {
+          "description": "Milliseconds since the last heartbeat. The same number\n`gmx_node_heartbeat_age_ms` carries.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "identity": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "instances": {
+          "default": [],
+          "description": "The instances it is hosting right now.",
+          "items": {
+            "$ref": "#/$defs/NodeInstance"
+          },
+          "type": "array"
+        },
+        "name": {
+          "type": "string"
+        },
+        "platform": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "plugins": {
+          "default": [],
+          "description": "The plugins this node has, name and version.",
+          "items": {
+            "$ref": "#/$defs/NodePlugin"
+          },
+          "type": "array"
+        },
+        "provides": {
+          "default": [],
+          "description": "The provide ids this node can run, `<plugin>/<provide>`.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "state": {
+          "description": "`online`, `offline`, or `expected` for a node listed in the config that\nhas never dialled in.",
+          "type": "string"
+        },
+        "version": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "name",
+        "state",
+        "heartbeat_age_ms",
+        "clock_offset_ms",
+        "clock_jitter_ms",
+        "clock_synced"
       ],
       "type": "object"
     },
@@ -5772,6 +6024,110 @@
       "scope": "operate",
       "since": "1",
       "summary": "Stream a file into the library. HTTP only: the body is the file."
+    },
+    {
+      "destructive": false,
+      "idempotent": true,
+      "mutating": false,
+      "name": "node.discover",
+      "params": {
+        "$ref": "#/$defs/DiscoverRequest2"
+      },
+      "rest": {
+        "method": "POST",
+        "path": "/api/v1/nodes/{id}/discover"
+      },
+      "result": {
+        "$ref": "#/$defs/DiscoverAnswer"
+      },
+      "scope": "read",
+      "since": "1",
+      "summary": "Look for nodes on the local network over mDNS. A network without multicast finds nothing and the [nodes] table in the config is the way there."
+    },
+    {
+      "destructive": false,
+      "idempotent": false,
+      "mutating": true,
+      "name": "node.enrol",
+      "params": {
+        "$ref": "#/$defs/EnrolRequest"
+      },
+      "rest": {
+        "method": "POST",
+        "path": "/api/v1/nodes/{id}/enrol"
+      },
+      "result": {
+        "type": "object"
+      },
+      "scope": "admin",
+      "since": "1",
+      "summary": "Mint a one time enrolment token for a node. The answer carries the command to run on the other machine. The token is good for one enrolment and expires."
+    },
+    {
+      "destructive": false,
+      "idempotent": true,
+      "mutating": false,
+      "name": "node.get",
+      "params": {
+        "$ref": "#/$defs/NodeName"
+      },
+      "rest": {
+        "method": "GET",
+        "path": "/api/v1/nodes/{id}"
+      },
+      "result": {
+        "$ref": "#/$defs/NodeView"
+      },
+      "scope": "read",
+      "since": "1",
+      "summary": "One node: its clock offset, how long since its last heartbeat, the plugins it has, and the instances it is hosting."
+    },
+    {
+      "destructive": false,
+      "idempotent": true,
+      "mcp": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "profile": "search",
+        "readOnlyHint": true,
+        "tool": "list_nodes"
+      },
+      "mutating": false,
+      "name": "node.list",
+      "params": {
+        "additionalProperties": false,
+        "properties": {},
+        "type": "object"
+      },
+      "rest": {
+        "method": "GET",
+        "path": "/api/v1/nodes"
+      },
+      "result": {
+        "$ref": "#/$defs/NodeListing"
+      },
+      "scope": "read",
+      "since": "1",
+      "summary": "Every node this core knows about: the ones connected now, the ones that have gone quiet, and the ones the config expects that have never dialled in."
+    },
+    {
+      "destructive": true,
+      "idempotent": true,
+      "mutating": true,
+      "name": "node.remove",
+      "params": {
+        "$ref": "#/$defs/NodeName"
+      },
+      "rest": {
+        "method": "DELETE",
+        "path": "/api/v1/nodes/{id}"
+      },
+      "result": {
+        "type": "object"
+      },
+      "scope": "admin",
+      "since": "1",
+      "summary": "Forget a node. Its bridge is closed, every token minted for a plugin on it is revoked, and its certificate stops working. Sources placed on it go to the slate until they are moved or the node enrols again."
     },
     {
       "destructive": false,

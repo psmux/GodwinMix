@@ -91,6 +91,13 @@ pub fn make_source(req: SourceRequest<'_>) -> Result<Box<dyn Source>> {
                 format!("nothing installed opens `{}`; write `type` to say what it is", req.cfg.uri)
             })?,
     };
+    // The one fork between placements, and the reason there is only one: a
+    // node hosted instance is not a process this core starts, so it never
+    // reaches `launch_for`. Everything after this line is the local path,
+    // unchanged.
+    if let Some(node) = req.cfg.placement().node() {
+        return bridged::make(req, &type_id, node);
+    }
     let instance = req.cfg.id.clone();
     let launched = crate::plugin::loader::launch_for(
         &type_id,

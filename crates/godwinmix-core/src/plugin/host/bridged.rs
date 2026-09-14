@@ -30,7 +30,6 @@ use crate::plugin::{Configure, Health, Hello, Manifest, MediaEnds, PluginState, 
 use anyhow::{Context, Result};
 use godwinmix_protocol::plugin::wire::{Canvas, HealthState};
 use gstreamer as gst;
-use gstreamer::prelude::*;
 use serde_json::{json, Value};
 use std::sync::Arc;
 
@@ -303,6 +302,79 @@ impl Drop for BridgedSource {
             let _ = self.call_node("node.stop", json!({ "reason": "the source was removed" }));
         }
     }
+}
+
+/// Build a source that runs on a node.
+///
+/// Refuses, by name, every way this can be wrong before anything is built: a
+/// core with no node machinery, a node nobody has enrolled, a plugin that node
+/// has not got, and a plugin that did not declare the `node` placement. Each
+/// refusal names what would have worked, because an operator who wrote
+/// `place = "node:studio-b"` and got "no" needs to know which of those it was.
+pub fn make(
+    req: crate::plugin::source::SourceRequest<'_>,
+    type_id: &str,
+    node: &str,
+) -> Result<Box<dyn Source>> {
+    let runtime = crate::node::runtime::get().context(
+        "this core has no node bridge, so nothing can be placed on a node. Add a [nodes] table \
+         to the config and restart",
+    )?;
+    anyhow::ensure!(
+        runtime.nodes.view(node).is_some(),
+        "no node called `{node}`. This core knows: {}. `gmx node token --name {node}` mints an \
+         enrolment token for a new one",
+        match runtime.nodes.names().join(", ") {
+            names if names.is_empty() => "none".to_string(),
+            names => names,
+        }
+    );
+    // The manifest comes off the node's hello, so it is the plugin that will
+    // actually run rather than whatever this machine happens to have installed
+    // under the same name.
+    let plugin = crate::plugin::remote::plugin_manifest(type_id, Some(node)).or_else(|| {
+        crate::plugin::loader::get(type_id.split('/').next().unwrap_or(type_id))
+            .map(|p| p.manifest)
+    });
+    let plugin = plugin.with_context(|| {
+        format!(
+            "`{node}` does not have `{type_id}`. It has: {}",
+            match crate::plugin::remote::on_node(node)
+                .iter()
+                .map(|p| p.plugin.name.clone())
+                .collect::<Vec<_>>()
+                .join(", ")
+            {
+                names if names.is_empty() => "nothing it has told us about".to_string(),
+                names => names,
+            }
+        )
+    })?;
+    crate::node::check_placement(
+        type_id,
+        &crate::node::Place::Node(node.to_string()),
+        &plugin.plugin.placements,
+    )?;
+    let manifest = crate::plugin::remote::manifest(type_id)
+        .or_else(|| crate::plugin::loader::provide_manifest(type_id))
+        .with_context(|| format!("`{type_id}` has no manifest on `{node}` or here"))?;
+    let plan = runtime.plan(
+        node,
+        req.cfg.bridge_transport(),
+        req.cfg.latency_ms,
+    )?;
+    let mut build = req.ctx();
+    build.tier = crate::plugin::Tier::Node;
+    Ok(Box::new(BridgedSource::new(
+        BridgedSpec {
+            node: node.to_string(),
+            type_id: type_id.to_string(),
+            manifest: *manifest,
+            link: runtime,
+            plan,
+        },
+        build,
+    )))
 }
 
 /// Elements the receive side wants in the pipeline, for a caller that builds
