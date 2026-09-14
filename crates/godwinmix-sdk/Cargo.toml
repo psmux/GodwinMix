@@ -1,0 +1,31 @@
+# The crate a Rust plugin author depends on. It is a member of the repository's
+# workspace through the `crates/*` glob in the root Cargo.toml.
+
+[package]
+name = "godwinmix-sdk"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.82"
+description = "Write a GodwinMix plugin in Rust: the manifest, the JSON lines protocol, pacing and the media transports"
+license = "Apache-2.0"
+repository = "https://github.com/psmux/godwinmix"
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+toml = "0.9"
+
+# Only for the `gst` feature. Without it the crate has no native dependency at
+# all and writes Matroska itself.
+gstreamer = { version = "0.24", optional = true }
+gstreamer-app = { version = "0.24", optional = true }
+glib = { version = "0.21", optional = true }
+
+[features]
+default = []
+# Mux and push media with GStreamer instead of the built in Matroska writer,
+# and unlock the unixfd and shm transports on Unix.
+gst = ["dep:gstreamer", "dep:gstreamer-app", "dep:glib"]
+
+[[example]]
+name = "colour-bars"

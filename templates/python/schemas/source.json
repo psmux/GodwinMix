@@ -1,0 +1,62 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "{{name}}",
+  "description": "{{description}}",
+  "type": "object",
+  "properties": {
+    "bars": {
+      "type": "integer",
+      "title": "Bars",
+      "description": "How many colour bars to draw across the picture.",
+      "default": 8,
+      "minimum": 1,
+      "maximum": 8,
+      "examples": [8, 4, 2]
+    },
+    "label": {
+      "type": "string",
+      "title": "Label",
+      "description": "A name for this instance, shown wherever the source is listed.",
+      "default": "",
+      "maxLength": 64,
+      "examples": ["Camera 1", "Stage wide"]
+    },
+    "url": {
+      "type": "string",
+      "title": "Address",
+      "description": "Where this source reads from. The template ignores it; your plugin will not.",
+      "format": "uri",
+      "default": "",
+      "examples": ["rtsp://10.0.0.21:554/stream1", "ndi://CAM 1 (Studio)"]
+    },
+    "password": {
+      "type": "string",
+      "title": "Password",
+      "description": "Stored encrypted and never read back.",
+      "format": "secret",
+      "default": "",
+      "examples": [""]
+    },
+    "gain_db": {
+      "type": "number",
+      "title": "Gain",
+      "description": "Audio gain. 0 is unity.",
+      "default": 0,
+      "minimum": -60,
+      "maximum": 12,
+      "x-gmx-unit": "db",
+      "examples": [0, -6, 3.5]
+    },
+    "reconnect_ms": {
+      "type": "integer",
+      "title": "Reconnect after",
+      "description": "How long to wait before trying the address again.",
+      "default": 2000,
+      "minimum": 100,
+      "maximum": 60000,
+      "x-gmx-unit": "ms",
+      "examples": [2000, 500]
+    }
+  },
+  "additionalProperties": false
+}
