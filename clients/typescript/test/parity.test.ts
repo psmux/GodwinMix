@@ -90,10 +90,10 @@ describe("parity with ui/client", { skip: present ? false : "no ui/client in thi
     assert.equal(ours!.seq, theirs.seq);
     assert.equal(ours!.layout, theirs.layout);
     // The one deliberate difference. The core writes milliseconds at offset 8
-    // (api::rpc::frame_header), ui/client calls the field runningTimeNs and
+    // (api::rpc::frame_header), ui/client now calls the field runningTimeMs too and
     // holds it as a BigInt. This package names it runningTimeMs and hands over
     // a Number, because that is what the bytes are. Same value either way.
-    assert.equal(BigInt(ours!.runningTimeMs), theirs.runningTimeNs);
+    assert.equal(BigInt(ours!.runningTimeMs), theirs.runningTimeMs);
     assert.deepEqual([...ours!.jpeg], [...theirs.jpeg]);
   });
 

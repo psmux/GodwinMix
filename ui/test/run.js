@@ -173,7 +173,7 @@ test("a frame header is sixteen little endian bytes then JPEG", () => {
   const frame = parseFrame(buf);
   eq(frame.seq, 4821);
   eq(frame.layout, 7);
-  ok(frame.runningTimeNs === 1234567890n);
+  ok(frame.runningTimeMs === 1234567890n);
   eq([...frame.jpeg], [0xff, 0xd8, 0xff]);
 });
 
