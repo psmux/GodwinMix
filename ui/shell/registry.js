@@ -10,7 +10,6 @@
 // is one less thing for a first panel to get wrong.
 
 import { el } from "./dom.js";
-import { SandboxHost } from "./sandbox.js";
 
 /** id -> {id, title, slots, tier, Class?, src?, plugin?} */
 const panels = new Map();
@@ -122,8 +121,26 @@ export function instantiate(id, client, config) {
     referrerpolicy: "no-referrer",
   });
   frame.dataset.panel = id;
-  const host = new SandboxHost(frame, client, config || {}, spec);
-  return { node: frame, destroy: () => host.destroy() };
+  // The postMessage bridge is four and a half kilobytes that only a sandboxed
+  // panel needs, and no first party panel is sandboxed. The frame is built
+  // now, because the shell wants a node to put in a slot, and the host
+  // attaches to it a moment later.
+  let host = null;
+  let dropped = false;
+  import("./sandbox.js")
+    .then(({ SandboxHost }) => {
+      if (dropped) return;
+      host = new SandboxHost(frame, client, config || {}, spec);
+    })
+    .catch((e) => console.error(`the sandbox host did not load for '${id}'`, e));
+  return {
+    node: frame,
+    destroy: () => {
+      dropped = true;
+      if (host) host.destroy();
+      else frame.remove();
+    },
+  };
 }
 
 /**

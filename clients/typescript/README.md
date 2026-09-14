@@ -75,6 +75,29 @@ const form = describeForm(schema, current);
 const settings = readForm(form, values, touchedSecrets);
 ```
 
+## Designer kits
+
+The arithmetic a scene surface needs, under `kits`: the record mirror that
+applies `event/scene.patch` and suppresses the echo of your own edits, the
+prediction ledger that lets a drag draw at input rate, the undo proxy over
+`scene.undo`, the canvas geometry, the handles a plugin declares, snapping, the
+safe areas, and the UI schema layer that turns a plugin's second document into a
+layout.
+
+```ts
+import { kits } from "@godwinmix/client";
+
+const handles = kits.handlesFor(box, kits.gizmosFor(plugin.designer));
+const grab = kits.hitTest(handles, x, y, 12);
+const drag = kits.applyDrag(grab, { box, transform }, dx, dy, { aspect: shift });
+await client.call("scene.item.set", { item, props: drag.props });
+```
+
+None of it touches a DOM, a socket or a timer, so the same code runs in a
+browser, in node and in a worker. The reference implementation is `ui/kits` in
+the repository and the Python library has its own copy; all three replay
+`ui/kits/fixtures.json` and must answer the same.
+
 ## Errors
 
 Every refusal is an `RpcError` with `{code, message, data}`. The message already

@@ -9,11 +9,32 @@
           "view": {
             "id": "s1",
             "name": "wide",
-            "canvas": { "width": 1920, "height": 1080, "fps": 30 },
+            "canvas": {
+              "width": 1920,
+              "height": 1080,
+              "fps": 30
+            },
             "records": [
-              { "id": "s1", "kind": "scene", "name": "wide", "order": "a0" },
-              { "id": "i2", "kind": "item", "parent": "s1", "order": "a1", "name": "pulpit" },
-              { "id": "i1", "kind": "item", "parent": "s1", "order": "a0", "name": "stage" }
+              {
+                "id": "s1",
+                "kind": "scene",
+                "name": "wide",
+                "order": "a0"
+              },
+              {
+                "id": "i2",
+                "kind": "item",
+                "parent": "s1",
+                "order": "a1",
+                "name": "pulpit"
+              },
+              {
+                "id": "i1",
+                "kind": "item",
+                "parent": "s1",
+                "order": "a0",
+                "name": "stage"
+              }
             ],
             "geometry": []
           }
@@ -28,10 +49,25 @@
           "view": {
             "id": "s1",
             "name": "wide",
-            "canvas": { "width": 1920, "height": 1080, "fps": 30 },
+            "canvas": {
+              "width": 1920,
+              "height": 1080,
+              "fps": 30
+            },
             "records": [
-              { "id": "s1", "kind": "scene", "name": "wide", "order": "a0" },
-              { "id": "i1", "kind": "item", "parent": "s1", "order": "a0", "name": "stage" }
+              {
+                "id": "s1",
+                "kind": "scene",
+                "name": "wide",
+                "order": "a0"
+              },
+              {
+                "id": "i1",
+                "kind": "item",
+                "parent": "s1",
+                "order": "a0",
+                "name": "stage"
+              }
             ],
             "geometry": []
           }
@@ -41,18 +77,45 @@
             "seq": 7,
             "source_client": "someone-else",
             "scope": "document",
-            "added": [{ "id": "i2", "kind": "item", "parent": "s1", "order": "a1", "name": "lyrics" }],
+            "added": [
+              {
+                "id": "i2",
+                "kind": "item",
+                "parent": "s1",
+                "order": "a1",
+                "name": "lyrics"
+              }
+            ],
             "updated": [
               {
-                "before": { "id": "i1", "kind": "item", "parent": "s1", "order": "a0", "name": "stage" },
-                "after": { "id": "i1", "kind": "item", "parent": "s1", "order": "a0", "name": "stage cam" }
+                "before": {
+                  "id": "i1",
+                  "kind": "item",
+                  "parent": "s1",
+                  "order": "a0",
+                  "name": "stage"
+                },
+                "after": {
+                  "id": "i1",
+                  "kind": "item",
+                  "parent": "s1",
+                  "order": "a0",
+                  "name": "stage cam"
+                }
               }
             ],
             "removed": []
           }
         },
         {
-          "patch": { "seq": 8, "source_client": "someone-else", "scope": "document", "removed": ["i2"] }
+          "patch": {
+            "seq": 8,
+            "source_client": "someone-else",
+            "scope": "document",
+            "removed": [
+              "i2"
+            ]
+          }
         }
       ]
     },
@@ -64,8 +127,19 @@
           "view": {
             "id": "s1",
             "name": "wide",
-            "canvas": { "width": 1920, "height": 1080, "fps": 30 },
-            "records": [{ "id": "s1", "kind": "scene", "name": "wide", "order": "a0" }],
+            "canvas": {
+              "width": 1920,
+              "height": 1080,
+              "fps": 30
+            },
+            "records": [
+              {
+                "id": "s1",
+                "kind": "scene",
+                "name": "wide",
+                "order": "a0"
+              }
+            ],
             "geometry": []
           }
         },
@@ -76,8 +150,18 @@
             "scope": "document",
             "updated": [
               {
-                "before": { "id": "s1", "kind": "scene", "name": "wide", "order": "a0" },
-                "after": { "id": "s1", "kind": "scene", "name": "wide and guest", "order": "a0" }
+                "before": {
+                  "id": "s1",
+                  "kind": "scene",
+                  "name": "wide",
+                  "order": "a0"
+                },
+                "after": {
+                  "id": "s1",
+                  "kind": "scene",
+                  "name": "wide and guest",
+                  "order": "a0"
+                }
               }
             ]
           }
@@ -93,8 +177,19 @@
             "seq": 1,
             "scope": "document",
             "added": [
-              { "id": "s1", "kind": "scene", "name": "wide", "order": "a0" },
-              { "id": "x1", "kind": "annotation", "parent": "s1", "order": "a5", "text": "from a newer core" }
+              {
+                "id": "s1",
+                "kind": "scene",
+                "name": "wide",
+                "order": "a0"
+              },
+              {
+                "id": "x1",
+                "kind": "annotation",
+                "parent": "s1",
+                "order": "a5",
+                "text": "from a newer core"
+              }
             ]
           }
         },
@@ -102,7 +197,13 @@
           "patch": {
             "seq": 2,
             "scope": "presence",
-            "added": [{ "id": "p1", "kind": "cursor", "order": "a0" }]
+            "added": [
+              {
+                "id": "p1",
+                "kind": "cursor",
+                "order": "a0"
+              }
+            ]
           }
         }
       ]
@@ -111,252 +212,1012 @@
       "name": "a patch that skips numbers reports a gap",
       "clientId": "ui-1",
       "steps": [
-        { "patch": { "seq": 1, "scope": "document", "added": [{ "id": "s1", "kind": "scene", "name": "one", "order": "a0" }] } },
-        { "patch": { "seq": 9, "scope": "document", "added": [{ "id": "s2", "kind": "scene", "name": "two", "order": "a1" }] } }
+        {
+          "patch": {
+            "seq": 1,
+            "scope": "document",
+            "added": [
+              {
+                "id": "s1",
+                "kind": "scene",
+                "name": "one",
+                "order": "a0"
+              }
+            ]
+          }
+        },
+        {
+          "patch": {
+            "seq": 9,
+            "scope": "document",
+            "added": [
+              {
+                "id": "s2",
+                "kind": "scene",
+                "name": "two",
+                "order": "a1"
+              }
+            ]
+          }
+        }
       ]
     },
     {
       "name": "a patch we have already applied is dropped",
       "clientId": "ui-1",
       "steps": [
-        { "patch": { "seq": 4, "scope": "document", "added": [{ "id": "s1", "kind": "scene", "name": "one", "order": "a0" }] } },
-        { "patch": { "seq": 4, "scope": "document", "added": [{ "id": "s2", "kind": "scene", "name": "two", "order": "a1" }] } }
+        {
+          "patch": {
+            "seq": 4,
+            "scope": "document",
+            "added": [
+              {
+                "id": "s1",
+                "kind": "scene",
+                "name": "one",
+                "order": "a0"
+              }
+            ]
+          }
+        },
+        {
+          "patch": {
+            "seq": 4,
+            "scope": "document",
+            "added": [
+              {
+                "id": "s2",
+                "kind": "scene",
+                "name": "two",
+                "order": "a1"
+              }
+            ]
+          }
+        }
       ]
     }
   ],
-
   "predict": [
     {
       "name": "a drag draws locally and snaps when the numbers meet",
       "ops": [
-        ["predict", "i1", { "transform": { "position": { "x": 10, "y": 10 } } }],
-        ["predict", "i1", { "transform": { "position": { "x": 20, "y": 10 } } }],
-        ["settle", 1]
+        [
+          "predict",
+          "i1",
+          {
+            "transform": {
+              "position": {
+                "x": 10,
+                "y": 10
+              }
+            }
+          }
+        ],
+        [
+          "predict",
+          "i1",
+          {
+            "transform": {
+              "position": {
+                "x": 20,
+                "y": 10
+              }
+            }
+          }
+        ],
+        [
+          "settle",
+          1
+        ]
       ],
-      "resolve": { "i1": { "transform": { "position": { "x": 0, "y": 0 }, "rotation": 4 } } },
-      "accepts": [["i1", 1], ["i1", 2], ["i2", 0]]
+      "resolve": {
+        "i1": {
+          "transform": {
+            "position": {
+              "x": 0,
+              "y": 0
+            },
+            "rotation": 4
+          }
+        }
+      },
+      "accepts": [
+        [
+          "i1",
+          1
+        ],
+        [
+          "i1",
+          2
+        ],
+        [
+          "i2",
+          0
+        ]
+      ]
     },
     {
       "name": "settling past the last number clears the item",
       "ops": [
-        ["predict", "i1", { "opacity": 0.5 }],
-        ["predict", "i2", { "opacity": 0.25 }],
-        ["settle", 2]
+        [
+          "predict",
+          "i1",
+          {
+            "opacity": 0.5
+          }
+        ],
+        [
+          "predict",
+          "i2",
+          {
+            "opacity": 0.25
+          }
+        ],
+        [
+          "settle",
+          2
+        ]
       ],
-      "resolve": { "i1": { "opacity": 1 }, "i2": { "opacity": 1 } },
-      "accepts": [["i1", 0], ["i2", 0]]
+      "resolve": {
+        "i1": {
+          "opacity": 1
+        },
+        "i2": {
+          "opacity": 1
+        }
+      },
+      "accepts": [
+        [
+          "i1",
+          0
+        ],
+        [
+          "i2",
+          0
+        ]
+      ]
     },
     {
       "name": "an old echo does not move an item that has been dragged past",
       "ops": [
-        ["predict", "i1", { "transform": { "position": { "x": 5, "y": 0 } } }],
-        ["settle", 0],
-        ["predict", "i1", { "transform": { "position": { "x": 9, "y": 0 } } }]
+        [
+          "predict",
+          "i1",
+          {
+            "transform": {
+              "position": {
+                "x": 5,
+                "y": 0
+              }
+            }
+          }
+        ],
+        [
+          "settle",
+          0
+        ],
+        [
+          "predict",
+          "i1",
+          {
+            "transform": {
+              "position": {
+                "x": 9,
+                "y": 0
+              }
+            }
+          }
+        ]
       ],
-      "resolve": { "i1": { "transform": { "position": { "x": 0, "y": 0 } } } },
-      "accepts": [["i1", 1], ["i1", 2]]
+      "resolve": {
+        "i1": {
+          "transform": {
+            "position": {
+              "x": 0,
+              "y": 0
+            }
+          }
+        }
+      },
+      "accepts": [
+        [
+          "i1",
+          1
+        ],
+        [
+          "i1",
+          2
+        ]
+      ]
     }
   ],
-
   "merge": [
-    { "name": "a nested object is merged, not replaced", "base": { "transform": { "position": { "x": 1, "y": 2 }, "frame": { "w": 8, "h": 4 } } }, "next": { "transform": { "position": { "x": 5 } } } },
-    { "name": "an array is replaced whole", "base": { "filters": [1, 2] }, "next": { "filters": [3] } },
-    { "name": "null clears", "base": { "name": "old" }, "next": { "name": null } }
-  ],
-
-  "gizmos": [
-    { "name": "no designer block gets the defaults", "designer": null },
-    { "name": "names expand to archetypes", "designer": { "gizmos": ["corner", "rotate"] } },
-    { "name": "a crop archetype targets the four crop sides", "designer": { "gizmos": ["crop"] } },
     {
-      "name": "the long spelling is taken as written and still gets a cage",
-      "designer": {
-        "gizmos": [{ "kind": "dial", "anchor": [0.4, 0.4], "action": "set", "target": "params.key_tolerance", "cursor": "ew-resize" }]
+      "name": "a nested object is merged, not replaced",
+      "base": {
+        "transform": {
+          "position": {
+            "x": 1,
+            "y": 2
+          },
+          "frame": {
+            "w": 8,
+            "h": 4
+          }
+        }
+      },
+      "next": {
+        "transform": {
+          "position": {
+            "x": 5
+          }
+        }
+      }
+    },
+    {
+      "name": "an array is replaced whole",
+      "base": {
+        "filters": [
+          1,
+          2
+        ]
+      },
+      "next": {
+        "filters": [
+          3
+        ]
+      }
+    },
+    {
+      "name": "null clears",
+      "base": {
+        "name": "old"
+      },
+      "next": {
+        "name": null
       }
     }
   ],
-
+  "gizmos": [
+    {
+      "name": "no designer block gets the defaults",
+      "designer": null
+    },
+    {
+      "name": "names expand to archetypes",
+      "designer": {
+        "gizmos": [
+          "corner",
+          "rotate"
+        ]
+      }
+    },
+    {
+      "name": "a crop archetype targets the four crop sides",
+      "designer": {
+        "gizmos": [
+          "crop"
+        ]
+      }
+    },
+    {
+      "name": "the long spelling is taken as written and still gets a cage",
+      "designer": {
+        "gizmos": [
+          {
+            "kind": "dial",
+            "anchor": [
+              0.4,
+              0.4
+            ],
+            "action": "set",
+            "target": "params.key_tolerance",
+            "cursor": "ew-resize"
+          }
+        ]
+      }
+    }
+  ],
   "handles": [
     {
       "name": "the default handles sit on the corners, the edges and above the top",
-      "box": { "x": 100, "y": 200, "width": 400, "height": 200 },
+      "box": {
+        "x": 100,
+        "y": 200,
+        "width": 400,
+        "height": 200
+      },
       "designer": null
     }
   ],
-
   "drag": [
     {
       "name": "the cage moves the item",
-      "handle": { "kind": "cage", "action": "move", "target": "transform.position", "dir": [0, 0] },
-      "start": { "box": { "x": 100, "y": 100, "width": 400, "height": 200 }, "transform": { "position": { "x": 100, "y": 100 } } },
+      "handle": {
+        "kind": "cage",
+        "action": "move",
+        "target": "transform.position",
+        "dir": [
+          0,
+          0
+        ]
+      },
+      "start": {
+        "box": {
+          "x": 100,
+          "y": 100,
+          "width": 400,
+          "height": 200
+        },
+        "transform": {
+          "position": {
+            "x": 100,
+            "y": 100
+          }
+        }
+      },
       "dx": 30,
       "dy": -12,
       "mods": {}
     },
     {
       "name": "the bottom right corner keeps the top left where it is",
-      "handle": { "kind": "corner", "action": "scale", "target": "transform.frame", "dir": [1, 1] },
-      "start": { "box": { "x": 100, "y": 100, "width": 400, "height": 200 }, "transform": { "position": { "x": 100, "y": 100 } } },
+      "handle": {
+        "kind": "corner",
+        "action": "scale",
+        "target": "transform.frame",
+        "dir": [
+          1,
+          1
+        ]
+      },
+      "start": {
+        "box": {
+          "x": 100,
+          "y": 100,
+          "width": 400,
+          "height": 200
+        },
+        "transform": {
+          "position": {
+            "x": 100,
+            "y": 100
+          }
+        }
+      },
       "dx": 40,
       "dy": 20,
       "mods": {}
     },
     {
       "name": "the top left corner keeps the bottom right where it is",
-      "handle": { "kind": "corner", "action": "scale", "target": "transform.frame", "dir": [-1, -1] },
-      "start": { "box": { "x": 100, "y": 100, "width": 400, "height": 200 }, "transform": { "position": { "x": 100, "y": 100 } } },
+      "handle": {
+        "kind": "corner",
+        "action": "scale",
+        "target": "transform.frame",
+        "dir": [
+          -1,
+          -1
+        ]
+      },
+      "start": {
+        "box": {
+          "x": 100,
+          "y": 100,
+          "width": 400,
+          "height": 200
+        },
+        "transform": {
+          "position": {
+            "x": 100,
+            "y": 100
+          }
+        }
+      },
       "dx": 40,
       "dy": 20,
       "mods": {}
     },
     {
       "name": "Shift keeps the shape",
-      "handle": { "kind": "corner", "action": "scale", "target": "transform.frame", "dir": [1, 1] },
-      "start": { "box": { "x": 0, "y": 0, "width": 400, "height": 200 }, "transform": { "position": { "x": 0, "y": 0 } } },
+      "handle": {
+        "kind": "corner",
+        "action": "scale",
+        "target": "transform.frame",
+        "dir": [
+          1,
+          1
+        ]
+      },
+      "start": {
+        "box": {
+          "x": 0,
+          "y": 0,
+          "width": 400,
+          "height": 200
+        },
+        "transform": {
+          "position": {
+            "x": 0,
+            "y": 0
+          }
+        }
+      },
       "dx": 100,
       "dy": 0,
-      "mods": { "aspect": true }
+      "mods": {
+        "aspect": true
+      }
     },
     {
       "name": "a scale respects the item's own scale factor when it writes the frame",
-      "handle": { "kind": "corner", "action": "scale", "target": "transform.frame", "dir": [1, 1] },
-      "start": { "box": { "x": 0, "y": 0, "width": 400, "height": 200 }, "transform": { "position": { "x": 0, "y": 0 }, "scale": { "x": 2, "y": 2 } } },
+      "handle": {
+        "kind": "corner",
+        "action": "scale",
+        "target": "transform.frame",
+        "dir": [
+          1,
+          1
+        ]
+      },
+      "start": {
+        "box": {
+          "x": 0,
+          "y": 0,
+          "width": 400,
+          "height": 200
+        },
+        "transform": {
+          "position": {
+            "x": 0,
+            "y": 0
+          },
+          "scale": {
+            "x": 2,
+            "y": 2
+          }
+        }
+      },
       "dx": 40,
       "dy": 20,
       "mods": {}
     },
     {
       "name": "a right edge crop is a fraction of the content, not pixels",
-      "handle": { "kind": "edge", "action": "crop", "target": "crop.right", "dir": [1, 0] },
-      "start": { "box": { "x": 0, "y": 0, "width": 400, "height": 200 }, "transform": { "crop": { "left": 0, "top": 0, "right": 0, "bottom": 0 } } },
+      "handle": {
+        "kind": "edge",
+        "action": "crop",
+        "target": "crop.right",
+        "dir": [
+          1,
+          0
+        ]
+      },
+      "start": {
+        "box": {
+          "x": 0,
+          "y": 0,
+          "width": 400,
+          "height": 200
+        },
+        "transform": {
+          "crop": {
+            "left": 0,
+            "top": 0,
+            "right": 0,
+            "bottom": 0
+          }
+        }
+      },
       "dx": -40,
       "dy": 0,
       "mods": {}
     },
     {
       "name": "rotation is read from where the pointer is",
-      "handle": { "kind": "rotate", "action": "rotate", "target": "transform.rotation", "dir": [0, -1], "x": 200, "y": -24 },
-      "start": { "box": { "x": 0, "y": 0, "width": 400, "height": 200 }, "transform": {} },
+      "handle": {
+        "kind": "rotate",
+        "action": "rotate",
+        "target": "transform.rotation",
+        "dir": [
+          0,
+          -1
+        ],
+        "x": 200,
+        "y": -24
+      },
+      "start": {
+        "box": {
+          "x": 0,
+          "y": 0,
+          "width": 400,
+          "height": 200
+        },
+        "transform": {}
+      },
       "dx": 0,
       "dy": 0,
-      "mods": { "pointer": { "x": 400, "y": 100 } }
+      "mods": {
+        "pointer": {
+          "x": 400,
+          "y": 100
+        }
+      }
     },
     {
       "name": "a dial is sideways travel between the schema's ends",
-      "handle": { "kind": "dial", "action": "set", "target": "params.key_tolerance", "dir": [1, 1] },
-      "start": { "box": { "x": 0, "y": 0, "width": 400, "height": 200 }, "transform": {} },
+      "handle": {
+        "kind": "dial",
+        "action": "set",
+        "target": "params.key_tolerance",
+        "dir": [
+          1,
+          1
+        ]
+      },
+      "start": {
+        "box": {
+          "x": 0,
+          "y": 0,
+          "width": 400,
+          "height": 200
+        },
+        "transform": {}
+      },
       "dx": 100,
       "dy": 0,
-      "mods": { "min": 0, "max": 10, "from": 5 }
+      "mods": {
+        "min": 0,
+        "max": 10,
+        "from": 5
+      }
     }
   ],
-
   "snap": [
     {
       "name": "the left edge takes the canvas centre line",
-      "targets": { "canvas": { "width": 1920, "height": 1080 }, "boxes": [] },
-      "box": { "x": 964, "y": 400, "width": 300, "height": 200 },
-      "opts": { "threshold": 8 }
+      "targets": {
+        "canvas": {
+          "width": 1920,
+          "height": 1080
+        },
+        "boxes": []
+      },
+      "box": {
+        "x": 964,
+        "y": 400,
+        "width": 300,
+        "height": 200
+      },
+      "opts": {
+        "threshold": 8
+      }
     },
     {
       "name": "another item's edge wins when it is nearer",
-      "targets": { "canvas": { "width": 1920, "height": 1080 }, "boxes": [{ "x": 600, "y": 100, "width": 300, "height": 200 }] },
-      "box": { "x": 604, "y": 400, "width": 300, "height": 200 },
-      "opts": { "threshold": 8 }
+      "targets": {
+        "canvas": {
+          "width": 1920,
+          "height": 1080
+        },
+        "boxes": [
+          {
+            "x": 600,
+            "y": 100,
+            "width": 300,
+            "height": 200
+          }
+        ]
+      },
+      "box": {
+        "x": 604,
+        "y": 400,
+        "width": 300,
+        "height": 200
+      },
+      "opts": {
+        "threshold": 8
+      }
     },
     {
       "name": "the modifier turns snapping off",
-      "targets": { "canvas": { "width": 1920, "height": 1080 }, "boxes": [] },
-      "box": { "x": 964, "y": 400, "width": 300, "height": 200 },
-      "opts": { "threshold": 8, "invert": true }
+      "targets": {
+        "canvas": {
+          "width": 1920,
+          "height": 1080
+        },
+        "boxes": []
+      },
+      "box": {
+        "x": 964,
+        "y": 400,
+        "width": 300,
+        "height": 200
+      },
+      "opts": {
+        "threshold": 8,
+        "invert": true
+      }
     },
     {
       "name": "a grid catches what no edge does",
-      "targets": { "canvas": { "width": 1920, "height": 1080 }, "boxes": [] },
-      "box": { "x": 103, "y": 207, "width": 300, "height": 200 },
-      "opts": { "threshold": 8, "grid": 10 }
+      "targets": {
+        "canvas": {
+          "width": 1920,
+          "height": 1080
+        },
+        "boxes": []
+      },
+      "box": {
+        "x": 103,
+        "y": 207,
+        "width": 300,
+        "height": 200
+      },
+      "opts": {
+        "threshold": 8,
+        "grid": 10
+      }
     }
   ],
-
-  "safe": [{ "canvas": { "width": 1920, "height": 1080 } }, { "canvas": { "width": 1280, "height": 720 } }],
-
+  "safe": [
+    {
+      "canvas": {
+        "width": 1920,
+        "height": 1080
+      }
+    },
+    {
+      "canvas": {
+        "width": 1280,
+        "height": 720
+      }
+    }
+  ],
   "schema": [
     {
       "name": "kinds, units, groups and defaults",
       "schema": {
         "type": "object",
-        "required": ["uri"],
+        "required": [
+          "uri"
+        ],
         "properties": {
-          "uri": { "type": "string", "format": "uri", "title": "Address" },
-          "name": { "type": "string", "title": "Name" },
-          "gain": { "type": "number", "title": "Gain", "x-gmx-unit": "dB", "minimum": -60, "maximum": 12, "default": 0 },
-          "tries": { "type": "integer", "title": "Tries", "x-gmx-group": "Advanced" },
-          "loop": { "type": "boolean", "title": "Loop" },
-          "method": { "type": "string", "enum": ["green", "blue"], "title": "Key colour" },
-          "tags": { "type": "array", "items": { "type": "string" } },
-          "extra": { "type": "object" },
-          "secret": { "type": "string", "format": "secret" }
+          "uri": {
+            "type": "string",
+            "format": "uri",
+            "title": "Address"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "gain": {
+            "type": "number",
+            "title": "Gain",
+            "x-gmx-unit": "dB",
+            "minimum": -60,
+            "maximum": 12,
+            "default": 0
+          },
+          "tries": {
+            "type": "integer",
+            "title": "Tries",
+            "x-gmx-group": "Advanced"
+          },
+          "loop": {
+            "type": "boolean",
+            "title": "Loop"
+          },
+          "method": {
+            "type": "string",
+            "enum": [
+              "green",
+              "blue"
+            ],
+            "title": "Key colour"
+          },
+          "tags": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "extra": {
+            "type": "object"
+          },
+          "secret": {
+            "type": "string",
+            "format": "secret"
+          }
         }
       },
-      "value": { "name": "Pulpit" }
+      "value": {
+        "name": "Pulpit"
+      }
     },
     {
       "name": "an if and then hides what does not apply",
       "schema": {
         "type": "object",
         "properties": {
-          "mode": { "type": "string", "enum": ["colour", "chroma"], "default": "colour" },
-          "colour": { "type": "string" },
-          "tolerance": { "type": "number" }
+          "mode": {
+            "type": "string",
+            "enum": [
+              "colour",
+              "chroma"
+            ],
+            "default": "colour"
+          },
+          "colour": {
+            "type": "string"
+          },
+          "tolerance": {
+            "type": "number"
+          }
         },
         "allOf": [
           {
-            "if": { "properties": { "mode": { "const": "chroma" } } },
-            "then": { "properties": { "tolerance": {} } },
-            "else": { "properties": { "colour": {} } }
+            "if": {
+              "properties": {
+                "mode": {
+                  "const": "chroma"
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "tolerance": {}
+              }
+            },
+            "else": {
+              "properties": {
+                "colour": {}
+              }
+            }
           }
         ]
       },
       "value": {}
     }
   ],
-
   "uiSchema": [
     {
       "name": "declared controls beat inferred ones and a forgotten field still appears",
       "schema": {
         "type": "object",
         "properties": {
-          "tolerance": { "type": "number", "minimum": 0, "maximum": 1, "title": "Tolerance" },
-          "key": { "type": "string", "title": "Key colour" },
-          "spill": { "type": "number", "title": "Spill" },
-          "notes": { "type": "string", "title": "Notes" }
+          "tolerance": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1,
+            "title": "Tolerance"
+          },
+          "key": {
+            "type": "string",
+            "title": "Key colour"
+          },
+          "spill": {
+            "type": "number",
+            "title": "Spill"
+          },
+          "notes": {
+            "type": "string",
+            "title": "Notes"
+          }
         }
       },
       "ui": {
         "type": "vertical",
         "elements": [
-          { "type": "group", "label": "Key", "elements": [
-            { "type": "control", "scope": "#/properties/key", "control": "template.chroma" },
-            { "type": "control", "scope": "#/properties/tolerance", "control": "slider" }
-          ] },
-          { "type": "control", "scope": "#/properties/spill", "control": "slider",
-            "rule": { "effect": "show", "condition": { "scope": "#/properties/tolerance", "equals": 1 } } }
+          {
+            "type": "group",
+            "label": "Key",
+            "elements": [
+              {
+                "type": "control",
+                "scope": "#/properties/key",
+                "control": "template.chroma"
+              },
+              {
+                "type": "control",
+                "scope": "#/properties/tolerance",
+                "control": "slider"
+              }
+            ]
+          },
+          {
+            "type": "control",
+            "scope": "#/properties/spill",
+            "control": "slider",
+            "rule": {
+              "effect": "show",
+              "condition": {
+                "scope": "#/properties/tolerance",
+                "equals": 1
+              }
+            }
+          }
         ]
       },
-      "value": { "tolerance": 0.5 }
+      "value": {
+        "tolerance": 0.5
+      }
     },
     {
       "name": "no UI schema means the data schema's own groups",
       "schema": {
         "type": "object",
         "properties": {
-          "uri": { "type": "string" },
-          "tries": { "type": "integer", "x-gmx-group": "Advanced" }
+          "uri": {
+            "type": "string"
+          },
+          "tries": {
+            "type": "integer",
+            "x-gmx-group": "Advanced"
+          }
         }
       },
       "ui": null,
       "value": {}
+    }
+  ],
+  "read": [
+    {
+      "name": "a select's string comes back as the schema's own typed value",
+      "schema": {
+        "type": "object",
+        "properties": {
+          "fps": {
+            "type": "integer",
+            "enum": [
+              25,
+              30,
+              60
+            ],
+            "title": "Frame rate"
+          },
+          "method": {
+            "type": "string",
+            "enum": [
+              "green",
+              "blue"
+            ]
+          }
+        }
+      },
+      "value": {},
+      "values": {
+        "fps": "30",
+        "method": "blue"
+      },
+      "touched": []
+    },
+    {
+      "name": "a number typed into a box is a number, and an empty box is left out",
+      "schema": {
+        "type": "object",
+        "properties": {
+          "gain": {
+            "type": "number"
+          },
+          "tries": {
+            "type": "integer"
+          },
+          "name": {
+            "type": "string"
+          },
+          "note": {
+            "type": "string"
+          }
+        }
+      },
+      "value": {},
+      "values": {
+        "gain": "-6.5",
+        "tries": "3",
+        "name": "Pulpit",
+        "note": ""
+      },
+      "touched": []
+    },
+    {
+      "name": "a secret nobody retyped is left alone rather than blanked",
+      "schema": {
+        "type": "object",
+        "properties": {
+          "key": {
+            "type": "string",
+            "format": "secret"
+          },
+          "user": {
+            "type": "string"
+          }
+        }
+      },
+      "value": {
+        "key": "kept",
+        "user": "one"
+      },
+      "values": {
+        "key": "........",
+        "user": "two"
+      },
+      "touched": []
+    },
+    {
+      "name": "a secret that was retyped is sent",
+      "schema": {
+        "type": "object",
+        "properties": {
+          "key": {
+            "type": "string",
+            "format": "secret"
+          }
+        }
+      },
+      "value": {
+        "key": "old"
+      },
+      "values": {
+        "key": "new"
+      },
+      "touched": [
+        "key"
+      ]
+    },
+    {
+      "name": "a hidden field is left out, and what is required and empty is named",
+      "schema": {
+        "type": "object",
+        "required": [
+          "mode",
+          "colour"
+        ],
+        "properties": {
+          "mode": {
+            "type": "string",
+            "enum": [
+              "colour",
+              "chroma"
+            ],
+            "default": "colour"
+          },
+          "colour": {
+            "type": "string"
+          },
+          "tolerance": {
+            "type": "number"
+          }
+        },
+        "allOf": [
+          {
+            "if": {
+              "properties": {
+                "mode": {
+                  "const": "chroma"
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "tolerance": {}
+              }
+            },
+            "else": {
+              "properties": {
+                "colour": {}
+              }
+            }
+          }
+        ]
+      },
+      "value": {},
+      "values": {
+        "mode": "colour",
+        "tolerance": 0.4
+      },
+      "touched": []
     }
   ]
 }

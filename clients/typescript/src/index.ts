@@ -47,6 +47,12 @@ export {
 } from "./schema-form.ts";
 export type { Choice, ControlKind, FormDescription, FormField, ShowWhen } from "./schema-form.ts";
 
+// The designer kits: the record mirror, prediction, undo, canvas geometry,
+// handles, snapping, safe areas, the UI schema layer and the renderer registry.
+// Namespaced, because they carry names a surface is likely to have of its own
+// (View, Handle, Rect) and because `kits.applyDrag` says where it came from.
+export * as kits from "./kits/index.ts";
+
 export {
   API_COMPATIBLE,
   API_LEVEL,

@@ -23,7 +23,7 @@ import { Prediction, mergeProps } from "../ui/kits/protocol/predict.js";
 import { gizmosFor, handlesFor, applyDrag } from "../ui/kits/canvas/gizmos.js";
 import { snapTargets, snapDelta } from "../ui/kits/canvas/snap.js";
 import { safeAreas } from "../ui/kits/canvas/safe.js";
-import { describeForm, valuesOf } from "../ui/kits/schema/describe.js";
+import { describeForm, valuesOf, readForm, missing } from "../ui/kits/schema/describe.js";
 import { layoutFor, applyRules, controlsOf } from "../ui/kits/schema/ui-schema.js";
 
 const root = new URL("../ui/kits/", import.meta.url);
@@ -42,6 +42,7 @@ const out = {
   snap: input.snap.map(snapCase),
   safe: input.safe.map((c) => ({ canvas: c.canvas, out: round(safeAreas(c.canvas)) })),
   schema: input.schema.map(schemaCase),
+  read: input.read.map(readCase),
   uiSchema: input.uiSchema.map(uiCase),
 };
 
@@ -158,6 +159,26 @@ function schemaCase(c) {
         value: f.value === undefined ? null : f.value,
         choices: f.choices ? f.choices.map((x) => x.value) : null,
       })),
+    },
+  };
+}
+
+/**
+ * What a form sends back. Its own section because `describeForm` never reaches
+ * `readForm`, which is where the three readers had quietly drifted apart.
+ */
+function readCase(c) {
+  const form = describeForm(c.schema, c.value || {});
+  const values = Object.assign({}, valuesOf(form), c.values || {});
+  return {
+    name: c.name,
+    schema: c.schema,
+    value: c.value || {},
+    values: c.values || {},
+    touched: c.touched || [],
+    out: {
+      read: readForm(form, values, new Set(c.touched || [])),
+      missing: missing(form, values),
     },
   };
 }

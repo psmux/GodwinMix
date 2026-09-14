@@ -304,7 +304,7 @@
             "applied": false,
             "echo": false,
             "gap": false,
-            "seq": 2
+            "seq": 1
           }
         ],
         "seq": 1,
@@ -1920,6 +1920,199 @@
             "value": null,
             "choices": null
           }
+        ]
+      }
+    }
+  ],
+  "read": [
+    {
+      "name": "a select's string comes back as the schema's own typed value",
+      "schema": {
+        "type": "object",
+        "properties": {
+          "fps": {
+            "type": "integer",
+            "enum": [
+              25,
+              30,
+              60
+            ],
+            "title": "Frame rate"
+          },
+          "method": {
+            "type": "string",
+            "enum": [
+              "green",
+              "blue"
+            ]
+          }
+        }
+      },
+      "value": {},
+      "values": {
+        "fps": "30",
+        "method": "blue"
+      },
+      "touched": [],
+      "out": {
+        "read": {
+          "fps": 30,
+          "method": "blue"
+        },
+        "missing": []
+      }
+    },
+    {
+      "name": "a number typed into a box is a number, and an empty box is left out",
+      "schema": {
+        "type": "object",
+        "properties": {
+          "gain": {
+            "type": "number"
+          },
+          "tries": {
+            "type": "integer"
+          },
+          "name": {
+            "type": "string"
+          },
+          "note": {
+            "type": "string"
+          }
+        }
+      },
+      "value": {},
+      "values": {
+        "gain": "-6.5",
+        "tries": "3",
+        "name": "Pulpit",
+        "note": ""
+      },
+      "touched": [],
+      "out": {
+        "read": {
+          "gain": -6.5,
+          "tries": 3,
+          "name": "Pulpit"
+        },
+        "missing": []
+      }
+    },
+    {
+      "name": "a secret nobody retyped is left alone rather than blanked",
+      "schema": {
+        "type": "object",
+        "properties": {
+          "key": {
+            "type": "string",
+            "format": "secret"
+          },
+          "user": {
+            "type": "string"
+          }
+        }
+      },
+      "value": {
+        "key": "kept",
+        "user": "one"
+      },
+      "values": {
+        "key": "........",
+        "user": "two"
+      },
+      "touched": [],
+      "out": {
+        "read": {
+          "user": "two"
+        },
+        "missing": []
+      }
+    },
+    {
+      "name": "a secret that was retyped is sent",
+      "schema": {
+        "type": "object",
+        "properties": {
+          "key": {
+            "type": "string",
+            "format": "secret"
+          }
+        }
+      },
+      "value": {
+        "key": "old"
+      },
+      "values": {
+        "key": "new"
+      },
+      "touched": [
+        "key"
+      ],
+      "out": {
+        "read": {
+          "key": "new"
+        },
+        "missing": []
+      }
+    },
+    {
+      "name": "a hidden field is left out, and what is required and empty is named",
+      "schema": {
+        "type": "object",
+        "required": [
+          "mode",
+          "colour"
+        ],
+        "properties": {
+          "mode": {
+            "type": "string",
+            "enum": [
+              "colour",
+              "chroma"
+            ],
+            "default": "colour"
+          },
+          "colour": {
+            "type": "string"
+          },
+          "tolerance": {
+            "type": "number"
+          }
+        },
+        "allOf": [
+          {
+            "if": {
+              "properties": {
+                "mode": {
+                  "const": "chroma"
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "tolerance": {}
+              }
+            },
+            "else": {
+              "properties": {
+                "colour": {}
+              }
+            }
+          }
+        ]
+      },
+      "value": {},
+      "values": {
+        "mode": "colour",
+        "tolerance": 0.4
+      },
+      "touched": [],
+      "out": {
+        "read": {
+          "mode": "colour"
+        },
+        "missing": [
+          "colour"
         ]
       }
     }

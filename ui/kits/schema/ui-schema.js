@@ -115,7 +115,10 @@ function node(spec, form, used) {
     const name = fieldOfScope(spec.scope);
     const field = form.fields.find((f) => f.name === name);
     if (field) used.add(field.name);
-    return leaf(field || { name, label: name || "", kind: "text", visible: true }, spec.control, spec);
+    // A control naming a property the data schema does not have still renders,
+    // as a text box over nothing, rather than producing a half built field that
+    // every reader of the layout then has to guard against.
+    return leaf(field || stubField(name), spec.control, spec);
   }
   const kind = type === "horizontal" ? "row" : type === "tabs" ? "tabs" : "group";
   return {
@@ -123,6 +126,19 @@ function node(spec, form, used) {
     label: spec.label ? String(spec.label) : "",
     rule: ruleOf(spec),
     elements: (spec.elements || []).map((child) => node(child, form, used)),
+  };
+}
+
+/** The shape of a form field, with nothing in it. Never null, never partial. */
+function stubField(name) {
+  return {
+    name: name || "",
+    label: name || "",
+    kind: "text",
+    group: "",
+    required: false,
+    value: undefined,
+    visible: true,
   };
 }
 
@@ -165,7 +181,7 @@ export function applyRules(layout, values) {
 }
 
 function holds(rule, values) {
-  if (!rule) return { visible: true, enabled: true };
+  if (!rule || !rule.field) return { visible: true, enabled: true };
   const value = values[rule.field];
   let met = true;
   if (rule.oneOf !== undefined) met = rule.oneOf.includes(value);

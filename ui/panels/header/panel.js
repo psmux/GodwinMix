@@ -6,7 +6,6 @@
 import { el, clear, fmtDuration } from "../../shell/dom.js";
 import { addView, dropView, meterElement, takeMeters } from "../../shell/meter.js";
 import { openSettings } from "../../shell/settings.js";
-import { openPalette } from "../../shell/palette.js";
 import { errorToast } from "../../shell/toast.js";
 
 class HeaderPanel extends HTMLElement {
@@ -46,7 +45,12 @@ class HeaderPanel extends HTMLElement {
         title: "0",
         onclick: () => this.client.call("program.take", { source: null }).catch((e) => errorToast(e, "Cut to black")),
       }),
-      el("button.btn.icon", { text: "⌘K", title: "Command palette", onclick: () => openPalette() }),
+      // The palette arrives when it is asked for, here and on Ctrl+K.
+      el("button.btn.icon", {
+        text: "⌘K",
+        title: "Command palette",
+        onclick: () => import("../../shell/palette.js").then((m) => m.openPalette()),
+      }),
       el("button.btn.icon", { text: "⚙", title: "Settings", "aria-label": "Settings", onclick: () => openSettings(this.client) })
     );
 
