@@ -13,10 +13,10 @@ resolver = "2"
 # this list. The one rule it imposes: a directory under `crates/` must carry a
 # `Cargo.toml`. Git does not track empty directories, so a clone never has one;
 # if you make a crate by hand, write the manifest before running cargo.
-members = ["crates/*"]
+members = ["crates/*", "plugins/*"]
 # Same glob, so `cargo build` at the root builds every crate and `cargo run`
 # still reaches the `godwinmix` binary through its `default-run`.
-default-members = ["crates/*"]
+default-members = ["crates/*", "plugins/*"]
 # Both have their own lockfiles and their own heavy dependency trees, and
 # neither is built by `cargo build` here.
 exclude = ["browser", "tauri-app"]
