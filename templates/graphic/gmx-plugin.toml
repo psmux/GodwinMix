@@ -1,0 +1,38 @@
+# A graphic, and nothing else.
+#
+# There is no [run] table here and that is deliberate. A graphic has no
+# process: it is an OGraf manifest saying what words go in it and a web
+# component that draws them. The core hands both to a graphics host, which
+# serves the page, and a browser source renders it. Adding a [run] table would
+# be declaring a process that never starts.
+#
+# `placements` says in-process for the same reason. The manifest validator
+# wants a [run] table as soon as placements names "sidecar" or "node", so a
+# graphic that claims either is refused before it is ever installed.
+[plugin]
+name = "{{name}}"
+version = "0.1.0"
+api = 1
+description = "{{description}}"
+license = "{{license}}"
+authors = ["{{author}}"]
+# Every platform, because a graphic is text. There is nothing here to compile
+# and nothing to ship per platform.
+platforms = ["linux-x86_64", "linux-aarch64", "linux-armv7", "macos-aarch64", "macos-x86_64", "windows-x86_64", "windows-aarch64"]
+placements = ["in-process"]
+
+[[provides]]
+kind = "graphic"
+id = "{{name}}"
+graphic = "graphic.ograf.json"
+skill = "skills/{{name}}/SKILL.md"
+
+# What a designer client needs to put this on a canvas without asking anybody.
+[provides.designer]
+icon = "ui/icon.svg"
+thumbnail = "ui/thumbnail.svg"
+# Where it lands when somebody drags it onto a scene. The numbers are the 16:9
+# canvas the scene document uses by default, and a client scales them to its
+# own. This one is a lower third: bottom left, a fifth of the canvas high.
+default_frame = { position = { x = 120, y = 760 }, frame = { w = 960, h = 200 }, fit = "stretch", align = "bottom-left" }
+gizmos = ["move", "resize"]

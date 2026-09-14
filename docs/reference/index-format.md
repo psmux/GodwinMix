@@ -53,7 +53,7 @@ against the bytes that arrived and nothing more.
 | `source` | string | yes | Where to get it. Any form `gmx plugin add` takes, listed below. Parsed when the marketplace is added, so a typo fails there. |
 | `description` | string | no | One sentence. It is what a person and a model both read first, so write it for somebody deciding whether this is the plugin they want. |
 | `tier` | string | no, default `custom` | `custom`, `bronze`, `silver` or `gold`. See [the quality scale](quality-scale.md). |
-| `kinds` | array of string | no | What it provides: `source`, `output`, `filter`, `panel`, `service`, `device`, `preset`, `encoder`, `theme`. Searched, so a listing with them is found by somebody looking for an output. |
+| `kinds` | array of string | no | What it provides, from the manifest's `[[provides]]` blocks: `source`, `output`, `filter`, `transition`, `encoder`, `service`, `device`, `panel`, `surface`, `preset`, `graphic`, `collection`. Searched, so a listing with them is found by somebody looking for an output. |
 | `license` | string | no | An SPDX id. |
 | `repository` | string | no | Where the code is. |
 | `versions` | array | no | One entry per published version, newest last. |
@@ -67,6 +67,28 @@ against the bytes that arrived and nothing more.
 | `platforms` | array of string | no | The platform triples this version has assets for: `linux-x86_64`, `linux-aarch64`, `linux-armv7`, `macos-aarch64`, `macos-x86_64`, `windows-x86_64`, `windows-aarch64`. |
 | `signed` | boolean | no | Whether the CI signed the assets for this version. |
 | `harness` | array of string | no | What the conformance harness found, one line per platform, written by the index CI. This is what the tier checks read and what the compatibility dashboard prints. |
+
+### The two kinds with no binary
+
+A `graphic` and a `collection` are files, not programs. A graphic is an OGraf
+template (a manifest and a web component); a collection is a set of scenes with
+their assets. Neither has a process, neither declares `[run]`, and neither is
+built per platform.
+
+That changes what a listing for one means:
+
+* `platforms` on a version entry is about where a binary runs. A graphic or a
+  collection runs wherever the core does, so the field is left out rather than
+  listing all seven triples.
+* `harness` is the conformance harness's per platform result. A provide with no
+  process has nothing to spawn, so `gmx plugin test` checks the manifest, every
+  schema and every `SKILL.md` and says so. A listing of these kinds is not held
+  to a per platform harness matrix.
+* `signed` still means what it means everywhere: the CI signed the assets.
+
+A plugin that ships both, a graphics host with its templates for example, is
+listed by everything it provides (`["service", "graphic"]`) and is held to the
+rules of the kinds that do have a binary.
 
 ## Source forms
 
