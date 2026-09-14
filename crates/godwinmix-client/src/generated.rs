@@ -271,6 +271,18 @@ pub struct ApplyResult {
     pub plan: Value,
 }
 
+/// A file the collection carries with it.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct Asset {
+    /// Relative to the collection root, always.
+    pub path: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub sha256: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub size: Option<u64>,
+}
+
 /// Whether the item's source is heard. A source is audible when any live item
 /// of it says so, which is OBS's behaviour and changes no pad topology.
 pub type Audio = String;
@@ -767,6 +779,35 @@ pub struct GroupSourcesRequest {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub name: Option<String>,
     pub sources: Vec<String>,
+}
+
+/// Everything in the document that is not a scene or an item: the name, the
+/// canvas, the collection's parameters, the transitions it carries, the assets
+/// and the source labels.
+///
+/// It is not a record and it has no id, so it cannot be diffed the way the
+/// tree is. It is carried whole, because it is small and because the
+/// alternative is that a command touching only the header produces an empty
+/// patch and is thrown away by `edit`, which is exactly what used to happen to
+/// `scene.params.set`, `source.set` and `source.group`: all three answered with
+/// the change and none of them kept it.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct Header {
+    pub assets: BTreeMap<String, Value>,
+    pub canvas: Canvas,
+    pub name: String,
+    pub params: Value,
+    pub sources: BTreeMap<String, Value>,
+    pub transitions: Vec<Transition2>,
+}
+
+/// The header as it was and as it is.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct HeaderChange {
+    pub after: Header,
+    pub before: Header,
 }
 
 /// `program.history`.
@@ -1340,6 +1381,10 @@ pub struct Patch {
     /// command carries a `seq`; this is that number coming back.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub client_seq: Option<u64>,
+    /// The collection's own properties, when they changed. Absent for the
+    /// ordinary case, which is every command that moves an item.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub header: Option<HeaderChange>,
     /// What the client called this change, for a label in an undo menu.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub label: Option<String>,
@@ -1891,6 +1936,22 @@ pub struct SourceAudioState {
     pub page: Option<f64>,
 }
 
+/// A source's name, colour and tray folder, as this collection has them.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct SourceMeta {
+    /// Free text so a client can use whatever it draws with. Absent means the
+    /// client picks one by kind.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub color: Option<String>,
+    /// A tray folder: a tag on the source, purely for finding things. Not a
+    /// scene group, which is a thing on the canvas.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub group: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+}
+
 /// Where a seekable source has got to, which is what the seek endpoint answers
 /// with.
 ///
@@ -2135,6 +2196,18 @@ pub struct Transform {
 
 /// A name, or an object.
 pub type Transition = Value;
+
+/// A named transition between two scenes.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct Transition2 {
+    pub duration_ms: u32,
+    pub id: Id,
+    pub name: String,
+    pub params: Value,
+    #[serde(rename = "type")]
+    pub r#type: String,
+}
 
 /// How a take gets there. See docs/reference/transitions.md.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
@@ -2465,7 +2538,7 @@ pub const METHODS: [MethodInfo; 118] = [
     MethodInfo { name: "scene.layout.paste", summary: "Put one scene's geometry onto another's items, matched by name first and slot order second. Items that match nothing are left alone.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/scenes/layout/paste")) },
     MethodInfo { name: "scene.list", summary: "Every scene in the collection, with how many items it has, the sources it draws and whether it is armed.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/scenes")) },
     MethodInfo { name: "scene.params.get", summary: "The collection's typed parameters, readable without their values, so a client discovers what is fillable before filling it.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/scenes/params/get")) },
-    MethodInfo { name: "scene.params.set", summary: "Set the collection's parameter values. A `{{name}}` in a string property follows them.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/scenes/params/set")) },
+    MethodInfo { name: "scene.params.set", summary: "Set the collection's parameter values, declaring any that are new. A `{{name}}` in any string property of any item follows them, so one call changes every lower third that uses it.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/scenes/params/set")) },
     MethodInfo { name: "scene.preview.frame", summary: "A still of the armed scene as base64 JPEG, the floor every client has.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/scenes/preview/frame")) },
     MethodInfo { name: "scene.preview.set", summary: "Arm a scene. The armed scene is the preview, and program.take with no argument takes it.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/scenes/preview/set")) },
     MethodInfo { name: "scene.redo", summary: "Put back what undo took away.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/scenes/redo")) },
@@ -3162,7 +3235,7 @@ impl Client {
         self.call("scene.params.get", &serde_json::json!({})).await
     }
 
-    /// Set the collection's parameter values. A `{{name}}` in a string property follows them.
+    /// Set the collection's parameter values, declaring any that are new. A `{{name}}` in any string property of any item follows them, so one call changes every lower third that uses it.
     pub async fn scene_params_set(&self, params: &ParamsRequest) -> Result<BTreeMap<String, Value>> {
         self.call("scene.params.set", params).await
     }

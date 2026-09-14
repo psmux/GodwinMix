@@ -137,6 +137,13 @@ export interface ApplyResult {
   plan: unknown;
 }
 
+/** A file the collection carries with it. */
+export interface Asset {
+  path: string;
+  sha256?: string | null;
+  size?: number | null;
+}
+
 /**
  * Whether the item's source is heard. A source is audible when any live item
  * of it says so, which is OBS's behaviour and changes no pad topology.
@@ -447,6 +454,33 @@ export interface GraphicType {
 export interface GroupSourcesRequest {
   name?: string | null;
   sources: string[];
+}
+
+/**
+ * Everything in the document that is not a scene or an item: the name, the
+ * canvas, the collection's parameters, the transitions it carries, the assets
+ * and the source labels.
+ *
+ * It is not a record and it has no id, so it cannot be diffed the way the
+ * tree is. It is carried whole, because it is small and because the
+ * alternative is that a command touching only the header produces an empty
+ * patch and is thrown away by `edit`, which is exactly what used to happen to
+ * `scene.params.set`, `source.set` and `source.group`: all three answered with
+ * the change and none of them kept it.
+ */
+export interface Header {
+  assets?: Record<string, unknown>;
+  canvas: Canvas;
+  name: string;
+  params: unknown;
+  sources?: Record<string, unknown>;
+  transitions?: Transition2[];
+}
+
+/** The header as it was and as it is. */
+export interface HeaderChange {
+  after: Header;
+  before: Header;
 }
 
 /** `program.history`. */
@@ -778,6 +812,7 @@ export interface ParamsRequest {
 export interface Patch {
   added?: ProtocolRecord[];
   client_seq?: number | null;
+  header?: HeaderChange | null;
   label?: string | null;
   removed?: Id[];
   scope: string;
@@ -1113,6 +1148,13 @@ export interface SourceAudioState {
   page?: number | null;
 }
 
+/** A source's name, colour and tray folder, as this collection has them. */
+export interface SourceMeta {
+  color?: string | null;
+  group?: string | null;
+  name?: string | null;
+}
+
 /**
  * Where a seekable source has got to, which is what the seek endpoint answers
  * with.
@@ -1249,6 +1291,15 @@ export interface Transform {
 
 /** A name, or an object. */
 export type Transition = string | TransitionRequest;
+
+/** A named transition between two scenes. */
+export interface Transition2 {
+  duration_ms: number;
+  id: Id;
+  name: string;
+  params?: unknown;
+  type: string;
+}
 
 /** How a take gets there. See docs/reference/transitions.md. */
 export interface TransitionRequest {
@@ -1758,7 +1809,7 @@ export const METHODS: readonly MethodInfo[] = [
   { name: "scene.layout.paste", summary: "Put one scene's geometry onto another's items, matched by name first and slot order second. Items that match nothing are left alone.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/scenes/layout/paste" } },
   { name: "scene.list", summary: "Every scene in the collection, with how many items it has, the sources it draws and whether it is armed.", scope: "read", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/scenes" } },
   { name: "scene.params.get", summary: "The collection's typed parameters, readable without their values, so a client discovers what is fillable before filling it.", scope: "read", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/scenes/params/get" } },
-  { name: "scene.params.set", summary: "Set the collection's parameter values. A `{{name}}` in a string property follows them.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/scenes/params/set" } },
+  { name: "scene.params.set", summary: "Set the collection's parameter values, declaring any that are new. A `{{name}}` in any string property of any item follows them, so one call changes every lower third that uses it.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/scenes/params/set" } },
   { name: "scene.preview.frame", summary: "A still of the armed scene as base64 JPEG, the floor every client has.", scope: "read", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/scenes/preview/frame" } },
   { name: "scene.preview.set", summary: "Arm a scene. The armed scene is the preview, and program.take with no argument takes it.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/scenes/preview/set" } },
   { name: "scene.redo", summary: "Put back what undo took away.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/scenes/redo" } },
@@ -2302,7 +2353,7 @@ export class GeneratedMethods {
     return this._call("scene.params.get", {}) as Promise<Record<string, unknown>>;
   }
 
-  /** Set the collection's parameter values. A `{{name}}` in a string property follows them. */
+  /** Set the collection's parameter values, declaring any that are new. A `{{name}}` in any string property of any item follows them, so one call changes every lower third that uses it. */
   sceneParamsSet(params: ParamsRequest = {}): Promise<Record<string, unknown>> {
     return this._call("scene.params.set", params as unknown as Record<string, unknown>) as Promise<Record<string, unknown>>;
   }

@@ -657,3 +657,110 @@ fn a_change_that_would_make_a_scene_contain_itself_is_refused() {
     assert!(format!("{err:#}").contains("contain itself"), "{err:#}");
     assert_eq!(s.scene("two").unwrap().geometry.len(), 2, "the refused change was kept");
 }
+
+// --- the collection's own properties ---------------------------------------
+
+/// `scene.params.set`, `source.set` and `source.group` change nothing that has
+/// a record id. Before the patch carried a header, `edit` read the record diff,
+/// found it empty, and threw the whole working copy away: all three answered
+/// with the change they had made and none of them kept it. This is that bug,
+/// as a test.
+#[test]
+fn a_change_to_the_collections_parameters_is_kept_and_published() {
+    let server = server();
+    let mut patches = server.subscribe();
+
+    let (_, patch) = server
+        .edit(None, |doc| {
+            doc.params["properties"]["speaker"] =
+                serde_json::json!({ "type": "string", "default": "Ada Lovelace" });
+            Ok(())
+        })
+        .expect("setting a parameter");
+
+    assert!(!patch.is_empty(), "a header change is a change");
+    assert_eq!(
+        server.document().params["properties"]["speaker"]["default"],
+        "Ada Lovelace",
+        "the parameter did not survive the edit"
+    );
+    let published = patches.try_recv().expect("nothing was published");
+    assert_eq!(
+        published.header.expect("no header on the patch").after.params["properties"]["speaker"]
+            ["default"],
+        "Ada Lovelace"
+    );
+}
+
+#[test]
+fn a_source_label_is_kept_and_undone() {
+    let server = server();
+    server
+        .edit(None, |doc| {
+            doc.sources.insert(
+                "cam1".into(),
+                crate::scene::document::SourceMeta {
+                    name: Some("Wide".into()),
+                    color: Some("#ff0000".into()),
+                    group: None,
+                },
+            );
+            Ok(())
+        })
+        .expect("naming a source");
+    assert_eq!(server.document().sources["cam1"].name.as_deref(), Some("Wide"));
+
+    server.undo(None).expect("undoing it");
+    assert!(server.document().sources.is_empty(), "undo did not take the label off");
+
+    server.redo(None).expect("putting it back");
+    assert_eq!(server.document().sources["cam1"].color.as_deref(), Some("#ff0000"));
+}
+
+#[test]
+fn a_header_change_and_an_item_change_in_one_transaction_are_one_step() {
+    let server = server();
+    let scene = two_box(&server).name;
+    server.begin().expect("a transaction");
+    server
+        .edit(None, |doc| {
+            doc.params["properties"]["speaker"] =
+                serde_json::json!({ "type": "string", "default": "Ada" });
+            Ok(())
+        })
+        .unwrap();
+    server
+        .edit_scene(None, &scene, |doc, i| {
+            doc.scenes[i].items.push(Item::new(Content::Source { source: "cam3".into() }));
+            Ok(())
+        })
+        .unwrap();
+    let patch = server.commit(None).expect("committing");
+    assert!(patch.header.is_some(), "the batch lost the parameter");
+    assert_eq!(patch.added.len(), 1);
+
+    server.undo(None).expect("undoing the batch");
+    let after = server.document();
+    assert!(after.params["properties"].get("speaker").is_none(), "the parameter came back");
+    assert_eq!(after.scenes[0].items.len(), 2, "the item came back with it");
+}
+
+/// Setting what is already set is still a no op, which is what makes every
+/// command idempotent. The header must not turn that into a change.
+#[test]
+fn setting_a_parameter_to_what_it_already_is_changes_nothing() {
+    let server = server();
+    server
+        .edit(None, |doc| {
+            doc.params["properties"]["speaker"] = serde_json::json!({ "default": "Ada" });
+            Ok(())
+        })
+        .unwrap();
+    let (_, again) = server
+        .edit(None, |doc| {
+            doc.params["properties"]["speaker"] = serde_json::json!({ "default": "Ada" });
+            Ok(())
+        })
+        .unwrap();
+    assert!(again.is_empty(), "the same value twice is not a change");
+}

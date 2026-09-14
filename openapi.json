@@ -494,6 +494,34 @@
         ],
         "type": "object"
       },
+      "Asset": {
+        "additionalProperties": false,
+        "description": "A file the collection carries with it.",
+        "properties": {
+          "path": {
+            "description": "Relative to the collection root, always.",
+            "type": "string"
+          },
+          "sha256": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "size": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "path"
+        ],
+        "type": "object"
+      },
       "Audio": {
         "description": "Whether the item's source is heard. A source is audible when any live item\nof it says so, which is OBS's behaviour and changes no pad topology.",
         "oneOf": [
@@ -1581,6 +1609,61 @@
         },
         "required": [
           "sources"
+        ],
+        "type": "object"
+      },
+      "Header": {
+        "description": "Everything in the document that is not a scene or an item: the name, the\ncanvas, the collection's parameters, the transitions it carries, the assets\nand the source labels.\n\nIt is not a record and it has no id, so it cannot be diffed the way the\ntree is. It is carried whole, because it is small and because the\nalternative is that a command touching only the header produces an empty\npatch and is thrown away by `edit`, which is exactly what used to happen to\n`scene.params.set`, `source.set` and `source.group`: all three answered with\nthe change and none of them kept it.",
+        "properties": {
+          "assets": {
+            "additionalProperties": false,
+            "patternProperties": {
+              "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$": {
+                "$ref": "#/components/schemas/Asset"
+              }
+            },
+            "type": "object"
+          },
+          "canvas": {
+            "$ref": "#/components/schemas/Canvas"
+          },
+          "name": {
+            "type": "string"
+          },
+          "params": true,
+          "sources": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/SourceMeta"
+            },
+            "type": "object"
+          },
+          "transitions": {
+            "items": {
+              "$ref": "#/components/schemas/Transition2"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "name",
+          "canvas",
+          "params"
+        ],
+        "type": "object"
+      },
+      "HeaderChange": {
+        "description": "The header as it was and as it is.",
+        "properties": {
+          "after": {
+            "$ref": "#/components/schemas/Header"
+          },
+          "before": {
+            "$ref": "#/components/schemas/Header"
+          }
+        },
+        "required": [
+          "before",
+          "after"
         ],
         "type": "object"
       },
@@ -2766,6 +2849,17 @@
               "null"
             ]
           },
+          "header": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/HeaderChange"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The collection's own properties, when they changed. Absent for the\nordinary case, which is every command that moves an item."
+          },
           "label": {
             "description": "What the client called this change, for a label in an undo menu.",
             "type": [
@@ -3909,6 +4003,33 @@
         ],
         "type": "object"
       },
+      "SourceMeta": {
+        "additionalProperties": false,
+        "description": "A source's name, colour and tray folder, as this collection has them.",
+        "properties": {
+          "color": {
+            "description": "Free text so a client can use whatever it draws with. Absent means the\nclient picks one by kind.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "group": {
+            "description": "A tray folder: a tag on the source, purely for finding things. Not a\nscene group, which is a thing on the canvas.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "type": "object"
+      },
       "SourcePositionState": {
         "description": "Where a seekable source has got to, which is what the seek endpoint answers\nwith.\n\nBoth numbers are read back off the pipeline after the seek has landed, not\ntaken from the request. A seek snaps to a key unit, so the frame an operator\nasked for and the frame they got are rarely the same millisecond, and a\nscrubber drawn from the request would sit a little away from the picture.",
         "properties": {
@@ -4421,6 +4542,34 @@
           }
         ],
         "description": "A name, or an object."
+      },
+      "Transition2": {
+        "additionalProperties": false,
+        "description": "A named transition between two scenes.",
+        "properties": {
+          "duration_ms": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "id": {
+            "$ref": "#/components/schemas/Id"
+          },
+          "name": {
+            "type": "string"
+          },
+          "params": true,
+          "type": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "type",
+          "duration_ms"
+        ],
+        "type": "object"
       },
       "TransitionRequest": {
         "description": "How a take gets there. See docs/reference/transitions.md.",
@@ -7958,7 +8107,7 @@
             "$ref": "#/components/responses/Error"
           }
         },
-        "summary": "Set the collection's parameter values. A `{{name}}` in a string property follows them.",
+        "summary": "Set the collection's parameter values, declaring any that are new. A `{{name}}` in any string property of any item follows them, so one call changes every lower third that uses it.",
         "tags": [
           "scene"
         ],
