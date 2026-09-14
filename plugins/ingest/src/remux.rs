@@ -30,8 +30,9 @@
 //! source.rs`, not here.
 
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
+use godwinmix_sdk::plugin::Reporter;
 use gstreamer as gst;
 use gstreamer::prelude::*;
 use gstreamer_app::AppSrc;
@@ -56,7 +57,7 @@ pub struct Remux {
 }
 
 impl Remux {
-    pub fn open(out: Out) -> Result<Remux, String> {
+    pub fn open(out: Out, reporter: Option<Reporter>) -> Result<Remux, String> {
         gmx_netkit::init()?;
         gmx_netkit::elements::require(&[
             "appsrc",
@@ -116,14 +117,33 @@ impl Remux {
         gst::Element::link(&mux, &sink)
             .map_err(|e| format!("could not link the muxer to the pipe: {e}"))?;
 
+        // `matroskamux streamable=true` writes its track list the moment the
+        // first buffer reaches it, and a pad requested after that carries
+        // nothing. `flvdemux` exposes its audio and video pads milliseconds
+        // apart, so whichever arrives first would be the only stream in the
+        // file. Each new pad is therefore blocked as it appears and unblocked
+        // once both are linked, or after a short wait when only one is coming.
+        let gate = Gating::new();
         let weak = pipeline.downgrade();
+        let for_pads = Arc::clone(&gate);
         demux.connect_pad_added(move |_, pad| {
             let Some(pipeline) = weak.upgrade() else { return };
-            let _ = branch(&pipeline, pad);
+            match branch(&pipeline, pad, &for_pads) {
+                Ok(()) => linked(&for_pads),
+                Err(why) => {
+                    // A stream that cannot be muxed is a stream the core will
+                    // never see, so it is worth a line rather than silence.
+                    if let Some(r) = &reporter {
+                        r.error(format!("a published stream could not be remuxed: {why}"));
+                    }
+                    release(&for_pads);
+                }
+            }
         });
 
         let broken = Arc::new(AtomicBool::new(false));
         let watch = spawn_watch(&pipeline, Arc::clone(&broken));
+        let _ = &gate;
         pipeline
             .set_state(gst::State::Playing)
             .map_err(|e| format!("the remuxer would not start: {e}"))?;
@@ -161,17 +181,98 @@ impl Drop for Remux {
     }
 }
 
+/// How long a single stream waits for the other one before it gives up and
+/// flows on its own. A publisher sending video only, or audio only, is normal;
+/// `flvdemux` exposes its two pads within milliseconds of each other when both
+/// are coming, so this is long enough by two orders of magnitude.
+const GATE_MS: u64 = 500;
+
+/// The block on the demuxer's pads while the branches are being built.
+struct Gating {
+    held: Vec<(gstreamer::Pad, gstreamer::PadProbeId)>,
+    linked: usize,
+    released: bool,
+    /// Whether the deadline is already running.
+    waiting: bool,
+}
+
+type Gate = Arc<Mutex<Gating>>;
+
+impl Gating {
+    fn new() -> Gate {
+        Arc::new(Mutex::new(Gating {
+            held: Vec::new(),
+            linked: 0,
+            released: false,
+            waiting: false,
+        }))
+    }
+}
+
+/// Block this pad until the gate opens.
+///
+/// The deadline starts here, with the first pad, and not when the remuxer was
+/// built: a listener waits minutes for a publisher, and a timer started at
+/// `open` would have run out long before anybody arrived.
+fn hold(gate: &Gate, pad: &gstreamer::Pad) {
+    let mut held = gate.lock().unwrap_or_else(|e| e.into_inner());
+    if held.released {
+        return;
+    }
+    let id = pad.add_probe(gst::PadProbeType::BLOCK_DOWNSTREAM, |_, _| {
+        gst::PadProbeReturn::Ok
+    });
+    if let Some(id) = id {
+        held.held.push((pad.clone(), id));
+    }
+    if held.waiting {
+        return;
+    }
+    held.waiting = true;
+    let for_timer = Arc::clone(gate);
+    let _ = std::thread::Builder::new()
+        .name("gmx-ingest-gate".into())
+        .spawn(move || {
+            std::thread::sleep(std::time::Duration::from_millis(GATE_MS));
+            release(&for_timer);
+        });
+}
+
+/// One more branch is built. Two is everything RTMP carries, so the gate opens.
+fn linked(gate: &Gate) {
+    let open = {
+        let mut held = gate.lock().unwrap_or_else(|e| e.into_inner());
+        held.linked += 1;
+        held.linked >= 2
+    };
+    if open {
+        release(gate);
+    }
+}
+
+/// Let everything through, once.
+fn release(gate: &Gate) {
+    let mut held = gate.lock().unwrap_or_else(|e| e.into_inner());
+    if held.released {
+        return;
+    }
+    held.released = true;
+    for (pad, id) in held.held.drain(..) {
+        pad.remove_probe(id);
+    }
+}
+
 /// Connect one demuxed stream to the muxer through its parser.
-fn branch(pipeline: &gst::Pipeline, pad: &gst::Pad) -> Result<(), String> {
+fn branch(pipeline: &gst::Pipeline, pad: &gst::Pad, gate: &Gate) -> Result<(), String> {
     let mux = pipeline.by_name("mux").ok_or("the remuxer has lost its muxer")?;
     let name = pad
         .current_caps()
         .and_then(|c| c.structure(0).map(|s| s.name().to_string()))
         .unwrap_or_default();
-    let parser = if name.starts_with("video/x-h264") {
-        "h264parse"
+    let (parser, template) = if name.starts_with("video/x-h264") {
+        ("h264parse", "video_%u")
     } else if name.starts_with("audio/mpeg") {
-        "aacparse"
+        ("aacparse", "audio_%u")
     } else {
         // Something neither half of RTMP normally carries. Leaving it
         // unlinked is right: the muxer takes what it knows.
@@ -187,12 +288,28 @@ fn branch(pipeline: &gst::Pipeline, pad: &gst::Pad) -> Result<(), String> {
     }
     gst::Element::link(&queue, &parse)
         .map_err(|e| format!("could not link the queue to {parser}: {e}"))?;
+    // The hold goes on the queue's output, not the demuxer's. Blocking the
+    // demuxer's own pad blocks the thread that parses the next tag, so it can
+    // never reach the second stream and the gate can only ever time out. The
+    // queue is what decouples the two, which is the whole reason it is here.
+    let queue_src = queue.static_pad("src").ok_or("the queue has no source pad")?;
+    hold(gate, &queue_src);
     let sink_pad = queue.static_pad("sink").ok_or("the queue has no sink pad")?;
     pad.link(&sink_pad)
         .map_err(|e| format!("could not link a demuxed pad: {e}"))?;
-    parse
-        .link(&mux)
-        .map_err(|e| format!("could not link {parser} into the muxer: {e}"))
+    // The muxer's pad is asked for by name rather than left to `link` to
+    // choose. Nothing has flowed through the parser yet, so its source pad has
+    // no caps, and a link that has to guess from ANY caps picks whichever
+    // template comes first: the audio stream arrives and the video one does
+    // not, silently, which is exactly what happened before this was explicit.
+    let mux_pad = mux
+        .request_pad_simple(template)
+        .ok_or_else(|| format!("matroskamux has no '{template}' pad to give"))?;
+    let parse_src = parse.static_pad("src").ok_or("the parser has no source pad")?;
+    parse_src
+        .link(&mux_pad)
+        .map_err(|e| format!("could not link {parser} into the muxer: {e}"))?;
+    Ok(())
 }
 
 /// Pop the bus on its own thread and record a failure.
@@ -236,7 +353,7 @@ mod tests {
     #[test]
     fn a_remuxer_opens_and_takes_bytes_without_a_publisher() {
         let path = std::env::temp_dir().join(format!("gmx-remux-{}.mkv", std::process::id()));
-        let remux = Remux::open(Out::File(path.clone())).expect("the remuxer assembles");
+        let remux = Remux::open(Out::File(path.clone()), None).expect("the remuxer assembles");
         remux.write(&crate::flv::header());
         assert!(!remux.broken());
         drop(remux);
@@ -246,7 +363,7 @@ mod tests {
     #[test]
     fn rubbish_that_is_not_flv_produces_no_stream_rather_than_a_broken_one() {
         let path = std::env::temp_dir().join(format!("gmx-remux-bad-{}.mkv", std::process::id()));
-        let remux = Remux::open(Out::File(path.clone())).expect("the remuxer assembles");
+        let remux = Remux::open(Out::File(path.clone()), None).expect("the remuxer assembles");
         for _ in 0..20 {
             remux.write(b"this is not an FLV stream at all, not even close");
         }

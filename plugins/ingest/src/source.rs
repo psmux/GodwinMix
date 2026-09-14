@@ -150,7 +150,7 @@ impl Ingest {
         reporter: Option<Reporter>,
         out: Out,
     ) -> Result<Ingest, String> {
-        let remux = Remux::open(out)?;
+        let remux = Remux::open(out, reporter.clone())?;
         if settings.relay.is_empty() {
             Ingest::listen(settings, reporter, remux)
         } else {

@@ -109,6 +109,16 @@ Without a sender, checks 2 and 3 fail honestly: a source that receives nothing
 produces no frames. `gmx plugin test plugins/srt --offline` needs no sender and
 no core; it replays `tests/transcript.jsonl`.
 
+Everything passes except check 6, the kill test, which measures the programme's
+frame interval across a deliberate kill and wants it under 34 ms, one frame. A
+network source cannot make that: after the process restarts, the SRT link has to
+be established again, and the gap measured here is 41 to 44 ms. The documented
+remedy is to drop `restart-in-place` from the manifest, and it is the wrong one:
+the capability does work, the supervisor uses it to restart the same process
+rather than rebuild the source from nothing, and dropping it would make the real
+behaviour worse to make a number pass. `--quick` skips the check.
+
+
 ## Where the rules come from
 
 `docs/reference/plugin-manifest.md`, `docs/reference/plugin-protocol.md` and
