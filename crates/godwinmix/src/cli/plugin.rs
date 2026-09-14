@@ -34,6 +34,16 @@ pub enum Plugin {
         /// Where to put it. Defaults to a directory named after the plugin.
         #[arg(long)]
         out: Option<PathBuf>,
+        /// One sentence saying what it does. It is what a person and a model
+        /// both read first in the index.
+        #[arg(long)]
+        description: Option<String>,
+        /// An SPDX id.
+        #[arg(long, default_value = "MIT")]
+        license: String,
+        /// Whose name goes in the manifest.
+        #[arg(long)]
+        author: Option<String>,
     },
     /// Run the conformance harness against a plugin directory.
     ///
@@ -108,9 +118,18 @@ pub enum Plugin {
 pub async fn run(base: &str, token: Option<&str>, cmd: Plugin) -> Result<()> {
     match cmd {
         // The two that need no mixer.
-        Plugin::New { name, kind, lang, out } => {
+        Plugin::New { name, kind, lang, out, description, license, author } => {
             let at = out.unwrap_or_else(|| PathBuf::from(&name));
-            return new_plugin(&name, &kind, &lang, &at);
+            let fields = Fields {
+                name: name.clone(),
+                kind: kind.clone(),
+                description: description.unwrap_or_else(|| {
+                    format!("A GodwinMix {kind} called {name}. Say here what it does.")
+                }),
+                license: license.clone(),
+                author: author.unwrap_or_else(whoami),
+            };
+            return new_plugin(&lang, &at, &fields);
         }
         Plugin::Test { dir, quick, offline, provide } => {
             return test_plugin(&dir, quick, offline, provide.as_deref());
@@ -382,17 +401,75 @@ fn test_offline(dir: &Path, provide: Option<&str>) -> Result<()> {
     }
 }
 
-/// `gmx plugin new`. Copies `templates/<lang>/` and substitutes `{{name}}`.
-fn new_plugin(name: &str, kind: &str, lang: &str, out: &Path) -> Result<()> {
+/// What a template's placeholders are filled with.
+///
+/// Every `{{key}}` a template can carry is here, so a template that grows one
+/// fails to substitute rather than shipping the braces to an author.
+pub struct Fields {
+    pub name: String,
+    pub kind: String,
+    pub description: String,
+    pub license: String,
+    pub author: String,
+}
+
+impl Fields {
+    /// The substitutions, in the order a reader would expect them.
+    fn pairs(&self) -> Vec<(String, String)> {
+        vec![
+            ("{{name}}".into(), self.name.clone()),
+            // A Rust module and a Python package cannot have a hyphen in them.
+            ("{{name_snake}}".into(), self.name.replace('-', "_")),
+            ("{{kind}}".into(), self.kind.clone()),
+            ("{{description}}".into(), self.description.clone()),
+            ("{{license}}".into(), self.license.clone()),
+            ("{{author}}".into(), self.author.clone()),
+            ("{{year}}".into(), year()),
+            // Templates written against a published SDK version.
+            ("{{sdk}}".into(), env!("CARGO_PKG_VERSION").to_string()),
+        ]
+    }
+
+    fn fill(&self, text: &str) -> String {
+        let mut out = text.to_string();
+        for (key, value) in self.pairs() {
+            out = out.replace(&key, &value);
+        }
+        out
+    }
+}
+
+/// The current year, for a licence header. Read off the clock rather than
+/// pulled from a date crate: one number does not justify a dependency.
+fn year() -> String {
+    let secs = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0);
+    // Good enough for a copyright line, and it needs no leap year table.
+    (1970 + secs / 31_556_952).to_string()
+}
+
+fn whoami() -> String {
+    std::env::var("GMX_AUTHOR")
+        .or_else(|_| std::env::var("USER"))
+        .or_else(|_| std::env::var("USERNAME"))
+        .unwrap_or_else(|_| "unknown".into())
+}
+
+/// `gmx plugin new`. Copies `templates/<lang>/` and fills its placeholders.
+fn new_plugin(lang: &str, out: &Path, fields: &Fields) -> Result<()> {
     anyhow::ensure!(
-        godwinmix_protocol::plugin::manifest::is_slug(name),
-        "`{name}` is not a slug. Use lower case letters, digits and hyphens, starting with \
-         a letter: the name becomes the namespace of every id this plugin contributes."
+        godwinmix_protocol::plugin::manifest::is_slug(&fields.name),
+        "`{}` is not a slug. Use lower case letters, digits and hyphens, starting with \
+         a letter: the name becomes the namespace of every id this plugin contributes.",
+        fields.name
     );
     let kinds = godwinmix_protocol::plugin::manifest::KINDS;
     anyhow::ensure!(
-        kinds.contains(&kind),
-        "`{kind}` is not a plugin kind. Known: {}.",
+        kinds.contains(&fields.kind.as_str()),
+        "`{}` is not a plugin kind. Known: {}.",
+        fields.kind,
         kinds.join(", ")
     );
     const LANGS: &[&str] = &["rust", "python", "node", "go", "shell"];
@@ -407,13 +484,13 @@ fn new_plugin(name: &str, kind: &str, lang: &str, out: &Path) -> Result<()> {
         "{} already exists. Pick another name, or --out somewhere else.",
         out.display()
     );
-    let written = copy_substituting(&template, out, name, kind)?;
-    println!("wrote {} file(s) to {}", written, out.display());
+    let written = copy_substituting(&template, out, fields)?;
+    println!("wrote {written} file(s) to {}", out.display());
     println!("\nNext:");
     println!("  cd {}", out.display());
     println!("  gmx plugin test . --quick");
     println!("  gmx plugin add .");
-    println!("  gmx source add {name} --type {name}/{kind}");
+    println!("  gmx source add {} --type {}/{}", fields.name, fields.name, fields.kind);
     Ok(())
 }
 
@@ -454,9 +531,9 @@ fn template_roots() -> Vec<PathBuf> {
     roots
 }
 
-/// Copy a tree, substituting `{{name}}` and `{{kind}}` in every text file and
-/// in every file name.
-fn copy_substituting(from: &Path, to: &Path, name: &str, kind: &str) -> Result<usize> {
+/// Copy a tree, filling every placeholder in every text file and in every file
+/// name.
+fn copy_substituting(from: &Path, to: &Path, fields: &Fields) -> Result<usize> {
     std::fs::create_dir_all(to).with_context(|| format!("making {}", to.display()))?;
     let mut written = 0;
     for entry in std::fs::read_dir(from)
@@ -464,20 +541,15 @@ fn copy_substituting(from: &Path, to: &Path, name: &str, kind: &str) -> Result<u
         .flatten()
     {
         let path = entry.path();
-        let target_name = entry
-            .file_name()
-            .to_string_lossy()
-            .replace("{{name}}", name)
-            .replace("{{kind}}", kind);
+        let target_name = fields.fill(&entry.file_name().to_string_lossy());
         let target = to.join(&target_name);
         if path.is_dir() {
-            written += copy_substituting(&path, &target, name, kind)?;
+            written += copy_substituting(&path, &target, fields)?;
             continue;
         }
         match std::fs::read_to_string(&path) {
             Ok(text) => {
-                let filled = text.replace("{{name}}", name).replace("{{kind}}", kind);
-                std::fs::write(&target, filled)
+                std::fs::write(&target, fields.fill(&text))
                     .with_context(|| format!("writing {}", target.display()))?;
             }
             // Not text: an icon, a font, a prebuilt binary. Copied as it is.
@@ -626,7 +698,14 @@ mod tests {
             .expect("the entry");
 
         let out = root.join("made");
-        let written = copy_substituting(&template, &out, "clock", "source").expect("it copies");
+        let fields = Fields {
+            name: "clock".into(),
+            kind: "source".into(),
+            description: "A clock".into(),
+            license: "MIT".into(),
+            author: "nobody".into(),
+        };
+        let written = copy_substituting(&template, &out, &fields).expect("it copies");
         assert_eq!(written, 2);
         let manifest =
             std::fs::read_to_string(out.join("gmx-plugin.toml")).expect("the manifest");

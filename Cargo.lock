@@ -890,6 +890,7 @@ name = "godwinmix-sdk"
 version = "0.1.0"
 dependencies = [
  "glib",
+ "godwinmix-protocol",
  "gstreamer",
  "gstreamer-app",
  "serde",
