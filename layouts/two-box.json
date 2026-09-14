@@ -1,0 +1,115 @@
+{
+  "schemaVersion": 1,
+  "id": "0199b000-0000-7016-8000-de5157ed0016",
+  "name": "two-box",
+  "canvas": {
+    "width": 1920,
+    "height": 1080,
+    "fps": 30
+  },
+  "params": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "required": [
+      "a"
+    ],
+    "properties": {
+      "a": {
+        "type": "string",
+        "default": "",
+        "title": "Left source",
+        "x-gmx-kind": "source"
+      },
+      "b": {
+        "type": "string",
+        "default": "",
+        "title": "Right source",
+        "x-gmx-kind": "source"
+      },
+      "gap": {
+        "type": "number",
+        "default": 0.02,
+        "minimum": 0.0,
+        "maximum": 0.1,
+        "title": "Gap",
+        "description": "Space between the boxes, as a fraction of the canvas."
+      }
+    }
+  },
+  "scenes": [
+    {
+      "id": "0199b000-0000-7017-8000-de5157ed0017",
+      "name": "Two boxes, side by side",
+      "items": [
+        {
+          "id": "0199b000-0000-7014-8000-de5157ed0014",
+          "name": "left",
+          "content": {
+            "source": "{{a}}"
+          },
+          "transform": {
+            "position": {
+              "x": 0,
+              "y": 0
+            },
+            "rotation": 0,
+            "scale": {
+              "x": 1,
+              "y": 1
+            },
+            "anchor": {
+              "x": 0,
+              "y": 0
+            },
+            "frame": {
+              "w": 0,
+              "h": 0
+            },
+            "fit": "cover",
+            "align": "center"
+          },
+          "bind": {
+            "position.x": "gap*W",
+            "position.y": "gap*H",
+            "frame.w": "(W - 3*gap*W)/2",
+            "frame.h": "H - 2*gap*H"
+          }
+        },
+        {
+          "id": "0199b000-0000-7015-8000-de5157ed0015",
+          "name": "right",
+          "content": {
+            "source": "{{b}}"
+          },
+          "transform": {
+            "position": {
+              "x": 0,
+              "y": 0
+            },
+            "rotation": 0,
+            "scale": {
+              "x": 1,
+              "y": 1
+            },
+            "anchor": {
+              "x": 0,
+              "y": 0
+            },
+            "frame": {
+              "w": 0,
+              "h": 0
+            },
+            "fit": "cover",
+            "align": "center"
+          },
+          "bind": {
+            "position.x": "gap*W + (W - 3*gap*W)/2 + gap*W",
+            "position.y": "gap*H",
+            "frame.w": "(W - 3*gap*W)/2",
+            "frame.h": "H - 2*gap*H"
+          }
+        }
+      ]
+    }
+  ]
+}
