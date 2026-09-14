@@ -2,7 +2,7 @@
 name = "classroom"
 version = "1.0.0"
 api = 1
-description = "A lesson recorded and streamed: one camera, the teacher's screen beside it, a local recording and one destination."
+description = "A lesson recorded and streamed: a camera on the teacher, the screen beside it, the slides from a file, a recording and one destination."
 license = "Apache-2.0"
 authors = ["The GodwinMix authors"]
 repository = "https://github.com/psmux/GodwinMix"

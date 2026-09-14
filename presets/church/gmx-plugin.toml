@@ -2,7 +2,7 @@
 name = "church"
 version = "1.0.0"
 api = 1
-description = "Sunday service: two NDI cameras, lyrics from a browser page, slides, YouTube and Facebook at once, and a four button surface for the volunteer."
+description = "Sunday service: two cameras, lyrics from a browser page, slides from a file, and YouTube and Facebook at once. The cameras start as test patterns so the service can go out before the camera plugin is installed."
 license = "Apache-2.0"
 authors = ["The GodwinMix authors"]
 repository = "https://github.com/psmux/GodwinMix"
@@ -26,7 +26,7 @@ gallery = "icon"
 # The three things the person does next. The welcome panel in the web UI
 # shows these in this order, and the README repeats them.
 steps = [
-  "Run `gmx ctl device list` and put your two cameras' names into the [[sources]] blocks.",
-  "Put your YouTube and Facebook stream keys into the two [[outputs]] blocks.",
-  "Run `gmx`, open http://localhost:8080 on the volunteer's screen, and press Wide.",
+  "Put your YouTube and Facebook stream keys into the two [[outputs]] blocks of godwinmix.toml.",
+  "Run `gmx` and open http://localhost:8080 on the volunteer's screen.",
+  "Press Wide to put a picture on air, then press the red button when the service starts.",
 ]

@@ -442,8 +442,15 @@ fn todo(plan: &Plan, config_text: &str) -> Vec<String> {
             plugin.name, plugin.name
         ));
     }
+    // Only what is actually in force. A placeholder behind a `#` is the
+    // preset explaining an option, not a value anybody has to replace.
+    let live: String = config_text
+        .lines()
+        .filter(|l| !l.trim_start().starts_with('#'))
+        .collect::<Vec<_>>()
+        .join("\n");
     for marker in ["YOUR-STREAM-KEY", "change-me", "CHANGE-ME", "YOUR-KEY"] {
-        if config_text.contains(marker) {
+        if live.contains(marker) {
             out.push(format!(
                 "replace {marker} in {} with the real value",
                 plan.config_path.display()

@@ -2068,8 +2068,17 @@ impl Mixer {
         struct Stored<'a> {
             sources: &'a [SourceConfig],
             outputs: &'a [OutputConfig],
+            /// The `[ui]` section `gmx preset apply` wrote, carried through
+            /// untouched. Without this, adding one source from the UI would
+            /// throw away the layout and theme the preset chose.
+            #[serde(skip_serializing_if = "Option::is_none")]
+            ui: Option<toml::Value>,
         }
-        let body = match toml::to_string_pretty(&Stored { sources: &live, outputs: &outputs }) {
+        let ui = std::fs::read_to_string(path)
+            .ok()
+            .and_then(|text| text.parse::<toml::Table>().ok())
+            .and_then(|table| table.get("ui").cloned());
+        let body = match toml::to_string_pretty(&Stored { sources: &live, outputs: &outputs, ui }) {
             Ok(b) => format!(
                 "# Sources and outputs managed from the GodwinMix UI or API.\n\
                  # These lists take precedence over the ones in the config file.\n\
