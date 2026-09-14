@@ -278,9 +278,9 @@ async fn preview_frame(call: Call, params: Value) -> Result<Value, RpcError> {
 ///
 /// A geometry command with a duration on a scene nobody is looking at is a
 /// cut: there is nothing being drawn to ramp. On air, the mixer is already
-/// drawing these items (the ids were kept), so the change is a property ramp
-/// on the pads it has, which is what makes an animated layout change a move
-/// rather than a cut between two sets of items.
+/// drawing these items, because the layout kept their ids, so the change is a
+/// property ramp on the pads it already has. That is what makes an animated
+/// layout change a move rather than a cut between two sets of items.
 pub(crate) async fn ramp_if_on_air(call: &Call, view: &SceneView, ms: u64, easing: Option<&str>) {
     let Ok(status) = call.app.mixer.status().await else { return };
     if status.scene.as_deref() != Some(view.name.as_str()) {
@@ -290,6 +290,7 @@ pub(crate) async fn ramp_if_on_air(call: &Call, view: &SceneView, ms: u64, easin
     let _ = call.app.mixer.send(Command::TakeScene {
         scene: Box::new(ProgramScene { name, placements }),
         at_running_time_ms: None,
+        duration_ms: Some(ms),
         ack: None,
     });
     tracing::debug!(scene = %view.name, duration_ms = ms, easing, "layout change applied on air");

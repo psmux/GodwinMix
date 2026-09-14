@@ -147,6 +147,31 @@ cargo test -p godwinmix-core -- --ignored --nocapture gapless
 cargo test -p godwinmix-core -- --ignored --nocapture hidden_slots
 ```
 
+## Moving rather than cutting
+
+A geometry command with a `duration_ms` on a scene that is on air eases the
+pads instead of jumping them. It works because the layout kept the item ids: the
+pads are already drawing these items, so there is a "from" to ramp from. Off
+air it is a cut whatever the duration says, because there is nothing being
+drawn.
+
+The ramp is a short lived thread writing pad properties about sixty times a
+second, guarded by the take generation so a newer take abandons it rather than
+fighting it. That is the shape `ramp_volumes` already had for a take's audio
+fade, and for the same two reasons: it cannot run on the mixer thread, which
+has commands to answer, and it must not run on a streaming thread, which is
+carrying the programme.
+
+`GstInterpolationControlSource` bindings sampled by the aggregator are the
+accurate way, and are what transitions between scenes will want. They need a
+crate this build does not carry, and at sixty steps a second the difference is
+not visible; the swap is one function.
+
+Measured: `pip-bottom-right` reapplied onto the same scene with a bigger inset
+over 300 ms moves the inset through the middle (a cut would already be at the
+target) with a largest inter frame interval of 33.3 ms, which is one frame, and
+zero relinks.
+
 ## What the compositor cannot do, and what is said instead
 
 `compositor` has three sizing policies, so the seven `fit` keywords map onto

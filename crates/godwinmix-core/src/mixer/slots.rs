@@ -179,6 +179,70 @@ impl Placement {
     }
 }
 
+/// Where one slot's picture sits, as five numbers the compositor reads.
+///
+/// Everything a geometry command can animate and nothing it cannot: the crop,
+/// the rotation and the sizing policy are steps rather than ramps, so they are
+/// written once at the start and left alone.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct PadState {
+    pub xpos: i32,
+    pub ypos: i32,
+    pub width: i32,
+    pub height: i32,
+    pub alpha: f64,
+}
+
+impl PadState {
+    fn read(pad: &gst::Pad) -> PadState {
+        PadState {
+            xpos: pad.property("xpos"),
+            ypos: pad.property("ypos"),
+            width: pad.property("width"),
+            height: pad.property("height"),
+            alpha: pad.property("alpha"),
+        }
+    }
+
+    fn of(p: &Placement) -> PadState {
+        PadState {
+            xpos: p.xpos,
+            ypos: p.ypos,
+            width: p.width.max(0),
+            height: p.height.max(0),
+            alpha: p.alpha.clamp(0.0, 1.0),
+        }
+    }
+
+    /// This state a fraction of the way towards another one.
+    pub fn lerp(&self, to: &PadState, t: f64) -> PadState {
+        let f = |a: i32, b: i32| (a as f64 + (b - a) as f64 * t).round() as i32;
+        PadState {
+            xpos: f(self.xpos, to.xpos),
+            ypos: f(self.ypos, to.ypos),
+            width: f(self.width, to.width),
+            height: f(self.height, to.height),
+            alpha: self.alpha + (to.alpha - self.alpha) * t,
+        }
+    }
+
+    pub fn write(&self, pad: &gst::Pad) {
+        set_i32(pad, "xpos", self.xpos);
+        set_i32(pad, "ypos", self.ypos);
+        set_i32(pad, "width", self.width.max(1));
+        set_i32(pad, "height", self.height.max(1));
+        set_f64(pad, "alpha", self.alpha.clamp(0.0, 1.0));
+    }
+}
+
+/// One slot on its way from where it was to where a scene wants it.
+#[derive(Debug, Clone)]
+pub struct Ramp {
+    pub pad: gst::Pad,
+    pub from: PadState,
+    pub to: PadState,
+}
+
 /// One slot: a fixed chain and the compositor pad at the end of it.
 pub struct Slot {
     pub index: usize,
@@ -224,13 +288,18 @@ impl Slot {
 
     /// Everything a placement decides, written straight onto the pad and the
     /// two elements above it. Nothing here allocates and nothing blocks.
-    fn draw(&self, p: &Placement, z: u32) {
+    fn draw(&self, p: &Placement, z: u32, hold: bool) -> Ramp {
+        let from = PadState::read(&self.pad);
+        let to = PadState::of(p);
         set_u32(&self.pad, "zorder", z);
-        set_f64(&self.pad, "alpha", p.alpha.clamp(0.0, 1.0));
-        set_i32(&self.pad, "xpos", p.xpos);
-        set_i32(&self.pad, "ypos", p.ypos);
-        set_i32(&self.pad, "width", p.width.max(0));
-        set_i32(&self.pad, "height", p.height.max(0));
+        // `hold` keeps the pad where it is and hands the move to the ramp. The
+        // z order, the crop, the flip and the sizing policy are steps whatever
+        // happens: there is no halfway between two crops worth drawing.
+        if hold {
+            from.write(&self.pad);
+        } else {
+            to.write(&self.pad);
+        }
         set_sizing(&self.pad, p.sizing);
         for (name, v) in [("xalign", p.align.0), ("yalign", p.align.1)] {
             if self.pad.has_property(name) {
@@ -239,6 +308,7 @@ impl Slot {
         }
         self.set_crop(p);
         self.set_rotation(p.rotation);
+        Ramp { pad: self.pad.clone(), from, to }
     }
 
     /// Hide this slot without unbinding it, which is what makes the next take
@@ -433,7 +503,27 @@ impl SlotPool {
         placements: &[Placement],
         branches: &[(&'a SourceId, &'a ProgrammeBranch)],
     ) -> Result<Applied> {
+        self.apply_move(placements, branches, false)
+    }
+
+    /// The same, with every slot left where it was so a caller can ease it
+    /// over. `Applied::ramps` is what it has to write.
+    pub fn apply_ramped<'a>(
+        &mut self,
+        placements: &[Placement],
+        branches: &[(&'a SourceId, &'a ProgrammeBranch)],
+    ) -> Result<Applied> {
+        self.apply_move(placements, branches, true)
+    }
+
+    fn apply_move<'a>(
+        &mut self,
+        placements: &[Placement],
+        branches: &[(&'a SourceId, &'a ProgrammeBranch)],
+        hold: bool,
+    ) -> Result<Applied> {
         let mut claimed: Vec<usize> = Vec::with_capacity(placements.len());
+        let mut ramps: Vec<Ramp> = Vec::with_capacity(placements.len());
         let mut missing: Vec<SourceId> = Vec::new();
         let mut drawn = 0usize;
 
@@ -453,7 +543,7 @@ impl SlotPool {
                 }
             };
             self.slots[index].open();
-            self.slots[index].draw(p, Z_LIVE + i as u32);
+            ramps.push(self.slots[index].draw(p, Z_LIVE + i as u32, hold));
             claimed.push(index);
             drawn += 1;
         }
@@ -463,7 +553,7 @@ impl SlotPool {
                 slot.hide();
             }
         }
-        Ok(Applied { drawn, missing, slots: claimed })
+        Ok(Applied { drawn, missing, slots: claimed, ramps })
     }
 
     /// A slot that already holds this source and has not been claimed yet.
@@ -647,7 +737,7 @@ impl SlotPool {
 }
 
 /// What one apply did, for the log, the status and the tests.
-#[derive(Debug, Clone, Default, PartialEq)]
+#[derive(Debug, Clone, Default)]
 pub struct Applied {
     /// Placements that reached a slot.
     pub drawn: usize,
@@ -655,6 +745,9 @@ pub struct Applied {
     pub missing: Vec<SourceId>,
     /// The slots that were claimed, in scene order.
     pub slots: Vec<usize>,
+    /// Where each claimed slot was and where the scene wants it. Empty on the
+    /// ordinary path, where the pad is already where it is going.
+    pub ramps: Vec<Ramp>,
 }
 
 /// Write `sizing-policy`, if this pad has it and has a value it understands.

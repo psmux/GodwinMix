@@ -209,6 +209,9 @@ async fn take_scene(
         .request(|ack| Command::TakeScene {
             scene: Box::new(godwinmix_core::mixer::ProgramScene { name: name.clone(), placements }),
             at_running_time_ms,
+            // A take is a cut. A duration belongs to a geometry command on a
+            // scene that is already on air, not to putting one there.
+            duration_ms: None,
             ack: Some(ack),
         })
         .await
