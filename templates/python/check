@@ -27,10 +27,22 @@ step() {
     fi
 }
 
+# The one mistake that ruins the video and nothing else: print() writes to
+# stdout, and in container mode stdout is the Matroska stream.
+stdout_is_media() {
+    if grep -n '^[^#]*\bprint(' main.py; then
+        echo "print() writes to stdout, and stdout is the Matroska stream."
+        echo "Use log(), which writes one JSON-RPC notification to stderr."
+        return 1
+    fi
+    return 0
+}
+
 echo "checking {{name}} with $($python --version 2>&1)"
 
 # 1. It parses, and nothing is obviously unused or undefined.
 step "compile" "$python" -m compileall -q main.py tests
+step "stdout is media" stdout_is_media
 if "$python" -c "import pyflakes" 2>/dev/null; then
     step "pyflakes" "$python" -m pyflakes main.py tests
 else
