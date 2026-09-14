@@ -84,7 +84,7 @@ async fn local_target(app: &AppHandle) -> Result<Target, String> {
     if let Some(target) = running {
         return Ok(target);
     }
-    let local = sidecar::start(app).await?;
+    let local = sidecar::ensure(app).await?;
     let target = local.target.clone();
     *app.state::<Shell>().local.lock().unwrap() = Some(local);
     Ok(target)

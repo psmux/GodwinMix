@@ -168,7 +168,7 @@ async fn headless_check(app: &AppHandle) -> i32 {
     println!("config and token in {data}");
     println!("logs in {logs}");
 
-    let local = match sidecar::start(app).await {
+    let local = match sidecar::ensure(app).await {
         Ok(local) => local,
         Err(why) => {
             println!("FAIL the mixer did not start: {why}");
@@ -177,7 +177,10 @@ async fn headless_check(app: &AppHandle) -> i32 {
     };
     let target = local.target.clone();
     println!("started on {} with a {} character token", target.base, target.token.len());
-    println!("its process id is {}", local.pid());
+    match local.pid() {
+        Some(pid) => println!("its process id is {pid}"),
+        None => println!("it was already running from an earlier run"),
+    }
     if target.base.ends_with(":8080") {
         println!("FAIL the port was 8080, which means it was not taken from the operating system");
         return 1;
