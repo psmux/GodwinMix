@@ -57,11 +57,17 @@ pub struct Wiring {
 
 impl Wiring {
     pub fn video_only(chain: impl Into<String>) -> Wiring {
-        Wiring { video: Some(chain.into()), audio: None }
+        Wiring {
+            video: Some(chain.into()),
+            audio: None,
+        }
     }
 
     pub fn audio_only(chain: impl Into<String>) -> Wiring {
-        Wiring { video: None, audio: Some(chain.into()) }
+        Wiring {
+            video: None,
+            audio: Some(chain.into()),
+        }
     }
 
     /// The whole pipeline description, sinks included.
@@ -70,9 +76,11 @@ impl Wiring {
     /// exists.
     pub fn description(&self, transport: Transport) -> Result<String, String> {
         if self.video.is_none() && self.audio.is_none() {
-            return Err("a capture pipeline with neither video nor audio carries nothing. \
+            return Err(
+                "a capture pipeline with neither video nor audio carries nothing. \
                         Declare one of them in the manifest's media table."
-                .into());
+                    .into(),
+            );
         }
         Ok(match transport {
             Transport::Container => self.container(),
@@ -178,8 +186,14 @@ mod tests {
 
     #[test]
     fn the_socket_names_are_the_ones_the_core_reads() {
-        assert_eq!(video_socket("/run/gmx/cam1/media"), "/run/gmx/cam1/media.video");
-        assert_eq!(audio_socket("/run/gmx/cam1/media"), "/run/gmx/cam1/media.audio");
+        assert_eq!(
+            video_socket("/run/gmx/cam1/media"),
+            "/run/gmx/cam1/media.video"
+        );
+        assert_eq!(
+            audio_socket("/run/gmx/cam1/media"),
+            "/run/gmx/cam1/media.audio"
+        );
     }
 
     #[test]
@@ -189,7 +203,10 @@ mod tests {
             audio: Some("audiotestsrc ! audioconvert".into()),
         };
         let d = w.description(Transport::Container).unwrap();
-        assert!(d.contains("matroskamux name=gmx-mux streamable=true"), "{d}");
+        assert!(
+            d.contains("matroskamux name=gmx-mux streamable=true"),
+            "{d}"
+        );
         assert!(d.contains("fdsink name=gmx-fd fd=1"), "{d}");
         assert_eq!(d.matches("gmx-mux.").count(), 2, "{d}");
         assert!(!d.contains("unixfdsink"), "{d}");
@@ -209,14 +226,18 @@ mod tests {
 
     #[test]
     fn an_audio_only_source_builds_no_video_branch() {
-        let d = Wiring::audio_only("audiotestsrc").description(Transport::Container).unwrap();
+        let d = Wiring::audio_only("audiotestsrc")
+            .description(Transport::Container)
+            .unwrap();
         assert!(!d.contains("gmx-video-queue"), "{d}");
         assert!(d.contains("gmx-audio-queue"), "{d}");
     }
 
     #[test]
     fn a_wiring_that_carries_nothing_says_so() {
-        let err = Wiring::default().description(Transport::Container).unwrap_err();
+        let err = Wiring::default()
+            .description(Transport::Container)
+            .unwrap_err();
         assert!(err.contains("media table"), "{err}");
     }
 

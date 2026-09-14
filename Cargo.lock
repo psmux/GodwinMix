@@ -800,6 +800,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "gmx-camera"
+version = "0.1.0"
+dependencies = [
+ "godwinmix-capture-common",
+ "godwinmix-sdk",
+ "gstreamer",
+ "serde_json",
+]
+
+[[package]]
 name = "gobject-sys"
 version = "0.21.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"

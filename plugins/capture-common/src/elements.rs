@@ -26,7 +26,11 @@ pub fn first(candidates: &[&'static str]) -> Option<&'static str> {
 ///
 /// `what` is what the operator was trying to do, so the message reads as a
 /// sentence: "no element for capturing a camera on this machine".
-pub fn require(what: &str, candidates: &[&'static str], hint: &str) -> Result<&'static str, String> {
+pub fn require(
+    what: &str,
+    candidates: &[&'static str],
+    hint: &str,
+) -> Result<&'static str, String> {
     first(candidates).ok_or_else(|| {
         format!(
             "this machine has no GStreamer element for {what}. Looked for: {}. {hint}",
@@ -75,6 +79,31 @@ pub fn set_text(element: &gst::Element, name: &str, value: &str) -> bool {
     set_if_present(element, name, &value.to_value())
 }
 
+/// Point a source element at a device, whatever it calls the property.
+///
+/// The first choice is always `devices::find`, which lets GStreamer's own
+/// device provider configure the element. This is the fallback for the case
+/// that provider cannot serve: an operator who forced a particular element in
+/// the settings, or a platform whose provider is not installed.
+///
+/// `id` may be a path, a name or an index; each property is offered the value
+/// and the ones whose type it does not fit decline. Returns the property that
+/// took it.
+pub fn point_at(element: &gst::Element, id: &str) -> Option<&'static str> {
+    if id.is_empty() {
+        return None;
+    }
+    [
+        "device-path",
+        "device",
+        "path",
+        "device-name",
+        "device-index",
+    ]
+    .into_iter()
+    .find(|name| set_text(element, name, id))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -103,8 +132,12 @@ mod tests {
     #[test]
     fn nothing_installed_names_every_candidate_it_looked_for() {
         gst();
-        let err = require("capturing a unicorn", &["unicornsrc", "pegasussrc"], "Install one.")
-            .expect_err("neither exists");
+        let err = require(
+            "capturing a unicorn",
+            &["unicornsrc", "pegasussrc"],
+            "Install one.",
+        )
+        .expect_err("neither exists");
         assert!(err.contains("unicornsrc"), "{err}");
         assert!(err.contains("pegasussrc"), "{err}");
         assert!(err.contains("Install one."), "{err}");
@@ -113,9 +146,21 @@ mod tests {
     #[test]
     fn an_optional_property_is_set_only_when_the_element_has_it() {
         gst();
-        let e = gst::ElementFactory::make("videotestsrc").build().expect("videotestsrc");
+        let e = gst::ElementFactory::make("videotestsrc")
+            .build()
+            .expect("videotestsrc");
         assert!(set_flag(&e, "is-live", true));
         assert!(!set_flag(&e, "there-is-no-such-property", true));
+    }
+
+    #[test]
+    fn an_element_with_no_device_property_declines_and_says_nothing_landed() {
+        gst();
+        let e = gst::ElementFactory::make("filesrc")
+            .build()
+            .expect("filesrc");
+        assert_eq!(point_at(&e, "/dev/video0"), None);
+        assert_eq!(point_at(&e, ""), None);
     }
 
     #[test]

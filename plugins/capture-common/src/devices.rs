@@ -34,11 +34,11 @@ pub const MICROPHONE: &[&str] = &["Audio/Source"];
 /// stable across reboots on their platform, which the display name is not when
 /// two identical cameras are plugged in.
 const ID_KEYS: &[&str] = &[
-    "device.path",      // v4l2, pipewire
-    "avf.unique_id",    // avfvideosrc
-    "device.strid",     // mediafoundation, ks
-    "device.serial",    // pipewire
-    "unique-id",        // osxaudiosrc, wasapi2
+    "device.path",   // v4l2, pipewire
+    "avf.unique_id", // avfvideosrc
+    "device.strid",  // mediafoundation, ks
+    "device.serial", // pipewire
+    "unique-id",     // osxaudiosrc, wasapi2
     "device.id",
     "object.path",
 ];
@@ -113,7 +113,10 @@ fn describe(device: gst::Device) -> Found {
             .and_then(|s| s.get::<String>(key).ok())
             .filter(|v| !v.is_empty())
     };
-    let id = ID_KEYS.iter().find_map(|k| value(k)).unwrap_or_else(|| name.clone());
+    let id = ID_KEYS
+        .iter()
+        .find_map(|k| value(k))
+        .unwrap_or_else(|| name.clone());
     Found {
         id,
         name,
@@ -130,7 +133,10 @@ fn largest_size(device: &gst::Device) -> Option<(i32, i32)> {
     let caps = device.caps()?;
     let mut best: Option<(i32, i32)> = None;
     for structure in caps.iter() {
-        let (Ok(w), Ok(h)) = (structure.get::<i32>("width"), structure.get::<i32>("height")) else {
+        let (Ok(w), Ok(h)) = (
+            structure.get::<i32>("width"),
+            structure.get::<i32>("height"),
+        ) else {
             continue;
         };
         if best.is_none_or(|(bw, bh)| (w as i64 * h as i64) > (bw as i64 * bh as i64)) {
@@ -156,7 +162,10 @@ pub fn find(classes: &[&str], wanted: &str) -> Result<Found, String> {
     if wanted.is_empty() {
         return Ok(devices.into_iter().next().expect("the list is not empty"));
     }
-    if let Some(found) = devices.iter().position(|d| d.id == wanted || d.name == wanted) {
+    if let Some(found) = devices
+        .iter()
+        .position(|d| d.id == wanted || d.name == wanted)
+    {
         return Ok(devices.into_iter().nth(found).expect("just found"));
     }
     if let Ok(index) = wanted.parse::<usize>() {
@@ -177,7 +186,10 @@ pub fn find(classes: &[&str], wanted: &str) -> Result<Found, String> {
 
 /// Every device under these classes as a `discover` answer.
 pub fn candidates(classes: &[&str], provide: &str) -> Result<Vec<Candidate>, String> {
-    Ok(list(classes)?.iter().map(|d| d.candidate(provide)).collect())
+    Ok(list(classes)?
+        .iter()
+        .map(|d| d.candidate(provide))
+        .collect())
 }
 
 #[cfg(test)]
