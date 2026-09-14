@@ -12,6 +12,10 @@
 //! plugin author needs no SDK holds. It needs `gst-launch-1.0` for the media
 //! checks and says so and skips rather than failing where that is missing.
 
+// Unix only, and the whole file rather than each test: the plugin these drive
+// is a shell script. Windows compiles and runs every ungated test in the
+// workspace on its own CI runner, and the platform arms this file would
+// exercise are listed in docs/explanation/cross-platform.md.
 #![cfg(unix)]
 
 use godwinmix_core::plugin::loader;

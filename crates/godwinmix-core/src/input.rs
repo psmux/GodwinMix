@@ -568,7 +568,7 @@ pub fn probe_page_media(id: &SourceId, spec: &ExecSpec, timeout: Duration) -> Op
     };
     let Some(err) = child.stderr.take() else {
         warn!(source = %id, "probe child has no stderr; rendering the page whole");
-        bury_child(child, spec.env.clone());
+        bury_child(child, spec.env.clone(), false);
         return None;
     };
 
@@ -625,7 +625,7 @@ pub fn probe_page_media(id: &SourceId, spec: &ExecSpec, timeout: Duration) -> Op
     // probe returns at once. The clip fetch below is what the caller is
     // waiting for and it does not need a dead browser.
     reader.stop();
-    bury_child(child, spec.env.clone());
+    bury_child(child, spec.env.clone(), false);
     // Fetch each clip once, and keep only what can actually be played. A video
     // whose address turns out to be dead (a 404 was the case that found this)
     // is left to the browser rather than built into a layer that fails and
@@ -1445,7 +1445,11 @@ fn descendants(_pid: u32) -> Vec<u32> {
 ///
 /// `child` is moved in and waited on here, which is what keeps it from
 /// becoming a zombie. Nothing else in this process waits for it.
-fn bury_child(child: std::process::Child, env: std::collections::BTreeMap<String, String>) {
+fn bury_child(
+    child: std::process::Child,
+    env: std::collections::BTreeMap<String, String>,
+    collected: bool,
+) {
     let pid = child.id();
     // Handed over rather than moved, so that a machine too short of threads to
     // take it still gets the child killed, here, instead of leaking it.
@@ -1455,28 +1459,114 @@ fn bury_child(child: std::process::Child, env: std::collections::BTreeMap<String
         .name(format!("undertaker-{pid}"))
         .spawn(move || {
             if let Some((child, env)) = mine.lock().take() {
-                take_down(child, env);
+                take_down(child, env, collected);
             }
         });
     if spawned.is_err() {
         if let Some((child, env)) = work.lock().take() {
-            take_down(child, env);
+            take_down(child, env, collected);
         }
     }
 }
 
+/// Whether `pid` still names a process group this process may signal.
+///
+/// A pid that has been collected is free for the kernel to hand to somebody
+/// else, and a signal sent to the group named by a recycled pid goes to a
+/// stranger. A full `cargo test --workspace` once ended at exit 143, which is
+/// SIGTERM reaching cargo itself, right after the tests that start and stop
+/// the most child processes.
+///
+/// The question that settles it is "is this still an uncollected child of
+/// ours", not "is this pid the leader of its group". Every child here is
+/// started with `process_group(0)` so it leads its own group, and while it has
+/// not been collected the kernel cannot hand its pid to anybody else, zombie
+/// or not. `getpgid` looks like the tidier test and is not: on macOS it
+/// answers ESRCH for a zombie, so a child that exited and left grandchildren
+/// behind would have had its group spared exactly when it needed sweeping.
+#[cfg(unix)]
+fn owns_process_group(pid: u32) -> bool {
+    if pid <= 1 {
+        return false;
+    }
+    if pid as i32 == unsafe { libc::getpgrp() } {
+        return false;
+    }
+    !matches!(peek_exit(pid), Peek::Gone)
+}
+
+/// What a peek at a child's exit found.
+#[cfg(unix)]
+enum Peek {
+    /// Still running.
+    Running,
+    /// Exited, and still a zombie: the pid is ours and the group is safe to
+    /// signal.
+    Exited,
+    /// Not our child any more, because somebody collected it. The pid means
+    /// nothing now and nothing may be signalled with it.
+    Gone,
+}
+
+/// Has the child exited, without collecting it?
+///
+/// `waitpid` is the obvious call and it is the wrong one. POSIX does not allow
+/// `WNOWAIT` there: macOS quietly accepts it, Linux answers EINVAL, and EINVAL
+/// read as "somebody collected it" meant the group was never signalled on
+/// Linux at all and the wait afterwards blocked until the child felt like
+/// leaving. `waitid` takes `WNOWAIT` on both, and tells ECHILD apart from
+/// "nothing to report" properly.
+#[cfg(unix)]
+fn peek_exit(pid: u32) -> Peek {
+    let mut info: libc::siginfo_t = unsafe { std::mem::zeroed() };
+    let rc = unsafe {
+        libc::waitid(
+            libc::P_PID,
+            pid as libc::id_t,
+            &mut info,
+            libc::WEXITED | libc::WNOHANG | libc::WNOWAIT,
+        )
+    };
+    if rc < 0 {
+        // ECHILD, or a pid that is not ours. Either way it is not ours to
+        // signal. Anything else here is a programming error and the safe
+        // reading of it is the same one.
+        return Peek::Gone;
+    }
+    // With `WNOHANG` and nothing to report, `waitid` returns zero and leaves
+    // the structure exactly as it was given, which is why it was zeroed.
+    if info.si_signo == 0 {
+        Peek::Running
+    } else {
+        Peek::Exited
+    }
+}
+
 /// Signal, wait, insist, reap, and sweep up. See `bury_child`.
-fn take_down(mut child: std::process::Child, env: std::collections::BTreeMap<String, String>) {
+fn take_down(
+    mut child: std::process::Child,
+    env: std::collections::BTreeMap<String, String>,
+    collected: bool,
+) {
     let pid = child.id();
     let started = Instant::now();
+    // A child that has already been collected is not signalled at all. Its pid
+    // belongs to the kernel again and whoever holds it next is a stranger. See
+    // `owns_process_group`.
+    #[cfg(unix)]
+    let mut signal_group = !collected && owns_process_group(pid);
+    #[cfg(not(unix))]
+    let _ = collected;
     // Written down before anything is signalled: after the parent dies a
     // process that called `setsid` cannot be traced back to it.
-    let strays = descendants(pid);
+    let strays = if cfg!(unix) && !collected { descendants(pid) } else { Vec::new() };
     #[cfg(unix)]
-    unsafe {
-        // Politely first, so the sidecar runs its own shutdown and a capture
-        // script's traps fire.
-        libc::killpg(pid as i32, libc::SIGTERM);
+    if signal_group {
+        unsafe {
+            // Politely first, so the sidecar runs its own shutdown and a
+            // capture script's traps fire.
+            libc::killpg(pid as i32, libc::SIGTERM);
+        }
     }
     #[cfg(not(unix))]
     let _ = child.kill();
@@ -1487,27 +1577,22 @@ fn take_down(mut child: std::process::Child, env: std::collections::BTreeMap<Str
     // started. Reaping it first and then signalling that group is a signal
     // sent to whatever the kernel handed the number to next. Collected below,
     // once there is nothing left to signal.
-    let mut clean = false;
-    #[cfg(unix)]
-    let mut signal_group = true;
-    while started.elapsed() < CHILD_EXIT_GRACE {
+    let mut clean = collected;
+    while !clean && started.elapsed() < CHILD_EXIT_GRACE {
         #[cfg(unix)]
-        {
-            let mut status = 0i32;
-            let seen = unsafe {
-                libc::waitpid(pid as i32, &mut status, libc::WNOHANG | libc::WNOWAIT)
-            };
-            if seen > 0 {
+        match peek_exit(pid) {
+            Peek::Exited => {
                 clean = true;
                 break;
             }
-            if seen < 0 {
+            Peek::Gone => {
                 // Somebody else collected it, so the pid is already free and
                 // the group it named means nothing now.
                 clean = true;
                 signal_group = false;
                 break;
             }
+            Peek::Running => {}
         }
         #[cfg(not(unix))]
         if matches!(child.try_wait(), Ok(Some(_)) | Err(_)) {
@@ -1517,7 +1602,7 @@ fn take_down(mut child: std::process::Child, env: std::collections::BTreeMap<Str
         std::thread::sleep(Duration::from_millis(50));
     }
     #[cfg(unix)]
-    if signal_group {
+    if signal_group && owns_process_group(pid) {
         unsafe {
             // Whether it went quietly or not. Either it is still running or it
             // is a zombie nobody has collected, and in both cases the pid, and
@@ -1779,6 +1864,9 @@ pub struct ExecChild {
     /// reads it. See `ExecStdout`.
     stdout: ExecStdoutHeld,
     stderr: Option<StderrReader>,
+    /// Set the moment a `try_wait` collects the child's status. After that the
+    /// pid is not this tree's any more and nothing may be signalled with it.
+    collected: bool,
 }
 
 impl ExecChild {
@@ -1792,7 +1880,15 @@ impl ExecChild {
     pub fn finished(&mut self) -> bool {
         match self.child.as_mut() {
             None => true,
-            Some(child) => matches!(child.try_wait(), Ok(Some(_)) | Err(_)),
+            Some(child) => {
+                // A `try_wait` that finds a status collects it, and from that
+                // moment the pid belongs to the kernel again. Written down so
+                // that the teardown does not signal a process group named by a
+                // pid somebody else now holds. See `owns_process_group`.
+                let done = matches!(child.try_wait(), Ok(Some(_)) | Err(_));
+                self.collected |= done;
+                done
+            }
         }
     }
 
@@ -1804,7 +1900,7 @@ impl ExecChild {
         stdout: ExecStdoutHeld,
         stderr: Option<StderrReader>,
     ) -> Self {
-        Self { child: Some(child), env, stdout, stderr }
+        Self { child: Some(child), env, stdout, stderr, collected: false }
     }
 }
 
@@ -1835,7 +1931,7 @@ impl Drop for ExecChild {
         }
         self.stdout.take();
         if let Some(child) = self.child.take() {
-            bury_child(child, std::mem::take(&mut self.env));
+            bury_child(child, std::mem::take(&mut self.env), self.collected);
         }
     }
 }
@@ -2035,7 +2131,8 @@ pub fn process_alive(pid: u32) -> bool {
 pub fn make_exec_source(id: &str, spec: &ExecSpec) -> Result<(gst::Element, ExecChild)> {
     let (out, child, stderr) = spawn_exec(id, spec)?;
     // Owned from here on, so that a failure below takes the process with it.
-    let mut held = ExecChild { child: Some(child), env: spec.env.clone(), stdout: None, stderr };
+    let mut held =
+        ExecChild { child: Some(child), env: spec.env.clone(), stdout: None, stderr, collected: false };
     let src = new_exec_source(id)?;
     held.stdout = attach_exec_stdout(id, &src, out);
     Ok((src, held))
@@ -2659,7 +2756,6 @@ mod tests {
             let _ = tx.send(line.to_string());
         });
         assert_eq!(rx.recv_timeout(Duration::from_secs(5)).unwrap(), "hello");
-        let _ = child.wait();
 
         // The background `sleep` still holds the write end, so there is no end
         // of file to wait for. Stopping must return anyway, and quickly.
@@ -2671,10 +2767,101 @@ mod tests {
             began.elapsed()
         );
         // The background `sleep` is in the child's process group, which is
-        // what takes it down.
+        // what takes it down. Before the `wait`, not after: a collected pid is
+        // free for the kernel to hand to somebody else and this signal would
+        // then go to a stranger. That is how a `cargo test --workspace` once
+        // ended at exit 143.
+        assert!(owns_process_group(child.id()), "the child leads its own group");
         unsafe {
             libc::killpg(child.id() as i32, libc::SIGKILL);
         }
+        let _ = child.wait();
+    }
+
+    /// The guard that keeps a teardown from signalling a stranger.
+    ///
+    /// Three answers, and each one of them was a way to send SIGTERM to
+    /// something that was never ours. See `owns_process_group`.
+    #[test]
+    #[cfg(unix)]
+    fn a_process_group_is_only_ours_while_the_pid_still_leads_it() {
+        assert!(!owns_process_group(0), "pid 0 means the caller's own group");
+        assert!(!owns_process_group(1), "pid 1 is init");
+        let ours = unsafe { libc::getpgrp() } as u32;
+        assert!(!owns_process_group(ours), "our own group is never ours to kill");
+
+        let spec = ExecSpec {
+            argv: shell_words::split("sh -c 'exit 0'").unwrap(),
+            env: Default::default(),
+            pipe_stdin: false,
+            cwd: None,
+        };
+        let mut child = exec_process(&spec, std::process::Stdio::null()).unwrap();
+        let pid = child.id();
+        assert!(owns_process_group(pid), "a child started by `exec_process` leads its own group");
+        // A zombie is still ours: the pid is allocated until somebody collects
+        // it, which is the whole reason the wait in `take_down` uses WNOWAIT.
+        while matches!(peek_exit(pid), Peek::Running) {
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        assert!(owns_process_group(pid), "a zombie's pid is still this tree's");
+        let _ = child.wait();
+        assert!(matches!(peek_exit(pid), Peek::Gone), "a collected child is gone");
+        assert!(!owns_process_group(pid), "a collected pid is not ours to signal");
+    }
+
+    /// Fifty children started and stopped, with a bystander watching.
+    ///
+    /// A full `cargo test --workspace` once ended at exit 143, SIGTERM
+    /// reaching cargo itself, right after the tests that churn the most child
+    /// processes. The mechanism was a pid collected by a health poll and then
+    /// used to name a process group by the teardown a moment later. The
+    /// sentinel here is a process in a group of its own that nothing in this
+    /// test has any business signalling; if a teardown ever reaches for a pid
+    /// it no longer owns, this is what notices.
+    #[test]
+    #[cfg(unix)]
+    fn fifty_children_come_and_go_without_signalling_a_bystander() {
+        let quiet = ExecSpec {
+            argv: shell_words::split("sh -c 'sleep 30'").unwrap(),
+            env: Default::default(),
+            pipe_stdin: false,
+            cwd: None,
+        };
+        let mut sentinel = exec_process(&quiet, std::process::Stdio::null()).unwrap();
+        let watching = sentinel.id();
+
+        let spec = ExecSpec {
+            argv: shell_words::split("sh -c 'exit 0'").unwrap(),
+            env: Default::default(),
+            pipe_stdin: false,
+            cwd: None,
+        };
+        for n in 0..50 {
+            let child = exec_process(&spec, std::process::Stdio::null()).unwrap();
+            let mut held = ExecChild::new(child, Default::default(), None, None);
+            // The path that collects the status before the teardown runs,
+            // which is what the supervisor's health poll does every second.
+            let began = Instant::now();
+            while !held.finished() && began.elapsed() < Duration::from_secs(5) {
+                std::thread::sleep(Duration::from_millis(5));
+            }
+            assert!(held.finished(), "child {n} never exited");
+            drop(held);
+            assert!(
+                unsafe { libc::kill(watching as i32, 0) } == 0,
+                "the bystander was signalled while child {n} was being taken down"
+            );
+        }
+
+        // And it is still there after the undertakers have all finished.
+        std::thread::sleep(Duration::from_millis(500));
+        let alive = unsafe { libc::kill(watching as i32, 0) } == 0;
+        unsafe {
+            libc::killpg(watching as i32, libc::SIGKILL);
+        }
+        let _ = sentinel.wait();
+        assert!(alive, "the bystander did not survive fifty children coming and going");
     }
 
     /// Every path that dropped an `InputPipeline` without calling `stop` used
