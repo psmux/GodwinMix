@@ -44,6 +44,9 @@
       "icons/icon.png"
     ],
     "externalBin": ["binaries/godwinmix"],
+    "resources": {
+      "gstreamer": "gstreamer"
+    },
     "macOS": {
       "minimumSystemVersion": "10.15"
     },

@@ -154,17 +154,27 @@ jobs:
   desktop:
     name: desktop (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 90
+    timeout-minutes: 120
     strategy:
       fail-fast: false
       matrix:
         include:
           - os: ubuntu-latest
-            bundles: deb
+            platform: linux
+            bundles: deb,appimage
           - os: macos-latest
+            platform: macos
             bundles: app,dmg
           - os: windows-latest
-            bundles: msi
+            platform: windows
+            bundles: msi,nsis
+    env:
+      # 09-builders: at most 150 MB for the Windows installer, against the
+      # 527 MB the stock GStreamer runtime installer costs on its own and the
+      # 160 MB OBS ships self contained. A release that breaks this does not
+      # get published.
+      WINDOWS_INSTALLER_BUDGET_MB: 150
+      RUNTIME_BUDGET_MB: 130
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -173,13 +183,60 @@ jobs:
           workspaces: tauri-app
 
       # The desktop shell is a webview pointed at the mixer's own URL, so it
-      # does not link GStreamer. It does need the platform's webview toolkit.
-      - name: Tauri dependencies (Linux)
+      # does not link GStreamer. It does need the platform's webview toolkit,
+      # and it needs a GStreamer to cut the bundled runtime out of.
+      - name: Tauri dependencies and GStreamer (Linux)
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
           sudo apt-get install -y libwebkit2gtk-4.1-dev libayatana-appindicator3-dev \
-            librsvg2-dev patchelf libssl-dev
+            librsvg2-dev patchelf libssl-dev libfuse2 \
+            libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev \
+            libgstreamer-plugins-bad1.0-dev gstreamer1.0-plugins-base \
+            gstreamer1.0-plugins-good gstreamer1.0-plugins-bad \
+            gstreamer1.0-libav gstreamer1.0-tools
+
+      - name: GStreamer (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          brew install gstreamer
+          echo "PKG_CONFIG_PATH=$(brew --prefix gstreamer)/lib/pkgconfig:$(brew --prefix)/lib/pkgconfig" >> "$GITHUB_ENV"
+
+      - name: GStreamer (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          choco install -y --no-progress gstreamer gstreamer-devel
+          $gst = "C:\Program Files\gstreamer\1.0\msvc_x86_64"
+          "PKG_CONFIG_PATH=$gst\lib\pkgconfig" | Out-File -FilePath $env:GITHUB_ENV -Append
+          "GSTREAMER_1_0_ROOT_MSVC_X86_64=$gst\" | Out-File -FilePath $env:GITHUB_ENV -Append
+          "$gst\bin" | Out-File -FilePath $env:GITHUB_PATH -Append
+
+      # The mixer travels inside the app as a sidecar, named for the triple it
+      # was built on, which is how Tauri finds it.
+      - name: The mixer, as a sidecar
+        shell: bash
+        run: |
+          cargo build --release --locked --bin godwinmix
+          triple=$(rustc -vV | sed -n 's/^host: //p')
+          if [ "${{ runner.os }}" = "Windows" ]; then
+            cp target/release/godwinmix.exe "tauri-app/binaries/godwinmix-${triple}.exe"
+          else
+            cp target/release/godwinmix "tauri-app/binaries/godwinmix-${triple}"
+          fi
+
+      # The trimmed runtime, which tauri.conf.json lists under
+      # bundle.resources. Without this step the installers go out expecting
+      # the operator to install a 527 MB GStreamer first, which is the thing
+      # this whole arrangement exists to avoid.
+      - name: The bundled GStreamer (Unix)
+        if: runner.os != 'Windows'
+        run: ./dev/bundle-gstreamer.sh --budget-mb "$RUNTIME_BUDGET_MB"
+
+      - name: The bundled GStreamer (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: ./dev/bundle-gstreamer.ps1 -BudgetMb ([double]$env:RUNTIME_BUDGET_MB)
 
       - name: Tauri CLI
         run: cargo install tauri-cli --locked --version "^2.0" || cargo install tauri-cli --version "^2.0"
@@ -187,16 +244,61 @@ jobs:
       # `cargo tauri build`, not `cargo build`: the plain build produces a bare
       # executable and no installer, which is what the old workflow did and why
       # there has never been a .msi or a .deb to download.
+      #
+      # The .dmg is built on its own afterwards. Its step drives
+      # `bundle_dmg.sh`, which asks Finder over AppleScript to arrange the disk
+      # image window and times out with `AppleEvent timed out (-1712)` on a
+      # machine with no automation permission, which a CI runner is.
+      # `--skip-jenkins` is the switch that leaves Finder out of it.
       - name: Bundle
         working-directory: tauri-app
         run: cargo tauri build --bundles ${{ matrix.bundles }}
+
+      - name: The disk image (macOS)
+        if: runner.os == 'macOS'
+        working-directory: tauri-app
+        run: |
+          export CI=true   # tauri passes --skip-jenkins to bundle_dmg.sh under CI
+          cargo tauri build --bundles dmg
+
+      # An installer with no media stack inside it is the failure this release
+      # is meant to make impossible, so the bundle is opened and looked at.
+      - name: The runtime really is inside the app (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          app=tauri-app/target/release/bundle/macos/GodwinMix.app
+          test -d "$app/Contents/Resources/gstreamer" \
+            || { echo "::error::no gstreamer in $app" >&2; exit 1; }
+          ./"$app"/Contents/MacOS/godwinmix-desktop --headless-check
+
+      - name: Sizes, against the budget
+        shell: bash
+        run: |
+          budget=0
+          [ "${{ runner.os }}" = "Windows" ] && budget="$WINDOWS_INSTALLER_BUDGET_MB"
+          failed=0
+          printf '### %s\n\n| artefact | size |\n|---|---|\n' "${{ matrix.platform }}" \
+            >> "$GITHUB_STEP_SUMMARY"
+          while IFS= read -r file; do
+            size_mb=$(du -m "$file" | cut -f1)
+            name=$(basename "$file")
+            echo "| $name | ${size_mb} MB |" >> "$GITHUB_STEP_SUMMARY"
+            if [ "$budget" -gt 0 ] && [ "$size_mb" -gt "$budget" ]; then
+              echo "::error::$name is ${size_mb} MB, over the ${budget} MB budget"
+              failed=1
+            fi
+          done < <(find tauri-app/target/release/bundle -type f \
+            \( -name '*.msi' -o -name '*.exe' -o -name '*.deb' \
+               -o -name '*.AppImage' -o -name '*.dmg' \) )
+          exit $failed
 
       - name: Collect the installers
         shell: bash
         run: |
           mkdir -p bundles
           find tauri-app/target/release/bundle -type f \
-            \( -name '*.deb' -o -name '*.msi' -o -name '*.dmg' \) \
+            \( -name '*.deb' -o -name '*.AppImage' -o -name '*.msi' \
+               -o -name '*.exe' -o -name '*.dmg' \) \
             -exec cp {} bundles/ \;
           # The .app is a directory, so it travels as an archive.
           if [ -d tauri-app/target/release/bundle/macos ]; then

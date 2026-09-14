@@ -1651,6 +1651,16 @@ fn drain_stderr(
     // `err` drops here, and with it the read end of the pipe.
 }
 
+/// The same lines on Windows, with one difference worth saying out loud.
+///
+/// There is no `poll` on a Windows pipe handle from `std`, so this blocks in
+/// `read` rather than waking every 200 ms to look at `stop`. It still ends,
+/// because the only thing that sets `stop` also kills the child, and killing
+/// the child closes the write end of this pipe, which ends the loop. The
+/// difference is the order: on Unix the reader notices the flag and leaves,
+/// on Windows it waits for the pipe to close. A child that is killed and
+/// whose grandchild still holds the pipe open would keep this thread alive,
+/// which is the price of not carrying an overlapped IO implementation here.
 #[cfg(not(unix))]
 fn drain_stderr(
     err: std::process::ChildStderr,
@@ -1731,6 +1741,13 @@ fn exec_process(spec: &ExecSpec, stdout: std::process::Stdio) -> Result<std::pro
         cmd.current_dir(dir);
     }
 
+    // Its own process group, so killing the source kills whatever it spawned.
+    // Windows has no equivalent that costs nothing: the same guarantee wants a
+    // Job Object with JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE, which is a handle to
+    // own and close and is not worth adding until an exec source on Windows is
+    // something people actually run. Until then a `--exec` command that spawns
+    // children of its own can leave grandchildren behind on Windows, and
+    // `descendants` returns nothing there to find them with.
     #[cfg(unix)]
     {
         use std::os::unix::process::CommandExt;

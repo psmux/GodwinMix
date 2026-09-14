@@ -1,0 +1,266 @@
+name: platforms
+
+# Windows, macOS and Linux as equals, on every push.
+#
+# `build.yml` proves the code compiles and the tests pass on three platforms.
+# This one proves the product works on three platforms, which is a different
+# question and the one that has actually bitten: a mixer that builds on
+# Windows and then cannot find its own GStreamer, an installer that quietly
+# grows past the budget, a bundled runtime that loads the machine's plugins
+# instead of its own.
+#
+# Each job does the same five things in the same order:
+#
+#   1. the core starts headless and runs the conformance harness against a
+#      test:// source, which needs no camera and no network
+#   2. the smoke test runs end to end (dev/smoke.sh, or dev/smoke.ps1 on
+#      Windows, which is a step for step port of it)
+#   3. a trimmed GStreamer is built for the platform
+#   4. the desktop bundle is built with that runtime inside it
+#   5. --headless-check proves the bundled plugins are the ones that load, and
+#      the installer is measured against the budget
+#
+# The Windows budget is the one that fails the job. 09-builders sets it at
+# 150 MB against the 527 MB the stock GStreamer runtime installer costs and
+# the 160 MB OBS ships.
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+  # The Windows desktop installer, in megabytes, from the budget table in
+  # 09-builders. A job that produces a bigger one fails.
+  WINDOWS_INSTALLER_BUDGET_MB: 150
+  # What the GStreamer tree itself may take, once the shell and the mixer have
+  # had the 17 MB they measured at.
+  RUNTIME_BUDGET_MB: 130
+
+concurrency:
+  group: platforms-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  platform:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            name: linux
+            platform: linux
+            bundles: deb,appimage
+          - os: macos-latest
+            name: macos
+            platform: macos
+            bundles: app
+          - os: windows-latest
+            name: windows
+            platform: windows
+            bundles: msi,nsis
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: platforms-${{ matrix.platform }}
+
+      # ------------------------------------------------------ the toolchain --
+
+      - name: GStreamer and the webview toolkit (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev \
+            libgstreamer-plugins-bad1.0-dev gstreamer1.0-plugins-base \
+            gstreamer1.0-plugins-good gstreamer1.0-plugins-bad \
+            gstreamer1.0-plugins-ugly gstreamer1.0-libav gstreamer1.0-tools \
+            libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev \
+            patchelf libssl-dev libfuse2 xvfb
+
+      - name: GStreamer (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          brew install gstreamer
+          echo "PKG_CONFIG_PATH=$(brew --prefix gstreamer)/lib/pkgconfig:$(brew --prefix)/lib/pkgconfig" >> "$GITHUB_ENV"
+
+      # The MSVC runtime, which is what the mixer links against and what the
+      # trimmed bundle is cut from. Not MinGW: a MinGW GStreamer and an MSVC
+      # Rust build do not share a C runtime and the result crashes in ways
+      # nobody can read.
+      - name: GStreamer (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          choco install -y --no-progress gstreamer gstreamer-devel
+          $gst = "C:\Program Files\gstreamer\1.0\msvc_x86_64"
+          "PKG_CONFIG_PATH=$gst\lib\pkgconfig" | Out-File -FilePath $env:GITHUB_ENV -Append
+          "GSTREAMER_1_0_ROOT_MSVC_X86_64=$gst\" | Out-File -FilePath $env:GITHUB_ENV -Append
+          "$gst\bin" | Out-File -FilePath $env:GITHUB_PATH -Append
+
+      # ------------------------------------------------------- 1. it starts --
+
+      - name: Build the mixer
+        run: cargo build --release --locked --bins
+
+      # Every cfg(windows) arm is compiled and run here, which is the point of
+      # the Windows job: a regression in a platform arm fails this, not a
+      # user's first launch. Deliberately the whole workspace.
+      - name: The tests pass on this platform
+        run: cargo test --release --locked --workspace
+
+      - name: What the codec probe picks here
+        shell: bash
+        run: |
+          ./target/release/godwinmix --probe 2>&1 | tee probe.txt || true
+          {
+            echo "## Codecs on ${{ matrix.name }}"
+            echo '```'
+            cat probe.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      # The core, headless, with a test:// source and nothing else: the
+      # conformance harness builds the source, waits for PLAYING, checks the
+      # caps match the canvas and tears it down. No camera, no network, and it
+      # exits non-zero if any check fails.
+      - name: The core runs a test:// source headless
+        shell: bash
+        run: ./target/release/godwinmix --test-core
+
+      # ------------------------------------------------------ 2. smoke test --
+
+      - name: Smoke test (bash)
+        if: runner.os != 'Windows'
+        run: ./dev/smoke.sh
+
+      - name: Smoke test (PowerShell)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: ./dev/smoke.ps1
+
+      # --------------------------------------------- 3. the bundled runtime --
+
+      - name: Trim GStreamer (Unix)
+        if: runner.os != 'Windows'
+        run: ./dev/bundle-gstreamer.sh --budget-mb "$RUNTIME_BUDGET_MB"
+
+      - name: Trim GStreamer (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: ./dev/bundle-gstreamer.ps1 -BudgetMb ([double]$env:RUNTIME_BUDGET_MB)
+
+      - name: The size of the trimmed runtime
+        shell: bash
+        run: |
+          printf '### Sizes on %s\n\n| platform | artefact | size |\n|---|---|---|\n' \
+            "${{ matrix.name }}" >> "$GITHUB_STEP_SUMMARY"
+          size_mb=$(du -sm "tauri-app/gstreamer/${{ matrix.platform }}" | cut -f1)
+          echo "| ${{ matrix.name }} | bundled GStreamer | ${size_mb} MB |" >> "$GITHUB_STEP_SUMMARY"
+          echo "RUNTIME_MB=${size_mb}" >> "$GITHUB_ENV"
+
+      # ------------------------------------------------------ 4. the bundle --
+
+      # Tauri copies the sidecar by target triple, so the file has to carry the
+      # triple of the machine it was built on.
+      - name: The mixer goes in as a sidecar
+        shell: bash
+        run: |
+          triple=$(rustc -vV | sed -n 's/^host: //p')
+          if [ "${{ runner.os }}" = "Windows" ]; then
+            cp target/release/godwinmix.exe "tauri-app/binaries/godwinmix-${triple}.exe"
+          else
+            cp target/release/godwinmix "tauri-app/binaries/godwinmix-${triple}"
+          fi
+          ls -la tauri-app/binaries
+
+      - name: Tauri CLI
+        run: cargo install tauri-cli --locked --version "^2.0" || cargo install tauri-cli --version "^2.0"
+
+      - name: Bundle the desktop app
+        working-directory: tauri-app
+        run: cargo tauri build --bundles ${{ matrix.bundles }}
+
+      # ----------------------------------- 5. it loads, and it fits the box --
+
+      # The proof that the runtime inside the app is the one that gets used.
+      # It starts the mixer the way the app does, asks the bundled
+      # gst-inspect where compositor, the software encoder, rtmp2sink and
+      # srtsink come from, and fails if any of them came from a GStreamer
+      # installed on the runner.
+      - name: --headless-check (macOS, out of the .app)
+        if: runner.os == 'macOS'
+        run: |
+          ./tauri-app/target/release/bundle/macos/GodwinMix.app/Contents/MacOS/godwinmix-desktop --headless-check
+
+      # On Linux and Windows the bundle is an installer rather than a
+      # directory that can be run in place, so the check runs against the
+      # built executable with the resources beside it, which is the same
+      # resolution path.
+      - name: --headless-check (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          mkdir -p tauri-app/target/release/gstreamer
+          cp -r tauri-app/gstreamer/linux tauri-app/target/release/gstreamer/linux
+          xvfb-run -a ./tauri-app/target/release/godwinmix-desktop --headless-check
+
+      - name: --headless-check (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path tauri-app\target\release\gstreamer | Out-Null
+          Copy-Item -Recurse -Force tauri-app\gstreamer\windows tauri-app\target\release\gstreamer\windows
+          & .\tauri-app\target\release\godwinmix-desktop.exe --headless-check
+          if ($LASTEXITCODE -ne 0) { throw "--headless-check failed" }
+
+      # The number the whole brief turns on. Measured on the artefact a person
+      # actually downloads, not on the directory it was made from.
+      - name: The installer against the budget
+        shell: bash
+        run: |
+          budget=0
+          [ "${{ runner.os }}" = "Windows" ] && budget="$WINDOWS_INSTALLER_BUDGET_MB"
+          failed=0
+          found=0
+          while IFS= read -r file; do
+            found=1
+            size_mb=$(du -m "$file" | cut -f1)
+            name=$(basename "$file")
+            echo "| ${{ matrix.name }} | $name | ${size_mb} MB |" >> "$GITHUB_STEP_SUMMARY"
+            echo "$name is ${size_mb} MB"
+            if [ "$budget" -gt 0 ] && [ "$size_mb" -gt "$budget" ]; then
+              echo "::error::$name is ${size_mb} MB, over the ${budget} MB budget in 09-builders"
+              failed=1
+            fi
+          done < <(find tauri-app/target/release/bundle -type f \
+            \( -name '*.msi' -o -name '*.exe' -o -name '*.deb' -o -name '*.AppImage' -o -name '*.dmg' \) )
+          if [ "$found" = 0 ] && [ "${{ runner.os }}" != "macOS" ]; then
+            echo "::error::no installer was produced"
+            exit 1
+          fi
+          # The macOS bundle is a directory, so it is measured as one.
+          if [ -d tauri-app/target/release/bundle/macos/GodwinMix.app ]; then
+            size_mb=$(du -sm tauri-app/target/release/bundle/macos/GodwinMix.app | cut -f1)
+            echo "| macos | GodwinMix.app | ${size_mb} MB |" >> "$GITHUB_STEP_SUMMARY"
+            echo "GodwinMix.app is ${size_mb} MB"
+          fi
+          exit $failed
+
+      - name: Keep the installers
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: platform-${{ matrix.name }}
+          path: |
+            tauri-app/target/release/bundle/**/*.msi
+            tauri-app/target/release/bundle/**/*.exe
+            tauri-app/target/release/bundle/**/*.deb
+            tauri-app/target/release/bundle/**/*.AppImage
+          if-no-files-found: ignore
