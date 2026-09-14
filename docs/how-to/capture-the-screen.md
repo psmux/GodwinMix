@@ -119,14 +119,14 @@ the permission granted:
 ```
 $ gmx plugin test ./plugins/screen
   ok   manifest               screen v0.1.0: 2 provide(s), 1 tool(s), every path and schema in place
-  ok   spawn                  hello in 464 ms (the limit is 5 s), api 1, transport unixfd
+  ok   spawn                  hello in 9 ms (the limit is 5 s), api 1, transport unixfd
   ok   playing                reached PLAYING within the timeout
-  ok   video caps             video/x-raw, format=(string)I420, width=(int)1280, height=(int)720, ...
-  ok   video buffers          91 buffers, none out of order
+  ok   video caps             video/x-raw, format=(string)I420, width=(int)1280, height=(int)720, framerate=(f ...
+  ok   video buffers          90 buffers, none out of order
   ok   audio buffers          not declared, not expected
   ok   stop                   the pipeline is in NULL and the kind let go
   ok   configure              19 example(s), every one answered
-  ok   kill                   this kind has no process to kill
+  ok   kill                   killed mid stream, back in 243 frames, away for 40 ms at this source's own end ( ...
   ok   footprint              no process, so nothing to measure
 screen/source is conformant
 ```
