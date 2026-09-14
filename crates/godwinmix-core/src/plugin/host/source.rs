@@ -136,6 +136,13 @@ impl SidecarSource {
     /// decides the transport and the transport decides what `start` builds.
     fn handshake(&mut self) -> Result<()> {
         let instance = self.build.id.clone();
+        // Let go of the previous instance's media directory first. A respawn
+        // makes one at the same path, and `MediaDir`'s drop removes the whole
+        // directory: assigning the new one over the old would delete the
+        // sockets the new process is about to bind, and `restart-in-place`
+        // would fail for every plugin on a socket transport. Dropping it here
+        // also takes any socket a killed process left behind.
+        drop(self.media.take());
         let mut child = Sidecar::spawn(&instance, &self.spec.launch)
             .with_context(|| format!("starting `{}`", self.spec.launch.command_line()))?;
         let canvas = canvas_of(&self.build.canvas);

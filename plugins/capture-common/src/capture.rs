@@ -254,6 +254,53 @@ impl Capture {
     }
 }
 
+/// Open a capture, retrying while the device is still being handed back.
+///
+/// `restart-in-place` replaces the process behind a running pipeline, and the
+/// new one asks the operating system for a camera or a screen that the old one
+/// let go of milliseconds ago. On macOS in particular the device is not free
+/// yet and the open fails outright. Nothing is wrong except the timing, so it
+/// is tried again rather than reported.
+///
+/// Each attempt builds a fresh pipeline (the caller's closure), starts it, and
+/// waits `first_data_within` for a buffer. A fault is a reason to try again; a
+/// device that has simply not produced anything yet is not, because a slow
+/// camera is allowed and `health` is where that is reported.
+pub fn open_with_retry<F>(
+    attempts: u32,
+    gap: Duration,
+    first_data_within: Duration,
+    reporter: Option<&Reporter>,
+    mut build: F,
+) -> Result<Capture, String>
+where
+    F: FnMut() -> Result<Capture, String>,
+{
+    let mut last = String::new();
+    for attempt in 1..=attempts.max(1) {
+        match build() {
+            Ok(capture) => {
+                if capture.wait_for_data(first_data_within) {
+                    return Ok(capture);
+                }
+                match capture.fault() {
+                    // Producing nothing yet is not a failure to open.
+                    None => return Ok(capture),
+                    Some(detail) => last = detail,
+                }
+            }
+            Err(detail) => last = detail,
+        }
+        if attempt < attempts.max(1) {
+            if let Some(r) = reporter {
+                r.warn(format!("attempt {attempt} did not open: {last}. Trying again."));
+            }
+            std::thread::sleep(gap);
+        }
+    }
+    Err(last)
+}
+
 impl Drop for Capture {
     fn drop(&mut self) {
         self.stop();
@@ -394,6 +441,43 @@ mod tests {
             waited.elapsed() < Duration::from_secs(2),
             "it waited the whole timeout"
         );
+    }
+
+    #[test]
+    fn a_device_that_frees_up_on_the_second_try_is_opened_rather_than_reported() {
+        let tries = std::sync::atomic::AtomicU32::new(0);
+        let capture = open_with_retry(
+            3,
+            Duration::from_millis(10),
+            Duration::from_millis(400),
+            None,
+            || {
+                if tries.fetch_add(1, Ordering::Relaxed) == 0 {
+                    return Err("the device is busy".into());
+                }
+                let pipeline = build(
+                    "videotestsrc is-live=true ! video/x-raw,width=16,height=16,framerate=60/1 \
+                     ! queue name=gmx-video-queue ! fakesink sync=false",
+                )?;
+                Capture::start(pipeline, Some("gmx-video-queue"), None)
+            },
+        )
+        .expect("the second attempt works");
+        assert!(capture.buffers() > 0);
+        assert_eq!(tries.load(Ordering::Relaxed), 2);
+    }
+
+    #[test]
+    fn a_device_that_never_frees_up_reports_the_last_reason() {
+        let err = open_with_retry(
+            2,
+            Duration::from_millis(1),
+            Duration::from_millis(10),
+            None,
+            || Err("the device is busy".into()),
+        )
+        .expect_err("it never opens");
+        assert_eq!(err, "the device is busy");
     }
 
     #[test]

@@ -154,6 +154,15 @@ pub fn bind(pipeline: &gst::Pipeline, transport: Transport, base: &str) -> Resul
         (AUDIO_SINK, audio_socket(base)),
     ] {
         if let Some(sink) = pipeline.by_name(name) {
+            // A socket left behind by a process that was killed rather than
+            // stopped cannot be bound again, and neither `unixfdsink` nor
+            // `shmsink` clears one. Without this, `restart-in-place` works
+            // once and then fails with "Address already in use" for the rest
+            // of the show. Removing it is safe: the only process that could
+            // have been serving it is the one that just died.
+            if std::fs::symlink_metadata(&path).is_ok() {
+                let _ = std::fs::remove_file(&path);
+            }
             sink.set_property("socket-path", &path);
             // shmsink alone needs a size; unixfdsink passes file descriptors
             // and has no such property, so this is set only where it exists.
@@ -265,6 +274,22 @@ mod tests {
             sink.property::<Option<String>>("socket-path").as_deref(),
             Some("/tmp/gmx-test/media.audio")
         );
+    }
+
+    #[test]
+    fn binding_clears_a_socket_a_dead_process_left_behind() {
+        gst::init().unwrap();
+        let dir = std::env::temp_dir().join(format!("gmx-bind-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let base = dir.join("media");
+        let stale = video_socket(base.to_str().unwrap());
+        std::fs::write(&stale, b"not really a socket").unwrap();
+        let description =
+            Wiring::video_only("videotestsrc").description(Transport::Unixfd).unwrap();
+        let pipeline = crate::capture::build(&description).unwrap();
+        bind(&pipeline, Transport::Unixfd, base.to_str().unwrap()).expect("it binds");
+        assert!(!std::path::Path::new(&stale).exists(), "the stale socket is still there");
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]

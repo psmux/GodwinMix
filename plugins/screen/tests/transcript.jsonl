@@ -1,0 +1,25 @@
+# A recorded conversation with the core, replayed with no core, no sockets and
+# no clock. Every step forces `element = "videotestsrc"`: a real screen capture
+# needs a permission a CI runner cannot grant, and a transcript that asked for
+# one would fail everywhere except the machine it was recorded on.
+{"plugin": {"jsonrpc": "2.0", "id": 0, "method": "initialize", "params": {"plugin": "screen", "api": 1}}}
+{"core": {"jsonrpc": "2.0", "id": 0, "result": {"core": "godwinmix", "version": "0.2.0", "api_level": 1, "api_compatible": 1, "canvas": {"width": 320, "height": 180, "fps": 30}, "transport": "container", "media": "", "instance": "lyrics", "provide": "source", "params": {"element": "videotestsrc", "label": "Lyrics screen", "show_cursor": false}}}}
+{"plugin": {"jsonrpc": "2.0", "method": "initialized"}}
+{"core": {"jsonrpc": "2.0", "id": 1, "method": "start", "params": {"canvas": {"width": 320, "height": 180, "fps": 30}, "transport": "container", "media": ""}}}
+{"plugin": {"jsonrpc": "2.0", "id": 1, "result": {}}}
+{"core": {"jsonrpc": "2.0", "id": 2, "method": "health", "params": {}}}
+{"plugin": {"jsonrpc": "2.0", "id": 2, "result": {"state": "ok"}}}
+# A label change is applied without reopening the capture.
+{"core": {"jsonrpc": "2.0", "id": 3, "method": "configure", "params": {"params": {"element": "videotestsrc", "label": "Presenter laptop", "show_cursor": false}}}}
+{"plugin": {"jsonrpc": "2.0", "id": 3, "result": {"applied": true}}}
+# Turning the pointer on reopens it, and still answers applied.
+{"core": {"jsonrpc": "2.0", "id": 4, "method": "configure", "params": {"params": {"element": "videotestsrc", "label": "Presenter laptop", "show_cursor": true}}}}
+{"plugin": {"jsonrpc": "2.0", "id": 4, "result": {"applied": true}}}
+{"core": {"jsonrpc": "2.0", "id": 5, "method": "tool.call", "params": {"name": "list_screens", "arguments": {}}}}
+{"plugin": {"jsonrpc": "2.0", "id": 5, "result": {"structured_content": {"screens": "*", "note": "*"}}}}
+{"core": {"jsonrpc": "2.0", "id": 6, "method": "teleport", "params": {}}}
+{"plugin": {"jsonrpc": "2.0", "id": 6, "error": {"code": -32601, "message": "*"}}}
+{"core": {"jsonrpc": "2.0", "id": 7, "method": "stop", "params": {}}}
+{"plugin": {"jsonrpc": "2.0", "id": 7, "result": {}}}
+{"core": {"jsonrpc": "2.0", "id": 8, "method": "shutdown", "params": {"reason": "offline test"}}}
+{"plugin": {"jsonrpc": "2.0", "id": 8, "result": {}}}
