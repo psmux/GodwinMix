@@ -178,6 +178,22 @@ enum Command {
         #[arg(long, env = "GODWINMIX_MCP_PROFILE", default_value = "standard")]
         profile: McpProfile,
     },
+    /// Presets: list, show, apply, save and diff.
+    ///
+    /// A preset is a name for a working setup: the plugins it needs, a
+    /// configuration, a UI layout, a theme and the scenes. `gmx preset apply
+    /// church` is meant to be the whole of a volunteer's install.
+    Preset {
+        #[command(subcommand)]
+        cmd: cli::preset::Preset,
+    },
+
+    /// Assemble a custom build: the core, a preset, and your branding.
+    ///
+    /// The local half of 06 section 5. It writes the directory that CI turns
+    /// into signed installers, and the README saying how.
+    Build(cli::build::BuildArgs),
+
     /// Inspect and test the codec catalogue.
     ///
     /// The catalogue is `codecs.toml`: which codec the programme is encoded
@@ -289,6 +305,16 @@ pub async fn run() -> Result<()> {
             gstreamer::init().context("initialising GStreamer")?;
             let cfg = Config::load(&config::path_in_force(&args.config)).ok();
             return cli::codec::run(cmd, cfg.as_ref(), args.codecs.as_deref());
+        }
+        Some(Command::Preset { cmd }) => {
+            // Validating a preset's config asks each built in kind what its
+            // element accepts, and that needs the registry.
+            gstreamer::init().context("initialising GStreamer")?;
+            return cli::preset::run(cmd);
+        }
+        Some(Command::Build(args)) => {
+            gstreamer::init().context("initialising GStreamer")?;
+            return cli::build::run(args);
         }
         Some(Command::Import { cmd }) => return cli::scene::run_import(cmd),
         Some(Command::Scene { cmd }) => return cli::scene::run_scene(cmd),
