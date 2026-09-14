@@ -82,6 +82,33 @@ impl Receiver {
     }
 }
 
+/// How many takes the timing test measures and takes the middle of.
+///
+/// A median rather than one reading, because one reading is a statement about
+/// the machine. The acceptance line gives a hook that answers at 19 ms a
+/// millisecond of round trip on top, and a build machine that is compiling
+/// something else can lose a millisecond to the scheduler in either the hooked
+/// run or the bare one. The middle of five cancels that; it does not hide a
+/// hook path that is actually slow, because a real cost is in every take.
+const TIMED_TAKES: usize = 5;
+
+/// Time `TIMED_TAKES` takes on this core and answer with the middle one.
+///
+/// One take first, untimed, so the connection to the hook receiver and every
+/// lazily built thing behind the call is already warm.
+async fn median_take(core: &Core) -> Duration {
+    core.call("program.take", json!({ "source": "cam1" })).await.expect("the warm up take");
+    let mut took = Vec::with_capacity(TIMED_TAKES);
+    for n in 0..TIMED_TAKES {
+        let to = if n % 2 == 0 { "cam2" } else { "cam1" };
+        let started = Instant::now();
+        core.call("program.take", json!({ "source": to })).await.expect("a timed take");
+        took.push(started.elapsed());
+    }
+    took.sort();
+    took[TIMED_TAKES / 2]
+}
+
 /// The longest delay a receiver spins out rather than sleeps. See `serve`.
 const SPUN: Duration = Duration::from_millis(50);
 
@@ -387,28 +414,27 @@ async fn a_hook_that_answers_at_nineteen_milliseconds_delays_the_decision_by_und
     let bare = {
         let core = Core::start(Vec::new()).await;
         core.settle().await;
-        core.call("program.take", json!({ "source": "cam1" })).await.expect("the first take");
-        let started = Instant::now();
-        core.call("program.take", json!({ "source": "cam2" })).await.expect("the second take");
-        started.elapsed()
+        median_take(&core).await
     };
 
     let receiver = Receiver::start(Duration::from_millis(19), r#"{"allow": true}"#);
     let core = Core::start(vec![http_hook("take.before", &receiver.url, None)]).await;
     core.settle().await;
-    core.call("program.take", json!({ "source": "cam1" })).await.expect("the first take");
+    let with_hook = median_take(&core).await;
 
-    let started = Instant::now();
     let answer = core.call("program.take", json!({ "source": "cam2" })).await.expect("the take");
-    let with_hook = started.elapsed();
-
     assert_eq!(answer["program"], "cam2", "the take landed: {answer}");
-    assert_eq!(receiver.requests(), 2, "both takes asked the hook");
+    assert_eq!(
+        receiver.requests(),
+        TIMED_TAKES as u64 + 2,
+        "every take asked the hook"
+    );
     let delay = with_hook.saturating_sub(bare);
     assert!(
         delay < Duration::from_millis(20),
         "the hook answered at 19 ms and delayed the decision by {} ms; the limit is 20 ms \
-         (the whole call took {} ms, the same take with no hook configured took {} ms)",
+         (the middle of {TIMED_TAKES} takes was {} ms with the hook and {} ms on a core with \
+          no hook configured)",
         delay.as_millis(),
         with_hook.as_millis(),
         bare.as_millis()
