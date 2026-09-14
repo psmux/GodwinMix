@@ -134,8 +134,8 @@ brings the window back, and Quit is the way out.
 The status line is the title bar: it names the version the mixer reported and
 whether it is this computer or an address. The version comes from
 `/api/v1/core/info`; a mixer built before that endpoint existed answers
-`/api/status` instead, and the app says "an older version" rather than refusing
-to connect.
+`/api/status` instead, and the app says "(version not reported)" rather than
+refusing to connect.
 
 ## The content security policy
 

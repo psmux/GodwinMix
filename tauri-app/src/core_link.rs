@@ -8,6 +8,11 @@ use std::time::Duration;
 
 use serde::Serialize;
 
+/// Stands in for a version, for a core old enough to have no endpoint that
+/// reports one. It goes in the title bar and the status line, so it has to
+/// read as a sentence and not as a missing value.
+const UNREPORTED: &str = "(version not reported)";
+
 /// Where a core is and how to prove we may talk to it.
 #[derive(Clone, Debug)]
 pub struct Target {
@@ -41,7 +46,7 @@ impl Target {
 pub struct CoreInfo {
     /// "GodwinMix" from the core, or a plain fallback for an older one.
     pub name: String,
-    /// The core's version, or "an older version" when it predates the
+    /// The core's version, or a note in its place when the core predates the
     /// endpoint that reports one.
     pub version: String,
     /// "the mixer on this computer" or the address, for the status line.
@@ -75,7 +80,7 @@ pub async fn info(http: &reqwest::Client, target: &Target, label: &str) -> Resul
         Err(Trouble::Absent) => {
             ask(http, target, "/api/status").await.map_err(|e| e.say(&target.base)).map(|_| CoreInfo {
                 name: "GodwinMix".into(),
-                version: "an older version".into(),
+                version: UNREPORTED.into(),
                 label: label.into(),
                 url: target.page_url(),
             })
@@ -96,7 +101,7 @@ fn describe(body: &serde_json::Value, target: &Target, label: &str) -> CoreInfo 
     };
     CoreInfo {
         name: field("name").unwrap_or_else(|| "GodwinMix".into()),
-        version: field("version").unwrap_or_else(|| "an unnamed version".into()),
+        version: field("version").unwrap_or_else(|| UNREPORTED.into()),
         label: label.into(),
         url: target.page_url(),
     }
