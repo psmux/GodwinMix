@@ -371,7 +371,7 @@ test("a chord is spelled the way the map spells it", () => {
 
 test("the map is commands, never indices into a source list", () => {
   for (const value of Object.values(DEFAULT_MAP)) ok(typeof value === "string" && value.includes("."), `${value} is a command id`);
-  eq(DEFAULT_MAP["1"], "tray.take-slot");
+  for (let n = 1; n <= 9; n += 1) eq(DEFAULT_MAP[String(n)], "tray.take-slot", `the key ${n}`);
   eq(DEFAULT_MAP["0"], "program.black");
 });
 
@@ -566,6 +566,70 @@ async function welcomeSuite() {
     eq(applied[1], { name: "church" }, "the preset it asked for");
   });
   panel.close();
+}
+
+// ------------------------------------------------------- the number keys
+
+/**
+ * 1 to 9 count the scenes, and count the inputs only when there are none.
+ *
+ * Driven through the tray's own `takeSlot`, DOM lookup and all, because the
+ * lookup is the part that decides which of the two lists a number means.
+ */
+async function numberKeySuite() {
+  window.godwinmixPanels = window.godwinmixPanels || [];
+  const { default: SourcesPanel } = await import("../panels/sources/panel.js");
+
+  const taken = [];
+  const tray = {
+    order: () => ["cam1", "cam2", "cam3"],
+    activate: (id) => taken.push(["input", id]),
+    scenesPanel: SourcesPanel.prototype.scenesPanel,
+    takeSlot: SourcesPanel.prototype.takeSlot,
+  };
+
+  test("with no scenes panel on the page a number is an input", () => {
+    taken.length = 0;
+    tray.takeSlot(2);
+    eq(taken, [["input", "cam2"]]);
+  });
+
+  const node = document.createElement("gmx-scenes");
+  // The real element would build itself on append and it has no client here.
+  node.built = true;
+  node.activate = (id) => taken.push(["scene", id]);
+  node.scenes = { supported: true, scenes: () => [] };
+  document.body.appendChild(node);
+
+  test("a core with no scene server leaves the numbers on the inputs", () => {
+    taken.length = 0;
+    node.scenes = { supported: false, scenes: () => [{ id: "s1" }] };
+    tray.takeSlot(1);
+    eq(taken, [["input", "cam1"]]);
+  });
+
+  test("an empty collection leaves the numbers on the inputs", () => {
+    taken.length = 0;
+    node.scenes = { supported: true, scenes: () => [] };
+    tray.takeSlot(3);
+    eq(taken, [["input", "cam3"]]);
+  });
+
+  test("with scenes in the collection a number is a scene", () => {
+    taken.length = 0;
+    node.scenes = { supported: true, scenes: () => [{ id: "wide" }, { id: "two-box" }] };
+    tray.takeSlot(2);
+    eq(taken, [["scene", "two-box"]]);
+  });
+
+  test("a number past the end of the scenes does nothing at all", () => {
+    taken.length = 0;
+    node.scenes = { supported: true, scenes: () => [{ id: "wide" }] };
+    tray.takeSlot(9);
+    eq(taken, [], "it must not fall through to the ninth input");
+  });
+
+  node.remove();
 }
 
 // ------------------------------------------------------------- the kits
@@ -1116,6 +1180,12 @@ legacySuite()
   .catch((e) => {
     failed += 1;
     line("fail", "the welcome suite threw: " + e.message);
+    console.error(e);
+  })
+  .then(numberKeySuite)
+  .catch((e) => {
+    failed += 1;
+    line("fail", "the number key suite threw: " + e.message);
     console.error(e);
   })
   .then(kitSuite)

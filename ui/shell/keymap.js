@@ -6,6 +6,10 @@
 // the command `tray.take-slot` with the argument 3, and what slot 3 is stays
 // the tray's business.
 //
+// Slot 3 is the third scene, which is what 05 section 3a asks for. With no
+// scenes in the collection, or on a core with no scene server, it is the third
+// input instead. "0" is the slate.
+//
 // Chords are written the way a person says them: "Ctrl+K", "Shift+Delete", "F2".
 // Ctrl means Cmd on macOS, which is the one substitution every shortcut in 3b
 // asks for.

@@ -163,7 +163,11 @@ function shellCommands(client, node) {
       title: "Cut to black",
       group: "Programme",
       key: "0",
-      run: () => client.call("program.take", { source: null }).catch((e) => errorToast(e, "Cut to black")),
+      // `program.take {}`, named neither a source nor a scene, is the slate.
+      // The one exception the core documents is a scene that is armed: with
+      // nothing named it takes that instead, which is the behaviour the
+      // protocol has had since before scenes and is not this key's to change.
+      run: () => client.call("program.take", {}).catch((e) => errorToast(e, "Cut to black")),
     },
   ]);
 }
