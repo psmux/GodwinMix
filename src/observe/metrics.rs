@@ -144,8 +144,12 @@ fn takes_labels(name: &str) -> bool {
 }
 
 fn series(name: &'static str, kind: Kind, labels: &[(&str, &str)]) -> Arc<Series> {
-    let key: Labels =
+    // Sorted, so that a caller who writes the labels in a different order
+    // still reaches the same series rather than silently starting a second one
+    // that counts half the events.
+    let mut key: Labels =
         labels.iter().map(|(k, v)| ((*k).to_string(), (*v).to_string())).collect();
+    key.sort();
     if let Some(s) = REGISTRY.read().get(name).and_then(|f| f.series.get(&key)).cloned() {
         return s;
     }

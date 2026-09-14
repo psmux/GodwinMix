@@ -132,7 +132,7 @@ const SECRET_KEYS: &[&str] = &["token", "secret", "password", "passwd", "key", "
 /// replaced, and the URL keeps its host and its shape so the reader can still
 /// see that the output was pointed at YouTube and not at Twitch.
 pub fn redact_config(text: &str) -> String {
-    let Ok(value) = text.parse::<toml::Value>() else {
+    let Ok(value) = toml::from_str::<toml::Value>(text) else {
         // An unparseable config is itself a thing worth having in the bundle,
         // but not at the price of shipping a token in it.
         return "# this config did not parse, so it is left out rather than \
