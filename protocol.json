@@ -899,7 +899,7 @@
           "type": "array"
         },
         "program": {
-          "description": "Source currently on program, or None while the slate is showing.",
+          "description": "Source currently on program, or None while the slate is showing. A\nscene of one full canvas item reports that item's source here too, so\nanything written against this before scenes existed still reads.",
           "type": [
             "string",
             "null"
@@ -910,6 +910,13 @@
           "format": "uint64",
           "minimum": 0,
           "type": "integer"
+        },
+        "scene": {
+          "description": "The scene on air, when one was taken by name.",
+          "type": [
+            "string",
+            "null"
+          ]
         },
         "sources": {
           "items": {

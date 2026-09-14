@@ -1179,7 +1179,7 @@ fn spawn_history(app: AppState) {
         loop {
             match events.recv().await {
                 Ok(envelope) => {
-                    if let Event::Took { source, at_running_time_ms } = envelope.event {
+                    if let Event::Took { source, at_running_time_ms, .. } = envelope.event {
                         app.history.record_event(source, at_running_time_ms, envelope.seq);
                     }
                 }

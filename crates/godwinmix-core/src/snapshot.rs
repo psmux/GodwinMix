@@ -678,6 +678,7 @@ mod tests {
             extra: Default::default(),
         };
         MixerStatus {
+            scene: None,
             program: Some("cam1".into()),
             sources: vec![source("cam1", Some(1)), source("cam2", Some(2))],
             outputs: vec![OutputStatus {

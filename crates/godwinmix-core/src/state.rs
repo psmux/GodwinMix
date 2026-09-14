@@ -172,8 +172,9 @@ mod tests {
         let mut a = bus.subscribe();
         let mut b = bus.subscribe();
         assert_eq!(bus.seq(), 0);
-        bus.send(Event::Took { source: Some("cam1".into()), at_running_time_ms: 10 }).unwrap();
-        bus.send(Event::Took { source: None, at_running_time_ms: 20 }).unwrap();
+        bus.send(Event::Took { source: Some("cam1".into()), scene: None, at_running_time_ms: 10 })
+            .unwrap();
+        bus.send(Event::Took { source: None, scene: None, at_running_time_ms: 20 }).unwrap();
         assert_eq!(bus.seq(), 2);
         for rx in [&mut a, &mut b] {
             assert_eq!(rx.recv().await.unwrap().seq, 1);
@@ -218,6 +219,7 @@ mod tests {
         page.put_extra("audio", SourceAudio { page: 0.8, media: vec![1.0, 0.0] });
         let status = MixerStatus {
             program: Some("cam1".into()),
+            scene: None,
             sources: vec![page],
             outputs: vec![],
             multiview: MultiviewStatus {
@@ -270,6 +272,7 @@ mod tests {
 
         let v: serde_json::Value = serde_json::to_value(Event::Took {
             source: None,
+            scene: None,
             at_running_time_ms: 4200,
         })
         .unwrap();

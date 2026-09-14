@@ -211,6 +211,15 @@ pub enum SeekOutcome {
 /// inside a layered source's own pipeline. Keeping the two apart is what lets
 /// an operator pull a camera down without being told the camera is not a
 /// website.
+/// Is this source heard, given what the scene on air says about it?
+///
+/// A source is audible when any live item of it says `follow` and is visible,
+/// or says `always`. One pad per source, whatever the answer, so this decides a
+/// volume and never a topology.
+fn audible(placements: &[Placement], id: &SourceId) -> bool {
+    placements.iter().any(|p| &p.source == id && p.heard())
+}
+
 fn needs_superimposed(page: Option<f64>, media: &[Option<f64>]) -> bool {
     page.is_some() || media.iter().any(|m| m.is_some())
 }
@@ -222,12 +231,23 @@ fn needs_superimposed(page: Option<f64>, media: &[Option<f64>]) -> bool {
 /// nothing may take this apart again by splitting on one: `pgm-alevel-cam-1`
 /// read that way names `cam`, which is a different source that may well exist.
 /// Attribution compares whole names instead.
-use crate::plugin::branch::{BranchCtx, ProgrammeBranch};
+use crate::plugin::branch::{BranchCtx, ProgrammeBranch, VideoPads};
+
+pub mod slots;
+pub use slots::{Placement, SlotPool};
 
 pub enum Command {
     /// Put a source on program. `None` cuts to the slate.
     Take {
         source: Option<SourceId>,
+        at_running_time_ms: Option<u64>,
+        ack: Option<Ack>,
+    },
+    /// Put a whole scene on programme: several sources at once, each with its
+    /// own place on the canvas. Flattened by the scene server before it gets
+    /// here, so nothing in the mixer knows what a group or a reference is.
+    TakeScene {
+        scene: Box<ProgramScene>,
         at_running_time_ms: Option<u64>,
         ack: Option<Ack>,
     },
@@ -570,9 +590,9 @@ pub struct TimelineAligner {
     /// Shared by both branches so they get an identical shift.
     offset: Mutex<Option<i64>>,
     applied: AtomicBool,
-    /// The pads the shift is applied to, held so that `place_at` is the one
-    /// place that writes an offset and can be exercised without a pipeline.
-    vpad: gst::Pad,
+    /// Every compositor pad drawing this source, shared with the branch so a
+    /// slot bound later gets the offset it missed.
+    vpads: Arc<VideoPads>,
     apad: gst::Pad,
 }
 
@@ -581,7 +601,7 @@ impl TimelineAligner {
         program: &gst::Pipeline,
         video_queue: &gst::Element,
         audio_queue: &gst::Element,
-        vpad: &gst::Pad,
+        vpads: Arc<VideoPads>,
         apad: &gst::Pad,
         id: &str,
     ) -> Result<Arc<Self>> {
@@ -589,7 +609,7 @@ impl TimelineAligner {
             id: id.to_string(),
             offset: Mutex::new(None),
             applied: AtomicBool::new(false),
-            vpad: vpad.clone(),
+            vpads,
             apad: apad.clone(),
         });
         let clock = program.clock();
@@ -649,7 +669,7 @@ impl TimelineAligner {
                 }
             }
         };
-        self.vpad.set_offset(offset);
+        self.vpads.set_offset(offset);
         self.apad.set_offset(offset);
         self.applied.store(true, Ordering::Relaxed);
         offset
@@ -677,7 +697,6 @@ pub struct Mixer {
     origin: Instant,
 
     program: gst::Pipeline,
-    vmix: gst::Element,
     amix: gst::Element,
     vraw_tee: gst::Element,
     venc_tee: gst::Element,
@@ -748,6 +767,21 @@ pub struct Mixer {
     /// on a source's programme side branch. A filter on a source's input side
     /// lives in that source's own pipeline instead.
     programme_filters: Vec<crate::plugin::FilterSlot>,
+    /// The compositor's slots: where a scene's items are actually drawn. See
+    /// `mixer::slots`.
+    pool: SlotPool,
+    /// The scene on air, flattened. `None` is the one item scene a bare source
+    /// id means, or the slate when nothing is on.
+    program_scene: Option<ProgramScene>,
+}
+
+/// A scene as the compositor has it: a name to report and the placements that
+/// were applied. The document itself lives in the scene server; nothing here
+/// knows what a group or a reference is.
+#[derive(Debug, Clone, PartialEq)]
+pub struct ProgramScene {
+    pub name: String,
+    pub placements: Vec<Placement>,
 }
 
 /// What is left of a source whose pipeline has been stopped for a rebuild:
@@ -763,7 +797,9 @@ pub struct Mixer {
 /// picture to copy, no code path that only runs during a fault.
 struct RetiredBranch {
     id: SourceId,
-    vpad: gst::Pad,
+    /// The slots held with this source's last frame, put back in the pool
+    /// when the hold ends.
+    slots: Vec<usize>,
     apad: gst::Pad,
     branch: Vec<gst::Element>,
     /// Dropped whether or not the rebuild ever finishes. A source that never
@@ -1174,13 +1210,17 @@ impl Mixer {
             })
         });
 
+        // The slots every scene is drawn in. Built before the pipeline runs,
+        // so the eight the pool starts with cost one pad request each and
+        // never another. See `mixer::slots`.
+        let pool = SlotPool::build(&program, &vmix).context("building the compositor slots")?;
+
         let mixer = Self {
             cfg,
             canvas,
             backends,
             origin: Instant::now(),
             program,
-            vmix,
             amix,
             vraw_tee: vraw_tee.clone(),
             venc_tee,
@@ -1212,6 +1252,8 @@ impl Mixer {
             rebuild_not_before: HashMap::new(),
             retired: Vec::new(),
             programme_filters: Vec::new(),
+            pool,
+            program_scene: None,
         };
         Ok((mixer, handle, rx, bus_rx))
     }
@@ -1376,18 +1418,21 @@ impl Mixer {
         // The operator's desk for this source, built once and handed over. See
         // `ProgrammeBranch`: the mixer no longer knows what is in it.
         let branch = ProgrammeBranch::build(
-            &BranchCtx {
-                program: &self.program,
-                vmix: &self.vmix,
-                amix: &self.amix,
-                canvas: &self.canvas,
-            },
+            &BranchCtx { program: &self.program, amix: &self.amix, canvas: &self.canvas },
             &cfg.id,
             &input.video_proxy,
             &input.audio_proxy,
             cfg.gain,
             cfg.muted,
         )?;
+
+        // One slot, now, while this source has not produced a frame yet.
+        //
+        // Binding here rather than at take time is what keeps a take free: by
+        // the time anybody asks for this source the slot is already linked, so
+        // the take is property writes and nothing else. Doing it later would
+        // make the first take of every source a relink.
+        self.pool.reserve(&branch).context("reserving a compositor slot for the source")?;
 
         // Map this source's timeline onto the programme's. Installed before
         // the branch is set running: the segment event travels as soon as data
@@ -1417,7 +1462,7 @@ impl Mixer {
                 &self.program,
                 &branch.vq,
                 &branch.aq,
-                &branch.vpad,
+                branch.pads.clone(),
                 &branch.apad,
                 &cfg.id,
             )?)
@@ -1549,17 +1594,30 @@ impl Mixer {
             .find(|s| &s.input.id == source)
             .with_context(|| format!("no such source {source}"))?;
         let filter = crate::plugin::filter::make(&cfg.type_id)?;
-        let (upstream, pad) = if filter.stream() == crate::plugin::filter::Stream::Audio {
-            (slot.branch.amute.clone(), slot.branch.apad.clone())
+        // Audio ends at the mixer's request pad; video now ends at this
+        // source's own tee, which every slot showing it hangs off. A filter
+        // here is therefore on the source as the scene sees it, however many
+        // places it is drawn in.
+        let down = if filter.stream() == crate::plugin::filter::Stream::Audio {
+            crate::plugin::filter::Downstream::Pad(slot.branch.apad.clone())
         } else {
-            (slot.branch.vq.clone(), slot.branch.vpad.clone())
+            crate::plugin::filter::Downstream::Element(slot.branch.vtee.clone())
+        };
+        let upstream = if filter.stream() == crate::plugin::filter::Stream::Audio {
+            slot.branch.amute.clone()
+        } else {
+            slot.branch.vq.clone()
         };
         let mut params = cfg.params.clone();
         params
             .entry("id".to_string())
             .or_insert_with(|| toml::Value::String(format!("pgm-{source}-{}", cfg.id)));
         let placed = crate::plugin::filter::insert(
-            crate::plugin::Insertion::before_pad(&self.program, &upstream, &pad),
+            crate::plugin::filter::Insertion {
+                pipeline: &self.program,
+                upstream: &upstream,
+                downstream: down,
+            },
             crate::plugin::FilterSpec {
                 id: cfg.id.clone(),
                 type_id: cfg.type_id.clone(),
@@ -1856,11 +1914,10 @@ impl Mixer {
             mv.remove_tile(id).ok();
         }
         slot.input.stop();
-        // Under the programme layer and over the slate, so whatever is taken
-        // next draws straight over it, and silent: the pipeline behind it has
+        // Under the live band and over the slate, so whatever is taken next
+        // draws straight over it, and silent: the pipeline behind it has
         // stopped and there is nothing left to hear.
-        slot.branch.vpad.set_property("zorder", 1u32);
-        slot.branch.vpad.set_property("alpha", 1.0f64);
+        let held = self.pool.retire(id);
         slot.branch.apad.set_property("volume", 0.0f64);
         // A meter keeps the name of the source it was built for, and the
         // replacement builds one with the same name. Silenced here so that the
@@ -1873,7 +1930,7 @@ impl Mixer {
         info!(source = %id, "source stopped, its last frame held on the programme");
         self.retired.push(RetiredBranch {
             id: id.clone(),
-            vpad: slot.branch.vpad,
+            slots: held,
             apad: slot.branch.apad,
             branch: slot.branch.elements,
             until: Instant::now() + FREEZE_HOLD,
@@ -1899,11 +1956,14 @@ impl Mixer {
             }
         }
         for (r, stale) in expired {
+            // The slots first: unbinding them takes the tee pads back before
+            // the tee itself leaves the pipeline.
+            self.pool.release(&r.slots);
+            self.pool.drop_source(&r.id);
             for el in &r.branch {
                 let _ = el.set_state(gst::State::Null);
                 let _ = self.program.remove(el);
             }
-            self.vmix.release_request_pad(&r.vpad);
             self.amix.release_request_pad(&r.apad);
             debug!(source = %r.id, stale, "released the held branch of a rebuilt source");
             // Held as long as it was worth holding and the source never came
@@ -2074,11 +2134,14 @@ impl Mixer {
         if let Some(mv) = &mut self.multiview {
             mv.remove_tile(id).ok();
         }
+        // The slots this source was drawn in go back to the pool before its
+        // tee leaves the pipeline, or they would be left holding a pad of an
+        // element that is gone.
+        self.pool.drop_source(id);
         for el in &slot.branch.elements {
             let _ = el.set_state(gst::State::Null);
             let _ = self.program.remove(el);
         }
-        self.vmix.release_request_pad(&slot.branch.vpad);
         self.amix.release_request_pad(&slot.branch.apad);
         // Everything this module keeps under the source's id goes with it. The
         // ids are reused: a director alternates two of them, one per match, so
@@ -2218,6 +2281,10 @@ impl Mixer {
         }
 
         self.program_source = source.clone();
+        // A bare source id is shorthand for a one item full canvas scene, so
+        // taking one puts the compositor back on that shorthand rather than
+        // leaving a scene half applied underneath.
+        self.program_scene = None;
         self.take_generation.fetch_add(1, Ordering::SeqCst);
         self.apply_visibility(true);
 
@@ -2225,6 +2292,7 @@ impl Mixer {
         info!(source = ?source, at_ms = at.mseconds(), "took source to program");
         let _ = self.events.send(Event::Took {
             source,
+            scene: None,
             at_running_time_ms: at.mseconds(),
         });
         self.broadcast_status();
@@ -2264,20 +2332,125 @@ impl Mixer {
         Ok(id)
     }
 
+    /// Put a whole scene on programme.
+    ///
+    /// The scene arrives already flattened: groups multiplied into their
+    /// children, references resolved, invisible items dropped, bottom of the
+    /// stack first. Applying it is binding and property writes, so it is the
+    /// same cut a bare source id gets and the encoder cannot tell the two
+    /// apart.
+    pub fn take_scene(&mut self, scene: ProgramScene, at_running_time_ms: Option<u64>) -> Result<()> {
+        if let Some(ms) = at_running_time_ms {
+            return self.schedule_scene_take(scene, ms);
+        }
+        let name = scene.name.clone();
+        // A one item full canvas scene is a source take, and saying so keeps
+        // the programme state, the tally and `program.revert` reading the same
+        // as they did before scenes existed.
+        self.program_source = self.shorthand_source(&scene);
+        self.program_scene = Some(scene);
+        self.take_generation.fetch_add(1, Ordering::SeqCst);
+        self.apply_visibility(true);
+
+        let at = self.running_time().unwrap_or(gst::ClockTime::ZERO);
+        info!(scene = %name, at_ms = at.mseconds(), "took scene to program");
+        let _ = self.events.send(Event::Took {
+            source: self.program_source.clone(),
+            scene: Some(name),
+            at_running_time_ms: at.mseconds(),
+        });
+        self.broadcast_status();
+        Ok(())
+    }
+
+    /// The source id a scene is shorthand for, when it is one full canvas item
+    /// of one source and nothing else.
+    fn shorthand_source(&self, scene: &ProgramScene) -> Option<SourceId> {
+        let [only] = scene.placements.as_slice() else { return None };
+        let full = only.xpos == 0
+            && only.ypos == 0
+            && only.width == self.canvas.width
+            && only.height == self.canvas.height
+            && only.alpha >= 1.0;
+        full.then(|| only.source.clone())
+    }
+
+    fn schedule_scene_take(&mut self, scene: ProgramScene, at_ms: u64) -> Result<()> {
+        if let Some(prev) = self.pending_take.take() {
+            prev.unschedule();
+        }
+        let id = self.schedule_command(
+            Command::TakeScene {
+                scene: Box::new(scene),
+                at_running_time_ms: None,
+                ack: None,
+            },
+            at_ms,
+        )?;
+        self.pending_take = Some(id);
+        info!(at_ms, "scene take scheduled on the pipeline clock");
+        Ok(())
+    }
+
+    /// What the compositor should be drawing right now, in z order.
+    ///
+    /// One function, whether the programme is a scene or the one item shorthand
+    /// a bare source id means, so the watchdog and a take go through the same
+    /// arithmetic. A source that is not live contributes nothing, which is what
+    /// fades a stalled camera to the slate and brings it back on its own.
+    fn current_placements(&self) -> Vec<Placement> {
+        let live = |id: &SourceId| {
+            self.sources
+                .iter()
+                .any(|s| &s.input.id == id && matches!(s.input.observed_state(), SourceState::Live))
+        };
+        match &self.program_scene {
+            Some(scene) => {
+                scene.placements.iter().filter(|p| live(&p.source)).cloned().collect()
+            }
+            None => self
+                .program_source
+                .iter()
+                .filter(|id| live(id))
+                .map(|id| Placement::full_canvas(id.clone(), &self.canvas))
+                .collect(),
+        }
+    }
+
     /// Recompute every pad's alpha and volume from current state.
     ///
     /// Declarative on purpose. The watchdog calls this on every tick, so a
     /// source that stalls while live fades to the slate and comes back on its
     /// own when buffers resume, with no separate code path.
-    fn apply_visibility(&self, ramp_audio: bool) {
+    fn apply_visibility(&mut self, ramp_audio: bool) {
+        let placements = self.current_placements();
+        let branches: Vec<(&SourceId, &ProgrammeBranch)> =
+            self.sources.iter().map(|s| (&s.input.id, &s.branch)).collect();
+        match self.pool.apply(&placements, &branches) {
+            Ok(applied) => {
+                if !applied.missing.is_empty() {
+                    warn!(
+                        missing = ?applied.missing,
+                        "the scene names sources this mixer does not have; they were skipped"
+                    );
+                }
+            }
+            Err(e) => {
+                // The compositor is still drawing whatever it was drawing. An
+                // apply that could not bind a slot is a refused change, not a
+                // black frame.
+                error!(?e, "could not apply the scene to the compositor");
+            }
+        }
+
+        // Audio follows video per item: a source is heard when any live item
+        // of it says `follow` and is visible, or says `always`. This is OBS's
+        // behaviour and it changes no pad topology, because there is still one
+        // audiomixer pad per source however many places it is drawn in.
         let mut targets = Vec::new();
         for slot in &self.sources {
-            let is_program = self.program_source.as_ref() == Some(&slot.input.id);
             let healthy = matches!(slot.input.observed_state(), SourceState::Live);
-            let on = is_program && healthy;
-
-            slot.branch.vpad.set_property("alpha", if on { 1.0f64 } else { 0.0f64 });
-            slot.branch.vpad.set_property("zorder", if is_program { 2u32 } else { 1u32 });
+            let on = healthy && audible(&placements, &slot.input.id);
             targets.push((slot.branch.apad.clone(), if on { 1.0f64 } else { 0.0f64 }));
         }
 
@@ -2395,7 +2568,7 @@ impl Mixer {
         // this the mixer would judge them against the current running time,
         // find them minutes stale, and stall while it worked out what to do.
         // The same offset goes on both pads so the ad stays in lip sync.
-        slot.branch.vpad.set_offset(cue.nseconds() as i64);
+        slot.branch.pads.set_offset(cue.nseconds() as i64);
         slot.branch.apad.set_offset(cue.nseconds() as i64);
         debug!(cue_ms = cue.mseconds(), "rebasing the ad onto programme time");
 
@@ -2467,7 +2640,7 @@ impl Mixer {
     /// log.
     pub fn label(cmd: &Command) -> &'static str {
         match cmd {
-            Command::Take { .. } => "program.take",
+            Command::Take { .. } | Command::TakeScene { .. } => "program.take",
             Command::AdBreak { .. } => "adbreak.start",
             Command::EndAdBreak(_) => "adbreak.end",
             Command::AddSource(..) | Command::AddSourceProbed(..) => "source.add",
@@ -2515,6 +2688,11 @@ impl Mixer {
                     reply(ack, &r);
                     r?;
                 }
+            }
+            Command::TakeScene { scene, at_running_time_ms, ack } => {
+                let r = self.take_scene(*scene, at_running_time_ms);
+                reply(ack, &r);
+                r?;
             }
             Command::AdBreak { uri, at_running_time_ms, return_to, ack } => {
                 let r = self.start_ad_break(uri, at_running_time_ms, return_to);
@@ -3158,6 +3336,7 @@ impl Mixer {
             .collect();
 
         MixerStatus {
+            scene: self.program_scene.as_ref().map(|s| s.name.clone()),
             program: self.program_source.clone(),
             sources,
             outputs: self.outputs.iter().map(|o| o.status()).collect(),
@@ -3313,6 +3492,7 @@ impl Mixer {
         }
         self.multiview = None;
         self.mv.mark_built(None);
+        self.pool.teardown();
         let _ = self.program.set_state(gst::State::Null);
     }
 }
@@ -3530,11 +3710,16 @@ mod tests {
         let _ = gst::init();
         let vpad = gst::Pad::builder(gst::PadDirection::Sink).name("vsink").build();
         let apad = gst::Pad::builder(gst::PadDirection::Sink).name("asink").build();
+        // One source can be drawn in several places, so the aligner writes
+        // through the set of pads rather than one, and a pad bound later picks
+        // up the offset it missed.
+        let vpads = VideoPads::new();
+        vpads.attach(&vpad);
         let aligner = TimelineAligner {
             id: "clip1".into(),
             offset: Mutex::new(None),
             applied: AtomicBool::new(false),
-            vpad: vpad.clone(),
+            vpads: vpads.clone(),
             apad: apad.clone(),
         };
         assert_eq!(aligner.offset(), None, "nothing is placed before a segment arrives");
@@ -3578,6 +3763,12 @@ mod tests {
         // cost lip sync either.
         assert_eq!(aligner.place_at(after_seek + 12_000_000, "video"), second);
         assert_eq!(apad.offset(), second);
+
+        // A second placement of the same source, bound after the offset was
+        // worked out, gets it rather than starting at zero.
+        let twice = gst::Pad::builder(gst::PadDirection::Sink).name("vsink2").build();
+        vpads.attach(&twice);
+        assert_eq!(twice.offset(), second, "a slot bound later must share the source's timeline");
     }
 
     #[test]
