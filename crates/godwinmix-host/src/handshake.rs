@@ -102,6 +102,13 @@ pub fn negotiate(
 }
 
 /// The answer the core writes back, in the shape 03 section 6 documents.
+///
+/// Eight arguments, because the handshake answer has eight fields and every
+/// one is decided somewhere different: the version by the build, the levels by
+/// the protocol crate, the canvas by the config, the transport by what was
+/// negotiated, and the last three by the instance being started. A struct to
+/// carry them would be the same eight names written twice.
+#[allow(clippy::too_many_arguments)]
 pub fn ready(
     version: &str,
     level: u32,

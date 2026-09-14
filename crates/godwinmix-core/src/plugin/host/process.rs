@@ -213,7 +213,7 @@ impl Sidecar {
             manifest,
             super::super::API_LEVEL,
             super::super::API_COMPATIBLE,
-            |t| media_for(t),
+            media_for,
         )?;
         let answer = handshake::ready(
             env!("CARGO_PKG_VERSION"),

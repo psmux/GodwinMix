@@ -22,6 +22,7 @@
 pub mod call;
 pub mod history;
 pub mod methods;
+pub mod push;
 pub mod rest;
 pub mod ws;
 
@@ -84,6 +85,15 @@ pub struct AppState {
     pub confirmations: Arc<Confirmations>,
     pub idempotency: Arc<idempotency::Cache>,
     pub history: Arc<History>,
+    /// The last audio peak per source, for `agent.state` detailed.
+    pub peaks: Arc<history::Peaks>,
+    /// The rules that stand in front of every take: the minimum hold, the rate
+    /// limit, the flash guard and the operator watchdog. See
+    /// `godwinmix_core::safety`.
+    pub safety: Arc<godwinmix_core::safety::Guard>,
+    /// Work that outlives the call that started it. `task.get`, `task.cancel`,
+    /// and the handle `media.convert` answers with.
+    pub tasks: Arc<godwinmix_core::tasks::Tasks>,
     pub features: Arc<Vec<String>>,
     pub limits: Limits,
     pub canvas: CanvasInfo,
@@ -110,6 +120,13 @@ impl AppState {
         rehearsal: bool,
     ) -> Self {
         let tokens = cfg.tokens(rehearsal);
+        let safety =
+            godwinmix_core::safety::Guard::new(cfg.safety.clone(), cfg.canvas.fps.max(1) as u32);
+        // The flash guard needs a luminance measurement and the telemetry
+        // probes are the only thing that takes one. Binding them here is what
+        // lets the guard tell a flash from a dissolve while a client is
+        // subscribed, and fall back to the stricter rule while none is.
+        godwinmix_core::telemetry::telemetry().bind_guard(safety.clone());
         Self {
             mixer,
             multiview,
@@ -134,6 +151,9 @@ impl AppState {
             confirmations: Confirmations::new(),
             idempotency: idempotency::Cache::new(),
             history: Arc::new(History::new()),
+            peaks: Arc::new(history::Peaks::new()),
+            safety,
+            tasks: godwinmix_core::tasks::Tasks::new(),
             rehearsal,
             plugin_settings: Arc::new(cfg.plugins.clone()),
             config_path: Arc::new(cfg.source_path.clone()),
@@ -308,14 +328,14 @@ async fn guard_legacy(State(ctx): State<Ctx>, req: Request, next: Next) -> Respo
                 .into_response()
         }
     };
-    if let Some(refusal) = legacy_refusal(&ctx, &token, req.method(), req.uri().path()) {
+    if let Some(refusal) = legacy_refusal_at(&ctx, &token, req.method(), req.uri().path()) {
         return (StatusCode::FORBIDDEN, Json(json!({ "error": refusal }))).into_response();
     }
     next.run(req).await
 }
 
 /// Why this token may not use this legacy path, if it may not.
-fn legacy_refusal(
+fn legacy_refusal_at(
     ctx: &Ctx,
     token: &godwinmix_protocol::scope::Token,
     http: &Method,
@@ -323,17 +343,38 @@ fn legacy_refusal(
 ) -> Option<String> {
     let (route, _) = rest::resolve(&ctx.legacy_routes, http, path).ok()?;
     let def = ctx.registry.get(route.method)?;
-    if !token.has(def.scope) {
-        return Some(
-            RpcError::scope(route.method, def.scope.as_str(), &token.scope_names()).message,
-        );
-    }
     if ctx.app.rehearsal && route.method == "output.add" {
         return Some(
             "this core was started with --rehearsal and will not add an output, so nothing \
              here reaches a real destination. Start a core without --rehearsal to go on air."
                 .to_string(),
         );
+    }
+    legacy_refusal(token, def, path)
+}
+
+/// The part of it that depends only on the token and the method, so a test
+/// can reach it without building a whole router.
+fn legacy_refusal(
+    token: &godwinmix_protocol::scope::Token,
+    def: &godwinmix_protocol::method::MethodDef<Call>,
+    path: &str,
+) -> Option<String> {
+    if !token.has(def.scope) {
+        return Some(RpcError::scope(def.name, def.scope.as_str(), &token.scope_names()).message);
+    }
+    // A token whose policy is `confirm = required` must not be able to remove
+    // a source, drop an output or shut the mixer down through a door that has
+    // no way to carry a confirm token. The deprecated routes have no envelope,
+    // so the answer is to send the caller to the versioned one rather than to
+    // invent a confirm round trip these clients cannot complete.
+    if def.destructive && token.confirm == godwinmix_protocol::scope::ConfirmPolicy::Required {
+        return Some(format!(
+            "this token needs a confirmation before a destructive call, and the deprecated \
+             {path} cannot carry one. Call {} on /api/v1 instead: it answers -32020 with a \
+             confirm_token, and the same call carrying `confirm` goes through.",
+            def.name
+        ));
     }
     None
 }
@@ -1213,19 +1254,95 @@ impl RunningTime {
     }
 }
 
+/// The background tasks the control plane needs whatever door a call arrives
+/// by: the take history, the audio peaks, and the operator watchdog.
+///
+/// Public because an embedder and the integration tests build an `AppState`
+/// without `serve`, and a core whose history is empty answers `program.revert`
+/// with "nothing to go back to" however many takes it has had.
+pub fn spawn_background(app: AppState) {
+    spawn_history(app.clone());
+    spawn_operator_watchdog(app);
+}
+
 /// Write every take down, whoever made it.
 fn spawn_history(app: AppState) {
     tokio::spawn(async move {
         let mut events = app.mixer.subscribe();
         loop {
             match events.recv().await {
-                Ok(envelope) => {
-                    if let Event::Took { source, at_running_time_ms } = envelope.event {
+                Ok(envelope) => match envelope.event {
+                    Event::Took { source, at_running_time_ms } => {
                         app.history.record_event(source, at_running_time_ms, envelope.seq);
                     }
-                }
+                    // Ten a second and nothing kept them, so an agent could
+                    // not find out whether a source was making a sound.
+                    Event::SourceAudioLevel { source, peak_db } => {
+                        app.peaks.note(&source, &peak_db);
+                    }
+                    Event::Status(status) => {
+                        let ids: Vec<String> =
+                            status.sources.iter().map(|s| s.id.clone()).collect();
+                        app.peaks.retain(&ids);
+                    }
+                    _ => {}
+                },
                 Err(broadcast::error::RecvError::Closed) => return,
                 Err(broadcast::error::RecvError::Lagged(_)) => {}
+            }
+        }
+    });
+}
+
+/// Watch whoever made the last take, and act when they go quiet.
+///
+/// 03 section 6: `on_operator_silence` watches the token that made the last
+/// take; if it makes no RPC call for `after_secs` the core raises a `critical`
+/// alert and takes the configured action. The default is `alert`, because a
+/// programme that keeps running is the safe state.
+fn spawn_operator_watchdog(app: AppState) {
+    use godwinmix_core::safety::SilenceAction;
+    let after = app.safety.config().on_operator_silence.after_secs;
+    tokio::spawn(async move {
+        let mut tick = tokio::time::interval(Duration::from_secs(1));
+        tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
+        loop {
+            tick.tick().await;
+            let Some(who) = app.safety.silent_operator() else { continue };
+            let action = app.safety.config().on_operator_silence.action.clone();
+            // Arm it before acting, so this fires once rather than every
+            // second until somebody comes back.
+            app.safety.arm_silence(matches!(action, SilenceAction::Hold));
+            let what = match &action {
+                SilenceAction::Alert => "the programme is unchanged".to_string(),
+                SilenceAction::Hold => "the programme is held until somebody calls".to_string(),
+                SilenceAction::Slate => "cutting to the slate".to_string(),
+                SilenceAction::Fallback(id) => format!("cutting to {id}"),
+            };
+            let message = format!(
+                "'{who}' made the last take and has made no call for {after} seconds: {what}. \
+                 Any call from any token clears this."
+            );
+            warn!(%who, after, action = %action.as_str(), "operator silence");
+            app.mixer.emit(Event::Alert {
+                severity: godwinmix_protocol::types::Severity::Critical,
+                message,
+            });
+            let target = match &action {
+                SilenceAction::Slate => Some(None),
+                SilenceAction::Fallback(id) => Some(Some(id.clone())),
+                _ => None,
+            };
+            if let Some(source) = target {
+                app.history.expect("core");
+                let _ = app
+                    .mixer
+                    .request(|ack| Command::Take {
+                        source,
+                        at_running_time_ms: None,
+                        ack: Some(ack),
+                    })
+                    .await;
             }
         }
     });
@@ -1236,7 +1353,7 @@ pub async fn serve(bind: &str, state: AppState) -> Result<()> {
     info!(%bind, "control server listening");
     let snapshots =
         Tracker::new(state.snapshot.clone(), state.multiview.clone(), state.mixer.clone());
-    spawn_history(state.clone());
+    spawn_background(state.clone());
     let observe = crate::observe::router(observe_state(&state));
     // Connect info so the snapshot rate limit can tell one client from
     // another. Nothing else uses it, and a request without it still works.

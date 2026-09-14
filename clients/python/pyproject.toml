@@ -1,0 +1,39 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "godwinmix"
+# The major version is the api_level this library speaks.
+version = "1.0.0"
+description = "Client for the GodwinMix control protocol: connect, subscribe, a state store, typed calls, the multiview frame decoder, MJPEG and a schema to form reader"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "Apache-2.0" }
+authors = [{ name = "GodwinMix" }]
+keywords = ["video", "mixer", "broadcast", "jsonrpc", "websocket", "godwinmix"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Framework :: AsyncIO",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: Apache Software License",
+    "Programming Language :: Python :: 3",
+    "Topic :: Multimedia :: Video",
+]
+# Nothing at runtime. A Raspberry Pi with no index can still run a panel.
+dependencies = []
+
+[project.optional-dependencies]
+# The Tkinter example decodes JPEGs for its preview. tkinter itself ships with
+# Python; Pillow does not.
+tk = ["pillow>=9"]
+
+[project.urls]
+Homepage = "https://github.com/psmux/modulargodwinmix"
+Source = "https://github.com/psmux/modulargodwinmix/tree/main/clients/python"
+
+[tool.setuptools]
+packages = ["godwinmix"]
+
+[tool.setuptools.package-data]
+godwinmix = ["py.typed"]

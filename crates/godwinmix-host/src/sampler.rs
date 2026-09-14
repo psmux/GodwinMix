@@ -186,7 +186,7 @@ mod tests {
         // A pid that cannot be running: one above the largest a 32 bit pid
         // space holds.
         let out = sampler.sample(&[u32::MAX]);
-        assert!(out.get(&u32::MAX).is_none());
+        assert!(!out.contains_key(&u32::MAX));
     }
 
     #[test]

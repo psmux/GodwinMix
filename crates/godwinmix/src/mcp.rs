@@ -30,6 +30,8 @@ use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tracing::{debug, warn};
 
 const SERVER_NAME: &str = "godwinmix";
+/// The tasks extension this server declares, for a client that speaks it.
+pub const TASKS_EXTENSION: &str = "io.modelcontextprotocol/tasks";
 /// Offered when the client asks for a revision we have not heard of. The
 /// client then either accepts it or disconnects; either is better than
 /// pretending to speak something we do not.
@@ -52,22 +54,56 @@ pub struct Server {
     profile: Profile,
 }
 
-/// Serve until stdin closes. EOF is how a client says goodbye, so it exits 0.
-pub async fn run(url: &str, token: Option<String>, profile: Profile) -> Result<()> {
-    let server = Server::new(url, token, profile);
+/// Serve until stdin closes, or on a Streamable HTTP address.
+///
+/// EOF on stdin is how a client says goodbye, so the stdio form exits 0.
+/// `http` is `gmx mcp --http 127.0.0.1:8765`: the same tool surface, reached
+/// over `POST /mcp`, with server initiated messages on `GET /mcp`.
+pub async fn run(
+    url: &str,
+    token: Option<String>,
+    profile: Profile,
+    http: Option<String>,
+) -> Result<()> {
+    let server = std::sync::Arc::new(Server::new(url, token.clone(), profile));
     debug!(base = %server.base, profile = profile.as_str(), "mcp server ready");
+    // The push behind both transports: a /rpc socket subscribed to
+    // event/agent.state, so an agent hears about a take rather than polling.
+    let pushes = crate::mcp_http::notifications(url, token);
+    if let Some(addr) = http {
+        let shared = crate::mcp_http::Shared { server, pushes };
+        return crate::mcp_http::serve(&addr, shared).await;
+    }
+    serve_stdio(server, pushes).await
+}
+
+/// stdio: one JSON object per line in, one out, and nothing else on stdout.
+async fn serve_stdio(
+    server: std::sync::Arc<Server>,
+    pushes: tokio::sync::broadcast::Sender<Value>,
+) -> Result<()> {
     let mut lines = BufReader::new(tokio::io::stdin()).lines();
     let mut stdout = tokio::io::stdout();
-    while let Some(line) = lines.next_line().await.context("reading stdin")? {
-        if line.trim().is_empty() {
-            continue;
-        }
-        if let Some(reply) = server.handle(&line).await {
-            let mut text = serde_json::to_string(&reply).context("encoding reply")?;
-            text.push('\n');
-            stdout.write_all(text.as_bytes()).await.context("writing stdout")?;
-            stdout.flush().await.context("flushing stdout")?;
-        }
+    let mut notifications = pushes.subscribe();
+    loop {
+        let out = tokio::select! {
+            line = lines.next_line() => match line.context("reading stdin")? {
+                None => break,
+                Some(line) if line.trim().is_empty() => continue,
+                Some(line) => server.handle(&line).await,
+            },
+            // Server initiated, which stdio carries as well as HTTP does.
+            push = notifications.recv() => match push {
+                Ok(message) => Some(message),
+                Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => continue,
+                Err(tokio::sync::broadcast::error::RecvError::Closed) => continue,
+            },
+        };
+        let Some(message) = out else { continue };
+        let mut text = serde_json::to_string(&message).context("encoding reply")?;
+        text.push('\n');
+        stdout.write_all(text.as_bytes()).await.context("writing stdout")?;
+        stdout.flush().await.context("flushing stdout")?;
     }
     debug!("stdin closed, exiting");
     Ok(())
@@ -327,6 +363,7 @@ impl Server {
             let id = args
                 .get("id")
                 .or_else(|| args.get("name"))
+                .or_else(|| args.get("task_id"))
                 .and_then(Value::as_str)
                 .map(str::trim)
                 .filter(|s| !s.is_empty())
@@ -336,6 +373,7 @@ impl Server {
                 return Err(format!("{tool}: `id` {id:?} is not a valid id"));
             }
             args.remove("id");
+            args.remove("task_id");
             rest.path.replace("{id}", &id)
         } else {
             rest.path.clone()
@@ -488,7 +526,19 @@ fn initialize_result(params: &Value, profile: Profile) -> Value {
     };
     json!({
         "protocolVersion": version,
-        "capabilities": { "tools": {} },
+        "capabilities": {
+            "tools": {},
+            // 03 section 6 and 09 section 5 item 9. A client that speaks the
+            // tasks extension reads a long running call through it; one that
+            // does not gets the same `{task_id, poll_interval_ms}` body and
+            // calls `task_get`, which `search_tools` finds.
+            "experimental": {
+                TASKS_EXTENSION: {
+                    "ttlMs": godwinmix_core::tasks::TTL.as_millis() as u64,
+                    "pollIntervalMs": godwinmix_core::tasks::POLL_INTERVAL_MS,
+                }
+            }
+        },
         "serverInfo": { "name": SERVER_NAME, "version": env!("CARGO_PKG_VERSION") },
         "instructions": format!(
             "GodwinMix is a live video mixer: several sources come in, one is on programme at \
@@ -500,7 +550,12 @@ fn initialize_result(params: &Value, profile: Profile) -> Value {
              tool talks to the running mixer over its HTTP API, so refusals come back \
              verbatim with the mixer's own reason and the next step to take. Mutating tools \
              accept an `idempotency_key`, so a retry after a timeout is free; destructive \
-             ones accept `dry_run: true`, which answers what would change without changing it.",
+             ones accept `dry_run: true`, which answers what would change without changing it. \
+             A call that would take more than five seconds answers at once with a `task_id`: \
+             the work is still running, the outcome is indeterminate rather than failed, and \
+             `task_get` reads it. Server initiated `notifications/gmx/agent.state` arrive on \
+             this connection when a take lands or a source goes black, so you do not have to \
+             poll for either.",
             profile.as_str()
         )
     })
@@ -528,6 +583,19 @@ mod tests {
 
     fn server() -> Server {
         Server::new("http://127.0.0.1:1", None, Profile::Standard)
+    }
+
+    /// The tasks extension, declared with the numbers a client needs to poll
+    /// without guessing.
+    #[tokio::test]
+    async fn initialize_declares_the_tasks_extension() {
+        let r = ask(r#"{"jsonrpc":"2.0","id":1,"method":"initialize"}"#).await;
+        let tasks = &r["result"]["capabilities"]["experimental"][TASKS_EXTENSION];
+        assert_eq!(tasks["ttlMs"], 3_600_000u64);
+        assert_eq!(tasks["pollIntervalMs"], 1_000u64);
+        let instructions = r["result"]["instructions"].as_str().unwrap();
+        assert!(instructions.contains("task_id"), "{instructions}");
+        assert!(instructions.contains("notifications/gmx/agent.state"), "{instructions}");
     }
 
     async fn ask(line: &str) -> Value {

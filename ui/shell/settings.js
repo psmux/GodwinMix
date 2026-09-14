@@ -130,6 +130,21 @@ export function openSettings(client, opts = {}) {
   simple.appendChild(check("Show the scrubber on files", s.lanes, (v) => setSetting("lanes", v)));
   simple.appendChild(check("Ask before removing anything", s.confirmRemove, (v) => setSetting("confirmRemove", v)));
 
+  simple.appendChild(
+    field(
+      "Setting up",
+      el("button.btn", {
+        text: "Show the welcome tiles again",
+        onclick: async () => {
+          const { showWelcomeAgain } = await import("../panels/welcome/panel.js");
+          m.close();
+          showWelcomeAgain();
+        },
+      }),
+      "The five tiles this mixer opened with. Picking one applies its preset over what is here now."
+    )
+  );
+
   // ------------------------------------------------------- advanced tab
 
   advanced.appendChild(

@@ -390,12 +390,24 @@ async fn add(call: Call, params: Value) -> Result<Value, RpcError> {
             )],
         ));
     }
-    // Fast enough to finish inside the call: a local copy of a directory and a
-    // manifest parse. A git source has to build, which is what the task id in
-    // 03 section 6 is for, and that arrives with git in Phase 5.
-    let installed = loader::install_from_path(&path)
-        .map_err(|e| RpcError::invalid_params(format!("{e:#}")))?;
-    body(record(&installed))
+    // A local copy of a directory and a manifest parse is usually quick, and a
+    // plugin with a venv to build or a node_modules to install is not. So this
+    // answers with a task handle either way, which is what 03 section 6 asks
+    // of every method that might take longer than five seconds: a client's own
+    // timeout then never leaves the work in an unknown state.
+    let source = path.clone();
+    Ok(super::tasks::spawn_task(
+        &call.app.tasks,
+        "plugin.add",
+        Some(serde_json::json!({ "source": req.source })),
+        move |_ctx| async move {
+            let installed = tokio::task::spawn_blocking(move || loader::install_from_path(&source))
+                .await
+                .map_err(|e| format!("the install task did not finish: {e}"))?
+                .map_err(|e| format!("{e:#}"))?;
+            serde_json::to_value(record(&installed)).map_err(|e| e.to_string())
+        },
+    ))
 }
 
 async fn remove(call: Call, params: Value) -> Result<Value, RpcError> {

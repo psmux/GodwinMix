@@ -23,7 +23,7 @@ export function parseFrame(buffer) {
   return {
     seq: view.getUint32(0, true),
     layout: view.getUint32(4, true),
-    runningTimeNs: view.getBigUint64(8, true),
+    runningTimeMs: view.getBigUint64(8, true),
     jpeg: bytes.subarray(HEADER_BYTES),
   };
 }
@@ -31,7 +31,7 @@ export function parseFrame(buffer) {
 /** Wrap a bare JPEG so callers see one shape whichever transport delivered it. */
 export function bareFrame(buffer, layout) {
   const bytes = buffer instanceof ArrayBuffer ? new Uint8Array(buffer) : buffer;
-  return { seq: 0, layout: layout || 0, runningTimeNs: 0n, jpeg: bytes };
+  return { seq: 0, layout: layout || 0, runningTimeMs: 0n, jpeg: bytes };
 }
 
 /**

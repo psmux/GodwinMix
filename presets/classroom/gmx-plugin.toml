@@ -2,7 +2,7 @@
 name = "classroom"
 version = "1.0.0"
 api = 1
-description = "A lesson recorded and streamed: one camera, the teacher's screen beside it, a local recording and one destination."
+description = "A lesson recorded and streamed: a camera on the teacher, the screen beside it, the slides from a file, a recording and one destination."
 license = "Apache-2.0"
 authors = ["The GodwinMix authors"]
 repository = "https://github.com/psmux/GodwinMix"
@@ -14,9 +14,19 @@ kind = "preset"
 id = "classroom"
 
 [provides.preset]
-plugins = ["camera@^1", "screen@^1", "rtmp@^1", "file-record@^1"]
+plugins = ["camera@^1", "screen@^1", "rtmp@^1"]
 config = "config/godwinmix.toml"
 layout = "config/layout.json"
 surface = "web"
 theme = "daylight"
 scenes = "scenes"
+theme_css = "theme.css"
+gallery = "snapshot"
+
+# The three things the person does next. The welcome panel in the web UI
+# shows these in this order, and the README repeats them.
+steps = [
+  "Point the camera source at your webcam, or leave the placeholder and drop a file on the page.",
+  "Put your school's streaming URL and key into the [[outputs]] block, or record only.",
+  "Run `gmx`, open http://localhost:8080, and press Camera to start the lesson.",
+]

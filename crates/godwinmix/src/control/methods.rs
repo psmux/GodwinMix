@@ -18,12 +18,15 @@ use serde_json::{json, Value};
 use std::future::Future;
 use std::sync::Arc;
 
+pub mod agent;
 mod filters;
 mod media;
 mod outputs;
 mod plugins;
+pub mod presets;
 mod program;
 mod sources;
+mod tasks;
 
 /// Wrap an async function as a handler, so a registration reads as one thing.
 pub(crate) fn handler<F, Fut>(f: F) -> Handler<Call>
@@ -52,8 +55,11 @@ pub fn registry() -> Registry<Call> {
     sources::register(&mut reg);
     outputs::register(&mut reg);
     media::register(&mut reg);
+    tasks::register(&mut reg);
+    agent::register(&mut reg);
     filters::register(&mut reg);
     plugins::register(&mut reg);
+    presets::register(&mut reg);
     crate::observe::register(&mut reg);
     // Other modules add their own here. One line each, and they land on
     // /rpc, /api/v1, protocol.json and the tool list together. See
@@ -78,6 +84,7 @@ fn register_core(reg: &mut Registry<Call>) {
                     canvas: call.app.canvas,
                     token: Some(call.token.info()),
                     rehearsal: call.app.rehearsal,
+                    ui: presets::ui_defaults(),
                 })
             }),
         )
@@ -152,33 +159,6 @@ fn register_core(reg: &mut Registry<Call>) {
 
 /// What the core will tell you about itself and the machine it is on.
 fn register_introspection(reg: &mut Registry<Call>) {
-    reg.register(
-        MethodDef::new(
-            "agent.state",
-            Scope::Read,
-            "The compact document written for agents: the programme, each source's state \
-             and a motion score saying how much its picture is changing.",
-            handler(|call: Call, _| async move {
-                let status = call.app.mixer.status().await.map_err(|e| call.mixer_error(e))?;
-                body(godwinmix_core::snapshot::agent_state(
-                    &status,
-                    call.snapshots.latest().as_ref(),
-                    call.snapshots.enabled(),
-                ))
-            }),
-        )
-        .result(any_object)
-        .tool(
-            "agent_state",
-            Tier::Minimal,
-            "Compact state written for agents, a few hundred tokens: the programme source, \
-             each source's id and state, and a motion score saying how much its picture is \
-             changing, so you can tell a live camera from a frozen or black one without \
-             looking at it. Start here. Use `snapshot` only when you need to see what is \
-             actually in the shot.",
-        ),
-    );
-
     reg.register(
         MethodDef::new(
             "codec.list",

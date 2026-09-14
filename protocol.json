@@ -173,6 +173,130 @@
       ],
       "type": "object"
     },
+    "AgentExt": {
+      "anyOf": [
+        {
+          "description": "`\"agent\": true` or `false`.",
+          "type": "boolean"
+        },
+        {
+          "properties": {
+            "black": {
+              "default": null,
+              "description": "Fraction of the picture at black. Default 0.98.",
+              "format": "double",
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "freeze_ms": {
+              "default": null,
+              "description": "How long the picture has to be identical. Default 200.",
+              "format": "uint64",
+              "minimum": 0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "shot": {
+              "default": null,
+              "description": "Shot change score, 0 to 1. Default 0.3.",
+              "format": "double",
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "silence_ms": {
+              "default": null,
+              "description": "How long the programme has to be quiet. Default 500.",
+              "format": "uint64",
+              "minimum": 0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            }
+          },
+          "type": "object"
+        }
+      ],
+      "description": "`ext.agent`. `true` takes the default thresholds; an object moves them."
+    },
+    "AgentStateRequest": {
+      "properties": {
+        "response_format": {
+          "$ref": "#/$defs/ResponseFormat",
+          "default": "concise"
+        }
+      },
+      "type": "object"
+    },
+    "ApplyRequest": {
+      "properties": {
+        "dry_run": {
+          "default": false,
+          "description": "Work out the plan and write nothing.",
+          "type": "boolean"
+        },
+        "force": {
+          "default": false,
+          "description": "Take the preset's value wherever the operator already has one.",
+          "type": "boolean"
+        },
+        "keep_sources": {
+          "default": false,
+          "description": "Leave the operator's sources and outputs alone.",
+          "type": "boolean"
+        },
+        "name": {
+          "description": "A preset name, or a path to a directory holding `gmx-plugin.toml`.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "type": "object"
+    },
+    "ApplyResult": {
+      "description": "What `preset.apply` answers with.",
+      "properties": {
+        "applied": {
+          "description": "Present when the preset was actually applied."
+        },
+        "dry_run": {
+          "description": "True when nothing was written because `dry_run` was set.",
+          "type": "boolean"
+        },
+        "live": {
+          "description": "The sources and outputs this core picked up without a restart.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "needs_restart": {
+          "description": "What still needs a restart, in plain words. Empty is the good case.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "plan": {
+          "description": "The whole plan, as JSON. The same object `preset.list` rows point at."
+        }
+      },
+      "required": [
+        "dry_run",
+        "plan",
+        "live",
+        "needs_restart"
+      ],
+      "type": "object"
+    },
     "AudioSetParams": {
       "description": "`source.audio.set` takes an id as well as the levels: the id comes off the\npath on REST and out of the params on `/rpc`, and both land in one object.",
       "properties": {
@@ -395,6 +519,17 @@
           ],
           "description": "Present when the request carried a token the core recognises."
         },
+        "ui": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/UiDefaults"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "What a surface should start with, when a preset chose it. Absent on a\ncore no preset has been applied to, which is what puts the welcome\npanel up in the reference UI."
+        },
         "version": {
           "description": "The build's own version, as in Cargo.toml.",
           "type": "string"
@@ -416,6 +551,17 @@
       "additionalProperties": true,
       "description": "The `ext` table from 03 section 6.\n\nEvery key is off by default. A terminal UI takes meters and tally and\ndeclines multiview; a Stream Deck takes tally only; an agent takes nothing.",
       "properties": {
+        "agent": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/AgentExt"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "`event/agent.state` when a threshold crosses or a state flips, with a\nsnapshot URL. `true` takes the defaults from 09 section 5 item 12."
+        },
         "meters": {
           "description": "`event/meters` at 10 per second.",
           "type": "boolean"
@@ -438,6 +584,17 @@
         "tally": {
           "description": "`event/tally`.",
           "type": "boolean"
+        },
+        "telemetry": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/TelemetryExt"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "`event/telemetry`: a line of numbers per tick, at 1 to 10 per second.\nThis is what turns the probes on; nothing measures until it is here."
         }
       },
       "type": "object"
@@ -1477,6 +1634,13 @@
       ],
       "type": "object"
     },
+    "ResponseFormat": {
+      "enum": [
+        "concise",
+        "detailed"
+      ],
+      "type": "string"
+    },
     "Resync": {
       "description": "`event/resync`: the client fell behind and the stream has a hole in it.",
       "properties": {
@@ -1496,6 +1660,26 @@
       "required": [
         "from_seq",
         "dropped"
+      ],
+      "type": "object"
+    },
+    "SaveRequest": {
+      "properties": {
+        "name": {
+          "description": "The new preset's name. A slug: lower case letters, digits and hyphens.",
+          "type": "string"
+        },
+        "out": {
+          "default": null,
+          "description": "Where to write it. Defaults to `~/.godwinmix/presets/<name>`.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "name"
       ],
       "type": "object"
     },
@@ -1947,6 +2131,105 @@
       ],
       "type": "object"
     },
+    "TaskRequest": {
+      "properties": {
+        "task_id": {
+          "description": "The id a long running method answered with. Spelled `id` on the REST\nroute, where it is in the path, and `task_id` everywhere else, which\nis what 03 section 6 calls it.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "task_id"
+      ],
+      "type": "object"
+    },
+    "TaskState": {
+      "enum": [
+        "running",
+        "completed",
+        "failed",
+        "cancelled"
+      ],
+      "type": "string"
+    },
+    "TaskView": {
+      "description": "What `task.get` answers with.",
+      "properties": {
+        "age_secs": {
+          "description": "Seconds since the task was started.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "error": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "kind": {
+          "description": "The method that started it, so a client reading a list knows what it is\nlooking at.",
+          "type": "string"
+        },
+        "poll_interval_ms": {
+          "description": "How long to wait before asking again, while it is still running.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "progress": {
+          "description": "0 to 1 where the work can say, absent where it cannot.",
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "result": {
+          "description": "The body the method would have answered with, once it is done."
+        },
+        "state": {
+          "$ref": "#/$defs/TaskState"
+        },
+        "task_id": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "task_id",
+        "kind",
+        "state",
+        "age_secs"
+      ],
+      "type": "object"
+    },
+    "TelemetryExt": {
+      "anyOf": [
+        {
+          "description": "`\"telemetry\": true` or `false`.",
+          "type": "boolean"
+        },
+        {
+          "properties": {
+            "hz": {
+              "default": null,
+              "description": "Ticks per second, 1 to 10. The core clamps to that range.",
+              "format": "uint32",
+              "minimum": 0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            }
+          },
+          "type": "object"
+        }
+      ],
+      "description": "`ext.telemetry`. Accepts `false` to mean off, `true` for the default rate,\nor an object naming it."
+    },
     "TokenInfo": {
       "description": "What the calling token is allowed to do, echoed back so a surface can grey\nout what it cannot reach instead of discovering it at the first refusal.",
       "properties": {
@@ -1978,6 +2261,43 @@
         "rehearsal",
         "profile"
       ],
+      "type": "object"
+    },
+    "UiDefaults": {
+      "description": "What a surface starts with: the layout, the theme and the gallery mode.\n\nChosen by a preset (`preset.apply`), carried in `core.info` and pushed as\n`event/ui.changed`. None of it changes what the core does. It exists so the\nfirst page a volunteer sees is the one their preset chose rather than the\none the last person to use this browser chose. 05 section 3b is where the\nfour gallery modes are defined.",
+      "properties": {
+        "gallery": {
+          "description": "`live`, `snapshot`, `icon` or `label`. Absent means the surface asks\nthe machine, which is what `gmx doctor` proposes.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "layout": {
+          "additionalProperties": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "description": "Slot to panels, top to bottom. Empty means the surface's own default.",
+          "type": "object"
+        },
+        "preset": {
+          "description": "The preset that set these, so a surface knows one has been applied.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "theme": {
+          "description": "A theme id the surface resolves, for example `dark` or `calm`.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
       "type": "object"
     }
   },
@@ -2237,6 +2557,22 @@
     },
     {
       "ext": null,
+      "legacy": null,
+      "name": "event/ui.changed",
+      "pattern": "ui.changed",
+      "payload": {
+        "properties": {
+          "ui": {
+            "$ref": "#/$defs/UiDefaults"
+          }
+        },
+        "type": "object"
+      },
+      "since": "1",
+      "summary": "The surface defaults changed: a preset was applied, or an operator set the layout, theme or gallery mode by hand. Nothing on air moves."
+    },
+    {
+      "ext": null,
       "legacy": "media_changed",
       "name": "event/media.changed",
       "pattern": "media.changed",
@@ -2292,6 +2628,78 @@
       },
       "since": "1",
       "summary": "Something an operator should see. Also written to the log and to the alert webhook."
+    },
+    {
+      "ext": "telemetry",
+      "legacy": null,
+      "name": "event/telemetry",
+      "pattern": "telemetry",
+      "payload": {
+        "properties": {
+          "black": {
+            "description": "fraction of the picture at or below black, 0 to 1",
+            "type": "number"
+          },
+          "freeze": {
+            "type": "boolean"
+          },
+          "lufs_i": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "lufs_s": {
+            "description": "short term loudness over three seconds, approximated from the programme meter",
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "shot": {
+            "description": "how much the picture changed since the last frame, 0 to 1",
+            "type": "number"
+          },
+          "silence": {
+            "type": "boolean"
+          },
+          "sources": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "description": "source id to 1 when it is live and 0 otherwise",
+            "type": "object"
+          },
+          "ts": {
+            "description": "milliseconds since the Unix epoch",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "ts",
+          "shot",
+          "black",
+          "freeze",
+          "silence",
+          "sources"
+        ],
+        "type": "object"
+      },
+      "since": "1",
+      "summary": "Numbers instead of a picture, up to ten times a second and under 200 bytes: the shot change score, the black ratio, a freeze flag, short term and integrated loudness, a silence flag and which sources are live. From cheap probes on the raw programme frames, which run only while a client is subscribed."
+    },
+    {
+      "ext": "agent",
+      "legacy": null,
+      "name": "event/agent.state",
+      "pattern": "agent.state",
+      "payload": {
+        "additionalProperties": true,
+        "description": "The concise agent.state document, plus `why` (one of program, black, freeze, silence, shot) and `snapshot`.",
+        "type": "object"
+      },
+      "since": "1",
+      "summary": "The agent.state document, pushed when a telemetry threshold crosses or a take lands, with `why` naming which and a snapshot URL beside it. Edge triggered and at most one a second, so a picture that stays black is one message rather than one a tick."
     },
     {
       "ext": "multiview",
@@ -2648,9 +3056,7 @@
       "mutating": false,
       "name": "agent.state",
       "params": {
-        "additionalProperties": false,
-        "properties": {},
-        "type": "object"
+        "$ref": "#/$defs/AgentStateRequest"
       },
       "rest": {
         "method": "GET",
@@ -3560,6 +3966,79 @@
       "summary": "Per instance cpu, memory, media latency, dropped buffers and restarts, refreshed once a second."
     },
     {
+      "destructive": true,
+      "idempotent": true,
+      "mcp": {
+        "destructiveHint": true,
+        "idempotentHint": true,
+        "profile": "search",
+        "readOnlyHint": false,
+        "tool": "apply_preset"
+      },
+      "mutating": true,
+      "name": "preset.apply",
+      "params": {
+        "$ref": "#/$defs/ApplyRequest"
+      },
+      "rest": {
+        "method": "POST",
+        "path": "/api/v1/preset/apply"
+      },
+      "result": {
+        "$ref": "#/$defs/ApplyResult"
+      },
+      "scope": "admin",
+      "since": "1",
+      "summary": "Put a preset on this core: its config, its scenes, its layout, its theme and its gallery mode. Pass dry_run to get the plan and write nothing."
+    },
+    {
+      "destructive": false,
+      "idempotent": true,
+      "mcp": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "profile": "search",
+        "readOnlyHint": true,
+        "tool": "list_presets"
+      },
+      "mutating": false,
+      "name": "preset.list",
+      "params": {
+        "additionalProperties": false,
+        "properties": {},
+        "type": "object"
+      },
+      "rest": {
+        "method": "GET",
+        "path": "/api/v1/preset/list"
+      },
+      "result": {
+        "type": "object"
+      },
+      "scope": "read",
+      "since": "1",
+      "summary": "Every preset this core can apply: the six built in, plus anything installed beside the binary or under ~/.godwinmix/presets."
+    },
+    {
+      "destructive": false,
+      "idempotent": true,
+      "mutating": true,
+      "name": "preset.save",
+      "params": {
+        "$ref": "#/$defs/SaveRequest"
+      },
+      "rest": {
+        "method": "POST",
+        "path": "/api/v1/preset/save"
+      },
+      "result": {
+        "type": "object"
+      },
+      "scope": "admin",
+      "since": "1",
+      "summary": "Turn this core's working setup into a preset directory somebody else can apply. Stream keys and the control token are replaced with placeholders."
+    },
+    {
       "destructive": false,
       "idempotent": true,
       "mutating": false,
@@ -3868,6 +4347,82 @@
       "scope": "operate",
       "since": "1",
       "summary": "Move a seekable source to a position. Answers with where it actually landed."
+    },
+    {
+      "destructive": false,
+      "idempotent": true,
+      "mcp": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "profile": "search",
+        "readOnlyHint": false,
+        "tool": "task_cancel"
+      },
+      "mutating": true,
+      "name": "task.cancel",
+      "params": {
+        "$ref": "#/$defs/TaskRequest"
+      },
+      "rest": {
+        "method": "POST",
+        "path": "/api/v1/task/cancel"
+      },
+      "result": {
+        "type": "object"
+      },
+      "scope": "operate",
+      "since": "1",
+      "summary": "Ask a piece of long running work to stop. Cooperative: the answer says the request landed, not that the work has stopped yet."
+    },
+    {
+      "destructive": false,
+      "idempotent": true,
+      "mcp": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "profile": "search",
+        "readOnlyHint": true,
+        "tool": "task_get"
+      },
+      "mutating": false,
+      "name": "task.get",
+      "params": {
+        "$ref": "#/$defs/TaskRequest"
+      },
+      "rest": {
+        "method": "GET",
+        "path": "/api/v1/task"
+      },
+      "result": {
+        "$ref": "#/$defs/TaskView"
+      },
+      "scope": "read",
+      "since": "1",
+      "summary": "How a piece of long running work is getting on, and its answer once it has one."
+    },
+    {
+      "destructive": false,
+      "idempotent": true,
+      "mutating": false,
+      "name": "task.list",
+      "params": {
+        "additionalProperties": false,
+        "properties": {},
+        "type": "object"
+      },
+      "rest": {
+        "method": "GET",
+        "path": "/api/v1/task/list"
+      },
+      "result": {
+        "items": {
+          "$ref": "#/$defs/TaskView"
+        },
+        "type": "array"
+      },
+      "scope": "read",
+      "since": "1",
+      "summary": "Every background job this core knows about, newest first."
     }
   ],
   "transports": [

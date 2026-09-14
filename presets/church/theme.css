@@ -1,0 +1,27 @@
+/* calm: the church preset's own theme. A screen at the back of a hall, seen
+   from a few metres away by somebody who has not done this before. Warm, low
+   contrast between the panels and high contrast for the text, and a red that
+   still means "this is going out". Only custom properties: base.css has the
+   structure, and any property left out keeps its default. */
+
+:root {
+  --bg: #14110f;
+  --panel: #1d1917;
+  --panel2: #241f1c;
+  --raise: #2e2825;
+  --overlay: rgba(10, 8, 7, 0.74);
+  --line: #3a322e;
+  --line-soft: #241f1c;
+  --text: #f4efe9;
+  --dim: #a2968c;
+  --faint: #6d635b;
+  --on-accent: #14110f;
+  --live: #ff2a36;
+  --bad: #e06a55;
+  --ok: #4fc08a;
+  --warn: #f0b13c;
+  --accent: #d8a24a;
+  --select: #d8a24a;
+  --select-fill: rgba(216, 162, 74, 0.18);
+  --shadow: 0 8px 28px rgba(0, 0, 0, 0.55);
+}

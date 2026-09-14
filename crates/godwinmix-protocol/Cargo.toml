@@ -20,3 +20,11 @@ toml = { workspace = true }
 # runtime of their own; neither pulls in a media stack or a server.
 tracing = { workspace = true }
 parking_lot = { workspace = true }
+# `sync` only: a Notify so two requests racing on one idempotency key do not
+# both run the work. No runtime, no media stack, no system library; a client
+# library depending on this still installs with one cargo add.
+tokio = { workspace = true, features = ["sync"] }
+
+[dev-dependencies]
+# The idempotency race test needs a runtime and a clock. Test only.
+tokio = { workspace = true, features = ["macros", "rt", "time", "sync"] }

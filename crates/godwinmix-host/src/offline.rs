@@ -171,8 +171,7 @@ fn await_match(expected: &Value, lines: &mpsc::Receiver<String>) -> Result<Value
         transcript::explain(expected, &Value::Null)
             .lines()
             .next()
-            .unwrap_or("no matching line")
-            .to_string(),
+            .unwrap_or("no matching line"),
         STEP_TIMEOUT.as_secs(),
         if tail.is_empty() {
             " The plugin said nothing at all.".to_string()

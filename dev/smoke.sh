@@ -70,7 +70,7 @@ GMX="$REPO/target/debug/gmx"
 step "config from --example-config"
 "$REPO/target/debug/godwinmix" --example-config >"$WORK/example.toml" 2>/dev/null
 python3 - "$WORK/example.toml" "$WORK/godwinmix.toml" "$PORT" "$TOKEN" <<'PY'
-import re, sys
+import os, re, sys
 src, dst, port, token = sys.argv[1:5]
 text = open(src).read()
 # Comment out every [[sources]] and [[outputs]] block: a smoke test drives the
@@ -92,6 +92,13 @@ text = re.sub(r'(?m)^# token = .*$', f'token = "{token}"', text)
 # both have to let go before it comes down.
 text = re.sub(r'(?m)^linger_secs = .*$', 'linger_secs = 2', text)
 text = re.sub(r'(?m)^idle_secs = .*$', 'idle_secs = 2', text)
+# Plugins under the work directory, not the user's own. The plugin steps
+# install into this and check it is empty again afterwards.
+text = re.sub(
+    r'(?m)^# plugins_dir = .*$',
+    'plugins_dir = "%s/plugins"' % os.path.dirname(dst),
+    text,
+)
 open(dst, "w").write(text)
 PY
 if grep -q "^token = " "$WORK/godwinmix.toml" && grep -q "127.0.0.1:$PORT" "$WORK/godwinmix.toml"; then
@@ -237,6 +244,120 @@ if [[ $DOWN -eq 1 ]]; then ok; else bad "gmx_multiview_subscribers stuck at ${SU
 step "and the log says the mosaic was torn down"
 if grep -qi "multiview\|mosaic" "$LOG"; then ok; else bad "nothing in the log about the mosaic"; fi
 
+# --- presets ----------------------------------------------------------------
+#
+# The volunteer's install, on a directory that has nothing in it: the plan
+# first, then the real thing, then a core started from what it wrote.
+
+PWORK="$WORK/preset"
+mkdir -p "$PWORK"
+
+step "gmx preset list names the six official presets"
+LISTED="$("$GMX" preset list --json 2>"$WORK/preset.log" | python3 -c 'import json,sys; print(",".join(sorted(r["name"] for r in json.load(sys.stdin) if r["official"])))')"
+if [[ "$LISTED" == "broadcast,church,classroom,default,esports,headless-agent" ]]; then
+    ok
+else
+    bad "listed ${LISTED:-nothing}"
+fi
+
+step "preset apply --dry-run names the camera plugin"
+"$GMX" preset apply church --dry-run --config "$PWORK/godwinmix.toml" >"$WORK/dry.log" 2>&1
+if grep -q "MISSING  camera" "$WORK/dry.log" && [[ ! -f "$PWORK/godwinmix.toml" ]]; then
+    ok
+else
+    bad "$(tail -3 "$WORK/dry.log")"
+fi
+
+step "and nothing else in the plan is wrong"
+if grep -qiE "error|does not (load|apply|resolve|validate)" "$WORK/dry.log"; then
+    bad "$(grep -iE -m 2 'error|does not' "$WORK/dry.log")"
+else
+    ok
+fi
+
+step "preset apply writes config, scenes and [ui]"
+"$GMX" preset apply church --config "$PWORK/godwinmix.toml" >"$WORK/apply.log" 2>&1
+if [[ -f "$PWORK/godwinmix.toml" ]] && [[ -f "$PWORK/godwinmix.scenes.json" ]] \
+    && grep -q '^\[ui\]' "$PWORK/godwinmix.runtime.toml"; then
+    ok
+else
+    bad "$(tail -3 "$WORK/apply.log")"
+fi
+
+step "the preset's own comments came with its config"
+if grep -q "# The church preset" "$PWORK/godwinmix.toml"; then ok; else bad "the comments were lost"; fi
+
+step "applying it twice does not double the sources"
+BEFORE="$(grep -c '^\[\[sources\]\]' "$PWORK/godwinmix.toml")"
+"$GMX" preset apply church --config "$PWORK/godwinmix.toml" >>"$WORK/apply.log" 2>&1
+AFTER="$(grep -c '^\[\[sources\]\]' "$PWORK/godwinmix.toml")"
+if [[ "$BEFORE" == "$AFTER" ]]; then ok; else bad "$BEFORE sources became $AFTER"; fi
+
+step "a core starts from what the preset wrote"
+PPORT="$(python3 -c 'import socket;s=socket.socket();s.bind(("127.0.0.1",0));print(s.getsockname()[1]);s.close()')"
+python3 - "$PWORK/godwinmix.toml" "$PPORT" <<'PYEOF'
+import re, sys
+path, port = sys.argv[1], sys.argv[2]
+text = open(path).read()
+open(path, "w").write(re.sub(r'bind = "[^"]*"', f'bind = "127.0.0.1:{port}"', text))
+PYEOF
+"$REPO/target/debug/godwinmix" --config "$PWORK/godwinmix.toml" >"$WORK/preset-core.log" 2>&1 &
+PRESET_PID=$!
+PUP=0
+for _ in $(seq 1 80); do
+    if curl -fsS "http://127.0.0.1:$PPORT/api/v1/core/info" >"$WORK/pinfo.json" 2>/dev/null; then PUP=1; break; fi
+    sleep 0.25
+done
+if [[ $PUP -eq 1 ]]; then ok; else bad "the core did not come up: $(tail -3 "$WORK/preset-core.log")"; fi
+
+step "core.info carries the preset's theme and gallery"
+UI="$(python3 -c 'import json,sys; d=json.load(open(sys.argv[1])).get("ui") or {}; print(d.get("preset"), d.get("theme"), d.get("gallery"), len(d.get("layout") or {}))' "$WORK/pinfo.json" 2>/dev/null)"
+if [[ "$UI" == "church calm icon 4" ]]; then ok; else bad "core.info ui is '${UI:-absent}'"; fi
+
+step "the preset's theme is served over HTTP"
+if curl -fsS "http://127.0.0.1:$PPORT/presets/church/theme.css" | grep -q -- "--live"; then
+    ok
+else
+    bad "no stylesheet at /presets/church/theme.css"
+fi
+
+step "ctl status: the preset's sources and outputs"
+GODWINMIX_URL="http://127.0.0.1:$PPORT" "$GMX" ctl status >"$WORK/pstatus.log" 2>&1
+if grep -q "cam-wide" "$WORK/pstatus.log" && grep -q "youtube" "$WORK/pstatus.log"; then
+    ok
+else
+    bad "$(tr '\n' '; ' <"$WORK/pstatus.log")"
+fi
+
+step "preset.apply over the API returns the plan"
+APPLIED="$(curl -fsS -X POST "http://127.0.0.1:$PPORT/api/v1/preset/apply" \
+    -H 'content-type: application/json' -d '{"name":"church","dry_run":true}' \
+    | python3 -c 'import json,sys; r=json.load(sys.stdin); print(r["dry_run"], len(r["plan"]["steps"]))' 2>/dev/null)"
+if [[ "$APPLIED" == "True 3" ]]; then ok; else bad "preset.apply answered '${APPLIED:-nothing}'"; fi
+
+step "preset save writes one the loader reads back"
+"$GMX" preset save my-church --config "$PWORK/godwinmix.toml" --out "$PWORK/mine" >"$WORK/save.log" 2>&1
+if "$GMX" preset show "$PWORK/mine" --config "$PWORK/second.toml" >"$WORK/show.log" 2>&1 \
+    && grep -q "YOUR-STREAM-KEY" "$PWORK/mine/config/godwinmix.toml" \
+    && ! grep -q "token = \"" "$PWORK/mine/config/godwinmix.toml"; then
+    ok
+else
+    bad "$(tail -3 "$WORK/save.log") $(tail -3 "$WORK/show.log")"
+fi
+
+step "gmx build refuses to bundle a copyleft codec entry"
+"$GMX" build --preset church --name "SmokeMix" --out "$PWORK/build" --no-binary >"$WORK/build2.log" 2>&1
+if grep -q "copyleft" "$WORK/build2.log" \
+    && [[ -f "$PWORK/build/tauri.conf.json" ]] \
+    && ! grep -q "GPL-2.0" "$PWORK/build/codecs.toml"; then
+    ok
+else
+    bad "$(tail -3 "$WORK/build2.log")"
+fi
+
+kill "$PRESET_PID" 2>/dev/null
+wait "$PRESET_PID" 2>/dev/null
+
 # --- the clients ------------------------------------------------------------
 
 step "gmx ctl status"
@@ -245,6 +366,71 @@ if grep -q "bars" "$WORK/ctl.log"; then
     ok
 else
     bad "ctl status did not list the source: $(tr '\n' '; ' <"$WORK/ctl.log")"
+fi
+
+# --- a plugin, installed and removed while the programme runs ---------------
+# The whole tier 2 path in one step: a plugin written in shell, installed into a
+# live core, producing real frames at canvas caps, then removed with nothing
+# left behind. If this passes, a third party can write a source.
+step "gmx plugin new writes a plugin that passes the harness"
+PLUGDIR="$WORK/smoke-bars"
+if "$GMX" plugin new smoke-bars --kind source --lang shell --out "$PLUGDIR" \
+        >"$WORK/plugin-new.log" 2>&1 \
+    && "$GMX" plugin test "$PLUGDIR" --quick >"$WORK/plugin-test.log" 2>&1; then
+    ok
+else
+    bad "the generated plugin did not pass: $(tail -5 "$WORK/plugin-test.log" | tr '\n' '; ')"
+fi
+
+step "gmx plugin test --offline replays its transcript with no core"
+if "$GMX" plugin test "$PLUGDIR" --offline >"$WORK/plugin-offline.log" 2>&1; then
+    ok
+else
+    bad "the offline replay failed: $(tail -3 "$WORK/plugin-offline.log" | tr '\n' '; ')"
+fi
+
+step "gmx plugin add installs it into the running core"
+if GODWINMIX_URL="$BASE" GODWINMIX_TOKEN="$TOKEN" "$GMX" plugin add "$PLUGDIR" \
+        >"$WORK/plugin-add.log" 2>&1 \
+    && grep -q "smoke-bars/source" "$WORK/plugin-add.log"; then
+    ok
+else
+    bad "plugin add failed: $(tr '\n' '; ' <"$WORK/plugin-add.log")"
+fi
+
+step "its source goes live and carries its cost in plugin list"
+GODWINMIX_URL="$BASE" GODWINMIX_TOKEN="$TOKEN" "$GMX" ctl source add plugbars \
+    --type smoke-bars/source >"$WORK/plugin-source.log" 2>&1 || true
+LIVE=no
+for _ in 1 2 3 4 5 6 7 8 9 10; do
+    sleep 1
+    if GODWINMIX_URL="$BASE" GODWINMIX_TOKEN="$TOKEN" "$GMX" ctl status 2>/dev/null \
+            | grep -E "plugbars.*live" >/dev/null; then
+        LIVE=yes
+        break
+    fi
+done
+GODWINMIX_URL="$BASE" GODWINMIX_TOKEN="$TOKEN" "$GMX" plugin list \
+    >"$WORK/plugin-list.log" 2>&1 || true
+if [ "$LIVE" = yes ] && grep -q "plugbars" "$WORK/plugin-list.log"; then
+    ok
+else
+    bad "the plugin source did not go live: $(tr '\n' '; ' <"$WORK/plugin-list.log")"
+fi
+
+step "gmx plugin remove leaves no process and no directory"
+GODWINMIX_URL="$BASE" GODWINMIX_TOKEN="$TOKEN" "$GMX" ctl source remove plugbars \
+    >/dev/null 2>&1 || true
+sleep 1
+GODWINMIX_URL="$BASE" GODWINMIX_TOKEN="$TOKEN" "$GMX" plugin remove smoke-bars \
+    >"$WORK/plugin-remove.log" 2>&1 || true
+sleep 2
+STRAYS=$(pgrep -f "smoke-bars/0.1.0/run.sh" 2>/dev/null | wc -l | tr -d ' ')
+LEFT=$(ls "$WORK/plugins/smoke-bars" 2>/dev/null | wc -l | tr -d ' ')
+if [ "$STRAYS" = "0" ] && [ "$LEFT" = "0" ]; then
+    ok
+else
+    bad "removal left $STRAYS process(es) and $LEFT directory entr(ies)"
 fi
 
 step "gmx mcp lists 12 tools on standard"

@@ -915,6 +915,9 @@ impl Mixer {
         // encoder and the multiview split apart, so it is where the frame
         // counter and the interval histogram go. See `observe::metrics`.
         crate::observe::attach_programme(&program, &vraw_tee);
+        // And the telemetry probes, which read a subsampled luma grid off the
+        // same frames and cost one atomic load while nobody is subscribed.
+        crate::telemetry::attach(&vraw_tee);
 
         let venc = make(&sel.video_encode.element, "venc")?;
         crate::catalogue::apply::apply(&venc, &sel.video_encode.properties, &vars);
@@ -2078,8 +2081,17 @@ impl Mixer {
         struct Stored<'a> {
             sources: &'a [SourceConfig],
             outputs: &'a [OutputConfig],
+            /// The `[ui]` section `gmx preset apply` wrote, carried through
+            /// untouched. Without this, adding one source from the UI would
+            /// throw away the layout and theme the preset chose.
+            #[serde(skip_serializing_if = "Option::is_none")]
+            ui: Option<toml::Value>,
         }
-        let body = match toml::to_string_pretty(&Stored { sources: &live, outputs: &outputs }) {
+        let ui = std::fs::read_to_string(path)
+            .ok()
+            .and_then(|text| text.parse::<toml::Table>().ok())
+            .and_then(|table| table.get("ui").cloned());
+        let body = match toml::to_string_pretty(&Stored { sources: &live, outputs: &outputs, ui }) {
             Ok(b) => format!(
                 "# Sources and outputs managed from the GodwinMix UI or API.\n\
                  # These lists take precedence over the ones in the config file.\n\
@@ -3432,6 +3444,7 @@ mod tests {
             codecs: Default::default(),
             media: Default::default(),
             security: Default::default(),
+            safety: Default::default(),
             browser: Default::default(),
             stall: Default::default(),
             sources: vec![],
@@ -3440,6 +3453,7 @@ mod tests {
             plugins: Default::default(),
             source_path: Default::default(),
             tokens: vec![],
+            ui: Default::default(),
             extra: Default::default(),
         })
         .err()
@@ -3467,6 +3481,7 @@ mod tests {
             codecs: Default::default(),
             media: Default::default(),
             security: Default::default(),
+            safety: Default::default(),
             browser: Default::default(),
             stall: Default::default(),
             sources: vec![],
@@ -3475,6 +3490,7 @@ mod tests {
             plugins: Default::default(),
             source_path: Default::default(),
             tokens: vec![],
+            ui: Default::default(),
             extra: Default::default(),
         };
         cfg.multiview.enabled = false;
