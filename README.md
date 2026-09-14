@@ -328,9 +328,10 @@ theme directory. Nothing in this paragraph exists yet, and the pages under
 [docs/](docs/) say so where they describe it.
 
 Where to start reading: [CONTRIBUTING.md](CONTRIBUTING.md) for the build and
-the house style, [docs/explanation/](docs/explanation/) for why the thing is
-shaped the way it is, and `src/mixer.rs` for the pipeline everything else
-exists to protect.
+the house style, [docs/explanation/architecture.md](docs/explanation/architecture.md)
+for the crate map, [docs/explanation/](docs/explanation/) for why the thing is
+shaped the way it is, and `crates/godwinmix-core/src/mixer.rs` for the pipeline
+everything else exists to protect.
 
 ## For agents
 

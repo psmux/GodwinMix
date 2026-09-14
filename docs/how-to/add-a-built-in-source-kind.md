@@ -8,13 +8,14 @@ Read `docs/explanation/how-a-source-works.md` first if you have not. This is the
 mechanical part.
 
 The worked examples here are two things that were added this way and are small
-enough to read in one sitting: `src/plugin/outputs/srt.rs`, which is an entire
-new output in one file, and `src/plugin/filters/chroma.rs`, which is an entire
+enough to read in one sitting: `crates/godwinmix-core/src/plugin/outputs/srt.rs`,
+which is an entire new output in one file, and
+`crates/godwinmix-core/src/plugin/filters/chroma.rs`, which is an entire
 new filter in one file.
 
 ## 1. Write the file
 
-`src/plugin/kinds/<name>.rs`. Four things go in it.
+`crates/godwinmix-core/src/plugin/kinds/<name>.rs`. Four things go in it.
 
 **A manifest**, as a `const`. It is the Rust mirror of one `[[provides]]` entry
 in a plugin's `gmx-plugin.toml`:
@@ -83,8 +84,9 @@ fn start(&mut self, canvas: &CanvasCaps, thumb: bool) -> Result<MediaEnds> {
 
 `w.route` handles dynamic pads. If your element has static pads, link them
 yourself inside the closure and set `w.has_video` / `w.has_audio` so the status
-says what the source actually carries. `src/plugin/kinds/testsrc.rs` is the
-shortest example of the static pad case; `src/plugin/kinds/rtmp.rs` is the
+says what the source actually carries.
+`crates/godwinmix-core/src/plugin/kinds/testsrc.rs` is the shortest example of
+the static pad case; `crates/godwinmix-core/src/plugin/kinds/rtmp.rs` is the
 longest example of the dynamic one.
 
 `livesync(true)` for anything that drifts against our clock. `false` for a file
@@ -109,19 +111,19 @@ pub fn validate(params: &Params) -> Result<()> {
 
 Three lines, all in files that already exist.
 
-`src/plugin/kinds/mod.rs`:
+`crates/godwinmix-core/src/plugin/kinds/mod.rs`:
 
 ```rust
 pub mod ndi;
 ```
 
-`src/plugin/source.rs`, in `REGISTRY`:
+`crates/godwinmix-core/src/plugin/source.rs`, in `REGISTRY`:
 
 ```rust
 kinds::ndi::PROVIDE,
 ```
 
-`src/config.rs`, in `SourceConfig::validate_params`:
+`crates/godwinmix-core/src/config.rs`, in `SourceConfig::validate_params`:
 
 ```rust
 "ndi" => crate::plugin::kinds::ndi::validate(&params),
@@ -141,7 +143,8 @@ cargo run -- --test-core
 
 That checks every built in kind that needs no network. For a kind that does need
 one, write a test that calls the harness directly. The file source's test is the
-pattern to copy (`src/plugin/harness.rs`, `a_file_source_passes_the_same_checks`):
+pattern to copy (`crates/godwinmix-core/src/plugin/harness.rs`,
+`a_file_source_passes_the_same_checks`):
 it writes a clip with GStreamer, runs the checks against it, and removes the
 clip.
 
@@ -169,7 +172,8 @@ The checks, and what failing each one means:
 | `audio buffers` | the same for audio |
 | `stop` | the pipeline did not go to NULL, or the kind held on to something |
 
-Then run the descriptor and directory counting tests in `src/input.rs` if your
+Then run the descriptor and directory counting tests in
+`crates/godwinmix-core/src/input.rs` if your
 kind starts a process or writes a file:
 
 ```
@@ -178,9 +182,11 @@ cargo test --lib leaves_no_descriptors
 
 ## Adding an output instead
 
-Smaller. `src/plugin/outputs/<name>.rs` with a manifest, `claims`, and an
+Smaller. `crates/godwinmix-core/src/plugin/outputs/<name>.rs` with a manifest,
+`claims`, and an
 `Output` impl whose `build` makes a muxer and a sink and links the two queues
-the core hands you. Register it in `REGISTRY` in `src/plugin/output.rs`.
+the core hands you. Register it in `REGISTRY` in
+`crates/godwinmix-core/src/plugin/output.rs`.
 Everything that rides out a network outage (the feed queues on the programme
 side, the proxy pair, the reconnect backoff, the overflow watchdog, the keyframe
 request on reconnect) is already done for you and you must not repeat it.
@@ -193,7 +199,8 @@ back to the element's state on a build whose sink reports nothing.
 
 ## Adding a filter instead
 
-`src/plugin/filters/<name>.rs` with a manifest and a `Filter` impl whose `build`
+`crates/godwinmix-core/src/plugin/filters/<name>.rs` with a manifest and a
+`Filter` impl whose `build`
 returns a `gst::Bin` with `sink` and `src` ghost pads. Register it in
 `plugin::filter::make`.
 
