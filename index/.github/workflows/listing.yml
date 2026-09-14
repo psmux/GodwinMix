@@ -391,7 +391,7 @@ jobs:
           git push --force origin badges-rebuild:badges
 
   dashboard:
-    name: Regenerate compatibility.md
+    name: Record the results and regenerate compatibility.md
     needs: [resolve, sign]
     runs-on: ubuntu-latest
     permissions:
@@ -405,18 +405,56 @@ jobs:
         with:
           python-version: "3.12"
 
+      - name: Download what the five runners recorded
+        uses: actions/download-artifact@v4
+        with:
+          pattern: asset-*
+          merge-multiple: true
+          path: dist
+
+      - name: Write the harness results back into index.json
+        env:
+          PLUGIN: ${{ needs.resolve.outputs.plugin }}
+          VERSION: ${{ needs.resolve.outputs.version }}
+        run: |
+          python3 - <<'PY'
+          import glob, json, os
+
+          plugin, version = os.environ["PLUGIN"], os.environ["VERSION"]
+          results = []
+          for path in sorted(glob.glob("dist/*.harness")):
+              with open(path) as f:
+                  line = f.read().strip()
+              if line:
+                  results.append(line)
+
+          doc = json.load(open("index.json"))
+          entry = next(p for p in doc["plugins"] if p["name"] == plugin)
+          listed = next(v for v in entry["versions"] if v["version"] == version)
+          listed["harness"] = results
+          listed["signed"] = True
+          with open("index.json", "w") as f:
+              json.dump(doc, f, indent=2)
+              f.write("\n")
+          for line in results:
+              print(line)
+          PY
+
+      - name: Check the index still passes the bot after the write back
+        run: python3 bot/validate.py
+
       - name: Rewrite the dashboard from index.json
         run: python3 bot/dashboard.py
 
-      - name: Commit it when it moved
+      - name: Commit what moved
         run: |
           set -euo pipefail
           git config user.name "godwinmix-listing-bot"
           git config user.email "bot@users.noreply.github.com"
-          if git diff --quiet compatibility.md; then
-            echo "the dashboard did not move"
+          if git diff --quiet index.json compatibility.md; then
+            echo "nothing moved"
           else
-            git add compatibility.md
-            git commit -m "compatibility: ${{ needs.resolve.outputs.plugin }} ${{ needs.resolve.outputs.version }}"
+            git add index.json compatibility.md
+            git commit -m "results: ${{ needs.resolve.outputs.plugin }} ${{ needs.resolve.outputs.version }}"
             git push
           fi
