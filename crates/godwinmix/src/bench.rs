@@ -106,6 +106,14 @@ pub struct BenchArgs {
     /// Internal: this process is the child of the cold start row. It builds a
     /// mixer, waits for the first encoded programme frame, prints how long
     /// that took and exits.
+    /// The nightly run: every row over the full window, compared to the
+    /// budgets in 09 section 3, written to `bench/results/<machine>-<date>.md`,
+    /// and a non zero exit when a row is over.
+    ///
+    /// One flag rather than four, so the workflow that runs this every night
+    /// and the person reproducing it by hand type the same thing.
+    #[arg(long)]
+    pub nightly: bool,
     #[arg(long, hide = true)]
     pub cold_start_child: bool,
 }
@@ -117,6 +125,22 @@ impl BenchArgs {
 
     fn warmup(&self) -> Duration {
         Duration::from_secs(if self.quick { 1 } else { self.warmup })
+    }
+
+    /// What `--nightly` means, spelled once.
+    ///
+    /// The full window rather than the quick one, because a two second sample
+    /// of a mixer is a sample of it starting up. Everything written down,
+    /// because a nightly nobody kept is a nightly nobody can compare against.
+    /// Non zero over budget, because that is the only part a workflow reads.
+    fn nightly(mut self) -> Self {
+        if self.nightly {
+            self.quick = false;
+            self.budget = true;
+            self.no_write = false;
+            self.only = None;
+        }
+        self
     }
 
     fn wants(&self, id: &str) -> bool {
@@ -1042,6 +1066,7 @@ pub async fn run(args: BenchArgs) -> Result<()> {
     if args.cold_start_child {
         return cold_start_child(&args).await;
     }
+    let args = args.nightly();
     let machine = args.machine.clone().unwrap_or_else(hostname);
     let mut rows: Vec<Row> = Vec::new();
 

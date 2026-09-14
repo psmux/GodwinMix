@@ -1,0 +1,30 @@
+{
+  "id": "inset-the-picture-in-picture",
+  "instruction": "Put the close camera in the top right corner at a quarter size.",
+  "tags": [
+    "parameterised",
+    "pending",
+    "scenes"
+  ],
+  "pending": "scenes land with the scene server; there is no scene.item.* yet",
+  "initial": {
+    "sources": [
+      {
+        "id": "cam-wide",
+        "uri": "test://smpte"
+      },
+      {
+        "id": "cam-close",
+        "uri": "test://ball"
+      }
+    ],
+    "program": "cam-wide"
+  },
+  "expect_changes": [
+    {
+      "what": "param",
+      "id": "scene.item.set.transform",
+      "to": "top right, 0.25"
+    }
+  ]
+}

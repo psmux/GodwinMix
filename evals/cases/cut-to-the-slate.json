@@ -1,0 +1,26 @@
+{
+  "id": "cut-to-the-slate",
+  "instruction": "Cut to the slate.",
+  "tags": [
+    "take"
+  ],
+  "initial": {
+    "sources": [
+      {
+        "id": "cam-wide",
+        "uri": "test://smpte"
+      },
+      {
+        "id": "cam-close",
+        "uri": "test://ball"
+      }
+    ],
+    "program": "cam-wide"
+  },
+  "expect_changes": [
+    {
+      "what": "program",
+      "to": "slate"
+    }
+  ]
+}

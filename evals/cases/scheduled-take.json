@@ -1,0 +1,34 @@
+{
+  "id": "scheduled-take",
+  "instruction": "Take the close camera in 2 seconds.",
+  "tags": [
+    "parameterised",
+    "take"
+  ],
+  "initial": {
+    "sources": [
+      {
+        "id": "cam-wide",
+        "uri": "test://smpte"
+      },
+      {
+        "id": "cam-close",
+        "uri": "test://ball"
+      }
+    ],
+    "program": "cam-wide"
+  },
+  "expect_changes": [
+    {
+      "what": "param",
+      "id": "program.take.at_running_time_ms",
+      "to": "SCHEDULED"
+    },
+    {
+      "what": "program",
+      "to": "cam-close"
+    }
+  ],
+  "notes": "A take armed on a running time rather than now. The running time itself differs on every run, so the grader only asks that one was given.",
+  "settle_ms": 4000
+}

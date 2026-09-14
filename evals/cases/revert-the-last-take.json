@@ -1,0 +1,28 @@
+{
+  "id": "revert-the-last-take",
+  "instruction": "That was wrong, go back.",
+  "tags": [
+    "take"
+  ],
+  "initial": {
+    "sources": [
+      {
+        "id": "cam-wide",
+        "uri": "test://smpte"
+      },
+      {
+        "id": "cam-close",
+        "uri": "test://ball"
+      }
+    ],
+    "program": "cam-close",
+    "program_twice": "cam-wide"
+  },
+  "expect_changes": [
+    {
+      "what": "program",
+      "to": "cam-close"
+    }
+  ],
+  "notes": "Two takes happen before the mark, so revert has somewhere to go. What is graded is only the revert."
+}

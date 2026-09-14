@@ -1,0 +1,20 @@
+{
+  "id": "abstain-remove-a-source-that-is-not-there",
+  "instruction": "Take cam-jib out.",
+  "tags": [
+    "abstain"
+  ],
+  "initial": {
+    "sources": [
+      {
+        "id": "cam-wide",
+        "uri": "test://smpte"
+      },
+      {
+        "id": "cam-close",
+        "uri": "test://ball"
+      }
+    ]
+  },
+  "expect_changes": []
+}
