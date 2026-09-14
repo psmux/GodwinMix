@@ -5,6 +5,7 @@
 //! missing key as the default, because `configure` in the conformance harness
 //! sends one property at a time.
 
+use godwinmix_sdk::wire::Canvas;
 use serde_json::Value;
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -47,21 +48,49 @@ impl Settings {
 
     /// The caps to ask the device for.
     ///
-    /// Three structures, tried in this order: raw frames in system memory,
-    /// then Motion JPEG, then H.264. Raw first because it needs no decoder;
-    /// the other two because plenty of cameras will not offer 1080p any other
-    /// way. Naming `video/x-raw` without a memory feature is also what keeps a
-    /// macOS camera from handing back GL textures that `videoconvert` cannot
-    /// read.
-    pub fn device_caps(&self) -> String {
-        let mut fields = String::new();
-        if let Some((w, h)) = self.size {
-            fields.push_str(&format!(",width={w},height={h}"));
-        }
+    /// Three media types per size, tried in this order: raw frames in system
+    /// memory, then Motion JPEG, then H.264. Raw first because it needs no
+    /// decoder; the other two because plenty of cameras will not offer 1080p
+    /// any other way. Naming `video/x-raw` without a memory feature is also
+    /// what keeps a macOS camera from handing back GL textures that
+    /// `videoconvert` cannot read.
+    ///
+    /// With no `resolution` set, the sizes are tried canvas first, then 1080p,
+    /// then 720p, then anything at all. Order matters more than it looks: a
+    /// camera whose first advertised mode is 1080x1920 will hand over a
+    /// portrait picture to a pipeline that asked for nothing, and the operator
+    /// gets a tall strip in the middle of a wide canvas. Asking for the canvas
+    /// size first is what makes the common case land the right way up, and it
+    /// is cheaper too, because nothing is scaled that did not have to be.
+    pub fn device_caps(&self, canvas: Canvas) -> String {
+        let mut rate = String::new();
         if let Some(fps) = self.framerate {
-            fields.push_str(&format!(",framerate={fps}/1"));
+            rate.push_str(&format!(",framerate={fps}/1"));
         }
-        format!("video/x-raw{fields};image/jpeg{fields};video/x-h264{fields}")
+        let sizes: Vec<Option<(u32, u32)>> = match self.size {
+            Some(size) => vec![Some(size)],
+            None => {
+                let mut wanted = vec![Some((canvas.width, canvas.height))];
+                for size in [(1920, 1080), (1280, 720)] {
+                    if Some(size) != Some((canvas.width, canvas.height)) {
+                        wanted.push(Some(size));
+                    }
+                }
+                wanted.push(None);
+                wanted
+            }
+        };
+        let mut structures = Vec::with_capacity(sizes.len() * 3);
+        for size in sizes {
+            let fields = match size {
+                Some((w, h)) => format!(",width={w},height={h}{rate}"),
+                None => rate.clone(),
+            };
+            for media in ["video/x-raw", "image/jpeg", "video/x-h264"] {
+                structures.push(format!("{media}{fields}"));
+            }
+        }
+        structures.join(";")
     }
 }
 
@@ -135,9 +164,13 @@ mod tests {
         assert!(a.needs_restart(&d));
     }
 
+    fn canvas() -> Canvas {
+        Canvas::new(1280, 720, 30)
+    }
+
     #[test]
     fn the_device_caps_offer_raw_before_jpeg_before_h264() {
-        let caps = Settings::from(&json!({})).device_caps();
+        let caps = Settings::from(&json!({})).device_caps(canvas());
         let raw = caps.find("video/x-raw").expect("raw is offered");
         let jpeg = caps.find("image/jpeg").expect("jpeg is offered");
         let h264 = caps.find("video/x-h264").expect("h264 is offered");
@@ -149,10 +182,42 @@ mod tests {
     }
 
     #[test]
-    fn a_size_and_a_rate_reach_every_structure_of_the_device_caps() {
-        let caps =
-            Settings::from(&json!({"resolution": "1280x720", "framerate": 30})).device_caps();
-        assert_eq!(caps.matches("width=1280").count(), 3, "{caps}");
+    fn a_size_that_was_asked_for_is_the_only_one_offered() {
+        let caps = Settings::from(&json!({"resolution": "640x480", "framerate": 30}))
+            .device_caps(canvas());
+        assert_eq!(caps.matches("width=640").count(), 3, "{caps}");
         assert_eq!(caps.matches("framerate=30/1").count(), 3, "{caps}");
+        assert!(
+            !caps.contains("width=1920"),
+            "an explicit size means that size: {caps}"
+        );
+    }
+
+    #[test]
+    fn with_no_size_asked_for_the_canvas_is_tried_before_anything_else() {
+        let caps = Settings::from(&json!({})).device_caps(canvas());
+        let canvas_at = caps
+            .find("width=1280,height=720")
+            .expect("the canvas size is offered");
+        let full_hd = caps
+            .find("width=1920,height=1080")
+            .expect("1080p is offered");
+        assert!(
+            canvas_at < full_hd,
+            "the canvas size must be asked for first: {caps}"
+        );
+        // And something unconstrained at the end, so an odd camera still works.
+        assert!(caps.ends_with("video/x-h264"), "{caps}");
+    }
+
+    #[test]
+    fn a_portrait_camera_is_not_what_an_empty_setting_asks_for() {
+        // The regression this ordering exists for: a camera advertising
+        // 1080x1920 first hands over a tall strip when nothing is asked for.
+        let caps = Settings::from(&json!({})).device_caps(Canvas::new(1920, 1080, 30));
+        assert!(
+            caps.starts_with("video/x-raw,width=1920,height=1080"),
+            "{caps}"
+        );
     }
 }

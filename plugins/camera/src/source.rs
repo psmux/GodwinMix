@@ -10,6 +10,12 @@ use crate::pipeline;
 use crate::settings::Settings;
 use crate::tools;
 
+/// How long `start` waits for the camera's first frame before carrying on.
+///
+/// The core allows a plugin five seconds to answer `start`. A camera on macOS
+/// takes about two to wake up; this leaves the rest of the budget alone.
+const FIRST_FRAME_WITHIN: Duration = Duration::from_millis(2_500);
+
 pub struct CameraSource {
     canvas: Canvas,
     settings: Settings,
@@ -58,6 +64,25 @@ impl CameraSource {
         .map_err(internal)?;
         let capture = Capture::start(pipeline, Some("gmx-video-queue"), self.reporter.clone())
             .map_err(internal)?;
+        // A camera takes a second or two to hand over its first frame, and the
+        // core builds its half of the pipeline the moment this returns. Waiting
+        // here means the picture is already flowing when the core connects,
+        // rather than the operator watching an empty socket. Bounded well
+        // inside the core's five second budget for `start`; a camera that never
+        // arrives still starts, and `health` says what happened.
+        if !capture.wait_for_data(FIRST_FRAME_WITHIN) {
+            if let Some(detail) = capture.fault() {
+                return Err(internal(format!("{} did not start: {detail}", self.what())));
+            }
+            if let Some(r) = &self.reporter {
+                r.warn(format!(
+                    "{} has not sent a frame yet after {:.1} s. Carrying on; `health` will \
+                     say whether it arrives.",
+                    self.what(),
+                    FIRST_FRAME_WITHIN.as_secs_f32()
+                ));
+            }
+        }
         if let Some(r) = &self.reporter {
             r.info(format!(
                 "{} is running at {}x{}@{} over {}",

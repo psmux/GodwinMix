@@ -100,7 +100,12 @@ pub enum Codec {
 
 impl Default for AudioRequest {
     fn default() -> Self {
-        Self { rate: 48_000, channels: 2, format: SampleFormat::F32le, codec: Codec::Pcm }
+        Self {
+            rate: 48_000,
+            channels: 2,
+            format: SampleFormat::F32le,
+            codec: Codec::Pcm,
+        }
     }
 }
 
@@ -202,7 +207,9 @@ impl AudioTap {
 
         install_callbacks(&sink, req, frames.clone());
 
-        pipeline.add_many(&branch).context("adding an audio monitoring branch")?;
+        pipeline
+            .add_many(&branch)
+            .context("adding an audio monitoring branch")?;
         gst::Element::link_many(branch.iter().collect::<Vec<_>>())
             .context("linking an audio monitoring branch")?;
 
@@ -221,12 +228,15 @@ impl AudioTap {
 
     fn attach(&mut self) -> Result<()> {
         let head = self.branch.first().context("an empty monitoring branch")?;
-        let sink = head.static_pad("sink").context("the branch head has no sink pad")?;
+        let sink = head
+            .static_pad("sink")
+            .context("the branch head has no sink pad")?;
         let pad = self
             .tee
             .request_pad_simple("src_%u")
             .context("the raw audio tee refused a pad for monitoring")?;
-        pad.link(&sink).context("linking the monitoring branch onto the audio tee")?;
+        pad.link(&sink)
+            .context("linking the monitoring branch onto the audio tee")?;
         for el in self.branch.iter().rev() {
             el.sync_state_with_parent().ok();
         }
@@ -269,11 +279,7 @@ impl Drop for AudioTap {
 /// Cut the appsink's buffers into the frames a client expects and publish them.
 ///
 /// Kept out of `build` so that both are short enough to read.
-fn install_callbacks(
-    sink: &gst_app::AppSink,
-    req: AudioRequest,
-    frames: broadcast::Sender<Frame>,
-) {
+fn install_callbacks(sink: &gst_app::AppSink, req: AudioRequest, frames: broadcast::Sender<Frame>) {
     let seq = Arc::new(AtomicU64::new(0));
     // Residue between buffers, and the running time the next byte in it sits
     // at. Only the appsink's own thread touches this, but the callback is
@@ -331,7 +337,9 @@ fn framed(seq: u32, running_time_ns: u64, payload: &[u8]) -> Frame {
 
 /// Element names may not carry slashes.
 fn sanitise(key: &str) -> String {
-    key.chars().map(|c| if c.is_ascii_alphanumeric() { c } else { '-' }).collect()
+    key.chars()
+        .map(|c| if c.is_ascii_alphanumeric() { c } else { '-' })
+        .collect()
 }
 
 /// Read the three numbers out of a frame header.
@@ -383,7 +391,11 @@ mod tests {
         mix.start().unwrap();
         let preview = mix.preview_handle();
         let pipeline = mix.program_pipeline().clone();
-        assert_eq!(branches(&pipeline), 0, "a monitoring branch before anybody asked");
+        assert_eq!(
+            branches(&pipeline),
+            0,
+            "a monitoring branch before anybody asked"
+        );
         let thread = crate::mixer::spawn(mix, cmd_rx, handle.clone());
 
         let req = AudioRequest::default().clamped();
@@ -414,7 +426,10 @@ mod tests {
                 assert_eq!(seq, prev + 1, "the sequence skipped at frame {i}");
             }
             if let Some(prev) = last_at {
-                assert!(at > prev, "running time went backwards at frame {i}: {prev} then {at}");
+                assert!(
+                    at > prev,
+                    "running time went backwards at frame {i}: {prev} then {at}"
+                );
                 assert_eq!(
                     at - prev,
                     10_000_000,
@@ -432,11 +447,18 @@ mod tests {
             }
             tokio::time::sleep(std::time::Duration::from_millis(50)).await;
         }
-        assert_eq!(branches(&pipeline), 0, "the branch outlived its last client");
+        assert_eq!(
+            branches(&pipeline),
+            0,
+            "the branch outlived its last client"
+        );
         assert_eq!(preview.clients().count("pcm"), 0);
 
         let _ = handle.send(crate::mixer::Command::Shutdown);
-        tokio::task::spawn_blocking(move || thread.join()).await.unwrap().unwrap();
+        tokio::task::spawn_blocking(move || thread.join())
+            .await
+            .unwrap()
+            .unwrap();
     }
 
     /// Two clients asking for the same shape share one branch.
@@ -460,17 +482,29 @@ mod tests {
         };
         let (a, _ra) = open(AudioRequest::default()).await;
         let (b, _rb) = open(AudioRequest::default()).await;
-        assert_eq!(branches(&pipeline), 1, "two clients at one shape built two branches");
+        assert_eq!(
+            branches(&pipeline),
+            1,
+            "two clients at one shape built two branches"
+        );
         assert_eq!(preview.clients().count("pcm"), 2);
 
         // A different shape is a second branch.
-        let narrow = AudioRequest { channels: 1, rate: 16_000, ..Default::default() };
+        let narrow = AudioRequest {
+            channels: 1,
+            rate: 16_000,
+            ..Default::default()
+        };
         let (c, _rc) = open(narrow).await;
         assert_eq!(branches(&pipeline), 2);
 
         drop(a);
         tokio::time::sleep(std::time::Duration::from_millis(200)).await;
-        assert_eq!(branches(&pipeline), 2, "a branch went while a client was still on it");
+        assert_eq!(
+            branches(&pipeline),
+            2,
+            "a branch went while a client was still on it"
+        );
         drop(b);
         drop(c);
         for _ in 0..50 {
@@ -482,7 +516,10 @@ mod tests {
         assert_eq!(branches(&pipeline), 0);
 
         let _ = handle.send(crate::mixer::Command::Shutdown);
-        tokio::task::spawn_blocking(move || thread.join()).await.unwrap().unwrap();
+        tokio::task::spawn_blocking(move || thread.join())
+            .await
+            .unwrap()
+            .unwrap();
     }
 
     /// A target that is not here says what is, rather than a bare not found.
@@ -499,18 +536,37 @@ mod tests {
             Err(e) => e,
         };
         assert!(e.contains("cam9"), "{e}");
-        assert!(e.contains("program"), "the refusal must name the next step: {e}");
+        assert!(
+            e.contains("program"),
+            "the refusal must name the next step: {e}"
+        );
 
         let _ = handle.send(crate::mixer::Command::Shutdown);
-        tokio::task::spawn_blocking(move || thread.join()).await.unwrap().unwrap();
+        tokio::task::spawn_blocking(move || thread.join())
+            .await
+            .unwrap()
+            .unwrap();
     }
 
     #[test]
     fn a_request_is_clamped_and_opus_is_always_48k() {
-        let r = AudioRequest { rate: 96_000, channels: 7, ..Default::default() }.clamped();
+        let r = AudioRequest {
+            rate: 96_000,
+            channels: 7,
+            ..Default::default()
+        }
+        .clamped();
         assert_eq!((r.rate, r.channels), (48_000, 2));
-        let r = AudioRequest { rate: 8_000, codec: Codec::Opus, ..Default::default() }.clamped();
-        assert_eq!(r.rate, 48_000, "opus is a 48 kHz codec whatever the query said");
+        let r = AudioRequest {
+            rate: 8_000,
+            codec: Codec::Opus,
+            ..Default::default()
+        }
+        .clamped();
+        assert_eq!(
+            r.rate, 48_000,
+            "opus is a 48 kHz codec whatever the query said"
+        );
     }
 
     #[test]
@@ -518,9 +574,18 @@ mod tests {
         let r = AudioRequest::default().clamped();
         // 480 samples, two channels, four bytes each.
         assert_eq!(r.frame_bytes(), 3_840);
-        let r = AudioRequest { format: SampleFormat::S16le, ..Default::default() }.clamped();
+        let r = AudioRequest {
+            format: SampleFormat::S16le,
+            ..Default::default()
+        }
+        .clamped();
         assert_eq!(r.frame_bytes(), 1_920);
-        let r = AudioRequest { channels: 1, rate: 16_000, ..Default::default() }.clamped();
+        let r = AudioRequest {
+            channels: 1,
+            rate: 16_000,
+            ..Default::default()
+        }
+        .clamped();
         assert_eq!(r.frame_bytes(), 640);
     }
 
@@ -545,10 +610,19 @@ mod tests {
     #[test]
     fn a_key_separates_shapes_so_two_clients_only_share_a_branch_when_they_match() {
         let a = AudioRequest::default().clamped();
-        let b = AudioRequest { channels: 1, ..Default::default() }.clamped();
+        let b = AudioRequest {
+            channels: 1,
+            ..Default::default()
+        }
+        .clamped();
         assert_ne!(a.key("program"), b.key("program"));
-        assert_eq!(a.key("program"), AudioRequest::default().clamped().key("program"));
+        assert_eq!(
+            a.key("program"),
+            AudioRequest::default().clamped().key("program")
+        );
         assert_ne!(a.key("program"), a.key("cam1"));
-        assert!(sanitise("program/pcm/48000/2/F32LE").chars().all(|c| c != '/'));
+        assert!(sanitise("program/pcm/48000/2/F32LE")
+            .chars()
+            .all(|c| c != '/'));
     }
 }

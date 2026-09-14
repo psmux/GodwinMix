@@ -118,8 +118,14 @@ impl OutputSlot {
         gst::Element::link_many([&feed_video, &vproxy]).context("linking video feed")?;
         gst::Element::link_many([&feed_audio, &aproxy]).context("linking audio feed")?;
         let tee_pads = vec![
-            (video_tee.clone(), link_tee_to(video_tee, &feed_video).context("linking video tee")?),
-            (audio_tee.clone(), link_tee_to(audio_tee, &feed_audio).context("linking audio tee")?),
+            (
+                video_tee.clone(),
+                link_tee_to(video_tee, &feed_video).context("linking video tee")?,
+            ),
+            (
+                audio_tee.clone(),
+                link_tee_to(audio_tee, &feed_audio).context("linking audio tee")?,
+            ),
         ];
         for el in [&feed_video, &feed_audio, &vproxy, &aproxy] {
             el.sync_state_with_parent().ok();
@@ -182,8 +188,16 @@ impl OutputSlot {
         // depend on the proxy elements cooperating. The queues themselves stay
         // put, so the buffered seconds survive the swap.
         if gen > 0 {
-            self.swap_proxy(&self.feed_video, &self.vproxy, format!("out-{id}-vproxy-{gen}"))?;
-            self.swap_proxy(&self.feed_audio, &self.aproxy, format!("out-{id}-aproxy-{gen}"))?;
+            self.swap_proxy(
+                &self.feed_video,
+                &self.vproxy,
+                format!("out-{id}-vproxy-{gen}"),
+            )?;
+            self.swap_proxy(
+                &self.feed_audio,
+                &self.aproxy,
+                format!("out-{id}-aproxy-{gen}"),
+            )?;
         }
 
         let pipeline = gst::Pipeline::with_name(&format!("output-{id}"));
@@ -221,13 +235,21 @@ impl OutputSlot {
                 &vq,
                 &aq,
             )
-            .with_context(|| format!("building the {} half of output {id}", self.manifest.provide_id()))?;
+            .with_context(|| {
+                format!(
+                    "building the {} half of output {id}",
+                    self.manifest.provide_id()
+                )
+            })?;
 
         self.connected.store(false, Ordering::Relaxed);
 
-        let watch = gstutil::watch_bus(&pipeline, BusOwner::Output(id.clone()), self.bus_tx.clone())
-            .context("watching output bus")?;
-        pipeline.set_state(gst::State::Playing).context("starting output pipeline")?;
+        let watch =
+            gstutil::watch_bus(&pipeline, BusOwner::Output(id.clone()), self.bus_tx.clone())
+                .context("watching output bus")?;
+        pipeline
+            .set_state(gst::State::Playing)
+            .context("starting output pipeline")?;
 
         *self.pipeline.lock() = Some(Live { pipeline, watch });
 
@@ -254,10 +276,14 @@ impl OutputSlot {
         name: String,
     ) -> Result<()> {
         let fresh = make("proxysink", &name)?;
-        self.program.add(&fresh).context("adding replacement proxysink")?;
+        self.program
+            .add(&fresh)
+            .context("adding replacement proxysink")?;
         fresh.sync_state_with_parent().ok();
 
-        let src = feed.static_pad("src").context("feed queue has no src pad")?;
+        let src = feed
+            .static_pad("src")
+            .context("feed queue has no src pad")?;
         let old = slot.lock().clone();
 
         let (relink_src, relink_old, relink_new) = (src.clone(), old.clone(), fresh.clone());
@@ -457,8 +483,12 @@ fn hold_audio_until_video_caps(
     audio_queue: &gst::Element,
     id: &str,
 ) -> Result<()> {
-    let apad = audio_queue.static_pad("src").context("audio queue has no src pad")?;
-    let vpad = video_queue.static_pad("src").context("video queue has no src pad")?;
+    let apad = audio_queue
+        .static_pad("src")
+        .context("audio queue has no src pad")?;
+    let vpad = video_queue
+        .static_pad("src")
+        .context("video queue has no src pad")?;
 
     let Some(block) = apad.add_probe(gst::PadProbeType::BLOCK_DOWNSTREAM, |_p, _i| {
         gst::PadProbeReturn::Ok
@@ -500,8 +530,12 @@ fn hold_audio_until_video_caps(
 }
 
 fn link_tee_to(tee: &gst::Element, dest: &gst::Element) -> Result<gst::Pad> {
-    let src = tee.request_pad_simple("src_%u").context("tee refused a new src pad")?;
-    let sink = dest.static_pad("sink").context("destination has no sink pad")?;
+    let src = tee
+        .request_pad_simple("src_%u")
+        .context("tee refused a new src pad")?;
+    let sink = dest
+        .static_pad("sink")
+        .context("destination has no sink pad")?;
     src.link(&sink).context("linking tee branch")?;
     Ok(src)
 }
@@ -515,7 +549,12 @@ mod tests {
         let _ = gst::init();
     }
 
-    fn harness() -> (gst::Pipeline, gst::Element, gst::Element, mpsc::UnboundedSender<BusEvent>) {
+    fn harness() -> (
+        gst::Pipeline,
+        gst::Element,
+        gst::Element,
+        mpsc::UnboundedSender<BusEvent>,
+    ) {
         let pipeline = gst::Pipeline::with_name("test-program");
         let vtee = make("tee", "vtee").unwrap();
         vtee.set_property("allow-not-linked", true);
@@ -546,7 +585,9 @@ mod tests {
             .map(|e| e.name().to_string())
             .collect();
         assert!(
-            !names.iter().any(|n| n.contains("rtmp") || n.contains("mux")),
+            !names
+                .iter()
+                .any(|n| n.contains("rtmp") || n.contains("mux")),
             "sink elements leaked into the program pipeline: {names:?}"
         );
         // The outage buffer, by contrast, must be program-side so it survives a
@@ -571,7 +612,10 @@ mod tests {
         for expected in 1..=5u32 {
             slot.reconnect().unwrap();
             assert_eq!(slot.status().reconnects, expected);
-            assert!(feed_linked(), "feed came unlinked after reconnect {expected}");
+            assert!(
+                feed_linked(),
+                "feed came unlinked after reconnect {expected}"
+            );
             assert!(slot.pipeline.lock().is_some());
         }
         slot.shutdown();
@@ -610,7 +654,10 @@ mod tests {
 
         for _ in 0..5 {
             slot.refresh_connected();
-            assert!(!slot.is_connected(), "reported connected with no server present");
+            assert!(
+                !slot.is_connected(),
+                "reported connected with no server present"
+            );
             assert_ne!(slot.state(), OutputState::Live);
             std::thread::sleep(std::time::Duration::from_millis(50));
         }
@@ -626,8 +673,14 @@ mod tests {
 
         // A dying connection emits several bus errors. Only the first may arm
         // a retry, or the retries pile into a storm.
-        assert!(slot.try_arm_reconnect(), "first error should arm a reconnect");
-        assert!(!slot.try_arm_reconnect(), "second error must not arm another");
+        assert!(
+            slot.try_arm_reconnect(),
+            "first error should arm a reconnect"
+        );
+        assert!(
+            !slot.try_arm_reconnect(),
+            "second error must not arm another"
+        );
         assert!(!slot.try_arm_reconnect());
 
         slot.reconnect().unwrap();

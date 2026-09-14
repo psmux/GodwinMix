@@ -51,8 +51,16 @@ pub struct Capture {
 
 /// Parse a `gst-launch` description into a pipeline, with an error a person
 /// can act on.
+///
+/// Set `GMX_PIPELINE_DEBUG` in the environment and the description is printed
+/// on stderr before it is parsed, which the core logs at `info` tagged with
+/// the instance. It is the one line you want when a capture produces nothing:
+/// paste it after `gst-launch-1.0` and the failure is in front of you.
 pub fn build(description: &str) -> Result<gst::Pipeline, String> {
     crate::init()?;
+    if std::env::var_os("GMX_PIPELINE_DEBUG").is_some() {
+        eprintln!("gmx pipeline: {description}");
+    }
     gst::parse::launch(description)
         .map_err(|e| {
             format!("could not build the capture pipeline: {e}. The pipeline was: {description}")
@@ -145,6 +153,17 @@ impl Capture {
         }
         let elapsed = self.started.elapsed();
         let buffers = self.buffers();
+        // A pipeline that is not playing is the answer to almost every "it
+        // produced one buffer and stopped", and it is worth saying outright
+        // rather than leaving the reader to guess from a count.
+        let state = self.pipeline.current_state();
+        if state != gst::State::Playing && elapsed > STALL_AFTER {
+            return Health::degraded(format!(
+                "{what} is in {state:?} rather than playing after {:.1} s, with {buffers} \
+                 buffer(s) so far",
+                elapsed.as_secs_f32()
+            ));
+        }
         if buffers == 0 {
             return if elapsed < STALL_AFTER {
                 Health {
@@ -178,6 +197,32 @@ impl Capture {
     /// The pipeline, for a plugin that has a property to change while running.
     pub fn pipeline(&self) -> &gst::Pipeline {
         &self.pipeline
+    }
+
+    /// Wait, at most `within`, for the first buffer to leave the counted
+    /// element. Answers whether one did.
+    ///
+    /// `start` is allowed to return before the first frame, and for a plugin
+    /// that draws its own pictures it should. A camera is different: the
+    /// operating system takes a second or two to hand one over, and a `start`
+    /// that returned immediately would have the core build its half of the
+    /// pipeline, reach playing, and then wait on an empty socket. The
+    /// conformance harness counts the frames in the three seconds after
+    /// `start` and that cold second is most of its missing tenth.
+    ///
+    /// Returns early on a fault, so a camera that is not there costs nothing.
+    pub fn wait_for_data(&self, within: Duration) -> bool {
+        let deadline = Instant::now() + within;
+        while Instant::now() < deadline {
+            if self.buffers() > 0 {
+                return true;
+            }
+            if self.fault().is_some() {
+                return false;
+            }
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        self.buffers() > 0
     }
 
     /// Send an end of stream and wait briefly for it to reach the sink.
@@ -329,6 +374,25 @@ mod tests {
         assert!(
             err.to_lowercase().contains("playing") || err.contains("start"),
             "{err}"
+        );
+    }
+
+    #[test]
+    fn waiting_for_the_first_buffer_returns_as_soon_as_one_lands() {
+        let pipeline = build(
+            "videotestsrc is-live=true ! video/x-raw,width=32,height=32,framerate=60/1 ! \
+             queue name=gmx-video-queue ! fakesink sync=false",
+        )
+        .expect("the description parses");
+        let capture = Capture::start(pipeline, Some("gmx-video-queue"), None).expect("it plays");
+        let waited = Instant::now();
+        assert!(
+            capture.wait_for_data(Duration::from_secs(2)),
+            "no buffer in two seconds"
+        );
+        assert!(
+            waited.elapsed() < Duration::from_secs(2),
+            "it waited the whole timeout"
         );
     }
 

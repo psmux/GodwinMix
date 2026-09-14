@@ -117,7 +117,12 @@ struct Registry {
 
 fn registry() -> &'static RwLock<Registry> {
     static REGISTRY: OnceLock<RwLock<Registry>> = OnceLock::new();
-    REGISTRY.get_or_init(|| RwLock::new(Registry { dir: default_dir(), ..Default::default() }))
+    REGISTRY.get_or_init(|| {
+        RwLock::new(Registry {
+            dir: default_dir(),
+            ..Default::default()
+        })
+    })
 }
 
 /// Where plugins are read from. Set once at startup from `[server] plugins_dir`.
@@ -146,7 +151,9 @@ pub fn scan(budgets: &BTreeMap<String, crate::config::Params>) -> Vec<Installed>
         if !name_dir.is_dir() {
             continue;
         }
-        let Ok(versions) = std::fs::read_dir(&name_dir) else { continue };
+        let Ok(versions) = std::fs::read_dir(&name_dir) else {
+            continue;
+        };
         for version in versions.flatten() {
             let path = version.path();
             if path.is_dir() && path.join("gmx-plugin.toml").is_file() {
@@ -166,8 +173,11 @@ pub fn read(root: &Path, budgets: &BTreeMap<String, crate::config::Params>) -> I
                 .get(&manifest.plugin.name)
                 .map(|t| Budget::from_table(&TomlTable(t)))
                 .unwrap_or_default();
-            let provides =
-                manifest.provides.iter().map(|p| format!("{}/{}", manifest.plugin.name, p.id)).collect();
+            let provides = manifest
+                .provides
+                .iter()
+                .map(|p| format!("{}/{}", manifest.plugin.name, p.id))
+                .collect();
             let tools = manifest
                 .tools
                 .iter()
@@ -221,7 +231,11 @@ fn placeholder(root: &Path) -> PluginManifest {
         .unwrap_or_else(|| "0.0.0".into());
     let text = format!(
         "[plugin]\nname = \"{}\"\nversion = \"{}\"\napi = 1\n",
-        if godwinmix_protocol::plugin::manifest::is_slug(&name) { name } else { "unknown".into() },
+        if godwinmix_protocol::plugin::manifest::is_slug(&name) {
+            name
+        } else {
+            "unknown".into()
+        },
         version
     );
     PluginManifest::parse(&text).expect("a two field manifest parses")
@@ -240,7 +254,10 @@ impl godwinmix_host::budget::toml_like::Table for TomlTable<'_> {
             .and_then(|v| v.as_float().or_else(|| v.as_integer().map(|i| i as f64)))
     }
     fn string(&self, key: &str) -> Option<String> {
-        self.0.get(key).and_then(toml::Value::as_str).map(str::to_string)
+        self.0
+            .get(key)
+            .and_then(toml::Value::as_str)
+            .map(str::to_string)
     }
 }
 
@@ -263,7 +280,8 @@ pub fn load_all(budgets: &BTreeMap<String, crate::config::Params>) -> Vec<Instal
                 "loaded a plugin"
             );
         }
-        reg.plugins.insert(plugin.name().to_string(), plugin.clone());
+        reg.plugins
+            .insert(plugin.name().to_string(), plugin.clone());
     }
     drop(reg);
     intern_all();
@@ -272,7 +290,10 @@ pub fn load_all(budgets: &BTreeMap<String, crate::config::Params>) -> Vec<Instal
 
 /// Put one plugin in, replacing whatever was there under that name.
 pub fn insert(plugin: Installed) {
-    registry().write().plugins.insert(plugin.name().to_string(), plugin);
+    registry()
+        .write()
+        .plugins
+        .insert(plugin.name().to_string(), plugin);
     intern_all();
 }
 
@@ -285,7 +306,8 @@ pub fn remove(name: &str) -> Option<Installed> {
         reg.interned.remove(id);
     }
     let prefix = format!("{name}/");
-    reg.stats.retain(|k, v| !k.starts_with(&prefix) && v.plugin != name);
+    reg.stats
+        .retain(|k, v| !k.starts_with(&prefix) && v.plugin != name);
     reg.pids.retain(|k, _| !k.starts_with(&prefix));
     reg.watches.retain(|k, _| !k.starts_with(&prefix));
     Some(gone)
@@ -315,7 +337,13 @@ pub fn get(name: &str) -> Option<Installed> {
 
 /// Every plugin that is live, for a listing that only wants the working ones.
 pub fn enabled() -> Vec<Installed> {
-    registry().read().plugins.values().filter(|p| p.live()).cloned().collect()
+    registry()
+        .read()
+        .plugins
+        .values()
+        .filter(|p| p.live())
+        .cloned()
+        .collect()
 }
 
 // ---------------------------------------------------------------------------
@@ -325,8 +353,13 @@ pub fn enabled() -> Vec<Installed> {
 /// Intern every live provide, so `source::by_type` can answer with a
 /// `&'static Provide` exactly as it does for a built in kind.
 fn intern_all() {
-    let plugins: Vec<Installed> =
-        registry().read().plugins.values().filter(|p| p.live()).cloned().collect();
+    let plugins: Vec<Installed> = registry()
+        .read()
+        .plugins
+        .values()
+        .filter(|p| p.live())
+        .cloned()
+        .collect();
     let mut made: BTreeMap<String, &'static Provide> = BTreeMap::new();
     {
         let reg = registry().read();
@@ -373,7 +406,11 @@ fn intern_provide(plugin: &Installed, decl: &ProvideDecl) -> &'static Provide {
         latency_ms: decl.latency_ms.unwrap_or(0),
         tier: Tier::Sidecar,
     };
-    Box::leak(Box::new(Provide { manifest, claims: claims_by_scheme, make: super::host::make_source }))
+    Box::leak(Box::new(Provide {
+        manifest,
+        claims: claims_by_scheme,
+        make: super::host::make_source,
+    }))
 }
 
 /// A sidecar source claims a bare URI by the schemes it declared, at the rank
@@ -402,7 +439,12 @@ fn media_of(decl: &ProvideDecl) -> MediaDecl {
             alpha: m.alpha,
             thumb: m.thumb,
         },
-        None => MediaDecl { video: StreamMode::None, audio: StreamMode::None, alpha: false, thumb: false },
+        None => MediaDecl {
+            video: StreamMode::None,
+            audio: StreamMode::None,
+            alpha: false,
+            thumb: false,
+        },
     }
 }
 
@@ -461,7 +503,12 @@ pub fn available() -> Vec<String> {
 
 /// Every loaded kind, for `core.api`'s `kinds` table and the add gallery.
 pub fn described() -> Vec<KindInfo> {
-    registry().read().interned.values().map(|p| p.manifest.describe()).collect()
+    registry()
+        .read()
+        .interned
+        .values()
+        .map(|p| p.manifest.describe())
+        .collect()
 }
 
 /// The settings schema a provide declared, read off disk.
@@ -548,21 +595,23 @@ pub struct Launched {
 ///
 /// The token is the per instance one, scoped `plugin:<name>`, issued by the
 /// caller because only the server knows how to mint one.
-pub fn launch_for(
-    type_id: &str,
-    instance: &str,
-    token: String,
-    rpc: String,
-) -> Result<Launched> {
-    let (name, id) = type_id
-        .split_once('/')
-        .with_context(|| format!("`{type_id}` is not a plugin provide id; write <plugin>/<provide>"))?;
+pub fn launch_for(type_id: &str, instance: &str, token: String, rpc: String) -> Result<Launched> {
+    let (name, id) = type_id.split_once('/').with_context(|| {
+        format!("`{type_id}` is not a plugin provide id; write <plugin>/<provide>")
+    })?;
     let plugin = get(name).with_context(|| {
-        let have = list().iter().map(|p| p.name().to_string()).collect::<Vec<_>>();
+        let have = list()
+            .iter()
+            .map(|p| p.name().to_string())
+            .collect::<Vec<_>>();
         format!(
             "no plugin called `{name}` is installed. Installed: {}. Add one with \
              `gmx plugin add <path>`.",
-            if have.is_empty() { "none".into() } else { have.join(", ") }
+            if have.is_empty() {
+                "none".into()
+            } else {
+                have.join(", ")
+            }
         )
     })?;
     anyhow::ensure!(
@@ -574,11 +623,24 @@ pub fn launch_for(
         anyhow::bail!("the plugin `{name}` did not load: {problem}");
     }
     let decl = plugin.manifest.provide(id).with_context(|| {
-        let have: Vec<&str> = plugin.manifest.provides.iter().map(|p| p.id.as_str()).collect();
-        format!("`{name}` has no provide called `{id}`. It provides: {}.", have.join(", "))
+        let have: Vec<&str> = plugin
+            .manifest
+            .provides
+            .iter()
+            .map(|p| p.id.as_str())
+            .collect();
+        format!(
+            "`{name}` has no provide called `{id}`. It provides: {}.",
+            have.join(", ")
+        )
     })?;
     anyhow::ensure!(
-        plugin.manifest.plugin.placements.iter().any(|p| p == "sidecar"),
+        plugin
+            .manifest
+            .plugin
+            .placements
+            .iter()
+            .any(|p| p == "sidecar"),
         "the plugin `{name}` does not declare the `sidecar` placement. It declares: {}.",
         plugin.manifest.plugin.placements.join(", ")
     );
@@ -628,7 +690,11 @@ pub fn install_from_path(source: &Path) -> Result<Installed> {
     let name = manifest.plugin.name.clone();
     let version = manifest.plugin.version.clone();
     anyhow::ensure!(
-        manifest.plugin.platforms.iter().any(|p| p == launch::this_platform()),
+        manifest
+            .plugin
+            .platforms
+            .iter()
+            .any(|p| p == launch::this_platform()),
         "`{name}` has no asset for {}. It ships: {}. Install it from a git source with a \
          [build] section, or ask the author for this platform.",
         launch::this_platform(),
@@ -660,13 +726,16 @@ pub fn uninstall(name: &str) -> Result<Installed> {
         let have: Vec<String> = list().iter().map(|p| p.name().to_string()).collect();
         format!(
             "no plugin called `{name}` is installed. Installed: {}.",
-            if have.is_empty() { "none".into() } else { have.join(", ") }
+            if have.is_empty() {
+                "none".into()
+            } else {
+                have.join(", ")
+            }
         )
     })?;
     let root = dir().join(name);
     if root.exists() {
-        std::fs::remove_dir_all(&root)
-            .with_context(|| format!("removing {}", root.display()))?;
+        std::fs::remove_dir_all(&root).with_context(|| format!("removing {}", root.display()))?;
     }
     info!(plugin = %name, "removed a plugin");
     Ok(gone)
@@ -690,7 +759,9 @@ fn copy_tree(from: &Path, to: &Path) -> Result<()> {
         ) {
             continue;
         }
-        let kind = entry.file_type().with_context(|| format!("reading {}", path.display()))?;
+        let kind = entry
+            .file_type()
+            .with_context(|| format!("reading {}", path.display()))?;
         if kind.is_symlink() {
             warn!(at = %path.display(), "skipping a symlink while installing a plugin");
             continue;
@@ -699,8 +770,7 @@ fn copy_tree(from: &Path, to: &Path) -> Result<()> {
             copy_tree(&path, &to.join(name))?;
         } else {
             let target = to.join(name);
-            std::fs::copy(&path, &target)
-                .with_context(|| format!("copying {}", path.display()))?;
+            std::fs::copy(&path, &target).with_context(|| format!("copying {}", path.display()))?;
             copy_mode(&path, &target);
         }
     }
@@ -782,18 +852,26 @@ pub fn refresh_stats(sampler: &mut Sampler) -> Vec<Breach> {
     let samples = sampler.sample(&pids);
     let mut breaches = Vec::new();
     let mut reg = registry().write();
-    let budgets: BTreeMap<String, Budget> =
-        reg.plugins.iter().map(|(k, v)| (k.clone(), v.budget)).collect();
-    let instances: Vec<(String, u32)> =
-        reg.pids.iter().map(|(k, v)| (k.clone(), *v)).collect();
+    let budgets: BTreeMap<String, Budget> = reg
+        .plugins
+        .iter()
+        .map(|(k, v)| (k.clone(), v.budget))
+        .collect();
+    let instances: Vec<(String, u32)> = reg.pids.iter().map(|(k, v)| (k.clone(), *v)).collect();
     for (instance, pid) in instances {
-        let Some(sample) = samples.get(&pid) else { continue };
-        let Some(entry) = reg.stats.get_mut(&instance) else { continue };
+        let Some(sample) = samples.get(&pid) else {
+            continue;
+        };
+        let Some(entry) = reg.stats.get_mut(&instance) else {
+            continue;
+        };
         entry.stats.cpu_percent = sample.cpu_percent;
         entry.stats.rss_bytes = sample.rss_bytes;
         let plugin = entry.plugin.clone();
         let stats = entry.stats;
-        let Some(budget) = budgets.get(&plugin).filter(|b| b.is_set()) else { continue };
+        let Some(budget) = budgets.get(&plugin).filter(|b| b.is_set()) else {
+            continue;
+        };
         let watch = reg.watches.entry(instance.clone()).or_default();
         if let Some(reason) = watch.observe(budget, &stats) {
             breaches.push(Breach {
@@ -870,9 +948,11 @@ pub fn tools() -> Vec<(String, String, Tool)> {
         .into_iter()
         .flat_map(|p| {
             let name = p.name().to_string();
-            p.manifest.tools.clone().into_iter().map(move |t| {
-                (tool_name(&name, &t.name), name.clone(), t)
-            })
+            p.manifest
+                .tools
+                .clone()
+                .into_iter()
+                .map(move |t| (tool_name(&name, &t.name), name.clone(), t))
         })
         .collect()
 }
@@ -944,8 +1024,11 @@ settings = "settings.json"
     }
 
     fn temp(tag: &str) -> PathBuf {
-        let path = std::env::temp_dir()
-            .join(format!("gmx-loader-{}-{}-{tag}", std::process::id(), line!()));
+        let path = std::env::temp_dir().join(format!(
+            "gmx-loader-{}-{}-{tag}",
+            std::process::id(),
+            line!()
+        ));
         let _ = std::fs::remove_dir_all(&path);
         std::fs::create_dir_all(&path).expect("a temporary plugins directory");
         path
@@ -973,7 +1056,10 @@ settings = "settings.json"
         let installed = read(&dir, &BTreeMap::new());
         let problem = installed.problem.clone().expect("it does not validate");
         assert!(problem.contains("gmx-plugin.toml"), "{problem}");
-        assert!(!installed.live(), "a plugin that did not load contributes nothing");
+        assert!(
+            !installed.live(),
+            "a plugin that did not load contributes nothing"
+        );
         let _ = std::fs::remove_dir_all(&root);
     }
 
@@ -989,10 +1075,9 @@ settings = "settings.json"
         let root = temp("budget");
         let dir = write_plugin(&root, "heavy", "1.0.0", "");
         let mut budgets = BTreeMap::new();
-        let table: crate::config::Params = toml::from_str(
-            "max_rss_mb = 256\nmax_cpu_percent = 40\non_over_budget = \"disable\"",
-        )
-        .expect("a budget table");
+        let table: crate::config::Params =
+            toml::from_str("max_rss_mb = 256\nmax_cpu_percent = 40\non_over_budget = \"disable\"")
+                .expect("a budget table");
         budgets.insert("heavy".to_string(), table);
         let installed = read(&dir, &budgets);
         assert_eq!(installed.budget.max_rss_mb, Some(256));
@@ -1010,15 +1095,24 @@ settings = "settings.json"
         let root = temp("unwind");
         let dir = write_plugin(&root, "gone", "0.1.0", "");
         insert(read(&dir, &BTreeMap::new()));
-        assert!(source_provide("gone/source").is_some(), "it registered its provide");
+        assert!(
+            source_provide("gone/source").is_some(),
+            "it registered its provide"
+        );
         assert!(available().contains(&"gone/source".to_string()));
         set_pid("cam1", "gone", "source", Some(std::process::id()));
         assert!(stats_for("cam1").is_some());
         let gone = remove("gone").expect("it was there");
         assert_eq!(gone.name(), "gone");
-        assert!(source_provide("gone/source").is_none(), "the provide went with it");
+        assert!(
+            source_provide("gone/source").is_none(),
+            "the provide went with it"
+        );
         assert!(available().is_empty(), "nothing is left in the table");
-        assert!(stats().iter().all(|s| s.plugin != "gone"), "its numbers went too");
+        assert!(
+            stats().iter().all(|s| s.plugin != "gone"),
+            "its numbers went too"
+        );
         clear();
         let _ = std::fs::remove_dir_all(&root);
     }
@@ -1031,10 +1125,16 @@ settings = "settings.json"
         insert(read(&dir, &BTreeMap::new()));
         assert!(source_provide("toggle/source").is_some());
         set_enabled("toggle", false).expect("it is installed");
-        assert!(source_provide("toggle/source").is_none(), "off means it contributes nothing");
+        assert!(
+            source_provide("toggle/source").is_none(),
+            "off means it contributes nothing"
+        );
         assert!(get("toggle").is_some(), "and it is still installed");
         set_enabled("toggle", true).expect("it is installed");
-        assert!(source_provide("toggle/source").is_some(), "on brings it back");
+        assert!(
+            source_provide("toggle/source").is_some(),
+            "on brings it back"
+        );
         clear();
         let _ = std::fs::remove_dir_all(&root);
     }
@@ -1043,11 +1143,17 @@ settings = "settings.json"
     fn a_bare_uri_reaches_a_loaded_plugin_by_scheme_and_rank() {
         let _lock = exclusive();
         let root = temp("uri");
-        insert(read(&write_plugin(&root, "ndi", "1.0.0", ""), &BTreeMap::new()));
+        insert(read(
+            &write_plugin(&root, "ndi", "1.0.0", ""),
+            &BTreeMap::new(),
+        ));
         let found = source_for_uri("ndi://CAM 1 (Studio)").expect("the scheme matches");
         assert_eq!(found.manifest.provide_id(), "ndi/source");
         assert_eq!(found.manifest.tier, Tier::Sidecar);
-        assert!(source_for_uri("rtmp://host/app").is_none(), "it claims only its own scheme");
+        assert!(
+            source_for_uri("rtmp://host/app").is_none(),
+            "it claims only its own scheme"
+        );
         clear();
         let _ = std::fs::remove_dir_all(&root);
     }

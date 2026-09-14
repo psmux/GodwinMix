@@ -271,8 +271,11 @@ impl Telemetry {
             video.frames += 1;
             let flash = match video.last.take() {
                 Some(last) => {
-                    let diff: u32 =
-                        last.iter().zip(&grid).map(|(a, b)| a.abs_diff(*b) as u32).sum();
+                    let diff: u32 = last
+                        .iter()
+                        .zip(&grid)
+                        .map(|(a, b)| a.abs_diff(*b) as u32)
+                        .sum();
                     video.shot = diff as f64 / (GRID as f64 * 255.0);
                     video.identical = diff == 0;
                     if diff == 0 {
@@ -289,8 +292,7 @@ impl Telemetry {
                     false
                 }
             };
-            video.black =
-                grid.iter().filter(|l| **l <= BLACK_LUMA).count() as f64 / GRID as f64;
+            video.black = grid.iter().filter(|l| **l <= BLACK_LUMA).count() as f64 / GRID as f64;
             video.last = Some(grid);
             flash
         };
@@ -314,7 +316,11 @@ impl Telemetry {
         let power: f64 = rms_db.iter().map(|db| 10f64.powf(db / 10.0)).sum();
         audio.heard = true;
         audio.window.push_back((now, power));
-        while audio.window.front().is_some_and(|(t, _)| now.duration_since(*t) > SHORT_TERM) {
+        while audio
+            .window
+            .front()
+            .is_some_and(|(t, _)| now.duration_since(*t) > SHORT_TERM)
+        {
             audio.window.pop_front();
         }
         // Bounded whatever the meter's interval turns out to be.
@@ -343,8 +349,8 @@ impl Audio {
         let short = if self.window.is_empty() {
             None
         } else {
-            let mean: f64 = self.window.iter().map(|(_, p)| *p).sum::<f64>()
-                / self.window.len() as f64;
+            let mean: f64 =
+                self.window.iter().map(|(_, p)| *p).sum::<f64>() / self.window.len() as f64;
             Some(lufs(mean))
         };
         let integrated = (self.blocks > 0).then(|| lufs(self.sum / self.blocks as f64));
@@ -379,9 +385,14 @@ pub fn attach(tee: &gstreamer::Element) {
         let Some(gstreamer::PadProbeData::Buffer(buffer)) = &info.data else {
             return gstreamer::PadProbeReturn::Ok;
         };
-        let Some(caps) = pad.current_caps() else { return gstreamer::PadProbeReturn::Ok };
+        let Some(caps) = pad.current_caps() else {
+            return gstreamer::PadProbeReturn::Ok;
+        };
         let mut cache = cached.lock();
-        if !cache.as_ref().is_some_and(|(c, _)| c.is_strictly_equal(&caps)) {
+        if !cache
+            .as_ref()
+            .is_some_and(|(c, _)| c.is_strictly_equal(&caps))
+        {
             match gstreamer_video::VideoInfo::from_caps(&caps) {
                 Ok(vi) => *cache = Some((caps.clone(), vi)),
                 Err(_) => return gstreamer::PadProbeReturn::Ok,
@@ -404,10 +415,7 @@ pub fn attach(tee: &gstreamer::Element) {
 /// zero directly. Packed RGB is weighted with the BT.709 coefficients. A
 /// format on GPU memory, or one with no readable luma, answers `None` and the
 /// telemetry tick simply carries the numbers it does have.
-fn grid_of(
-    buffer: &gstreamer::BufferRef,
-    info: &gstreamer_video::VideoInfo,
-) -> Option<[u8; GRID]> {
+fn grid_of(buffer: &gstreamer::BufferRef, info: &gstreamer_video::VideoInfo) -> Option<[u8; GRID]> {
     use gstreamer_video::prelude::VideoFrameExt;
     let frame = gstreamer_video::VideoFrameRef::from_buffer_ref_readable(buffer, info).ok()?;
     let format = info.format_info();
@@ -436,8 +444,11 @@ fn grid_of(
             let x = (gx * 2 + 1) * width / (GRID_W * 2);
             let at = row + x * pixel_stride;
             grid[gy * GRID_W + gx] = if rgb {
-                let (r, g, b) =
-                    (*plane.get(at)? as f64, *plane.get(at + 1)? as f64, *plane.get(at + 2)? as f64);
+                let (r, g, b) = (
+                    *plane.get(at)? as f64,
+                    *plane.get(at + 1)? as f64,
+                    *plane.get(at + 2)? as f64,
+                );
                 // BT.709 luma, into studio swing so it matches the I420 path.
                 (16.0 + (0.2126 * r + 0.7152 * g + 0.0722 * b) * 219.0 / 255.0) as u8
             } else {
@@ -457,7 +468,9 @@ pub fn note_level(src: Option<&str>, structure: &gstreamer::StructureRef) {
     if src != Some(PROGRAMME_METER) || !telemetry().wanted() {
         return;
     }
-    let Ok(array) = structure.get::<glib::ValueArray>("rms") else { return };
+    let Ok(array) = structure.get::<glib::ValueArray>("rms") else {
+        return;
+    };
     let rms: Vec<f64> = array.iter().filter_map(|v| v.get::<f64>().ok()).collect();
     telemetry().absorb_rms(&rms);
 }
@@ -503,14 +516,25 @@ mod tests {
         let t = Telemetry::new();
         let _lease = t.lease();
         t.absorb_grid(grid(16));
-        assert_eq!(t.read().shot, 0.0, "the first frame has nothing to compare to");
+        assert_eq!(
+            t.read().shot,
+            0.0,
+            "the first frame has nothing to compare to"
+        );
         t.absorb_grid(grid(235));
         let reading = t.read();
-        assert!(reading.shot > 0.8, "a cut from black to white: {}", reading.shot);
+        assert!(
+            reading.shot > 0.8,
+            "a cut from black to white: {}",
+            reading.shot
+        );
         t.absorb_grid(grid(235));
         assert_eq!(t.read().shot, 0.0);
         t.absorb_grid(grid(236));
-        assert!(t.read().shot < 0.01, "one step of luma is not a shot change");
+        assert!(
+            t.read().shot < 0.01,
+            "one step of luma is not a shot change"
+        );
     }
 
     #[test]
@@ -553,7 +577,10 @@ mod tests {
         let reading = t.read();
         assert_eq!(reading.lufs_s, None);
         assert_eq!(reading.lufs_i, None);
-        assert!(!reading.silence(500), "silence before any audio is not silence");
+        assert!(
+            !reading.silence(500),
+            "silence before any audio is not silence"
+        );
 
         // Full scale on two channels reads near 0 LUFS.
         t.absorb_rms(&[-3.0, -3.0]);
@@ -567,8 +594,14 @@ mod tests {
         // not fall towards it, because a gated block does not count.
         let before = t.read().lufs_i.unwrap();
         t.absorb_rms(&[-120.0, -120.0]);
-        assert!((t.read().lufs_i.unwrap() - before).abs() < 1e-9, "a silent block is gated out");
-        assert!(t.read().silence(0), "and the silence flag follows the level");
+        assert!(
+            (t.read().lufs_i.unwrap() - before).abs() < 1e-9,
+            "a silent block is gated out"
+        );
+        assert!(
+            t.read().silence(0),
+            "and the silence flag follows the level"
+        );
     }
 
     /// Nothing runs unless asked, and what was measured while somebody was
@@ -594,26 +627,36 @@ mod tests {
     fn a_luminance_step_over_the_frame_tells_the_flash_guard() {
         let t = Telemetry::new();
         let guard = crate::safety::Guard::new(
-            crate::safety::SafetyConfig { min_hold_ms: 0, ..Default::default() },
+            crate::safety::SafetyConfig {
+                min_hold_ms: 0,
+                ..Default::default()
+            },
             30,
         );
         t.bind_guard(guard.clone());
         let _lease = t.lease();
         t.absorb_grid(grid(16));
         t.absorb_grid(grid(235));
-        let refusal = guard.check(&godwinmix_protocol::scope::Token::open()).unwrap_err();
+        let refusal = guard
+            .check(&godwinmix_protocol::scope::Token::open())
+            .unwrap_err();
         assert_eq!(refusal.rule, "flash_guard");
 
         // A gentle change is not a flash, so a second core stays open.
         let quiet = Telemetry::new();
         let other = crate::safety::Guard::new(
-            crate::safety::SafetyConfig { min_hold_ms: 0, ..Default::default() },
+            crate::safety::SafetyConfig {
+                min_hold_ms: 0,
+                ..Default::default()
+            },
             30,
         );
         quiet.bind_guard(other.clone());
         let _lease = quiet.lease();
         quiet.absorb_grid(grid(120));
         quiet.absorb_grid(grid(124));
-        assert!(other.check(&godwinmix_protocol::scope::Token::open()).is_ok());
+        assert!(other
+            .check(&godwinmix_protocol::scope::Token::open())
+            .is_ok());
     }
 }

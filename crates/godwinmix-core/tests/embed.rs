@@ -13,7 +13,13 @@ mod embed;
 /// colour bars reach programme, and the mixer thread joins when told to stop.
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn the_engine_runs_inside_another_program() {
-    let status = embed::run().await.expect("the embedded engine should come up");
-    assert_eq!(status.program.as_deref(), Some("bars"), "colour bars should be on programme");
+    let status = embed::run()
+        .await
+        .expect("the embedded engine should come up");
+    assert_eq!(
+        status.program.as_deref(),
+        Some("bars"),
+        "colour bars should be on programme"
+    );
     assert_eq!(status.sources.len(), 1, "the one source that was added");
 }

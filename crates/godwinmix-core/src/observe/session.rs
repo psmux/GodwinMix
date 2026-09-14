@@ -67,7 +67,10 @@ impl SessionLog {
         if let Some(dir) = path.parent() {
             std::fs::create_dir_all(dir)?;
         }
-        let file = std::fs::OpenOptions::new().create(true).append(true).open(&path)?;
+        let file = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(&path)?;
         let size = file.metadata().map(|m| m.len()).unwrap_or(0);
         *self.file.lock() = Some(file);
         *self.path.lock() = Some(path);
@@ -136,7 +139,11 @@ impl SessionLog {
         // Shift the generations down, oldest first, so nothing is overwritten
         // before it has been moved.
         for n in (1..=GENERATIONS).rev() {
-            let from = if n == 1 { path.clone() } else { generation(&path, n - 1) };
+            let from = if n == 1 {
+                path.clone()
+            } else {
+                generation(&path, n - 1)
+            };
             let to = generation(&path, n);
             if n == GENERATIONS {
                 let _ = std::fs::remove_file(&to);
@@ -145,7 +152,11 @@ impl SessionLog {
                 let _ = std::fs::rename(&from, &to);
             }
         }
-        match std::fs::OpenOptions::new().create(true).append(true).open(&path) {
+        match std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(&path)
+        {
             Ok(file) => {
                 *guard = Some(file);
                 self.written.store(0, Ordering::Relaxed);
@@ -181,7 +192,8 @@ impl SessionLog {
 
     /// One event off the state broadcast.
     pub fn record_event(&self, event: &Event) {
-        let body = serde_json::to_value(event).unwrap_or_else(|e| json!({ "unserialisable": e.to_string() }));
+        let body = serde_json::to_value(event)
+            .unwrap_or_else(|e| json!({ "unserialisable": e.to_string() }));
         self.record("event", json!({ "event": body }));
     }
 
@@ -215,7 +227,9 @@ impl SessionLog {
     /// The same with the cap given, which is how the test reaches it without
     /// writing four megabytes.
     pub fn range_since(&self, secs: u64, byte_cap: usize) -> Vec<String> {
-        let Some(path) = self.path() else { return Vec::new() };
+        let Some(path) = self.path() else {
+            return Vec::new();
+        };
         let cutoff = std::time::SystemTime::now()
             .checked_sub(std::time::Duration::from_secs(secs))
             .unwrap_or(std::time::UNIX_EPOCH);
@@ -224,13 +238,18 @@ impl SessionLog {
         // thing being investigated.
         let mut chunks: Vec<Vec<String>> = Vec::new();
         let mut used = 0usize;
-        for file in std::iter::once(path.clone())
-            .chain((1..=GENERATIONS).map(|n| generation(&path, n)))
+        for file in
+            std::iter::once(path.clone()).chain((1..=GENERATIONS).map(|n| generation(&path, n)))
         {
-            let Ok(handle) = std::fs::File::open(&file) else { continue };
+            let Ok(handle) = std::fs::File::open(&file) else {
+                continue;
+            };
             let mut chunk: Vec<String> = Vec::new();
             let mut saw_older = false;
-            for line in std::io::BufReader::new(handle).lines().map_while(Result::ok) {
+            for line in std::io::BufReader::new(handle)
+                .lines()
+                .map_while(Result::ok)
+            {
                 match ts_of(&line) {
                     // Lexical comparison is date comparison for RFC 3339 in
                     // UTC, which is the only spelling this file writes.
@@ -266,13 +285,18 @@ impl SessionLog {
     /// Reading tens of megabytes of JSONL on the Tokio runtime is how one slow
     /// disk becomes every client's latency, so no async caller does it.
     pub async fn tail_since_async(&'static self, secs: u64) -> Vec<String> {
-        tokio::task::spawn_blocking(move || self.tail_since(secs)).await.unwrap_or_default()
+        tokio::task::spawn_blocking(move || self.tail_since(secs))
+            .await
+            .unwrap_or_default()
     }
 }
 
 /// `session.jsonl` becomes `session.3.jsonl`.
 fn generation(path: &Path, n: usize) -> PathBuf {
-    let stem = path.file_stem().map(|s| s.to_string_lossy().to_string()).unwrap_or_default();
+    let stem = path
+        .file_stem()
+        .map(|s| s.to_string_lossy().to_string())
+        .unwrap_or_default();
     let ext = path.extension().map(|s| s.to_string_lossy().to_string());
     let name = match ext {
         Some(ext) => format!("{stem}.{n}.{ext}"),
@@ -366,8 +390,10 @@ mod tests {
         log.record("command", json!({ "method": "program.take" }));
         log.record("event", json!({ "event": "took" }));
         let text = std::fs::read_to_string(&path).unwrap();
-        let lines: Vec<Value> =
-            text.lines().map(|l| serde_json::from_str(l).unwrap()).collect();
+        let lines: Vec<Value> = text
+            .lines()
+            .map(|l| serde_json::from_str(l).unwrap())
+            .collect();
         assert_eq!(lines.len(), 2);
         assert_eq!(lines[0]["seq"], 0);
         assert_eq!(lines[1]["seq"], 1);
@@ -396,7 +422,12 @@ mod tests {
             source: "cam1".into(),
             state: SourceState::Stalled,
         });
-        log.record_decision("cam1", "rebuild", "no buffers for 10 s", json!({ "behind_ms": -2427 }));
+        log.record_decision(
+            "cam1",
+            "rebuild",
+            "no buffers for 10 s",
+            json!({ "behind_ms": -2427 }),
+        );
         log.record("anything", json!({ "x": 1 }));
         let _ = log.tail_since(3600);
         let _ = log.path();
@@ -434,9 +465,16 @@ mod tests {
         // A record from last year, written by hand the way an older run would
         // have left it.
         {
-            let mut f = std::fs::OpenOptions::new().append(true).open(&path).unwrap();
-            writeln!(f, "{}", json!({ "seq": 0, "ts": "2020-01-01T00:00:00.000Z", "kind": "old" }))
+            let mut f = std::fs::OpenOptions::new()
+                .append(true)
+                .open(&path)
                 .unwrap();
+            writeln!(
+                f,
+                "{}",
+                json!({ "seq": 0, "ts": "2020-01-01T00:00:00.000Z", "kind": "old" })
+            )
+            .unwrap();
         }
         log.record("new", json!({}));
         let tail = log.tail_since(3600);
@@ -458,14 +496,21 @@ mod tests {
         assert_eq!(all.len(), 200);
 
         let capped = log.range_since(3600, 2_000);
-        assert!(capped.len() < 200, "the cap has to bite: {} records", capped.len());
+        assert!(
+            capped.len() < 200,
+            "the cap has to bite: {} records",
+            capped.len()
+        );
         let total: usize = capped.iter().map(|l| l.len() + 1).sum();
         assert!(total < 2_000 + 200, "{total} bytes came back");
         // The newest are the ones kept, and they are still in order.
         let last: Value = serde_json::from_str(capped.last().unwrap()).unwrap();
         assert_eq!(last["i"], 199);
         let first: Value = serde_json::from_str(capped.first().unwrap()).unwrap();
-        assert!(first["i"].as_u64().unwrap() > 0, "the oldest records were dropped, not the newest");
+        assert!(
+            first["i"].as_u64().unwrap() > 0,
+            "the oldest records were dropped, not the newest"
+        );
         let _ = std::fs::remove_dir_all(path.parent().unwrap());
     }
 
@@ -483,12 +528,21 @@ mod tests {
         log.record("two", json!({ "n": 2 }));
         log.record("three", json!({ "n": 3 }));
 
-        assert!(generation(&path, 1).exists(), "the old generation is beside it, not gone");
+        assert!(
+            generation(&path, 1).exists(),
+            "the old generation is beside it, not gone"
+        );
         let first = std::fs::read_to_string(generation(&path, 1)).unwrap();
-        assert!(first.contains("\"n\":1") && first.contains("\"n\":2"), "{first}");
+        assert!(
+            first.contains("\"n\":1") && first.contains("\"n\":2"),
+            "{first}"
+        );
         let current = std::fs::read_to_string(&path).unwrap();
         assert!(current.contains("\"n\":3"), "{current}");
-        assert!(!current.contains("\"n\":1"), "the new generation starts empty: {current}");
+        assert!(
+            !current.contains("\"n\":1"),
+            "the new generation starts empty: {current}"
+        );
 
         // And the query reads across both, oldest first.
         let all = log.range_since(3600, MAX_RANGE_BYTES);
@@ -503,7 +557,10 @@ mod tests {
         let p = Path::new("/run/gmx/session.jsonl");
         assert_eq!(generation(p, 1), Path::new("/run/gmx/session.1.jsonl"));
         assert_eq!(generation(p, 5), Path::new("/run/gmx/session.5.jsonl"));
-        assert_eq!(generation(Path::new("/run/gmx/session"), 2), Path::new("/run/gmx/session.2"));
+        assert_eq!(
+            generation(Path::new("/run/gmx/session"), 2),
+            Path::new("/run/gmx/session.2")
+        );
     }
 
     #[test]
@@ -525,15 +582,34 @@ mod tests {
             tx.send(Envelope { seq, event })
         };
 
-        tx(Event::Took { source: Some("cam1".into()), at_running_time_ms: 1234 }).unwrap();
-        tx(Event::SourceStateChanged { source: "cam1".into(), state: SourceState::Live }).unwrap();
-        tx(Event::Alert { severity: Severity::Warning, message: "cam1 stalled".into() }).unwrap();
+        tx(Event::Took {
+            source: Some("cam1".into()),
+            at_running_time_ms: 1234,
+        })
+        .unwrap();
+        tx(Event::SourceStateChanged {
+            source: "cam1".into(),
+            state: SourceState::Live,
+        })
+        .unwrap();
+        tx(Event::Alert {
+            severity: Severity::Warning,
+            message: "cam1 stalled".into(),
+        })
+        .unwrap();
         // Meters are counted, not written.
-        tx(Event::AudioLevel { peak_db: vec![-21.0, -20.5] }).unwrap();
+        tx(Event::AudioLevel {
+            peak_db: vec![-21.0, -20.5],
+        })
+        .unwrap();
 
         for _ in 0..50 {
             tokio::time::sleep(std::time::Duration::from_millis(20)).await;
-            if std::fs::read_to_string(path_in(&dir)).map(|t| t.lines().count()).unwrap_or(0) >= 3 {
+            if std::fs::read_to_string(path_in(&dir))
+                .map(|t| t.lines().count())
+                .unwrap_or(0)
+                >= 3
+            {
                 break;
             }
         }
@@ -543,12 +619,18 @@ mod tests {
         assert!(text.contains("\"took\""), "{text}");
         assert!(text.contains("source_state_changed"), "{text}");
         assert!(text.contains("cam1 stalled"), "{text}");
-        assert!(!text.contains("audio_level"), "meters should not be in the session log: {text}");
+        assert!(
+            !text.contains("audio_level"),
+            "meters should not be in the session log: {text}"
+        );
     }
 
     #[test]
     fn the_timestamp_is_found_without_parsing_the_line() {
-        assert_eq!(ts_of(r#"{"a":1,"ts":"2026-01-01T00:00:00.000Z","b":2}"#), Some("2026-01-01T00:00:00.000Z"));
+        assert_eq!(
+            ts_of(r#"{"a":1,"ts":"2026-01-01T00:00:00.000Z","b":2}"#),
+            Some("2026-01-01T00:00:00.000Z")
+        );
         assert_eq!(ts_of("{}"), None);
     }
 }

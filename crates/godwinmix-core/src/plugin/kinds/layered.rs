@@ -42,7 +42,8 @@ pub const MANIFEST: Manifest = Manifest {
     id: "source",
     kind: ProvideKind::Source,
     api: API_LEVEL,
-    description: "A web page drawn over the video it was playing, decoded here rather than in the browser",
+    description:
+        "A web page drawn over the video it was playing, decoded here rather than in the browser",
     // Never claimed from a bare URI: the core substitutes this kind for
     // `browser/source` once a page has been probed and has media worth taking
     // over. An operator can still write `type = "layered/source"`.
@@ -62,7 +63,11 @@ pub const MANIFEST: Manifest = Manifest {
     tier: Tier::Core,
 };
 
-pub const PROVIDE: Provide = Provide { manifest: MANIFEST, claims, make: new };
+pub const PROVIDE: Provide = Provide {
+    manifest: MANIFEST,
+    claims,
+    make: new,
+};
 
 fn claims(_uri: &str) -> Option<u16> {
     None
@@ -127,7 +132,12 @@ impl Source for LayeredSource {
         let layers = Layers::build(&id, &self.report)?;
         let src = self.process.build_src(&id)?;
         let decode = ExecProcess::decoder(&id)?;
-        self.cache = self.report.media.iter().filter_map(|m| m.cache.clone()).collect();
+        self.cache = self
+            .report
+            .media
+            .iter()
+            .filter_map(|m| m.cache.clone())
+            .collect();
         let levels = layers.levels();
         self.levels = Some(levels.clone());
 
@@ -185,7 +195,11 @@ impl Source for LayeredSource {
     }
 
     fn health(&self) -> Health {
-        Health::of(if self.running { PluginState::Running } else { PluginState::Starting })
+        Health::of(if self.running {
+            PluginState::Running
+        } else {
+            PluginState::Starting
+        })
     }
 
     fn call(&mut self, method: &str, params: Value) -> Result<Value> {
@@ -197,7 +211,10 @@ impl Source for LayeredSource {
                 "layered/source does not restart in place; the core builds it again from nothing"
             ),
             "audio.set" => {
-                let levels = self.levels.as_ref().context("the layers are not built yet")?;
+                let levels = self
+                    .levels
+                    .as_ref()
+                    .context("the layers are not built yet")?;
                 let page = params.get("page").and_then(|v| v.as_f64());
                 let media: Vec<Option<f64>> = params
                     .get("media")
@@ -208,11 +225,18 @@ impl Source for LayeredSource {
                 Ok(serde_json::to_value(after)?)
             }
             "audio.get" => {
-                let levels = self.levels.as_ref().context("the layers are not built yet")?;
+                let levels = self
+                    .levels
+                    .as_ref()
+                    .context("the layers are not built yet")?;
                 Ok(serde_json::to_value(levels.report())?)
             }
             "sidecar" => Ok(json!({ "sidecar": true })),
-            other => Err(unknown_method(&MANIFEST, other, &["audio.set", "audio.get", "sidecar"])),
+            other => Err(unknown_method(
+                &MANIFEST,
+                other,
+                &["audio.set", "audio.get", "sidecar"],
+            )),
         }
     }
 }
@@ -221,7 +245,10 @@ pub fn validate(params: &Params) -> Result<()> {
     for (key, value) in params {
         match key.as_str() {
             "uri" | "url" => {
-                anyhow::ensure!(value.is_str(), "layered/source params.{key} must be a string");
+                anyhow::ensure!(
+                    value.is_str(),
+                    "layered/source params.{key} must be a string"
+                );
             }
             "superimpose" => {
                 let s = value.as_str().unwrap_or_default();
@@ -273,7 +300,6 @@ const MEDIA_JOIN_SLACK_NS: u64 = 2_000_000_000;
 /// gap shows on air.
 const LAYER_LATENCY_NS: i64 = 500_000_000;
 
-
 /// How far ahead of the picture the page's media is decoded, in seconds. See
 /// the media queue in `Layers::build`.
 const MEDIA_LEAD_SECS: f64 = 4.0;
@@ -313,7 +339,11 @@ pub enum Fetched {
 }
 
 pub fn cache_media(id: &SourceId, src: &mut String) -> Fetched {
-    let path_part = src.split(['?', '#']).next().unwrap_or("").to_ascii_lowercase();
+    let path_part = src
+        .split(['?', '#'])
+        .next()
+        .unwrap_or("")
+        .to_ascii_lowercase();
     if path_part.ends_with(".m3u8") || path_part.ends_with(".mpd") {
         debug!(source = %id, "the page's video is a stream; playing it from its address");
         return Fetched::Stream;
@@ -324,23 +354,32 @@ pub fn cache_media(id: &SourceId, src: &mut String) -> Fetched {
     else {
         return Fetched::Stream;
     };
-    let stem = path_part.rsplit('/').next().unwrap_or("clip").replace(|c: char| !c.is_ascii_alphanumeric() && c != '.', "_");
+    let stem = path_part
+        .rsplit('/')
+        .next()
+        .unwrap_or("clip")
+        .replace(|c: char| !c.is_ascii_alphanumeric() && c != '.', "_");
     // Numbered per fetch, not only per process: a source rebuilt after its
     // browser died fetches its clips again while the old pipeline, torn down
     // on another thread, is deleting its own, and with the same names the new
     // copy would go with the old.
     static FETCHES: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
     let n = FETCHES.fetch_add(1, Ordering::SeqCst);
-    let file = std::env::temp_dir().join(format!("gmx-media-{id}-{}-{n}-{stem}", std::process::id()));
+    let file =
+        std::env::temp_dir().join(format!("gmx-media-{id}-{}-{n}-{stem}", std::process::id()));
     let fetch = || -> Result<()> {
         let pipeline = gst::Pipeline::with_name(&format!("fetch-{id}"));
         let http = make(factory, &format!("{id}-fetch-src"))?;
         http.set_property("location", &*src);
         let sink = make("filesink", &format!("{id}-fetch-sink"))?;
         sink.set_property("location", file.to_string_lossy().as_ref());
-        pipeline.add_many([&http, &sink]).context("adding fetch elements")?;
+        pipeline
+            .add_many([&http, &sink])
+            .context("adding fetch elements")?;
         http.link(&sink).context("linking fetch")?;
-        pipeline.set_state(gst::State::Playing).context("starting fetch")?;
+        pipeline
+            .set_state(gst::State::Playing)
+            .context("starting fetch")?;
         let bus = pipeline.bus().context("fetch pipeline has no bus")?;
         let msg = bus.timed_pop_filtered(
             gst::ClockTime::from_seconds(MEDIA_FETCH_TIMEOUT.as_secs()),
@@ -520,7 +559,9 @@ impl MediaBranch {
             conv: make("videoconvert", &format!("{id}-media{n}-conv"))?,
             caps: gstutil::capsfilter(
                 &format!("{id}-media{n}-caps"),
-                &gst::Caps::builder("video/x-raw").field("format", "I420").build(),
+                &gst::Caps::builder("video/x-raw")
+                    .field("format", "I420")
+                    .build(),
             )?,
             // The media decodes far faster than real time and then waits on
             // the compositor, and this queue is where those frames sit. Its
@@ -542,8 +583,15 @@ impl MediaBranch {
 
     fn elements(&self) -> [&gst::Element; 9] {
         [
-            &self.src, &self.conv, &self.caps, &self.q, &self.scale, &self.aq, &self.aconv,
-            &self.ares, &self.avol,
+            &self.src,
+            &self.conv,
+            &self.caps,
+            &self.q,
+            &self.scale,
+            &self.aq,
+            &self.aconv,
+            &self.ares,
+            &self.avol,
         ]
     }
 }
@@ -565,7 +613,10 @@ impl Layers {
             .cloned()
             .map(|item| MediaBranch::build(id, item))
             .collect::<Result<Vec<_>>>()?;
-        anyhow::ensure!(!media.is_empty(), "a layered source needs at least one video");
+        anyhow::ensure!(
+            !media.is_empty(),
+            "a layered source needs at least one video"
+        );
         Ok(Self {
             media,
             over_q: gstutil::queue_thread(&format!("{id}-over-q"))?,
@@ -589,7 +640,9 @@ impl Layers {
             // makes the feature work at all.
             comp_caps: gstutil::capsfilter(
                 &format!("{id}-sup-caps"),
-                &gst::Caps::builder("video/x-raw").field("format", "AYUV").build(),
+                &gst::Caps::builder("video/x-raw")
+                    .field("format", "AYUV")
+                    .build(),
             )?,
             // And back to I420 immediately, so what leaves this bin is what
             // every other source produces and nothing downstream has to know
@@ -597,7 +650,9 @@ impl Layers {
             flat_conv: make("videoconvert", &format!("{id}-sup-flat-conv"))?,
             flat_caps: gstutil::capsfilter(
                 &format!("{id}-sup-flat-caps"),
-                &gst::Caps::builder("video/x-raw").field("format", "I420").build(),
+                &gst::Caps::builder("video/x-raw")
+                    .field("format", "I420")
+                    .build(),
             )?,
             counts: Arc::new(LayerCounts::default()),
         })
@@ -702,7 +757,10 @@ impl Layers {
             // a rounded rectangle; where the two disagree by one, the
             // compositor's background would show as a line.
             let (x, y) = ((x - 1).max(0), (y - 1).max(0));
-            let (w, h) = ((w + 2).min(canvas.width - x), (h + 2).min(canvas.height - y));
+            let (w, h) = (
+                (w + 2).min(canvas.width - x),
+                (h + 2).min(canvas.height - y),
+            );
             let pad = self
                 .comp
                 .request_pad_simple("sink_%u")
@@ -725,16 +783,30 @@ impl Layers {
                 .context("video branch has no src pad")?
                 .link(&pad)
                 .context("linking a video into the compositor")?;
-            info!(video = b.item.index, x, y, width = w, height = h, muted = b.item.muted, "page video placed on the canvas");
+            info!(
+                video = b.item.index,
+                x,
+                y,
+                width = w,
+                height = h,
+                muted = b.item.muted,
+                "page video placed on the canvas"
+            );
             media_pads.push(pad);
         }
 
         // The page arrives from the sidecar already keyed: alpha zero where a
         // video the mixer draws itself used to be. See `KEY_TOLERANCE` in the
         // sidecar's mux.rs for why that happens there and not here.
-        gst::Element::link_many([&self.over_q, &self.over_conv]).context("linking the page branch")?;
-        gst::Element::link_many([&self.page_aconv, &self.page_ares, &self.page_vol, &self.amix])
-            .context("linking the page's sound into the mix")?;
+        gst::Element::link_many([&self.over_q, &self.over_conv])
+            .context("linking the page branch")?;
+        gst::Element::link_many([
+            &self.page_aconv,
+            &self.page_ares,
+            &self.page_vol,
+            &self.amix,
+        ])
+        .context("linking the page's sound into the mix")?;
         let over_pad = self
             .comp
             .request_pad_simple("sink_%u")
@@ -755,9 +827,17 @@ impl Layers {
             .link(&over_pad)
             .context("linking the page into the compositor")?;
 
-        gst::Element::link_many([&self.comp, &self.comp_caps, &self.flat_conv, &self.flat_caps, vrate])
-            .context("linking the composed layers into the normaliser")?;
-        self.amix.link(audio_entry).context("linking the mix into the audio chain")?;
+        gst::Element::link_many([
+            &self.comp,
+            &self.comp_caps,
+            &self.flat_conv,
+            &self.flat_caps,
+            vrate,
+        ])
+        .context("linking the composed layers into the normaliser")?;
+        self.amix
+            .link(audio_entry)
+            .context("linking the mix into the audio chain")?;
 
         // One counter on each side of the compositor. See `LayerCounts`.
         for b in &self.media {
@@ -785,7 +865,11 @@ impl Layers {
                 .and_then(|c| c.structure(0).map(|s| s.name().to_string()))
                 .unwrap_or_default();
             let name = pad.name();
-            if name.starts_with("video") || media.starts_with("video/") || name.starts_with("audio") || media.starts_with("audio/") {
+            if name.starts_with("video")
+                || media.starts_with("video/")
+                || name.starts_with("audio")
+                || media.starts_with("audio/")
+            {
                 me.watch(&pid, Stream::Page, pad, None);
             }
         });
@@ -972,7 +1056,9 @@ impl Placement {
     fn now(&self, pad: &gst::Pad) -> gst::ClockTime {
         pad.parent_element()
             .and_then(|el| el.current_running_time())
-            .unwrap_or_else(|| gst::ClockTime::from_nseconds(self.started.lock().elapsed().as_nanos() as u64))
+            .unwrap_or_else(|| {
+                gst::ClockTime::from_nseconds(self.started.lock().elapsed().as_nanos() as u64)
+            })
     }
 
     pub fn reset(&self) {
@@ -1085,11 +1171,7 @@ struct Watch {
 impl Watch {
     /// A new segment: place this layer where the round before it ended, or at
     /// `now` with the stream's own bias when there is nothing to join.
-    fn on_segment(
-        &self,
-        on: &gst::Pad,
-        seg: Option<gst::FormattedSegment<gst::ClockTime>>,
-    ) {
+    fn on_segment(&self, on: &gst::Pad, seg: Option<gst::FormattedSegment<gst::ClockTime>>) {
         let folded = gst::ClockTime::from_nseconds(on.offset().max(0) as u64);
         *self.segment.lock() = seg.map(|sg| (sg, folded));
         if self.own_change.swap(false, Ordering::SeqCst) {
@@ -1193,9 +1275,14 @@ impl Watch {
     fn on_buffer(&self, on: &gst::Pad, b: &gst::Buffer) {
         let Some(pts) = b.pts() else { return };
         let guard = self.segment.lock();
-        let Some((seg, folded)) = guard.as_ref() else { return };
+        let Some((seg, folded)) = guard.as_ref() else {
+            return;
+        };
         // The stream's own running time, placement taken out.
-        let rt = seg.to_running_time(pts).unwrap_or(gst::ClockTime::ZERO).saturating_sub(*folded);
+        let rt = seg
+            .to_running_time(pts)
+            .unwrap_or(gst::ClockTime::ZERO)
+            .saturating_sub(*folded);
         drop(guard);
         let now = self.me.now(on);
         if self.stream == Stream::Page {
@@ -1261,7 +1348,11 @@ impl Watch {
         // and the sound came back three quarters of a second later. Only a
         // first round, which has nothing to join, is placed by its first
         // buffer.
-        let place = if after.is_zero() { biased(self.stream, now, after) } else { placed };
+        let place = if after.is_zero() {
+            biased(self.stream, now, after)
+        } else {
+            placed
+        };
         place_offset(on, &self.own_change, place.saturating_sub(rt));
         if now > placed + gst::ClockTime::from_mseconds(100)
             || rt > gst::ClockTime::from_mseconds(20)
@@ -1310,7 +1401,6 @@ fn restart_round(el: gst::Element, me: Arc<Placement>, id: SourceId) {
     me.restarting.store(false, Ordering::SeqCst);
 }
 
-
 /// The levels a superimposed source exposes.
 ///
 /// A page drawn over video has two sounds: the page's own, which is the
@@ -1346,7 +1436,10 @@ impl AudioLevels {
     }
 
     pub fn media_gains(&self) -> Vec<f64> {
-        self.media.iter().map(|v| v.property::<f64>("volume")).collect()
+        self.media
+            .iter()
+            .map(|v| v.property::<f64>("volume"))
+            .collect()
     }
 
     pub fn media_count(&self) -> usize {
@@ -1382,6 +1475,9 @@ impl AudioLevels {
     /// Where the channels sit now, read back off the elements rather than
     /// remembered, so a clamped request reports the gain that took effect.
     pub fn report(&self) -> SourceAudio {
-        SourceAudio { page: self.page_gain(), media: self.media_gains() }
+        SourceAudio {
+            page: self.page_gain(),
+            media: self.media_gains(),
+        }
     }
 }

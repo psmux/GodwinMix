@@ -108,7 +108,10 @@ pub struct IceConfig {
 
 impl Default for IceConfig {
     fn default() -> Self {
-        Self { stun: "stun://stun.l.google.com:19302".into(), turn: Vec::new() }
+        Self {
+            stun: "stun://stun.l.google.com:19302".into(),
+            turn: Vec::new(),
+        }
     }
 }
 
@@ -159,9 +162,15 @@ mod tests {
     #[test]
     fn an_empty_stun_means_host_candidates_only() {
         assert!(!IceConfig::default().is_lan_only());
-        let lan = IceConfig { stun: String::new(), turn: vec![] };
+        let lan = IceConfig {
+            stun: String::new(),
+            turn: vec![],
+        };
         assert!(lan.is_lan_only());
-        let relayed = IceConfig { stun: String::new(), turn: vec!["turn://x".into()] };
+        let relayed = IceConfig {
+            stun: String::new(),
+            turn: vec!["turn://x".into()],
+        };
         assert!(!relayed.is_lan_only());
     }
 }

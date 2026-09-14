@@ -49,7 +49,9 @@ mod tests {
     /// The committed file, read from the source tree rather than the working
     /// directory, so the test passes wherever cargo is run from.
     fn committed() -> std::path::PathBuf {
-        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..").join(PATH)
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../..")
+            .join(PATH)
     }
 
     #[test]
@@ -68,7 +70,10 @@ mod tests {
     #[test]
     fn the_schema_says_draft_2020_12_and_describes_an_item() {
         let schema: Value = serde_json::from_str(&generate()).unwrap();
-        assert_eq!(schema["$schema"], "https://json-schema.org/draft/2020-12/schema");
+        assert_eq!(
+            schema["$schema"],
+            "https://json-schema.org/draft/2020-12/schema"
+        );
         let defs = &schema["$defs"];
         assert!(defs["Item"].is_object(), "no Item definition: {defs}");
         assert!(defs["Fit"].is_object(), "no Fit definition");
@@ -78,6 +83,9 @@ mod tests {
     #[test]
     fn the_flat_schema_generates_too() {
         let schema: Value = serde_json::from_str(&generate_flat()).unwrap();
-        assert!(schema["$defs"]["Record"].is_object(), "no Record definition");
+        assert!(
+            schema["$defs"]["Record"].is_object(),
+            "no Record definition"
+        );
     }
 }

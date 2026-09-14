@@ -101,7 +101,10 @@ pub struct MediaLibrary {
 
 impl MediaLibrary {
     pub fn new(cfg: MediaConfig) -> Self {
-        Self { cfg, cache: Mutex::new(HashMap::new()) }
+        Self {
+            cfg,
+            cache: Mutex::new(HashMap::new()),
+        }
     }
 
     pub fn dir(&self) -> &Path {
@@ -131,9 +134,17 @@ impl MediaLibrary {
             );
             out.push(part);
         }
-        let root = self.dir().canonicalize().context("the media library is not readable")?;
-        let real = out.canonicalize().with_context(|| format!("no such file {name}"))?;
-        anyhow::ensure!(real.starts_with(&root), "{name:?} is outside the media library");
+        let root = self
+            .dir()
+            .canonicalize()
+            .context("the media library is not readable")?;
+        let real = out
+            .canonicalize()
+            .with_context(|| format!("no such file {name}"))?;
+        anyhow::ensure!(
+            real.starts_with(&root),
+            "{name:?} is outside the media library"
+        );
         anyhow::ensure!(real.is_file() && is_media(&real), "{name:?} is not a clip");
         Ok(real)
     }
@@ -160,15 +171,22 @@ impl MediaLibrary {
         // `plain_stem` strips one ordinary extension. A `.web.mp4` whose
         // original is not in the library is left in the list, because someone
         // may have uploaded one directly.
-        let originals: std::collections::HashSet<String> =
-            items.iter().filter(|i| !crate::convert::is_converted_name(&i.name)).map(|i| plain_stem(&i.name)).collect();
+        let originals: std::collections::HashSet<String> = items
+            .iter()
+            .filter(|i| !crate::convert::is_converted_name(&i.name))
+            .map(|i| plain_stem(&i.name))
+            .collect();
         let converted: std::collections::HashMap<String, String> = items
             .iter()
-            .filter(|i| crate::convert::is_converted_name(&i.name) && originals.contains(&converted_stem(&i.name)))
+            .filter(|i| {
+                crate::convert::is_converted_name(&i.name)
+                    && originals.contains(&converted_stem(&i.name))
+            })
             .map(|i| (converted_stem(&i.name), i.path.clone()))
             .collect();
         items.retain(|i| {
-            !(crate::convert::is_converted_name(&i.name) && converted.contains_key(&converted_stem(&i.name)))
+            !(crate::convert::is_converted_name(&i.name)
+                && converted.contains_key(&converted_stem(&i.name)))
         });
         for it in items.iter_mut() {
             if let Some(path) = converted.get(&plain_stem(&it.name)) {
@@ -178,21 +196,19 @@ impl MediaLibrary {
                 it.conversion = conv.state(&it.name);
             }
         }
-        MediaListing { dir: dir.display().to_string(), items, error }
+        MediaListing {
+            dir: dir.display().to_string(),
+            items,
+            error,
+        }
     }
 
-    fn walk(
-        &self,
-        root: &Path,
-        dir: &Path,
-        depth: usize,
-        out: &mut Vec<MediaItem>,
-    ) -> Result<()> {
+    fn walk(&self, root: &Path, dir: &Path, depth: usize, out: &mut Vec<MediaItem>) -> Result<()> {
         if depth > self.cfg.max_depth || out.len() >= self.cfg.max_files {
             return Ok(());
         }
-        let entries = std::fs::read_dir(dir)
-            .with_context(|| format!("reading {}", dir.display()))?;
+        let entries =
+            std::fs::read_dir(dir).with_context(|| format!("reading {}", dir.display()))?;
 
         for entry in entries.flatten() {
             if out.len() >= self.cfg.max_files {
@@ -278,7 +294,11 @@ impl MediaLibrary {
                 faststart: None,
             }
         });
-        let probed = Probed { modified, size: meta.len(), ..probed };
+        let probed = Probed {
+            modified,
+            size: meta.len(),
+            ..probed
+        };
         self.cache.lock().insert(path.to_path_buf(), probed.clone());
         probed
     }
@@ -340,8 +360,14 @@ pub fn safe_upload_name(raw: &str) -> Result<String> {
         !name.contains(['/', '\\', '\0']) && name != "." && name != "..",
         "a file name is one segment: no slashes, no ..",
     );
-    anyhow::ensure!(!name.starts_with('.'), "a name starting with a dot is hidden from the library");
-    anyhow::ensure!(!name.chars().any(|c| c.is_control()), "a file name cannot contain control characters");
+    anyhow::ensure!(
+        !name.starts_with('.'),
+        "a name starting with a dot is hidden from the library"
+    );
+    anyhow::ensure!(
+        !name.chars().any(|c| c.is_control()),
+        "a file name cannot contain control characters"
+    );
     anyhow::ensure!(
         is_media(Path::new(name)),
         "only video containers are accepted here: {}",
@@ -357,12 +383,21 @@ mod tests {
     #[test]
     fn an_upload_name_is_one_segment_with_a_known_extension() {
         assert!(safe_upload_name("clip.mp4").is_ok());
-        assert!(safe_upload_name("  Sting.MOV  ").is_ok(), "trimmed and case insensitive");
+        assert!(
+            safe_upload_name("  Sting.MOV  ").is_ok(),
+            "trimmed and case insensitive"
+        );
         assert!(safe_upload_name("../clip.mp4").is_err());
-        assert!(safe_upload_name("a/b.mp4").is_err(), "no subdirectories on upload");
+        assert!(
+            safe_upload_name("a/b.mp4").is_err(),
+            "no subdirectories on upload"
+        );
         assert!(safe_upload_name("a\\b.mp4").is_err());
         assert!(safe_upload_name(".hidden.mp4").is_err());
-        assert!(safe_upload_name("notes.txt").is_err(), "not a video container");
+        assert!(
+            safe_upload_name("notes.txt").is_err(),
+            "not a video container"
+        );
         assert!(safe_upload_name("").is_err());
     }
 
@@ -372,10 +407,16 @@ mod tests {
         let _ = std::fs::create_dir_all(dir.join("sub"));
         std::fs::write(dir.join("a.mp4"), b"x").unwrap();
         std::fs::write(dir.join("sub").join("c.mkv"), b"x").unwrap();
-        let lib = MediaLibrary::new(MediaConfig { dir: dir.display().to_string(), ..Default::default() });
+        let lib = MediaLibrary::new(MediaConfig {
+            dir: dir.display().to_string(),
+            ..Default::default()
+        });
 
         assert!(lib.resolve("a.mp4").is_ok());
-        assert!(lib.resolve("sub/c.mkv").is_ok(), "a nested listed name resolves");
+        assert!(
+            lib.resolve("sub/c.mkv").is_ok(),
+            "a nested listed name resolves"
+        );
         assert!(lib.resolve("../../etc/passwd").is_err());
         assert!(lib.resolve("sub/../../../etc/passwd").is_err());
         assert!(lib.resolve("nope.mp4").is_err(), "a file that is not there");
@@ -390,14 +431,29 @@ mod tests {
         std::fs::write(dir.join("clip.mkv"), b"x").unwrap();
         std::fs::write(dir.join("clip.web.mp4"), b"x").unwrap();
         std::fs::write(dir.join("orphan.web.mp4"), b"x").unwrap();
-        let lib = MediaLibrary::new(MediaConfig { dir: dir.display().to_string(), ..Default::default() });
+        let lib = MediaLibrary::new(MediaConfig {
+            dir: dir.display().to_string(),
+            ..Default::default()
+        });
         let listing = lib.list_with(None);
         let names: Vec<_> = listing.items.iter().map(|i| i.name.clone()).collect();
-        assert!(names.contains(&"clip.mkv".to_string()), "the original is listed");
-        assert!(!names.contains(&"clip.web.mp4".to_string()), "its converted copy is folded away");
-        assert!(names.contains(&"orphan.web.mp4".to_string()), "a converted file with no original stays");
+        assert!(
+            names.contains(&"clip.mkv".to_string()),
+            "the original is listed"
+        );
+        assert!(
+            !names.contains(&"clip.web.mp4".to_string()),
+            "its converted copy is folded away"
+        );
+        assert!(
+            names.contains(&"orphan.web.mp4".to_string()),
+            "a converted file with no original stays"
+        );
         let clip = listing.items.iter().find(|i| i.name == "clip.mkv").unwrap();
-        assert!(clip.converted_path.is_some(), "the original points at its converted copy");
+        assert!(
+            clip.converted_path.is_some(),
+            "the original points at its converted copy"
+        );
         let _ = std::fs::remove_dir_all(&dir);
     }
 
@@ -419,7 +475,10 @@ mod tests {
         });
         let listing = lib.list_with(None);
         assert!(listing.items.is_empty());
-        assert!(listing.error.is_some(), "an unreadable directory must say so");
+        assert!(
+            listing.error.is_some(),
+            "an unreadable directory must say so"
+        );
     }
 
     #[test]
@@ -439,7 +498,11 @@ mod tests {
         let listing = lib.list_with(None);
         let names: Vec<_> = listing.items.iter().map(|i| i.name.clone()).collect();
         assert!(listing.error.is_none());
-        assert_eq!(names, vec!["a.mov", "b.mp4", "sub/c.mkv"], "sorted, nested, text excluded");
+        assert_eq!(
+            names,
+            vec!["a.mov", "b.mp4", "sub/c.mkv"],
+            "sorted, nested, text excluded"
+        );
         // Unreadable files are still listed, just without a duration.
         assert!(listing.items.iter().all(|i| i.duration_ms.is_none()));
 
