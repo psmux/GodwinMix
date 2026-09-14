@@ -1,8 +1,12 @@
-# `src/observe/`
+# `godwinmix_core::observe`
 
 Logs, metrics, the session log and pipeline introspection, behind one
 correlation id. Phase 0 of the observability contract: everything here works on
 today's architecture and none of it waits for the traits.
+
+The instrumentation is here, in the engine, so an embedded mixer is observable
+with nothing serving. The surfaces a client reaches are in the `godwinmix`
+crate, which is where axum, clap and reqwest are allowed.
 
 | File | What is in it |
 |---|---|
@@ -11,11 +15,16 @@ today's architecture and none of it waits for the traits.
 | `session.rs` | the append only JSONL session log and the event recorder |
 | `introspect.rs` | the pipeline registry, dot, latency, queues, clock, startup report |
 | `doctor.rs` | the environment checks |
-| `trace.rs` | `TraceId`, W3C `traceparent`, the task local |
-| `bundle.rs` | the store only zip writer, config redaction, `gmx support-bundle` |
-| `methods.rs` | the rows this module puts in the control plane's method table |
-| `routes.rs` | the axum router the control plane merges |
-| `cli.rs` | `gmx doctor`, `logs`, `trace`, `dot`, `support-bundle` |
+| `trace.rs` | the task local; `TraceId` and W3C `traceparent` are in `godwinmix-protocol` |
+
+And in `crates/godwinmix/src/`:
+
+| File | What is in it |
+|---|---|
+| `observe/methods.rs` | the rows this module puts in the control plane's method table |
+| `observe/routes.rs` | the axum router the control plane merges |
+| `cli/observe.rs` | `gmx doctor`, `logs`, `trace`, `dot`, `support-bundle` |
+| `cli/bundle.rs` | the store only zip writer, config redaction, `gmx support-bundle` |
 
 Operator documentation is in `docs/how-to/debug-a-show.md`; the metric list is
 `docs/reference/metrics.md`.
@@ -131,8 +140,10 @@ pub struct LevelCode;  // OFF, ERROR, WARN, INFO, DEBUG, TRACE; LevelCode::parse
 ```
 
 A target is matched as a module path prefix and the longest match wins, so
-`godwinmix::mixer` also reaches `godwinmix::mixer::supervisor` and a more
-specific override still beats it.
+`godwinmix_core::mixer` also reaches `godwinmix_core::mixer::supervisor` and a
+more specific override still beats it. The prefix is the Rust module path, so
+a bare `godwinmix` still catches `godwinmix_core` and `godwinmix_protocol`
+too.
 
 ## Metrics signatures
 

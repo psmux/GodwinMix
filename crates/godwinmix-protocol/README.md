@@ -1,4 +1,18 @@
-# src/api: the control surface, as data
+# godwinmix-protocol: the control surface, as data
+
+The wire contract between a GodwinMix mixer and anything that talks to it.
+Request, response, event and status types, the error code table, scopes and
+tokens, the trace id, the method table, and the generators behind
+`protocol.json`, `protocol.md`, `openapi.json` and the MCP tool list.
+
+Its dependencies are serde, serde_json and schemars. No GStreamer, no HTTP
+server, nothing that has to be installed first, and CI fails if that changes.
+Depend on this crate alone to write a client, an SDK or a test harness.
+
+`API_LEVEL` and `API_COMPATIBLE` are here, which makes this crate what the
+compatibility promise is written against: level 1 is frozen for breaking
+changes, additions bump the level, and `api_compatible` moves only at an
+announced major.
 
 Every method the core answers is a row in a table. The table is walked to
 dispatch a call on `/rpc`, to build the `/api/v1` router, to write
@@ -10,10 +24,13 @@ row adds the method to all four.
 Your module owns its methods. control.rs does not need to know they exist
 beyond one call that hands your module the registry.
 
+The table lives here; the handlers live in the `godwinmix` crate, because a
+handler reaches into a running mixer and this crate does not know there is one.
+
 ```rust
-use godwinmix::api::method::{MethodDef, Registry, schema_of, Tier};
-use godwinmix::api::scope::Scope;
-use godwinmix::control::Call;              // the call context
+use godwinmix_protocol::method::{MethodDef, Registry, schema_of, Tier};
+use godwinmix_protocol::scope::Scope;
+use crate::control::Call;                  // the call context, in `godwinmix`
 use std::sync::Arc;
 
 pub fn register(reg: &mut Registry<Call>) {
@@ -85,8 +102,9 @@ tool list inlines them, because most clients do not resolve `$ref`.
 ## Where the expensive streams hang
 
 Nothing in this module. A stream that costs CPU is held up by whoever is
-watching it: `AppState::multiview` hands out a `MultiviewSubscription`, the
+watching it: `AppState::multiview` in the `godwinmix` crate hands out a
+`MultiviewSubscription`, the
 mosaic pipeline exists for as long as one is alive, and it is taken down
 again a couple of seconds after the last one drops. A `/rpc` connection that
 subscribed with `ext.multiview` holds one for as long as it wants frames. See
-`src/multiview.rs`.
+`godwinmix_core::multiview`.

@@ -18,12 +18,20 @@
 
 use anyhow::{Context, Result};
 use godwinmix_core::config::SourceConfig;
+use godwinmix_core::observe::logs;
 use godwinmix_core::prelude::*;
 use std::time::Duration;
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    tracing_subscriber::fmt().with_env_filter("info").init();
+    // The engine's own log layer, which is what a GodwinMix binary installs:
+    // `RUST_LOG` sets the starting point and `logs::set_default_level` moves it
+    // at runtime. A host program that has its own subscriber skips this.
+    logs::init(logs::Options {
+        format: logs::Format::Auto,
+        node: None,
+        env_filter: std::env::var("RUST_LOG").ok(),
+    });
     let status = run().await?;
     println!("programme was on {:?} with {} source(s)", status.program, status.sources.len());
     Ok(())

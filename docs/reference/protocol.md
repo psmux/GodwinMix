@@ -1,8 +1,8 @@
 # The control protocol: where the reference lives
 
 The reference is generated, not written. Three artefacts sit at the repository
-root, all built from the method table in `src/api/`, all checked by a test
-that regenerates them and fails on any difference.
+root, all built from the method table in `crates/godwinmix-protocol/src/`, all
+checked by a test that regenerates them and fails on any difference.
 
 | File | What it is | Read it when |
 |---|---|---|
@@ -53,7 +53,7 @@ may use against an older core without probing for a 404.
 
 Methods are rows in a table, and the table is the only place a method is
 declared: `/rpc`, `/api/v1`, these three documents and the MCP tool list are
-all built from it. `src/api/README.md` is the how to, and it is short.
+all built from it. `crates/godwinmix-protocol/README.md` is the how to, and it is short.
 
 ## The rest of the shelf
 

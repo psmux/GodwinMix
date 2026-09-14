@@ -45,7 +45,7 @@ asking what is upstream.
 
 ## The trait
 
-`src/plugin/source.rs`:
+`crates/godwinmix-core/src/plugin/source.rs`:
 
 ```rust
 pub trait Source: Send {
@@ -106,7 +106,8 @@ stores these and never interprets them.
 
 ## The shared normaliser
 
-`src/plugin/kinds/normalise.rs` builds everything from `videorate` down. A kind
+`crates/godwinmix-core/src/plugin/kinds/normalise.rs` builds everything from
+`videorate` down. A kind
 builds only what sits above it and says where its dynamic pads should go:
 
 ```rust
@@ -127,7 +128,8 @@ problem and paces its own output anyway.
 
 ## ProgrammeBranch
 
-`src/plugin/branch.rs`. The mixer builds one per source and hands it over: the
+`crates/godwinmix-core/src/plugin/branch.rs`. The mixer builds one per source
+and hands it over: the
 two proxy sources, the two queues, the fader, the meter, the mute, and the two
 mixer pads.
 

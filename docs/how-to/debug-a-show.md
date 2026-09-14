@@ -80,12 +80,18 @@ works the same way:
 
 ```
 curl -X POST localhost:8080/api/v1/log/set \
-  -d '{"target": "godwinmix::mixer", "level": "trace"}'
+  -d '{"target": "godwinmix_core::mixer", "level": "trace"}'
 ```
 
 A target matches as a module path prefix and the longest match wins, so
-`godwinmix::mixer` also reaches everything under it and a more specific
+`godwinmix_core::mixer` also reaches everything under it and a more specific
 override still beats it.
+
+The prefix is the Rust module path, so it names the crate the code is in:
+`godwinmix_core` for the mixing (the mixer, sources, outputs, plugins, scenes),
+`godwinmix` for the control plane, the CLI and the MCP server, and
+`godwinmix_protocol` for the contract. A bare `godwinmix` still catches all
+three, because it is a prefix of the other two.
 
 Put it back with `{"level": "default"}` on the same instance or target. Ask
 what is in force with `GET /api/v1/log/levels`.

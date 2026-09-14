@@ -13,7 +13,8 @@ a file, change some colours, and the page looks different.
    { id: "midnight", title: "Midnight", href: "themes/midnight.css" },
    ```
 
-4. Add the file to the table in `src/ui.rs` so it ships in the binary.
+4. Add the file to the table in `crates/godwinmix/src/ui.rs` so it ships in
+   the binary.
 5. Reload. It is in the theme picker in Settings, and the choice is remembered
    per device.
 

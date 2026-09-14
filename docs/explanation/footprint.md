@@ -55,7 +55,7 @@ here is in process and so is the cheaper half of it.
 for the snapshot routes. It does not exist until a client subscribes, and it is
 taken down two seconds after the last one leaves, so the row is genuinely zero
 when nobody is looking: not a small number, no pipeline at all. See
-`src/multiview.rs`.
+`crates/godwinmix-core/src/multiview.rs`.
 
 **Snapshot and motion tracker.** Decodes each mosaic frame to luma and scores
 the change per cell, which is what lets an agent ask "what is moving" for
