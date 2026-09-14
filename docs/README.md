@@ -16,7 +16,7 @@ Start here if you have never run it.
 
 * [Your first stream in five minutes, with Docker](tutorials/first-stream-docker.md)
 * [Your first stream with the desktop app](tutorials/first-stream-desktop.md)
-* [Your first plugin](tutorials/your-first-plugin.md) (planned; the page says what is missing)
+* [Your first plugin](tutorials/your-first-plugin.md)
 
 ## How to
 
@@ -25,20 +25,25 @@ Start here if you have never run it.
 * [Run it on a Raspberry Pi](how-to/raspberry-pi.md)
 * [Choose a hardware encoder](how-to/choose-a-hardware-encoder.md)
 * [Roll an ad break](how-to/ad-breaks.md)
+* [Run the terminal UI](how-to/terminal-ui.md)
 * [Add a theme](how-to/add-a-theme.md) (planned)
 * [Write a preset](how-to/write-a-preset.md) (planned)
 * [Upgrade from LiveboxMix](how-to/upgrade-from-liveboxmix.md)
 * [Run the smoke test](how-to/smoke-test.md)
 * [Embed the engine in your own program](how-to/embed-the-engine.md)
+* [Write a source plugin in Rust](how-to/write-a-source-plugin.md)
 
 ## Reference
 
 * [The HTTP API](reference/http-api.md)
 * [The command line](reference/cli.md)
+* [The keyboard](reference/keyboard.md)
 * [Configuration, every key](reference/configuration.md)
 * [Sources](reference/sources.md)
 * [Web page sources](reference/web-page-sources.md)
 * [The generated protocol reference](reference/protocol.md)
+* [The plugin manifest](reference/plugin-manifest.md)
+* [The plugin protocol](reference/plugin-protocol.md)
 
 ## Explanation
 

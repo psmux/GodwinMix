@@ -1,36 +1,26 @@
-# The manifest. It is read by a person, a package index and a model, without
-# running anything. `gmx plugin test` validates every key in it.
 [plugin]
 name = "{{name}}"
 version = "0.1.0"
-# The protocol level this plugin was written against. It loads on any core
-# whose api_compatible <= 1 <= api_level.
 api = 1
-description = "Colour bars at the canvas size. Replace the gst-launch-1.0 line in run.sh with whatever produces your picture."
-license = "MIT"
+description = "{{description}}"
+license = "{{license}}"
+authors = ["{{author}}"]
+# No windows-x86_64. A [run] shell entry is refused on Windows unless [run] also
+# carries a bin entry for it, and this plugin has no binary to offer. If you need
+# Windows, port it to one of the other templates.
 platforms = ["linux-x86_64", "linux-aarch64", "macos-aarch64", "macos-x86_64"]
 placements = ["sidecar", "node"]
 process = "per-instance"
 
-# How the core starts it. One key wins per platform. A shell plugin is refused
-# on Windows unless there is a `bin` entry too, so this template does not claim
-# windows-x86_64 above.
 [run]
 shell = "run.sh"
 
 [[provides]]
-kind = "{{kind}}"
-id = "{{kind}}"
-uri_schemes = ["{{name}}://"]
-# 0 to 256, GStreamer style. The highest ranked provide claiming a scheme wins.
-rank = 128
-# What crosses the boundary. `container` is a stream decodebin opens; `raw` is
-# frames already at the canvas caps.
-media = { video = "container", audio = "none", alpha = false, thumb = true }
-# `container` works on every platform. Add "unixfd" for zero copy on Linux and
-# macOS once the plugin can write frames to a socket.
+kind = "source"
+id = "source"
+media = { video = "raw", audio = "none", alpha = false, thumb = true }
 transports = ["container"]
 capabilities = ["restart-in-place", "health"]
 latency_ms = 0
-settings = "settings.json"
-skill = "SKILL.md"
+settings = "schemas/source.json"
+skill = "skills/source/SKILL.md"
