@@ -365,6 +365,16 @@ impl MixerHandle {
         self.events.subscribe()
     }
 
+    /// Raise an alert from outside the mixer loop.
+    ///
+    /// The plugin budget sampler runs on a thread of its own and has something
+    /// to say when an instance goes over its limit. Everything else that
+    /// raises an alert is already inside the loop and sends the event
+    /// directly.
+    pub fn publish_alert(&self, severity: Severity, message: impl Into<String>) {
+        let _ = self.events.send(Event::Alert { severity, message: message.into() });
+    }
+
     /// The sequence number of the last event published, so a caller taking a
     /// status snapshot can say which point in the stream it is current as of.
     pub fn event_seq(&self) -> u64 {

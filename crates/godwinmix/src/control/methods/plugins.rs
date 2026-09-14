@@ -161,10 +161,15 @@ pub fn register(reg: &mut Registry<Call>) {
 }
 
 /// Anything that names one plugin.
+///
+/// The field is `id` because that is what the REST layer fills in from
+/// `/api/v1/plugins/{id}`, and a plugin's id is its name: the namespace of
+/// every id it contributes. `name` is accepted as well, for a JSON-RPC caller
+/// who wrote the obvious thing.
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 pub struct PluginName {
-    /// The plugin's name, which is the namespace of every id it contributes.
-    pub name: String,
+    #[serde(alias = "name")]
+    pub id: String,
 }
 
 /// `plugin.add`.
@@ -178,7 +183,8 @@ pub struct AddPluginRequest {
 /// `plugin.settings.set`.
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 pub struct SetSettingsRequest {
-    pub name: String,
+    #[serde(alias = "name")]
+    pub id: String,
     /// Only the keys named are changed.
     #[serde(default)]
     pub settings: Map<String, Value>,
@@ -211,6 +217,10 @@ pub struct PluginRecord {
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 pub struct InstanceRecord {
     pub instance: String,
+    /// The plugin it belongs to. Carried on the instance as well as on the
+    /// plugin, because `plugin.stats` is a flat list and a caller holding one
+    /// row should not have to go back for the name.
+    pub plugin: String,
     pub provide: String,
     pub state: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -289,6 +299,7 @@ fn record(installed: &loader::Installed) -> PluginRecord {
 fn instance(stats: loader::InstanceStats) -> InstanceRecord {
     InstanceRecord {
         instance: stats.instance,
+        plugin: stats.plugin,
         provide: stats.provide,
         state: if stats.state.is_empty() { "stopped".into() } else { stats.state },
         pid: stats.pid,
@@ -321,7 +332,7 @@ async fn stats(_call: Call, _params: Value) -> Result<Value, RpcError> {
 
 async fn describe(call: Call, params: Value) -> Result<Value, RpcError> {
     let req: PluginName = call.params(&params)?;
-    let installed = find(&req.name)?;
+    let installed = find(&req.id)?;
     let manifest = serde_json::to_value(&installed.manifest)
         .map_err(|e| RpcError::internal(format!("encoding the manifest: {e}")))?;
     let mut schemas = Map::new();
@@ -389,7 +400,7 @@ async fn add(call: Call, params: Value) -> Result<Value, RpcError> {
 
 async fn remove(call: Call, params: Value) -> Result<Value, RpcError> {
     let req: PluginName = call.params(&params)?;
-    let installed = find(&req.name)?;
+    let installed = find(&req.id)?;
     if call.dry_run {
         return Ok(call.dry_run_answer(
             true,
@@ -402,7 +413,7 @@ async fn remove(call: Call, params: Value) -> Result<Value, RpcError> {
             )],
         ));
     }
-    let gone = loader::uninstall(&req.name)
+    let gone = loader::uninstall(&req.id)
         .map_err(|e| RpcError::new(ErrorCode::NotInState, format!("{e:#}")))?;
     body(PluginRemoved {
         removed: gone.name().to_string(),
@@ -421,15 +432,15 @@ async fn disable(call: Call, params: Value) -> Result<Value, RpcError> {
 
 async fn set_enabled(call: Call, params: Value, on: bool) -> Result<Value, RpcError> {
     let req: PluginName = call.params(&params)?;
-    find(&req.name)?;
-    let installed = loader::set_enabled(&req.name, on)
-        .ok_or_else(|| RpcError::not_found("plugin", &req.name, &[]))?;
+    find(&req.id)?;
+    let installed = loader::set_enabled(&req.id, on)
+        .ok_or_else(|| RpcError::not_found("plugin", &req.id, &[]))?;
     body(record(&installed))
 }
 
 async fn reload(call: Call, params: Value) -> Result<Value, RpcError> {
     let req: PluginName = call.params(&params)?;
-    let installed = find(&req.name)?;
+    let installed = find(&req.id)?;
     // Read the directory again, in place. Every instance keeps running until
     // its own turn comes, and the freeze frame covers each swap, which is what
     // the supervisor already does for a source being rebuilt.
@@ -439,7 +450,7 @@ async fn reload(call: Call, params: Value) -> Result<Value, RpcError> {
             ErrorCode::NotInState,
             format!(
                 "{} was not reloaded and the running one is untouched: {problem}",
-                req.name
+                req.id
             ),
         ));
     }
@@ -449,16 +460,16 @@ async fn reload(call: Call, params: Value) -> Result<Value, RpcError> {
 
 async fn settings_get(call: Call, params: Value) -> Result<Value, RpcError> {
     let req: PluginName = call.params(&params)?;
-    let installed = find(&req.name)?;
+    let installed = find(&req.id)?;
     body(settings_of(&call, &installed))
 }
 
 async fn settings_set(call: Call, params: Value) -> Result<Value, RpcError> {
     let req: SetSettingsRequest = call.params(&params)?;
-    let installed = find(&req.name)?;
+    let installed = find(&req.id)?;
     // The settings live in the operator's config, which is the one place a
     // restart reads them back from. Everything else is derived.
-    let mut current = call.app.plugin_settings.get(&req.name).cloned().unwrap_or_default();
+    let mut current = call.app.plugin_settings.get(&req.id).cloned().unwrap_or_default();
     for (key, value) in &req.settings {
         match toml::Value::try_from(value) {
             Ok(v) => {
@@ -474,7 +485,7 @@ async fn settings_set(call: Call, params: Value) -> Result<Value, RpcError> {
     }
     let saved = call
         .app
-        .save_plugin_settings(&req.name, current)
+        .save_plugin_settings(&req.id, current)
         .map_err(|e| RpcError::internal(format!("writing the settings: {e:#}")))?;
     let _ = saved;
     body(settings_of(&call, &installed))

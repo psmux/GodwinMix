@@ -110,6 +110,7 @@ impl SidecarSource {
             old.lifecycle_mut().restarting();
             old.shutdown("restarting");
         }
+        crate::plugin::loader::count_restart(&id);
         self.child = None;
         self.handshake()?;
         // The element stays and the pipe behind it changes, which is what
@@ -167,6 +168,18 @@ impl SidecarSource {
                 return Err(e);
             }
         }
+        // The loader holds the numbers `plugin.list` and `plugin.stats` carry,
+        // and the sampler reads a set of pids at a time. Telling it which
+        // process is behind this instance is what puts a cost next to the
+        // plugin's name.
+        crate::plugin::loader::set_pid(
+            &instance,
+            &self.spec.plugin.plugin.name,
+            &self.spec.provide,
+            child.pid(),
+        );
+        crate::plugin::loader::set_state(&instance, child.state().as_str());
+        crate::plugin::loader::set_latency(&instance, self.latency_ms);
         self.media = made;
         self.child = Some(child);
         Ok(())
@@ -193,6 +206,11 @@ impl SidecarSource {
             self.latency_ms = ms as u32;
         }
         self.started = true;
+        crate::plugin::loader::set_latency(&self.build.id, self.latency_ms);
+        crate::plugin::loader::set_state(
+            &self.build.id,
+            godwinmix_protocol::plugin::wire::InstanceState::Running.as_str(),
+        );
         Ok(())
     }
 
@@ -318,6 +336,16 @@ impl Source for SidecarSource {
         if let Some(child) = self.child.as_mut() {
             child.shutdown("the source was stopped");
         }
+        crate::plugin::loader::set_pid(
+            &self.build.id,
+            &self.spec.plugin.plugin.name,
+            &self.spec.provide,
+            None,
+        );
+        crate::plugin::loader::set_state(
+            &self.build.id,
+            godwinmix_protocol::plugin::wire::InstanceState::Stopped.as_str(),
+        );
         self.child = None;
         // Dropping it removes the directory, so no socket and no directory is
         // left behind. The leak counting test checks exactly that.

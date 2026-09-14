@@ -655,6 +655,10 @@
               "null"
             ]
           },
+          "plugin": {
+            "description": "The plugin it belongs to. Carried on the instance as well as on the\nplugin, because `plugin.stats` is a flat list and a caller holding one\nrow should not have to go back for the name.",
+            "type": "string"
+          },
           "provide": {
             "type": "string"
           },
@@ -677,6 +681,7 @@
         },
         "required": [
           "instance",
+          "plugin",
           "provide",
           "state",
           "buffers_dropped",
@@ -1230,15 +1235,14 @@
         "type": "object"
       },
       "PluginName": {
-        "description": "Anything that names one plugin.",
+        "description": "Anything that names one plugin.\n\nThe field is `id` because that is what the REST layer fills in from\n`/api/v1/plugins/{id}`, and a plugin's id is its name: the namespace of\nevery id it contributes. `name` is accepted as well, for a JSON-RPC caller\nwho wrote the obvious thing.",
         "properties": {
-          "name": {
-            "description": "The plugin's name, which is the namespace of every id it contributes.",
+          "id": {
             "type": "string"
           }
         },
         "required": [
-          "name"
+          "id"
         ],
         "type": "object"
       },
@@ -1450,7 +1454,7 @@
       "SetSettingsRequest": {
         "description": "`plugin.settings.set`.",
         "properties": {
-          "name": {
+          "id": {
             "type": "string"
           },
           "settings": {
@@ -1461,7 +1465,7 @@
           }
         },
         "required": [
-          "name"
+          "id"
         ],
         "type": "object"
       },

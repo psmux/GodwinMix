@@ -133,7 +133,14 @@ impl Server {
     /// error: the agent is expected to read it and try something else.
     async fn call(&self, name: &str, args: &Value) -> Value {
         if name == mcp_tools::SEARCH_TOOL {
-            return self.search(args);
+            return self.search(args).await;
+        }
+        // A plugin's tool, if the mixer has one by that name. Routed through
+        // `tool.call`, which reaches the plugin process and brings the answer
+        // back in MCP's own shape. Nothing about this is in the hot list, so
+        // installing a plugin never changes what an agent is shown.
+        if name.starts_with("gmx_") && mcp_tools::method_for(&self.registry, name).is_none() {
+            return self.plugin_tool(name, args).await;
         }
         let plan = match self.plan(name, args) {
             Ok(p) => p,
@@ -150,7 +157,7 @@ impl Server {
 
     /// `search_tools`: everything that is not in the hot list, found by what
     /// the agent is trying to do rather than by name.
-    fn search(&self, args: &Value) -> Value {
+    async fn search(&self, args: &Value) -> Value {
         let query = args.get("query").and_then(Value::as_str).unwrap_or_default();
         if query.trim().is_empty() {
             return error_result(
@@ -160,7 +167,12 @@ impl Server {
             );
         }
         let limit = args.get("limit").and_then(Value::as_u64).unwrap_or(5) as usize;
-        let found = mcp_tools::search(&self.registry, query, limit);
+        let mut found = mcp_tools::search(&self.registry, query, limit);
+        // Whatever the plugins installed on this mixer contribute, ranked the
+        // same way and shown in the same list. This is the only route to a
+        // plugin's tools, which is what keeps the hot list a fixed shape and
+        // the prompt cache valid across an install.
+        found.extend(self.plugin_tools(query, limit).await);
         if found.is_empty() {
             let names: Vec<&str> = self
                 .registry
@@ -178,6 +190,109 @@ impl Server {
             "Call any of these by name with tools/call. They are not in your tool list, and \
              they do not need to be.\n{text}"
         ))
+    }
+
+    /// The plugin tools this mixer has, matching a query.
+    ///
+    /// Asked of the mixer rather than held here, because the MCP server is a
+    /// separate process and a plugin can be installed while it runs. A mixer
+    /// that cannot be reached contributes nothing rather than failing the
+    /// search: the core tools are still worth finding.
+    async fn plugin_tools(&self, query: &str, limit: usize) -> Vec<Value> {
+        let Ok(listing) = self.get_json("/api/v1/plugins").await else { return Vec::new() };
+        let words: Vec<String> =
+            query.to_lowercase().split_whitespace().map(str::to_string).collect();
+        let mut found = Vec::new();
+        for plugin in listing["plugins"].as_array().cloned().unwrap_or_default() {
+            if !plugin["enabled"].as_bool().unwrap_or(false) {
+                continue;
+            }
+            let name = plugin["name"].as_str().unwrap_or("").to_string();
+            let description = plugin["description"].as_str().unwrap_or("").to_lowercase();
+            for tool in plugin["tools"].as_array().cloned().unwrap_or_default() {
+                let Some(tool) = tool.as_str() else { continue };
+                let haystack = format!("{tool} {name} {description}");
+                if words.iter().any(|w| haystack.contains(w.as_str())) {
+                    found.push(json!({
+                        "name": tool,
+                        "description": format!(
+                            "A tool from the `{name}` plugin. Call it by name with \
+                             tools/call; `describe_plugin {{name: \"{name}\"}}` says what \
+                             arguments it takes."
+                        ),
+                        "plugin": name,
+                    }));
+                }
+                if found.len() >= limit {
+                    return found;
+                }
+            }
+        }
+        found
+    }
+
+    /// Call one plugin's tool through the mixer's `tool.call`.
+    ///
+    /// The MCP name is resolved by asking the mixer which plugin declares it,
+    /// rather than by taking `gmx_<plugin>_<tool>` apart here. A plugin name
+    /// may carry a hyphen and an MCP tool name may not, so the two halves
+    /// cannot be told apart from the string alone: `gmx_colour_bars_draw` is
+    /// `colour-bars/draw` or `colour/bars_draw` and only the mixer knows which.
+    async fn plugin_tool(&self, name: &str, args: &Value) -> Value {
+        let Some(qualified) = self.resolve_plugin_tool(name).await else {
+            return error_result(format!(
+                "there is no tool {name:?} on this mixer. Use search_tools to find one by \
+                 what it does, or list_plugins to see what is installed."
+            ));
+        };
+        let body = json!({ "name": qualified, "arguments": args });
+        let url = format!("{}/api/v1/tool/call", self.base);
+        let mut request = self.client.post(&url).json(&body);
+        if let Some(token) = &self.token {
+            request = request.bearer_auth(token);
+        }
+        match request.send().await {
+            Err(e) => error_result(format!("could not reach the mixer at {}: {e}", self.base)),
+            Ok(response) => match response.json::<Value>().await {
+                Ok(v) if v.get("error").is_some() => error_result(
+                    v["error"]["message"].as_str().unwrap_or("the mixer refused").to_string(),
+                ),
+                Ok(v) => v,
+                Err(e) => error_result(format!("the mixer's answer was not JSON: {e}")),
+            },
+        }
+    }
+
+    /// Which plugin declares this MCP tool name, as `<plugin>/<tool>`.
+    async fn resolve_plugin_tool(&self, name: &str) -> Option<String> {
+        let listing = self.get_json("/api/v1/plugins").await.ok()?;
+        for plugin in listing["plugins"].as_array()? {
+            if !plugin["enabled"].as_bool().unwrap_or(false) {
+                continue;
+            }
+            let declared = plugin["tools"].as_array()?;
+            if !declared.iter().any(|t| t.as_str() == Some(name)) {
+                continue;
+            }
+            let plugin_name = plugin["name"].as_str()?;
+            // The tool's own name is what is left after the prefix the loader
+            // put on: `gmx_` plus the plugin's name with hyphens as
+            // underscores, plus one more underscore.
+            let prefix = format!("gmx_{}_", plugin_name.replace('-', "_"));
+            let tool = name.strip_prefix(&prefix)?;
+            return Some(format!("{plugin_name}/{tool}"));
+        }
+        None
+    }
+
+    /// One GET against the mixer, as JSON.
+    async fn get_json(&self, path: &str) -> Result<Value, String> {
+        let mut request = self.client.get(format!("{}{path}", self.base));
+        if let Some(token) = &self.token {
+            request = request.bearer_auth(token);
+        }
+        let response = request.send().await.map_err(|e| e.to_string())?;
+        response.json::<Value>().await.map_err(|e| e.to_string())
     }
 
     /// A tool call worked out into an HTTP request against `/api/v1`.
@@ -487,6 +602,93 @@ mod tests {
         sorted.sort();
         sorted.dedup();
         assert_eq!(sorted.len(), names.len());
+    }
+
+    /// Installing a plugin does not change the hot list, in either profile.
+    ///
+    /// This is the one that keeps the prompt cache valid. Modifying any tool
+    /// definition invalidates the whole cache, so a mixer whose tool list grew
+    /// every time a plugin was installed would pay full price on every call
+    /// afterwards. A plugin's tools live behind `search_tools` for exactly
+    /// this reason, and this test is what stops somebody helpfully promoting
+    /// one into the list.
+    #[tokio::test]
+    async fn installing_a_plugin_changes_nothing_in_the_hot_list() {
+        let plugins = std::env::temp_dir().join(format!("gmx-mcp-hot-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&plugins);
+        let dir = plugins.join("noisy").join("0.1.0");
+        std::fs::create_dir_all(&dir).expect("a plugin directory");
+        std::fs::write(dir.join("settings.json"), r#"{"type":"object"}"#).expect("settings");
+        std::fs::write(dir.join("input.json"), r#"{"type":"object"}"#).expect("a tool schema");
+        std::fs::write(dir.join("run.sh"), "#!/bin/sh
+exit 0
+").expect("an entry point");
+        std::fs::write(
+            dir.join("gmx-plugin.toml"),
+            r#"
+[plugin]
+name = "noisy"
+version = "0.1.0"
+api = 1
+description = "A plugin that contributes several tools, to prove they stay out of the hot list."
+license = "MIT"
+platforms = ["linux-x86_64", "linux-aarch64", "macos-aarch64", "macos-x86_64"]
+placements = ["sidecar"]
+
+[run]
+shell = "run.sh"
+
+[[provides]]
+kind = "source"
+id = "source"
+media = { video = "raw", audio = "none" }
+transports = ["container"]
+settings = "settings.json"
+
+[[tools]]
+name = "list_senders"
+description = "List every sender on the network. Example: list_senders {} returns a list."
+input = "input.json"
+
+[[tools]]
+name = "rescan"
+description = "Scan the network again. Example: rescan {} returns how many were found."
+input = "input.json"
+"#,
+        )
+        .expect("a manifest");
+
+        for profile in [Profile::Standard, Profile::Minimal] {
+            let s = Server::new("http://127.0.0.1:1", None, profile);
+            let before: Vec<String> = s
+                .tools()
+                .iter()
+                .map(|t| serde_json::to_string(t).expect("a tool serialises"))
+                .collect();
+
+            godwinmix_core::plugin::loader::set_dir(plugins.clone());
+            let installed = godwinmix_core::plugin::loader::load_all(&Default::default());
+            assert_eq!(installed.len(), 1, "the plugin loaded: {installed:#?}");
+            assert_eq!(
+                installed[0].tools,
+                vec!["gmx_noisy_list_senders", "gmx_noisy_rescan"],
+                "and it contributed two tools"
+            );
+
+            let after: Vec<String> = s
+                .tools()
+                .iter()
+                .map(|t| serde_json::to_string(t).expect("a tool serialises"))
+                .collect();
+            assert_eq!(
+                before, after,
+                "the {} hot list changed when a plugin was installed, which throws away \
+                 the prompt cache on every call afterwards",
+                profile.as_str()
+            );
+            godwinmix_core::plugin::loader::remove("noisy");
+        }
+        let _ = std::fs::remove_dir_all(&plugins);
     }
 
     /// The minimal profile is five tools and no more, and the way out is in
