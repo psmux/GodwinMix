@@ -735,6 +735,104 @@ async function kitSuite() {
 }
 
 
+// ------------------------------------- a plugin with a schema and no code
+
+/**
+ * 07 Phase 3: "a plugin that ships only a data schema and a `designer` block
+ * gets an inspector and handles in the web designer and the Tkinter example
+ * with no HTML in the plugin".
+ *
+ * The fixture is `tests/fixtures/designer/lower-third.json`, which is what
+ * `plugin.describe` answers for such a plugin. The Python suite reads the same
+ * file against the same kits, so the acceptance is one file and two toolkits.
+ */
+async function designerFixtureSuite() {
+  let fixture;
+  try {
+    const res = await fetch("./designer-fixture.json");
+    if (!res.ok) throw new Error(`answered ${res.status}`);
+    fixture = await res.json();
+  } catch (e) {
+    line("ok", `skipped the designer fixture: ${e.message}`);
+    return;
+  }
+
+  const asked = [];
+  const client = {
+    call: async (method, params) => {
+      asked.push(method);
+      if (method === "plugin.list") return { plugins: [fixture.plugin] };
+      if (method === "plugin.describe") return fixture.describe;
+      throw new RpcError(CODES.NO_METHOD, `no ${method} here`, {});
+    },
+  };
+
+  const { Catalogue } = await import("../panels/composer/catalogue.js");
+  const catalogue = new Catalogue(client);
+  await catalogue.load();
+  const type = catalogue.typeOf(fixture.record);
+
+  test("the composer finds the plugin behind an item from plugin.list and plugin.describe", () => {
+    ok(type, "the item's type was not resolved");
+    eq(type.plugin, "lower-third");
+    ok(type.schema && type.schema.properties, "no schema came back");
+    ok(!type.designer.editor, "this fixture ships no editor, which is the point of it");
+  });
+
+  const gizmos = gizmosFor(type.designer);
+  test("its handles come from its designer block, with the cage added for it", () => {
+    eq(gizmos.map((g) => g.kind), fixture.expect.gizmo_kinds);
+  });
+
+  const handles = handlesFor(fixture.box, gizmos);
+  test("the handles land on the item's own box", () => {
+    const corners = handles.filter((h) => h.kind === "corner").map((h) => [h.x, h.y]);
+    const box = fixture.box;
+    ok(corners.some(([x, y]) => x === box.x && y === box.y), "no handle on the top left");
+    ok(
+      corners.some(([x, y]) => x === box.x + box.width && y === box.y + box.height),
+      "no handle on the bottom right"
+    );
+    const rotate = handles.find((h) => h.kind === "rotate");
+    ok(rotate && rotate.y < box.y, "the rotation handle is not above the item");
+  });
+
+  const { editorFor } = await import("../kits/schema/index.js");
+  const editor = await editorFor({
+    plugin: "lower-third",
+    designer: type.designer,
+    schema: type.schema,
+    value: fixture.record.content.params,
+  });
+
+  test("it gets an inspector generated from its data schema", () => {
+    eq(editor.mode, fixture.expect.editor_mode, "which link of the fallback chain");
+    ok(editor.why.includes("data schema"), editor.why);
+  });
+
+  test("every property in the schema has a control, and the plugin wrote no HTML", () => {
+    const controls = editor.el.querySelectorAll("input, select, textarea");
+    ok(controls.length >= fixture.expect.controls.length, `only ${controls.length} controls`);
+    const text = editor.el.textContent;
+    for (const label of ["Name", "Role", "Bar colour", "Hold", "Slide in", "Side"]) {
+      ok(text.includes(label), `no control labelled ${label}`);
+    }
+    ok(editor.el.querySelector(".unit"), "the unit from x-gmx-unit is not shown");
+    ok(editor.el.querySelector("details"), "the advanced group is not a section");
+  });
+
+  test("the values it was given are in the form, and it reads them back", () => {
+    const read = editor.read();
+    eq(read.name, "Jane Okonjo", "the name it was handed");
+    eq(read.hold_secs, 6, "the number it was handed, as a number");
+    eq(read.colour, "#2f6f4f", "the schema's own default");
+  });
+
+  test("it asked the core only what the protocol has", () => {
+    eq([...new Set(asked)].sort(), ["plugin.describe", "plugin.list"]);
+  });
+}
+
 // ------------------------------------------------------- against a live core
 
 /**
@@ -1024,6 +1122,12 @@ legacySuite()
   .catch((e) => {
     failed += 1;
     line("fail", "the kit suite threw: " + e.message);
+    console.error(e);
+  })
+  .then(designerFixtureSuite)
+  .catch((e) => {
+    failed += 1;
+    line("fail", "the designer fixture suite threw: " + e.message);
     console.error(e);
   })
   .then(liveSuite)
