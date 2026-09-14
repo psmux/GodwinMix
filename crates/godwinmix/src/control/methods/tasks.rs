@@ -22,7 +22,10 @@ use std::sync::Arc;
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 pub struct TaskRequest {
-    /// The id a long running method answered with.
+    /// The id a long running method answered with. Spelled `id` on the REST
+    /// route, where it is in the path, and `task_id` everywhere else, which
+    /// is what 03 section 6 calls it.
+    #[serde(alias = "id")]
     pub task_id: String,
 }
 
@@ -64,8 +67,7 @@ pub fn register(reg: &mut Registry<Call>) {
             handler(|call: Call, _| async move { body(call.app.tasks.list()) }),
         )
         .result(schema_of::<Vec<TaskView>>)
-        .mutating(false)
-        .rest_at("GET", "/api/v1/tasks"),
+        .mutating(false),
     );
 
     reg.register(
@@ -76,13 +78,6 @@ pub fn register(reg: &mut Registry<Call>) {
              request landed, not that the work has stopped yet.",
             handler(|call: Call, params| async move {
                 let req: TaskRequest = call.params(&params)?;
-                if call.dry_run {
-                    let view = find(&call, &req.task_id)?;
-                    return Ok(call.dry_run_answer(
-                        !view.state.finished(),
-                        vec![format!("ask {} to stop", req.task_id)],
-                    ));
-                }
                 let _ = find(&call, &req.task_id)?;
                 let view = call
                     .app
@@ -94,7 +89,6 @@ pub fn register(reg: &mut Registry<Call>) {
         )
         .params(schema_of::<TaskRequest>)
         .result(any_object)
-        .destructive()
         .tool(
             "task_cancel",
             Tier::Search,

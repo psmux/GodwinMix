@@ -529,19 +529,40 @@ mod tests {
             serde_json::from_value(json!({ "ext": { "multiview": false } })).unwrap();
         assert!(!off.ext.wants_multiview());
 
-        // A client written against the whole table connects, and is told which
-        // keys this build did nothing with.
+        // Telemetry and the agent push, which this build does implement.
         let ahead: SubscribeRequest = serde_json::from_value(json!({
             "ext": { "telemetry": { "hz": 4 }, "agent": true }
         }))
         .unwrap();
-        let mut ignored = ahead.ext.unsupported();
-        ignored.sort();
-        assert_eq!(ignored, vec!["agent".to_string(), "telemetry".to_string()]);
+        assert!(ahead.ext.unsupported().is_empty());
+        assert_eq!(ahead.ext.telemetry_hz(), Some(4));
+        assert!(ahead.ext.wants_agent());
+        // The rate is clamped to the 1 to 10 the table names, and `true` is
+        // the default rate rather than an error.
+        let fast: SubscribeRequest =
+            serde_json::from_value(json!({ "ext": { "telemetry": { "hz": 99 } } })).unwrap();
+        assert_eq!(fast.ext.telemetry_hz(), Some(10));
+        let plain: SubscribeRequest =
+            serde_json::from_value(json!({ "ext": { "telemetry": true } })).unwrap();
+        assert_eq!(plain.ext.telemetry_hz(), Some(1));
+        // And off is off, not on with a default.
+        let none: SubscribeRequest =
+            serde_json::from_value(json!({ "ext": { "telemetry": false, "agent": false } }))
+                .unwrap();
+        assert_eq!(none.ext.telemetry_hz(), None);
+        assert!(!none.ext.wants_agent());
+
+        // A client written against a key this build does not have connects,
+        // and is told which keys it did nothing with.
+        let ahead: SubscribeRequest =
+            serde_json::from_value(json!({ "ext": { "thumb": { "fps": 2 } } })).unwrap();
+        assert_eq!(ahead.ext.unsupported(), vec!["thumb".to_string()]);
 
         // Nothing at all is the agent's subscription: no expensive stream runs.
         let bare: SubscribeRequest = serde_json::from_value(json!({})).unwrap();
         assert!(!bare.ext.wants_multiview());
         assert!(!bare.ext.meters && !bare.ext.tally && !bare.ext.positions);
+        assert_eq!(bare.ext.telemetry_hz(), None);
+        assert!(!bare.ext.wants_agent());
     }
 }
