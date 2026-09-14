@@ -43,6 +43,10 @@ struct Connection {
     /// `event/tally` can be derived without asking the mixer every time.
     program: Option<String>,
     sources: Vec<String>,
+    /// The layout id this client was last told about. Every mosaic frame
+    /// carries one, so a grid that changes under a client has to be announced
+    /// or the frames stop matching anything it knows.
+    layout: u32,
     /// Held while this client wants the mosaic. Dropping it tells the gate the
     /// last viewer has gone.
     _multiview: Option<crate::api::streams::GateGuard>,
@@ -61,6 +65,7 @@ pub async fn serve_rpc(socket: WebSocket, ctx: Ctx, token: Token) {
         seq: 0,
         program: None,
         sources: Vec::new(),
+        layout: 0,
         _multiview: None,
     };
 
@@ -185,6 +190,9 @@ impl Connection {
             self._multiview = Some(self.ctx.app.multiview_gate.subscribe());
         }
         self.seq = self.ctx.app.mixer.event_seq();
+        // A client re-subscribing is rebuilding from nothing, so the grid it
+        // was told about last time counts for nothing either.
+        self.layout = 0;
         serde_json::to_value(SubscribeResult {
             seq: self.seq,
             events: patterns,
@@ -205,16 +213,24 @@ impl Connection {
             serde_json::to_value(snapshot).map_err(|_| ())?,
         ))
         .await?;
-        if self.sub.as_ref().is_some_and(|s| s.wants("multiview.layout")) {
-            let layout = crate::control::layout_of(&status.multiview);
-            self.send(rpc::notification(
-                "event/multiview.layout",
-                serde_json::to_value(layout).map_err(|_| ())?,
-            ))
-            .await?;
-        }
+        self.send_layout(&status.multiview).await?;
         self.send_tally().await?;
         self.flush().await
+    }
+
+    /// Tell the client about the grid, when it wants the mosaic and the grid
+    /// is not the one it already has.
+    async fn send_layout(&mut self, multiview: &crate::api::MultiviewStatus) -> Result<(), ()> {
+        if !self.sub.as_ref().is_some_and(|s| s.wants("multiview.layout")) {
+            return Ok(());
+        }
+        let layout = crate::control::layout_of(multiview);
+        if layout.id == self.layout {
+            return Ok(());
+        }
+        self.layout = layout.id;
+        let value = serde_json::to_value(layout).map_err(|_| ())?;
+        self.send(rpc::notification("event/multiview.layout", value)).await
     }
 
     /// One event: remember what it says, then write it out if this client
@@ -230,11 +246,14 @@ impl Connection {
         if self.meters.absorb(&envelope.event) {
             return Ok(());
         }
-        // A full status is the snapshot event, not a delta.
+        // A full status is the snapshot event, not a delta. A source added or
+        // removed reshuffles the mosaic, so the new grid goes out with it.
         if let Event::Status(status) = &envelope.event {
+            let multiview = status.multiview.clone();
             let snapshot = Snapshot { seq: envelope.seq, state: status.clone() };
             let value = serde_json::to_value(snapshot).map_err(|_| ())?;
-            return self.send(rpc::notification("event/snapshot", value)).await;
+            self.send(rpc::notification("event/snapshot", value)).await?;
+            return self.send_layout(&multiview).await;
         }
         let Some((name, mut payload)) = rpc::event_name_and_payload(&envelope.event) else {
             return Ok(());
@@ -315,6 +334,7 @@ impl Connection {
             serde_json::to_value(Resync { from_seq: self.seq, dropped }).map_err(|_| ())?;
         self.send(rpc::notification("event/resync", value)).await?;
         self.seq = self.ctx.app.mixer.event_seq();
+        self.layout = 0;
         self.after_subscribe().await
     }
 }

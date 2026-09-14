@@ -1105,6 +1105,13 @@ fn spawn_frame_relay(app: AppState) {
         let mut counter: u32 = 0;
         loop {
             app.multiview_gate.wait_for_a_subscriber().await;
+            // Seed from a status read rather than waiting for the next one.
+            // A status is published on a change, so the last one may be older
+            // than this task, and a frame header carrying layout 0 would not
+            // match any layout event a client has been sent.
+            if let Ok(status) = app.mixer.status().await {
+                clock.observe(&Event::Status(Box::new(status)));
+            }
             let mut rx = frames.subscribe();
             while app.multiview_gate.anyone_watching() {
                 tokio::select! {
