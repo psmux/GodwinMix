@@ -44,6 +44,11 @@ gstreamer-pbutils = "0.24"
 # compositor pad with, sampled by the aggregator per output frame rather than
 # written by a thread. Same version family as the rest of the bindings.
 gstreamer-controller = "0.24"
+# libgstnet: the net clock. The core runs a `GstNetTimeProvider` on the
+# programme clock and every node runs a `GstNetClientClock` against it, which
+# is the only way two machines agree what running time means. Same version
+# family as the rest of the bindings.
+gstreamer-net = "0.24"
 glib = "0.21"
 
 tokio = "1"
@@ -79,6 +84,21 @@ base64 = "0.22"
 # format a 128 bit integer we already have to generate ourselves; getrandom is
 # already in the tree under rustls and costs nothing new to compile.
 getrandom = "0.3"
+
+# The node bridge. rustls and tokio-rustls are already in the tree under
+# reqwest; naming them here makes the core a TLS server as well as a client,
+# which is what mutual TLS between a node and the core needs.
+rustls = { version = "0.23", default-features = false, features = ["ring", "std", "logging", "tls12"] }
+tokio-rustls = { version = "0.26", default-features = false, features = ["ring", "tls12", "logging"] }
+rustls-pki-types = "1.15"
+# The core is a small certificate authority: it signs one certificate per node
+# with a SPIFFE style identity. Writing X.509 DER by hand to avoid a crate
+# would be a worse trade than this one, which is three pure Rust crates over
+# the `ring` already compiled in.
+rcgen = { version = "0.13", default-features = false, features = ["ring", "pem"] }
+# AES-GCM for secrets at rest, from the `ring` rustls already pulls in. No new
+# compilation, and the alternative was inventing a cipher.
+ring = "0.17"
 
 [profile.release]
 opt-level = 3
