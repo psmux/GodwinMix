@@ -136,6 +136,36 @@ Several credentials, each with its own scopes, beside the single
 | `agent` | false | this credential belongs to an unattended agent, so its `safety` override may only tighten |
 | `safety` | none | `{ min_hold_ms, max_takes_per_minute, flash_guard }`, overriding `[safety]` for this token |
 
+## `[[hooks]]`
+
+Your code, called when something happens. One block each. A plugin declares its
+own hooks in its manifest and does not appear here.
+
+| Key | Default | Means |
+|---|---|---|
+| `event` | required | One of `take.before`, `take.after`, `source.added`, `source.removed`, `source.state`, `output.state`, `alert.raised`, `session.start`, `session.end`, `plugin.loaded`, `plugin.failed`, `plugin.state` |
+| `http` | | A URL to POST the event to |
+| `command` | | A command line; the event arrives as JSON on stdin |
+| `plugin` | | A plugin to call over JSON-RPC |
+| `timeout_ms` | 20 | `take.before` only, 1 to 100 |
+| `name` | | What `event/hook.blocked` calls this one |
+
+Exactly one of `http`, `command` and `plugin`.
+
+```toml
+[[hooks]]
+event = "take.after"
+http = "https://tally.example/on-take"
+```
+
+Only `take.before` can delay anything, and only by its own `timeout_ms`. A hook
+that does not answer in time is skipped, the take goes ahead, and
+`event/hook.blocked` says so. A block that does not parse is reported at
+startup and skipped; the mixer comes up.
+
+Full detail in [hooks](hooks.md) and
+[run your own code when something happens](../how-to/hooks.md).
+
 ## `[security]`
 
 | Key | Default | Meaning |
