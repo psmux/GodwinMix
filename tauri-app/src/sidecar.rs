@@ -30,7 +30,9 @@ use crate::core_link::{self, Target};
 /// Pi is the slow part.
 const START_TIMEOUT: Duration = Duration::from_secs(25);
 /// How long a stopping daemon gets to close its outputs before it is killed.
-const STOP_GRACE: Duration = Duration::from_secs(5);
+/// It closes them in milliseconds when it is well; this is the budget for one
+/// that is not, and it is spent while the app is on its way out.
+const STOP_GRACE: Duration = Duration::from_secs(3);
 /// Past this, the log is rolled over. One previous file is kept.
 const LOG_MAX_BYTES: u64 = 4 * 1024 * 1024;
 
