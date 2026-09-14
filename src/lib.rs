@@ -23,6 +23,7 @@ pub mod mcp;
 pub mod media;
 pub mod mixer;
 pub mod multiview;
+pub mod observe;
 pub mod output;
 pub mod probe;
 pub mod snapshot;
@@ -33,8 +34,7 @@ use clap::{Parser, Subcommand};
 use config::Config;
 use std::path::PathBuf;
 use std::sync::Arc;
-use tracing::{error, info};
-use tracing_subscriber::EnvFilter;
+use tracing::{error, info, warn};
 
 const EXAMPLE_CONFIG: &str = include_str!("../godwinmix.example.toml");
 
@@ -60,6 +60,16 @@ struct Args {
     /// exit. Useful for checking a new server before pointing cameras at it.
     #[arg(long)]
     probe: bool,
+
+    /// Print per stage and per plugin start time once everything is up, and
+    /// name anything that took longer than 250 ms.
+    #[arg(long)]
+    startup_report: bool,
+
+    /// How log lines are written. `auto` is human form on a terminal and JSON
+    /// anywhere else, which is what a service unit and a container want.
+    #[arg(long, value_enum, default_value_t = observe::logs::Format::Auto)]
+    log_format: observe::logs::Format,
 
     #[command(subcommand)]
     command: Option<Command>,
@@ -91,20 +101,25 @@ enum Command {
         #[arg(long, env = "GODWINMIX_TOKEN")]
         token: Option<String>,
     },
+    /// doctor, logs, trace, dot and support-bundle. See `src/observe/`.
+    #[command(flatten)]
+    Observe(observe::cli::ObserveCmd),
 }
 
 /// Parse the command line and do what it says. Both binaries call this.
 pub async fn run() -> Result<()> {
     let args = Args::parse();
 
-    let filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info"));
-    // The MCP client reads stdout as protocol, so a log line there would
-    // break the connection. Everything else keeps the usual stdout logging.
-    if matches!(args.command, Some(Command::Mcp { .. })) {
-        tracing_subscriber::fmt().with_env_filter(filter).with_writer(std::io::stderr).init();
-    } else {
-        tracing_subscriber::fmt().with_env_filter(filter).init();
-    }
+    observe::introspect::begin();
+    // Every log line goes to stderr, which keeps stdout clean for the things
+    // that are meant to be piped: MCP's protocol, and `gmx dot | dot -Tsvg`.
+    // Levels start from `RUST_LOG` and move at runtime from there: see
+    // `observe::logs`.
+    observe::logs::init(observe::logs::Options {
+        format: args.log_format,
+        node: config::env_var("NODE"),
+        env_filter: std::env::var("RUST_LOG").ok(),
+    });
 
     // The client subcommands talk to an already-running mixer and need none
     // of the setup below.
@@ -121,6 +136,7 @@ pub async fn run() -> Result<()> {
             let token = token.or_else(|| config::env_var("TOKEN"));
             return mcp::run(&url, token).await;
         }
+        Some(Command::Observe(cmd)) => return observe::cli::run(cmd).await,
         None => {}
     }
 
@@ -134,7 +150,10 @@ pub async fn run() -> Result<()> {
     // orphaned the moment their parent is killed. See `reap_orphans_if_init`.
     input::reap_orphans_if_init();
 
-    gstreamer::init().context("initialising GStreamer")?;
+    {
+        let _stage = observe::introspect::stage("gstreamer init");
+        gstreamer::init().context("initialising GStreamer")?;
+    }
 
     if args.probe {
         let b = probe::Backends::probe(config::Accel::Auto, config::Accel::Auto)?;
@@ -147,6 +166,7 @@ pub async fn run() -> Result<()> {
 
     // The LiveboxMix config name is still read when there is no GodwinMix one.
     let config_path = config::path_in_force(&args.config);
+    let load = observe::introspect::stage("config");
     let cfg = Config::load(&config_path).with_context(|| {
         format!(
             "could not load {}. Run with --example-config to print a starting point.",
@@ -160,10 +180,28 @@ pub async fn run() -> Result<()> {
         None => info!("control API is open: no token configured"),
     }
     let cfg_media = cfg.media.clone();
+    drop(load);
 
+    let build = observe::introspect::stage("mixer build");
     let (mut mix, handle, cmd_rx, mut bus_rx) = mixer::Mixer::build(cfg)?;
     mix.persist_runtime_to(Config::runtime_store_path(&config_path));
-    mix.start().context("starting mixer")?;
+    drop(build);
+    {
+        let _stage = observe::introspect::stage("mixer start");
+        mix.start().context("starting mixer")?;
+    }
+
+    // Logs to files, the session log, and the task that records every event.
+    // After the mixer is built so that the recorder has a broadcast to join,
+    // and before the control server so that nothing it does goes unrecorded.
+    let observe_options = observe::Options {
+        config_path: config_path.clone(),
+        startup_report: args.startup_report,
+    };
+    match observe::start(&handle, &observe_options) {
+        Ok(dir) => info!(runtime_dir = %dir.display(), "logs and the session log are here"),
+        Err(e) => warn!(?e, "no runtime directory, so logs stay on stderr only"),
+    }
 
     let frames = mix.multiview_sender().map(Arc::new);
 
@@ -203,6 +241,11 @@ pub async fn run() -> Result<()> {
             error!(?e, "control server stopped");
         }
     });
+
+    if args.startup_report {
+        // stdout, because it is a report somebody asked for, not a log line.
+        print!("{}", observe::introspect::format_startup_report(&observe::startup_report()));
+    }
 
     tokio::select! {
         _ = tokio::signal::ctrl_c() => {}
