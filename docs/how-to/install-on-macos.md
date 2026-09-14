@@ -63,11 +63,12 @@ The whole media stack. `GodwinMix.app/Contents/Resources/gstreamer/macos` is a
 GStreamer trimmed to what the codec catalogue and the pipelines actually name,
 with its library paths rewritten so it runs wherever the app is put.
 
-| Inside | Roughly |
+| Inside | Measured, 0.2.0 on Apple silicon |
 |---|---|
-| the desktop shell | 9 MB |
-| the mixer itself | 15 MB |
-| GStreamer, trimmed | 84 MB |
+| the desktop shell | 8.8 MB |
+| the mixer itself | 14 MB |
+| GStreamer, trimmed | 85 MB |
+| `GodwinMix.app` altogether | 108 MB |
 
 The app never uses a GStreamer installed elsewhere on the machine, even if you
 have one from Homebrew. It pins `GST_PLUGIN_SYSTEM_PATH` to its own directory
