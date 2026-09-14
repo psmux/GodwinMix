@@ -21,6 +21,7 @@ use std::sync::Arc;
 mod filters;
 mod media;
 mod outputs;
+mod preview;
 mod program;
 mod sources;
 
@@ -52,6 +53,7 @@ pub fn registry() -> Registry<Call> {
     outputs::register(&mut reg);
     media::register(&mut reg);
     filters::register(&mut reg);
+    preview::register(&mut reg);
     crate::observe::register(&mut reg);
     // Other modules add their own here. One line each, and they land on
     // /rpc, /api/v1, protocol.json and the tool list together. See

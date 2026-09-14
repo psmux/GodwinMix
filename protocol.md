@@ -66,6 +66,8 @@ Keys accepted on every method, handled before a method runs.
 | `pipeline.latency` | `GET /api/v1/pipeline/latency` | read |  | 1 | How much delay one pipeline is carrying, and which stage put it there. |
 | `pipeline.list` | `GET /api/v1/pipeline/list` | read |  | 1 | Every pipeline running right now, by the name the other pipeline methods accept. |
 | `pipeline.queues` | `GET /api/v1/pipeline/queues` | read |  | 1 | Every queue in one pipeline with how full it is, fullest first. A queue that stays full is where the trouble is. |
+| `preview.close` | `POST /api/v1/preview/close` | read |  | 1 | Give up a raw frame socket. The socket goes when the last holder closes it. |
+| `preview.open` | `POST /api/v1/preview/open` | read |  | 1 | Open a raw frame socket on this machine for a source or the programme, and answer with its path. No encode anywhere: a client on the same host reads the frames the mixer already has. Close it with preview.close. |
 | `program.get` | `GET /api/v1/program` | read |  | 1 | What is on air, the programme running time, and what revert would go back to. |
 | `program.golive` | `POST /api/v1/program/golive` | operate |  | 1 | One call to put a web page on air: add the page, add the destination, and take the page as soon as it renders. |
 | `program.history` | `GET /api/v1/program/history` | read |  | 1 | The last hundred takes, newest first, with the token that asked for each. |
@@ -639,6 +641,36 @@ Every queue in one pipeline with how full it is, fullest first. A queue that sta
   },
   "result": {
     "type": "object"
+  }
+}
+```
+
+#### `preview.close`
+
+Give up a raw frame socket. The socket goes when the last holder closes it.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/PreviewOpenRequest"
+  },
+  "result": {
+    "$ref": "#/$defs/PreviewClosed"
+  }
+}
+```
+
+#### `preview.open`
+
+Open a raw frame socket on this machine for a source or the programme, and answer with its path. No encode anywhere: a client on the same host reads the frames the mixer already has. Close it with preview.close.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/PreviewOpenRequest"
+  },
+  "result": {
+    "$ref": "#/$defs/PreviewSocket"
   }
 }
 ```
