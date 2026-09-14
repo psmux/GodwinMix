@@ -3438,10 +3438,13 @@ impl Mixer {
                 // is never a moment with two mosaic encoders running.
                 self.multiview = None;
                 self.mv.mark_built(None);
-                self.attach_programme_return()
-                    .context("attaching the programme return branch for the mosaic")?;
                 let mut mv = Multiview::build(&self.mv, shape, &self.pgm_video_proxy)
                     .context("building multiview")?;
+                // After the mosaic exists, not before: the branch ends at a
+                // `proxysink`, and a proxysink with no `proxysrc` on the other
+                // side has nowhere to put a buffer.
+                self.attach_programme_return()
+                    .context("attaching the programme return branch for the mosaic")?;
                 mv.attach_watch(gstutil::watch_bus(
                     mv.pipeline(),
                     gstutil::BusOwner::Multiview,
@@ -3493,6 +3496,20 @@ impl Mixer {
         self.multiview = None;
         self.mv.mark_built(None);
         self.pool.teardown();
+        let _ = self.program.set_state(gst::State::Null);
+    }
+}
+
+/// A mixer that goes out of scope without `shutdown` still takes its pipeline
+/// down.
+///
+/// GStreamer disposes an element that is still in PLAYING with a critical
+/// warning and, with several pipelines in one process, sometimes with a
+/// segmentation fault. The ordinary path is `spawn`'s loop calling `shutdown`;
+/// this is for every other path, including a test that fails an assertion
+/// halfway.
+impl Drop for Mixer {
+    fn drop(&mut self) {
         let _ = self.program.set_state(gst::State::Null);
     }
 }
@@ -3956,6 +3973,500 @@ mod tests {
         assert!(mix.handle(Command::Tick).expect("a tick after the panic"));
         let status = mix.status();
         assert!(status.sources.is_empty(), "a status read still works");
+    }
+
+    // -- the slot pool -------------------------------------------------
+
+    /// A mixer with a handful of `test://` sources, running, ready to be
+    /// asked for scenes. Nothing here is a double: the sources are real
+    /// pipelines producing real frames into the real compositor.
+    async fn with_sources(ids: &[&str]) -> Mixer {
+        let _ = gst::init();
+        let (mut mix, _handle, _cmds, _bus) =
+            Mixer::build(programme_config(crate::config::Accel::Software)).expect("mixer builds");
+        mix.start().expect("the programme starts");
+        for (i, id) in ids.iter().enumerate() {
+            let pattern = ["smpte", "ball", "snow", "red", "green", "blue", "checkers-1", "bar"]
+                [i % 8];
+            let cfg: SourceConfig = toml::from_str(&format!(
+                "id = \"{id}\"\nuri = \"test://{pattern}\"\n"
+            ))
+            .expect("a two line source config");
+            mix.add_source(&cfg, None).unwrap_or_else(|e| panic!("adding {id}: {e:#}"));
+        }
+        // Long enough for every source to deliver a frame and be judged live.
+        for _ in 0..100 {
+            if ids.iter().all(|id| {
+                mix.sources
+                    .iter()
+                    .any(|s| &s.input.id == id && matches!(s.input.observed_state(), SourceState::Live))
+            }) {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(50)).await;
+        }
+        mix
+    }
+
+    fn scene(name: &str, placements: Vec<Placement>) -> ProgramScene {
+        ProgramScene { name: name.into(), placements }
+    }
+
+    fn box_at(canvas: &CanvasCaps, source: &str, x: i32, y: i32) -> Placement {
+        Placement {
+            xpos: x,
+            ypos: y,
+            width: canvas.width / 2,
+            height: canvas.height / 2,
+            ..Placement::full_canvas(source.into(), canvas)
+        }
+    }
+
+    /// The property the whole design turns on: a source is bound to a slot
+    /// when it is added, so taking it is property writes and nothing else.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn taking_a_source_relinks_nothing() {
+        let mut mix = with_sources(&["cam1", "cam2"]).await;
+        assert_eq!(mix.pool.misses(), 0, "adding sources should not have relinked anything");
+        assert_eq!(mix.pool.slots_of(&"cam1".to_string()).len(), 1);
+
+        mix.take(Some("cam1".into()), None).expect("taking a source");
+        assert_eq!(mix.pool.misses(), 0, "a take must not relink the graph");
+        assert_eq!(mix.pool.visible(), 1, "exactly one pad is drawn for a one item scene");
+
+        mix.take(Some("cam2".into()), None).expect("taking the other source");
+        assert_eq!(mix.pool.misses(), 0);
+        assert_eq!(mix.pool.visible(), 1);
+        mix.shutdown();
+    }
+
+    /// `program.take {source}` is shorthand for a one item full canvas scene,
+    /// and the acceptance says the two must be bit identical. Compared where
+    /// it matters: the pad properties the compositor actually reads.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn a_source_take_and_a_one_item_scene_write_the_same_pad() {
+        let mut mix = with_sources(&["cam1"]).await;
+        let read = |mix: &Mixer| -> Vec<(u32, f64, i32, i32, i32, i32)> {
+            mix.pool
+                .slots()
+                .iter()
+                .filter(|s| s.pad.property::<f64>("alpha") > 0.0)
+                .map(|s| {
+                    (
+                        s.pad.property::<u32>("zorder"),
+                        s.pad.property::<f64>("alpha"),
+                        s.pad.property::<i32>("xpos"),
+                        s.pad.property::<i32>("ypos"),
+                        s.pad.property::<i32>("width"),
+                        s.pad.property::<i32>("height"),
+                    )
+                })
+                .collect()
+        };
+
+        mix.take(Some("cam1".into()), None).expect("the shorthand take");
+        let shorthand = read(&mix);
+
+        mix.take(None, None).expect("back to the slate");
+        let canvas = mix.canvas.clone();
+        mix.take_scene(scene("wide", vec![Placement::full_canvas("cam1".into(), &canvas)]), None)
+        .expect("the same thing written out as a scene");
+        assert_eq!(read(&mix), shorthand, "a one item scene must land exactly where the shorthand did");
+
+        // And it reports itself as the source, so the tally, the history and
+        // program.revert read the same as they did before scenes existed.
+        assert_eq!(mix.status().program.as_deref(), Some("cam1"));
+        assert_eq!(mix.status().scene.as_deref(), Some("wide"));
+        assert_eq!(mix.pool.misses(), 0);
+        mix.shutdown();
+    }
+
+    /// A take between two eight item scenes is the acceptance case. Nothing
+    /// may be relinked, because everything is already bound.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn a_take_between_two_eight_item_scenes_binds_nothing() {
+        let ids: Vec<String> = (1..=8).map(|i| format!("cam{i}")).collect();
+        let refs: Vec<&str> = ids.iter().map(String::as_str).collect();
+        let mut mix = with_sources(&refs).await;
+        assert_eq!(mix.pool.len(), slots::INITIAL_SLOTS);
+
+        let canvas = mix.canvas.clone();
+        let grid = |offset: i32| {
+            scene(
+                "grid",
+                ids.iter()
+                    .enumerate()
+                    .map(|(i, id)| {
+                        box_at(&canvas, id, (i as i32 % 4) * 80 + offset, (i as i32 / 4) * 90)
+                    })
+                    .collect(),
+            )
+        };
+        mix.take_scene(grid(0), None).expect("the first eight item scene");
+        assert_eq!(mix.pool.visible(), 8);
+        let before = mix.pool.misses();
+        mix.take_scene(grid(10), None).expect("the second eight item scene");
+        assert_eq!(mix.pool.misses(), before, "a take between two full scenes relinked the graph");
+        assert_eq!(mix.pool.visible(), 8);
+        mix.shutdown();
+    }
+
+    /// The same source twice on one canvas: the wide shot and a cut out of it.
+    /// That is one cache miss, and only the first time.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn a_source_placed_twice_costs_one_relink_and_then_none() {
+        let mut mix = with_sources(&["cam1"]).await;
+        let canvas = mix.canvas.clone();
+        let twice = || {
+            scene(
+                "double",
+                vec![
+                    Placement::full_canvas("cam1".into(), &canvas),
+                    Placement {
+                        xpos: 10,
+                        ypos: 10,
+                        width: 100,
+                        height: 60,
+                        ..Placement::full_canvas("cam1".into(), &canvas)
+                    },
+                ],
+            )
+        };
+        mix.take_scene(twice(), None).expect("one source in two places");
+        assert_eq!(mix.pool.slots_of(&"cam1".to_string()).len(), 2);
+        assert_eq!(mix.pool.visible(), 2);
+        let after_first = mix.pool.misses();
+
+        mix.take(None, None).expect("to the slate");
+        mix.take_scene(twice(), None).expect("and back again");
+        assert_eq!(mix.pool.misses(), after_first, "the second apply relinked what was already bound");
+        mix.shutdown();
+    }
+
+    /// A scene wider than the pool grows it, once, and keeps the slots.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn a_scene_wider_than_the_pool_grows_it() {
+        let mut mix = with_sources(&["cam1"]).await;
+        let canvas = mix.canvas.clone();
+        let wide = |n: usize| {
+            scene(
+                "wall",
+                (0..n)
+                    .map(|i| Placement {
+                        xpos: i as i32 * 5,
+                        width: 60,
+                        height: 40,
+                        ..Placement::full_canvas("cam1".into(), &canvas)
+                    })
+                    .collect(),
+            )
+        };
+        mix.take_scene(wide(12), None).expect("twelve places for one source");
+        assert!(mix.pool.len() >= 12, "the pool did not grow: {}", mix.pool.len());
+        assert_eq!(mix.pool.visible(), 12);
+        let grown = mix.pool.len();
+        mix.take_scene(wide(12), None).expect("the same again");
+        assert_eq!(mix.pool.len(), grown, "the pool grew twice for the same scene");
+        mix.shutdown();
+    }
+
+    /// A scene naming a source this mixer does not have draws what it can and
+    /// says what it could not, rather than going to black.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn a_scene_with_a_missing_source_draws_the_rest() {
+        let mut mix = with_sources(&["cam1"]).await;
+        let canvas = mix.canvas.clone();
+        mix.take_scene(
+            scene(
+                "half",
+                vec![
+                    Placement::full_canvas("cam1".into(), &canvas),
+                    Placement::full_canvas("nope".into(), &canvas),
+                ],
+            ),
+            None,
+        )
+        .expect("the scene applies");
+        assert_eq!(mix.pool.visible(), 1, "the source that exists is still drawn");
+        mix.shutdown();
+    }
+
+    /// The z bands: the slate underneath everything, the live items above, and
+    /// a rebuilt source's frozen frame in between.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn z_is_banded_so_the_slate_and_the_freeze_frame_still_work() {
+        let mut mix = with_sources(&["cam1", "cam2"]).await;
+        let canvas = mix.canvas.clone();
+        mix.take_scene(
+            scene("two", vec![box_at(&canvas, "cam1", 0, 0), box_at(&canvas, "cam2", 100, 0)]),
+            None,
+        )
+        .expect("two items");
+        let live: Vec<u32> = mix
+            .pool
+            .slots()
+            .iter()
+            .filter(|s| s.pad.property::<f64>("alpha") > 0.0)
+            .map(|s| s.pad.property::<u32>("zorder"))
+            .collect();
+        assert!(live.iter().all(|z| *z >= slots::Z_LIVE), "a live item is below the live band: {live:?}");
+        assert_eq!(live.len(), 2);
+
+        // cam1 goes away for a rebuild. Its slot drops into the retired band,
+        // keeps its last frame, and stays out of the pool.
+        mix.retire_branch(&"cam1".to_string()).expect("retiring a source");
+        let retired: Vec<u32> = mix
+            .pool
+            .slots()
+            .iter()
+            .filter(|s| s.pad.property::<f64>("alpha") > 0.0)
+            .map(|s| s.pad.property::<u32>("zorder"))
+            .collect();
+        assert!(
+            retired.iter().any(|z| (slots::Z_RETIRED..=slots::Z_RETIRED_TOP).contains(z)),
+            "the frozen frame is not in the retired band: {retired:?}"
+        );
+        mix.shutdown();
+    }
+
+    /// Sixteen hidden slots must cost what no compositor costs. A pad at alpha
+    /// 0 is skipped before any conversion, which is the measurement 11 section
+    /// 3 rests on; this asserts the mixer actually leaves them at zero rather
+    /// than trusting that it does.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn hidden_slots_are_at_alpha_zero_and_stay_there() {
+        let mut mix = with_sources(&["cam1"]).await;
+        // Grow past sixteen, then show one item.
+        let canvas = mix.canvas.clone();
+        let wide: Vec<Placement> = (0..16)
+            .map(|i| Placement {
+                xpos: i * 5,
+                width: 40,
+                height: 30,
+                ..Placement::full_canvas("cam1".into(), &canvas)
+            })
+            .collect();
+        mix.take_scene(scene("wall", wide), None).expect("sixteen places");
+        assert!(mix.pool.len() >= 16);
+
+        mix.take(Some("cam1".into()), None).expect("back to one item");
+        assert_eq!(mix.pool.visible(), 1, "fifteen slots are still being blended");
+        // And a supervisor tick does not quietly bring them back.
+        mix.tick();
+        assert_eq!(mix.pool.visible(), 1);
+        mix.shutdown();
+    }
+
+    /// Audio follows the item flags: a source is heard when any live item of
+    /// it says `follow` and is visible, or says `always`, and nothing else.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn audio_follows_the_item_and_not_the_pad_count() {
+        let mut mix = with_sources(&["cam1", "cam2"]).await;
+        let canvas = mix.canvas.clone();
+        let volume = |mix: &Mixer, id: &str| {
+            mix.sources
+                .iter()
+                .find(|s| s.input.id == id)
+                .map(|s| s.branch.apad.property::<f64>("volume"))
+                .expect("the source is there")
+        };
+
+        let mut quiet = box_at(&canvas, "cam2", 100, 0);
+        quiet.audio = slots::PlacementAudio::Never;
+        mix.take_scene(scene("two", vec![box_at(&canvas, "cam1", 0, 0), quiet]), None)
+            .expect("two items, one of them silent");
+        // No ramp: the fade is a thread and this asserts where it ends up.
+        mix.cfg.program.audio_ramp_ms = 0;
+        mix.apply_visibility(false);
+        assert_eq!(volume(&mix, "cam1"), 1.0, "a visible follow item is heard");
+        assert_eq!(volume(&mix, "cam2"), 0.0, "a `never` item is not heard however visible");
+
+        // An `always` item is heard while invisible, which is what a music bed
+        // under another camera is.
+        let mut bed = box_at(&canvas, "cam2", 100, 0);
+        bed.alpha = 0.0;
+        bed.audio = slots::PlacementAudio::Always;
+        mix.take_scene(scene("bed", vec![box_at(&canvas, "cam1", 0, 0), bed]), None)
+            .expect("a hidden bed");
+        mix.apply_visibility(false);
+        assert_eq!(volume(&mix, "cam2"), 1.0, "an `always` item is heard while hidden");
+
+        // And a source in no scene at all is silent.
+        mix.take(Some("cam1".into()), None).expect("one item");
+        mix.apply_visibility(false);
+        assert_eq!(volume(&mix, "cam2"), 0.0);
+        mix.shutdown();
+    }
+
+    /// The largest gap between consecutive programme frames, in nanoseconds.
+    ///
+    /// The README's verification method, done inside the process: a frame that
+    /// never arrived shows as an interval of two frame durations, so a maximum
+    /// of one frame means nothing was lost. Watched on the encoder's own sink
+    /// pad, which is the last place a gap could still be hidden.
+    #[derive(Default)]
+    struct Gaps {
+        last: AtomicU64,
+        largest: AtomicU64,
+        seen: AtomicU64,
+    }
+
+    impl Gaps {
+        fn watch(self: &Arc<Self>, pad: &gst::Pad) {
+            let me = self.clone();
+            pad.add_probe(gst::PadProbeType::BUFFER, move |_p, info| {
+                if let Some(gst::PadProbeData::Buffer(b)) = &info.data {
+                    if let Some(pts) = b.pts() {
+                        let last = me.last.swap(pts.nseconds(), Ordering::Relaxed);
+                        if last > 0 {
+                            me.largest.fetch_max(pts.nseconds().saturating_sub(last), Ordering::Relaxed);
+                        }
+                        me.seen.fetch_add(1, Ordering::Relaxed);
+                    }
+                }
+                gst::PadProbeReturn::Ok
+            });
+        }
+
+        async fn wait_for(&self, frames: u64) {
+            let mark = self.seen.load(Ordering::Relaxed) + frames;
+            for _ in 0..600 {
+                if self.seen.load(Ordering::Relaxed) >= mark {
+                    return;
+                }
+                tokio::time::sleep(Duration::from_millis(20)).await;
+            }
+            panic!("the programme stopped producing frames");
+        }
+    }
+
+    /// The acceptance measurement: a take between two eight item scenes must
+    /// not cost a frame.
+    ///
+    /// Eight `test://` sources, two scenes of eight items each, and the gap
+    /// measured on the encoder's sink pad across ten takes back and forth.
+    /// Ignored by default because it builds nine pipelines and runs for a few
+    /// seconds; run it with `cargo test -p godwinmix-core -- --ignored
+    /// gapless`.
+    #[tokio::test(flavor = "multi_thread")]
+    #[ignore = "builds nine pipelines and runs for several seconds"]
+    async fn gapless_take_between_two_eight_item_scenes() {
+        let ids: Vec<String> = (1..=8).map(|i| format!("cam{i}")).collect();
+        let refs: Vec<&str> = ids.iter().map(String::as_str).collect();
+        let mut mix = with_sources(&refs).await;
+        let canvas = mix.canvas.clone();
+        let frame = canvas.frame_duration().nseconds();
+
+        let gaps = Arc::new(Gaps::default());
+        gaps.watch(&mix.venc_tee.static_pad("sink").expect("the encoder tee has a sink pad"));
+        gaps.wait_for(15).await;
+
+        let grid = |offset: i32| {
+            scene(
+                "grid",
+                ids.iter()
+                    .enumerate()
+                    .map(|(i, id)| {
+                        box_at(&canvas, id, (i as i32 % 4) * 70 + offset, (i as i32 / 4) * 80)
+                    })
+                    .collect(),
+            )
+        };
+        mix.take_scene(grid(0), None).expect("the first scene");
+        gaps.wait_for(10).await;
+        // Measured from here, so the first build is not in the figure.
+        gaps.largest.store(0, Ordering::Relaxed);
+
+        for i in 0..10 {
+            mix.take_scene(grid(if i % 2 == 0 { 20 } else { 0 }), None).expect("a take");
+            gaps.wait_for(6).await;
+        }
+        let largest = gaps.largest.load(Ordering::Relaxed);
+        println!(
+            "gapless: ten takes between two eight item scenes, largest interval {:.1} ms, one frame is {:.1} ms, {} relinks",
+            largest as f64 / 1e6,
+            frame as f64 / 1e6,
+            mix.pool.misses()
+        );
+        assert_eq!(mix.pool.misses(), 0, "a take between two scenes relinked the graph");
+        assert!(
+            largest <= frame * 2,
+            "largest interval was {largest} ns, more than two frames ({} ns)",
+            frame * 2
+        );
+        mix.shutdown();
+    }
+
+    /// The other acceptance measurement: sixteen hidden slots cost within 2
+    /// percent of no compositor at all.
+    ///
+    /// Compared honestly: the same programme, the same source, the same run
+    /// length, with and without the sixteen slots grown and hidden. What is
+    /// timed is the process's own CPU, because that is the number the budget
+    /// is written in. Ignored by default; run it with `cargo test -p
+    /// godwinmix-core -- --ignored hidden_slots`.
+    #[tokio::test(flavor = "multi_thread")]
+    #[ignore = "a CPU measurement that takes about twenty seconds"]
+    async fn hidden_slots_cost_within_two_percent_of_no_compositor() {
+        let sample = || async {
+            let start = cpu_seconds();
+            let at = Instant::now();
+            tokio::time::sleep(Duration::from_secs(8)).await;
+            let secs = at.elapsed().as_secs_f64();
+            (cpu_seconds() - start) / secs
+        };
+
+        let mut mix = with_sources(&["cam1"]).await;
+        let canvas = mix.canvas.clone();
+        mix.take(Some("cam1".into()), None).expect("one source on programme");
+        // Settle, then measure the baseline: eight slots, one of them drawn.
+        tokio::time::sleep(Duration::from_secs(2)).await;
+        let base = sample().await;
+
+        // Grow to sixteen, then hide them all again. The slots stay, bound and
+        // fed, at alpha 0: the case the budget is about.
+        let wall: Vec<Placement> = (0..16)
+            .map(|i| Placement {
+                xpos: i * 5,
+                width: 40,
+                height: 30,
+                ..Placement::full_canvas("cam1".into(), &canvas)
+            })
+            .collect();
+        mix.take_scene(scene("wall", wall), None).expect("sixteen places");
+        mix.take(Some("cam1".into()), None).expect("back to one");
+        assert!(mix.pool.len() >= 16);
+        assert_eq!(mix.pool.visible(), 1);
+        tokio::time::sleep(Duration::from_secs(2)).await;
+        let hidden = sample().await;
+
+        let extra = if base > 0.0 { (hidden - base) / base * 100.0 } else { 0.0 };
+        println!(
+            "hidden slots: baseline {base:.4} cores, with {} slots {hidden:.4} cores, {extra:+.2} percent",
+            mix.pool.len()
+        );
+        assert!(extra < 2.0, "sixteen hidden slots cost {extra:.2} percent, over the 2 percent budget");
+        mix.shutdown();
+    }
+
+    /// This process's CPU time so far, in seconds. `getrusage` rather than a
+    /// crate: it is two lines and it is on every platform this runs on.
+    #[cfg(unix)]
+    fn cpu_seconds() -> f64 {
+        // SAFETY: `getrusage` writes into a struct we own and reads nothing else.
+        unsafe {
+            let mut usage: libc::rusage = std::mem::zeroed();
+            if libc::getrusage(libc::RUSAGE_SELF, &mut usage) != 0 {
+                return 0.0;
+            }
+            let secs = |t: libc::timeval| t.tv_sec as f64 + t.tv_usec as f64 / 1e6;
+            secs(usage.ru_utime) + secs(usage.ru_stime)
+        }
+    }
+
+    #[cfg(not(unix))]
+    fn cpu_seconds() -> f64 {
+        0.0
     }
 
     /// Every command has a name, so the alert after a panic can say which one

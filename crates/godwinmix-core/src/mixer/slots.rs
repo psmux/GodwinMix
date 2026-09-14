@@ -5,7 +5,7 @@
 //! it gets here. A slot is a chain that never changes shape:
 //!
 //! ```text
-//!   pgm-vtee-{source} =|=> slot-q-N -> slot-crop-N -> slot-flip-N -> vmix:sink_N
+//!   pgm-vtee-{source} =|=> slot-gate-N -> slot-q-N -> slot-crop-N -> slot-flip-N -> vmix:sink_N
 //! ```
 //!
 //! Applying a scene is: flatten, bind each entry to a slot (reusing the slot
@@ -26,6 +26,16 @@
 //! * A cache miss, which is a source placed in more places than it has slots,
 //!   relinks under `with_pad_blocked`. The pool makes that rare by
 //!   construction; live pad addition is the documented hazard.
+//!
+//! The `valve` at the head of each slot is what keeps a hidden slot honest. A
+//! compositor pad at alpha 0 is skipped, but the chain feeding it is not: the
+//! queue still has a thread and the crop and the flip still see every frame,
+//! and sixteen of those measured 180 percent over the baseline. A closed valve
+//! drops the buffer where the tee hands it over, before any of that, and the
+//! same sixteen measure inside the 2 percent budget. One slot per source, the
+//! one it was given when it was added, keeps its valve open whatever the scene
+//! says, so the ordinary path costs exactly what it did before the pool
+//! existed and a take never waits for a frame.
 //!
 //! z is banded so the slate and the freeze frame keep working:
 //!
@@ -140,6 +150,9 @@ impl Placement {
 /// One slot: a fixed chain and the compositor pad at the end of it.
 pub struct Slot {
     pub index: usize,
+    /// Closed when this slot is hidden and is not a source's home slot, so a
+    /// slot nobody is looking at costs one dropped buffer per frame.
+    gate: gst::Element,
     pub queue: gst::Element,
     crop: gst::Element,
     flip: gst::Element,
@@ -151,6 +164,9 @@ pub struct Slot {
     /// Held with its last frame while a source is rebuilt. Not available for
     /// binding, not cleared by an apply.
     retired: bool,
+    /// The one slot a source keeps whatever the scene says, so its picture is
+    /// always at the compositor and a take of it never waits for a frame.
+    home: bool,
 }
 
 struct Bound {
@@ -198,11 +214,26 @@ impl Slot {
         self.set_rotation(p.rotation);
     }
 
-    /// Hide this slot without unbinding it. The picture is still flowing into
-    /// the compositor, which is what makes the next take a property write, and
-    /// a pad at alpha 0 is skipped before any conversion happens.
+    /// Hide this slot without unbinding it, which is what makes the next take
+    /// a property write.
+    ///
+    /// A home slot keeps its picture flowing: the compositor skips a pad at
+    /// alpha 0 before any conversion, and having the frame already there is
+    /// what makes a take show the current picture rather than a stale one. Any
+    /// other slot shuts its valve, because the chain feeding a hidden pad is
+    /// not free even when the pad is.
     fn hide(&self) {
         set_f64(&self.pad, "alpha", 0.0);
+        if !self.home {
+            self.gate.set_property("drop", true);
+        }
+    }
+
+    /// Let the picture through again.
+    fn open(&self) {
+        if self.gate.property::<bool>("drop") {
+            self.gate.set_property("drop", false);
+        }
     }
 
     /// The crop, in whole source pixels, from the normalised fractions the
@@ -213,7 +244,7 @@ impl Slot {
     /// makes one number here right for every kind of source.
     fn set_crop(&self, p: &Placement) {
         let caps = self
-            .queue
+            .gate
             .static_pad("sink")
             .and_then(|pad| pad.current_caps())
             .and_then(|c| frame_size(&c));
@@ -282,8 +313,10 @@ impl SlotPool {
         self.slots.is_empty()
     }
 
-    /// How many times a slot has had to be relinked. Zero for a show that
-    /// never places a source in more spots than it has slots.
+    /// How many times applying a scene has had to relink a slot. Zero for a
+    /// show that never places a source in more spots than it has slots. The
+    /// binding a source gets when it is added is not one of these: it is the
+    /// relink that buys every later take its freedom.
     pub fn misses(&self) -> u64 {
         self.misses
     }
@@ -292,10 +325,14 @@ impl SlotPool {
     /// more places than the pool has.
     fn grow(&mut self) -> Result<&mut Slot> {
         let index = self.slots.len();
+        // `valve` resends the sticky events when it opens again, so a slot
+        // coming back gets its caps and segment without anything reconnecting.
+        let gate = make("valve", &format!("slot-gate-{index}"))?;
+        gate.set_property("drop", true);
         let queue = gstutil::queue_thread(&format!("slot-q-{index}"))?;
         let crop = make("videocrop", &format!("slot-crop-{index}"))?;
         let flip = make("videoflip", &format!("slot-flip-{index}"))?;
-        let elements = vec![queue.clone(), crop.clone(), flip.clone()];
+        let elements = vec![gate.clone(), queue.clone(), crop.clone(), flip.clone()];
         self.program.add_many(&elements).context("adding a compositor slot")?;
         gst::Element::link_many(elements.iter().collect::<Vec<_>>())
             .context("linking a compositor slot")?;
@@ -323,6 +360,7 @@ impl SlotPool {
 
         self.slots.push(Slot {
             index,
+            gate,
             queue,
             crop,
             flip,
@@ -330,6 +368,7 @@ impl SlotPool {
             elements,
             bound: None,
             retired: false,
+            home: false,
         });
         Ok(self.slots.last_mut().expect("just pushed"))
     }
@@ -346,7 +385,13 @@ impl SlotPool {
             return Ok(());
         }
         let index = self.free_slot(&branch.id, &[])?;
-        self.bind(index, branch)?;
+        // Not counted as a miss: this is the relink that buys every later take
+        // its freedom, and it happens while the source has no picture yet.
+        self.bind(index, branch, false)?;
+        // The home slot: open whatever the scene says, so this source's
+        // picture is always at the compositor and a take of it is instant.
+        self.slots[index].home = true;
+        self.slots[index].open();
         Ok(())
     }
 
@@ -376,10 +421,11 @@ impl SlotPool {
                 Some(index) => index,
                 None => {
                     let index = self.free_slot(&p.source, &claimed)?;
-                    self.bind(index, branch)?;
+                    self.bind(index, branch, true)?;
                     index
                 }
             };
+            self.slots[index].open();
             self.slots[index].draw(p, Z_LIVE + i as u32);
             claimed.push(index);
             drawn += 1;
@@ -426,10 +472,10 @@ impl SlotPool {
 
     /// Link a slot to a source's tee. The one place in the whole apply path
     /// that touches the graph, and the reason `reserve` exists.
-    fn bind(&mut self, index: usize, branch: &ProgrammeBranch) -> Result<()> {
+    fn bind(&mut self, index: usize, branch: &ProgrammeBranch, miss: bool) -> Result<()> {
         self.unbind(index);
         let slot = &mut self.slots[index];
-        let sink = slot.queue.static_pad("sink").context("a slot's queue has no sink pad")?;
+        let sink = slot.gate.static_pad("sink").context("a slot's valve has no sink pad")?;
         let tee_pad = branch
             .vtee
             .request_pad_simple("src_%u")
@@ -449,7 +495,9 @@ impl SlotPool {
             // keeps aggregating its other pads and `force-live` keeps the
             // output on schedule, so the cost is this source's own frames for
             // as long as the block holds and nothing downstream notices.
-            self.misses += 1;
+            if miss {
+                self.misses += 1;
+            }
             let src = branch.vq.static_pad("src").context("the video queue has no src pad")?;
             let (tee_pad, sink) = (tee_pad.clone(), sink.clone());
             gstutil::with_pad_blocked(&src, BLOCK_TIMEOUT, move || {
@@ -478,9 +526,10 @@ impl SlotPool {
     /// source that is removed does not leave one behind.
     fn unbind(&mut self, index: usize) {
         let Some(bound) = self.slots[index].bound.take() else { return };
-        let slot = &self.slots[index];
+        let slot = &mut self.slots[index];
+        slot.home = false;
         slot.hide();
-        if let Some(sink) = slot.queue.static_pad("sink") {
+        if let Some(sink) = slot.gate.static_pad("sink") {
             let _ = bound.tee_pad.unlink(&sink);
         }
         if let Some(tee) = bound.tee_pad.parent_element() {
