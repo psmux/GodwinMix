@@ -29,9 +29,11 @@ pub struct TakeRequest {
     /// given; with neither, the armed scene goes on air.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub scene: Option<String>,
-    /// `cut` in this build.
+    /// How to get there: a name (`"fade"`) at the default duration, or an
+    /// object. Absent is a cut.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub transition: Option<String>,
+    #[schemars(description = "\"fade\", or {type, duration_ms, params}. Absent is a cut.")]
+    pub transition: Option<Transition>,
     /// Programme running time to land the cut on, in milliseconds. Omit for
     /// immediate. Read the current running time from `core.info` or a status
     /// snapshot first.
@@ -39,8 +41,103 @@ pub struct TakeRequest {
     pub at_running_time_ms: Option<u64>,
 }
 
-/// The transitions this build runs. Widening this list is Phase 6.
-pub const TRANSITIONS: &[&str] = &["cut"];
+/// A transition, as a name or as an object.
+///
+/// Both spellings, because every client written before transitions sends
+/// `"cut"` and must keep working, and because typing `{"type": "cut"}` to ask
+/// for the default is noise. `program.take {transition: "fade"}` and
+/// `program.take {transition: {type: "fade", duration_ms: 300}}` are the same
+/// call.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(untagged)]
+// A short description on purpose: this one is inlined into the MCP tool
+// schema, which every agent pays for on every call. The long version is the
+// doc comment above and `docs/reference/transitions.md`.
+#[schemars(description = "A name, or an object.")]
+pub enum Transition {
+    Named(String),
+    Full(TransitionRequest),
+}
+
+/// The full form of a transition on `program.take`.
+///
+/// The same three fields the collection stores a named transition under, so a
+/// transition written into a scene collection and one typed into a call are
+/// the same thing. `params` is the transition's own: a stinger reads `clip`,
+/// `cut_at_ms` and `luma`, a plugin reads whatever it documents. See
+/// `docs/reference/transitions.md`.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[schemars(description = "How a take gets there. See docs/reference/transitions.md.")]
+pub struct TransitionRequest {
+    /// cut, fade, move, stinger, or a plugin's name.
+    #[serde(rename = "type")]
+    #[schemars(description = "cut, fade, move, stinger, or a plugin name.")]
+    pub type_id: String,
+    /// How long it takes. 0 is a cut.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(description = "How long it takes. 0 is a cut.")]
+    pub duration_ms: Option<u64>,
+    /// The transition's own settings. A stinger takes `clip` (a source id, a
+    /// path or a URI), `cut_at_ms` (where the scenes swap, half way by
+    /// default) and `luma` (key the clip's black out). A plugin transition
+    /// takes whatever it documents.
+    #[serde(default, skip_serializing_if = "Map::is_empty")]
+    #[schemars(description = "A stinger takes clip, cut_at_ms, luma.")]
+    pub params: Map<String, Value>,
+}
+
+/// The transitions built into this build. A `transition` plugin adds its own
+/// name to what `program.take` accepts.
+pub const TRANSITIONS: &[&str] = &["cut", "fade", "move", "stinger"];
+
+/// How long a transition runs when the caller named one but not a duration.
+///
+/// Three hundred milliseconds is the figure every switcher ships with: long
+/// enough to read as a dissolve rather than a glitch, short enough that an
+/// operator cutting on a word is not late.
+pub const DEFAULT_TRANSITION_MS: u64 = 300;
+
+impl Transition {
+    /// The type, trimmed and lowercased.
+    pub fn type_id(&self) -> String {
+        match self {
+            Transition::Named(name) => name.trim().to_lowercase(),
+            Transition::Full(req) => req.type_id.trim().to_lowercase(),
+        }
+    }
+
+    /// How long it takes. A cut is zero however it was asked for.
+    pub fn duration_ms(&self) -> u64 {
+        if self.type_id() == "cut" {
+            return 0;
+        }
+        match self {
+            Transition::Named(_) => DEFAULT_TRANSITION_MS,
+            Transition::Full(req) => req.duration_ms.unwrap_or(DEFAULT_TRANSITION_MS),
+        }
+    }
+
+    pub fn full(&self) -> Option<&TransitionRequest> {
+        match self {
+            Transition::Full(req) => Some(req),
+            Transition::Named(_) => None,
+        }
+    }
+
+    /// One of the transition's own settings, as a string.
+    pub fn param_str(&self, key: &str) -> Option<String> {
+        let value = self.full()?.params.get(key)?.as_str()?.trim();
+        (!value.is_empty()).then(|| value.to_string())
+    }
+
+    pub fn param_u64(&self, key: &str) -> Option<u64> {
+        self.full()?.params.get(key)?.as_u64()
+    }
+
+    pub fn param_bool(&self, key: &str) -> Option<bool> {
+        self.full()?.params.get(key)?.as_bool()
+    }
+}
 
 impl TakeRequest {
     /// The source named, if one was, trimmed.
@@ -59,15 +156,35 @@ impl TakeRequest {
         self.source_id().or_else(|| self.scene_name())
     }
 
-    /// `Ok` for a transition this build runs, or the list of the ones it does.
-    pub fn check_transition(&self) -> Result<(), String> {
-        match self.transition.as_deref().map(str::trim) {
-            None | Some("") | Some("cut") => Ok(()),
-            Some(other) => Err(format!(
-                "this build has no transition called {other:?}. It has: {}. Transitions                  between scenes land in a later release; leave `transition` out for a cut.",
-                TRANSITIONS.join(", ")
-            )),
+    /// `Ok` for a transition this core can run, or the list of the ones it
+    /// can, with whatever a plugin has added to them.
+    ///
+    /// `extra` is the transition plugins the supervisor has running. A core
+    /// with no plugins passes an empty slice and the message names the four
+    /// built in ones.
+    pub fn check_transition(&self, extra: &[String]) -> Result<(), String> {
+        let Some(transition) = &self.transition else { return Ok(()) };
+        let type_id = transition.type_id();
+        if type_id.is_empty() {
+            return Ok(());
         }
+        let known = TRANSITIONS.contains(&type_id.as_str())
+            || extra.iter().any(|name| name.eq_ignore_ascii_case(&type_id));
+        if !known {
+            let mut names: Vec<String> = TRANSITIONS.iter().map(|s| s.to_string()).collect();
+            names.extend(extra.iter().cloned());
+            return Err(format!(
+                "this core has no transition called {type_id:?}. It has: {}. A transition                  plugin adds its own name here once it is installed and enabled.",
+                names.join(", ")
+            ));
+        }
+        if type_id == "stinger" && transition.param_str("clip").unwrap_or_default().is_empty() {
+            return Err(
+                "a stinger needs a clip: {\"type\": \"stinger\", \"clip\": \"stinger.mp4\",                  \"duration_ms\": 1000}. The clip is a source already in the mixer, or a file                  the core adds for the length of the transition."
+                    .to_string(),
+            );
+        }
+        Ok(())
     }
 }
 

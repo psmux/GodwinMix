@@ -1709,9 +1709,9 @@ pub struct TakeRequest {
     /// Id of the source to put on air.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub source: Option<String>,
-    /// `cut` in this build.
+    /// "fade", or {type, duration_ms, params}. Absent is a cut.
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub transition: Option<String>,
+    pub transition: Option<Transition>,
 }
 
 /// `event/tally`.
@@ -1800,6 +1800,23 @@ pub struct Transform {
     pub rotation: Option<f64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub scale: Option<Vec2>,
+}
+
+/// A name, or an object.
+pub type Transition = Value;
+
+/// How a take gets there. See docs/reference/transitions.md.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct TransitionRequest {
+    /// How long it takes. 0 is a cut.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub duration_ms: Option<u64>,
+    /// A stinger takes clip, cut_at_ms, luma.
+    pub params: BTreeMap<String, Value>,
+    /// cut, fade, move, stinger, or a plugin name.
+    #[serde(rename = "type")]
+    pub r#type: String,
 }
 
 /// What a surface starts with: the layout, the theme and the gallery mode.

@@ -3,11 +3,11 @@
   "tools": {
     "minimal": {
       "count": 5,
-      "bytes": 4772
+      "bytes": 4762
     },
     "standard": {
       "count": 12,
-      "bytes": 10899
+      "bytes": 10889
     }
   }
 }

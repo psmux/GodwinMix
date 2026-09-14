@@ -291,6 +291,10 @@ pub(crate) async fn ramp_if_on_air(call: &Call, view: &SceneView, ms: u64, easin
         scene: Box::new(ProgramScene { name, placements }),
         at_running_time_ms: None,
         duration_ms: Some(ms),
+        // A reshape of the scene already on air, not a crossing between two.
+        // The pads are already drawing these items, so easing them is a ramp
+        // on the pads they have rather than a second scene beside them.
+        transition: None,
         ack: None,
     });
     tracing::debug!(scene = %view.name, duration_ms = ms, easing, "layout change applied on air");

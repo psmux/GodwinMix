@@ -112,6 +112,28 @@ impl TransitionSpec {
     }
 }
 
+impl From<&godwinmix_protocol::requests::Transition> for TransitionSpec {
+    /// What a client asked for, as the mixer has it.
+    ///
+    /// A name this build does not know becomes `Kind::Plugin`, which the mixer
+    /// hands to the transition renderer; the control layer has already refused
+    /// a name that no plugin answers to, so nothing gets here by accident.
+    fn from(request: &godwinmix_protocol::requests::Transition) -> Self {
+        let kind = match request.type_id().as_str() {
+            "cut" => Kind::Cut,
+            "fade" => Kind::Fade,
+            "move" => Kind::Move,
+            "stinger" => Kind::Stinger {
+                clip: request.param_str("clip").unwrap_or_default(),
+                cut_at_ms: request.param_u64("cut_at_ms"),
+                luma: request.param_bool("luma").unwrap_or(true),
+            },
+            other => Kind::Plugin(other.to_string()),
+        };
+        TransitionSpec { kind, duration_ms: request.duration_ms() }
+    }
+}
+
 /// The transitions this build runs.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Kind {
