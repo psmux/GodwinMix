@@ -8,11 +8,27 @@ use super::*;
 use crate::scene::geometry::flatten;
 use crate::scene::validate;
 
-const SIMPLE: &str = include_str!("../../../tests/fixtures/obs/simple.json");
-const FULL: &str = include_str!("../../../tests/fixtures/obs/full.json");
+const SIMPLE_RAW: &str = include_str!("../../../tests/fixtures/obs/simple.json");
+const FULL_RAW: &str = include_str!("../../../tests/fixtures/obs/full.json");
+
+/// The fixtures with Unix line endings whatever git checked them out as, so the
+/// tests that edit the text by hand match on Windows too.
+fn fixture(text: &str) -> String {
+    text.replace("\r\n", "\n")
+}
+
+/// A fixture as text. `.gitattributes` pins these files to LF as well; this is
+/// the belt to that pair of braces.
+fn simple() -> String {
+    fixture(SIMPLE_RAW)
+}
+
+fn full() -> String {
+    fixture(FULL_RAW)
+}
 
 fn import_full(options: &Options) -> Import {
-    import(FULL, options).expect("the full fixture imports")
+    import(&full(), options).expect("the full fixture imports")
 }
 
 /// Every placement of a scene as `(path, x, y, w, h)`, rounded.
@@ -37,7 +53,7 @@ fn outcome_of<'a>(report: &'a Report, name: &str) -> &'a Outcome {
 
 #[test]
 fn the_simple_collection_lands_every_item_where_obs_had_it() {
-    let imported = import(SIMPLE, &Options::default()).unwrap();
+    let imported = import(&simple(), &Options::default()).unwrap();
     let canvas = Canvas::default();
     assert_eq!(imported.document.scenes.len(), 1);
     let scene = &imported.document.scenes[0];
@@ -60,7 +76,7 @@ fn the_simple_collection_lands_every_item_where_obs_had_it() {
 
 #[test]
 fn the_simple_collection_reports_what_each_source_became() {
-    let imported = import(SIMPLE, &Options::default()).unwrap();
+    let imported = import(&simple(), &Options::default()).unwrap();
     assert!(matches!(
         outcome_of(&imported.report, "Backdrop"),
         Outcome::Imported { r#type, id } if r#type == "test/source" && id == "backdrop"
@@ -344,7 +360,7 @@ fn a_file_that_is_not_a_collection_says_where_to_get_one() {
 fn an_item_naming_a_source_that_is_gone_is_reported_rather_than_dropped_in_silence() {
     // Both the uuid and the name have to be wrong: OBS files address by uuid
     // with a fallback to the name, and the importer tries both.
-    let text = SIMPLE.replace(
+    let text = simple().replace(
         "\"name\": \"Camera\",\n            \"source_uuid\": \"33333333-3333-3333-3333-333333333333\"",
         "\"name\": \"Ghost\",\n            \"source_uuid\": \"deadbeef-0000-0000-0000-000000000000\"",
     );
@@ -360,7 +376,7 @@ fn an_item_naming_a_source_that_is_gone_is_reported_rather_than_dropped_in_silen
 fn an_item_falls_back_to_the_source_name_when_the_uuid_is_gone() {
     // OBS wrote names before it wrote uuids, and the current serialiser still
     // falls back to the name, so a file with no uuids has to import.
-    let text = SIMPLE.replace("source_uuid", "was_source_uuid");
+    let text = simple().replace("source_uuid", "was_source_uuid");
     let imported = import(&text, &Options::default()).unwrap();
     assert_eq!(imported.document.scenes[0].items.len(), 3);
     assert!(imported.report.notes.iter().all(|n| !n.contains("not in this collection")));
@@ -368,7 +384,7 @@ fn an_item_falls_back_to_the_source_name_when_the_uuid_is_gone() {
 
 #[test]
 fn a_group_that_contains_itself_is_reported_and_not_recursed_into() {
-    let text = FULL.replace(
+    let text = full().replace(
         "\"name\": \"CAM 2\",\n            \"source_uuid\": \"a0000000-0000-0000-0000-000000000003\"",
         "\"name\": \"Corner\",\n            \"source_uuid\": \"a0000000-0000-0000-0000-000000000009\"",
     );
