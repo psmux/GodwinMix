@@ -1,0 +1,99 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Director",
+  "description": "How often to decide, how long to hold a shot, what counts as movement, and whether to ask a model.",
+  "type": "object",
+  "properties": {
+    "interval_secs": {
+      "type": "number",
+      "title": "Decide every",
+      "description": "Seconds between decisions. Never faster than one second: nothing in the state changes faster than the frame rate, and every cycle with a model configured costs money.",
+      "default": 2,
+      "minimum": 1,
+      "maximum": 60,
+      "x-gmx-unit": "s",
+      "examples": [2, 5, 1]
+    },
+    "min_hold_secs": {
+      "type": "number",
+      "title": "Hold a shot for",
+      "description": "Seconds before another take is allowed. The most important number here: a programme that changes shot every few seconds is unwatchable. A source that fails or freezes breaks the hold at once.",
+      "default": 8,
+      "minimum": 0,
+      "maximum": 600,
+      "x-gmx-unit": "s",
+      "examples": [8, 4, 20]
+    },
+    "slow_look_secs": {
+      "type": "number",
+      "title": "Move on after",
+      "description": "Seconds after which the programme moves to the next live source even though nothing has changed, so a service does not sit on one camera for an hour. 0 turns it off.",
+      "default": 45,
+      "minimum": 0,
+      "maximum": 3600,
+      "x-gmx-unit": "s",
+      "examples": [45, 0, 120]
+    },
+    "motion_delta": {
+      "type": "number",
+      "title": "Movement worth cutting to",
+      "description": "How much more a source has to be moving than what is on air before that is a reason to cut. Motion runs 0 to 1: a static slide is near 0, a talking head 0.1 to 0.3, a panning camera higher.",
+      "default": 0.15,
+      "minimum": 0,
+      "maximum": 1,
+      "examples": [0.15, 0.3, 0.05]
+    },
+    "idle_ms": {
+      "type": "integer",
+      "title": "Frozen after",
+      "description": "A picture that has not sent a frame for this long is not a shot: the director cuts away from it and never cuts to it.",
+      "default": 2000,
+      "minimum": 100,
+      "maximum": 60000,
+      "x-gmx-unit": "ms",
+      "examples": [2000, 5000]
+    },
+    "sources": {
+      "type": "array",
+      "title": "Only these sources",
+      "description": "The sources this director may take. Empty means all of them. Use it to keep a director away from the scoreboard or a guest feed somebody else is driving.",
+      "items": { "type": "string" },
+      "default": [],
+      "examples": [[], ["cam1", "cam2"]]
+    },
+    "goal": {
+      "type": "string",
+      "title": "Goal",
+      "description": "What the programme should show, in plain words. Only read when a model is configured; the rules do not read English.",
+      "default": "",
+      "maxLength": 1000,
+      "examples": ["", "Show whoever is speaking. Cut to the scoreboard when the score changes, hold it ten seconds, then go back."]
+    },
+    "llm": {
+      "type": "string",
+      "title": "Model command",
+      "description": "A command to ask for an opinion each cycle. It is given the prompt on stdin and must write {\"take\": \"<id>\" or null, \"reason\": \"...\"} on stdout. Empty is the rule based mode, which is the default and needs no model, no key and no network beyond the mixer. Whatever the command answers is checked against the same rules before it reaches the mixer.",
+      "default": "",
+      "maxLength": 500,
+      "examples": ["", "claude -p --output-format text", "ollama run llama3.2"]
+    },
+    "llm_timeout_ms": {
+      "type": "integer",
+      "title": "Wait for the model",
+      "description": "How long to wait for that command before deciding on the rules for this cycle. A slow model costs a cycle its opinion and nothing else.",
+      "default": 10000,
+      "minimum": 500,
+      "maximum": 120000,
+      "x-gmx-unit": "ms",
+      "examples": [10000, 3000]
+    },
+    "dry_run": {
+      "type": "boolean",
+      "title": "Dry run",
+      "description": "Decide and log, take nothing. The way to watch a director for ten minutes before letting it near a show.",
+      "default": false,
+      "examples": [false, true]
+    }
+  },
+  "additionalProperties": false
+}

@@ -1,0 +1,59 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Record to a file",
+  "description": "Write the programme to a file. It is a remux, not a re-encode: the recording is exactly what the encoder already made, so it costs almost no CPU.",
+  "type": "object",
+  "properties": {
+    "directory": {
+      "type": "string",
+      "title": "Folder",
+      "description": "Where the files go. It is made if it is not there. Empty means a GodwinMix folder inside your Videos folder, or the system temporary folder on a machine with no home directory.",
+      "default": "",
+      "maxLength": 1024,
+      "examples": ["", "/home/av/Videos/services", "/Volumes/Recordings"]
+    },
+    "pattern": {
+      "type": "string",
+      "title": "File name",
+      "description": "The name, without the extension. {date} is 2026-09-13, {time} is 1030, {datetime} is both, {instance} is this output's id. A split recording gets a five digit number on the end.",
+      "default": "{instance}-{datetime}",
+      "maxLength": 200,
+      "examples": ["{instance}-{datetime}", "sunday-{date}", "{date}/service-{time}"]
+    },
+    "format": {
+      "type": "string",
+      "title": "Format",
+      "description": "MP4 is written in fragments, so a machine that loses power leaves a file that still plays up to the last few seconds. Matroska is the alternative and is friendlier to very long recordings.",
+      "default": "mp4",
+      "enum": ["mp4", "mkv"],
+      "examples": ["mp4", "mkv"]
+    },
+    "split_after_minutes": {
+      "type": "integer",
+      "title": "Split after",
+      "description": "Start a new file every so many minutes. 0 keeps one file however long the service runs. Splits land on the next keyframe, so the number is approximate by a second or two.",
+      "default": 0,
+      "minimum": 0,
+      "maximum": 1440,
+      "examples": [0, 30, 60]
+    },
+    "min_free_gb": {
+      "type": "number",
+      "title": "Warn under",
+      "description": "Report the recording as degraded when the disk has less than this much room left. It does not stop recording: an operator who is told at 1 GB can act, and a recorder that stopped itself could not be argued with.",
+      "default": 1.0,
+      "minimum": 0,
+      "maximum": 1024,
+      "examples": [1.0, 5.0, 0.5]
+    },
+    "label": {
+      "type": "string",
+      "title": "Label",
+      "description": "A name for this recorder, shown wherever the output is listed.",
+      "default": "",
+      "maxLength": 64,
+      "examples": ["", "Archive", "Sermon only"]
+    }
+  },
+  "additionalProperties": false
+}

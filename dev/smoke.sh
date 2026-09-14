@@ -696,6 +696,57 @@ else
     bad "removal left $STRAYS process(es) and $LEFT directory entr(ies)"
 fi
 
+# --- the mixer as a server -------------------------------------------------
+# The acceptance line from the roadmap, checked end to end: a publisher sending
+# RTMP to the mixer's own address appears as a live source within five seconds
+# with nothing configured. It needs the ingest plugin built and a GStreamer that
+# can publish; both are announced and skipped rather than failed when absent.
+INGEST="$REPO/plugins/ingest"
+step "an RTMP publisher appears as a live source in five seconds"
+if [ ! -x "$INGEST/bin/gmx-ingest" ]; then
+    printf 'skipped (dev/harness/stage-plugins.sh has not been run)\n'
+elif ! command -v gst-launch-1.0 >/dev/null 2>&1 \
+        || ! gst-inspect-1.0 rtmp2sink >/dev/null 2>&1 \
+        || ! gst-inspect-1.0 x264enc >/dev/null 2>&1; then
+    printf 'skipped (this build of GStreamer cannot publish RTMP)\n'
+else
+    RTMP_PORT="$(python3 -c 'import socket;s=socket.socket();s.bind(("127.0.0.1",0));print(s.getsockname()[1]);s.close()')"
+    GODWINMIX_URL="$BASE" GODWINMIX_TOKEN="$TOKEN" "$GMX" plugin add "$INGEST" \
+        >"$WORK/ingest-add.log" 2>&1 || true
+    # Through the REST layer rather than `gmx ctl source add`, because the port
+    # to listen on is a param and the CLI takes only an id, a type and a URI.
+    # Params ride at the top level: AddSourceRequest flattens them, which is the
+    # seam a plugin's settings reach its config through.
+    curl -fsS -X POST "$BASE/api/v1/sources" "${AUTH[@]}" \
+        -H 'content-type: application/json' \
+        -d "{\"id\":\"phone\",\"uri\":\"ingest/rtmp\",\"type\":\"ingest/rtmp\",\"bind\":\"127.0.0.1\",\"port\":$RTMP_PORT}" \
+        >"$WORK/ingest-source.log" 2>&1 || true
+    sleep 1
+    "$REPO/dev/harness/publish.sh" rtmp "$RTMP_PORT" >"$WORK/ingest-publish.log" 2>&1 &
+    PUB_PID=$!
+    INGEST_LIVE=no
+    for _ in 1 2 3 4 5; do
+        sleep 1
+        GODWINMIX_URL="$BASE" GODWINMIX_TOKEN="$TOKEN" "$GMX" ctl status \
+            >>"$WORK/ingest-status.log" 2>&1 || true
+        if grep -E "phone.*live" "$WORK/ingest-status.log" >/dev/null 2>&1; then
+            INGEST_LIVE=yes
+            break
+        fi
+    done
+    kill "$PUB_PID" 2>/dev/null || true
+    wait "$PUB_PID" 2>/dev/null || true
+    GODWINMIX_URL="$BASE" GODWINMIX_TOKEN="$TOKEN" "$GMX" ctl source remove phone \
+        >/dev/null 2>&1 || true
+    GODWINMIX_URL="$BASE" GODWINMIX_TOKEN="$TOKEN" "$GMX" plugin remove ingest \
+        >/dev/null 2>&1 || true
+    if [ "$INGEST_LIVE" = yes ]; then
+        ok
+    else
+        bad "the publisher never went live: $(tail -3 "$WORK/ingest-publish.log" | tr '\n' '; ')"
+    fi
+fi
+
 step "gmx mcp lists 12 tools on standard"
 COUNT="$(python3 "$REPO/dev/smoke_mcp.py" "$GMX" "$BASE" "$TOKEN" standard 2>>"$WORK/mcp.log")"
 if [[ "$COUNT" == "12" ]]; then ok; else bad "standard listed ${COUNT:-nothing}, wanted 12"; fi

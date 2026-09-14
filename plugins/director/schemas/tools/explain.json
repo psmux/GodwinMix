@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "explain",
+  "description": "A mixer state to reason about.",
+  "type": "object",
+  "properties": {
+    "state": {
+      "type": "object",
+      "title": "State",
+      "description": "The agent.state document, or one shaped like it: program, and sources with id, state, motion, video_idle_ms, no_video, no_audio.",
+      "additionalProperties": true,
+      "examples": [{"program": "cam1", "sources": [{"id": "cam1", "state": "live"}, {"id": "cam2", "state": "live"}]}]
+    },
+    "held_secs": {
+      "type": "number",
+      "title": "Held for",
+      "description": "How long the current shot has been on air. Defaults to just past the hold, so the answer shows what the director would do when it is free to act.",
+      "minimum": 0,
+      "x-gmx-unit": "s",
+      "examples": [60, 2]
+    }
+  },
+  "required": ["state"],
+  "additionalProperties": false
+}

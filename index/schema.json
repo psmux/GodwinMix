@@ -1,0 +1,326 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://psmux.github.io/godwinmix-plugins/schema.json",
+  "title": "GodwinMix marketplace document",
+  "description": "The shape of index.json and of godwinmix-marketplace.json. It is read by crates/godwinmix-host/src/marketplace.rs, and this file says nothing that reader does not do. Unknown keys on a plugin entry are preserved by the reader, so the index CI writes badge, added, skill, policy and the rest there. Unknown keys at the top of the document are accepted but not preserved when the document is cached.",
+  "type": "object",
+  "required": [
+    "name",
+    "plugins"
+  ],
+  "properties": {
+    "name": {
+      "description": "A slug naming this marketplace. It names the cache file under ~/.godwinmix/marketplaces/ and it is what `gmx marketplace remove` takes.",
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9-]*[a-z0-9]$",
+      "minLength": 1,
+      "maxLength": 64
+    },
+    "title": {
+      "description": "The name a person reads in `gmx marketplace list`. One line.",
+      "type": "string",
+      "maxLength": 200
+    },
+    "description": {
+      "description": "One or two sentences saying what this index carries and who runs it.",
+      "type": "string",
+      "maxLength": 1024
+    },
+    "owner": {
+      "description": "Who runs the index, for the listing. A GitHub login or an organisation name.",
+      "type": "string",
+      "maxLength": 100
+    },
+    "version": {
+      "description": "The schema version of this document. A core refuses anything above the version it reads, which is 1.",
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 1,
+      "default": 1
+    },
+    "signing": {
+      "$ref": "#/$defs/signing",
+      "description": "Who signs the assets this index lists. A plugin resolved through an index with this set is verified against that identity rather than against nobody in particular."
+    },
+    "cores": {
+      "description": "The core releases the compatibility dashboard reports against. Read by bot/dashboard.py only; the Rust reader ignores it.",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/core"
+      }
+    },
+    "plugins": {
+      "description": "Every listed plugin. The order is the order a person reads them in; the core sorts by tier itself.",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/listing"
+      }
+    }
+  },
+  "$defs": {
+    "signing": {
+      "title": "Signing identity",
+      "description": "The sigstore identity this index's CI signs with.",
+      "type": "object",
+      "required": [
+        "identity_regexp",
+        "oidc_issuer"
+      ],
+      "properties": {
+        "identity_regexp": {
+          "description": "A regular expression the signing certificate's subject must match. For GitHub Actions it is the workflow file's identity, anchored at both ends.",
+          "type": "string",
+          "minLength": 1
+        },
+        "oidc_issuer": {
+          "description": "The OIDC issuer that minted the token. https://token.actions.githubusercontent.com for an index whose CI is GitHub Actions.",
+          "type": "string",
+          "format": "uri"
+        }
+      },
+      "additionalProperties": false
+    },
+    "core": {
+      "title": "Core release",
+      "description": "One GodwinMix core release, and the range of plugin api levels it runs.",
+      "type": "object",
+      "required": [
+        "version",
+        "api",
+        "compatible"
+      ],
+      "properties": {
+        "version": {
+          "description": "The core's semver version.",
+          "$ref": "#/$defs/semver"
+        },
+        "api": {
+          "description": "The highest protocol level this core speaks (godwinmix_protocol::API_LEVEL).",
+          "type": "integer",
+          "minimum": 1
+        },
+        "compatible": {
+          "description": "The lowest protocol level this core still runs (godwinmix_protocol::API_COMPATIBLE).",
+          "type": "integer",
+          "minimum": 1
+        }
+      },
+      "additionalProperties": false
+    },
+    "listing": {
+      "title": "Plugin listing",
+      "description": "One plugin in the index. Every key the Rust reader does not know is kept, which is how the CI writes its results back into the entry.",
+      "type": "object",
+      "required": [
+        "name",
+        "source"
+      ],
+      "properties": {
+        "name": {
+          "description": "The plugin's own name, which is the namespace of every id it contributes and what `gmx plugin add <name>` matches. A slug: lower case letters, digits and hyphens, starting with a letter, no trailing hyphen and no doubled hyphen.",
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9]*(-[a-z0-9]+)*$",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "source": {
+          "description": "Where to get it, in one of the forms Source::parse accepts: owner/repo optionally @version, a git URL ending in .git, cargo:name, npm:@scope/name, pypi:name or oci:ref. A path is a form the core parses but the index refuses, because a path on your machine resolves to nothing on anyone else's.",
+          "type": "string",
+          "minLength": 1,
+          "not": {
+            "pattern": "^(\\.\\.?([/\\\\]|$)|[/~]|[A-Za-z]:[/\\\\])"
+          }
+        },
+        "description": {
+          "description": "One sentence saying what the plugin does. It is what a person and a model both read first.",
+          "type": "string",
+          "maxLength": 1024
+        },
+        "tier": {
+          "description": "The quality tier. custom is listed and unchecked; bronze passed the harness on one platform and has a SKILL.md and a release; silver passed on every platform it declares and answers its issues; gold is maintained by two or more people, has an eval suite with recorded shows, and is on the official marketplace.",
+          "type": "string",
+          "enum": [
+            "custom",
+            "bronze",
+            "silver",
+            "gold"
+          ],
+          "default": "custom"
+        },
+        "kinds": {
+          "description": "The kinds this plugin provides, from the manifest's [[provides]] blocks.",
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "source",
+              "output",
+              "filter",
+              "transition",
+              "encoder",
+              "service",
+              "device",
+              "panel",
+              "surface",
+              "preset",
+              "graphic",
+              "collection"
+            ]
+          }
+        },
+        "license": {
+          "description": "An SPDX id, MIT or Apache-2.0 or whatever the repository carries.",
+          "type": "string",
+          "maxLength": 100
+        },
+        "repository": {
+          "description": "The URL a person opens to read the code.",
+          "type": "string",
+          "format": "uri"
+        },
+        "homepage": {
+          "description": "Written by CI. Where the documentation lives, if it is not the repository.",
+          "type": "string",
+          "format": "uri"
+        },
+        "added": {
+          "description": "Written by CI. The date the listing was merged, as YYYY-MM-DD.",
+          "type": "string",
+          "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
+        },
+        "badge": {
+          "description": "Written by CI. The shields.io endpoint JSON for this plugin's tier badge.",
+          "type": "string",
+          "format": "uri"
+        },
+        "skill": {
+          "description": "The path, inside the plugin, of the SKILL.md the harness validated. Bronze and above must have one. Written by CI from what it found in the checked out source.",
+          "type": "string",
+          "pattern": "\\.md$"
+        },
+        "official": {
+          "description": "True when this plugin is also on the official marketplace, which is one of the gold requirements.",
+          "type": "boolean"
+        },
+        "maintainers": {
+          "description": "Who maintains it. Gold needs two or more, or the project itself.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "evals": {
+          "description": "The path, inside the plugin, of the eval suite with its recorded shows. Gold needs one.",
+          "type": "string"
+        },
+        "docs_reviewed": {
+          "description": "The date the documentation was last reviewed, as YYYY-MM-DD. Gold needs one.",
+          "type": "string",
+          "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
+        },
+        "policy": {
+          "$ref": "#/$defs/policy",
+          "description": "What the plugin does that the operator would want to know before running it. Bronze and above must declare it."
+        },
+        "versions": {
+          "description": "The versions listed, newest last. A core picks the newest whose api it can run.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/version"
+          }
+        }
+      }
+    },
+    "policy": {
+      "title": "Listing policy declaration",
+      "description": "The three things the listing policy makes an author state. An empty array means none, and a missing key is not the same as an empty one.",
+      "type": "object",
+      "required": [
+        "network",
+        "secrets",
+        "telemetry"
+      ],
+      "properties": {
+        "network": {
+          "description": "Every host or protocol the plugin talks to, one line each, in plain words. An empty array means it never touches the network.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "secrets": {
+          "description": "Every credential the plugin reads, named, with where it is sent. An empty array means it reads none.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "telemetry": {
+          "description": "none, or one line saying what is collected, where it goes and how it is switched off.",
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "additionalProperties": false
+    },
+    "version": {
+      "title": "Published version",
+      "description": "One published version of a listed plugin.",
+      "type": "object",
+      "required": [
+        "version",
+        "api"
+      ],
+      "properties": {
+        "version": {
+          "description": "The version, as MAJOR.MINOR.PATCH with an optional prerelease. It is the release tag the CI checks out.",
+          "$ref": "#/$defs/semver"
+        },
+        "api": {
+          "description": "The protocol level this version declares, copied from plugin.api in its gmx-plugin.toml. A core runs it when the level is inside its own compatible range.",
+          "type": "integer",
+          "minimum": 1
+        },
+        "platforms": {
+          "description": "The platform triples this version ships an asset for.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/platform"
+          },
+          "uniqueItems": true
+        },
+        "signed": {
+          "description": "Whether this index's CI signed the assets for this version with the identity in the signing block.",
+          "type": "boolean",
+          "default": false
+        },
+        "harness": {
+          "description": "What the conformance harness recorded, one line per platform, written as `<platform>: <passed>/<total>`. Eight checks run, so a pass reads `linux-x86_64: 8/8`.",
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[a-z0-9_]+-[a-z0-9_]+: [0-9]+/[0-9]+$"
+          }
+        }
+      }
+    },
+    "semver": {
+      "description": "MAJOR.MINOR.PATCH, with an optional prerelease and build, the same rule godwinmix_protocol::plugin::manifest::is_semver applies.",
+      "type": "string",
+      "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+([-+].*)?$"
+    },
+    "platform": {
+      "description": "One of the seven platform triples the core matches release assets against.",
+      "type": "string",
+      "enum": [
+        "linux-x86_64",
+        "linux-aarch64",
+        "linux-armv7",
+        "macos-aarch64",
+        "macos-x86_64",
+        "windows-x86_64",
+        "windows-aarch64"
+      ]
+    }
+  }
+}

@@ -1,0 +1,49 @@
+{
+  "name": "fixture-index",
+  "title": "A silver listing that declares a platform it never tested",
+  "description": "Three platforms are declared and two of them have a passing harness result, so entry.silver refuses it. Bronze would have accepted this listing, which is the whole point of the difference.",
+  "owner": "psmux",
+  "version": 1,
+  "signing": {
+    "identity_regexp": "^https://github\\.com/psmux/godwinmix-plugins/\\.github/workflows/listing\\.yml@refs/heads/main$",
+    "oidc_issuer": "https://token.actions.githubusercontent.com"
+  },
+  "plugins": [
+    {
+      "name": "ndi",
+      "source": "psmux/gmx-ndi",
+      "description": "NDI in and out, with discovery over mDNS.",
+      "tier": "silver",
+      "kinds": [
+        "source",
+        "output"
+      ],
+      "license": "Apache-2.0",
+      "repository": "https://github.com/psmux/gmx-ndi",
+      "skill": "SKILL.md",
+      "policy": {
+        "network": [
+          "mDNS discovery on the local segment"
+        ],
+        "secrets": [],
+        "telemetry": "none"
+      },
+      "versions": [
+        {
+          "version": "1.3.1",
+          "api": 1,
+          "platforms": [
+            "linux-x86_64",
+            "macos-aarch64",
+            "windows-x86_64"
+          ],
+          "signed": true,
+          "harness": [
+            "linux-x86_64: 8/8",
+            "macos-aarch64: 8/8"
+          ]
+        }
+      ]
+    }
+  ]
+}

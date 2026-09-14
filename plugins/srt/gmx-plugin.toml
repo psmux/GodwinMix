@@ -1,0 +1,43 @@
+# srt/source. The other half of the pair, srt/output, is built into the core at
+# tier 0 and stays there: the programme is already encoded on the output tee, so
+# a sidecar sender would add a copy and a process for nothing. See
+# docs/how-to/srt.md.
+
+[plugin]
+name = "srt"
+version = "0.1.0"
+api = 1
+description = "Receive SRT in caller, listener or rendezvous mode, with a latency budget, a passphrase, a stream id, and link statistics (round trip time, loss, retransmits) in health. Sending over SRT is built into the core as srt/output."
+license = "Apache-2.0"
+authors = ["GodwinMix"]
+repository = "https://github.com/psmux/godwinmix"
+platforms = ["linux-x86_64", "linux-aarch64", "macos-aarch64", "macos-x86_64", "windows-x86_64"]
+placements = ["sidecar", "node"]
+process = "per-instance"
+
+[run]
+bin = { "linux-x86_64" = "bin/gmx-srt", "linux-aarch64" = "bin/gmx-srt", "macos-aarch64" = "bin/gmx-srt", "macos-x86_64" = "bin/gmx-srt", "windows-x86_64" = "bin/gmx-srt.exe" }
+
+[[provides]]
+kind = "source"
+id = "source"
+uri_schemes = ["srt://"]
+# The same rank the built in srt/output carries, so the family agrees. It is
+# above hls/source's 200, which claims srt:// through uridecodebin and cannot
+# set a passphrase, a stream id or a latency budget.
+rank = 240
+# The stream crosses to the core as the MPEG-TS that arrived. The core demuxes
+# and decodes it once, on its hardware aware path.
+media = { video = "container", audio = "container", alpha = false, thumb = true }
+transports = ["container"]
+capabilities = ["restart-in-place", "health", "latency-report"]
+latency_ms = 125
+settings = "schemas/source.json"
+skill = "skills/source/SKILL.md"
+
+[provides.designer]
+icon = "designer/icon.svg"
+
+[build]
+command = "cargo build --release -p gmx-srt"
+output = "bin/gmx-srt"

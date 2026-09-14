@@ -13,7 +13,6 @@ import { el } from "../../shell/dom.js";
 import { errorToast } from "../../shell/toast.js";
 import { modal } from "../../shell/modal.js";
 import { openPicker } from "../../shell/picker.js";
-import { art } from "./tiles.js";
 import { applyCoreDefaults, forgetPreset } from "./defaults.js";
 
 /** The five choices, in the order a person reads them. */
@@ -76,20 +75,23 @@ export class WelcomePanel extends HTMLElement {
     const info = await applyCoreDefaults(this.client);
     const applied = info && info.ui && info.ui.preset;
     const sources = (this.client.state.sources || []).length;
-    if (!applied && sources === 0) this.open();
+    if (!applied && sources === 0) await this.open();
     this.offs = [
       // Settings has a "Show this again", which fires this.
       onShowAgain(() => {
         forgetPreset();
-        this.open();
+        this.open().catch((e) => console.error("welcome", e));
       }),
     ];
   }
 
-  open() {
+  async open() {
     if (this.dialog) return;
+    // The five pictures are five kilobytes of inline SVG, and a mixer that has
+    // been set up never draws them. They arrive with the dialog.
+    const { art } = await import("./tiles.js");
     const grid = el("div.welcome-grid");
-    for (const choice of CHOICES) grid.appendChild(this.tile(choice));
+    for (const choice of CHOICES) grid.appendChild(this.tile(choice, art));
     this.dialog = modal({
       title: "What are you streaming?",
       wide: true,
@@ -109,7 +111,7 @@ export class WelcomePanel extends HTMLElement {
     });
   }
 
-  tile(choice) {
+  tile(choice, art) {
     const node = el("button.welcome-tile", {
       type: "button",
       onclick: () => this.pick(choice),

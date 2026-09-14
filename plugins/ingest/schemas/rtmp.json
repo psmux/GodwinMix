@@ -1,0 +1,47 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "RTMP listener",
+  "description": "Where to wait for a publisher. The defaults take anyone who publishes to port 1935, which is what every encoder offers.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "port": {
+      "title": "Port",
+      "description": "The TCP port to listen on. 1935 is the RTMP default and the one an encoder fills in by itself. A port below 1024 needs privileges this process usually does not have.",
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 65535,
+      "default": 1935,
+      "examples": [1935, 1936]
+    },
+    "bind": {
+      "title": "Interface",
+      "description": "0.0.0.0 listens on every interface, which is what a publisher on the same network needs. Give one address to listen on that one only.",
+      "type": "string",
+      "default": "0.0.0.0",
+      "examples": ["0.0.0.0", "127.0.0.1"]
+    },
+    "app": {
+      "title": "Application name",
+      "description": "The first part of the publish path: rtmp://host:1935/<app>/<key>. Empty accepts whatever the publisher asks for, which is why nothing has to be configured at either end.",
+      "type": "string",
+      "default": "",
+      "examples": ["", "live"]
+    },
+    "stream_key": {
+      "title": "Stream key",
+      "description": "The rest of the publish path. Empty accepts any key. Set one to make this source take only the publisher that knows it, which is the closest RTMP gets to a password.",
+      "type": "string",
+      "format": "secret",
+      "default": "",
+      "examples": ["", "phone"]
+    },
+    "relay": {
+      "title": "Relay address",
+      "description": "Filled in by ingest/discover when it, rather than this source, owns the listening port. Leave it empty and this source listens for itself.",
+      "type": "string",
+      "default": "",
+      "examples": ["", "127.0.0.1:54321"]
+    }
+  }
+}

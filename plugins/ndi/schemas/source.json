@@ -1,0 +1,39 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "NDI source",
+  "description": "Which sender on the network to receive from.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "name": {
+      "title": "Sender name",
+      "description": "The NDI name exactly as the sender announces it, usually MACHINE (SOURCE). The list_senders tool reports the ones this machine can see.",
+      "type": "string",
+      "default": "",
+      "examples": ["", "STUDIO (CAM 1)"]
+    },
+    "address": {
+      "title": "Address",
+      "description": "host:port, for a sender mDNS cannot reach: another subnet, a VPN, or a network where multicast is filtered. Not needed when the name is enough.",
+      "type": "string",
+      "default": "",
+      "examples": ["", "10.0.0.21:5961"]
+    },
+    "bandwidth": {
+      "title": "Bandwidth",
+      "description": "high is the full picture. low is a much smaller one at a fraction of the bandwidth, which is what a preview or a weak network wants. audio-only takes the sound and no picture.",
+      "type": "string",
+      "enum": ["high", "low", "audio-only"],
+      "default": "high",
+      "examples": ["high", "low", "audio-only"]
+    },
+    "timestamp_mode": {
+      "title": "Timestamps",
+      "description": "Which clock the frames are stamped with. Leave it alone unless lip sync is wrong across several NDI sources, and then try timecode.",
+      "type": "string",
+      "enum": ["receive-time-vs-timecode", "receive-time-vs-timestamp", "timecode", "timestamp", "receive-time"],
+      "default": "receive-time-vs-timecode",
+      "examples": ["receive-time-vs-timecode", "timecode"]
+    }
+  }
+}

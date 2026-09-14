@@ -192,7 +192,7 @@
       "description": "`plugin.add`.",
       "properties": {
         "source": {
-          "description": "A local directory with `gmx-plugin.toml` at its root. Git, an index and\na signed release are Phase 5; this takes a path.",
+          "description": "Where the plugin comes from. One of: `owner/repo` (a GitHub release,\noptionally `@version`), a git URL ending in `.git`, `cargo:name`,\n`npm:@scope/name`, `pypi:name`, `oci:ref`, an absolute path to a\ndirectory, or a bare plugin name to look up in the marketplaces.",
           "type": "string"
         }
       },
@@ -2695,12 +2695,24 @@
           "description": "Per provide id, the description line from its SKILL.md.",
           "type": "object"
         },
+        "source": {
+          "description": "Where it was installed from, as it was typed.",
+          "type": "string"
+        },
         "tools": {
           "description": "Its MCP tools, as `gmx_<plugin>_<tool>`. Reachable with `search_tools`;\nnever in the hot list.",
           "items": {
             "type": "string"
           },
           "type": "array"
+        },
+        "trust": {
+          "description": "What was checked about where this came from: \"signed\", \"signed, digest\nonly\", or \"custom, unreviewed\". 06 section 4: an operator can only\njudge a plugin if the catalogue says what was checked.",
+          "type": "string"
+        },
+        "trust_detail": {
+          "description": "The sentence behind the label.",
+          "type": "string"
         },
         "version": {
           "type": "string"
@@ -2715,6 +2727,8 @@
         "provides",
         "tools",
         "hooks",
+        "trust",
+        "trust_detail",
         "instances",
         "manifest",
         "schemas",
@@ -2796,12 +2810,24 @@
           "description": "Where it is installed.",
           "type": "string"
         },
+        "source": {
+          "description": "Where it was installed from, as it was typed.",
+          "type": "string"
+        },
         "tools": {
           "description": "Its MCP tools, as `gmx_<plugin>_<tool>`. Reachable with `search_tools`;\nnever in the hot list.",
           "items": {
             "type": "string"
           },
           "type": "array"
+        },
+        "trust": {
+          "description": "What was checked about where this came from: \"signed\", \"signed, digest\nonly\", or \"custom, unreviewed\". 06 section 4: an operator can only\njudge a plugin if the catalogue says what was checked.",
+          "type": "string"
+        },
+        "trust_detail": {
+          "description": "The sentence behind the label.",
+          "type": "string"
         },
         "version": {
           "type": "string"
@@ -2816,6 +2842,8 @@
         "provides",
         "tools",
         "hooks",
+        "trust",
+        "trust_detail",
         "instances"
       ],
       "type": "object"
@@ -2865,6 +2893,33 @@
         "name",
         "settings",
         "schemas"
+      ],
+      "type": "object"
+    },
+    "PluginUpdated": {
+      "description": "What `plugin.update` answers with.",
+      "properties": {
+        "from": {
+          "type": "string"
+        },
+        "handshake_ms": {
+          "description": "How long the new build took to answer `initialize`.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "plugin": {
+          "$ref": "#/$defs/PluginRecord"
+        },
+        "to": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "from",
+        "to",
+        "handshake_ms",
+        "plugin"
       ],
       "type": "object"
     },
@@ -3346,6 +3401,87 @@
         "canvas",
         "records",
         "geometry"
+      ],
+      "type": "object"
+    },
+    "SearchRequest": {
+      "description": "`plugin.search`.",
+      "properties": {
+        "term": {
+          "default": "",
+          "description": "A word to look for in a plugin's name, description or kind. Empty\nlists everything.",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "SearchResult": {
+      "description": "One plugin a marketplace lists.",
+      "properties": {
+        "description": {
+          "type": "string"
+        },
+        "installed": {
+          "description": "Whether it is already on this mixer.",
+          "type": "boolean"
+        },
+        "kinds": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "marketplace": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "source": {
+          "description": "What to pass to `plugin.add`.",
+          "type": "string"
+        },
+        "tier": {
+          "description": "custom, bronze, silver or gold. 06 section 4.",
+          "type": "string"
+        },
+        "version": {
+          "description": "The newest listed version this core's api range can run.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "description",
+        "tier",
+        "kinds",
+        "version",
+        "source",
+        "marketplace",
+        "installed"
+      ],
+      "type": "object"
+    },
+    "SearchResults": {
+      "description": "What `plugin.search` answers with.",
+      "properties": {
+        "marketplaces": {
+          "description": "The marketplaces that were searched.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "results": {
+          "items": {
+            "$ref": "#/$defs/SearchResult"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "marketplaces",
+        "results"
       ],
       "type": "object"
     },
@@ -4197,6 +4333,25 @@
       "required": [
         "before",
         "after"
+      ],
+      "type": "object"
+    },
+    "UpdatePluginRequest": {
+      "description": "`plugin.update`.",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "source": {
+          "description": "Where the new build comes from. Defaults to wherever this plugin was\ninstalled from last time.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "id"
       ],
       "type": "object"
     },
@@ -5839,7 +5994,7 @@
       },
       "scope": "admin",
       "since": "1",
-      "summary": "Install a plugin from a local directory, while live. The directory is the one with gmx-plugin.toml at its root."
+      "summary": "Install a plugin, while live, from any source form: a GitHub release (owner/repo), a git URL, cargo:, npm:, pypi:, a local directory, or a bare name looked up in the marketplaces this mixer knows. The signature and the api level are checked before anything is copied."
     },
     {
       "destructive": false,
@@ -5974,6 +6129,32 @@
     {
       "destructive": false,
       "idempotent": true,
+      "mcp": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "profile": "search",
+        "readOnlyHint": true,
+        "tool": "search_plugins"
+      },
+      "mutating": false,
+      "name": "plugin.search",
+      "params": {
+        "$ref": "#/$defs/SearchRequest"
+      },
+      "rest": {
+        "method": "POST",
+        "path": "/api/v1/plugins/{id}/search"
+      },
+      "result": {
+        "$ref": "#/$defs/SearchResults"
+      },
+      "scope": "read",
+      "since": "1",
+      "summary": "Search every marketplace this mixer knows for a plugin, by name, description or kind. Answers what `gmx plugin add <name>` would install."
+    },
+    {
+      "destructive": false,
+      "idempotent": true,
       "mutating": false,
       "name": "plugin.settings.get",
       "params": {
@@ -6029,6 +6210,25 @@
       "scope": "read",
       "since": "1",
       "summary": "Per instance cpu, memory, media latency, dropped buffers and restarts, refreshed once a second."
+    },
+    {
+      "destructive": true,
+      "idempotent": true,
+      "mutating": true,
+      "name": "plugin.update",
+      "params": {
+        "$ref": "#/$defs/UpdatePluginRequest"
+      },
+      "rest": {
+        "method": "POST",
+        "path": "/api/v1/plugins/{id}/update"
+      },
+      "result": {
+        "$ref": "#/$defs/PluginUpdated"
+      },
+      "scope": "admin",
+      "since": "1",
+      "summary": "Fetch a newer build of a plugin, install it beside the one that is running, and prove it starts. A build that does not answer `initialize` within ten seconds is rolled back and the plugin that was working stays working."
     },
     {
       "destructive": true,

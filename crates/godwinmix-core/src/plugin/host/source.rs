@@ -135,6 +135,13 @@ impl SidecarSource {
     /// decides the transport and the transport decides what `start` builds.
     fn handshake(&mut self) -> Result<()> {
         let instance = self.build.id.clone();
+        // Let go of the previous instance's media directory first. A respawn
+        // makes one at the same path, and `MediaDir`'s drop removes the whole
+        // directory: assigning the new one over the old would delete the
+        // sockets the new process is about to bind, and `restart-in-place`
+        // would fail for every plugin on a socket transport. Dropping it here
+        // also takes any socket a killed process left behind.
+        drop(self.media.take());
         let mut child = Sidecar::spawn(&instance, &self.spec.launch)
             .with_context(|| format!("starting `{}`", self.spec.launch.command_line()))?;
         let canvas = canvas_of(&self.build.canvas);
@@ -272,14 +279,25 @@ impl SidecarSource {
             }
             socket => {
                 let media = self.media.as_ref().context("a socket transport with no address")?;
-                let video = transport::socket_video(socket, &id, &media.video(), &canvas)?;
                 let declared = self.spec.manifest.media;
+                // Each stream is built only if the plugin declared it. An
+                // audio only source binds no video socket, and a video branch
+                // waiting on one nobody will ever bind is a pipeline that
+                // never reaches PLAYING.
+                let video = declared
+                    .video
+                    .present()
+                    .then(|| transport::socket_video(socket, &id, &media.video(), &canvas))
+                    .transpose()?;
                 let audio = declared
                     .audio
                     .present()
                     .then(|| transport::socket_audio(socket, &id, &media.audio(), &canvas))
                     .transpose()?;
-                let mut elements = video.clone();
+                let mut elements = Vec::new();
+                if let Some(v) = &video {
+                    elements.extend(v.clone());
+                }
                 if let Some(a) = &audio {
                     elements.extend(a.clone());
                 }
@@ -295,7 +313,7 @@ impl SidecarSource {
 /// What has to be linked once everything is in one pipeline.
 enum Wire {
     Container { src: gst::Element, decode: gst::Element, download: Option<gst::Element> },
-    Socket { video: Vec<gst::Element>, audio: Option<Vec<gst::Element>> },
+    Socket { video: Option<Vec<gst::Element>>, audio: Option<Vec<gst::Element>> },
 }
 
 impl Source for SidecarSource {
@@ -335,11 +353,13 @@ impl Source for SidecarSource {
                 Ok(KindParts::default())
             }
             Wire::Socket { video, audio } => {
-                gst::Element::link_many(video.iter().collect::<Vec<_>>().as_slice())
-                    .context("linking the plugin's video socket")?;
-                let last = video.last().context("an empty video chain")?;
-                last.link(&w.norm.video_entry()).context("linking the plugin's video")?;
-                w.has_video.store(true, std::sync::atomic::Ordering::Relaxed);
+                if let Some(video) = video {
+                    gst::Element::link_many(video.iter().collect::<Vec<_>>().as_slice())
+                        .context("linking the plugin's video socket")?;
+                    let last = video.last().context("an empty video chain")?;
+                    last.link(&w.norm.video_entry()).context("linking the plugin's video")?;
+                    w.has_video.store(true, std::sync::atomic::Ordering::Relaxed);
+                }
                 if let Some(audio) = audio {
                     gst::Element::link_many(audio.iter().collect::<Vec<_>>().as_slice())
                         .context("linking the plugin's audio socket")?;

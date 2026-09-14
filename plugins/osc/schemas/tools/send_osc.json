@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "send_osc",
+  "description": "One OSC message to put on the wire.",
+  "type": "object",
+  "properties": {
+    "address": {
+      "type": "string",
+      "title": "Address",
+      "description": "The OSC address, starting with a slash.",
+      "examples": ["/gmx/tally/cam1", "/gmx/program"]
+    },
+    "args": {
+      "type": "array",
+      "title": "Arguments",
+      "description": "Numbers, strings and booleans. An integer goes out as int32, any other number as float32.",
+      "items": { "type": ["string", "number", "boolean"] },
+      "default": [],
+      "examples": [[1], ["cam1"], [0.5, "half"]]
+    },
+    "to": {
+      "type": "string",
+      "title": "To",
+      "description": "Where to send it, as address:port. Omit to send to everything in send_to.",
+      "examples": ["10.0.0.7:9001"]
+    }
+  },
+  "required": ["address"],
+  "additionalProperties": false
+}

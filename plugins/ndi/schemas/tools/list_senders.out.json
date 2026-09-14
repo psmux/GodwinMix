@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "list_senders output",
+  "type": "object",
+  "properties": {
+    "senders": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": { "description": "The slug a source would sensibly be added under.", "type": "string" },
+          "name": { "description": "The NDI name, which goes in a source's settings.", "type": "string" },
+          "address": { "description": "host:port, where the sender announced one.", "type": "string" },
+          "width": { "type": "integer" },
+          "height": { "type": "integer" },
+          "fps": { "type": "number" }
+        },
+        "required": ["id", "name"]
+      }
+    }
+  },
+  "required": ["senders"]
+}

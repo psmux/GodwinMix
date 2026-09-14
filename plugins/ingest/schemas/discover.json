@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Publisher discovery",
+  "description": "One RTMP port for many publishers. Each one that arrives is reported as a candidate ready for source.add.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "rtmp_port": {
+      "title": "RTMP port",
+      "description": "The port every publisher uses. Only one process can hold it, so run either this device or an ingest/rtmp source on it, not both.",
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 65535,
+      "default": 1935,
+      "examples": [1935, 1936]
+    },
+    "bind": {
+      "title": "Interface",
+      "description": "0.0.0.0 listens on every interface.",
+      "type": "string",
+      "default": "0.0.0.0",
+      "examples": ["0.0.0.0", "127.0.0.1"]
+    },
+    "app": {
+      "title": "Application name",
+      "description": "Accept publishers on this application name only. Empty accepts any, which is what makes a publisher appear with nothing configured at either end.",
+      "type": "string",
+      "default": "",
+      "examples": ["", "live"]
+    }
+  }
+}

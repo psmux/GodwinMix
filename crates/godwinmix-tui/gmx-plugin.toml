@@ -1,0 +1,29 @@
+# The terminal UI, declared as a surface plugin.
+#
+# A `surface` is a whole UI: it owns a terminal or a window, it reaches the
+# core over /rpc like any other client, and `gmx ui tui` starts it with
+# GODWINMIX_URL and GODWINMIX_TOKEN already in its environment.
+#
+# The TUI is first party and ships beside the gmx binary rather than being
+# installed into the plugins directory, which is why `surface.run` names a
+# command rather than a path: `gmx ui` looks for it inside the plugin
+# directory, then beside the gmx binary, then on PATH.
+[plugin]
+name = "tui"
+version = "0.2.0"
+api = 1
+description = "A mixer panel in a terminal: sources, outputs, meters, tally, take with number keys, and the multiview over sixel or kitty graphics"
+license = "Apache-2.0"
+authors = ["GodwinMix"]
+repository = "https://github.com/psmux/godwinmix"
+platforms = ["linux-x86_64", "linux-aarch64", "macos-aarch64", "macos-x86_64", "windows-x86_64"]
+# A surface is not placed in the pipeline: it is a client. `in-process` is the
+# nearest true thing to say, and it keeps the manifest from claiming it is a
+# sidecar the supervisor should be starting and restarting.
+placements = ["in-process"]
+process = "singleton"
+
+[[provides]]
+kind = "surface"
+id = "tui"
+surface = { run = "gmx-tui", api = 1 }

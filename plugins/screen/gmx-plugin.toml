@@ -1,0 +1,55 @@
+[plugin]
+name = "screen"
+version = "0.1.0"
+api = 1
+description = "A monitor or a window as a source: the PipeWire portal or X11 on Linux, AVFoundation on macOS, Desktop Duplication on Windows. Desktop duplication only, not exclusive fullscreen game capture."
+license = "Apache-2.0"
+authors = ["GodwinMix"]
+repository = "https://github.com/psmux/godwinmix"
+platforms = ["linux-x86_64", "linux-aarch64", "macos-aarch64", "macos-x86_64", "windows-x86_64"]
+placements = ["sidecar"]
+process = "per-instance"
+
+[run]
+bin = { "linux-x86_64" = "bin/gmx-screen", "linux-aarch64" = "bin/gmx-screen", "macos-aarch64" = "bin/gmx-screen", "macos-x86_64" = "bin/gmx-screen", "windows-x86_64" = "bin/gmx-screen.exe" }
+
+[build]
+command = "sh build"
+output = "bin/gmx-screen"
+
+[[provides]]
+kind = "source"
+id = "source"
+media = { video = "raw", audio = "none", alpha = false, thumb = true }
+transports = ["unixfd", "container"]
+capabilities = ["restart-in-place", "health"]
+# A screen capture's latency is the compositor's and differs by desktop, so no
+# number is declared and the aligner absorbs what arrives.
+latency_ms = 0
+settings = "schemas/source.json"
+skill = "skills/source/SKILL.md"
+
+[provides.designer]
+icon = "ui/icons/screen.svg"
+thumbnail = "ui/thumbnails/screen.svg"
+gizmos = ["move", "resize", "crop"]
+default_frame = { position = { x = 0, y = 0 }, frame = { w = 1920, h = 1080 }, fit = "contain", align = "center", aspect = "16:9" }
+
+# What the platform will tell us about. On Windows that is one entry per
+# monitor; elsewhere it is the whole screen, because neither AVFoundation nor
+# X11 offers GStreamer a monitor list.
+[[provides]]
+kind = "device"
+id = "devices"
+discovery = { local = ["Source/Monitor"] }
+settings = "schemas/devices.json"
+skill = "skills/source/SKILL.md"
+
+[[tools]]
+name = "list_screens"
+description = "List what this machine can capture: the monitors the platform will name, and which capture element would be used. Use it before adding a screen source, and when a screen source is black, because the answer says whether the platform will hand over a screen at all and what permission is missing if it will not. Example: list_screens {} returns {element: 'avfvideosrc', screens: [{index: 0, name: 'The whole screen'}], note: 'macOS asks for screen recording permission the first time'}."
+input = "schemas/tools/list_screens.json"
+output = "schemas/tools/list_screens.out.json"
+annotations = { readOnlyHint = true, destructiveHint = false, idempotentHint = false, openWorldHint = false }
+user_invocable = true
+model_invocable = true

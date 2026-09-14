@@ -9,13 +9,11 @@ import * as registry from "./registry.js";
 import { Keymap } from "./keymap.js";
 import { UndoStack } from "./undo.js";
 import { registerAll, register, addProtocolCommands } from "./commands.js";
-import { openPalette, methodForm } from "./palette.js";
 import { openSettings, settings, onSettingsChanged } from "./settings.js";
 import { initTheme } from "./theme.js";
 import { toast, errorToast } from "./toast.js";
 import { openPicker, pickFromDrop } from "./picker.js";
 import { modal } from "./modal.js";
-import { SchemaForm } from "../client/schema-form.js";
 
 /** Everything a panel might want that is not the client. One object, one import. */
 export const shell = {
@@ -114,10 +112,27 @@ export async function mountShell(client, root) {
   });
 
   // Every method the core publishes becomes a palette entry. Silent on a core
-  // that has no core.api, which is every core today.
-  addProtocolCommands(client, (m) => methodForm(client, m, SchemaForm)).catch(() => {});
+  // that has no core.api, which is every core today. The form itself is built
+  // by the palette module, which arrives the first time somebody opens one.
+  addProtocolCommands(client, (m) => openMethodForm(client, m)).catch(() => {});
 
   return node;
+}
+
+/**
+ * The palette, and the schema form it builds its method dialogs from.
+ *
+ * Ten kilobytes that a page which never sees Ctrl+K never fetches. The same
+ * rule as the composer and the legacy adapter: nothing runs, and nothing is
+ * downloaded, unless somebody asks for it.
+ */
+function palette() {
+  return import("./palette.js");
+}
+
+async function openMethodForm(client, method) {
+  const [{ methodForm }, { SchemaForm }] = await Promise.all([palette(), import("../client/schema-form.js")]);
+  return methodForm(client, method, SchemaForm);
 }
 
 function applyTileWidth() {
@@ -126,7 +141,7 @@ function applyTileWidth() {
 
 function shellCommands(client, node) {
   registerAll([
-    { id: "shell.palette", title: "Command palette", group: "Shell", key: "Ctrl+K", run: () => openPalette() },
+    { id: "shell.palette", title: "Command palette", group: "Shell", key: "Ctrl+K", run: () => palette().then((m) => m.openPalette()) },
     { id: "shell.settings", title: "Settings", group: "Shell", key: "Ctrl+,", run: () => openSettings(client) },
     { id: "shell.undo", title: "Undo", group: "Shell", key: "Ctrl+Z", enabled: () => shell.undo.canUndo, run: () => shell.undo.undo() },
     { id: "shell.redo", title: "Redo", group: "Shell", key: "Ctrl+Shift+Z", enabled: () => shell.undo.canRedo, run: () => shell.undo.redo() },

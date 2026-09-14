@@ -7,12 +7,21 @@ rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
 
-# No GStreamer, no axum, no tokio. The engine wires the media ends; everything
-# here is the part of a sidecar that has nothing to do with pipelines, so it
-# unit tests on a machine with no media stack installed.
+# No GStreamer and no axum. The engine wires the media ends; everything here is
+# the part of a sidecar that has nothing to do with pipelines, so it unit tests
+# on a machine with no media stack installed.
+#
+# reqwest is here for `sources/`, which fetches a release asset and a signature.
+# The blocking client rather than the async one: installing a plugin already
+# runs on a blocking task, and an async client would put a runtime in a crate
+# that otherwise has none. rustls rather than the platform TLS, so the same
+# binary reaches a release on all three platforms and CI needs no OpenSSL.
+# Unpacking archives, hashing and signature parsing are all written out rather
+# than pulled in; see sources/archive.rs and verify/sha256.rs for why.
 [dependencies]
 godwinmix-protocol = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
 anyhow = { workspace = true }
 tracing = { workspace = true }
+reqwest = { workspace = true, features = ["blocking", "rustls-tls"] }

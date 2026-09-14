@@ -65,10 +65,32 @@ pub enum Plugin {
         #[arg(long)]
         provide: Option<String>,
     },
-    /// Install a plugin from a local directory, while live.
+    /// Install a plugin, while live, from anywhere it can come from.
+    ///
+    /// Seven forms, and the first one is the one to reach for:
+    ///
+    ///   gmx plugin add ndi                     a name a marketplace knows
+    ///   gmx plugin add psmux/gmx-ndi           a GitHub release, @version to pin
+    ///   gmx plugin add https://x/y.git         a git clone, built here
+    ///   gmx plugin add cargo:gmx-ndi           a crate
+    ///   gmx plugin add npm:@x/gmx-chat         an npm package
+    ///   gmx plugin add pypi:gmx-director       a PyPI package
+    ///   gmx plugin add ./my-plugin             a directory you are working in
+    ///
+    /// The signature and the api level are checked before anything is copied.
+    #[command(verbatim_doc_comment)]
     Add {
-        /// The directory with gmx-plugin.toml at its root.
+        /// Where the plugin comes from.
         source: String,
+    },
+    /// Find a plugin in the marketplaces this mixer knows.
+    Search {
+        /// A word to look for in a name, a description or a kind. Leave it out
+        /// to list everything.
+        #[arg(default_value = "")]
+        term: String,
+        #[arg(long)]
+        json: bool,
     },
     /// Uninstall a plugin and unwind everything it registered.
     Remove { name: String },
@@ -78,14 +100,16 @@ pub enum Plugin {
     Disable { name: String },
     /// Read a plugin's directory again and swap its running instances.
     Reload { name: String },
-    /// Reinstall a plugin from a directory, keeping its settings.
+    /// Fetch a newer build, prove it starts, and swap it in.
     ///
-    /// Installing from an index is Phase 5; this updates from a path, which is
-    /// what a plugin author does after a rebuild.
+    /// The new build is installed beside the one that is running and has ten
+    /// seconds to answer `initialize`. One that does not is rolled back, and
+    /// the version that was working is the version that is still working.
     Update {
         name: String,
-        /// Where the new version is.
-        source: String,
+        /// Where the new version is, in any of the forms `add` takes.
+        /// Defaults to wherever this plugin was installed from.
+        source: Option<String>,
     },
     /// Every plugin installed, with what each instance costs.
     List {
@@ -143,9 +167,24 @@ pub async fn run(base: &str, token: Option<&str>, cmd: Plugin) -> Result<()> {
             print_added(&record);
         }
         Plugin::Update { name, source } => {
-            let record = add_and_wait(&api, &source).await?;
-            println!("updated {name} to {}", record["version"].as_str().unwrap_or("?"));
-            print_added(&record);
+            let updated = update_and_wait(&api, &name, source.as_deref()).await?;
+            println!(
+                "updated {name}: {} -> {} (said hello in {} ms)",
+                updated["from"].as_str().unwrap_or("?"),
+                updated["to"].as_str().unwrap_or("?"),
+                updated["handshake_ms"].as_u64().unwrap_or(0)
+            );
+            print_added(&updated["plugin"]);
+        }
+        Plugin::Search { term, json } => {
+            let found: Value = api
+                .get("plugin.search", None, &[("term", term.clone())])
+                .await?;
+            if json {
+                println!("{}", serde_json::to_string_pretty(&found)?);
+            } else {
+                print_search(&term, &found);
+            }
         }
         Plugin::Remove { name } => {
             let gone: Value = api.call("plugin.remove", Some(&name), &json!({})).await?;
@@ -203,7 +242,22 @@ pub async fn run(base: &str, token: Option<&str>, cmd: Plugin) -> Result<()> {
 /// a terminal wants the answer, so this polls until it has one.
 async fn add_and_wait(api: &Api, source: &str) -> Result<Value> {
     let started: Value =
-        api.call("plugin.add", None, &json!({ "source": absolute(source)? })).await?;
+        api.call("plugin.add", None, &json!({ "source": resolve_locally(source)? })).await?;
+    wait_for(api, started, "install").await
+}
+
+/// The same, for `plugin.update`.
+async fn update_and_wait(api: &Api, name: &str, source: Option<&str>) -> Result<Value> {
+    let mut params = json!({ "id": name });
+    if let Some(source) = source {
+        params["source"] = Value::String(resolve_locally(source)?);
+    }
+    let started: Value = api.call("plugin.update", Some(name), &params).await?;
+    wait_for(api, started, "update").await
+}
+
+/// Poll a task handle until it has an answer.
+async fn wait_for(api: &Api, started: Value, what: &str) -> Result<Value> {
     // A core that answered outright rather than with a handle: take it.
     let Some(task_id) = started["task_id"].as_str().map(str::to_string) else {
         return Ok(started);
@@ -220,27 +274,71 @@ async fn add_and_wait(api: &Api, source: &str) -> Result<Value> {
             "completed" => return Ok(task["result"].clone()),
             "failed" => anyhow::bail!(
                 "{}",
-                task["error"].as_str().unwrap_or("the install failed and said nothing")
+                task["error"]
+                    .as_str()
+                    .unwrap_or("it failed and said nothing, which is a bug worth reporting")
             ),
-            "cancelled" => anyhow::bail!("the install was cancelled"),
+            "cancelled" => anyhow::bail!("the {what} was cancelled"),
             _ => {}
         }
         anyhow::ensure!(
             std::time::Instant::now() < deadline,
-            "the install is still running after ten minutes. It has not been cancelled; \
+            "the {what} is still running after ten minutes. It has not been cancelled; \
              read it back with `gmx ctl ... task.get {task_id}`."
         );
     }
 }
 
-fn absolute(path: &str) -> Result<String> {
-    let p = Path::new(path);
-    let full = if p.is_absolute() {
-        p.to_path_buf()
+/// Make a path source absolute, and leave every other form alone.
+///
+/// The core resolves the source itself, and it may be on another machine, so a
+/// relative path has to become the one the operator meant before it is sent. A
+/// `owner/repo` or a `cargo:` spec means the same thing on both ends and
+/// travels unchanged.
+fn resolve_locally(source: &str) -> Result<String> {
+    let parsed = godwinmix_host::sources::Source::parse(source);
+    let Ok(godwinmix_host::sources::Source::Path(path)) = parsed else {
+        return Ok(source.to_string());
+    };
+    let full = if path.is_absolute() {
+        path
     } else {
-        std::env::current_dir().context("reading the working directory")?.join(p)
+        std::env::current_dir().context("reading the working directory")?.join(path)
     };
     Ok(full.to_string_lossy().into_owned())
+}
+
+fn print_search(term: &str, found: &Value) {
+    let results = found["results"].as_array().cloned().unwrap_or_default();
+    let markets = found["marketplaces"]
+        .as_array()
+        .map(|m| m.iter().filter_map(Value::as_str).collect::<Vec<_>>().join(", "))
+        .unwrap_or_default();
+    if markets.is_empty() {
+        println!("no marketplaces are configured on this mixer, so there is nothing to search.");
+        println!("\nAdd one:  gmx marketplace add psmux/godwinmix-plugins");
+        return;
+    }
+    if results.is_empty() {
+        println!("nothing in {markets} matches `{term}`.");
+        println!("\nThe listing is a cached copy; `gmx marketplace refresh` fetches it again.");
+        return;
+    }
+    println!("{:<16} {:<9} {:<8} {:<26} DESCRIPTION", "PLUGIN", "VERSION", "TIER", "SOURCE");
+    for r in &results {
+        let mark = if r["installed"].as_bool().unwrap_or(false) { " (installed)" } else { "" };
+        println!(
+            "{:<16} {:<9} {:<8} {:<26} {}{}",
+            r["name"].as_str().unwrap_or("?"),
+            r["version"].as_str().unwrap_or("-"),
+            r["tier"].as_str().unwrap_or("custom"),
+            r["source"].as_str().unwrap_or("?"),
+            r["description"].as_str().unwrap_or(""),
+            mark
+        );
+    }
+    println!("\nsearched {markets}");
+    println!("Install one with:  gmx plugin add <plugin>");
 }
 
 fn print_added(record: &Value) {
@@ -270,7 +368,10 @@ fn print_list(listing: &Value) {
         println!("write one with:  gmx plugin new --lang python my-plugin");
         return;
     }
-    println!("{:<16} {:<9} {:<8} PROVIDES", "PLUGIN", "VERSION", "STATE");
+    println!(
+        "{:<16} {:<9} {:<8} {:<20} PROVIDES",
+        "PLUGIN", "VERSION", "STATE", "TRUST"
+    );
     for p in &plugins {
         let state = if p["problem"].is_string() {
             "broken"
@@ -280,10 +381,11 @@ fn print_list(listing: &Value) {
             "off"
         };
         println!(
-            "{:<16} {:<9} {:<8} {}",
+            "{:<16} {:<9} {:<8} {:<20} {}",
             p["name"].as_str().unwrap_or("?"),
             p["version"].as_str().unwrap_or("?"),
             state,
+            p["trust"].as_str().unwrap_or("custom, unreviewed"),
             p["provides"]
                 .as_array()
                 .map(|v| v.iter().filter_map(Value::as_str).collect::<Vec<_>>().join(", "))
@@ -333,6 +435,13 @@ fn print_described(described: &Value) {
         println!("{d}");
     }
     println!("\ninstalled at {}", described["root"].as_str().unwrap_or("?"));
+    if let Some(source) = described["source"].as_str().filter(|s| !s.is_empty()) {
+        println!("from         {source}");
+    }
+    println!("trust        {}", described["trust"].as_str().unwrap_or("custom, unreviewed"));
+    if let Some(detail) = described["trust_detail"].as_str() {
+        println!("             {detail}");
+    }
     if let Some(schemas) = described["schemas"].as_object() {
         for (id, schema) in schemas {
             println!("\n{id}");

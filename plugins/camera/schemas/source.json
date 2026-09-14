@@ -1,0 +1,50 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Camera",
+  "description": "A USB or built in camera. Leave everything empty and the first camera on the machine runs at the canvas size and rate.",
+  "type": "object",
+  "properties": {
+    "device": {
+      "type": "string",
+      "title": "Camera",
+      "description": "Which camera. The id from `list_cameras`, the name as the operating system shows it, or a number counting from 0. Empty means the first camera this machine has.",
+      "default": "",
+      "maxLength": 512,
+      "examples": ["", "/dev/video0", "Logitech BRIO", "1"]
+    },
+    "resolution": {
+      "type": "string",
+      "title": "Resolution",
+      "description": "What to ask the camera for, as WIDTHxHEIGHT. Empty lets the camera choose, which is usually its best. The picture is scaled to the canvas afterwards either way, so this is about what the camera sends, not about what the programme shows.",
+      "default": "",
+      "pattern": "^$|^[0-9]{2,5}x[0-9]{2,5}$",
+      "examples": ["", "1920x1080", "1280x720", "640x480"]
+    },
+    "framerate": {
+      "type": "integer",
+      "title": "Frame rate",
+      "description": "What to ask the camera for, in frames per second. 0 lets the camera choose. A camera slower than the canvas has its frames repeated; a faster one has them dropped.",
+      "default": 0,
+      "minimum": 0,
+      "maximum": 240,
+      "examples": [0, 30, 25, 60]
+    },
+    "label": {
+      "type": "string",
+      "title": "Label",
+      "description": "A name for this camera, shown wherever the source is listed.",
+      "default": "",
+      "maxLength": 64,
+      "examples": ["", "Camera 1", "Stage wide"]
+    },
+    "element": {
+      "type": "string",
+      "title": "Capture element",
+      "description": "Force one GStreamer capture element instead of letting the plugin choose. Only for working around a driver bug: on Windows, `ksvideosrc` is the fallback for mfvideosrc's startup bug. Empty is the right answer almost always.",
+      "default": "",
+      "enum": ["", "v4l2src", "avfvideosrc", "mfvideosrc", "ksvideosrc", "videotestsrc"],
+      "examples": ["", "ksvideosrc", "videotestsrc"]
+    }
+  },
+  "additionalProperties": false
+}

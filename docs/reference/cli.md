@@ -138,8 +138,9 @@ UI and an agent use.
 |---|---|
 | `gmx plugin new <name> --kind source --lang rust\|python\|node\|go\|shell` | write a plugin from a template, with every placeholder filled in |
 | `gmx plugin test <dir> [--quick] [--offline]` | run the conformance harness; `--quick` skips the two slow checks, `--offline` replays a transcript with no core |
-| `gmx plugin add <dir>` | install from a local directory, while live |
-| `gmx plugin update <name> <dir>` | reinstall from a directory, keeping the settings |
+| `gmx plugin add <source>` | install, while live, from any of the seven source forms below |
+| `gmx plugin search [<term>] [--json]` | find a plugin in the marketplaces this mixer knows |
+| `gmx plugin update <name> [<source>]` | fetch a newer build, prove it starts, and roll back if it does not |
 | `gmx plugin reload <name>` | read the directory again and swap the running instances one at a time |
 | `gmx plugin remove <name>` | uninstall, unwinding every registration |
 | `gmx plugin enable\|disable <name>` | turn one on or off without uninstalling it |
@@ -151,8 +152,73 @@ UI and an agent use.
 `--url` and `--token` take the mixer's address and credential, or the
 `GODWINMIX_URL` and `GODWINMIX_TOKEN` environment variables.
 
-See [install a plugin](../how-to/install-a-plugin.md) and
-[test a plugin](../how-to/test-a-plugin.md).
+### Where a plugin comes from
+
+`<source>` in `add` and `update` is one of these. The signature and the `api`
+level are checked before anything is copied, and what was checked shows in the
+`TRUST` column of `gmx plugin list`.
+
+| Form | Example | Notes |
+|---|---|---|
+| a marketplace name | `ndi` | resolved through the marketplaces this mixer knows, highest tier first |
+| a GitHub release | `psmux/gmx-ndi`, `psmux/gmx-ndi@1.2.0` | the asset whose name carries this platform's triple, and the `.sigstore.json` beside it |
+| a git repository | `https://host/x/y.git`, `...git#v2` | cloned and built here with the manifest's `[build]` command |
+| a crate | `cargo:gmx-ndi`, `cargo:gmx-ndi@0.3.1` | the published source, then `cargo install` |
+| an npm package | `npm:@x/gmx-chat` | `npm pack`, then `npm install --omit=dev` after it lands |
+| a PyPI package | `pypi:gmx-director` | the source distribution, then a virtual environment |
+| a container image | `oci:ghcr.io/x/y:1.0` | recognised and refused, with the next step |
+| a directory | `./my-plugin` | development, and always `custom, unreviewed` |
+
+## Marketplaces
+
+A marketplace is a repository with `godwinmix-marketplace.json` (or
+`index.json`) at its root, listing plugins and where each comes from. These
+commands need no running mixer: the list belongs to the machine, beside the
+config file, and the core reads it when it installs.
+
+| Command | Does |
+|---|---|
+| `gmx marketplace add <owner/repo\|url\|path>` | fetch a marketplace, check it, and cache it |
+| `gmx marketplace list [--json]` | every marketplace this machine knows, and how many plugins each lists |
+| `gmx marketplace remove <name>` | forget one; plugins installed from it stay installed |
+| `gmx marketplace refresh` | fetch every added marketplace again |
+
+`[marketplaces] only = ["acme"]` in the config pins which of them a name may be
+resolved through.
+
+See [install a plugin](../how-to/install-a-plugin.md),
+[test a plugin](../how-to/test-a-plugin.md),
+[publish a plugin](../how-to/publish-a-plugin.md) and
+[run a marketplace](../how-to/run-a-marketplace.md).
+
+## Surfaces
+
+A surface is a whole UI: a plugin whose manifest says `kind = "surface"` and
+names the command to start and the protocol level it speaks. `gmx ui` finds one
+and starts it against the mixer you are already talking to.
+
+| Command | Does |
+|---|---|
+| `gmx ui` or `gmx ui list [--json]` | every surface this machine can start, with where its command was found or every place it was looked for |
+| `gmx ui <name>` | start it, with `GODWINMIX_URL` and `GODWINMIX_TOKEN` in its environment and stdio inherited |
+| `gmx ui <name> -- <args>` | everything after `--` goes to the surface untouched |
+
+```sh
+gmx ui tui                        # the terminal UI
+gmx ui tui -- --multiview --fps 8 # with its own flags
+```
+
+A surface may not be called `list`, because `gmx ui list` is the listing.
+`gmx ui` carries the surface's exit code out, so a script can act on it.
+
+The command is looked for inside the plugin directory, then beside the `gmx`
+binary, then on `PATH`. A surface whose protocol level is above the core's is
+refused with both numbers.
+
+`gmx preset apply` writes the preset's chosen surface into the runtime store,
+and `gmx ui list` marks it with a star.
+
+See [surfaces](surfaces.md).
 
 ## Chaos
 

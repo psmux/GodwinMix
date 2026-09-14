@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 180" width="320" height="180"
+     role="img" aria-label="Camera tile">
+  <defs>
+    <linearGradient id="camera-sky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#20364e"/>
+      <stop offset="1" stop-color="#0f1c29"/>
+    </linearGradient>
+  </defs>
+  <rect width="320" height="180" fill="url(#camera-sky)"/>
+  <g fill="none" stroke="#7fb3e8" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+    <rect x="106" y="62" width="76" height="56" rx="10"/>
+    <path d="M182 82l28-15a3 3 0 0 1 4.4 2.7v40.6a3 3 0 0 1-4.4 2.7l-28-15z"/>
+    <circle cx="144" cy="90" r="15"/>
+  </g>
+  <circle cx="144" cy="90" r="5" fill="#7fb3e8"/>
+</svg>

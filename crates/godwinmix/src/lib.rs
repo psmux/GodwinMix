@@ -40,7 +40,7 @@ const EXAMPLE_CONFIG: &str = include_str!("../../../godwinmix.example.toml");
 pub const DEFAULT_URL: &str = "http://127.0.0.1:8080";
 
 #[derive(Parser, Debug)]
-#[command(name = "godwinmix", about = "Live RTMP video mixer with hot source switching")]
+#[command(name = "godwinmix", version, about = "A plugin first live video mixer: headless core, web UI, desktop app, MCP for agents")]
 struct Args {
     /// Path to the TOML configuration file.
     #[arg(short, long, default_value = "godwinmix.toml")]
@@ -234,6 +234,16 @@ enum Command {
         cmd: cli::codec::Codec,
     },
 
+    /// The marketplaces this machine installs plugins from.
+    ///
+    /// A marketplace is a repository with `godwinmix-marketplace.json` at its
+    /// root. `gmx marketplace add psmux/godwinmix-plugins` is the community
+    /// index; after that `gmx plugin add ndi` resolves a name through it.
+    Marketplace {
+        #[command(subcommand)]
+        cmd: cli::marketplace::Marketplace,
+    },
+
     /// Write, test, install and inspect plugins. See `src/cli/plugin.rs`.
     ///
     /// `new` and `test` need no running mixer; everything else is a thin
@@ -249,6 +259,14 @@ enum Command {
         #[command(subcommand)]
         cmd: cli::plugin::Plugin,
     },
+
+    /// Start a whole UI against the running mixer. See `src/cli/ui.rs`.
+    ///
+    /// `gmx ui tui` runs the terminal UI; `gmx ui list` shows every surface
+    /// this machine can start. A surface is a plugin whose manifest says
+    /// `kind = "surface"`, and it talks the same public protocol as every
+    /// other client.
+    Ui(cli::ui::UiArgs),
 
     /// Break something on purpose and watch what the programme does.
     ///
@@ -427,6 +445,7 @@ pub async fn run() -> Result<()> {
             let cfg = Config::load(&config::path_in_force(&args.config)).ok();
             return cli::codec::run(cmd, cfg.as_ref(), args.codecs.as_deref());
         }
+        Some(Command::Marketplace { cmd }) => return cli::marketplace::run(cmd),
         Some(Command::Plugin { url, token, cmd }) => {
             let url = url.or_else(|| config::env_var("URL")).unwrap_or_else(|| DEFAULT_URL.into());
             let token = token.or_else(|| config::env_var("TOKEN"));
@@ -436,6 +455,11 @@ pub async fn run() -> Result<()> {
             let url = url.or_else(|| config::env_var("URL")).unwrap_or_else(|| DEFAULT_URL.into());
             let token = token.or_else(|| config::env_var("TOKEN"));
             return cli::chaos::run(&url, token.as_deref(), cmd).await;
+        }
+        Some(Command::Ui(args)) => {
+            let url = args.url.clone().or_else(|| config::env_var("URL")).unwrap_or_else(|| DEFAULT_URL.into());
+            let token = args.token.clone().or_else(|| config::env_var("TOKEN"));
+            return cli::ui::run(&url, token.as_deref(), args);
         }
         Some(Command::Preset { cmd }) => {
             // Validating a preset's config asks each built in kind what its
@@ -552,7 +576,7 @@ pub async fn run() -> Result<()> {
     // `plugin.add` later needs something to hand a new plugin to.
     let supervisor = godwinmix_core::plugin::supervisor::Supervisor::new(
         godwinmix_core::caps::CanvasCaps::new(&cfg.canvas),
-        cfg.plugins.clone(),
+        cfg.plugins.settings.clone(),
     );
     // Which config `preset.apply` writes to, and what the surface starts with.
     control::methods::presets::configure(&config_path, cfg.ui.clone());

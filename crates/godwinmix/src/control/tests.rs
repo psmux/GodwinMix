@@ -216,6 +216,7 @@ fn the_table_matches_the_scopes_in_the_protocol_document() {
             "output.remove",
             "plugin.add",
             "plugin.remove",
+            "plugin.update",
             "preset.apply",
             // A scene and an item are documents: deleting one cannot be undone
             // by repeating the call, so both are confirmed like the rest.
@@ -226,6 +227,7 @@ fn the_table_matches_the_scopes_in_the_protocol_document() {
         ],
         "the destructive set is the one 03 section 6 marks, plus filter.remove (taking a \
          filter out changes the picture and cannot be undone by repeating it), \
+         plugin.update (it replaces a running plugin, and rolls back rather than undoes), \
          preset.apply (it rewrites the operator's configuration file) and the two scene \
          removals (a deleted composition does not come back)"
     );
