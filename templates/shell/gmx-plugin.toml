@@ -1,0 +1,26 @@
+[plugin]
+name = "{{name}}"
+version = "0.1.0"
+api = 1
+description = "{{description}}"
+license = "{{license}}"
+authors = ["{{author}}"]
+# No windows-x86_64. A [run] shell entry is refused on Windows unless [run] also
+# carries a bin entry for it, and this plugin has no binary to offer. If you need
+# Windows, port it to one of the other templates.
+platforms = ["linux-x86_64", "linux-aarch64", "macos-aarch64", "macos-x86_64"]
+placements = ["sidecar", "node"]
+process = "per-instance"
+
+[run]
+shell = "run.sh"
+
+[[provides]]
+kind = "source"
+id = "source"
+media = { video = "raw", audio = "none", alpha = false, thumb = true }
+transports = ["container"]
+capabilities = ["restart-in-place", "health"]
+latency_ms = 0
+settings = "schemas/source.json"
+skill = "skills/source/SKILL.md"
