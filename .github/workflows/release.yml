@@ -1,0 +1,254 @@
+name: release
+
+# Everything a `v*` tag has to produce, in one workflow:
+#
+#   * the core binaries per platform, as an archive, with the `gmx` alias in it
+#   * the desktop app as .app (and .dmg), .msi and .deb
+#   * SHA256SUMS over all of it
+#   * the container image on GHCR
+#
+# The release is created as a draft and published when every asset is attached,
+# so nobody downloads half a release while the Windows job is still running.
+
+on:
+  push:
+    tags: ["v*"]
+  # For rehearsing the whole thing without cutting a tag. Produces artifacts
+  # and an image tagged with the commit, and no GitHub release.
+  workflow_dispatch:
+
+permissions:
+  contents: write   # create the release and attach assets
+  packages: write   # push the image to GHCR
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  # --------------------------------------------------------------- binaries --
+  core:
+    name: core (${{ matrix.target }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            archive: tar.gz
+          - os: macos-latest
+            target: aarch64-apple-darwin
+            archive: tar.gz
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            archive: zip
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+
+      - name: GStreamer (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev \
+            libgstreamer-plugins-bad1.0-dev
+
+      - name: GStreamer (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          brew install gstreamer
+          echo "PKG_CONFIG_PATH=$(brew --prefix gstreamer)/lib/pkgconfig:$(brew --prefix)/lib/pkgconfig" >> "$GITHUB_ENV"
+
+      - name: GStreamer (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          choco install -y --no-progress gstreamer gstreamer-devel
+          $gst = "C:\Program Files\gstreamer\1.0\msvc_x86_64"
+          "PKG_CONFIG_PATH=$gst\lib\pkgconfig" | Out-File -FilePath $env:GITHUB_ENV -Append
+          "GSTREAMER_1_0_ROOT_MSVC_X86_64=$gst\" | Out-File -FilePath $env:GITHUB_ENV -Append
+          "$gst\bin" | Out-File -FilePath $env:GITHUB_PATH -Append
+
+      - name: Build
+        run: cargo build --release --locked --bins
+
+      # Both binaries go in the archive. They are the same code under two
+      # names: `godwinmix` is what a service unit and a package call it, `gmx`
+      # is what an operator types.
+      - name: Package
+        shell: bash
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          [ "$version" = "$GITHUB_REF_NAME" ] && version="$(git rev-parse --short HEAD)"
+          name="godwinmix-${version}-${{ matrix.target }}"
+          mkdir -p "pkg/$name"
+          if [ "${{ runner.os }}" = "Windows" ]; then
+            cp target/release/godwinmix.exe target/release/gmx.exe "pkg/$name/"
+          else
+            cp target/release/godwinmix target/release/gmx "pkg/$name/"
+          fi
+          cp README.md LICENSE godwinmix.example.toml "pkg/$name/"
+          cd pkg
+          if [ "${{ matrix.archive }}" = "zip" ]; then
+            7z a "../$name.zip" "$name" > /dev/null
+          else
+            tar czf "../$name.tar.gz" "$name"
+          fi
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: core-${{ matrix.target }}
+          path: |
+            *.tar.gz
+            *.zip
+
+  # ---------------------------------------------------------------- desktop --
+  desktop:
+    name: desktop (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            bundles: deb
+          - os: macos-latest
+            bundles: app,dmg
+          - os: windows-latest
+            bundles: msi
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: tauri-app
+
+      # The desktop shell is a webview pointed at the mixer's own URL, so it
+      # does not link GStreamer. It does need the platform's webview toolkit.
+      - name: Tauri dependencies (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libayatana-appindicator3-dev \
+            librsvg2-dev patchelf libssl-dev
+
+      - name: Tauri CLI
+        run: cargo install tauri-cli --locked --version "^2.0" || cargo install tauri-cli --version "^2.0"
+
+      # `cargo tauri build`, not `cargo build`: the plain build produces a bare
+      # executable and no installer, which is what the old workflow did and why
+      # there has never been a .msi or a .deb to download.
+      - name: Bundle
+        working-directory: tauri-app
+        run: cargo tauri build --bundles ${{ matrix.bundles }}
+
+      - name: Collect the installers
+        shell: bash
+        run: |
+          mkdir -p bundles
+          find tauri-app/target/release/bundle -type f \
+            \( -name '*.deb' -o -name '*.msi' -o -name '*.dmg' \) \
+            -exec cp {} bundles/ \;
+          # The .app is a directory, so it travels as an archive.
+          if [ -d tauri-app/target/release/bundle/macos ]; then
+            version="${GITHUB_REF_NAME#v}"
+            (cd tauri-app/target/release/bundle/macos && tar czf "$GITHUB_WORKSPACE/bundles/GodwinMix-${version}-macos.app.tar.gz" GodwinMix.app)
+          fi
+          ls -la bundles
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: desktop-${{ matrix.os }}
+          path: bundles/
+
+  # ----------------------------------------------------------------- image ---
+  image:
+    name: container image
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # `latest` moves only on a tag, never on a manual run, so a rehearsal
+      # cannot become the image people pull.
+      - name: Tags
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository }}
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=raw,value=latest,enable=${{ startsWith(github.ref, 'refs/tags/v') }}
+            type=sha,enable=${{ !startsWith(github.ref, 'refs/tags/v') }}
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: deploy/docker/Dockerfile
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  # --------------------------------------------------------------- release ---
+  publish:
+    name: publish the release
+    needs: [core, desktop, image]
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: incoming
+
+      - name: One directory, one checksum file
+        run: |
+          mkdir -p assets
+          find incoming -type f -exec cp {} assets/ \;
+          cd assets
+          # One file, every asset, so a download can be checked with a single
+          # `sha256sum -c SHA256SUMS` after fetching the ones you want.
+          sha256sum * > SHA256SUMS
+          cat SHA256SUMS
+
+      - name: Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: assets/*
+          draft: false
+          generate_release_notes: true
+          body: |
+            ## Install
+
+            Docker, which carries its own GStreamer:
+
+                docker run -d --name godwinmix -p 127.0.0.1:8080:8080 \
+                  -e GODWINMIX_TOKEN=change-me ghcr.io/${{ github.repository }}:${{ github.ref_name }}
+
+            Desktop: the `.dmg` on macOS, the `.msi` on Windows, the `.deb` on
+            Debian and Ubuntu. GStreamer is not bundled yet, so the desktop app
+            needs it installed (see the README, Platforms).
+
+            Server: the archive for your platform holds `godwinmix` and `gmx`,
+            the same binary under two names, plus the example config. The
+            distribution's GStreamer packages are the only dependency.
+
+            Check what you downloaded against `SHA256SUMS`.
