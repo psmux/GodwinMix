@@ -182,6 +182,26 @@ gmx plugin test plugins/ingest               # the full harness
 The harness's frame counting checks need a publisher, like any listener. With
 nothing publishing they fail honestly.
 
+Two things to know about the full harness here.
+
+It needs a publisher connected while the harness is playing, and the listener
+only exists once the harness has started, so the publisher has to be retrying:
+
+```sh
+while :; do dev/harness/publish.sh rtmp 1935; sleep 0.3; done &
+gmx plugin test plugins/ingest
+```
+
+With that, every check passes except check 6, the kill test. It measures the
+programme's frame interval across a deliberate kill and wants it under 34 ms,
+one frame; a listener cannot make that, because after the process restarts the
+publisher has to connect again. The gap measured here is about 70 ms. The
+documented remedy is to drop `restart-in-place` from the manifest, and it is the
+wrong one: the capability does work, and dropping it would have the supervisor
+rebuild the source from nothing instead, which is slower. `--quick` skips the
+check.
+
+
 ## Where the rules come from
 
 `docs/reference/plugin-manifest.md`, `docs/reference/plugin-protocol.md` and
