@@ -117,9 +117,11 @@ export class SceneMirror {
   applyPatch(patch) {
     const empty = { applied: false, echo: false, gap: false, seq: this.seq, added: [], updated: [], removed: [] };
     if (!patch || typeof patch !== "object") return empty;
-    // `presence` (who is looking at what) is a scope this build does not draw.
-    // Ignoring it is the forward compatible half of the rule above.
-    if (patch.scope && patch.scope !== "document") return Object.assign(empty, { seq: patch.seq ?? this.seq });
+    // `presence` (who is looking at what) is not drawn here. Nothing is
+    // applied, so the sequence number reported is the one the mirror is
+    // actually at: a caller that trusted the patch's own number would think it
+    // had caught up with something it never read.
+    if (patch.scope && patch.scope !== "document") return empty;
 
     const seq = Number(patch.seq || 0);
     // A patch older than what we have already applied is a duplicate from a

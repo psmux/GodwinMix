@@ -219,9 +219,15 @@ function coerce(raw, field) {
         return undefined;
       }
     }
-    default: {
-      const text = String(raw);
-      return text === "" ? undefined : text;
-    }
+    case "choice":
+      return raw === "" ? undefined : coerceChoice(raw, field);
+    default:
+      return raw === "" ? undefined : raw;
   }
+}
+
+/** A select hands back a string even when the schema's values are numbers. */
+function coerceChoice(raw, field) {
+  const match = (field.choices || []).find((c) => String(c.value) === String(raw));
+  return match ? match.value : raw;
 }

@@ -34,6 +34,17 @@ export const DEFAULT_GIZMOS = [
   { kind: "rotate", anchor: [0, -0.62], action: "rotate", target: "transform.rotation" },
 ];
 
+/**
+ * Its own objects, never the ones in DEFAULT_GIZMOS.
+ *
+ * A client that writes into a gizmo it was handed would otherwise change the
+ * defaults for every other item on the canvas, which is the sort of bug that
+ * takes an afternoon to find.
+ */
+function copy(list) {
+  return list.map((g) => Object.assign({}, g, { anchor: g.anchor.slice() }));
+}
+
 /** The cursor each direction wants, so a corner says what it will do. */
 const CURSORS = {
   "-1,-1": "nwse-resize",
@@ -55,12 +66,12 @@ const CURSORS = {
  * its own parameters writes that one out and leaves the rest as names.
  */
 export const ARCHETYPES = {
-  cage: [DEFAULT_GIZMOS[0]],
-  move: [DEFAULT_GIZMOS[0]],
-  corner: DEFAULT_GIZMOS.slice(1, 5),
-  edge: DEFAULT_GIZMOS.slice(5, 9),
-  scale: DEFAULT_GIZMOS.slice(1, 9),
-  rotate: [DEFAULT_GIZMOS[9]],
+  cage: copy(DEFAULT_GIZMOS.slice(0, 1)),
+  move: copy(DEFAULT_GIZMOS.slice(0, 1)),
+  corner: copy(DEFAULT_GIZMOS.slice(1, 5)),
+  edge: copy(DEFAULT_GIZMOS.slice(5, 9)),
+  scale: copy(DEFAULT_GIZMOS.slice(1, 9)),
+  rotate: copy(DEFAULT_GIZMOS.slice(9, 10)),
   crop: [
     { kind: "edge", anchor: [-0.5, 0], action: "crop", target: "crop.left" },
     { kind: "edge", anchor: [0.5, 0], action: "crop", target: "crop.right" },
@@ -80,10 +91,13 @@ export function gizmosFor(designer) {
     if (typeof entry === "string") declared.push(...(ARCHETYPES[entry] || []));
     else if (valid(entry)) declared.push(entry);
   }
-  if (!declared.length) return DEFAULT_GIZMOS;
+  // Always a fresh list of fresh objects. A caller that nudges an anchor on a
+  // handle it was handed would otherwise move it for every item in the
+  // document, and for the plugin's manifest too.
+  if (!declared.length) return copy(DEFAULT_GIZMOS);
   // A plugin that declares handles still gets to be moved: without a cage
   // nothing could pick the item up, and no plugin should have to remember it.
-  return declared.some((g) => g.kind === "cage") ? declared : [DEFAULT_GIZMOS[0], ...declared];
+  return copy(declared.some((g) => g.kind === "cage") ? declared : [DEFAULT_GIZMOS[0], ...declared]);
 }
 
 function valid(g) {
@@ -157,9 +171,9 @@ export function applyDrag(handle, start, dx, dy, mods = {}) {
     case "crop":
       return cropped(handle, box, t, dx, dy);
     case "rotate":
-      return rotated(handle, box, t, mods);
+      return rotated(handle, box, mods);
     case "set":
-      return dialled(handle, t, dx, mods);
+      return dialled(handle, dx, mods);
     default:
       return moved(box, t, dx, dy);
   }
@@ -225,7 +239,7 @@ function cropped(handle, box, t, dx, dy) {
  * The angle is read from where the pointer is, not from how far it travelled:
  * a rotation handle that integrates deltas drifts over a long drag.
  */
-function rotated(handle, box, t, mods) {
+function rotated(handle, box, mods) {
   const cx = box.x + box.width / 2;
   const cy = box.y + box.height / 2;
   const p = mods.pointer || { x: handle.x, y: handle.y };
@@ -240,7 +254,7 @@ function rotated(handle, box, t, mods) {
  * ends are; without one, 0 to 1 over 200 pixels, which is what a person
  * expects of a knob they have never seen.
  */
-function dialled(handle, t, dx, mods) {
+function dialled(handle, dx, mods) {
   const min = mods.min === undefined ? 0 : mods.min;
   const max = mods.max === undefined ? 1 : mods.max;
   const from = mods.from === undefined ? min : mods.from;
