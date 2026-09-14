@@ -859,6 +859,7 @@ impl SourceConfig {
             "exec" => crate::plugin::kinds::exec::validate(&params),
             "browser" => crate::plugin::kinds::browser::validate(&params),
             "layered" => crate::plugin::kinds::layered::validate(&params),
+            "test" => crate::plugin::kinds::testsrc::validate(&params),
             _ => Ok(()),
         }
     }
