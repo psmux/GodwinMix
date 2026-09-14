@@ -1,34 +1,37 @@
 # godwinmix-host
 
-The tier 2 plugin host. Nothing is written yet: this crate exists so the layout
-is settled before the code arrives.
+The tier 2 plugin host: everything about running a plugin beside the core that
+is not a pipeline.
 
-A tier 2 plugin is a separate process that the core starts and supervises. It
-speaks the same JSON-RPC control protocol as every other client, over a pipe
-rather than a socket, and it hands media across the process boundary through a
-transport the two agree on at handshake. A `SIGKILL` on a plugin costs one
-source and never a programme frame.
+A tier 2 plugin is a separate process. It speaks JSON-RPC 2.0 over stdin and
+stderr, one object per line, and it hands media across the process boundary
+through a transport the two sides agree on at the handshake. A crash costs one
+source and never the programme output.
 
-## What lands here
+| Module | What it owns |
+|---|---|
+| `launch` | `[run]` and `[build]` turned into argv, an environment and a cwd; the `GMX_*` variables |
+| `channel` | JSON lines, the 4 MiB limit, several requests in flight per direction |
+| `handshake` | the api range check and the transport negotiation |
+| `lifecycle` | the state machine of 03 section 7 and the restart backoff |
+| `budget` | `[plugins.<name>]` limits and the `on_over_budget` policy |
+| `sampler` | cpu and rss per process, read once a second |
+| `offline` | `gmx plugin test --offline`: a transcript, a binary, no core |
 
-In the order 03 section 5 builds it:
+## What it does not own
 
-* `manifest`: reading and validating `gmx-plugin.toml`, and the capability set
-  a plugin declares.
-* `handshake`: the version and capability exchange that picks a transport and
-  refuses a plugin built against an incompatible `api_level`.
-* `transport`: unixfd on Linux and macOS, a container on a pipe everywhere,
-  which is the fallback that always works.
-* `loader`: start, supervise, restart with backoff, hold to the RSS and CPU
-  budget in `[plugins.<name>]`, and kill.
+The child process itself. `godwinmix-core` already carries the process group
+teardown, the PID 1 orphan reaper and the Windows stdout reader thread that a
+sidecar needs, and a second copy of those would be a second set of bugs. The
+core's `plugin::host` module spawns and wires; this crate decides what to say
+and what a line means.
 
-## Why it is a crate of its own
+No GStreamer, no axum, no tokio. Everything here unit tests on a machine with
+no media stack installed.
 
-Two reasons, both from 09 section 4 item 2. The engine has to be embeddable
-without a plugin loader linked in, so the loader cannot live in
-`godwinmix-core`. And a plugin author writing their own host process wants this
-without the engine, so it cannot live in the `godwinmix` binary either.
+## Where the rules come from
 
-It depends on `godwinmix-protocol` and nothing else so far.
-
-Licensed under Apache-2.0.
+`docs/reference/plugin-lifecycle.md` and `docs/reference/plugin-manifest.md`.
+The manifest types themselves live in `godwinmix-protocol::plugin`, because
+both the core and a plugin's SDK read them and one description of a protocol
+cannot drift.
