@@ -46,7 +46,10 @@ docker run -d --name godwinmix \
 * `/etc/godwinmix` holds `godwinmix.toml` and the `godwinmix.runtime.toml` the
   mixer writes beside it when sources are added over the API. Mount nothing
   there and the entrypoint copies the shipped default in, which is enough to
-  start and be driven over the API.
+  start and be driven over the API. A bind mounted directory has to be
+  writable by the container's user first (`sudo chown -R 10001:10001
+  /srv/godwinmix/config`), because the mixer does not run as root and a
+  directory the daemon created for you is owned by root.
 * `/var/lib/godwinmix/media` is the ad clip library and anything else played
   from a file.
 * `GODWINMIX_TOKEN` overrides `[control] token` in the config. Set it. The
