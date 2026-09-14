@@ -90,6 +90,13 @@ SKIPPED = "skip"
 Result = namedtuple("Result", "status check detail")
 
 
+def plural(n, singular, plural_form=None):
+    """`1 entry`, `3 entries`. Every detail line reads like a sentence."""
+    if n == 1:
+        return "1 %s" % singular
+    return "%d %s" % (n, plural_form or singular + "s")
+
+
 class Refused(Exception):
     """A check said no. The message is the detail that gets printed."""
 
@@ -269,7 +276,7 @@ def check_document_shape(ctx):
     plugins = ctx.doc.get("plugins")
     if not isinstance(plugins, list):
         raise Refused("`plugins` must be an array, even when it is empty")
-    return "%s, %d entries" % (name, len(plugins))
+    return "%s, %s" % (name, plural(len(plugins), "entry", "entries"))
 
 
 def check_document_version(ctx):
@@ -311,7 +318,7 @@ def check_document_names_are_unique(ctx):
         if name in seen:
             raise Refused("`%s` is listed twice. One entry per plugin, with its versions inside it" % name)
         seen[name] = True
-    return "%d names, all distinct" % len(seen)
+    return "%s, all distinct" % plural(len(seen), "name")
 
 
 def check_document_cores(ctx):
@@ -420,7 +427,7 @@ def check_entry_versions(ctx):
             raise Refused("version %s declares api %r, and api starts at 1" % (label, api))
         if "signed" in version and not isinstance(version["signed"], bool):
             raise Refused("version %s has a non boolean `signed`" % label)
-    return ctx.named("%d versions, newest %s at api %d" % (len(versions), versions[-1]["version"], versions[-1]["api"]))
+    return ctx.named("%s, newest %s at api %d" % (plural(len(versions), "version"), versions[-1]["version"], versions[-1]["api"]))
 
 
 def check_entry_platforms(ctx):
@@ -463,7 +470,7 @@ def check_entry_harness(ctx):
                 raise Refused("`%s` passed more checks than it ran" % line)
     if not lines:
         raise Skip(ctx.named("no harness results recorded"))
-    return ctx.named("%d results, all well formed" % lines)
+    return ctx.named("%s, all well formed" % plural(lines, "result"))
 
 
 def check_entry_bronze(ctx):
@@ -512,7 +519,7 @@ def check_entry_silver(ctx):
                 "%s is missing %s. Either publish for those platforms or drop them from the list"
                 % (version["version"], ", ".join(missing))
             )
-    return ctx.named("every declared platform passes, on all %d versions" % len(ctx.versions))
+    return ctx.named("every declared platform passes, on all %s" % plural(len(ctx.versions), "version"))
 
 
 def check_entry_gold(ctx):
@@ -533,7 +540,7 @@ def check_entry_gold(ctx):
         raise Refused("gold needs its documentation reviewed. Put the date in `docs_reviewed`")
     if ctx.entry.get("official") is not True:
         raise Refused("gold is on the official marketplace. Set `official` once it is listed there")
-    return ctx.named("%d maintainers, evals at %s, docs read %s" % (len(maintainers), ctx.entry["evals"], ctx.entry["docs_reviewed"]))
+    return ctx.named("%s, evals at %s, docs read %s" % (plural(len(maintainers), "maintainer"), ctx.entry["evals"], ctx.entry["docs_reviewed"]))
 
 
 def check_entry_policy(ctx):
@@ -824,9 +831,9 @@ def self_test(out=sys.stdout):
     if problems:
         for problem in problems:
             out.write("FAIL %s\n" % problem)
-        out.write("\nself test failed: %d fixtures did not behave as named\n" % len(problems))
+        out.write("\nself test failed: %s did not behave as named\n" % plural(len(problems), "fixture"))
         return 1
-    out.write("self test passed: %d fixtures behaved as named\n" % (len(FIXTURE_EXPECTATIONS) + len(DIRECTORY_EXPECTATIONS)))
+    out.write("self test passed: %s behaved as named\n" % plural(len(FIXTURE_EXPECTATIONS) + len(DIRECTORY_EXPECTATIONS), "fixture"))
     return 0
 
 
@@ -874,7 +881,7 @@ def main(argv=None):
         print("%d of %d checks failed. The listing is not merged until they pass." % (len(failed), len(results)))
         return 1
     skipped = len([r for r in results if r.status == SKIPPED])
-    print("accepted: %d checks, %d skipped, %d entries in %s" % (len(results), skipped, len(doc.get("plugins", [])), os.path.basename(args.index)))
+    print("accepted: %s, %d skipped, %s in %s" % (plural(len(results), "check"), skipped, plural(len(doc.get("plugins", [])), "entry", "entries"), os.path.basename(args.index)))
     return 0
 
 
