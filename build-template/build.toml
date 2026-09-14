@@ -25,9 +25,12 @@ name = "AcmeMix"
 identifier = "com.acme.mix"
 
 # A square PNG, 512x512 or larger, relative to this file. The workflow turns it
-# into the .icns and .ico the macOS and Windows bundles need. Leave it empty to
-# ship the stock GodwinMix icon.
-icon = "branding/icon.png"
+# into the .icns and .ico the macOS and Windows bundles need. Empty, as it
+# ships, means the stock GodwinMix icon, so a fresh fork builds before you have
+# drawn anything. Put your PNG in branding/ and name it here:
+#
+#   icon = "branding/icon.png"
+icon = ""
 
 [upstream]
 # The GodwinMix repository the core is built from.
