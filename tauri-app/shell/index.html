@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>GodwinMix</title>
+    <link rel="stylesheet" href="connect.css" />
+  </head>
+  <body>
+    <main>
+      <h1>GodwinMix</h1>
+      <p id="status" class="status">Looking for a mixer.</p>
+
+      <form id="form" hidden>
+        <fieldset>
+          <legend>Which mixer?</legend>
+
+          <label class="choice">
+            <input type="radio" name="mode" value="local" checked />
+            <span>
+              <strong>This computer</strong>
+              <small>Start the mixer here. Nothing else to fill in.</small>
+            </span>
+          </label>
+
+          <label class="choice">
+            <input type="radio" name="mode" value="remote" />
+            <span>
+              <strong>Another machine</strong>
+              <small>A mixer already running on a server or another computer.</small>
+            </span>
+          </label>
+        </fieldset>
+
+        <div id="remote" hidden>
+          <label for="address">Address</label>
+          <input
+            id="address"
+            name="address"
+            type="text"
+            placeholder="http://studio.local:8080"
+            autocomplete="off"
+            spellcheck="false"
+          />
+
+          <label for="token">Token <small>(leave empty if the mixer has none)</small></label>
+          <input id="token" name="token" type="password" autocomplete="off" />
+        </div>
+
+        <p id="error" class="error" hidden></p>
+
+        <button id="go" type="submit">Connect</button>
+      </form>
+    </main>
+    <script src="connect.js" defer></script>
+  </body>
+</html>

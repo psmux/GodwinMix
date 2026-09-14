@@ -1,0 +1,11 @@
+# The mixer daemon, one per target triple, is a build artefact and not source.
+# `cargo tauri build` refuses to run without the one for the host, so put it
+# here first:
+#
+#   cargo build --release --bin godwinmix
+#   cp target/release/godwinmix \
+#      tauri-app/binaries/godwinmix-$(rustc -vV | sed -n 's/^host: //p')
+#
+# CI does the same, per platform, before it calls `cargo tauri build`.
+godwinmix-*
+!.gitignore

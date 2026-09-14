@@ -4,13 +4,14 @@
   "version": "0.2.0",
   "identifier": "mix.godwin.desktop",
   "build": {
-    "frontendDist": "../ui"
+    "frontendDist": "shell"
   },
   "app": {
+    "withGlobalTauri": true,
     "windows": [
       {
         "title": "GodwinMix",
-        "url": "http://localhost:8080",
+        "url": "index.html",
         "width": 1440,
         "height": 900,
         "minWidth": 900,
@@ -21,12 +22,19 @@
       }
     ],
     "security": {
-      "csp": null
+      "csp": "default-src 'self'; img-src 'self' asset: data: blob:; media-src 'self' blob:; style-src 'self'; script-src 'self'; connect-src 'self' ipc: http://ipc.localhost; form-action 'none'; frame-ancestors 'none'; base-uri 'self'; object-src 'none'",
+      "capabilities": ["desktop-shell"]
     }
   },
   "bundle": {
     "active": true,
-    "targets": "all",
+    "targets": ["app", "dmg", "msi", "nsis", "deb", "appimage"],
+    "category": "Video",
+    "shortDescription": "Live video mixer",
+    "longDescription": "GodwinMix is a live video mixer. The desktop app starts the mixer on this machine, or connects to one running on a server, and opens its operator UI.",
+    "publisher": "GodwinMix",
+    "copyright": "Copyright GodwinMix contributors",
+    "licenseFile": "../LICENSE",
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
@@ -34,6 +42,42 @@
       "icons/icon.icns",
       "icons/icon.ico",
       "icons/icon.png"
-    ]
+    ],
+    "externalBin": ["binaries/godwinmix"],
+    "macOS": {
+      "minimumSystemVersion": "10.15"
+    },
+    "windows": {
+      "wix": {
+        "language": ["en-US"]
+      },
+      "nsis": {
+        "installMode": "perMachine",
+        "languages": ["English"]
+      }
+    },
+    "linux": {
+      "deb": {
+        "depends": [
+          "libgstreamer1.0-0",
+          "libgstreamer-plugins-base1.0-0",
+          "gstreamer1.0-plugins-base",
+          "gstreamer1.0-plugins-good",
+          "gstreamer1.0-plugins-bad",
+          "gstreamer1.0-libav"
+        ]
+      }
+    }
+  },
+  "plugins": {
+    "updater": {
+      "endpoints": [
+        "https://releases.godwin.mix/desktop/{{target}}/{{arch}}/{{current_version}}"
+      ],
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDVGRkU4Q0VCNEJBMTZENDgKUldSSWJhRkw2NHorWDg4TmxlYjRSbWdYNEhNNmQ2K2NNTjZjQjJRNGZwL0ZvZDhaWHc1THR2YlcK",
+      "windows": {
+        "installMode": "passive"
+      }
+    }
   }
 }
