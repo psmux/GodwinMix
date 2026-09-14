@@ -142,21 +142,36 @@ fn panic_message(info: &std::panic::PanicHookInfo<'_>) -> String {
 mod tests {
     use super::*;
 
+    /// The log ring is one per process, so the tests that assert on its
+    /// contents take turns.
+    static RING_TESTS: Mutex<()> = Mutex::new(());
+
+    // The ring is one per process and the other tests in this crate log into
+    // it while these run, so these assert what stays true either way: the ring
+    // never grows past its bound, the newest line is there, and the oldest is
+    // gone.
     #[test]
     fn the_ring_keeps_the_last_fifty_lines() {
+        let _turn = RING_TESTS.lock().unwrap_or_else(|e| e.into_inner());
         clear_logs();
         for i in 0..LOG_RING + 10 {
             record_log(LogLevel::Info, &format!("line {i}"));
         }
         let logs = recent_logs();
-        assert_eq!(logs.len(), LOG_RING);
-        assert!(logs[0].contains("line 10"), "{}", logs[0]);
-        assert!(logs[LOG_RING - 1].contains("line 59"));
-        clear_logs();
+        assert!(logs.len() <= LOG_RING, "the ring grew to {}", logs.len());
+        assert!(
+            logs.iter().any(|l| l == "[info] line 59"),
+            "the newest line was dropped: {logs:?}"
+        );
+        assert!(
+            !logs.iter().any(|l| l == "[info] line 0"),
+            "the oldest line was kept: {logs:?}"
+        );
     }
 
     #[test]
     fn a_report_carries_the_message_the_backtrace_and_the_logs() {
+        let _turn = RING_TESTS.lock().unwrap_or_else(|e| e.into_inner());
         clear_logs();
         record_log(LogLevel::Warn, "the camera went away");
         let dir = std::env::temp_dir().join(format!("gmx-sdk-crash-{}", now_ms()));
@@ -165,7 +180,11 @@ mod tests {
         let value: serde_json::Value = serde_json::from_str(&text).unwrap();
         assert_eq!(value["message"], "it broke at main.rs:10");
         assert_eq!(value["backtrace"], "frame 0\nframe 1");
-        assert_eq!(value["logs"][0], "[warn] the camera went away");
+        let logs = value["logs"].as_array().expect("no logs in the report");
+        assert!(
+            logs.iter().any(|l| l == "[warn] the camera went away"),
+            "the report lost the log line: {logs:?}"
+        );
         assert!(path.file_name().unwrap().to_string_lossy().starts_with("crash-"));
         let _ = std::fs::remove_dir_all(&dir);
         clear_logs();
