@@ -271,6 +271,12 @@ class Crop(TypedDict, total=False):
     right: float
     top: float
 
+class DiscoverRequest(TypedDict, total=False):
+    """`device.discover`."""
+
+    timeout_ms: Optional[int]
+    # How long to look, shared between the devices. Two seconds by default, four and a half at most, because no method blocks for five.
+
 class DraftRecord(TypedDict, total=False):
     """`scene.edit.begin`."""
 
@@ -534,6 +540,8 @@ class ItemsRequest(TypedDict, total=False):
     name: Optional[str]
     # `group`: what to call the group.
     scene: str
+    seq: Optional[int]
+    # A client's own sequence number, echoed on the patch. See `SetItemRequest::seq`.
     to: Optional[str]
     # `match_size`: the item to match.
 
@@ -741,6 +749,8 @@ class Patch(TypedDict, total=False):
     """What changed in one transaction."""
 
     added: List[Record]
+    client_seq: Optional[int]
+    # The client's own sequence number, echoed back. A drag cannot wait for a round trip, so the client kit draws the move itself and reconciles when the echo arrives. Without this it cannot tell an echo of the move it has already drawn past from a correction, and the handle rubber bands backwards under the cursor. Every geometry command carries a `seq`; this is that number coming back.
     label: Optional[str]
     # What the client called this change, for a label in an undo menu.
     removed: List[Id]
@@ -905,6 +915,8 @@ class ReorderRequest(TypedDict, total=False):
     draft: Optional[str]
     item: str
     scene: str
+    seq: Optional[int]
+    # A client's own sequence number, echoed on the patch.
 
 ResponseFormat = Literal['concise', 'detailed']
 
@@ -1165,6 +1177,14 @@ class TokenInfo(TypedDict, total=False):
     rehearsal: bool
     scopes: List[str]
 
+class ToolCallRequest(TypedDict, total=False):
+    """`tool.call`."""
+
+    arguments: Any
+    # The tool's own arguments, as its input schema describes them.
+    name: str
+    # `<plugin>/<tool>`, or the bare tool name when only one plugin has it.
+
 class Transform(TypedDict, total=False):
     """Where an item sits and how it is sized."""
 
@@ -1234,6 +1254,19 @@ class ProgramTookEvent(TypedDict, total=False):
     scene: Optional[str]
     source: Optional[str]
     transition: str
+    transition_id: int
+
+class ScenePatchEvent(TypedDict, total=False):
+    added: List[Dict[str, Any]]
+    client_seq: Optional[int]
+    # The client's own sequence number, from the `seq` on the command, so a drag discards echoes of moves it has already drawn past.
+    label: Optional[str]
+    removed: List[str]
+    scope: Literal['document']
+    seq: int
+    source_client: Optional[str]
+    # Who asked for the change, so a client suppresses the echo of its own edits.
+    updated: List[Dict[str, Any]]
 
 class PreviewChangedEvent(TypedDict, total=False):
     scene: Optional[str]
@@ -1295,6 +1328,7 @@ METHODS = (
     {"name": "core.startup_report", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/core/startup_report"), "summary": 'How long each stage of the start took, and what was over the 250 ms mark.'},
     {"name": "core.status", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/core/status"), "summary": 'The full state: programme, every source, every output, the multiview grid, the encoder backend and any ad break.'},
     {"name": "core.subscribe", "scope": "read", "mutating": False, "destructive": False, "rest": None, "summary": 'Subscribe to the event stream. WebSocket only: the core answers event/snapshot then deltas, ending every batch with event/flush.'},
+    {"name": "device.discover", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/device/discover"), "summary": "Ask every device plugin what it can see: cameras, NDI senders, publishers. Each candidate's params are ready for source.add."},
     {"name": "filter.add", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/filters"), "summary": 'Hang a filter on one source or on the programme, live.'},
     {"name": "filter.list", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/filters"), "summary": 'Every filter in place, with what it is and where it sits.'},
     {"name": "filter.remove", "scope": "operate", "mutating": True, "destructive": True, "rest": ("DELETE", "/api/v1/filters/{id}"), "summary": 'Take a filter out of the pipeline.'},
@@ -1393,11 +1427,13 @@ METHODS = (
     {"name": "task.cancel", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/task/cancel"), "summary": 'Ask a piece of long running work to stop. Cooperative: the answer says the request landed, not that the work has stopped yet.'},
     {"name": "task.get", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/task"), "summary": 'How a piece of long running work is getting on, and its answer once it has one.'},
     {"name": "task.list", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/task/list"), "summary": 'Every background job this core knows about, newest first.'},
+    {"name": "tool.call", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/tool/call"), "summary": "Call one of a plugin's tools, in MCP's shape. The name is `<plugin>/<tool>`, or the bare tool name when only one plugin has it."},
 )
 
 EVENT_NAMES = (
     "snapshot",
     "program.took",
+    "scene.patch",
     "preview.changed",
     "source.state",
     "source.position",
@@ -1547,6 +1583,17 @@ class GeneratedMethods:
         if ext is not None:
             params["ext"] = ext
         return await self._call("core.subscribe", params)
+
+    async def device_discover(
+        self,
+        *,
+        timeout_ms: Optional[int] = None,
+    ) -> Dict[str, Any]:
+        """Ask every device plugin what it can see: cameras, NDI senders, publishers. Each candidate's params are ready for source.add."""
+        params: Dict[str, Any] = {}
+        if timeout_ms is not None:
+            params["timeout_ms"] = timeout_ms
+        return await self._call("device.discover", params)
 
     async def filter_add(
         self,
@@ -2155,6 +2202,7 @@ class GeneratedMethods:
         easing: Optional[str] = None,
         edge: Optional[str] = None,
         name: Optional[str] = None,
+        seq: Optional[int] = None,
         to: Optional[str] = None,
     ) -> Dict[str, Any]:
         """Line items up on an edge: left, right, top, bottom, center-x or center-y."""
@@ -2175,6 +2223,8 @@ class GeneratedMethods:
             params["edge"] = edge
         if name is not None:
             params["name"] = name
+        if seq is not None:
+            params["seq"] = seq
         if to is not None:
             params["to"] = to
         return await self._call("scene.item.align", params)
@@ -2191,6 +2241,7 @@ class GeneratedMethods:
         easing: Optional[str] = None,
         edge: Optional[str] = None,
         name: Optional[str] = None,
+        seq: Optional[int] = None,
         to: Optional[str] = None,
     ) -> Dict[str, Any]:
         """Lay items out in a grid of `cols` columns."""
@@ -2211,6 +2262,8 @@ class GeneratedMethods:
             params["edge"] = edge
         if name is not None:
             params["name"] = name
+        if seq is not None:
+            params["seq"] = seq
         if to is not None:
             params["to"] = to
         return await self._call("scene.item.arrange_grid", params)
@@ -2259,6 +2312,7 @@ class GeneratedMethods:
         easing: Optional[str] = None,
         edge: Optional[str] = None,
         name: Optional[str] = None,
+        seq: Optional[int] = None,
         to: Optional[str] = None,
     ) -> Dict[str, Any]:
         """Put items over the whole canvas, filling it and letting the overflow go."""
@@ -2279,6 +2333,8 @@ class GeneratedMethods:
             params["edge"] = edge
         if name is not None:
             params["name"] = name
+        if seq is not None:
+            params["seq"] = seq
         if to is not None:
             params["to"] = to
         return await self._call("scene.item.cover_canvas", params)
@@ -2295,6 +2351,7 @@ class GeneratedMethods:
         easing: Optional[str] = None,
         edge: Optional[str] = None,
         name: Optional[str] = None,
+        seq: Optional[int] = None,
         to: Optional[str] = None,
     ) -> Dict[str, Any]:
         """Space items evenly between the two on the ends, horizontally or vertically."""
@@ -2315,6 +2372,8 @@ class GeneratedMethods:
             params["edge"] = edge
         if name is not None:
             params["name"] = name
+        if seq is not None:
+            params["seq"] = seq
         if to is not None:
             params["to"] = to
         return await self._call("scene.item.distribute", params)
@@ -2400,6 +2459,7 @@ class GeneratedMethods:
         easing: Optional[str] = None,
         edge: Optional[str] = None,
         name: Optional[str] = None,
+        seq: Optional[int] = None,
         to: Optional[str] = None,
     ) -> Dict[str, Any]:
         """Put items over the whole canvas, keeping their aspect ratio inside it."""
@@ -2420,6 +2480,8 @@ class GeneratedMethods:
             params["edge"] = edge
         if name is not None:
             params["name"] = name
+        if seq is not None:
+            params["seq"] = seq
         if to is not None:
             params["to"] = to
         return await self._call("scene.item.fit_to_canvas", params)
@@ -2436,6 +2498,7 @@ class GeneratedMethods:
         easing: Optional[str] = None,
         edge: Optional[str] = None,
         name: Optional[str] = None,
+        seq: Optional[int] = None,
         to: Optional[str] = None,
     ) -> Dict[str, Any]:
         """Put items into a group. The picture does not change."""
@@ -2456,6 +2519,8 @@ class GeneratedMethods:
             params["edge"] = edge
         if name is not None:
             params["name"] = name
+        if seq is not None:
+            params["seq"] = seq
         if to is not None:
             params["to"] = to
         return await self._call("scene.item.group", params)
@@ -2472,6 +2537,7 @@ class GeneratedMethods:
         easing: Optional[str] = None,
         edge: Optional[str] = None,
         name: Optional[str] = None,
+        seq: Optional[int] = None,
         to: Optional[str] = None,
     ) -> Dict[str, Any]:
         """Make items the same size as another one."""
@@ -2492,6 +2558,8 @@ class GeneratedMethods:
             params["edge"] = edge
         if name is not None:
             params["name"] = name
+        if seq is not None:
+            params["seq"] = seq
         if to is not None:
             params["to"] = to
         return await self._call("scene.item.match_size", params)
@@ -2532,6 +2600,7 @@ class GeneratedMethods:
         after: Optional[str] = None,
         before: Optional[str] = None,
         draft: Optional[str] = None,
+        seq: Optional[int] = None,
     ) -> Dict[str, Any]:
         """Move an item up or down the stack, between two named neighbours."""
         params: Dict[str, Any] = {}
@@ -2543,6 +2612,8 @@ class GeneratedMethods:
             params["before"] = before
         if draft is not None:
             params["draft"] = draft
+        if seq is not None:
+            params["seq"] = seq
         return await self._call("scene.item.reorder", params)
 
     async def scene_item_set(
@@ -2893,3 +2964,16 @@ class GeneratedMethods:
         """Every background job this core knows about, newest first."""
         params: Dict[str, Any] = {}
         return await self._call("task.list", params)
+
+    async def tool_call(
+        self,
+        name: str,
+        *,
+        arguments: Any = None,
+    ) -> Dict[str, Any]:
+        """Call one of a plugin's tools, in MCP's shape. The name is `<plugin>/<tool>`, or the bare tool name when only one plugin has it."""
+        params: Dict[str, Any] = {}
+        params["name"] = name
+        if arguments is not None:
+            params["arguments"] = arguments
+        return await self._call("tool.call", params)

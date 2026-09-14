@@ -72,7 +72,50 @@ fn state_events() -> Vec<EventDef> {
                         "scene": { "type": ["string", "null"] },
                         "transition": { "type": "string" },
                         "duration_ms": { "type": "integer" },
+                        "transition_id": { "type": "integer" },
                         "at_running_time_ms": { "type": "integer" }
+                    }
+                }))
+            },
+        },
+        EventDef {
+            name: "scene.patch",
+            since: "1",
+            summary: "One change to the scene document, as records rather than a snapshot: \
+                      what was added, what changed with its before and after, and what was \
+                      removed. One per transaction, batched and ended by event/flush.",
+            ext: None,
+            legacy: None,
+            payload: |_| {
+                inline(json!({
+                    "type": "object",
+                    "properties": {
+                        "seq": { "type": "integer" },
+                        "source_client": {
+                            "type": ["string", "null"],
+                            "description": "Who asked for the change, so a client suppresses \
+                                            the echo of its own edits."
+                        },
+                        "client_seq": {
+                            "type": ["integer", "null"],
+                            "description": "The client's own sequence number, from the `seq` \
+                                            on the command, so a drag discards echoes of \
+                                            moves it has already drawn past."
+                        },
+                        "scope": { "type": "string", "enum": ["document"] },
+                        "added": { "type": "array", "items": { "type": "object" } },
+                        "updated": {
+                            "type": "array",
+                            "items": {
+                                "type": "object",
+                                "properties": {
+                                    "before": { "type": "object" },
+                                    "after": { "type": "object" }
+                                }
+                            }
+                        },
+                        "removed": { "type": "array", "items": { "type": "string" } },
+                        "label": { "type": ["string", "null"] }
                     }
                 }))
             },

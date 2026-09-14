@@ -45,6 +45,7 @@ Keys accepted on every method, handled before a method runs.
 | `core.startup_report` | `GET /api/v1/core/startup_report` | read |  | 1 | How long each stage of the start took, and what was over the 250 ms mark. |
 | `core.status` | `GET /api/v1/core/status` | read |  | 1 | The full state: programme, every source, every output, the multiview grid, the encoder backend and any ad break. |
 | `core.subscribe` | (none) | read |  | 1 | Subscribe to the event stream. WebSocket only: the core answers event/snapshot then deltas, ending every batch with event/flush. |
+| `device.discover` | `POST /api/v1/device/discover` | operate |  | 1 | Ask every device plugin what it can see: cameras, NDI senders, publishers. Each candidate's params are ready for source.add. |
 | `filter.add` | `POST /api/v1/filters` | operate |  | 1 | Hang a filter on one source or on the programme, live. |
 | `filter.list` | `GET /api/v1/filters` | read |  | 1 | Every filter in place, with what it is and where it sits. |
 | `filter.remove` | `DELETE /api/v1/filters/{id}` | operate | yes | 1 | Take a filter out of the pipeline. |
@@ -143,6 +144,7 @@ Keys accepted on every method, handled before a method runs.
 | `task.cancel` | `POST /api/v1/task/cancel` | operate |  | 1 | Ask a piece of long running work to stop. Cooperative: the answer says the request landed, not that the work has stopped yet. |
 | `task.get` | `GET /api/v1/task` | read |  | 1 | How a piece of long running work is getting on, and its answer once it has one. |
 | `task.list` | `GET /api/v1/task/list` | read |  | 1 | Every background job this core knows about, newest first. |
+| `tool.call` | `POST /api/v1/tool/call` | operate |  | 1 | Call one of a plugin's tools, in MCP's shape. The name is `<plugin>/<tool>`, or the bare tool name when only one plugin has it. |
 
 ### Params and results
 
@@ -352,6 +354,23 @@ Subscribe to the event stream. WebSocket only: the core answers event/snapshot t
   },
   "result": {
     "$ref": "#/$defs/SubscribeResult"
+  }
+}
+```
+
+#### `device.discover`
+
+Ask every device plugin what it can see: cameras, NDI senders, publishers. Each candidate's params are ready for source.add.
+
+MCP tool `discover_sources` in the `search` profile: readOnlyHint false, destructiveHint false, idempotentHint true.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/DiscoverRequest"
+  },
+  "result": {
+    "type": "object"
   }
 }
 ```
@@ -1952,6 +1971,21 @@ Every background job this core knows about, newest first.
 }
 ```
 
+#### `tool.call`
+
+Call one of a plugin's tools, in MCP's shape. The name is `<plugin>/<tool>`, or the bare tool name when only one plugin has it.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/ToolCallRequest"
+  },
+  "result": {
+    "type": "object"
+  }
+}
+```
+
 ## Events
 
 Subscribe with `core.subscribe`. Patterns match the part after `event/`, so `program.*` matches `event/program.took`. Every event carries `seq`; every batch ends with `event/flush`; a client that falls behind gets `event/resync`.
@@ -1960,6 +1994,7 @@ Subscribe with `core.subscribe`. Patterns match the part after `event/`, so `pro
 |---|---|---|---|
 | `event/snapshot` |  | `status` | The full state, and the sequence number it is current as of. Sent on subscribe and after any change the deltas cannot describe. |
 | `event/program.took` |  | `took` | The programme changed. Carries the running time the cut landed on, so a client can see how close a scheduled take was to its mark. |
+| `event/scene.patch` |  |  | One change to the scene document, as records rather than a snapshot: what was added, what changed with its before and after, and what was removed. One per transaction, batched and ended by event/flush. |
 | `event/preview.changed` |  |  | A scene was armed, or the arming was cleared. The armed scene is the preview, and program.take with no argument takes it. |
 | `event/source.state` |  | `source_state_changed` | A source moved between connecting, live, stalled and failed. |
 | `event/source.position` | `positions` | `source_position` | How far through a seekable source has got, a few times a second. Never sent for a camera, which has no position to report. |

@@ -419,37 +419,52 @@ impl Supervisor {
     }
 
     /// A device saying something turned up or went away.
+    ///
+    /// Two spellings are read, because two are in use and neither is wrong.
+    /// The core's own vocabulary is `source.appeared` and `source.gone`. A
+    /// plugin that names its event after itself (`ingest.publisher`) says which
+    /// it means in an `action` field, which is the shape an event stream takes
+    /// when one event carries both halves of a lifecycle. Anything else is
+    /// logged and ignored: a device is free to raise events of its own that
+    /// the core has no business acting on.
     fn device_event(&self, instance: &str, name: &str, params: &Value) {
-        match name {
-            APPEARED => match serde_json::from_value::<Candidate>(params.clone()) {
-                Ok(candidate) => self.adopt(instance, &candidate),
+        let action = params.get("action").and_then(Value::as_str).unwrap_or("");
+        let arrived = name == APPEARED || matches!(action, "connected" | "appeared" | "added");
+        let left = name == GONE || matches!(action, "left" | "gone" | "disconnected" | "removed");
+        if arrived {
+            match serde_json::from_value::<Candidate>(params.clone()) {
+                Ok(candidate) => self.adopt(instance, &candidate, named_id(params)),
                 Err(e) => warn!(
-                    %instance, ?e,
-                    "a device's source.appeared was not a candidate: it needs \
-                     type, name and params"
+                    %instance, %name, ?e,
+                    "a device said something arrived but did not describe it: an arrival \
+                     needs type, name and params"
                 ),
-            },
-            GONE => {
-                let id = params
-                    .get("id")
-                    .or_else(|| params.get("name"))
-                    .and_then(Value::as_str)
-                    .map(slug);
-                match id {
-                    Some(id) if self.inner.lock().adopted.contains_key(&id) => {
-                        self.remove_source(&id)
-                    }
-                    Some(id) => debug!(%instance, %id, "a device let go of a source it did not add"),
-                    None => warn!(%instance, "a device's source.gone named nothing"),
-                }
             }
-            other => debug!(%instance, %other, "a device raised an event the core does not route"),
+            return;
         }
+        if left {
+            match named_id(params).or_else(|| {
+                params.get("name").and_then(Value::as_str).map(slug)
+            }) {
+                Some(id) if self.inner.lock().adopted.contains_key(&id) => self.remove_source(&id),
+                Some(id) => debug!(%instance, %id, "a device let go of a source it did not add"),
+                None => warn!(%instance, %name, "a device said something left but not what"),
+            }
+            return;
+        }
+        debug!(%instance, %name, "a device raised an event the core does not route");
     }
 
     /// Add what a device found as a source.
-    fn adopt(&self, instance: &str, candidate: &Candidate) {
-        let id = self.free_id(&slug(&candidate.name));
+    fn adopt(&self, instance: &str, candidate: &Candidate, named: Option<String>) {
+        // The id the device chose, when it chose one. A device that relays a
+        // publisher already has a name for it and the source it expects to be
+        // created; inventing a different one here would mean its own tools
+        // could not find what it asked for.
+        let id = match named {
+            Some(id) => id,
+            None => self.free_id(&slug(&candidate.name)),
+        };
         let uri = candidate
             .params
             .get("uri")
@@ -518,7 +533,8 @@ impl Supervisor {
         let result = match method {
             "source.add" => match serde_json::from_value::<Candidate>(params.clone()) {
                 Ok(candidate) => {
-                    self.adopt(instance, &candidate);
+                    let named = named_id(&params);
+                    self.adopt(instance, &candidate, named);
                     Ok(json!({"added": true}))
                 }
                 Err(e) => Err(format!(
@@ -752,6 +768,13 @@ impl Supervisor {
 /// The whole sampling of a transition is budgeted in the mixer; this is the
 /// per call deadline inside it, so one slow answer cannot eat the lot.
 const RENDER_DEADLINE: Duration = Duration::from_millis(50);
+
+/// The id a device named for something it found, if it named one.
+fn named_id(params: &Value) -> Option<String> {
+    let id = params.get("id").and_then(Value::as_str)?;
+    let id = slug(id);
+    (!id.is_empty()).then_some(id)
+}
 
 /// A name a person typed, as an id. The same rule `source.add` applies, so a
 /// device finding "CAM 1 (Studio)" produces `cam-1-studio`.
