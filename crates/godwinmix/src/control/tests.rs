@@ -213,6 +213,7 @@ fn the_table_matches_the_scopes_in_the_protocol_document() {
             "core.shutdown",
             "filter.remove",
             "media.remove",
+            "node.remove",
             "output.remove",
             "plugin.add",
             "plugin.remove",

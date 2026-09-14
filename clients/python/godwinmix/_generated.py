@@ -257,11 +257,18 @@ class Crop(TypedDict, total=False):
     right: float
     top: float
 
+class DiscoverAnswer(TypedDict, total=False):
+    found: List[Found]
+
 class DiscoverRequest(TypedDict, total=False):
     """`device.discover`."""
 
     timeout_ms: Optional[int]
     # How long to look, shared between the devices. Two seconds by default, four and a half at most, because no method blocks for five.
+
+class DiscoverRequest2(TypedDict, total=False):
+    timeout_ms: Optional[int]
+    # How long to listen. Capped at 4.5 seconds, so the call stays inside the five second ceiling every method is held to.
 
 class DraftRecord(TypedDict, total=False):
     """`scene.edit.begin`."""
@@ -291,6 +298,14 @@ class EditBeginRequest(TypedDict, total=False):
     live: bool
     # True to edit the scene that is on air as you go. The default is off air: the draft is applied on the next take or on an explicit apply.
     scene: str
+
+class EnrolRequest(TypedDict, total=False):
+    address: Optional[str]
+    # Where the node is, for the record. The node always dials the core, so this is what `node.list` shows before it has.
+    name: str
+    # What the node will call itself. A slug: it goes in `place` and in the node's certificate.
+    ttl_secs: Optional[int]
+    # How long the token is good for. Default one hour.
 
 class ExportRequest(TypedDict, total=False):
     collection: Optional[str]
@@ -364,6 +379,18 @@ class Flush(TypedDict, total=False):
 
     seq: int
     # The sequence number of the last event in the batch.
+
+class Found(TypedDict, total=False):
+    """One thing found on the network."""
+
+    address: str
+    # `host:port`, ready to hand to `godwinmix node --core`.
+    api: int
+    # The bridge version it speaks.
+    name: str
+    # The instance name, which is the node's name.
+    role: str
+    # `node` or `core`.
 
 class Frame(TypedDict, total=False):
     """The rectangle an item is fitted into."""
@@ -693,6 +720,48 @@ class NameRequest(TypedDict, total=False):
 
     name: str
     # File name as it appears in the media listing. The REST layer puts it in the path, where the transform rule calls it `id`, so both spellings are read.
+
+class NodeInstance(TypedDict, total=False):
+    detail: Optional[str]
+    instance: str
+    latency_ms: int
+    state: str
+
+class NodeListing(TypedDict, total=False):
+    listening: bool
+    # Whether this core is listening for nodes at all.
+    nodes: List[NodeView]
+
+class NodeName(TypedDict, total=False):
+    id: str
+    # The node's name, as it was enrolled.
+
+class NodePlugin(TypedDict, total=False):
+    name: str
+    provides: List[str]
+    version: str
+
+class NodeView(TypedDict, total=False):
+    """What `node.get` reports about one node, and what `node.list` reports about all of them."""
+
+    address: Optional[str]
+    clock_jitter_ms: float
+    clock_offset_ms: float
+    clock_synced: bool
+    heartbeat_age_ms: int
+    # Milliseconds since the last heartbeat. The same number `gmx_node_heartbeat_age_ms` carries.
+    identity: Optional[str]
+    instances: List[NodeInstance]
+    # The instances it is hosting right now.
+    name: str
+    platform: Optional[str]
+    plugins: List[NodePlugin]
+    # The plugins this node has, name and version.
+    provides: List[str]
+    # The provide ids this node can run, `<plugin>/<provide>`.
+    state: str
+    # `online`, `offline`, or `expected` for a node listed in the config that has never dialled in.
+    version: Optional[str]
 
 class OutputStatus(TypedDict, total=False):
     id: str
@@ -1403,6 +1472,11 @@ METHODS = (
     {"name": "media.list", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/media"), "summary": 'The clips in the library, with durations and whether each has audio.'},
     {"name": "media.remove", "scope": "operate", "mutating": True, "destructive": True, "rest": ("DELETE", "/api/v1/media/{id}"), "summary": 'Delete a library file and its converted copy. Refused while it is a live source.'},
     {"name": "media.upload", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/media/upload"), "summary": 'Stream a file into the library. HTTP only: the body is the file.'},
+    {"name": "node.discover", "scope": "read", "mutating": False, "destructive": False, "rest": ("POST", "/api/v1/nodes/{id}/discover"), "summary": 'Look for nodes on the local network over mDNS. A network without multicast finds nothing and the [nodes] table in the config is the way there.'},
+    {"name": "node.enrol", "scope": "admin", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/nodes/{id}/enrol"), "summary": 'Mint a one time enrolment token for a node. The answer carries the command to run on the other machine. The token is good for one enrolment and expires.'},
+    {"name": "node.get", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/nodes/{id}"), "summary": 'One node: its clock offset, how long since its last heartbeat, the plugins it has, and the instances it is hosting.'},
+    {"name": "node.list", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/nodes"), "summary": 'Every node this core knows about: the ones connected now, the ones that have gone quiet, and the ones the config expects that have never dialled in.'},
+    {"name": "node.remove", "scope": "admin", "mutating": True, "destructive": True, "rest": ("DELETE", "/api/v1/nodes/{id}"), "summary": 'Forget a node. Its bridge is closed, every token minted for a plugin on it is revoked, and its certificate stops working. Sources placed on it go to the slate until they are moved or the node enrols again.'},
     {"name": "output.add", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/outputs"), "summary": 'Send the programme to another destination. The encoder is shared, so adding one costs nothing on air.'},
     {"name": "output.get", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/outputs/{id}"), "summary": 'One destination.'},
     {"name": "output.list", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/outputs"), "summary": 'Every destination, with its state, reconnect count and how much is buffered.'},
@@ -1784,6 +1858,58 @@ class GeneratedMethods:
         """Stream a file into the library. HTTP only: the body is the file."""
         params: Dict[str, Any] = {}
         return await self._call("media.upload", params)
+
+    async def node_discover(
+        self,
+        *,
+        timeout_ms: Optional[int] = None,
+    ) -> DiscoverAnswer:
+        """Look for nodes on the local network over mDNS. A network without multicast finds nothing and the [nodes] table in the config is the way there."""
+        params: Dict[str, Any] = {}
+        if timeout_ms is not None:
+            params["timeout_ms"] = timeout_ms
+        return await self._call("node.discover", params)
+
+    async def node_enrol(
+        self,
+        name: str,
+        *,
+        address: Optional[str] = None,
+        ttl_secs: Optional[int] = None,
+    ) -> Dict[str, Any]:
+        """Mint a one time enrolment token for a node. The answer carries the command to run on the other machine. The token is good for one enrolment and expires."""
+        params: Dict[str, Any] = {}
+        params["name"] = name
+        if address is not None:
+            params["address"] = address
+        if ttl_secs is not None:
+            params["ttl_secs"] = ttl_secs
+        return await self._call("node.enrol", params)
+
+    async def node_get(
+        self,
+        id: str,
+    ) -> NodeView:
+        """One node: its clock offset, how long since its last heartbeat, the plugins it has, and the instances it is hosting."""
+        params: Dict[str, Any] = {}
+        params["id"] = id
+        return await self._call("node.get", params)
+
+    async def node_list(
+        self,
+    ) -> NodeListing:
+        """Every node this core knows about: the ones connected now, the ones that have gone quiet, and the ones the config expects that have never dialled in."""
+        params: Dict[str, Any] = {}
+        return await self._call("node.list", params)
+
+    async def node_remove(
+        self,
+        id: str,
+    ) -> Dict[str, Any]:
+        """Forget a node. Its bridge is closed, every token minted for a plugin on it is revoked, and its certificate stops working. Sources placed on it go to the slate until they are moved or the node enrols again."""
+        params: Dict[str, Any] = {}
+        params["id"] = id
+        return await self._call("node.remove", params)
 
     async def output_add(
         self,

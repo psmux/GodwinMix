@@ -21,6 +21,7 @@ use std::sync::Arc;
 pub mod agent;
 mod filters;
 mod media;
+mod nodes;
 mod outputs;
 mod preview;
 mod plugins;
@@ -63,6 +64,7 @@ pub fn registry() -> Registry<Call> {
     scenes::register(&mut reg);
     preview::register(&mut reg);
     plugins::register(&mut reg);
+    nodes::register(&mut reg);
     presets::register(&mut reg);
     crate::observe::register(&mut reg);
     // Other modules add their own here. One line each, and they land on

@@ -3907,6 +3907,16 @@ impl Mixer {
         &self.program
     }
 
+    /// The programme clock, for the net time provider every node slaves to.
+    ///
+    /// The one thing a node needs from the mixer and the only reason this is
+    /// public. A running time only means something if both machines agree what
+    /// it is, so the core publishes this clock with a `GstNetTimeProvider` and
+    /// each node runs a `GstNetClientClock` against it. See `node::clock`.
+    pub fn program_clock(&self) -> Option<gst::Clock> {
+        self.program.clock()
+    }
+
     /// Put the programme's return branch on the raw tee, because something is
     /// now going to read it.
     ///

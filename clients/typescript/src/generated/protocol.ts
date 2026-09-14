@@ -233,8 +233,16 @@ export interface Crop {
   top: number;
 }
 
+export interface DiscoverAnswer {
+  found: Found[];
+}
+
 /** `device.discover`. */
 export interface DiscoverRequest {
+  timeout_ms?: number | null;
+}
+
+export interface DiscoverRequest2 {
   timeout_ms?: number | null;
 }
 
@@ -260,6 +268,12 @@ export interface DuplicateSceneRequest {
 export interface EditBeginRequest {
   live?: boolean;
   scene: string;
+}
+
+export interface EnrolRequest {
+  address?: string | null;
+  name: string;
+  ttl_secs?: number | null;
 }
 
 export interface ExportRequest {
@@ -351,6 +365,14 @@ export type FlatContent = {
 /** `event/flush`: the end of a batch. A client renders here and not before. */
 export interface Flush {
   seq: number;
+}
+
+/** One thing found on the network. */
+export interface Found {
+  address: string;
+  api: number;
+  name: string;
+  role: string;
 }
 
 /** The rectangle an item is fitted into. */
@@ -648,6 +670,48 @@ export interface MultiviewStatus {
 /** `media.convert` and `media.remove` name a file rather than an id. */
 export interface NameRequest {
   name: string;
+}
+
+export interface NodeInstance {
+  detail?: string | null;
+  instance: string;
+  latency_ms: number;
+  state: string;
+}
+
+export interface NodeListing {
+  listening: boolean;
+  nodes: NodeView[];
+}
+
+export interface NodeName {
+  id: string;
+}
+
+export interface NodePlugin {
+  name: string;
+  provides?: string[];
+  version: string;
+}
+
+/**
+ * What `node.get` reports about one node, and what `node.list` reports about
+ * all of them.
+ */
+export interface NodeView {
+  address?: string | null;
+  clock_jitter_ms: number;
+  clock_offset_ms: number;
+  clock_synced: boolean;
+  heartbeat_age_ms: number;
+  identity?: string | null;
+  instances?: NodeInstance[];
+  name: string;
+  platform?: string | null;
+  plugins?: NodePlugin[];
+  provides?: string[];
+  state: string;
+  version?: string | null;
 }
 
 export type OutputState = "connecting" | "live" | "reconnecting" | "failed";
@@ -1287,6 +1351,11 @@ export interface MethodParams {
   "media.list": Record<string, never>;
   "media.remove": NameRequest;
   "media.upload": Record<string, never>;
+  "node.discover": DiscoverRequest2;
+  "node.enrol": EnrolRequest;
+  "node.get": NodeName;
+  "node.list": Record<string, never>;
+  "node.remove": NodeName;
   "output.add": AddOutputRequest;
   "output.get": IdRequest;
   "output.list": Record<string, never>;
@@ -1405,6 +1474,11 @@ export interface MethodResults {
   "media.list": MediaListing;
   "media.remove": Record<string, unknown>;
   "media.upload": Record<string, unknown>;
+  "node.discover": DiscoverAnswer;
+  "node.enrol": Record<string, unknown>;
+  "node.get": NodeView;
+  "node.list": NodeListing;
+  "node.remove": Record<string, unknown>;
   "output.add": OutputStatus;
   "output.get": OutputStatus;
   "output.list": OutputStatus[];
@@ -1560,6 +1634,11 @@ export const METHODS: readonly MethodInfo[] = [
   { name: "media.list", summary: "The clips in the library, with durations and whether each has audio.", scope: "read", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/media" } },
   { name: "media.remove", summary: "Delete a library file and its converted copy. Refused while it is a live source.", scope: "operate", mutating: true, destructive: true, rest: { method: "DELETE", path: "/api/v1/media/{id}" } },
   { name: "media.upload", summary: "Stream a file into the library. HTTP only: the body is the file.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/media/upload" } },
+  { name: "node.discover", summary: "Look for nodes on the local network over mDNS. A network without multicast finds nothing and the [nodes] table in the config is the way there.", scope: "read", mutating: false, destructive: false, rest: { method: "POST", path: "/api/v1/nodes/{id}/discover" } },
+  { name: "node.enrol", summary: "Mint a one time enrolment token for a node. The answer carries the command to run on the other machine. The token is good for one enrolment and expires.", scope: "admin", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/nodes/{id}/enrol" } },
+  { name: "node.get", summary: "One node: its clock offset, how long since its last heartbeat, the plugins it has, and the instances it is hosting.", scope: "read", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/nodes/{id}" } },
+  { name: "node.list", summary: "Every node this core knows about: the ones connected now, the ones that have gone quiet, and the ones the config expects that have never dialled in.", scope: "read", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/nodes" } },
+  { name: "node.remove", summary: "Forget a node. Its bridge is closed, every token minted for a plugin on it is revoked, and its certificate stops working. Sources placed on it go to the slate until they are moved or the node enrols again.", scope: "admin", mutating: true, destructive: true, rest: { method: "DELETE", path: "/api/v1/nodes/{id}" } },
   { name: "output.add", summary: "Send the programme to another destination. The encoder is shared, so adding one costs nothing on air.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/outputs" } },
   { name: "output.get", summary: "One destination.", scope: "read", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/outputs/{id}" } },
   { name: "output.list", summary: "Every destination, with its state, reconnect count and how much is buffered.", scope: "read", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/outputs" } },
@@ -1818,6 +1897,31 @@ export class GeneratedMethods {
   /** Stream a file into the library. HTTP only: the body is the file. */
   mediaUpload(): Promise<Record<string, unknown>> {
     return this._call("media.upload", {}) as Promise<Record<string, unknown>>;
+  }
+
+  /** Look for nodes on the local network over mDNS. A network without multicast finds nothing and the [nodes] table in the config is the way there. */
+  nodeDiscover(params: DiscoverRequest2 = {}): Promise<DiscoverAnswer> {
+    return this._call("node.discover", params as unknown as Record<string, unknown>) as Promise<DiscoverAnswer>;
+  }
+
+  /** Mint a one time enrolment token for a node. The answer carries the command to run on the other machine. The token is good for one enrolment and expires. */
+  nodeEnrol(params: EnrolRequest): Promise<Record<string, unknown>> {
+    return this._call("node.enrol", params as unknown as Record<string, unknown>) as Promise<Record<string, unknown>>;
+  }
+
+  /** One node: its clock offset, how long since its last heartbeat, the plugins it has, and the instances it is hosting. */
+  nodeGet(params: NodeName): Promise<NodeView> {
+    return this._call("node.get", params as unknown as Record<string, unknown>) as Promise<NodeView>;
+  }
+
+  /** Every node this core knows about: the ones connected now, the ones that have gone quiet, and the ones the config expects that have never dialled in. */
+  nodeList(): Promise<NodeListing> {
+    return this._call("node.list", {}) as Promise<NodeListing>;
+  }
+
+  /** Forget a node. Its bridge is closed, every token minted for a plugin on it is revoked, and its certificate stops working. Sources placed on it go to the slate until they are moved or the node enrols again. */
+  nodeRemove(params: NodeName): Promise<Record<string, unknown>> {
+    return this._call("node.remove", params as unknown as Record<string, unknown>) as Promise<Record<string, unknown>>;
   }
 
   /** Send the programme to another destination. The encoder is shared, so adding one costs nothing on air. */

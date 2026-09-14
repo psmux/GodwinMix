@@ -209,7 +209,22 @@ impl Node {
             origin: std::time::Instant::now(),
             overlay: None,
         };
-        let mut source = crate::plugin::host::make_source(request)
+        // Whatever this machine has: a plugin out of its own plugins
+        // directory, or a kind built into the binary. A node is the core's
+        // host code on another machine, so it resolves a type id exactly the
+        // way the core does, and `test/source` works on a node for the same
+        // reason it works on a core.
+        let provide = crate::plugin::source::by_type(&spawn.type_id).with_context(|| {
+            format!(
+                "this node has no `{}`. It has: {}",
+                spawn.type_id,
+                match crate::plugin::source::available().join(", ") {
+                    names if names.is_empty() => "nothing".to_string(),
+                    names => names,
+                }
+            )
+        })?;
+        let mut source = (provide.make)(request)
             .with_context(|| format!("start `{}` on this node", spawn.type_id))?;
         let hello = crate::plugin::Hello {
             instance: spawn.instance.clone(),
@@ -445,12 +460,19 @@ pub async fn run(options: Options) -> Result<()> {
 }
 
 /// One connection, from the TLS handshake to the socket closing.
-async fn connect(node: &Arc<Node>, identity: &Issued) -> Result<String> {
+///
+/// Public so a test can drive a node without the retry loop around it, and so
+/// an embedder can run a node inside its own process.
+pub async fn connect(node: &Arc<Node>, identity: &Issued) -> Result<String> {
     let authority = node.options.authority();
     let host = node.options.host();
     let tls = ca::client_config(&identity.ca_pem, Some(identity))?;
     let stream = dial(&authority, &host, tls).await?;
     let (peer, pump) = Peer::start(stream, node.handler());
+    // The pump is what reads and writes the socket, so it has to be running
+    // before the first call. Awaiting it here instead would be a deadlock: the
+    // hello would wait for an answer nobody is reading the socket for.
+    let driving = tokio::spawn(pump);
     let hello = Hello {
         name: node.options.name.clone(),
         version: env!("CARGO_PKG_VERSION").into(),
@@ -482,7 +504,7 @@ async fn connect(node: &Arc<Node>, identity: &Issued) -> Result<String> {
     }
     *node.clock.lock() = Some(follower);
     tokio::spawn(heartbeats(node.clone(), peer.clone()));
-    let why = pump.await;
+    let why = driving.await.unwrap_or_else(|e| format!("the bridge task ended: {e}"));
     *node.clock.lock() = None;
     Ok(why)
 }
