@@ -655,7 +655,7 @@ The paths below still answer, for one release, with a `Deprecation: true` header
 
 ## The ext table
 
-A client declares which expensive streams it wants. The core does no work for a stream nobody asked for. Keys marked not implemented are accepted and reported back in `ignored_ext`, so a client written against the whole table still connects.
+A client declares which expensive streams it wants. The core does no work for a stream nobody asked for. An `ext` key is the subscription for its own events: ask for `meters` and you get `event/meters`, whether or not `meters` is among your event patterns. Keys marked not implemented are accepted and reported back in `ignored_ext`, so a client written against the whole table still connects.
 
 | Key | Value | Turns on | In this build |
 |---|---|---|---|

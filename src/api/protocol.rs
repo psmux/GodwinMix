@@ -578,8 +578,10 @@ fn markdown_ext(doc: &Value, out: &mut String) {
     out.push_str("## The ext table\n\n");
     out.push_str(
         "A client declares which expensive streams it wants. The core does no work for a \
-         stream nobody asked for. Keys marked not implemented are accepted and reported back \
-         in `ignored_ext`, so a client written against the whole table still connects.\n\n",
+         stream nobody asked for. An `ext` key is the subscription for its own events: ask \
+         for `meters` and you get `event/meters`, whether or not `meters` is among your \
+         event patterns. Keys marked not implemented are accepted and reported back in \
+         `ignored_ext`, so a client written against the whole table still connects.\n\n",
     );
     out.push_str("| Key | Value | Turns on | In this build |\n|---|---|---|---|\n");
     for e in doc["ext"].as_array().into_iter().flatten() {

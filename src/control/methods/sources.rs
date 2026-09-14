@@ -60,12 +60,11 @@ pub fn register(reg: &mut Registry<Call>) {
             "add_source",
             Tier::Minimal,
             "Add a source while the mixer is running. The protocol is worked out from the \
-             URL: rtmp://, rtmps://, an https:// .m3u8 or .mpd manifest, rtsp://, srt://, \
-             udp://, a file path or a media file URL. To show a web page pass its https:// \
-             URL with kind \"web\" and the mixer renders it in a real browser, with its \
-             audio. Omit the id to have one derived from the name or the host. The source \
-             starts connecting at once and is not on air until you `take` it; the answer \
-             carries the id it got and its state.",
+             URL: rtmp, rtmps, an https .m3u8 or .mpd manifest, rtsp, srt, udp, a file path \
+             or a media file URL. For a web page, pass its https URL with kind \"web\" and \
+             the mixer renders it in a real browser, with its audio. Omit the id to have one \
+             derived from the name or the host. The source is not on air until you `take` \
+             it; the answer carries the id it got and its state.",
         ),
     );
 
