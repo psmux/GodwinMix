@@ -18,7 +18,7 @@ use serde_json::{json, Value};
 use std::future::Future;
 use std::sync::Arc;
 
-mod agent;
+pub mod agent;
 mod filters;
 mod media;
 mod outputs;

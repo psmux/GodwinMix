@@ -56,6 +56,9 @@ struct Connection {
     /// What this client asked the mosaic for, or None when it asked for no
     /// mosaic at all. `serve_rpc` turns a change here into a subscription.
     wants_mosaic: Option<MultiviewRequest>,
+    /// `ext.telemetry` and `ext.agent`. Holding this is what keeps the
+    /// telemetry probes measuring. See `control/push.rs`.
+    push: crate::control::push::Push,
 }
 
 pub async fn serve_rpc(socket: WebSocket, ctx: Ctx, token: Token) {
@@ -74,6 +77,7 @@ pub async fn serve_rpc(socket: WebSocket, ctx: Ctx, token: Token) {
         clock: RunningTime::default(),
         frame_no: 0,
         wants_mosaic: None,
+        push: crate::control::push::Push::none(),
     };
     // Holding this is what keeps the mosaic up, and dropping it is what takes
     // it down again after the linger. A client that never asks for
@@ -99,6 +103,14 @@ pub async fn serve_rpc(socket: WebSocket, ctx: Ctx, token: Token) {
                     }
                 }
                 Some(Ok(_)) => {}
+            },
+            // `ext.telemetry` and `ext.agent`, on their own clock. Pending
+            // for ever while neither was asked for, so a client that wanted
+            // neither never wakes this task. See `control/push.rs`.
+            _ = conn.push.due() => {
+                if conn.send_push().await.is_err() {
+                    break;
+                }
             },
             event = events.recv() => match event {
                 Ok(envelope) => {
@@ -239,6 +251,7 @@ impl Connection {
         };
         let patterns =
             if request.events.is_empty() { vec!["*".to_string()] } else { request.events.clone() };
+        self.push.configure(&request.ext);
         self.sub = Some(Subscription { patterns: patterns.clone(), ext: request.ext });
         self.seq = self.ctx.app.mixer.event_seq();
         // A client re-subscribing is rebuilding from nothing, so the grid it
@@ -358,6 +371,46 @@ impl Connection {
             map.insert("seq".into(), json!(self.seq));
         }
         self.send(rpc::notification("event/tally", value)).await
+    }
+
+    /// `event/telemetry` and `event/agent.state`, when this client asked for
+    /// them and there is something to say.
+    ///
+    /// The liveness map comes from what this connection already remembers, so
+    /// a tick at ten per second never asks the mixer for a status.
+    async fn send_push(&mut self) -> Result<(), ()> {
+        let live: std::collections::BTreeMap<String, u8> = self
+            .sources
+            .iter()
+            .map(|id| (id.clone(), u8::from(Some(id) == self.program.as_ref())))
+            .collect();
+        let program = self.program.clone();
+        let app = self.ctx.app.clone();
+        let snapshots = self.ctx.snapshots.clone();
+        let token = self.token.clone();
+        // Only the agent document needs one, so a telemetry tick at ten per
+        // second never touches the mixer's command queue.
+        let status = match self.push.needs_status() {
+            true => self.ctx.app.mixer.status().await.ok(),
+            false => None,
+        };
+        let messages = self.push.messages(live, program.as_deref(), move || {
+            let held = app.safety.check(&token).err().map(|r| r.message);
+            match status {
+                Some(status) => serde_json::to_value(
+                    crate::control::methods::agent::document(&status, &snapshots, held),
+                )
+                .unwrap_or(Value::Null),
+                None => Value::Null,
+            }
+        });
+        for (name, mut payload) in messages {
+            if let Some(map) = payload.as_object_mut() {
+                map.insert("seq".into(), json!(self.seq));
+            }
+            self.send(rpc::notification(&format!("event/{name}"), payload)).await?;
+        }
+        Ok(())
     }
 
     /// End a batch: the meters gathered in it, then the flush marker a client
