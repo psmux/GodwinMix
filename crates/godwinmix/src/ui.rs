@@ -118,6 +118,11 @@ const LEGACY: &str = include_str!("../../../ui/legacy/index.html");
 const DEV_ASSETS: &[(&str, &str)] = &[
     ("test/index.html", include_str!("../../../ui/test/index.html")),
     ("test/run.js", include_str!("../../../ui/test/run.js")),
+    // The designer kits' behaviour, as the reference implementation answered
+    // it. The TypeScript and Python suites read the same file from the
+    // repository; the browser reads it from here, because the page has no file
+    // system. Written by `node dev/kit-fixtures.mjs`.
+    ("test/fixtures.json", include_str!("../../../ui/kits/fixtures.json")),
 ];
 
 /// True when this process was started with `GMX_UI_DEV=1`.
@@ -699,6 +704,7 @@ mod tests {
         assert!(!ASSETS.iter().any(|(p, _)| p.starts_with("test/")));
         assert!(DEV_ASSETS.iter().any(|(p, _)| *p == "test/index.html"));
         assert!(DEV_ASSETS.iter().any(|(p, _)| *p == "test/run.js"));
+        assert!(DEV_ASSETS.iter().any(|(p, _)| *p == "test/fixtures.json"));
     }
 
     #[test]
