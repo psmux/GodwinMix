@@ -1,0 +1,51 @@
+# whip/output and whip/whep. One plugin, because WHIP and WHEP are the same
+# protocol pointed in opposite directions and share every setting.
+#
+# Note on the core as it stands: the output registry in
+# crates/godwinmix-core/src/plugin/output.rs is a static list of built in
+# outputs and does not consult the plugin loader, so whip/output is not yet
+# reachable through output.add. The provide is written to the contract in
+# docs/reference/plugin-lifecycle.md and works the moment that registry grows a
+# loader lookup, the way plugin/source.rs already has one. See README.md.
+
+[plugin]
+name = "whip"
+version = "0.1.0"
+api = 1
+description = "Send the programme to a WHIP endpoint over WebRTC, and receive somebody else's stream over WHEP. One HTTP POST carrying an SDP offer, a bearer token if the service wants one, and reconnection with a backoff."
+license = "Apache-2.0"
+authors = ["GodwinMix"]
+repository = "https://github.com/psmux/godwinmix"
+platforms = ["linux-x86_64", "linux-aarch64", "macos-aarch64", "macos-x86_64", "windows-x86_64"]
+placements = ["sidecar", "node"]
+process = "per-instance"
+
+[run]
+bin = { "linux-x86_64" = "bin/gmx-whip", "linux-aarch64" = "bin/gmx-whip", "macos-aarch64" = "bin/gmx-whip", "macos-x86_64" = "bin/gmx-whip", "windows-x86_64" = "bin/gmx-whip.exe" }
+
+[[provides]]
+kind = "output"
+id = "output"
+# The core hands an output the encoded programme on a FIFO. The video goes to
+# whipclientsink as it is; only the audio is decoded, because WebRTC has no AAC.
+media = { video = "container", audio = "container", alpha = false, thumb = false }
+capabilities = ["restart-in-place", "health"]
+settings = "schemas/output.json"
+skill = "skills/output/SKILL.md"
+
+[[provides]]
+kind = "source"
+id = "whep"
+media = { video = "container", audio = "container", alpha = false, thumb = true }
+transports = ["container"]
+capabilities = ["restart-in-place", "health", "latency-report"]
+latency_ms = 100
+settings = "schemas/whep.json"
+skill = "skills/whep/SKILL.md"
+
+[provides.designer]
+icon = "designer/icon.svg"
+
+[build]
+command = "cargo build --release -p gmx-whip"
+output = "bin/gmx-whip"

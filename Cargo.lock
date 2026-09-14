@@ -820,6 +820,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "gmx-whip"
+version = "0.2.0"
+dependencies = [
+ "glib",
+ "gmx-netkit",
+ "godwinmix-sdk",
+ "gstreamer",
+ "serde_json",
+]
+
+[[package]]
 name = "gobject-sys"
 version = "0.21.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
