@@ -76,6 +76,17 @@ impl CanvasCaps {
             .build()
     }
 
+    /// Audio caps at an arbitrary format, rate and channel count, for a
+    /// monitoring branch that a client asked to have downsized.
+    pub fn audio_at(format: &str, rate: i32, channels: i32) -> gst::Caps {
+        gst::Caps::builder("audio/x-raw")
+            .field("format", format)
+            .field("rate", rate)
+            .field("channels", channels)
+            .field("layout", "interleaved")
+            .build()
+    }
+
     /// Duration of a single video frame. Used for scheduling takes on frame
     /// boundaries and for sizing jitter buffers.
     #[allow(dead_code)]
