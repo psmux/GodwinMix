@@ -42,6 +42,9 @@ Start here if you have never run it.
 * [Write a source plugin in Rust](how-to/write-a-source-plugin.md)
 * [Install a plugin](how-to/install-a-plugin.md)
 * [Test a plugin](how-to/test-a-plugin.md)
+* [Use a webcam](how-to/use-a-webcam.md)
+* [Capture the screen](how-to/capture-the-screen.md)
+* [Record to a file](how-to/record-to-a-file.md)
 
 ## Reference
 
@@ -57,6 +60,7 @@ Start here if you have never run it.
 * [Web page sources](reference/web-page-sources.md)
 * [Streams: MJPEG, PCM, Opus, WHEP and the local socket](reference/streams.md)
 * [The generated protocol reference](reference/protocol.md)
+* [The first party plugins](reference/plugins.md)
 * [The plugin manifest](reference/plugin-manifest.md)
 * [The plugin protocol](reference/plugin-protocol.md)
 * [The plugin lifecycle](reference/plugin-lifecycle.md)
