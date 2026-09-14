@@ -911,10 +911,15 @@ mod tests {
         assert_eq!(mv.live_pipelines(), 0, "a mosaic before anybody asked");
         assert!(tracker.latest().is_none());
 
+        // Ten rather than four. What is being checked is that asking builds
+        // the mosaic and that it goes away again, not how long a machine takes
+        // to build one: this runs beside every other test binary in the
+        // workspace, and four seconds for a pipeline to reach PLAYING and
+        // encode a JPEG is a measurement of the build machine's load.
         let latest = tracker
-            .latest_wanted(Duration::from_secs(4))
+            .latest_wanted(Duration::from_secs(10))
             .await
-            .expect("no frame within four seconds of asking");
+            .expect("no frame within ten seconds of asking");
         assert!(!latest.jpeg.is_empty());
         assert!(tracker.following());
         assert_eq!(mv.live_pipelines(), 1);
