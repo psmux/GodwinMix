@@ -13,7 +13,7 @@
 //! that line.
 
 use crate::observe::trace::{current_trace_id, TraceId};
-use crate::state::Event;
+use crate::state::{Envelope, Event};
 use parking_lot::Mutex;
 use serde_json::{json, Value};
 use std::io::Write as _;
@@ -202,12 +202,13 @@ pub fn open_in(dir: &Path) -> std::io::Result<()> {
 /// hundred lines a minute of "the level was -21 dBFS" buries the take that
 /// went wrong and is not a thing a replay needs.
 pub fn spawn_recorder(
-    mut rx: tokio::sync::broadcast::Receiver<Event>,
+    mut rx: tokio::sync::broadcast::Receiver<Envelope>,
 ) -> tokio::task::JoinHandle<()> {
     tokio::spawn(async move {
         loop {
             match rx.recv().await {
-                Ok(event) => {
+                Ok(envelope) => {
+                    let event = envelope.event;
                     crate::observe::metrics::observe_event(&event);
                     if worth_recording(&event) {
                         session().record_event(&event);
@@ -235,7 +236,7 @@ fn worth_recording(event: &Event) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::state::{SourceState, Severity};
+    use crate::state::{Envelope, Severity, SourceState};
 
     fn temp_log(tag: &str) -> (SessionLog, PathBuf) {
         let dir = crate::observe::tempdir(tag);
@@ -343,14 +344,17 @@ mod tests {
         let dir = crate::observe::tempdir("session-broadcast");
         session().open(path_in(&dir)).unwrap();
         let task = spawn_recorder(rx);
+        let mut seq = 0u64;
+        let mut tx = |event: Event| {
+            seq += 1;
+            tx.send(Envelope { seq, event })
+        };
 
-        tx.send(Event::Took { source: Some("cam1".into()), at_running_time_ms: 1234 }).unwrap();
-        tx.send(Event::SourceStateChanged { source: "cam1".into(), state: SourceState::Live })
-            .unwrap();
-        tx.send(Event::Alert { severity: Severity::Warning, message: "cam1 stalled".into() })
-            .unwrap();
+        tx(Event::Took { source: Some("cam1".into()), at_running_time_ms: 1234 }).unwrap();
+        tx(Event::SourceStateChanged { source: "cam1".into(), state: SourceState::Live }).unwrap();
+        tx(Event::Alert { severity: Severity::Warning, message: "cam1 stalled".into() }).unwrap();
         // Meters are counted, not written.
-        tx.send(Event::AudioLevel { peak_db: vec![-21.0, -20.5] }).unwrap();
+        tx(Event::AudioLevel { peak_db: vec![-21.0, -20.5] }).unwrap();
 
         for _ in 0..50 {
             tokio::time::sleep(std::time::Duration::from_millis(20)).await;

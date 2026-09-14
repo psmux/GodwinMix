@@ -27,7 +27,7 @@ use tracing::{info, warn};
 
 use crate::gstutil::make;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum ConversionPhase {
     Running,
@@ -36,7 +36,7 @@ pub enum ConversionPhase {
 }
 
 /// One conversion, in flight or remembered after it finished.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, schemars::JsonSchema)]
 pub struct ConversionState {
     pub state: ConversionPhase,
     /// 0.0 to 1.0, position over duration, both read off the pipeline.

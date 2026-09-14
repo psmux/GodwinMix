@@ -1,0 +1,2362 @@
+{
+  "components": {
+    "responses": {
+      "Error": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "properties": {
+                "error": {
+                  "properties": {
+                    "code": {
+                      "description": "JSON-RPC code.",
+                      "examples": [
+                        "-32700: the body was not JSON (HTTP 400)",
+                        "-32600: the envelope was not a JSON-RPC request (HTTP 400)",
+                        "-32601: no such method (HTTP 404)",
+                        "-32602: the params were wrong for this method (HTTP 400)",
+                        "-32603: the core failed while handling the call (HTTP 500)",
+                        "-32001: not in a state that allows this (HTTP 409)",
+                        "-32002: refused by the token's scopes (HTTP 403)",
+                        "-32003: refused by a safety rule (HTTP 429)",
+                        "-32004: no such id (HTTP 404)",
+                        "-32005: the plugin did not declare that placement (HTTP 400)",
+                        "-32010: the plugin died during the call (HTTP 500)",
+                        "-32011: a protocol line was over 4 MiB (HTTP 400)",
+                        "-32012: the change needs the instance restarted (HTTP 400)",
+                        "-32020: a confirm token is needed first (HTTP 428)"
+                      ],
+                      "type": "integer"
+                    },
+                    "data": {
+                      "description": "Always carries `retryable`; carries `valid` on an unknown id and `confirm_token` on -32020.",
+                      "type": "object"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "code",
+                    "message",
+                    "data"
+                  ],
+                  "type": "object"
+                },
+                "trace_id": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "error"
+              ],
+              "type": "object"
+            }
+          }
+        },
+        "description": "One error shape everywhere. The message names the current state and the next step, and an unknown id lists the ids that would have worked."
+      }
+    },
+    "schemas": {
+      "AdBreakRequest": {
+        "description": "`adbreak.start`.",
+        "properties": {
+          "at_running_time_ms": {
+            "description": "Programme running time to open the break on. Omit to roll now.",
+            "format": "uint64",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "return_to": {
+            "description": "Source to rejoin afterwards. Omit to return to whatever is on air.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "uri": {
+            "description": "File path or URI of the clip to roll.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "uri"
+        ],
+        "type": "object"
+      },
+      "AdStatus": {
+        "description": "An ad break, either armed for a future cue or currently on air.",
+        "properties": {
+          "on_air": {
+            "description": "False while it is prerolled and waiting for its cue.",
+            "type": "boolean"
+          },
+          "return_to": {
+            "description": "Source to return to when the ad ends. None returns to the slate.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "uri": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "uri",
+          "on_air"
+        ],
+        "type": "object"
+      },
+      "AddOutputRequest": {
+        "additionalProperties": true,
+        "description": "`output.add`. The id and the URL are the whole of it for an RTMP\ndestination; anything else a kind understands rides in `params`.",
+        "properties": {
+          "id": {
+            "description": "Stable id for this destination.",
+            "type": "string"
+          },
+          "policy": {
+            "description": "Reconnect policy: \"own\" retries quickly, for servers you run; \"cdn\"\nbacks off harder, for platforms that penalise hammering.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "uri": {
+            "description": "rtmp:// or rtmps:// URL including the stream key.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "uri"
+        ],
+        "type": "object"
+      },
+      "AddSourceRequest": {
+        "additionalProperties": true,
+        "description": "`source.add`.",
+        "properties": {
+          "id": {
+            "description": "Stable id used by `program.take` and `source.remove`. Lowercase\nletters, digits and dashes. Derived from the name or the host when\nomitted, with a numeric suffix if that is taken.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "kind": {
+            "description": "\"web\" renders the URL as a page in the browser sidecar, the same as\nwriting `web+` in front of it. \"auto\" or omitted works the protocol out\nfrom the URL.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "name": {
+            "description": "Name shown to an operator. Defaults to the host of the URL.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "superimpose": {
+            "description": "Websites only: \"auto\" lets the mixer decode the page's own video\noutside the browser and draw the page over the top, which saves about a\nCPU core. \"off\" is the default.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "uri": {
+            "description": "Stream URL, file path, or with kind \"web\" the address of a page.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "uri"
+        ],
+        "type": "object"
+      },
+      "AudioSetParams": {
+        "description": "`source.audio.set` takes an id as well as the levels: the id comes off the\npath on REST and out of the params on `/rpc`, and both land in one object.",
+        "properties": {
+          "gain": {
+            "description": "The operator's fader for the whole source, 0.0 to 10.0. Omit to leave\nit where it is.",
+            "format": "double",
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "id": {
+            "description": "Source id.",
+            "type": "string"
+          },
+          "media": {
+            "description": "Gain per video underneath, by position. A null entry, or a list shorter\nthan the number of videos, leaves those alone: `[null, 0.0]` silences\nthe second video and touches nothing else.",
+            "items": {
+              "format": "double",
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "type": "array"
+          },
+          "muted": {
+            "description": "Mute the whole source. Held apart from the fader, so unmuting comes\nback to the level that was set.",
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "page": {
+            "description": "Gain on a superimposed page's own sound.",
+            "format": "double",
+            "type": [
+              "number",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "type": "object"
+      },
+      "BackendInfo": {
+        "properties": {
+          "audio_decoder": {
+            "type": "string"
+          },
+          "audio_encoder": {
+            "type": "string"
+          },
+          "hardware_accelerated": {
+            "type": "boolean"
+          },
+          "video_decoder": {
+            "type": "string"
+          },
+          "video_encoder": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "video_decoder",
+          "video_encoder",
+          "audio_decoder",
+          "audio_encoder",
+          "hardware_accelerated"
+        ],
+        "type": "object"
+      },
+      "CanvasInfo": {
+        "description": "The canvas every source is scaled onto and every output leaves by.",
+        "properties": {
+          "fps": {
+            "format": "int32",
+            "type": "integer"
+          },
+          "height": {
+            "format": "int32",
+            "type": "integer"
+          },
+          "width": {
+            "format": "int32",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "width",
+          "height",
+          "fps"
+        ],
+        "type": "object"
+      },
+      "CellAssignment": {
+        "properties": {
+          "h": {
+            "format": "int32",
+            "type": "integer"
+          },
+          "index": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "source": {
+            "description": "None means this cell is the program return.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "w": {
+            "format": "int32",
+            "type": "integer"
+          },
+          "x": {
+            "format": "int32",
+            "type": "integer"
+          },
+          "y": {
+            "format": "int32",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "index",
+          "x",
+          "y",
+          "w",
+          "h"
+        ],
+        "type": "object"
+      },
+      "ConversionPhase": {
+        "enum": [
+          "running",
+          "done",
+          "failed"
+        ],
+        "type": "string"
+      },
+      "ConversionState": {
+        "description": "One conversion, in flight or remembered after it finished.",
+        "properties": {
+          "error": {
+            "description": "Set only on `failed`, shown to the operator verbatim: \"no AAC encoder\navailable\" is worth more than \"conversion failed\".",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "output": {
+            "description": "The `.web.mp4` name, on `done`.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "progress": {
+            "description": "0.0 to 1.0, position over duration, both read off the pipeline.",
+            "format": "double",
+            "type": "number"
+          },
+          "state": {
+            "$ref": "#/components/schemas/ConversionPhase"
+          }
+        },
+        "required": [
+          "state",
+          "progress"
+        ],
+        "type": "object"
+      },
+      "CoreInfo": {
+        "description": "`core.info`: what this core is, what it can do, and where its edges are.",
+        "properties": {
+          "api_compatible": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "api_level": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "canvas": {
+            "$ref": "#/components/schemas/CanvasInfo"
+          },
+          "core": {
+            "description": "Always \"godwinmix\".",
+            "type": "string"
+          },
+          "features": {
+            "description": "Feature strings a client can branch on: multiview, snapshot, uploads,\nmcp, browser, exec-sources, rehearsal, tokens.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "limits": {
+            "$ref": "#/components/schemas/Limits"
+          },
+          "rehearsal": {
+            "description": "True when the core was started with `--rehearsal`, which refuses\n`output.add` and accepts rehearsal tokens.",
+            "type": "boolean"
+          },
+          "token": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TokenInfo"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Present when the request carried a token the core recognises."
+          },
+          "version": {
+            "description": "The build's own version, as in Cargo.toml.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "core",
+          "version",
+          "api_level",
+          "api_compatible",
+          "features",
+          "limits",
+          "canvas",
+          "rehearsal"
+        ],
+        "type": "object"
+      },
+      "GoLiveRequest": {
+        "description": "`program.golive`: add the page, add the destination, take the page.",
+        "properties": {
+          "id": {
+            "description": "Source id. Derived from the host when omitted.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "rtmp": {
+            "description": "Where to send the programme. Added as an output unless one already\nsends there. Omit to leave the outputs alone.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "superimpose": {
+            "description": "\"auto\" (the default) or \"off\". See `source.add`.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "url": {
+            "description": "The page to put on air. Plain http(s); `web+` is added here.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "url"
+        ],
+        "type": "object"
+      },
+      "GoLiveResult": {
+        "description": "What `program.golive` answers with.",
+        "properties": {
+          "output": {
+            "description": "The output that was created or reused, if one was asked for.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "source": {
+            "description": "The source that was created or reused.",
+            "type": "string"
+          },
+          "state": {
+            "$ref": "#/components/schemas/SourceState",
+            "description": "Where the source is now. It goes to programme as soon as it is live."
+          }
+        },
+        "required": [
+          "source",
+          "state"
+        ],
+        "type": "object"
+      },
+      "HistoryRequest": {
+        "description": "`program.history`.",
+        "properties": {
+          "limit": {
+            "default": null,
+            "description": "How many takes to return, newest first. At most 100.",
+            "format": "uint32",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          }
+        },
+        "type": "object"
+      },
+      "IdRequest": {
+        "description": "An id on its own: `source.get`, `source.remove`, `output.remove`,\n`output.reconnect`, `media.remove`.",
+        "properties": {
+          "id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "type": "object"
+      },
+      "Limits": {
+        "description": "The ceilings a client should plan against rather than discover by being\nrefused.",
+        "properties": {
+          "event_queue": {
+            "description": "How many events the bus holds before a slow client is told to resync.",
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "max_call_secs": {
+            "description": "Longest any method blocks before it answers. The tightest client\ndefault in the wild, so nothing here can time out a client that used\nits own.",
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "max_gain": {
+            "description": "Loudest a fader can be asked for. Out of range is clamped to this\nrather than refused.",
+            "format": "double",
+            "type": "number"
+          },
+          "max_idempotency_key_bytes": {
+            "description": "Longest `idempotency_key` accepted, in bytes.",
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "max_upload_bytes": {
+            "description": "Largest upload the media endpoint accepts, in bytes.",
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "max_upload_bytes",
+          "max_gain",
+          "max_call_secs",
+          "max_idempotency_key_bytes",
+          "event_queue"
+        ],
+        "type": "object"
+      },
+      "MediaItem": {
+        "properties": {
+          "audio_codec": {
+            "default": null,
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "conversion": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ConversionState"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Where a conversion of this file stands, None when none was asked for in\nthis process's lifetime."
+          },
+          "converted_path": {
+            "default": null,
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "duration_ms": {
+            "description": "None when the file could not be inspected; it is still listed, because\nan operator would rather see a clip they cannot read the length of than\nwonder why it is missing.",
+            "format": "uint64",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "faststart": {
+            "default": null,
+            "description": "The converted copy's absolute path when one exists on disk. This is\nwhat \"add as source\" should prefer over `path`.\nWhether the moov atom comes first (a player can start before the whole\nfile arrives). None for a non-ISO container, never a reason to convert\non its own. See `convert::moov_first`.",
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "has_audio": {
+            "type": "boolean"
+          },
+          "has_video": {
+            "type": "boolean"
+          },
+          "height": {
+            "default": null,
+            "format": "uint32",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "name": {
+            "description": "Name shown in the UI, relative to the library root.",
+            "type": "string"
+          },
+          "path": {
+            "description": "Absolute path, which is what gets handed back to the ad break API.",
+            "type": "string"
+          },
+          "reasons": {
+            "default": [],
+            "description": "Why it is not, in words an operator can act on. Empty when it is.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "size_bytes": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "video_codec": {
+            "default": null,
+            "description": "Short codec name of the first video stream (\"h264\", \"vp9\"), None when\nthere is no video or it could not be inspected.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "web_safe": {
+            "default": false,
+            "description": "True when the file needs no conversion to play in a browser: H.264 plus\nAAC (or no audio) in an MP4. See `convert::web_safety`.",
+            "type": "boolean"
+          },
+          "width": {
+            "default": null,
+            "format": "uint32",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "name",
+          "path",
+          "size_bytes",
+          "has_video",
+          "has_audio"
+        ],
+        "type": "object"
+      },
+      "MediaListing": {
+        "properties": {
+          "dir": {
+            "type": "string"
+          },
+          "error": {
+            "description": "Set when the directory itself could not be read, so the UI can say why\nthe list is empty instead of just showing nothing.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/MediaItem"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "dir",
+          "items"
+        ],
+        "type": "object"
+      },
+      "MixerStatus": {
+        "properties": {
+          "ad": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AdStatus"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Present while an ad break is armed or running."
+          },
+          "backend": {
+            "$ref": "#/components/schemas/BackendInfo"
+          },
+          "multiview": {
+            "$ref": "#/components/schemas/MultiviewStatus"
+          },
+          "outputs": {
+            "items": {
+              "$ref": "#/components/schemas/OutputStatus"
+            },
+            "type": "array"
+          },
+          "program": {
+            "description": "Source currently on program, or None while the slate is showing.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "running_time_ms": {
+            "description": "Program pipeline running time. Cues are scheduled against this, not\nagainst wall clock, so a client can place a break on a known frame.",
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "sources": {
+            "items": {
+              "$ref": "#/components/schemas/SourceStatus"
+            },
+            "type": "array"
+          },
+          "uptime_secs": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "sources",
+          "outputs",
+          "multiview",
+          "uptime_secs",
+          "running_time_ms",
+          "backend"
+        ],
+        "type": "object"
+      },
+      "MultiviewStatus": {
+        "properties": {
+          "cells": {
+            "description": "Cell index to source id, in reading order. Cell 0 is the program return\nwhen it is enabled.",
+            "items": {
+              "$ref": "#/components/schemas/CellAssignment"
+            },
+            "type": "array"
+          },
+          "cols": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "fps": {
+            "description": "Frame rate of the mosaic, so the UI can size its own expectations.",
+            "format": "int32",
+            "type": "integer"
+          },
+          "height": {
+            "format": "int32",
+            "type": "integer"
+          },
+          "rows": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "width": {
+            "format": "int32",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "enabled",
+          "width",
+          "height",
+          "cols",
+          "rows",
+          "cells",
+          "fps"
+        ],
+        "type": "object"
+      },
+      "NameRequest": {
+        "description": "`media.convert` and `media.remove` name a file rather than an id.",
+        "properties": {
+          "name": {
+            "description": "File name as it appears in the media listing. The REST layer puts it\nin the path, where the transform rule calls it `id`, so both spellings\nare read.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "type": "object"
+      },
+      "OutputState": {
+        "enum": [
+          "connecting",
+          "live",
+          "reconnecting",
+          "failed"
+        ],
+        "type": "string"
+      },
+      "OutputStatus": {
+        "additionalProperties": true,
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "queue_secs": {
+            "description": "Seconds of encoded data waiting in the pre-muxer queue. A number that\nclimbs and stays high means the destination cannot keep up.",
+            "format": "double",
+            "type": "number"
+          },
+          "reconnects": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "state": {
+            "$ref": "#/components/schemas/OutputState"
+          },
+          "uri_host": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "uri_host",
+          "state",
+          "reconnects",
+          "queue_secs"
+        ],
+        "type": "object"
+      },
+      "ProgramState": {
+        "description": "What `program.get` answers with, and what `program.take` returns so that no\nfollow up read is needed.",
+        "properties": {
+          "ad": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AdStatus"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Present while an ad break is armed or on air."
+          },
+          "previous": {
+            "description": "The previous source, which is what `program.revert` would take back to.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "program": {
+            "description": "Source on air, or null for the slate.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "running_time_ms": {
+            "description": "Programme pipeline running time, in milliseconds.",
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "running_time_ms"
+        ],
+        "type": "object"
+      },
+      "SeekParams": {
+        "description": "`source.seek`.",
+        "properties": {
+          "id": {
+            "description": "Source id.",
+            "type": "string"
+          },
+          "position_ms": {
+            "description": "Milliseconds from the start of the clip. Off either end is clamped\nrather than refused, so a scrubber flicked past the end lands there.",
+            "format": "double",
+            "type": "number"
+          }
+        },
+        "required": [
+          "id",
+          "position_ms"
+        ],
+        "type": "object"
+      },
+      "SnapshotRequest": {
+        "description": "`snapshot.get` on `/rpc` and through MCP. The REST route serves the same\nbytes raw, because an `<img>` tag cannot read base64 out of JSON.",
+        "properties": {
+          "id": {
+            "description": "\"sheet\", \"program\", or a source id. A `.jpg` on the end is accepted.",
+            "type": "string"
+          },
+          "width": {
+            "description": "Scale down to this many pixels across, keeping the aspect. Never\nenlarges. Omit for the cell's own size.",
+            "format": "uint32",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "type": "object"
+      },
+      "SourceAudio": {
+        "description": "The gains a superimposed source is currently running with.\n\n1.0 is unity, 0.0 is silent, and the ceiling is 10.0. Reported rather than\nremembered: these are read back off the volume elements, so what the UI\nshows is what the pipeline is doing, including any clamping.",
+        "properties": {
+          "media": {
+            "description": "One per video the mixer decodes underneath, in the order the page\nhanded them over.",
+            "items": {
+              "format": "double",
+              "type": "number"
+            },
+            "type": "array"
+          },
+          "page": {
+            "description": "The page's own sound, which is the commentary and whatever the page\nplays itself.",
+            "format": "double",
+            "type": "number"
+          }
+        },
+        "required": [
+          "page",
+          "media"
+        ],
+        "type": "object"
+      },
+      "SourceAudioState": {
+        "description": "What a source's audio controls read back as, which is what the audio\nendpoint answers with.\n\nWider than `SourceAudio` because the fader and the mute apply to every\nsource, while the page and media balance belongs only to a superimposed one.\nEvery number here is read off the elements after the request landed, so a\nrequest whose gain was clamped answers with the gain that took effect.",
+        "properties": {
+          "gain": {
+            "format": "double",
+            "type": "number"
+          },
+          "media": {
+            "items": {
+              "format": "double",
+              "type": "number"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "muted": {
+            "type": "boolean"
+          },
+          "page": {
+            "description": "Absent on anything but a superimposed source, which is the only kind\nwith separate sounds to balance.",
+            "format": "double",
+            "type": [
+              "number",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "gain",
+          "muted"
+        ],
+        "type": "object"
+      },
+      "SourcePositionState": {
+        "description": "Where a seekable source has got to, which is what the seek endpoint answers\nwith.\n\nBoth numbers are read back off the pipeline after the seek has landed, not\ntaken from the request. A seek snaps to a key unit, so the frame an operator\nasked for and the frame they got are rarely the same millisecond, and a\nscrubber drawn from the request would sit a little away from the picture.",
+        "properties": {
+          "duration_ms": {
+            "description": "Absent while the demuxer has not worked the duration out yet.",
+            "format": "uint64",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "position_ms": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "position_ms"
+        ],
+        "type": "object"
+      },
+      "SourceState": {
+        "oneOf": [
+          {
+            "const": "connecting",
+            "description": "Pipeline is up but no media has arrived yet.",
+            "type": "string"
+          },
+          {
+            "const": "live",
+            "description": "Buffers arriving within the stall timeout.",
+            "type": "string"
+          },
+          {
+            "const": "stalled",
+            "description": "Was live, then went quiet. Its program pad is held at alpha 0 so the\nslate shows through rather than a frozen frame.",
+            "type": "string"
+          },
+          {
+            "const": "failed",
+            "description": "The input pipeline errored. A retry is scheduled.",
+            "type": "string"
+          }
+        ]
+      },
+      "SourceStatus": {
+        "additionalProperties": true,
+        "properties": {
+          "audio": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SourceAudio"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Where this source's sounds sit against each other. `None` for anything\nbut a superimposed source, because everything else arrives already\nmixed and there is nothing to balance. Absent rather than null in the\nJSON, so a snapshot written by an older build still parses."
+          },
+          "audio_idle_ms": {
+            "description": "Same for audio. `None` here while `has_audio` is true means the source\nadvertised an audio track that never produced a decoded sample.",
+            "format": "uint64",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "cell": {
+            "description": "Index into the multiview grid, or None while the source has no cell.",
+            "format": "uint32",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "duration_ms": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "gain": {
+            "default": 1.0,
+            "description": "The operator's fader for this source, 0.0 silent through 1.0 unity to a\nceiling of 10.0. Read back off the volume element rather than remembered,\nso what the UI shows is what the pipeline is doing.",
+            "format": "double",
+            "type": "number"
+          },
+          "has_audio": {
+            "type": "boolean"
+          },
+          "has_video": {
+            "type": "boolean"
+          },
+          "id": {
+            "type": "string"
+          },
+          "muted": {
+            "default": false,
+            "description": "Muted by the operator. Held apart from the fader so that unmuting returns\nthe source to where it was rather than to unity.",
+            "type": "boolean"
+          },
+          "name": {
+            "type": "string"
+          },
+          "position_ms": {
+            "description": "Where this source has got to, and how long it runs, in milliseconds.\n`None` on anything not seekable, and on a seekable source whose duration\nthe demuxer has not worked out yet.",
+            "format": "uint64",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "seekable": {
+            "default": false,
+            "description": "True when this source can be scrubbed. A file can be. A camera, an RTMP\nfeed or a page cannot, and asking one to is a mistake worth refusing\nrather than quietly doing nothing.",
+            "type": "boolean"
+          },
+          "state": {
+            "$ref": "#/components/schemas/SourceState"
+          },
+          "superimposed": {
+            "default": false,
+            "description": "True when this website source is running with its media decoded outside\nthe browser and the page drawn over it. False covers both a source that\nnever asked for it and one that asked and could not get it, because the\npage turned out to have no address worth handing over.",
+            "type": "boolean"
+          },
+          "uri": {
+            "type": "string"
+          },
+          "video_idle_ms": {
+            "description": "Milliseconds since the last video buffer, or None if none has arrived.",
+            "format": "uint64",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "uri",
+          "state",
+          "has_video",
+          "has_audio"
+        ],
+        "type": "object"
+      },
+      "TakeRecord": {
+        "description": "One take, as `program.history` reports it.",
+        "properties": {
+          "at_running_time_ms": {
+            "description": "Programme running time the cut landed on.",
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "by": {
+            "description": "Token id that asked for it, or \"core\" when the mixer did it itself.",
+            "type": "string"
+          },
+          "seq": {
+            "description": "Event sequence number the take was published under.",
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "source": {
+            "description": "What went on air. Null is the slate.",
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "at_running_time_ms",
+          "by",
+          "seq"
+        ],
+        "type": "object"
+      },
+      "TakeRequest": {
+        "description": "`program.take`: put a source on programme.",
+        "properties": {
+          "at_running_time_ms": {
+            "description": "Programme running time to land the cut on, in milliseconds. Omit for\nimmediate. Read the current running time from `core.info` or a status\nsnapshot first.",
+            "format": "uint64",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "scene": {
+            "description": "The scene to take, once scenes exist (11). Today a scene name is read\nas a one item scene, which is to say as a source id, and `source` wins\nwhen both are given.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "source": {
+            "description": "Id of the source to put on air. Null or omitted cuts to the slate.",
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "type": "object"
+      },
+      "TokenInfo": {
+        "description": "What the calling token is allowed to do, echoed back so a surface can grey\nout what it cannot reach instead of discovering it at the first refusal.",
+        "properties": {
+          "confirm": {
+            "description": "\"none\" or \"required\": whether destructive calls need a confirm token.",
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "profile": {
+            "description": "MCP tool profile this token is meant for: \"standard\" or \"minimal\".",
+            "type": "string"
+          },
+          "rehearsal": {
+            "type": "boolean"
+          },
+          "scopes": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "id",
+          "scopes",
+          "confirm",
+          "rehearsal",
+          "profile"
+        ],
+        "type": "object"
+      }
+    },
+    "securitySchemes": {
+      "bearer": {
+        "description": "The control token. A GET may carry it as ?token= instead, because a browser opening a WebSocket or an <img> tag cannot set a header.",
+        "scheme": "bearer",
+        "type": "http"
+      }
+    }
+  },
+  "info": {
+    "description": "Generated from the method table in src/api/. api_level 1, compatible from 1. The same methods are reachable over JSON-RPC on the /rpc WebSocket; see protocol.md. The paths here come from the noun.verb transform rule, so `source.list` is `GET /api/v1/sources` and `source.audio.set` is `POST /api/v1/sources/{id}/audio`.\n\nFour keys are accepted in the body of every call: `trace_id`, `idempotency_key` on anything mutating, `dry_run` on anything destructive, and `confirm` where the token's policy requires it.",
+    "license": {
+      "name": "Apache-2.0"
+    },
+    "summary": "The REST layer of the GodwinMix control protocol.",
+    "title": "GodwinMix control API",
+    "version": "1"
+  },
+  "openapi": "3.1.0",
+  "paths": {
+    "/api/v1/adbreak/end": {
+      "post": {
+        "description": "JSON-RPC method `adbreak.end`. Needs the `operate` scope. Accepts `idempotency_key`, honoured for 24 hours.",
+        "operationId": "adbreak.end",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {},
+                "type": "object"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Cut a running ad short, or disarm one that is scheduled.",
+        "tags": [
+          "adbreak"
+        ],
+        "x-destructive": false,
+        "x-idempotent": true,
+        "x-scope": "operate"
+      }
+    },
+    "/api/v1/adbreak/start": {
+      "post": {
+        "description": "JSON-RPC method `adbreak.start`. Needs the `operate` scope. Accepts `idempotency_key`, honoured for 24 hours.",
+        "operationId": "adbreak.start",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AdBreakRequest"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Interrupt the programme with a clip, then rejoin live when it ends.",
+        "tags": [
+          "adbreak"
+        ],
+        "x-destructive": false,
+        "x-idempotent": true,
+        "x-scope": "operate"
+      }
+    },
+    "/api/v1/agent/state": {
+      "get": {
+        "description": "JSON-RPC method `agent.state`. Needs the `read` scope.",
+        "operationId": "agent.state",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "The compact document written for agents: the programme, each source's state and a motion score saying how much its picture is changing.",
+        "tags": [
+          "agent"
+        ],
+        "x-destructive": false,
+        "x-idempotent": true,
+        "x-scope": "read"
+      }
+    },
+    "/api/v1/codecs": {
+      "get": {
+        "description": "JSON-RPC method `codec.list`. Needs the `read` scope.",
+        "operationId": "codec.list",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "The codecs and elements this machine can use. The catalogue proper is not built yet; this reports the backends actually selected.",
+        "tags": [
+          "codec"
+        ],
+        "x-destructive": false,
+        "x-idempotent": true,
+        "x-scope": "read"
+      }
+    },
+    "/api/v1/core/api": {
+      "get": {
+        "description": "JSON-RPC method `core.api`. Needs the `read` scope.",
+        "operationId": "core.api",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Every method, event and type as JSON Schema. The same document as protocol.json and `godwinmix --api-info`.",
+        "tags": [
+          "core"
+        ],
+        "x-destructive": false,
+        "x-idempotent": true,
+        "x-scope": "read"
+      }
+    },
+    "/api/v1/core/info": {
+      "get": {
+        "description": "JSON-RPC method `core.info`. Needs the `read` scope.",
+        "operationId": "core.info",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CoreInfo"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "What this core is, what it can do, and where its edges are.",
+        "tags": [
+          "core"
+        ],
+        "x-destructive": false,
+        "x-idempotent": true,
+        "x-scope": "read"
+      }
+    },
+    "/api/v1/core/shutdown": {
+      "post": {
+        "description": "JSON-RPC method `core.shutdown`. Needs the `admin` scope. Destructive: accepts `dry_run: true`, and on a token whose policy is `confirm = required` it is refused once with -32020 and a confirm token. Accepts `idempotency_key`, honoured for 24 hours.",
+        "operationId": "core.shutdown",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {},
+                "type": "object"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Stop the mixer, and with it the programme. Nothing else takes the show off air, so this is deliberately its own call.",
+        "tags": [
+          "core"
+        ],
+        "x-destructive": true,
+        "x-idempotent": true,
+        "x-scope": "admin"
+      }
+    },
+    "/api/v1/core/status": {
+      "get": {
+        "description": "JSON-RPC method `core.status`. Needs the `read` scope.",
+        "operationId": "core.status",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MixerStatus"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "The full state: programme, every source, every output, the multiview grid, the encoder backend and any ad break.",
+        "tags": [
+          "core"
+        ],
+        "x-destructive": false,
+        "x-idempotent": true,
+        "x-scope": "read"
+      }
+    },
+    "/api/v1/media": {
+      "get": {
+        "description": "JSON-RPC method `media.list`. Needs the `read` scope.",
+        "operationId": "media.list",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MediaListing"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "The clips in the library, with durations and whether each has audio.",
+        "tags": [
+          "media"
+        ],
+        "x-destructive": false,
+        "x-idempotent": true,
+        "x-scope": "read"
+      }
+    },
+    "/api/v1/media/upload": {
+      "post": {
+        "description": "JSON-RPC method `media.upload`. Needs the `operate` scope. Accepts `idempotency_key`, honoured for 24 hours.",
+        "operationId": "media.upload",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {},
+                "type": "object"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Stream a file into the library. HTTP only: the body is the file.",
+        "tags": [
+          "media"
+        ],
+        "x-destructive": false,
+        "x-idempotent": false,
+        "x-scope": "operate"
+      }
+    },
+    "/api/v1/media/{id}": {
+      "delete": {
+        "description": "JSON-RPC method `media.remove`. Needs the `operate` scope. Destructive: accepts `dry_run: true`, and on a token whose policy is `confirm = required` it is refused once with -32020 and a confirm token. Accepts `idempotency_key`, honoured for 24 hours.",
+        "operationId": "media.remove",
+        "parameters": [
+          {
+            "description": "The id, as listed by the matching list call.",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NameRequest"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Delete a library file and its converted copy. Refused while it is a live source.",
+        "tags": [
+          "media"
+        ],
+        "x-destructive": true,
+        "x-idempotent": true,
+        "x-scope": "operate"
+      }
+    },
+    "/api/v1/media/{id}/convert": {
+      "post": {
+        "description": "JSON-RPC method `media.convert`. Needs the `operate` scope. Accepts `idempotency_key`, honoured for 24 hours.",
+        "operationId": "media.convert",
+        "parameters": [
+          {
+            "description": "The id, as listed by the matching list call.",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NameRequest"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConversionState"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Transcode a library file to a web safe copy, in the background.",
+        "tags": [
+          "media"
+        ],
+        "x-destructive": false,
+        "x-idempotent": true,
+        "x-scope": "operate"
+      }
+    },
+    "/api/v1/outputs": {
+      "get": {
+        "description": "JSON-RPC method `output.list`. Needs the `read` scope.",
+        "operationId": "output.list",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/OutputStatus"
+                  },
+                  "type": "array"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Every destination, with its state, reconnect count and how much is buffered.",
+        "tags": [
+          "output"
+        ],
+        "x-destructive": false,
+        "x-idempotent": true,
+        "x-scope": "read"
+      },
+      "post": {
+        "description": "JSON-RPC method `output.add`. Needs the `operate` scope. Accepts `idempotency_key`, honoured for 24 hours.",
+        "operationId": "output.add",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AddOutputRequest"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OutputStatus"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Send the programme to another destination. The encoder is shared, so adding one costs nothing on air.",
+        "tags": [
+          "output"
+        ],
+        "x-destructive": false,
+        "x-idempotent": true,
+        "x-scope": "operate"
+      }
+    },
+    "/api/v1/outputs/{id}": {
+      "delete": {
+        "description": "JSON-RPC method `output.remove`. Needs the `operate` scope. Destructive: accepts `dry_run: true`, and on a token whose policy is `confirm = required` it is refused once with -32020 and a confirm token. Accepts `idempotency_key`, honoured for 24 hours.",
+        "operationId": "output.remove",
+        "parameters": [
+          {
+            "description": "The id, as listed by the matching list call.",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/IdRequest"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Stop sending to a destination and forget it. Other outputs are unaffected.",
+        "tags": [
+          "output"
+        ],
+        "x-destructive": true,
+        "x-idempotent": true,
+        "x-scope": "operate"
+      },
+      "get": {
+        "description": "JSON-RPC method `output.get`. Needs the `read` scope.",
+        "operationId": "output.get",
+        "parameters": [
+          {
+            "description": "The id, as listed by the matching list call.",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OutputStatus"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "One destination.",
+        "tags": [
+          "output"
+        ],
+        "x-destructive": false,
+        "x-idempotent": true,
+        "x-scope": "read"
+      }
+    },
+    "/api/v1/outputs/{id}/reconnect": {
+      "post": {
+        "description": "JSON-RPC method `output.reconnect`. Needs the `operate` scope. Accepts `idempotency_key`, honoured for 24 hours.",
+        "operationId": "output.reconnect",
+        "parameters": [
+          {
+            "description": "The id, as listed by the matching list call.",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/IdRequest"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OutputStatus"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Drop and re-establish one destination's connection now, without waiting for its reconnect policy.",
+        "tags": [
+          "output"
+        ],
+        "x-destructive": false,
+        "x-idempotent": true,
+        "x-scope": "operate"
+      }
+    },
+    "/api/v1/program": {
+      "get": {
+        "description": "JSON-RPC method `program.get`. Needs the `read` scope.",
+        "operationId": "program.get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProgramState"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "What is on air, the programme running time, and what revert would go back to.",
+        "tags": [
+          "program"
+        ],
+        "x-destructive": false,
+        "x-idempotent": true,
+        "x-scope": "read"
+      }
+    },
+    "/api/v1/program/golive": {
+      "post": {
+        "description": "JSON-RPC method `program.golive`. Needs the `operate` scope. Accepts `idempotency_key`, honoured for 24 hours.",
+        "operationId": "program.golive",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GoLiveRequest"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GoLiveResult"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "One call to put a web page on air: add the page, add the destination, and take the page as soon as it renders.",
+        "tags": [
+          "program"
+        ],
+        "x-destructive": false,
+        "x-idempotent": true,
+        "x-scope": "operate"
+      }
+    },
+    "/api/v1/program/history": {
+      "get": {
+        "description": "JSON-RPC method `program.history`. Needs the `read` scope.",
+        "operationId": "program.history",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/TakeRecord"
+                  },
+                  "type": "array"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "The last hundred takes, newest first, with the token that asked for each.",
+        "tags": [
+          "program"
+        ],
+        "x-destructive": false,
+        "x-idempotent": true,
+        "x-scope": "read"
+      }
+    },
+    "/api/v1/program/revert": {
+      "post": {
+        "description": "JSON-RPC method `program.revert`. Needs the `operate` scope. Accepts `idempotency_key`, honoured for 24 hours.",
+        "operationId": "program.revert",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {},
+                "type": "object"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProgramState"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Take back to the shot before this one.",
+        "tags": [
+          "program"
+        ],
+        "x-destructive": false,
+        "x-idempotent": true,
+        "x-scope": "operate"
+      }
+    },
+    "/api/v1/program/take": {
+      "post": {
+        "description": "JSON-RPC method `program.take`. Needs the `operate` scope. Accepts `idempotency_key`, honoured for 24 hours.",
+        "operationId": "program.take",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TakeRequest"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProgramState"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Put a source on programme. The cut is instant and the outgoing stream is not disturbed.",
+        "tags": [
+          "program"
+        ],
+        "x-destructive": false,
+        "x-idempotent": true,
+        "x-scope": "operate"
+      }
+    },
+    "/api/v1/snapshot/{id}": {
+      "get": {
+        "description": "JSON-RPC method `snapshot.get`. Needs the `read` scope.",
+        "operationId": "snapshot.get",
+        "parameters": [
+          {
+            "description": "The id, as listed by the matching list call.",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "One JPEG: the whole contact sheet, the programme, or one source cut out of the mosaic.",
+        "tags": [
+          "snapshot"
+        ],
+        "x-destructive": false,
+        "x-idempotent": true,
+        "x-scope": "read"
+      }
+    },
+    "/api/v1/sources": {
+      "get": {
+        "description": "JSON-RPC method `source.list`. Needs the `read` scope.",
+        "operationId": "source.list",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/SourceStatus"
+                  },
+                  "type": "array"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Every source, with its state, whether it has video and audio, and its fader.",
+        "tags": [
+          "source"
+        ],
+        "x-destructive": false,
+        "x-idempotent": true,
+        "x-scope": "read"
+      },
+      "post": {
+        "description": "JSON-RPC method `source.add`. Needs the `operate` scope. Accepts `idempotency_key`, honoured for 24 hours.",
+        "operationId": "source.add",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AddSourceRequest"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SourceStatus"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Add a source while the mixer runs. Answers with the id it got and the whole source record.",
+        "tags": [
+          "source"
+        ],
+        "x-destructive": false,
+        "x-idempotent": true,
+        "x-scope": "operate"
+      }
+    },
+    "/api/v1/sources/{id}": {
+      "delete": {
+        "description": "JSON-RPC method `source.remove`. Needs the `operate` scope. Destructive: accepts `dry_run: true`, and on a token whose policy is `confirm = required` it is refused once with -32020 and a confirm token. Accepts `idempotency_key`, honoured for 24 hours.",
+        "operationId": "source.remove",
+        "parameters": [
+          {
+            "description": "The id, as listed by the matching list call.",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/IdRequest"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Remove a source. If it is on programme the mixer cuts to the slate first.",
+        "tags": [
+          "source"
+        ],
+        "x-destructive": true,
+        "x-idempotent": true,
+        "x-scope": "operate"
+      },
+      "get": {
+        "description": "JSON-RPC method `source.get`. Needs the `read` scope.",
+        "operationId": "source.get",
+        "parameters": [
+          {
+            "description": "The id, as listed by the matching list call.",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SourceStatus"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "One source. Refused with the ids that exist when there is no such source.",
+        "tags": [
+          "source"
+        ],
+        "x-destructive": false,
+        "x-idempotent": true,
+        "x-scope": "read"
+      }
+    },
+    "/api/v1/sources/{id}/audio": {
+      "post": {
+        "description": "JSON-RPC method `source.audio.set`. Needs the `operate` scope. Accepts `idempotency_key`, honoured for 24 hours.",
+        "operationId": "source.audio.set",
+        "parameters": [
+          {
+            "description": "The id, as listed by the matching list call.",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AudioSetParams"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SourceAudioState"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Move a source's audio: the fader, the mute, and for a superimposed page the balance between its own sound and the videos under it.",
+        "tags": [
+          "source"
+        ],
+        "x-destructive": false,
+        "x-idempotent": true,
+        "x-scope": "operate"
+      }
+    },
+    "/api/v1/sources/{id}/seek": {
+      "post": {
+        "description": "JSON-RPC method `source.seek`. Needs the `operate` scope. Accepts `idempotency_key`, honoured for 24 hours.",
+        "operationId": "source.seek",
+        "parameters": [
+          {
+            "description": "The id, as listed by the matching list call.",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SeekParams"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SourcePositionState"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Move a seekable source to a position. Answers with where it actually landed.",
+        "tags": [
+          "source"
+        ],
+        "x-destructive": false,
+        "x-idempotent": true,
+        "x-scope": "operate"
+      }
+    }
+  },
+  "security": [
+    {
+      "bearer": []
+    }
+  ],
+  "servers": [
+    {
+      "description": "the mixer's control port",
+      "url": "/"
+    }
+  ]
+}

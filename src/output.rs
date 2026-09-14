@@ -392,6 +392,9 @@ impl OutputSlot {
             state: self.state(),
             reconnects: self.reconnects.load(Ordering::Relaxed),
             queue_secs: gstutil::queue_level_secs(&self.feed_video),
+            // Per kind data, for an output built by a plugin rather than by
+            // the core. Nothing the core builds itself has any.
+            extra: Default::default(),
         }
     }
 

@@ -23,7 +23,7 @@ const EXTENSIONS: &[&str] = &[
     "mp4", "mov", "m4v", "mkv", "webm", "avi", "ts", "mpg", "mpeg", "flv", "wmv",
 ];
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
 pub struct MediaItem {
     /// Name shown in the UI, relative to the library root.
     pub name: String,
@@ -68,7 +68,7 @@ pub struct MediaItem {
     pub conversion: Option<crate::convert::ConversionState>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
 pub struct MediaListing {
     pub dir: String,
     pub items: Vec<MediaItem>,
