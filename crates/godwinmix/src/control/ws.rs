@@ -444,14 +444,17 @@ impl Connection {
         let Some((name, mut payload)) = rpc::event_name_and_payload(&envelope.event) else {
             return Ok(());
         };
-        if !sub.wants(name) {
-            return Ok(());
+        // A take or an armed scene moves the tally whether or not this client
+        // asked for the take event itself. A Stream Deck that subscribes to
+        // `tally` alone must still see its lamps change.
+        let moves_tally = name == "program.took" || name == "preview.changed";
+        if sub.wants(name) {
+            if let Some(map) = payload.as_object_mut() {
+                map.insert("seq".into(), json!(envelope.seq));
+            }
+            self.send(rpc::notification(&format!("event/{name}"), payload)).await?;
         }
-        if let Some(map) = payload.as_object_mut() {
-            map.insert("seq".into(), json!(envelope.seq));
-        }
-        self.send(rpc::notification(&format!("event/{name}"), payload)).await?;
-        if name == "program.took" {
+        if moves_tally {
             self.send_tally().await?;
         }
         Ok(())

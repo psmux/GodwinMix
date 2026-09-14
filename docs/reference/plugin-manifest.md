@@ -179,6 +179,21 @@ registers nothing and is refused.
 `latency_ms` on a filter may be 0, but it must be there: the aligner absorbs
 what you declare, so a missing number is worse than a zero.
 
+A `surface` is the one kind with no `[run]` table. It is a whole UI, not
+something the supervisor places in the pipeline, so it names its own command
+and the protocol level it speaks:
+
+```toml
+[[provides]]
+kind = "surface"
+id = "tui"
+surface = { run = "gmx-tui", api = 1 }
+```
+
+`run` is looked for inside the plugin directory, then beside the `gmx` binary,
+then on `PATH`; `gmx ui <name>` is what starts it. The whole contract is in
+[surfaces.md](surfaces.md).
+
 `skill` is accepted on any provide, whatever the kind. The table above names
 what each kind is checked for.
 
@@ -428,6 +443,8 @@ reported in one pass. Ordered as the validator walks the file.
 | `provides[i].panel.entry` | the file is missing, absolute or escapes the root |
 | `provides[i].panel.slots` | the list is empty |
 | `provides[i].surface` | the kind is `surface` and it is missing |
+| `provides[i].surface.run` | it is missing, or not a non-empty string |
+| `provides[i].surface.api` | it is missing, or not an integer of 1 or more |
 | `provides[i].preset` | the kind is `preset` and it is missing |
 | `provides[i].graphic` | the kind is `graphic` and it is missing, or the file is missing |
 | `provides[i].collection` | the kind is `collection` and it is missing, or the file is missing |

@@ -1,0 +1,37 @@
+[plugin]
+name = "osc"
+version = "0.2.0"
+api = 1
+description = "OSC in and out: take, fader and mute from any control surface, tally and programme back out"
+license = "Apache-2.0"
+authors = ["GodwinMix"]
+repository = "https://github.com/psmux/godwinmix"
+platforms = ["linux-x86_64", "linux-aarch64", "macos-aarch64", "macos-x86_64", "windows-x86_64"]
+placements = ["sidecar", "node"]
+process = "singleton"
+
+# The binary is staged into bin/ by `dev/plugins.sh build`, because a workspace
+# member's target directory sits above the plugin and a manifest path may not
+# climb out of the plugin's own directory.
+[run]
+bin = { "linux-x86_64" = "bin/gmx-osc", "linux-aarch64" = "bin/gmx-osc", "macos-aarch64" = "bin/gmx-osc", "macos-x86_64" = "bin/gmx-osc", "windows-x86_64" = "bin/gmx-osc.exe" }
+
+[[provides]]
+kind = "service"
+id = "bridge"
+settings = "schemas/bridge.json"
+skill = "skills/bridge/SKILL.md"
+capabilities = ["health"]
+
+[[tools]]
+name = "send_osc"
+description = "Send one OSC message from the mixer to a control surface or a lamp, to prove the path works before a show. Example: send_osc {address: \"/gmx/tally/cam1\", args: [1], to: \"10.0.0.7:9001\"} puts a red lamp on the tablet at that address and answers with the byte count."
+input = "schemas/tools/send_osc.json"
+output = "schemas/tools/send_osc.out.json"
+annotations = { readOnlyHint = false, destructiveHint = false, idempotentHint = true, openWorldHint = true }
+user_invocable = true
+model_invocable = true
+
+[build]
+command = "cargo build --release -p gmx-osc"
+output = "bin/gmx-osc"

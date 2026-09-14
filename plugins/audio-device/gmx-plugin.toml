@@ -1,0 +1,61 @@
+[plugin]
+name = "audio-device"
+version = "0.1.0"
+api = 1
+description = "A microphone, a line input or a sound card as a source: PipeWire or PulseAudio on Linux, Core Audio on macOS, WASAPI on Windows, with gain and mute and device discovery."
+license = "Apache-2.0"
+authors = ["GodwinMix"]
+repository = "https://github.com/psmux/godwinmix"
+platforms = ["linux-x86_64", "linux-aarch64", "linux-armv7", "macos-aarch64", "macos-x86_64", "windows-x86_64"]
+placements = ["sidecar"]
+process = "per-instance"
+
+[run]
+bin = { "linux-x86_64" = "bin/gmx-audio-device", "linux-aarch64" = "bin/gmx-audio-device", "linux-armv7" = "bin/gmx-audio-device", "macos-aarch64" = "bin/gmx-audio-device", "macos-x86_64" = "bin/gmx-audio-device", "windows-x86_64" = "bin/gmx-audio-device.exe" }
+
+[build]
+command = "sh build"
+output = "bin/gmx-audio-device"
+
+[[provides]]
+kind = "source"
+id = "source"
+# Sound and nothing else. A device with a camera in it is a separate
+# `camera/source`.
+media = { video = "none", audio = "raw", alpha = false, thumb = false }
+# The container and nothing else, on purpose. `unixfd` passes one file
+# descriptor per buffer, which is what makes it free for 93 MB/s of video and
+# what makes it wrong here: sound at the canvas contract is 384 kB/s in ten
+# millisecond buffers, so the socket transport would be a hundred descriptors a
+# second to save a copy of 3,840 bytes. A streamable Matroska stream on a pipe
+# costs one memcpy per buffer, works on Windows too, and is the cheaper of the
+# two at this rate.
+transports = ["container"]
+capabilities = ["restart-in-place", "health"]
+# The device's own buffer is its latency and it differs per driver, so the
+# number is left at 0 and the aligner absorbs what arrives. `latency-report`
+# is not declared, so the core does not trust this.
+latency_ms = 0
+settings = "schemas/source.json"
+skill = "skills/source/SKILL.md"
+
+# No thumbnail and no default frame: this source has no picture to place. The
+# icon is what the add input gallery needs.
+[provides.designer]
+icon = "ui/icons/audio-device.svg"
+
+[[provides]]
+kind = "device"
+id = "devices"
+discovery = { local = ["Audio/Source"] }
+settings = "schemas/devices.json"
+skill = "skills/source/SKILL.md"
+
+[[tools]]
+name = "list_audio_inputs"
+description = "List every sound input on this machine with the id to use and the name the system shows. Use it before adding an audio source when the operator names a microphone or a desk rather than an id, and when a source is silent and you need to know whether the device is visible at all. Example: list_audio_inputs {} returns {inputs: [{id: 'alsa_input.usb-Focusrite_Scarlett', name: 'Scarlett 2i2 Analog Stereo', api: 'pipewire'}]}."
+input = "schemas/tools/list_audio_inputs.json"
+output = "schemas/tools/list_audio_inputs.out.json"
+annotations = { readOnlyHint = true, destructiveHint = false, idempotentHint = false, openWorldHint = false }
+user_invocable = true
+model_invocable = true

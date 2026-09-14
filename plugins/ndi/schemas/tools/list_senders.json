@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "list_senders input",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "timeout_ms": {
+      "description": "How long to listen for announcements. Under about 500 ms usually finds nothing on a quiet network even when senders are there.",
+      "type": "integer",
+      "minimum": 100,
+      "maximum": 10000,
+      "default": 1500
+    }
+  }
+}

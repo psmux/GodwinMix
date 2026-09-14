@@ -142,6 +142,7 @@ scenes go with it.
 
 ## What to read next
 
+* [The same thing with a mouse, in the web UI](compose-a-scene.md)
 * [Every scene command with an example](../reference/scene-commands.md)
 * [The scene document, field by field](../reference/scene-document.md)
 * [How a scene reaches the compositor](../explanation/how-a-scene-reaches-the-compositor.md)

@@ -1,0 +1,23 @@
+#!/bin/sh
+# Stage the binary where the manifest says it is.
+#
+# This plugin is a member of the repository's cargo workspace, so its build
+# output lands in the workspace target directory. `gmx plugin add` copies the
+# plugin directory and skips anything named `target`, so the binary has to be
+# somewhere else by the time you install it. That is what this does.
+#
+#   ./build        build and stage bin/gmx-file-record
+#
+# Run it before `gmx plugin add ./plugins/camera`.
+
+set -eu
+cd "$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
+
+: "${CARGO_TARGET_DIR:=$(cd ../.. && pwd)/target}"
+export CARGO_TARGET_DIR
+
+cargo build --release -p gmx-file-record
+mkdir -p bin
+cp "$CARGO_TARGET_DIR/release/gmx-file-record" bin/gmx-file-record
+chmod +x bin/gmx-file-record
+echo "staged bin/gmx-file-record from $CARGO_TARGET_DIR/release"

@@ -219,7 +219,9 @@ export class DragSelect {
     if (s.ghost) s.ghost.remove();
     this.o.container.classList.remove("dragging-tiles");
     for (const node of this.o.container.querySelectorAll(".dragging")) node.classList.remove("dragging");
-    for (const node of this.o.container.querySelectorAll(".drop-into")) node.classList.remove("drop-into");
+    // Across the page, not just this container: a drag from the tray onto a
+    // scene highlights a tile in another panel, and it has to be let go of.
+    for (const node of document.querySelectorAll(".drop-into")) node.classList.remove("drop-into");
   }
 
   _ghost() {
@@ -241,7 +243,7 @@ export class DragSelect {
 
   _hover(x, y, s) {
     const target = this._dropTarget(x, y);
-    for (const node of this.o.container.querySelectorAll(".drop-into")) {
+    for (const node of document.querySelectorAll(".drop-into")) {
       if (node !== target) node.classList.remove("drop-into");
     }
     if (target && !this.sel.has(target.dataset.id)) target.classList.add("drop-into");

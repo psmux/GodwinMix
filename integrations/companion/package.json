@@ -1,0 +1,22 @@
+{
+  "name": "godwinmix-companion",
+  "version": "0.2.0",
+  "description": "Bitfocus Companion module for GodwinMix: take, add source, start output, tally and output feedbacks, programme and uptime variables",
+  "license": "Apache-2.0",
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "main": "dist/index.js",
+  "scripts": {
+    "test": "node --test \"test/*.test.ts\"",
+    "build": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@companion-module/base": "~1.11.0",
+    "@godwinmix/client": "file:../../clients/typescript"
+  },
+  "devDependencies": {
+    "typescript": "^5.8.0"
+  }
+}

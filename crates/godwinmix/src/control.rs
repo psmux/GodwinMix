@@ -115,6 +115,11 @@ pub struct AppState {
     /// answer and `plugin.settings.set` has something to change. The core
     /// never reads inside these tables; they belong to the plugin named.
     pub plugin_settings: Arc<std::collections::BTreeMap<String, godwinmix_core::config::Params>>,
+    /// `[plugins] allow_unsigned`. Whether `plugin.add` will install something
+    /// nothing signed. True unless the operator turned it off.
+    pub allow_unsigned: bool,
+    /// `[marketplaces] only`. Empty means every marketplace that was added.
+    pub marketplaces_only: Vec<String>,
     /// Where the config was read from, so a settings change can be written
     /// back to the file a restart will read.
     pub config_path: Arc<std::path::PathBuf>,
@@ -204,7 +209,9 @@ impl AppState {
             safety,
             tasks: godwinmix_core::tasks::Tasks::new(),
             rehearsal,
-            plugin_settings: Arc::new(cfg.plugins.clone()),
+            plugin_settings: Arc::new(cfg.plugins.settings.clone()),
+            allow_unsigned: cfg.plugins.allow_unsigned,
+            marketplaces_only: cfg.marketplaces_only(),
             config_path: Arc::new(cfg.source_path.clone()),
             plugins,
         }

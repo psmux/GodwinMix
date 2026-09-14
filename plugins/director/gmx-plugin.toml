@@ -1,0 +1,37 @@
+[plugin]
+name = "director"
+version = "0.2.0"
+api = 1
+description = "An automatic director: rule based out of the box, and able to consult a model when one is configured"
+license = "Apache-2.0"
+authors = ["GodwinMix"]
+repository = "https://github.com/psmux/godwinmix"
+platforms = ["linux-x86_64", "linux-aarch64", "macos-aarch64", "macos-x86_64", "windows-x86_64"]
+placements = ["sidecar", "node"]
+process = "singleton"
+
+# Staged into bin/ by `dev/plugins.sh build`: a workspace member's target
+# directory sits above the plugin, and a manifest path may not climb out of the
+# plugin's own directory.
+[run]
+bin = { "linux-x86_64" = "bin/gmx-director", "linux-aarch64" = "bin/gmx-director", "macos-aarch64" = "bin/gmx-director", "macos-x86_64" = "bin/gmx-director", "windows-x86_64" = "bin/gmx-director.exe" }
+
+[[provides]]
+kind = "service"
+id = "director"
+settings = "schemas/director.json"
+skill = "skills/director/SKILL.md"
+capabilities = ["health"]
+
+[[tools]]
+name = "explain"
+description = "Say what the director would do with a given mixer state, and why, without doing it. Use before handing a show over, or to find out what the rules are without reading them. Example: explain {state: {program: \"cam1\", sources: [{id: \"cam1\", state: \"live\"}, {id: \"cam2\", state: \"live\"}]}, held_secs: 60} answers with take cam2 and the sentence saying why."
+input = "schemas/tools/explain.json"
+output = "schemas/tools/explain.out.json"
+annotations = { readOnlyHint = true, destructiveHint = false, idempotentHint = true, openWorldHint = false }
+user_invocable = true
+model_invocable = true
+
+[build]
+command = "cargo build --release -p gmx-director"
+output = "bin/gmx-director"

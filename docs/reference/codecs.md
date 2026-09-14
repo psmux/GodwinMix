@@ -96,13 +96,66 @@ you an AV1 programme over RTMP.
 In this order, each layering over the one before:
 
 1. The `codecs.toml` compiled into the binary, which is this table.
-2. `[codecs]` in your configuration file.
-3. `--codecs <file>` on the command line.
-4. `GMX_CODEC_RANK=<id>=<rank>,...` and `GMX_CODEC_DISABLE=<id>,...` from the
+2. `~/.godwinmix/codecs.toml`, what `gmx codec update` installed.
+3. `[codecs]` in your configuration file.
+4. `--codecs <file>` on the command line.
+5. `GMX_CODEC_RANK=<id>=<rank>,...` and `GMX_CODEC_DISABLE=<id>,...` from the
    environment.
 
 An entry whose `id` matches an existing one replaces it outright. Anything else
 is appended. See [add-a-codec-entry.md](../how-to/add-a-codec-entry.md).
+
+## Updating the catalogue without updating the core
+
+Element names change, drivers get renamed, and a new GPU generation arrives on
+its own schedule. None of that should wait for a core release, so the catalogue
+ships on its own signed channel:
+
+```
+gmx codec update
+```
+
+That fetches `codecs.toml` and its sigstore bundle from the release channel,
+checks the signature the same way `gmx plugin add` checks a plugin's, parses
+and validates the file before installing it, and prints which entries are new
+and which changed. It lands at `~/.godwinmix/codecs.toml`, which is layer 2
+above: over what the binary shipped with, and under anything you set yourself.
+An update with no signature beside it is refused, because this file decides
+which element encodes the programme.
+
+It takes effect on the next start. `godwinmix --probe` says what will be chosen
+and why. Deleting the file goes back to what the core shipped with.
+
+| Flag | Does |
+|---|---|
+| `--channel <owner/repo\|url>` | where to fetch from. Defaults to the project's own release channel, or `GMX_CODEC_CHANNEL`. |
+| `--tag <tag>` | a particular release rather than the newest |
+| `--dry-run` | say what would be fetched and where it would land, and fetch nothing |
+
+## Proving an entry on your own hardware
+
+The reference lab covers NVIDIA and Intel. Everything else is verified by
+whoever owns the card, which is how a catalogue reaches hardware the project
+does not have:
+
+```
+gmx codec verify h264-nvidia
+```
+
+It runs the same encode and decode `gmx codec test` runs, and on a pass appends
+a `verified` record to your own catalogue (platform, driver, GStreamer version,
+who, when, and what happened) and prints the block to paste into a pull request
+against `codecs.toml`. A failing test records nothing: a `verified` record that
+says an entry failed says the opposite of what the field means.
+
+| Flag | Does |
+|---|---|
+| `--by <name>` | who ran it. Defaults to `$GMX_AUTHOR` or `$USER`. |
+| `--driver <version>` | the graphics driver version. Read off the machine when it can be. |
+| `--seconds`, `--width`, `--height`, `--fps` | the same knobs `gmx codec test` takes |
+
+`gmx doctor` reads the `verified` list back and says, in one line, when an
+entry has never been tested on a driver like yours.
 
 ## Regenerating this page
 

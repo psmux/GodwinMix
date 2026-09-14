@@ -1,0 +1,17 @@
+# A microphone, a line input or a sound card as a GodwinMix source. See
+# plugins/camera/Cargo.toml for why the binary is staged into `bin/`.
+
+[package]
+name = "gmx-audio-device"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.82"
+description = "A microphone, a line input or a sound card as a GodwinMix source"
+license = "Apache-2.0"
+repository = "https://github.com/psmux/godwinmix"
+
+[dependencies]
+godwinmix-sdk = { path = "../../crates/godwinmix-sdk", version = "0.1.0" }
+godwinmix-capture-common = { path = "../capture-common", version = "0.1.0" }
+gstreamer = { workspace = true }
+serde_json = { workspace = true }

@@ -80,6 +80,20 @@ impl Reporter {
     pub fn event(&self, name: &str, params: Value) {
         let _ = self.writer.notify(&format!("event/{name}"), params);
     }
+
+    /// A reporter that writes to this process's stderr, for a plugin's own
+    /// unit tests.
+    ///
+    /// The runtime builds the real one and hands it to `initialize`, so a
+    /// plugin author never constructs a `Reporter`. A test that calls
+    /// `initialize` directly needs one anyway, and the alternative is every
+    /// plugin crate inventing its own trait to stand in for this.
+    pub fn for_test() -> Reporter {
+        Reporter::new(
+            crate::framing::Writer::stderr(),
+            std::sync::Arc::new(std::sync::Mutex::new(crate::wire::Health::ok())),
+        )
+    }
 }
 
 /// The error for a method a plugin did not implement.

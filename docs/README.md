@@ -32,9 +32,16 @@ Start here if you have never run it.
 * [Choose a hardware encoder](how-to/choose-a-hardware-encoder.md)
 * [Put more than one thing on screen](how-to/scenes.md)
 * [Change scene with a transition](how-to/transitions.md)
+* [Build a scene by dragging](how-to/compose-a-scene.md)
+* [Make your plugin editable in every designer](how-to/extend-the-designer.md)
 * [Roll an ad break](how-to/ad-breaks.md)
 * [See and hear the mixer from anywhere](how-to/preview-and-audio.md)
 * [Run the terminal UI](how-to/terminal-ui.md)
+* [Put GodwinMix on a hardware panel](how-to/companion-and-streamdeck.md),
+  Bitfocus Companion and Elgato Stream Deck
+* [Control the mixer from OSC, and light the tally lamps](how-to/osc-and-tally.md)
+* [Let the mixer cut by itself](how-to/run-a-director.md), rule based first,
+  then with a model and what that costs
 * [Add a theme](how-to/add-a-theme.md) (planned)
 * [Write a preset](how-to/write-a-preset.md) (planned)
 * [Add a theme](how-to/add-a-theme.md)
@@ -47,6 +54,15 @@ Start here if you have never run it.
 * [Write a source plugin in Rust](how-to/write-a-source-plugin.md)
 * [Install a plugin](how-to/install-a-plugin.md)
 * [Test a plugin](how-to/test-a-plugin.md)
+* [Publish a plugin](how-to/publish-a-plugin.md)
+* [Run a marketplace](how-to/run-a-marketplace.md)
+* [Receive a phone or an OBS stream](how-to/receive-a-phone-or-obs-stream.md)
+* [Receive and send SRT](how-to/srt.md)
+* [Send the programme to a WHIP endpoint](how-to/send-to-whip.md)
+* [Use NDI](how-to/use-ndi.md)
+* [Use a webcam](how-to/use-a-webcam.md)
+* [Capture the screen](how-to/capture-the-screen.md)
+* [Record to a file](how-to/record-to-a-file.md)
 
 ## Reference
 
@@ -61,13 +77,19 @@ Start here if you have never run it.
 * [Scene commands, every method with an example](reference/scene-commands.md)
 * [Transitions: the built in types, the plugin contract, the accuracy](reference/transitions.md)
 * [The scene document](reference/scene-document.md)
+* [The designer kits](reference/designer-kits.md)
 * [Sources](reference/sources.md)
 * [Web page sources](reference/web-page-sources.md)
 * [Streams: MJPEG, PCM, Opus, WHEP and the local socket](reference/streams.md)
 * [The generated protocol reference](reference/protocol.md)
+* [The first party plugins](reference/plugins.md)
 * [The plugin manifest](reference/plugin-manifest.md)
+* [The index format](reference/index-format.md)
+* [The quality scale](reference/quality-scale.md)
+* [Surfaces: a whole UI, and `gmx ui`](reference/surfaces.md)
 * [The plugin protocol](reference/plugin-protocol.md)
 * [The plugin lifecycle](reference/plugin-lifecycle.md)
+* [The network plugins: srt, whip, ingest and ndi](reference/plugins-network.md)
 * [The client libraries](reference/clients.md)
 
 ## Explanation
@@ -80,6 +102,7 @@ Start here if you have never run it.
 * [Footprint budgets and the reference machines](explanation/footprint-budgets.md)
 * [The crate map](explanation/architecture.md)
 * [Cross platform: what is gated where, and why](explanation/cross-platform.md)
+* [Trust and signing](explanation/trust-and-signing.md)
 
 ## For AI agents
 

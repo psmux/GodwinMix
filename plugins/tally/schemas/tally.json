@@ -1,0 +1,95 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "TSL tally",
+  "description": "Where the lamps are, which source each one watches, and what colour it shows.",
+  "type": "object",
+  "properties": {
+    "protocol": {
+      "type": "string",
+      "title": "Protocol",
+      "description": "UDP is what a rack of lamps usually wants. TCP is what a multiviewer or a router usually wants, and it reconnects on its own if the far end restarts.",
+      "enum": ["udp", "tcp"],
+      "default": "udp",
+      "examples": ["udp", "tcp"]
+    },
+    "address": {
+      "type": "string",
+      "title": "Send to",
+      "description": "Where the tally interface is, as address:port. 8900 is the port TSL's own examples use.",
+      "default": "127.0.0.1:8900",
+      "examples": ["10.0.0.30:8900", "tally.local:8900", "8901"]
+    },
+    "screen": {
+      "type": "integer",
+      "title": "Screen",
+      "description": "The display group. A rig with one tally interface leaves this at 0 and never thinks about it again.",
+      "default": 0,
+      "minimum": 0,
+      "maximum": 65535,
+      "examples": [0, 1]
+    },
+    "lamps": {
+      "type": "array",
+      "title": "Lamps",
+      "description": "One entry per lamp: which source it watches, its UMD index, and what is written on it. A source with no entry lights nothing.",
+      "default": [],
+      "items": {
+        "type": "object",
+        "properties": {
+          "source": { "type": "string", "description": "Source id, as the mixer knows it." },
+          "index": { "type": "integer", "minimum": 0, "maximum": 65535, "description": "UMD index. Defaults to the position in this list." },
+          "label": { "type": "string", "maxLength": 32, "description": "What is written on the lamp. Defaults to the source id." }
+        },
+        "required": ["source"],
+        "additionalProperties": false
+      },
+      "examples": [
+        [],
+        [{"source": "cam1", "index": 0, "label": "CAM 1"}, {"source": "cam2", "index": 1, "label": "CAM 2"}]
+      ]
+    },
+    "program_colour": {
+      "type": "string",
+      "title": "Programme colour",
+      "description": "What a source on air shows. Red everywhere except the rigs that do not.",
+      "enum": ["red", "green", "amber", "off"],
+      "default": "red",
+      "examples": ["red", "amber"]
+    },
+    "preview_colour": {
+      "type": "string",
+      "title": "Preview colour",
+      "description": "What a source on preview shows.",
+      "enum": ["red", "green", "amber", "off"],
+      "default": "green",
+      "examples": ["green", "off"]
+    },
+    "brightness": {
+      "type": "integer",
+      "title": "Brightness",
+      "description": "0 dimmest to 3 brightest. Lamps that ignore it stay at full.",
+      "default": 3,
+      "minimum": 0,
+      "maximum": 3,
+      "examples": [3, 1]
+    },
+    "unicode": {
+      "type": "boolean",
+      "title": "UTF-16 labels",
+      "description": "Write labels as UTF-16LE, which a lamp needs for anything outside ASCII. Off halves the packet and is right for an English rig.",
+      "default": false,
+      "examples": [false, true]
+    },
+    "refresh_secs": {
+      "type": "integer",
+      "title": "Refresh every",
+      "description": "Send every lamp again this often, so one that was power cycled catches up without anybody taking a source. 0 turns it off.",
+      "default": 10,
+      "minimum": 0,
+      "maximum": 3600,
+      "x-gmx-unit": "s",
+      "examples": [10, 0, 30]
+    }
+  },
+  "additionalProperties": false
+}

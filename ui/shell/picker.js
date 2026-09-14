@@ -12,7 +12,6 @@ import { el, clear, svg, on } from "./dom.js";
 import { modal } from "./modal.js";
 import { toast, errorToast } from "./toast.js";
 import { ICONS, SOURCE_KINDS, OUTPUT_KINDS, loadKinds, grouped, kindOfUri } from "../client/kinds.js";
-import { SchemaForm } from "../client/schema-form.js";
 
 const LIST_KEY = "gmx.picker.list";
 
@@ -113,8 +112,15 @@ export async function openPicker(client, what, opts = {}) {
   return m;
 }
 
-/** The chosen kind's form, rendered from its schema and nothing else. */
-export function openForm(client, what, kind, preset) {
+/**
+ * The chosen kind's form, rendered from its schema and nothing else.
+ *
+ * The schema reader is fetched here rather than with the page: eleven
+ * kilobytes that matter only once somebody is adding something, and the picker
+ * itself is already a modal the operator waited a moment for.
+ */
+export async function openForm(client, what, kind, preset) {
+  const { SchemaForm } = await import("../client/schema-form.js");
   const form = new SchemaForm(kind.schema, preset || {});
   const add = el("button.btn.primary", { text: what === "output" ? "Start sending" : "Add" });
 

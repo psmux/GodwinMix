@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "list_screens result",
+  "description": "What this machine will let the mixer capture, and how.",
+  "type": "object",
+  "properties": {
+    "element": {
+      "type": "string",
+      "description": "The GStreamer element that would be used, or empty when this machine has none."
+    },
+    "screens": {
+      "type": "array",
+      "description": "One entry per monitor the platform will name. Where the platform names none, one entry stands for the whole screen.",
+      "items": {
+        "type": "object",
+        "properties": {
+          "index": { "type": "integer", "description": "What to put in the `monitor` setting." },
+          "name": { "type": "string", "description": "What the platform calls it." }
+        },
+        "required": ["index", "name"],
+        "additionalProperties": false
+      }
+    },
+    "note": {
+      "type": "string",
+      "description": "What an operator has to do on this platform before a capture will work: a permission to grant, a portal to go through, or nothing."
+    }
+  },
+  "required": ["element", "screens", "note"],
+  "additionalProperties": false
+}

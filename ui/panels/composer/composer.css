@@ -1,0 +1,130 @@
+/* The composer's own stylesheet, fetched with its module on first open.
+ *
+ * Everything here is scoped under .composer, and it uses the theme's variables
+ * rather than colours of its own, so a theme that changes the palette changes
+ * the composer with it. */
+
+.composer {
+  max-width: min(1280px, 96vw);
+  width: 100%;
+}
+
+.composer.composer-full {
+  max-width: 100vw;
+  width: 100vw;
+  height: 100vh;
+  border-radius: 0;
+}
+
+.composer > .body {
+  padding: 0;
+}
+
+.composer-body {
+  display: grid;
+  grid-template-columns: 1fr minmax(240px, 300px);
+  grid-template-rows: auto 1fr;
+  grid-template-areas:
+    "bar bar"
+    "canvas side";
+  min-height: 56vh;
+}
+
+.composer.composer-full .composer-body {
+  height: calc(100vh - 120px);
+}
+
+.composer-bar {
+  grid-area: bar;
+  flex-wrap: wrap;
+  gap: var(--gap);
+  padding: 6px var(--pad);
+  border-bottom: var(--border) solid var(--line);
+  background: var(--panel);
+}
+
+.composer-group {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding-right: var(--gap);
+  border-right: var(--border) solid var(--line);
+}
+
+.composer-group:last-of-type {
+  border-right: 0;
+}
+
+.composer-bar .btn.sm,
+.composer-bar label.sm {
+  font-size: var(--fs-sm);
+  padding: 3px 7px;
+}
+
+.composer-canvas {
+  grid-area: canvas;
+  position: relative;
+  background: #000;
+  min-height: 300px;
+  overflow: hidden;
+}
+
+.composer-picture,
+.composer-overlay {
+  position: absolute;
+  inset: 0;
+}
+
+.composer-picture {
+  display: grid;
+  place-items: center;
+}
+
+.composer-picture img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
+}
+
+.composer-overlay {
+  touch-action: none;
+  cursor: default;
+}
+
+.composer-side {
+  grid-area: side;
+  border-left: var(--border) solid var(--line);
+  overflow: auto;
+  max-height: 70vh;
+}
+
+.composer.composer-full .composer-side {
+  max-height: none;
+}
+
+.composer-inspector .field {
+  gap: 2px;
+}
+
+.composer-sep {
+  height: var(--border);
+  background: var(--line);
+}
+
+/* A narrow window puts the inspector under the picture rather than beside it,
+ * because a 300 px column on a phone leaves no picture at all. */
+@media (max-width: 720px) {
+  .composer-body {
+    grid-template-columns: 1fr;
+    grid-template-areas:
+      "bar"
+      "canvas"
+      "side";
+  }
+
+  .composer-side {
+    border-left: 0;
+    border-top: var(--border) solid var(--line);
+  }
+}

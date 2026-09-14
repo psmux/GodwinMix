@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 180" width="320" height="180"
+     role="img" aria-label="Screen tile">
+  <defs>
+    <linearGradient id="screen-ground" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#24304a"/>
+      <stop offset="1" stop-color="#121826"/>
+    </linearGradient>
+  </defs>
+  <rect width="320" height="180" fill="url(#screen-ground)"/>
+  <g fill="none" stroke="#8fc0f0" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+    <rect x="96" y="56" width="128" height="76" rx="6"/>
+    <path d="M140 140h40"/>
+    <path d="M160 132v8"/>
+    <path d="M112 116l18-22 15 15 20-27 18 34"/>
+  </g>
+</svg>

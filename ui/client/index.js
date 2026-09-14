@@ -9,7 +9,6 @@
 
 import { Store } from "./store.js";
 import { RpcTransport } from "./transport-rpc.js";
-import { LegacyTransport } from "./transport-legacy.js";
 import { asRpcError } from "./errors.js";
 import { SheetPainter, sheetWidthFor } from "./frames.js";
 
@@ -368,7 +367,14 @@ export async function connect(opts = {}) {
     onFrame: (frame) => client.handleFrame(frame),
   };
 
-  const transport = kind === "rpc" ? new RpcTransport({ base, token, hooks }) : new LegacyTransport({ base, token, hooks });
+  // The adapter for a core with no `/rpc` is eleven kilobytes that a current
+  // core never needs, so it is fetched only when `detect` says this one is old.
+  // Nothing runs unless asked (01, principle 2), and nothing is downloaded
+  // unless asked either.
+  const transport =
+    kind === "rpc"
+      ? new RpcTransport({ base, token, hooks })
+      : new (await import("./transport-legacy.js")).LegacyTransport({ base, token, hooks });
   client = new Client(transport, store);
   transport.open();
   return client;

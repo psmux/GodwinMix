@@ -211,11 +211,27 @@ fn no_such_stream(which: &str) -> std::io::Error {
     )
 }
 
+/// The socket the core reads a plugin's video from, given the base it sent.
+#[cfg(unix)]
+pub fn video_socket(base: &str) -> String {
+    format!("{base}.video")
+}
+
+/// The socket the core reads a plugin's audio from.
+#[cfg(unix)]
+pub fn audio_socket(base: &str) -> String {
+    format!("{base}.audio")
+}
+
 /// Raw frames over `unixfdsink` or `shmsink`.
 ///
 /// Unix only, because neither element exists anywhere else. Video and audio get
-/// a socket each: the address the core sends is the video socket, and the audio
-/// socket is that path with `.audio` on the end.
+/// a socket each: the address the core sends is a base, and the two sockets are
+/// that path with `.video` and `.audio` on the end. Both suffixes matter.
+/// `MediaDir` in `crates/godwinmix-core/src/plugin/host/transport.rs` builds
+/// exactly those two names from the base it sent, and
+/// `docs/reference/plugin-lifecycle.md` says the same; a plugin that binds the
+/// base itself leaves the core waiting on a socket nobody ever creates.
 #[cfg(unix)]
 pub struct FdTransportWriter {
     video: Option<(gst::Pipeline, AppSrc)>,
@@ -242,7 +258,7 @@ impl FdTransportWriter {
         }
         let video = match streams.video {
             Some(format) => {
-                let (pipeline, src) = Self::branch(transport, address, "v")?;
+                let (pipeline, src) = Self::branch(transport, &video_socket(address), "v")?;
                 src.set_caps(Some(&video_caps(canvas, format)));
                 pipeline
                     .set_state(gst::State::Playing)
@@ -252,7 +268,7 @@ impl FdTransportWriter {
             None => None,
         };
         let audio = if streams.audio {
-            let (pipeline, src) = Self::branch(transport, &format!("{address}.audio"), "a")?;
+            let (pipeline, src) = Self::branch(transport, &audio_socket(address), "a")?;
             src.set_caps(Some(&audio_caps()));
             pipeline
                 .set_state(gst::State::Playing)
@@ -385,6 +401,19 @@ mod tests {
             caps.structure(0).unwrap().get::<String>("format").unwrap(),
             "AYUV"
         );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn the_sockets_are_the_two_names_the_core_reads() {
+        // The core sends a base and reads `<base>.video` and `<base>.audio`;
+        // `MediaDir` in the core builds exactly those two names and
+        // docs/reference/plugin-lifecycle.md says the same. A writer that
+        // bound the base itself would leave the core waiting on a socket
+        // nobody ever creates, which is what this guards against.
+        assert_eq!(video_socket("/run/gmx/cam1/media"), "/run/gmx/cam1/media.video");
+        assert_eq!(audio_socket("/run/gmx/cam1/media"), "/run/gmx/cam1/media.audio");
+        assert_ne!(video_socket("/run/gmx/cam1/media"), "/run/gmx/cam1/media");
     }
 
     #[cfg(unix)]

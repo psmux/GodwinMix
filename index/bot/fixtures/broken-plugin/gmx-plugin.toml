@@ -1,0 +1,28 @@
+# This manifest parses. Everything it says is well formed, and the one thing
+# it promises, main.py, is not in this directory. That is the fault the fixture
+# exists to reproduce.
+
+[plugin]
+name = "clock"
+version = "0.2.0"
+api = 1
+description = "A source that draws the current time, large, on a solid background."
+license = "MIT"
+authors = ["the fixture"]
+repository = "https://github.com/psmux/gmx-clock"
+platforms = ["linux-x86_64"]
+placements = ["sidecar"]
+process = "per-instance"
+
+[run]
+python = "main.py"
+
+[[provides]]
+kind = "source"
+id = "source"
+media = { video = "raw", audio = "none", alpha = false, thumb = true }
+transports = ["container"]
+capabilities = ["restart-in-place", "health"]
+latency_ms = 0
+settings = "settings.json"
+skill = "SKILL.md"

@@ -1,0 +1,44 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "test_lamp",
+  "description": "Light one lamp for a moment, then put it out.",
+  "type": "object",
+  "properties": {
+    "index": {
+      "type": "integer",
+      "title": "UMD index",
+      "description": "Which lamp. Give this or a source.",
+      "minimum": 0,
+      "maximum": 65535,
+      "examples": [0, 3]
+    },
+    "source": {
+      "type": "string",
+      "title": "Source",
+      "description": "The source whose lamp to light. Looked up in the lamps list.",
+      "examples": ["cam1"]
+    },
+    "colour": {
+      "type": "string",
+      "enum": ["red", "green", "amber", "off"],
+      "default": "red",
+      "examples": ["red", "green"]
+    },
+    "label": {
+      "type": "string",
+      "maxLength": 32,
+      "description": "What to write on it while it is lit. Defaults to the lamp's own label.",
+      "examples": ["TEST"]
+    },
+    "hold_ms": {
+      "type": "integer",
+      "description": "How long to hold it, 100 to 30000 milliseconds.",
+      "default": 2000,
+      "minimum": 100,
+      "maximum": 30000,
+      "x-gmx-unit": "ms",
+      "examples": [2000, 5000]
+    }
+  },
+  "additionalProperties": false
+}

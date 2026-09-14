@@ -1,0 +1,297 @@
+{
+  "name": "godwinmix",
+  "title": "GodwinMix official",
+  "description": "The plugins the project maintains. Everything here is built on the public sidecar contract, tested by the conformance harness in CI on every declared platform, and signed by the release workflow.",
+  "owner": "psmux",
+  "version": 1,
+  "signing": {
+    "identity_regexp": "^https://github.com/psmux/godwinmix/.github/workflows/.+",
+    "oidc_issuer": "https://token.actions.githubusercontent.com"
+  },
+  "plugins": [
+    {
+      "name": "audio-device",
+      "source": "./plugins/audio-device",
+      "description": "A microphone, a line input or a sound card as a source: PipeWire or PulseAudio on Linux, Core Audio on macOS, WASAPI on Windows, with gain and mute and device discovery.",
+      "tier": "gold",
+      "kinds": [
+        "device",
+        "source"
+      ],
+      "license": "Apache-2.0",
+      "repository": "https://github.com/psmux/godwinmix/tree/main/plugins/audio-device",
+      "versions": [
+        {
+          "version": "0.1.0",
+          "api": 1,
+          "platforms": [
+            "linux-x86_64",
+            "linux-aarch64",
+            "linux-armv7",
+            "macos-aarch64",
+            "macos-x86_64",
+            "windows-x86_64"
+          ],
+          "signed": true
+        }
+      ]
+    },
+    {
+      "name": "camera",
+      "source": "./plugins/camera",
+      "description": "A USB or built in camera as a source: v4l2 on Linux, AVFoundation on macOS, Media Foundation on Windows, with device discovery and a resolution and frame rate you can set.",
+      "tier": "gold",
+      "kinds": [
+        "device",
+        "source"
+      ],
+      "license": "Apache-2.0",
+      "repository": "https://github.com/psmux/godwinmix/tree/main/plugins/camera",
+      "versions": [
+        {
+          "version": "0.1.0",
+          "api": 1,
+          "platforms": [
+            "linux-x86_64",
+            "linux-aarch64",
+            "linux-armv7",
+            "macos-aarch64",
+            "macos-x86_64",
+            "windows-x86_64"
+          ],
+          "signed": true
+        }
+      ]
+    },
+    {
+      "name": "director",
+      "source": "./plugins/director",
+      "description": "An automatic director: rule based out of the box, and able to consult a model when one is configured",
+      "tier": "gold",
+      "kinds": [
+        "service"
+      ],
+      "license": "Apache-2.0",
+      "repository": "https://github.com/psmux/godwinmix/tree/main/plugins/director",
+      "versions": [
+        {
+          "version": "0.2.0",
+          "api": 1,
+          "platforms": [
+            "linux-x86_64",
+            "linux-aarch64",
+            "macos-aarch64",
+            "macos-x86_64",
+            "windows-x86_64"
+          ],
+          "signed": true
+        }
+      ]
+    },
+    {
+      "name": "file-record",
+      "source": "./plugins/file-record",
+      "description": "Record the programme to a file: fragmented MP4 so a crash leaves something playable, or Matroska; a path pattern with the date and time, splitting by the clock, and a disk space check that says so before the disk fills.",
+      "tier": "gold",
+      "kinds": [
+        "output"
+      ],
+      "license": "Apache-2.0",
+      "repository": "https://github.com/psmux/godwinmix/tree/main/plugins/file-record",
+      "versions": [
+        {
+          "version": "0.1.0",
+          "api": 1,
+          "platforms": [
+            "linux-x86_64",
+            "linux-aarch64",
+            "linux-armv7",
+            "macos-aarch64",
+            "macos-x86_64"
+          ],
+          "signed": true
+        }
+      ]
+    },
+    {
+      "name": "ingest",
+      "source": "./plugins/ingest",
+      "description": "GodwinMix as a server: an RTMP listener written in Rust so a phone or an OBS can publish straight to the mixer, a WHIP endpoint a browser can publish to with nothing but a URL, and a device provide that reports every publisher as a source ready to add.",
+      "tier": "gold",
+      "kinds": [
+        "device",
+        "source"
+      ],
+      "license": "Apache-2.0",
+      "repository": "https://github.com/psmux/godwinmix/tree/main/plugins/ingest",
+      "versions": [
+        {
+          "version": "0.1.0",
+          "api": 1,
+          "platforms": [
+            "linux-x86_64",
+            "linux-aarch64",
+            "macos-aarch64",
+            "macos-x86_64",
+            "windows-x86_64"
+          ],
+          "signed": true
+        }
+      ]
+    },
+    {
+      "name": "ndi",
+      "source": "./plugins/ndi",
+      "description": "NDI sources and outputs, with mDNS discovery of every NDI sender on the network. The NDI runtime is loaded at run time and never linked, so the plugin builds and runs on a machine that has never had it and says where to get it.",
+      "tier": "gold",
+      "kinds": [
+        "device",
+        "output",
+        "source"
+      ],
+      "license": "Apache-2.0",
+      "repository": "https://github.com/psmux/godwinmix/tree/main/plugins/ndi",
+      "versions": [
+        {
+          "version": "0.1.0",
+          "api": 1,
+          "platforms": [
+            "linux-x86_64",
+            "linux-aarch64",
+            "macos-aarch64",
+            "macos-x86_64",
+            "windows-x86_64"
+          ],
+          "signed": true
+        }
+      ]
+    },
+    {
+      "name": "osc",
+      "source": "./plugins/osc",
+      "description": "OSC in and out: take, fader and mute from any control surface, tally and programme back out",
+      "tier": "gold",
+      "kinds": [
+        "service"
+      ],
+      "license": "Apache-2.0",
+      "repository": "https://github.com/psmux/godwinmix/tree/main/plugins/osc",
+      "versions": [
+        {
+          "version": "0.2.0",
+          "api": 1,
+          "platforms": [
+            "linux-x86_64",
+            "linux-aarch64",
+            "macos-aarch64",
+            "macos-x86_64",
+            "windows-x86_64"
+          ],
+          "signed": true
+        }
+      ]
+    },
+    {
+      "name": "screen",
+      "source": "./plugins/screen",
+      "description": "A monitor or a window as a source: the PipeWire portal or X11 on Linux, AVFoundation on macOS, Desktop Duplication on Windows. Desktop duplication only, not exclusive fullscreen game capture.",
+      "tier": "gold",
+      "kinds": [
+        "device",
+        "source"
+      ],
+      "license": "Apache-2.0",
+      "repository": "https://github.com/psmux/godwinmix/tree/main/plugins/screen",
+      "versions": [
+        {
+          "version": "0.1.0",
+          "api": 1,
+          "platforms": [
+            "linux-x86_64",
+            "linux-aarch64",
+            "macos-aarch64",
+            "macos-x86_64",
+            "windows-x86_64"
+          ],
+          "signed": true
+        }
+      ]
+    },
+    {
+      "name": "srt",
+      "source": "./plugins/srt",
+      "description": "Receive SRT in caller, listener or rendezvous mode, with a latency budget, a passphrase, a stream id, and link statistics (round trip time, loss, retransmits) in health. Sending over SRT is built into the core as srt/output.",
+      "tier": "gold",
+      "kinds": [
+        "source"
+      ],
+      "license": "Apache-2.0",
+      "repository": "https://github.com/psmux/godwinmix/tree/main/plugins/srt",
+      "versions": [
+        {
+          "version": "0.1.0",
+          "api": 1,
+          "platforms": [
+            "linux-x86_64",
+            "linux-aarch64",
+            "macos-aarch64",
+            "macos-x86_64",
+            "windows-x86_64"
+          ],
+          "signed": true
+        }
+      ]
+    },
+    {
+      "name": "tally",
+      "source": "./plugins/tally",
+      "description": "TSL UMD v5 tally: one lamp per source, over UDP or TCP, because tally lamps do not speak JSON",
+      "tier": "gold",
+      "kinds": [
+        "service"
+      ],
+      "license": "Apache-2.0",
+      "repository": "https://github.com/psmux/godwinmix/tree/main/plugins/tally",
+      "versions": [
+        {
+          "version": "0.2.0",
+          "api": 1,
+          "platforms": [
+            "linux-x86_64",
+            "linux-aarch64",
+            "macos-aarch64",
+            "macos-x86_64",
+            "windows-x86_64"
+          ],
+          "signed": true
+        }
+      ]
+    },
+    {
+      "name": "whip",
+      "source": "./plugins/whip",
+      "description": "Send the programme to a WHIP endpoint over WebRTC, and receive somebody else's stream over WHEP. One HTTP POST carrying an SDP offer, a bearer token if the service wants one, and reconnection with a backoff.",
+      "tier": "gold",
+      "kinds": [
+        "output",
+        "source"
+      ],
+      "license": "Apache-2.0",
+      "repository": "https://github.com/psmux/godwinmix/tree/main/plugins/whip",
+      "versions": [
+        {
+          "version": "0.1.0",
+          "api": 1,
+          "platforms": [
+            "linux-x86_64",
+            "linux-aarch64",
+            "macos-aarch64",
+            "macos-x86_64",
+            "windows-x86_64"
+          ],
+          "signed": true
+        }
+      ]
+    }
+  ]
+}
