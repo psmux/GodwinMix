@@ -9,14 +9,16 @@ and `main` picks the handler from it:
 
 | Provide | Kind | Module |
 |---|---|---|
-| `ingest/rtmp` | source | `src/source.rs` over `src/rtmp.rs` and `src/flv.rs` |
+| `ingest/rtmp` | source | `src/source.rs` over `src/rtmp.rs`, `src/flv.rs` and `src/remux.rs` |
 | `ingest/whip` | source | `src/whip_in.rs` |
 | `ingest/discover` | device | `src/device.rs` over `src/rtmp.rs`, `src/relay.rs`, `src/rest.rs` |
 
 The RTMP half is pure Rust: `rml_rtmp` parses chunks and raises events, this
 plugin owns the sockets, and the published messages become FLV tags with a
-twenty byte header each. No GStreamer element is involved in RTMP at all. The
-WHIP half is one GStreamer element, `whipserversrc`.
+twenty byte header each. That FLV is then remuxed to Matroska by two parsers and
+a muxer, with nothing decoded; `src/remux.rs` says at length why the FLV cannot
+go to the core as it is. The WHIP half is one GStreamer element,
+`whipserversrc`.
 
 ## Build and test
 
@@ -32,10 +34,11 @@ gmx plugin test plugins/ingest --offline     # replay tests/transcript.jsonl
 1. **stdout is media.** A `println!` anywhere in this process corrupts the
    stream. Log through the `Reporter`, which writes to stderr. `src/source.rs`
    takes the stdout handle for exactly this reason.
-2. **Do not parse the media.** An RTMP message body is an FLV tag body. It goes
-   through unchanged, and the core decodes it once. Adding a parser or a
-   decoder here would pay for the decode twice and is the one change that would
-   make this plugin expensive.
+2. **Do not decode the media.** An RTMP message body is an FLV tag body and
+   stays one all the way to `matroskamux`. `h264parse` and `aacparse` are there
+   because a muxer needs framing, not because anything is being examined.
+   Adding a decoder here would pay for the decode twice and is the one change
+   that would make this plugin expensive.
 3. **A connection thread must not block on anything but its own socket.** The
    `Sink` closure is called from it. Writing to the pipe is what it does;
    waiting on a lock somebody else holds for long is not.

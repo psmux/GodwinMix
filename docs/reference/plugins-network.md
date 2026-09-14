@@ -90,8 +90,8 @@ falls back automatically when it is gone.
 
 ## `ingest/rtmp`
 
-The mixer listens and the publisher dials in. Written in Rust over `rml_rtmp`;
-no GStreamer element is involved.
+The mixer listens and the publisher dials in. The protocol is written in Rust
+over `rml_rtmp`; GStreamer is used only to remux for the core.
 
 | Key | Type | Default | Meaning |
 |---|---|---|---|
@@ -105,9 +105,13 @@ One source is one picture, so a second publisher is refused while the first is
 live and the refusal reaches the publisher's own error box. Bytes are held back
 until the first keyframe.
 
-The stream crosses to the core as FLV: an RTMP audio or video message carries
-exactly the body of an FLV tag, so it costs a nine byte file header and eleven
-bytes per message and nothing else.
+An RTMP audio or video message carries exactly the body of an FLV tag, so the
+listener writes FLV for nine bytes plus eleven per message and parses nothing.
+That FLV is remuxed to Matroska before it crosses to the core, by two parsers
+and a muxer with nothing decoded, because FLV into the core's `decodebin`
+autoplugs a GL backed decoder on macOS that the normaliser cannot take.
+`plugins/ingest/src/remux.rs` carries the measurement and names the one core
+change that would remove the need for it.
 
 ## `ingest/whip`
 
@@ -216,7 +220,9 @@ with no NDI on it is not broken.
 | `whepsrc`, `whepclientsrc` | `whip` | `gstreamer1.0-plugins-rs` |
 | `ndisrc`, `ndisink` | `ndi` | `gstreamer1.0-plugins-rs`, plus the NDI runtime |
 
-Nothing in `ingest`'s RTMP path needs an element at all.
+`ingest`'s RTMP path needs `flvdemux`, `h264parse`, `aacparse` and
+`matroskamux`, all from the base and good sets, and no element at all for the
+protocol itself.
 
 Every one of these plugins refuses at `initialize` with one sentence naming the
 element and the package for the platform it is running on, rather than a missing

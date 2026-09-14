@@ -40,4 +40,5 @@ setting on this side will.
 
 `whipserversrc` arrived in the GStreamer 1.28 rs webrtc set. On an older build
 this source refuses to start with a message naming the package. Take the stream
-over RTMP with `ingest/rtmp` instead, which needs no GStreamer element at all.
+over RTMP with `ingest/rtmp` instead, whose protocol is written in Rust and
+needs no webrtc element.

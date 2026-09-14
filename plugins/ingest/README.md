@@ -9,7 +9,7 @@ means running a separate mediamtx beside the mixer.
 
 | Provide | What it is |
 |---|---|
-| `ingest/rtmp` | an RTMP listener, in Rust, with no GStreamer element involved |
+| `ingest/rtmp` | an RTMP listener written in Rust |
 | `ingest/whip` | a WHIP endpoint, so a browser needs nothing but the URL |
 | `ingest/discover` | one RTMP port for many publishers, each reported as a source ready to add |
 
@@ -57,15 +57,40 @@ again; today it wants Rust 1.97 and this workspace is on 1.82.
 ## How the stream reaches the core
 
 An RTMP audio or video message carries exactly the body of an FLV tag: the same
-codec byte, the same AVC or AAC packet type. So turning a published stream into
-something the core can open is a nine byte file header and an eleven byte header
-per message. Nothing is parsed, nothing is re-timed, nothing is decoded here.
+codec byte, the same AVC or AAC packet type. So the RTMP half of this plugin
+turns a published stream into FLV with a nine byte file header and eleven bytes
+per message, and parses nothing.
 
-The core's container transport is `fdsrc ! decodebin`, which typefinds FLV and
-picks `flvdemux`, so a stream that arrives here is decoded by exactly the code
-that decodes one `rtmp/source` dialled out for. There is a test that captures a
-real publisher's stream and runs `decodebin` over it, because a correct header
-is not the same as an openable stream.
+That FLV is then remuxed to Matroska before it crosses to the core:
+
+```
+appsrc(FLV) ──► flvdemux ──┬─► h264parse ─┐
+                           └─► aacparse ──┴─► matroskamux ──► fdsink fd=1
+```
+
+Two parsers and a muxer. No decode, no encode, no copy of a picture.
+
+Handing the core the FLV directly would have been cheaper still, and it is what
+this plugin did first. It does not work on macOS: `flvdemux` feeding the core's
+`decodebin` makes it autoplug Apple's `vtdec_hw`, which negotiates GL backed
+memory, and the core's normaliser works in system memory. The pipeline fails
+with `not-negotiated`, the source never produces a frame, and nothing in the log
+names the cause. The same stream in Matroska or MPEG-TS decodes on the same
+machine with the same hardware decoder, which was measured with
+`gst-launch-1.0` and no GodwinMix code involved. `src/remux.rs` carries the
+whole finding.
+
+The core could fix it instead, by putting the catalogue's `download` element
+between `decodebin` and the normaliser on the sidecar container path, the way
+the built in `rtmp/source` already does for its own decoder. That is the better
+long term answer and it belongs in
+`crates/godwinmix-core/src/plugin/host/source.rs`. Until it lands, every sidecar
+plugin sending encoded video over the container transport wants Matroska or
+MPEG-TS rather than FLV, and that is worth knowing.
+
+There is a test that captures a real publisher's stream and runs `decodebin`
+over what comes out, because a correct header is not the same as an openable
+stream.
 
 Bytes are held back until the first keyframe, so a decoder is never handed a run
 of inter frames with nothing to decode them against.

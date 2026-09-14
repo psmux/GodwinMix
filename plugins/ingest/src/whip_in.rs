@@ -34,7 +34,7 @@ pub fn unavailable() -> String {
     format!(
         "this build of GStreamer has no 'whipserversrc', so the mixer cannot be a WHIP \
          endpoint. It comes from {}. Until it is there, take the stream over RTMP with \
-         ingest/rtmp, which needs no GStreamer element at all, or over SRT with \
+         ingest/rtmp, whose protocol is written in Rust, or over SRT with \
          srt/source in listener mode.",
         gmx_netkit::elements::where_from("whipserversrc")
     )

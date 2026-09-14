@@ -20,7 +20,11 @@
 set -uo pipefail
 
 mode=${1:-rtmp}
-here=$(cd "$(dirname "$0")" && pwd)
+# Replace this shell with gst-launch for a single protocol, so the process id a
+# caller has is the one publishing: `kill $!` then stops the publisher rather
+# than leaving it orphaned behind a dead wrapper. In `both` mode there are two
+# children, so the wrapper stays and traps.
+RUN=exec
 
 have() { command -v "$1" >/dev/null 2>&1; }
 
@@ -53,7 +57,7 @@ publish_rtmp() {
   fi
   echo "publishing a test pattern to rtmp://127.0.0.1:$port/$path"
   # shellcheck disable=SC2086
-  gst-launch-1.0 -q flvmux name=mux streamable=true \
+  $RUN gst-launch-1.0 -q flvmux name=mux streamable=true \
     ! rtmp2sink "location=rtmp://127.0.0.1:$port/$path" \
     $video ! mux. \
     $audio ! "audio/x-raw,rate=44100" ! avenc_aac ! aacparse ! mux.
@@ -67,7 +71,7 @@ publish_srt() {
   fi
   echo "publishing a test pattern to srt://127.0.0.1:$port (caller mode)"
   # shellcheck disable=SC2086
-  gst-launch-1.0 -q mpegtsmux name=mux \
+  $RUN gst-launch-1.0 -q mpegtsmux name=mux \
     ! srtsink "uri=srt://127.0.0.1:$port?mode=caller&latency=125" wait-for-connection=false \
     $video ! mux. \
     $audio ! avenc_aac ! aacparse ! mux.
@@ -81,6 +85,7 @@ case "$mode" in
     publish_srt "${2:-9000}"
     ;;
   both)
+    RUN=""
     publish_rtmp "${2:-1935}" "live/test" &
     rtmp_pid=$!
     publish_srt "${3:-9000}" &
