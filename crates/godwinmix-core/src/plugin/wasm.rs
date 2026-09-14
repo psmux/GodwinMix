@@ -407,3 +407,85 @@ mod tests {
         assert!(e.to_string().contains("--features wasm"), "{e}");
     }
 }
+
+#[cfg(test)]
+mod through_the_launcher {
+    use super::*;
+
+    /// A plugin that can be either, with the operator asking for `wasm`, and a
+    /// `source` provide. The manifest is valid: the source is meant to run as
+    /// a sidecar. What is refused is the source at the placement the operator
+    /// chose, and it is refused in the launch path, where `source.add`,
+    /// `output.add` and `filter.add` all pass.
+    #[test]
+    fn a_source_is_refused_where_the_launcher_would_have_built_it() {
+        let dir = std::env::temp_dir().join(format!("gmx-wasm-launch-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let root = dir.join("both").join("0.1.0");
+        std::fs::create_dir_all(&root).expect("a plugin directory");
+        std::fs::write(root.join("plugin.wasm"), b"\0asm\x0d\0\x01\0").expect("a component file");
+        std::fs::write(
+            root.join("source.json"),
+            r#"{"$schema":"https://json-schema.org/draft/2020-12/schema","type":"object","properties":{}}"#,
+        )
+        .expect("a settings schema");
+        std::fs::write(
+            root.join("gmx-plugin.toml"),
+            r#"
+[plugin]
+name = "both"
+version = "0.1.0"
+api = 1
+description = "A plugin with a media provide and a component"
+license = "MIT"
+platforms = ["macos-aarch64", "linux-x86_64", "linux-aarch64", "macos-x86_64", "windows-x86_64"]
+placements = ["sidecar", "wasm"]
+
+[run]
+bin = { "macos-aarch64" = "bin/both", "linux-x86_64" = "bin/both", "linux-aarch64" = "bin/both", "macos-x86_64" = "bin/both", "windows-x86_64" = "bin/both.exe" }
+wasm = "plugin.wasm"
+
+[[provides]]
+kind = "source"
+id = "source"
+media = { video = "raw", audio = "none" }
+transports = ["container"]
+settings = "source.json"
+"#,
+        )
+        .expect("a manifest");
+        std::fs::create_dir_all(root.join("bin")).expect("a bin directory");
+        std::fs::write(root.join("bin").join("both"), b"#!/bin/sh\n").expect("a binary");
+
+        let installed = super::super::loader::read(&root, &Default::default());
+        assert!(installed.problem.is_none(), "the manifest is valid: {:?}", installed.problem);
+        super::super::loader::insert(installed);
+
+        let asked: toml::Table = toml::from_str("place = \"wasm\"").expect("a table");
+        set_config(BTreeMap::from([("both".to_string(), asked)]), Vec::new());
+        let refused = super::super::loader::launch_for(
+            "both/source",
+            "cam1",
+            String::new(),
+            String::new(),
+        )
+        .expect_err("a source cannot run as a component");
+        let typed = refused.downcast_ref::<MediaRefused>().expect("a typed refusal");
+        assert_eq!(typed.kind, "source");
+        assert_eq!(typed.placements, ["in-process", "sidecar", "node"]);
+
+        // And with the operator asking for nothing, the same plugin launches
+        // as a process: a plugin that can be either stays one until asked.
+        set_config(BTreeMap::new(), Vec::new());
+        let launched = super::super::loader::launch_for(
+            "both/source",
+            "cam1",
+            String::new(),
+            String::new(),
+        );
+        assert!(launched.is_ok(), "{:?}", launched.err());
+
+        super::super::loader::remove("both");
+        let _ = std::fs::remove_dir_all(dir);
+    }
+}
