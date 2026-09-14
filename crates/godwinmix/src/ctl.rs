@@ -42,6 +42,17 @@ pub enum Ctl {
         /// Land the cut on this program running time, in milliseconds.
         #[arg(long)]
         at: Option<u64>,
+        /// How to get there: cut, fade, move, stinger, a name the collection
+        /// knows, or a transition plugin's name. A cut by default.
+        #[arg(long)]
+        transition: Option<String>,
+        /// How long the transition takes, in milliseconds. 300 by default,
+        /// and 0 is a cut whatever the type says.
+        #[arg(long)]
+        duration: Option<u64>,
+        /// A stinger's clip: a source already in the mixer, or a file.
+        #[arg(long)]
+        clip: Option<String>,
     },
     /// Take back to the shot that was on air before this one.
     Revert,
@@ -274,11 +285,24 @@ pub async fn run(base: &str, token: Option<&str>, cmd: Ctl) -> Result<()> {
     let api = &api;
     match cmd {
         Ctl::Status { json } => status(api, json).await?,
-        Ctl::Take { name, scene, at } => {
+        Ctl::Take { name, scene, at, transition, duration, clip } => {
+            let transition = transition.map(|type_id| {
+                let mut params = serde_json::Map::new();
+                if let Some(clip) = clip {
+                    params.insert("clip".into(), serde_json::Value::String(clip));
+                }
+                godwinmix_protocol::requests::Transition::Full(
+                    godwinmix_protocol::requests::TransitionRequest {
+                        type_id,
+                        duration_ms: duration,
+                        params,
+                    },
+                )
+            });
             let req = if scene {
-                TakeRequest { source: None, scene: name, transition: None, at_running_time_ms: at }
+                TakeRequest { source: None, scene: name, transition, at_running_time_ms: at }
             } else {
-                TakeRequest { source: name, scene: None, transition: None, at_running_time_ms: at }
+                TakeRequest { source: name, scene: None, transition, at_running_time_ms: at }
             };
             let state: ProgramState = api.call("program.take", None, &req).await?;
             println!("on program: {}", on_air(&state));

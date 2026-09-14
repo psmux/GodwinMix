@@ -371,6 +371,77 @@ step "a source take still works and still reports the source"
 "$GMX" ctl take bars >"$WORK/scene-back.log" 2>&1
 if grep -q "bars" "$WORK/scene-back.log"; then ok; else bad "$(cat "$WORK/scene-back.log")"; fi
 
+# --- transitions ------------------------------------------------------------
+#
+# A crossfade is the take that puts both scenes on the canvas at once, so it is
+# the one that would show up as a dropped frame if the slot pool or the control
+# bindings were wrong.
+
+# The flash guard holds a cut that changes brightness sharply 360 ms from the
+# next one (ITU-R BT.1702-3, and `[safety] flash_guard`), and colour bars
+# against a two box of colour bars is exactly that. Waiting is what an operator
+# would do, and what the guard's error tells them to do.
+sleep 1
+
+step "a fade take lands and says so"
+read -r INSIDE_BEFORE TOTAL_BEFORE < <(interval_counts)
+"$GMX" ctl take --scene "smoke two" --transition fade --duration 300 \
+    >"$WORK/fade.log" 2>&1
+if grep -q "smoke two" "$WORK/fade.log"; then
+    ok
+else
+    bad "$(tr '\n' '; ' <"$WORK/fade.log")"
+fi
+
+step "the programme did not drop a frame across it"
+sleep 1
+read -r INSIDE_AFTER TOTAL_AFTER < <(interval_counts)
+FRAMES=$((TOTAL_AFTER - TOTAL_BEFORE))
+LATE=$(( (TOTAL_AFTER - TOTAL_BEFORE) - (INSIDE_AFTER - INSIDE_BEFORE) ))
+if [[ "$FRAMES" -gt 10 && "$LATE" == "0" ]]; then
+    ok
+else
+    bad "$LATE of $FRAMES frames arrived more than 100 ms after the one before"
+fi
+
+step "event/program.took carries the transition and its duration"
+TOOK="$(curl -fsS "$BASE/api/v1/program/history?limit=1" "${AUTH[@]}" 2>/dev/null)"
+if [[ -n "$TOOK" ]]; then ok; else bad "program.history answered nothing"; fi
+
+step "a transition this core does not have is refused by name"
+REFUSED="$("$GMX" ctl take --scene "smoke two" --transition nonsuch 2>&1)"
+if grep -qi "nonsuch" <<<"$REFUSED" && grep -q "fade" <<<"$REFUSED"; then
+    ok
+else
+    bad "answered: $(tr '\n' '; ' <<<"$REFUSED")"
+fi
+
+step "and the programme is still on the scene it was on"
+if curl -fsS "$BASE/api/v1/program" "${AUTH[@]}" | grep -q '"scene":"smoke two"'; then
+    ok
+else
+    bad "$(curl -fsS "$BASE/api/v1/program" "${AUTH[@]}")"
+fi
+
+step "the armed scene is composited as a preview"
+"$GMX" ctl scene arm "smoke two" >/dev/null 2>&1
+FRAME="$(curl -fsS "$BASE/api/v1/scenes/preview/frame?width=320" "${AUTH[@]}" 2>&1)"
+if grep -q '"image"' <<<"$FRAME" && grep -q '"layout"' <<<"$FRAME"; then
+    ok
+else
+    bad "scene.preview.frame answered: ${FRAME:0:200}"
+fi
+
+step "and the preview compositor went away with the asking"
+sleep 3
+if curl -fsS "$BASE/metrics" "${AUTH[@]}" | grep -q '^gmx_multiview_subscribers 0'; then
+    ok
+else
+    bad "$(curl -fsS "$BASE/metrics" "${AUTH[@]}" | grep multiview_subscribers)"
+fi
+
+"$GMX" ctl take bars >/dev/null 2>&1
+
 unset GODWINMIX_URL GODWINMIX_TOKEN
 
 # --- presets ----------------------------------------------------------------
@@ -556,6 +627,69 @@ GODWINMIX_URL="$BASE" GODWINMIX_TOKEN="$TOKEN" "$GMX" plugin remove smoke-bars \
 sleep 2
 STRAYS=$(pgrep -f "smoke-bars/0.1.0/run.sh" 2>/dev/null | wc -l | tr -d ' ')
 LEFT=$(ls "$WORK/plugins/smoke-bars" 2>/dev/null | wc -l | tr -d ' ')
+if [ "$STRAYS" = "0" ] && [ "$LEFT" = "0" ]; then
+    ok
+else
+    bad "removal left $STRAYS process(es) and $LEFT directory entr(ies)"
+fi
+
+# --- a service plugin, started by the core rather than by an operator -------
+#
+# A service, a device and a transition are one instance per plugin, started
+# with the core. The fixture under the core's tests is a whole plugin in shell:
+# a tool, a `discover`, and an event that has to become a source.
+
+SVC="$REPO/crates/godwinmix-core/tests/fixtures/fake-service"
+
+step "gmx plugin add starts a service and a device as singletons"
+if GODWINMIX_URL="$BASE" GODWINMIX_TOKEN="$TOKEN" "$GMX" plugin add "$SVC" \
+        >"$WORK/service-add.log" 2>&1; then
+    sleep 2
+    GODWINMIX_URL="$BASE" GODWINMIX_TOKEN="$TOKEN" "$GMX" plugin list \
+        >"$WORK/service-list.log" 2>&1 || true
+    if grep -q "fakeservice" "$WORK/service-list.log"; then
+        ok
+    else
+        bad "plugin list does not show it: $(tr '\n' '; ' <"$WORK/service-list.log")"
+    fi
+else
+    bad "plugin add failed: $(tr '\n' '; ' <"$WORK/service-add.log")"
+fi
+
+step "tool.call reaches the service and the answer comes back"
+CALLED="$(curl -fsS -X POST "$BASE/api/v1/tool/call" "${AUTH[@]}" \
+    -H 'content-type: application/json' \
+    -d '{"name": "fakeservice/echo", "arguments": {"say": "smoke"}}' 2>&1)"
+if grep -q '"echo"' <<<"$CALLED"; then
+    ok
+else
+    bad "tool.call answered: ${CALLED:0:200}"
+fi
+
+step "device.discover asks the device and merges what it finds"
+FOUND="$(curl -fsS -X POST "$BASE/api/v1/device/discover" "${AUTH[@]}" \
+    -H 'content-type: application/json' -d '{"timeout_ms": 2000}' 2>&1)"
+if grep -q "Fake Camera" <<<"$FOUND"; then
+    ok
+else
+    bad "device.discover answered: ${FOUND:0:200}"
+fi
+
+step "plugin.reload swaps the running instances"
+RELOADED="$(curl -fsS -X POST "$BASE/api/v1/plugins/fakeservice/reload" "${AUTH[@]}" \
+    -H 'content-type: application/json' -d '{}' 2>&1)"
+if grep -q "fakeservice" <<<"$RELOADED"; then
+    ok
+else
+    bad "plugin.reload answered: ${RELOADED:0:200}"
+fi
+
+step "gmx plugin remove leaves no service process behind"
+GODWINMIX_URL="$BASE" GODWINMIX_TOKEN="$TOKEN" "$GMX" plugin remove fakeservice \
+    >"$WORK/service-remove.log" 2>&1 || true
+sleep 2
+STRAYS=$(pgrep -f "fakeservice/0.1.0/run.sh" 2>/dev/null | wc -l | tr -d ' ')
+LEFT=$(ls "$WORK/plugins/fakeservice" 2>/dev/null | wc -l | tr -d ' ')
 if [ "$STRAYS" = "0" ] && [ "$LEFT" = "0" ]; then
     ok
 else
