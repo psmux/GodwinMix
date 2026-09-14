@@ -1,0 +1,25 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "desktop-shell",
+  "description": "What the shell's own connect page may do. The same window later loads the operator UI from the core over http, and that origin is not named here or in the config, so it gets no IPC at all: the page the core serves cannot spawn the sidecar, read a path or ask for an update.",
+  "windows": ["main"],
+  "local": true,
+  "permissions": [
+    "core:default",
+    "shell:allow-kill",
+    {
+      "identifier": "shell:allow-spawn",
+      "allow": [
+        {
+          "name": "binaries/godwinmix",
+          "sidecar": true,
+          "args": true
+        }
+      ]
+    },
+    "opener:default",
+    "opener:allow-open-path",
+    "dialog:allow-message",
+    "updater:default"
+  ]
+}

@@ -11,8 +11,40 @@ edition = "2021"
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
-tauri = { version = "2", features = [] }
+# tray-icon puts the app in the menu bar or the notification area; image-png
+# lets the tray reuse the window icon that is already in the bundle.
+tauri = { version = "2", features = ["tray-icon", "image-png"] }
+
+# One plugin per thing the brief asks for, and nothing else:
+#   shell         spawns the bundled daemon as a sidecar and stops it
+#   single-instance  a second launch focuses the window already open
+#   window-state  size and position survive a quit
+#   opener        "Open logs folder" and "Open config folder"
+#   dialog        the only way to tell the operator something when the window
+#                 is showing a page served by the core, which the shell cannot
+#                 write into
+#   updater       "Check for updates", against the endpoint in tauri.conf.json
+tauri-plugin-shell = "2"
+tauri-plugin-single-instance = "2"
+tauri-plugin-window-state = "2"
+tauri-plugin-opener = "2"
+tauri-plugin-dialog = "2"
+tauri-plugin-updater = "2"
+
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tokio = { version = "1", default-features = false, features = ["rt", "time", "macros"] }
+# The updater plugin already carries reqwest, so asking the core for its
+# version and for a shutdown over HTTP costs nothing extra. rustls rather than
+# the platform's TLS, for the same reason the daemon does it: a remote core
+# behind https must work on all three platforms with no system headers.
+reqwest = { version = "0.13", default-features = false, features = ["json", "rustls"] }
+# The control token has to be unguessable and the shell has no other source of
+# randomness. getrandom is already under Tauri; this is a version line, not a
+# new tree.
+getrandom = "0.3"
 
 [profile.release]
 opt-level = "s"
 lto = true
+strip = true
