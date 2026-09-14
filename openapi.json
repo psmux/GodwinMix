@@ -246,6 +246,19 @@
         ],
         "type": "object"
       },
+      "AddPluginRequest": {
+        "description": "`plugin.add`.",
+        "properties": {
+          "source": {
+            "description": "A local directory with `gmx-plugin.toml` at its root. Git, an index and\na signed release are Phase 5; this takes a path.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "source"
+        ],
+        "type": "object"
+      },
       "AddSceneRequest": {
         "properties": {
           "color": {
@@ -1454,6 +1467,74 @@
         ],
         "type": "object"
       },
+      "InstanceRecord": {
+        "description": "One running instance and its cost.",
+        "properties": {
+          "buffers_dropped": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "cpu_percent": {
+            "format": "double",
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "instance": {
+            "type": "string"
+          },
+          "media_latency_ms": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "pid": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "plugin": {
+            "description": "The plugin it belongs to. Carried on the instance as well as on the\nplugin, because `plugin.stats` is a flat list and a caller holding one\nrow should not have to go back for the name.",
+            "type": "string"
+          },
+          "provide": {
+            "type": "string"
+          },
+          "restarts": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "rss_bytes": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "state": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "instance",
+          "plugin",
+          "provide",
+          "state",
+          "buffers_dropped",
+          "restarts"
+        ],
+        "type": "object"
+      },
       "ItemFilterRequest": {
         "description": "`scene.item.filter.set` and `remove`.",
         "properties": {
@@ -2364,6 +2445,235 @@
         },
         "type": "object"
       },
+      "PluginDescription": {
+        "description": "The whole of one plugin, for an agent about to use it.",
+        "properties": {
+          "description": {
+            "type": "string"
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "hooks": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "instances": {
+            "description": "Every running instance of it, with what it costs.",
+            "items": {
+              "$ref": "#/components/schemas/InstanceRecord"
+            },
+            "type": "array"
+          },
+          "manifest": {
+            "description": "The manifest as JSON, every table of it."
+          },
+          "name": {
+            "type": "string"
+          },
+          "problem": {
+            "description": "Why it is not loaded, when it is not.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "provides": {
+            "description": "The type ids it contributes: what goes in `type` on a source, an output\nor a filter.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "root": {
+            "description": "Where it is installed.",
+            "type": "string"
+          },
+          "schemas": {
+            "additionalProperties": true,
+            "description": "Per provide id, its settings schema.",
+            "type": "object"
+          },
+          "skills": {
+            "additionalProperties": true,
+            "description": "Per provide id, the description line from its SKILL.md.",
+            "type": "object"
+          },
+          "tools": {
+            "description": "Its MCP tools, as `gmx_<plugin>_<tool>`. Reachable with `search_tools`;\nnever in the hot list.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "version": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "version",
+          "description",
+          "enabled",
+          "root",
+          "provides",
+          "tools",
+          "hooks",
+          "instances",
+          "manifest",
+          "schemas",
+          "skills"
+        ],
+        "type": "object"
+      },
+      "PluginListing": {
+        "properties": {
+          "plugins": {
+            "items": {
+              "$ref": "#/components/schemas/PluginRecord"
+            },
+            "type": "array"
+          },
+          "plugins_dir": {
+            "description": "Where plugins are read from on this machine.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "plugins",
+          "plugins_dir"
+        ],
+        "type": "object"
+      },
+      "PluginName": {
+        "description": "Anything that names one plugin.\n\nThe field is `id` because that is what the REST layer fills in from\n`/api/v1/plugins/{id}`, and a plugin's id is its name: the namespace of\nevery id it contributes. `name` is accepted as well, for a JSON-RPC caller\nwho wrote the obvious thing.",
+        "properties": {
+          "id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "type": "object"
+      },
+      "PluginRecord": {
+        "description": "One plugin as the core reports it.",
+        "properties": {
+          "description": {
+            "type": "string"
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "hooks": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "instances": {
+            "description": "Every running instance of it, with what it costs.",
+            "items": {
+              "$ref": "#/components/schemas/InstanceRecord"
+            },
+            "type": "array"
+          },
+          "name": {
+            "type": "string"
+          },
+          "problem": {
+            "description": "Why it is not loaded, when it is not.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "provides": {
+            "description": "The type ids it contributes: what goes in `type` on a source, an output\nor a filter.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "root": {
+            "description": "Where it is installed.",
+            "type": "string"
+          },
+          "tools": {
+            "description": "Its MCP tools, as `gmx_<plugin>_<tool>`. Reachable with `search_tools`;\nnever in the hot list.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "version": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "version",
+          "description",
+          "enabled",
+          "root",
+          "provides",
+          "tools",
+          "hooks",
+          "instances"
+        ],
+        "type": "object"
+      },
+      "PluginRemoved": {
+        "properties": {
+          "provides": {
+            "description": "What went with it, so a caller can see the blast radius.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "removed": {
+            "type": "string"
+          },
+          "tools": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "removed",
+          "provides",
+          "tools"
+        ],
+        "type": "object"
+      },
+      "PluginSettings": {
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "schemas": {
+            "additionalProperties": true,
+            "description": "The JSON Schema every surface renders, one per provide.",
+            "type": "object"
+          },
+          "settings": {
+            "additionalProperties": true,
+            "type": "object"
+          }
+        },
+        "required": [
+          "name",
+          "settings",
+          "schemas"
+        ],
+        "type": "object"
+      },
       "PreviewClosed": {
         "description": "What `preview.close` answers with.",
         "properties": {
@@ -2880,6 +3190,24 @@
         ],
         "type": "object"
       },
+      "SetSettingsRequest": {
+        "description": "`plugin.settings.set`.",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "settings": {
+            "additionalProperties": true,
+            "default": {},
+            "description": "Only the keys named are changed.",
+            "type": "object"
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "type": "object"
+      },
       "SetSourceMetaRequest": {
         "description": "`source.set`.",
         "properties": {
@@ -3125,6 +3453,20 @@
           "state",
           "has_video",
           "has_audio"
+        ],
+        "type": "object"
+      },
+      "StatsListing": {
+        "properties": {
+          "instances": {
+            "items": {
+              "$ref": "#/components/schemas/InstanceRecord"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "instances"
         ],
         "type": "object"
       },
@@ -4593,6 +4935,452 @@
         "summary": "Every queue in one pipeline with how full it is, fullest first. A queue that stays full is where the trouble is.",
         "tags": [
           "pipeline"
+        ],
+        "x-destructive": false,
+        "x-idempotent": true,
+        "x-scope": "read"
+      }
+    },
+    "/api/v1/plugins": {
+      "get": {
+        "description": "JSON-RPC method `plugin.list`. Needs the `read` scope.",
+        "operationId": "plugin.list",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PluginListing"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Every plugin installed, with what it provides and what each running instance is costing in cpu, memory, latency, dropped buffers and restarts.",
+        "tags": [
+          "plugin"
+        ],
+        "x-destructive": false,
+        "x-idempotent": true,
+        "x-scope": "read"
+      },
+      "post": {
+        "description": "JSON-RPC method `plugin.add`. Needs the `admin` scope. Destructive: accepts `dry_run: true`, and on a token whose policy is `confirm = required` it is refused once with -32020 and a confirm token. Accepts `idempotency_key`, honoured for 24 hours.",
+        "operationId": "plugin.add",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AddPluginRequest"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PluginRecord"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Install a plugin from a local directory, while live. The directory is the one with gmx-plugin.toml at its root.",
+        "tags": [
+          "plugin"
+        ],
+        "x-destructive": true,
+        "x-idempotent": true,
+        "x-scope": "admin"
+      }
+    },
+    "/api/v1/plugins/{id}": {
+      "delete": {
+        "description": "JSON-RPC method `plugin.remove`. Needs the `admin` scope. Destructive: accepts `dry_run: true`, and on a token whose policy is `confirm = required` it is refused once with -32020 and a confirm token. Accepts `idempotency_key`, honoured for 24 hours.",
+        "operationId": "plugin.remove",
+        "parameters": [
+          {
+            "description": "The id, as listed by the matching list call.",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PluginName"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PluginRemoved"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Uninstall a plugin and unwind everything it registered: its provides, its tools, its panels, its hooks and its discovery matchers.",
+        "tags": [
+          "plugin"
+        ],
+        "x-destructive": true,
+        "x-idempotent": true,
+        "x-scope": "admin"
+      }
+    },
+    "/api/v1/plugins/{id}/describe": {
+      "post": {
+        "description": "JSON-RPC method `plugin.describe`. Needs the `read` scope.",
+        "operationId": "plugin.describe",
+        "parameters": [
+          {
+            "description": "The id, as listed by the matching list call.",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PluginName"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PluginDescription"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "One plugin in full: its manifest, the settings schema of every provide, and the description from each SKILL.md.",
+        "tags": [
+          "plugin"
+        ],
+        "x-destructive": false,
+        "x-idempotent": true,
+        "x-scope": "read"
+      }
+    },
+    "/api/v1/plugins/{id}/disable": {
+      "post": {
+        "description": "JSON-RPC method `plugin.disable`. Needs the `admin` scope. Accepts `idempotency_key`, honoured for 24 hours.",
+        "operationId": "plugin.disable",
+        "parameters": [
+          {
+            "description": "The id, as listed by the matching list call.",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PluginName"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PluginRecord"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Turn a plugin off without uninstalling it. It registers nothing and runs no process until it is enabled again.",
+        "tags": [
+          "plugin"
+        ],
+        "x-destructive": false,
+        "x-idempotent": true,
+        "x-scope": "admin"
+      }
+    },
+    "/api/v1/plugins/{id}/enable": {
+      "post": {
+        "description": "JSON-RPC method `plugin.enable`. Needs the `admin` scope. Accepts `idempotency_key`, honoured for 24 hours.",
+        "operationId": "plugin.enable",
+        "parameters": [
+          {
+            "description": "The id, as listed by the matching list call.",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PluginName"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PluginRecord"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Turn a plugin back on. It registers what it declares and its instances start.",
+        "tags": [
+          "plugin"
+        ],
+        "x-destructive": false,
+        "x-idempotent": true,
+        "x-scope": "admin"
+      }
+    },
+    "/api/v1/plugins/{id}/reload": {
+      "post": {
+        "description": "JSON-RPC method `plugin.reload`. Needs the `admin` scope. Accepts `idempotency_key`, honoured for 24 hours.",
+        "operationId": "plugin.reload",
+        "parameters": [
+          {
+            "description": "The id, as listed by the matching list call.",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PluginName"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PluginRecord"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Read a plugin's directory again and swap its running instances one at a time, with the freeze frame covering each.",
+        "tags": [
+          "plugin"
+        ],
+        "x-destructive": false,
+        "x-idempotent": true,
+        "x-scope": "admin"
+      }
+    },
+    "/api/v1/plugins/{id}/settings": {
+      "get": {
+        "description": "JSON-RPC method `plugin.settings.get`. Needs the `read` scope.",
+        "operationId": "plugin.settings.get",
+        "parameters": [
+          {
+            "description": "The id, as listed by the matching list call.",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PluginSettings"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "A plugin's settings as they stand, with its schema beside them.",
+        "tags": [
+          "plugin"
+        ],
+        "x-destructive": false,
+        "x-idempotent": true,
+        "x-scope": "read"
+      },
+      "post": {
+        "description": "JSON-RPC method `plugin.settings.set`. Needs the `admin` scope. Accepts `idempotency_key`, honoured for 24 hours.",
+        "operationId": "plugin.settings.set",
+        "parameters": [
+          {
+            "description": "The id, as listed by the matching list call.",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetSettingsRequest"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PluginSettings"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Change a plugin's settings. A plugin that cannot take a change while running says so rather than being restarted behind your back.",
+        "tags": [
+          "plugin"
+        ],
+        "x-destructive": false,
+        "x-idempotent": true,
+        "x-scope": "admin"
+      }
+    },
+    "/api/v1/plugins/{id}/stats": {
+      "post": {
+        "description": "JSON-RPC method `plugin.stats`. Needs the `read` scope.",
+        "operationId": "plugin.stats",
+        "parameters": [
+          {
+            "description": "The id, as listed by the matching list call.",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {},
+                "type": "object"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StatsListing"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Per instance cpu, memory, media latency, dropped buffers and restarts, refreshed once a second.",
+        "tags": [
+          "plugin"
         ],
         "x-destructive": false,
         "x-idempotent": true,

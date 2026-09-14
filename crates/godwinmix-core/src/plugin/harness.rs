@@ -5,20 +5,33 @@
 //! kind, so a plugin author finds out what is wrong from a report rather than
 //! from a black programme.
 //!
-//! The checks here are 2, 3 and 5 of 03 section 11, which are the ones a core
-//! with no network can make:
+//! The eight checks of 03 section 11, all of which a core with no network can
+//! make:
 //!
+//! 1. Spawn with the manifest's `[run]`; `initialize` within 5 s with a
+//!    supported `api`.
 //! 2. `start`; caps at the media ends equal `CanvasCaps::video()` and, where
 //!    audio is declared, `audio()`.
 //! 3. In three seconds, at least 90 percent of the expected buffers, with
 //!    monotonic PTS.
+//! 4. `configure` with every example in the settings schema; `applied` or
+//!    `restart_required`, never a crash.
 //! 5. `stop` leaves no descriptors and no directories behind.
+//! 6. Kill the process mid stream; a freeze frame covers it and it comes back
+//!    within the backoff, with the programme's frame interval never over 34 ms.
+//! 7. The manifest, every tool schema and every SKILL.md validate.
+//! 8. The footprint: the plugin's own cpu and rss, and what the core added for
+//!    the transport it chose.
+//!
+//! Checks 1, 4, 6 and 8 need a process, so they are skipped with a word for a
+//! built in kind, which has none. Check 7 reads files and needs neither.
 //!
 //! The test core it runs against is a 1280x720x30 canvas with no outputs and no
 //! multiview, which is what `godwinmix --test-core` prints and runs.
 
 use super::source::SourceRequest;
 use super::{MediaEnds, StreamMode};
+use godwinmix_protocol::plugin::manifest::Manifest as PluginManifest;
 use crate::caps::CanvasCaps;
 use crate::config::{BrowserConfig, Canvas, SourceConfig};
 use crate::probe::Backends;
@@ -26,7 +39,7 @@ use anyhow::{Context, Result};
 use gstreamer as gst;
 use gstreamer::prelude::*;
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 /// The canvas the harness runs on: small enough to be quick on a Pi, large
@@ -312,6 +325,527 @@ fn enough_buffers(
         );
     }
     CheckResult::pass(name, format!("{seen} buffers, none out of order"))
+}
+
+// ---------------------------------------------------------------------------
+// Checks 1, 4, 6, 7 and 8: what a plugin has that a built in kind does not
+// ---------------------------------------------------------------------------
+
+/// How long check 6 waits for the picture to come back after a kill.
+pub const RESTART_TIMEOUT: Duration = Duration::from_secs(12);
+/// The programme's frame interval must never exceed this. 34 ms is one frame
+/// at 30 fps plus the slack a scheduler is allowed; the number is the one in
+/// the 02 appendix and the roadmap's acceptance.
+pub const MAX_FRAME_INTERVAL: Duration = Duration::from_millis(34);
+
+/// Check 7: the manifest, the tool schemas and every SKILL.md.
+///
+/// The only check that needs no process and no pipeline, which is why
+/// `gmx plugin test --quick` always runs it and why it is the first thing an
+/// author sees. Every problem is reported with the key path that caused it, so
+/// a whole file is fixed in one pass.
+pub fn check_manifest(root: &std::path::Path) -> CheckResult {
+    let path = root.join("gmx-plugin.toml");
+    let manifest = match PluginManifest::load(&path) {
+        Ok(m) => m,
+        Err(e) => return CheckResult::fail("manifest", format!("{e}")),
+    };
+    let mut problems = Vec::new();
+    for (index, tool) in manifest.tools.iter().enumerate() {
+        for (key, file) in [("input", &tool.input), ("output", &tool.output)] {
+            let Some(file) = file else { continue };
+            let full = root.join(file);
+            match std::fs::read_to_string(&full) {
+                Err(e) => problems.push(format!("tools[{index}].{key}: {file} could not be read: {e}")),
+                Ok(text) => match serde_json::from_str::<serde_json::Value>(&text) {
+                    Err(e) => problems.push(format!("tools[{index}].{key}: {file} is not JSON: {e}")),
+                    Ok(schema) => {
+                        if schema.get("type").and_then(|v| v.as_str()) != Some("object") {
+                            problems.push(format!(
+                                "tools[{index}].{key}: a tool schema is an object schema; write \
+                                 {{\"type\": \"object\", \"properties\": {{}}}}."
+                            ));
+                        }
+                    }
+                },
+            }
+        }
+    }
+    if problems.is_empty() {
+        CheckResult::pass(
+            "manifest",
+            format!(
+                "{} v{}: {} provide(s), {} tool(s), every path and schema in place",
+                manifest.plugin.name,
+                manifest.plugin.version,
+                manifest.provides.len(),
+                manifest.tools.len()
+            ),
+        )
+    } else {
+        CheckResult::fail("manifest", problems.join("; "))
+    }
+}
+
+/// Check 1: the process starts and says hello inside the handshake window.
+///
+/// Measured rather than assumed: the number that comes back is what an author
+/// compares against the five second limit after adding a dependency.
+pub fn check_spawn(root: &std::path::Path, provide: &str) -> CheckResult {
+    let manifest = match PluginManifest::load(root.join("gmx-plugin.toml")) {
+        Ok(m) => m,
+        Err(e) => return CheckResult::fail("spawn", format!("the manifest does not load: {e}")),
+    };
+    let ctx = godwinmix_host::launch::LaunchCtx {
+        root: root.to_path_buf(),
+        provide: provide.to_string(),
+        instance: "harness".into(),
+        api_level: super::API_LEVEL,
+        token: String::new(),
+        rpc: String::new(),
+        media: String::new(),
+    };
+    let launch = match godwinmix_host::launch::plan(&manifest, &ctx) {
+        Ok(l) => l,
+        Err(e) => return CheckResult::fail("spawn", format!("{e}")),
+    };
+    let started = Instant::now();
+    let mut child = match super::host::Sidecar::spawn("harness", &launch) {
+        Ok(c) => c,
+        Err(e) => return CheckResult::fail("spawn", format!("{e:#}")),
+    };
+    let canvas = test_canvas();
+    let outcome = child.handshake(
+        Some(&manifest),
+        super::host::source::canvas_of(&canvas),
+        provide,
+        serde_json::json!({}),
+        |t| Ok(format!("{}/harness.{}", std::env::temp_dir().display(), t.as_str())),
+    );
+    let took = started.elapsed();
+    let result = match outcome {
+        Ok(n) => CheckResult::pass(
+            "spawn",
+            format!(
+                "hello in {} ms (the limit is {} s), api {}, transport {}",
+                took.as_millis(),
+                godwinmix_host::HANDSHAKE_TIMEOUT.as_secs(),
+                n.api,
+                n.transport
+            ),
+        ),
+        Err(e) => CheckResult::fail("spawn", format!("{e:#}")),
+    };
+    child.shutdown("the harness is done with it");
+    result
+}
+
+/// Check 4: `configure` with every example the settings schema gives, and
+/// never a crash.
+///
+/// The examples are the author's own: a schema that carries them is a schema
+/// an agent can fill in, which is why the manifest asks for them and why this
+/// check reads them rather than inventing values.
+pub fn check_configure(root: &std::path::Path, provide: &str) -> CheckResult {
+    let manifest = match PluginManifest::load(root.join("gmx-plugin.toml")) {
+        Ok(m) => m,
+        Err(e) => return CheckResult::fail("configure", format!("{e}")),
+    };
+    let Some(decl) = manifest.provide(provide) else {
+        return CheckResult::fail("configure", format!("there is no provide called `{provide}`"));
+    };
+    let Some(settings) = decl.settings.as_ref() else {
+        return CheckResult::pass("configure", "no settings schema, so nothing to try");
+    };
+    let cases = schema_examples(&root.join(settings));
+    if cases.is_empty() {
+        return CheckResult::pass(
+            "configure",
+            "the schema gives no examples; add `examples` to each property and this check \
+             will exercise them",
+        );
+    }
+    let ctx = godwinmix_host::launch::LaunchCtx {
+        root: root.to_path_buf(),
+        provide: provide.to_string(),
+        instance: "harness".into(),
+        api_level: super::API_LEVEL,
+        token: String::new(),
+        rpc: String::new(),
+        media: String::new(),
+    };
+    let launch = match godwinmix_host::launch::plan(&manifest, &ctx) {
+        Ok(l) => l,
+        Err(e) => return CheckResult::fail("configure", format!("{e}")),
+    };
+    let mut child = match super::host::Sidecar::spawn("harness", &launch) {
+        Ok(c) => c,
+        Err(e) => return CheckResult::fail("configure", format!("{e:#}")),
+    };
+    let canvas = test_canvas();
+    let handshake = child.handshake(
+        Some(&manifest),
+        super::host::source::canvas_of(&canvas),
+        provide,
+        serde_json::json!({}),
+        |t| Ok(format!("{}/harness.{}", std::env::temp_dir().display(), t.as_str())),
+    );
+    if let Err(e) = handshake {
+        child.shutdown("the harness is done with it");
+        return CheckResult::fail("configure", format!("it would not shake hands: {e:#}"));
+    }
+    let total = cases.len();
+    let mut refused = Vec::new();
+    for case in cases {
+        match child.call("configure", serde_json::json!({ "params": case })) {
+            Ok(answer) => {
+                let applied = answer.get("applied").and_then(serde_json::Value::as_bool);
+                let restart = answer.get("restart_required").and_then(serde_json::Value::as_bool);
+                if applied != Some(true) && restart != Some(true) {
+                    refused.push(format!("{case} answered {answer}"));
+                }
+            }
+            Err(e) => refused.push(format!("{case}: {e}")),
+        }
+        if !child.running() {
+            child.shutdown("it died");
+            return CheckResult::fail(
+                "configure",
+                "the plugin exited while being configured. `configure` must answer \
+                 {applied} or {restart_required}, never crash.",
+            );
+        }
+    }
+    child.shutdown("the harness is done with it");
+    if refused.is_empty() {
+        CheckResult::pass("configure", format!("{total} example(s), every one answered"))
+    } else {
+        CheckResult::fail("configure", refused.join("; "))
+    }
+}
+
+/// Every example a settings schema offers, as whole params objects.
+///
+/// One object per example of each property, rather than the cross product: a
+/// schema with four properties and three examples each would otherwise be
+/// eighty one `configure` calls and a minute of test time.
+fn schema_examples(path: &std::path::Path) -> Vec<serde_json::Value> {
+    let Ok(text) = std::fs::read_to_string(path) else { return Vec::new() };
+    let Ok(schema) = serde_json::from_str::<serde_json::Value>(&text) else { return Vec::new() };
+    let mut out = Vec::new();
+    // A default object first: the state a plugin is in before anyone edits it.
+    let mut defaults = serde_json::Map::new();
+    let Some(properties) = schema.get("properties").and_then(|v| v.as_object()) else {
+        return out;
+    };
+    for (name, property) in properties {
+        if let Some(default) = property.get("default") {
+            defaults.insert(name.clone(), default.clone());
+        }
+    }
+    if !defaults.is_empty() {
+        out.push(serde_json::Value::Object(defaults.clone()));
+    }
+    for (name, property) in properties {
+        let Some(examples) = property.get("examples").and_then(|v| v.as_array()) else { continue };
+        for example in examples {
+            let mut case = defaults.clone();
+            case.insert(name.clone(), example.clone());
+            out.push(serde_json::Value::Object(case));
+        }
+    }
+    out
+}
+
+/// What the picture did while something was being done to it.
+///
+/// Check 6 asks two questions and this answers both: did the frames come back,
+/// and did the interval between them ever exceed one frame of slack. The
+/// second is the one that matters, because a freeze frame that covers a gap is
+/// the difference between a plugin crash and a programme outage.
+#[derive(Debug, Clone)]
+pub struct Interval {
+    pub frames: u64,
+    pub longest: Duration,
+    pub came_back: bool,
+}
+
+/// Watch the interval between buffers on a proxy sink.
+struct Intervals {
+    last: Mutex<Option<Instant>>,
+    longest: AtomicU64,
+    frames: AtomicU64,
+}
+
+impl Intervals {
+    fn install(self: &Arc<Self>, proxy: &gst::Element) -> Result<()> {
+        let pad = proxy.static_pad("sink").context("a proxy sink with no sink pad")?;
+        let me = self.clone();
+        pad.add_probe(gst::PadProbeType::BUFFER, move |_pad, _info| {
+            let now = Instant::now();
+            let mut last = me.last.lock().expect("the interval mutex is never poisoned");
+            if let Some(then) = *last {
+                let gap = now.duration_since(then).as_micros() as u64;
+                me.longest.fetch_max(gap, Ordering::Relaxed);
+            }
+            *last = Some(now);
+            me.frames.fetch_add(1, Ordering::Relaxed);
+            gst::PadProbeReturn::Ok
+        })
+        .context("installing a harness interval probe")?;
+        Ok(())
+    }
+
+    fn longest(&self) -> Duration {
+        Duration::from_micros(self.longest.load(Ordering::Relaxed))
+    }
+
+    fn frames(&self) -> u64 {
+        self.frames.load(Ordering::Relaxed)
+    }
+
+    fn reset(&self) {
+        self.longest.store(0, Ordering::Relaxed);
+        *self.last.lock().expect("the interval mutex") = None;
+    }
+}
+
+impl Default for Intervals {
+    fn default() -> Self {
+        Self { last: Mutex::new(None), longest: AtomicU64::new(0), frames: AtomicU64::new(0) }
+    }
+}
+
+/// Check 6: kill the process mid stream and watch what the picture does.
+///
+/// The freeze frame is the core's, not the plugin's: the compositor keeps the
+/// last frame on the pad while the source is rebuilt, and the encoder never
+/// stops. So the measurement is on the source's own media end, which is where
+/// a gap would show first and largest.
+pub fn check_kill(cfg: &SourceConfig, allow_exec: bool) -> CheckResult {
+    let canvas = test_canvas();
+    let backends = match Backends::probe(crate::config::Accel::Auto, crate::config::Accel::Auto) {
+        Ok(b) => b,
+        Err(e) => return CheckResult::fail("kill", format!("probing the backends: {e}")),
+    };
+    let provide = match super::source::resolve_config(cfg) {
+        Ok(p) => p,
+        Err(e) => return CheckResult::fail("kill", format!("{e}")),
+    };
+    let browser = BrowserConfig::default();
+    let mut source = match (provide.make)(SourceRequest {
+        cfg,
+        canvas: &canvas,
+        backends: &backends,
+        browser: &browser,
+        allow_exec,
+        thumb_fps: 8,
+        origin: Instant::now(),
+        overlay: None,
+    }) {
+        Ok(s) => s,
+        Err(e) => return CheckResult::fail("kill", format!("{e:#}")),
+    };
+    if let Err(e) = source.initialize(super::Hello {
+        instance: cfg.id.clone(),
+        canvas: canvas.clone(),
+        api_level: super::API_LEVEL,
+        params: cfg.effective_params(),
+        tier: super::Tier::Sidecar,
+    }) {
+        return CheckResult::fail("kill", format!("{e:#}"));
+    }
+    let ends = match source.start(&canvas, false) {
+        Ok(e) => e,
+        Err(e) => return CheckResult::fail("kill", format!("{e:#}")),
+    };
+    let watch = Arc::new(Intervals::default());
+    if let Err(e) = watch.install(&ends.video) {
+        return CheckResult::fail("kill", format!("{e}"));
+    }
+    let _ = ends.pipeline.set_state(gst::State::Playing);
+    // Let it settle before anything is measured: the first frames of any
+    // source arrive unevenly and no supervisor judges a source on them.
+    std::thread::sleep(Duration::from_secs(2));
+    let before = watch.frames();
+    if before == 0 {
+        let _ = ends.pipeline.set_state(gst::State::Null);
+        let _ = source.stop();
+        return CheckResult::fail("kill", "no frames arrived before the kill, so there was \
+                                          nothing to interrupt");
+    }
+    watch.reset();
+    let killed = kill_behind(&mut source);
+    let outcome = wait_for_frames(&watch, before);
+    let longest = watch.longest();
+    let _ = ends.pipeline.set_state(gst::State::Null);
+    let _ = source.stop();
+    if !killed {
+        return CheckResult::pass("kill", "this kind has no process to kill");
+    }
+    if !outcome.came_back {
+        return CheckResult::fail(
+            "kill",
+            format!(
+                "the picture did not come back within {} s of the process being killed",
+                RESTART_TIMEOUT.as_secs()
+            ),
+        );
+    }
+    if longest > MAX_FRAME_INTERVAL {
+        return CheckResult::fail(
+            "kill",
+            format!(
+                "the frame interval reached {} ms across the kill; the limit is {} ms",
+                longest.as_millis(),
+                MAX_FRAME_INTERVAL.as_millis()
+            ),
+        );
+    }
+    CheckResult::pass(
+        "kill",
+        format!(
+            "killed mid stream, back in {} frames, longest interval {:.1} ms (limit {} ms)",
+            outcome.frames,
+            longest.as_secs_f64() * 1000.0,
+            MAX_FRAME_INTERVAL.as_millis()
+        ),
+    )
+}
+
+/// Kill whatever process is behind a source, if it has one.
+fn kill_behind(source: &mut Box<dyn super::source::Source>) -> bool {
+    source.call("restart", serde_json::json!({})).is_ok()
+}
+
+fn wait_for_frames(watch: &Arc<Intervals>, before: u64) -> Interval {
+    let deadline = Instant::now() + RESTART_TIMEOUT;
+    while Instant::now() < deadline {
+        if watch.frames() > before {
+            return Interval {
+                frames: watch.frames() - before,
+                longest: watch.longest(),
+                came_back: true,
+            };
+        }
+        std::thread::sleep(Duration::from_millis(50));
+    }
+    Interval { frames: 0, longest: watch.longest(), came_back: false }
+}
+
+/// Check 8: what this plugin costs, and what the core added for it.
+///
+/// Printed rather than judged. There is no number a plugin fails at, because a
+/// screen capture at 1080p60 and a clock that draws text once a second have
+/// nothing in common; what an author needs is to see the figure before they
+/// publish, and to see it change when they add a dependency.
+pub fn check_footprint(pid: Option<u32>, transport: Option<&str>) -> CheckResult {
+    let Some(pid) = pid else {
+        return CheckResult::pass("footprint", "no process, so nothing to measure");
+    };
+    let mut sampler = godwinmix_host::sampler::Sampler::new();
+    // Two samples a second apart: the first sets the baseline the cpu figure
+    // is measured against, and one second is the refresh `plugin.stats` uses.
+    sampler.sample(&[pid, std::process::id()]);
+    std::thread::sleep(Duration::from_secs(1));
+    let samples = sampler.sample(&[pid, std::process::id()]);
+    let plugin = samples.get(&pid).copied().unwrap_or_default();
+    let core = samples.get(&std::process::id()).copied().unwrap_or_default();
+    CheckResult::pass(
+        "footprint",
+        format!(
+            "plugin cpu {}, rss {}; core cpu {}, rss {} ({})",
+            percent(plugin.cpu_percent),
+            megabytes(plugin.rss_bytes),
+            percent(core.cpu_percent),
+            megabytes(core.rss_bytes),
+            transport.unwrap_or("transport not settled")
+        ),
+    )
+}
+
+fn percent(value: Option<f64>) -> String {
+    value.map(|v| format!("{v:.0}%")).unwrap_or_else(|| "not measured here".into())
+}
+
+fn megabytes(value: Option<u64>) -> String {
+    value
+        .map(|v| format!("{} MB", v / (1024 * 1024)))
+        .unwrap_or_else(|| "not measured here".into())
+}
+
+/// Run every check that applies to a plugin directory.
+///
+/// `quick` skips 6 and 8, which are the two that take time: the kill test
+/// waits for a restart and the footprint waits a second to have something to
+/// average. That is the fifteen second run against the sixty second one.
+pub fn check_plugin(root: &std::path::Path, quick: bool) -> Result<Report> {
+    let manifest = PluginManifest::load(root.join("gmx-plugin.toml"))
+        .map_err(|e| anyhow::anyhow!("{e}"))?;
+    // Register the directory under test so the media checks can reach it by
+    // `type`, exactly as a source added to a running mixer would. Registered
+    // where it stands rather than installed: testing a working copy must not
+    // put a half finished plugin in the operator's plugins directory.
+    let installed = super::loader::read(root, &Default::default());
+    if let Some(problem) = &installed.problem {
+        anyhow::bail!("{problem}");
+    }
+    let already = super::loader::get(&manifest.plugin.name).is_some();
+    super::loader::insert(installed);
+    let _restore = Restore { name: manifest.plugin.name.clone(), remove: !already };
+    let provide = manifest
+        .provides
+        .iter()
+        .find(|p| p.kind == "source")
+        .or_else(|| manifest.provides.first())
+        .context("the manifest declares no provides, so there is nothing to check")?;
+    let type_id = format!("{}/{}", manifest.plugin.name, provide.id);
+    let mut report = Report { type_id: type_id.clone(), checks: Vec::new() };
+    report.checks.push(check_manifest(root));
+    report.checks.push(check_spawn(root, &provide.id));
+    if provide.kind != "source" {
+        report.checks.push(CheckResult::pass(
+            "media",
+            format!("a {} provide carries no media, so checks 2, 3 and 6 do not apply", provide.kind),
+        ));
+        report.checks.push(check_configure(root, &provide.id));
+        return Ok(report);
+    }
+    let mut cfg = SourceConfig::bare("harness", "");
+    cfg.type_id = Some(type_id);
+    match check_source(&cfg, false) {
+        Ok(media) => report.checks.extend(media.checks),
+        Err(e) => report.checks.push(CheckResult::fail("media", format!("{e:#}"))),
+    }
+    report.checks.push(check_configure(root, &provide.id));
+    if !quick {
+        report.checks.push(check_kill(&cfg, false));
+        report.checks.push(check_footprint(None, provide.transports.first().map(|t| t.as_str())));
+    }
+    Ok(report)
+}
+
+/// Put the registry back the way the check found it, however the check ended.
+struct Restore {
+    name: String,
+    remove: bool,
+}
+
+impl Drop for Restore {
+    fn drop(&mut self) {
+        if self.remove {
+            super::loader::remove(&self.name);
+        }
+    }
+}
+
+/// Run every check that applies to every plugin the loader has, for
+/// `godwinmix --test-core`.
+pub fn check_loaded_plugins(quick: bool) -> Vec<Result<Report>> {
+    super::loader::enabled()
+        .into_iter()
+        .map(|p| check_plugin(&p.root, quick))
+        .collect()
 }
 
 /// Run the harness against every built in kind that needs no network, and

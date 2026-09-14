@@ -304,6 +304,12 @@ pub fn rest_transform(method: &str) -> Option<Rest> {
             ("get", true) => Rest { http: "GET", path: format!("{base}/{{id}}") },
             ("remove", true) => Rest { http: "DELETE", path: format!("{base}/{{id}}") },
             (verb, true) => Rest { http: "POST", path: format!("{base}/{{id}}/{verb}") },
+            // A sub resource read is a GET of it, and a write is a POST to the
+            // same path, which is what keeps `plugin.settings.get` and
+            // `plugin.settings.set` from landing on one route.
+            ("get", false) => {
+                Rest { http: "GET", path: format!("{base}/{{id}}/{}", middle.join("/")) }
+            }
             (_, false) => {
                 Rest { http: "POST", path: format!("{base}/{{id}}/{}", middle.join("/")) }
             }

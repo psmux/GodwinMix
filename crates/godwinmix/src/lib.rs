@@ -234,6 +234,35 @@ enum Command {
         cmd: cli::codec::Codec,
     },
 
+    /// Write, test, install and inspect plugins. See `src/cli/plugin.rs`.
+    ///
+    /// `new` and `test` need no running mixer; everything else is a thin
+    /// client of the `plugin.*` methods, which is the same contract a third
+    /// party surface calls.
+    Plugin {
+        /// Address of the mixer's control server [default: http://127.0.0.1:8080].
+        #[arg(long, env = "GODWINMIX_URL")]
+        url: Option<String>,
+        /// Bearer token, when the mixer has one configured.
+        #[arg(long, env = "GODWINMIX_TOKEN", hide_env_values = true)]
+        token: Option<String>,
+        #[command(subcommand)]
+        cmd: cli::plugin::Plugin,
+    },
+
+    /// Break something on purpose and watch what the programme does.
+    ///
+    /// Refused on a core that is not in rehearsal unless `--i-am-sure`. See
+    /// `src/cli/chaos.rs`.
+    Chaos {
+        #[arg(long, env = "GODWINMIX_URL")]
+        url: Option<String>,
+        #[arg(long, env = "GODWINMIX_TOKEN", hide_env_values = true)]
+        token: Option<String>,
+        #[command(subcommand)]
+        cmd: cli::chaos::Chaos,
+    },
+
     /// doctor, logs, trace, dot and support-bundle. See `src/cli/observe.rs`.
     #[command(flatten)]
     Observe(cli::observe::ObserveCmd),
@@ -252,8 +281,14 @@ enum Command {
 /// failure, so CI and `gmx plugin test` can both read the exit code.
 fn run_test_core() -> Result<()> {
     println!("godwinmix test core: 1280x720x30, no outputs, no multiview");
+    // Every plugin installed on this machine is checked alongside the built in
+    // kinds, because the whole point of the harness is that a plugin is held
+    // to the contract the core holds itself to.
+    plugin::loader::load_all(&Default::default());
     let mut failures = 0usize;
-    for outcome in plugin::harness::check_offline_kinds() {
+    let plugins = plugin::harness::check_loaded_plugins(false);
+    let built_in = plugin::harness::check_offline_kinds();
+    for outcome in built_in.into_iter().chain(plugins) {
         match outcome {
             Ok(report) => {
                 println!("\n{}", report.type_id);
@@ -272,9 +307,12 @@ fn run_test_core() -> Result<()> {
     }
     println!();
     if failures > 0 {
-        anyhow::bail!("{failures} of the built in kinds failed the harness");
+        anyhow::bail!("{failures} kind(s) failed the harness");
     }
-    println!("every built in kind that runs without a network is conformant");
+    println!(
+        "every built in kind that runs without a network, and every plugin installed, \
+         is conformant"
+    );
     Ok(())
 }
 
@@ -389,6 +427,16 @@ pub async fn run() -> Result<()> {
             let cfg = Config::load(&config::path_in_force(&args.config)).ok();
             return cli::codec::run(cmd, cfg.as_ref(), args.codecs.as_deref());
         }
+        Some(Command::Plugin { url, token, cmd }) => {
+            let url = url.or_else(|| config::env_var("URL")).unwrap_or_else(|| DEFAULT_URL.into());
+            let token = token.or_else(|| config::env_var("TOKEN"));
+            return cli::plugin::run(&url, token.as_deref(), cmd).await;
+        }
+        Some(Command::Chaos { url, token, cmd }) => {
+            let url = url.or_else(|| config::env_var("URL")).unwrap_or_else(|| DEFAULT_URL.into());
+            let token = token.or_else(|| config::env_var("TOKEN"));
+            return cli::chaos::run(&url, token.as_deref(), cmd).await;
+        }
         Some(Command::Preset { cmd }) => {
             // Validating a preset's config asks each built in kind what its
             // element accepts, and that needs the registry.
@@ -478,6 +526,27 @@ pub async fn run() -> Result<()> {
     let cfg_media = cfg.media.clone();
     // Where the web UI and any plugin panels are read from.
     ui::configure(cfg.control.ui_dir.as_deref(), cfg.control.plugins_dir.as_deref());
+    // The same directory the panels are served from is the one plugins are
+    // installed into, so `<plugins_dir>/<name>/<version>/ui/` is both the
+    // plugin and its panel and nothing has to be copied anywhere.
+    {
+        let stage = core_observe::introspect::stage("plugins");
+        if let Some(dir) = cfg.control.plugins_dir.as_deref() {
+            plugin::loader::set_dir(std::path::PathBuf::from(dir));
+        }
+        for installed in plugin::loader::load_all(&cfg.plugins) {
+            match &installed.problem {
+                Some(problem) => warn!(plugin = installed.name(), "{problem}"),
+                None => info!(
+                    plugin = installed.name(),
+                    version = installed.version(),
+                    provides = installed.provides.len(),
+                    "plugin loaded"
+                ),
+            }
+        }
+        drop(stage);
+    }
     // Which config `preset.apply` writes to, and what the surface starts with.
     control::methods::presets::configure(&config_path, cfg.ui.clone());
     // Kept for the control plane, which reads the canvas, the snapshot limits,
@@ -504,7 +573,37 @@ pub async fn run() -> Result<()> {
             info!(runtime_dir = %dir.display(), "logs and the session log are here");
             // Local raw preview sockets go beside the logs, and `--info` prints
             // the directory so a native client never has to guess.
-            mix.preview_sockets_in(dir);
+            mix.preview_sockets_in(dir.clone());
+            // Where a plugin instance's sockets and FIFOs go. Under the runtime
+            // directory so that `plugin.add` then `plugin.remove` leaves
+            // nothing behind anywhere else.
+            plugin::loader::set_runtime_dir(dir);
+            // One thread for every plugin's numbers, refreshed once a second
+            // and idle while nothing is running. What it finds over budget is
+            // acted on here, because the loader has no mixer to act with.
+            let budgets = handle.clone();
+            plugin::loader::start_sampler(move |breach| {
+                use godwinmix_host::budget::OverBudget;
+                budgets.publish_alert(
+                    match breach.action {
+                        OverBudget::Alert => godwinmix_core::state::Severity::Warning,
+                        _ => godwinmix_core::state::Severity::Error,
+                    },
+                    format!("{} is over its budget: {}", breach.instance, breach.reason),
+                );
+                match breach.action {
+                    OverBudget::Restart => {
+                        let _ = budgets.send(mixer::Command::RestartSource(breach.instance));
+                    }
+                    // Disabling is the operator's decision to make permanent,
+                    // so the instance is stopped and the plugin stays
+                    // installed. `gmx plugin enable` puts it back.
+                    OverBudget::Disable => {
+                        plugin::loader::set_enabled(&breach.plugin, false);
+                    }
+                    OverBudget::Alert => {}
+                }
+            });
         }
         Err(e) => warn!(?e, "no runtime directory, so logs stay on stderr only"),
     }

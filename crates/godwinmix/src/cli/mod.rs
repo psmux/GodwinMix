@@ -9,8 +9,10 @@
 pub mod build;
 pub mod agent;
 pub mod bundle;
+pub mod chaos;
 pub mod codec;
 pub mod observe;
+pub mod plugin;
 pub mod preset;
 pub mod scene;
 pub mod skill;

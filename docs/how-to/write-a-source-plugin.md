@@ -432,11 +432,14 @@ is the plugin working, not a bug. Point the writer somewhere else if it bothers
 you, by calling `media::ContainerWriter::new` yourself instead of
 `media::open`.
 
-`gmx plugin test --offline` will run a transcript against a built plugin the
-same way. It does not exist yet.
+`gmx plugin test . --offline` runs a recorded transcript against your built
+plugin the same way, with no core, no sockets and no clock. It reads
+`tests/transcript.jsonl`, which the template ships, and it is what to put in
+your own CI: it runs on any machine in seconds. See
+[test a plugin](test-a-plugin.md).
 
-To see the whole thing end to end, drive the example by hand the way the core
-does:
+To see the whole thing end to end without any of that, drive the example by hand
+the way the core does:
 
 ```sh
 cargo build -p godwinmix-sdk --example colour-bars

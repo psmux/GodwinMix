@@ -1,11 +1,18 @@
 [package]
 name = "godwinmix-host"
-description = "The GodwinMix tier 2 plugin host: manifest, handshake, transports and loader for a plugin that runs beside the core"
+description = "The GodwinMix tier 2 plugin host: manifest resolution, the launch plan, the JSON lines channel, the handshake, the lifecycle state machine and per plugin budgets"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
 
+# No GStreamer, no axum, no tokio. The engine wires the media ends; everything
+# here is the part of a sidecar that has nothing to do with pipelines, so it
+# unit tests on a machine with no media stack installed.
 [dependencies]
 godwinmix-protocol = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
+anyhow = { workspace = true }
+tracing = { workspace = true }

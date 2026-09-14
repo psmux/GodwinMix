@@ -111,6 +111,13 @@ pub struct AppState {
     pub canvas: CanvasInfo,
     /// True when the core was started with `--rehearsal`.
     pub rehearsal: bool,
+    /// `[plugins.<name>]` from the config, held so `plugin.settings.get` can
+    /// answer and `plugin.settings.set` has something to change. The core
+    /// never reads inside these tables; they belong to the plugin named.
+    pub plugin_settings: Arc<std::collections::BTreeMap<String, godwinmix_core::config::Params>>,
+    /// Where the config was read from, so a settings change can be written
+    /// back to the file a restart will read.
+    pub config_path: Arc<std::path::PathBuf>,
 }
 
 /// The handles onto one running engine, gathered so `AppState::new` takes a
@@ -172,7 +179,41 @@ impl AppState {
             safety,
             tasks: godwinmix_core::tasks::Tasks::new(),
             rehearsal,
+            plugin_settings: Arc::new(cfg.plugins.clone()),
+            config_path: Arc::new(cfg.source_path.clone()),
         }
+    }
+
+    /// Write one plugin's settings back to the config file.
+    ///
+    /// The config is the one place a restart reads settings from, so a change
+    /// that only lived in memory would be lost by the next restart and an
+    /// operator would rightly call that a bug. The file is rewritten whole
+    /// from the table that was parsed, so comments elsewhere in it are lost;
+    /// that is said plainly in `docs/how-to/install-a-plugin.md` rather than
+    /// discovered.
+    pub fn save_plugin_settings(
+        &self,
+        name: &str,
+        settings: godwinmix_core::config::Params,
+    ) -> anyhow::Result<godwinmix_core::config::Params> {
+        let path = self.config_path.as_path();
+        if path.as_os_str().is_empty() || !path.exists() {
+            // An embedded core with no config file on disk. The change applies
+            // to the running instance and there is nowhere to persist it.
+            return Ok(settings);
+        }
+        let text = std::fs::read_to_string(path)?;
+        let mut document: toml::Table = toml::from_str(&text)?;
+        let plugins = document
+            .entry("plugins".to_string())
+            .or_insert_with(|| toml::Value::Table(toml::Table::new()));
+        let Some(table) = plugins.as_table_mut() else {
+            anyhow::bail!("[plugins] in {} is not a table", path.display());
+        };
+        table.insert(name.to_string(), toml::Value::Table(settings.clone()));
+        std::fs::write(path, toml::to_string_pretty(&document)?)?;
+        Ok(settings)
     }
 }
 
