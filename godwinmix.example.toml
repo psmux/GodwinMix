@@ -111,6 +111,27 @@ on_operator_silence = { after_secs = 120, action = "alert" }
 # confirm = "required"
 # profile = "minimal"
 
+# Hooks: your code, called when something happens. One [[hooks]] block each.
+# A plugin asks for its own hooks in its manifest and does not appear here.
+#
+# `take.before` is the only one that can delay anything, and only by its own
+# timeout_ms (default 20, maximum 100). A hook that does not answer in time is
+# skipped, the take goes ahead, and event/hook.blocked says so. Nothing a hook
+# does ever reaches the encoder. See docs/how-to/hooks.md.
+#
+# [[hooks]]
+# event = "take.after"
+# http = "https://tally.example/on-take"
+#
+# [[hooks]]
+# event = "output.state"
+# command = "/usr/local/bin/page-the-duty-engineer"
+#
+# [[hooks]]
+# event = "take.before"
+# http = "http://127.0.0.1:8787/policy"
+# timeout_ms = 19
+
 # Running a command line as a source is arbitrary code execution for anyone who
 # can reach the control port. Off unless you turn it on deliberately.
 [security]

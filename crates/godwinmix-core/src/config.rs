@@ -1220,6 +1220,43 @@ pub fn path_in_force(asked: &Path) -> std::path::PathBuf {
 }
 
 impl Config {
+    /// `[[hooks]]`: the hooks with no plugin behind them.
+    ///
+    /// Read out of `extra` rather than declared as a field. The open schema is
+    /// already there for exactly this (a table the core did not know about
+    /// used to be silently dropped, which the audit named), and reading
+    /// through it means adding hooks did not change the shape of `Config` for
+    /// everything that builds one.
+    ///
+    /// A block that does not parse is reported by the registry, not here, so
+    /// one bad entry does not cost the operator the rest of them.
+    pub fn hooks(&self) -> Vec<crate::hooks::HookConfig> {
+        let Some(value) = self.extra.get("hooks") else { return Vec::new() };
+        match value.clone().try_into::<Vec<crate::hooks::HookConfig>>() {
+            Ok(hooks) => hooks,
+            Err(e) => {
+                tracing::warn!(
+                    "[[hooks]] in the config did not parse and no hook is registered: {e}. Each                      block needs `event = \"take.after\"` and one of `http`, `command` or                      `plugin`."
+                );
+                Vec::new()
+            }
+        }
+    }
+
+    /// Set them from code, for a test or an embedded core.
+    pub fn set_hooks(&mut self, hooks: Vec<crate::hooks::HookConfig>) {
+        if hooks.is_empty() {
+            self.extra.remove("hooks");
+            return;
+        }
+        match toml::Value::try_from(hooks) {
+            Ok(value) => {
+                self.extra.insert("hooks".into(), value);
+            }
+            Err(e) => tracing::warn!("those hooks would not serialise: {e}"),
+        }
+    }
+
     /// Where runtime source and output changes are saved for a config path.
     pub fn runtime_store_path(config: &Path) -> std::path::PathBuf {
         let mut name = config.file_stem().unwrap_or_default().to_os_string();

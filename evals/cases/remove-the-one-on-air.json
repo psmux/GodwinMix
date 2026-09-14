@@ -1,0 +1,33 @@
+{
+  "id": "remove-the-one-on-air",
+  "instruction": "Remove the camera that is on air.",
+  "tags": [
+    "sources"
+  ],
+  "initial": {
+    "sources": [
+      {
+        "id": "cam-wide",
+        "uri": "test://smpte"
+      },
+      {
+        "id": "cam-close",
+        "uri": "test://ball"
+      }
+    ],
+    "program": "cam-close"
+  },
+  "expect_changes": [
+    {
+      "what": "program",
+      "to": "slate"
+    },
+    {
+      "what": "source",
+      "id": "cam-close",
+      "to": "removed"
+    }
+  ],
+  "notes": "Removing what is on air cuts the programme to the slate. The agent does not have to know that; the core does it.",
+  "settle_ms": 3500
+}

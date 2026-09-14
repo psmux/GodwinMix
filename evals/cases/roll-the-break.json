@@ -1,0 +1,45 @@
+{
+  "id": "roll-the-break",
+  "instruction": "Roll the break.",
+  "tags": [
+    "adbreak"
+  ],
+  "initial": {
+    "sources": [
+      {
+        "id": "cam-wide",
+        "uri": "test://smpte"
+      },
+      {
+        "id": "cam-close",
+        "uri": "test://ball"
+      }
+    ],
+    "program": "cam-wide"
+  },
+  "expect_changes": [
+    {
+      "what": "source",
+      "id": "__ad__",
+      "to": "connecting"
+    },
+    {
+      "what": "adbreak",
+      "to": "armed"
+    },
+    {
+      "what": "adbreak",
+      "to": "on air"
+    },
+    {
+      "what": "program",
+      "to": "__ad__"
+    },
+    {
+      "what": "source",
+      "id": "__ad__",
+      "to": "live"
+    }
+  ],
+  "notes": "The break is a source like any other while it is on."
+}

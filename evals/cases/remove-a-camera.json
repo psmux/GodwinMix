@@ -1,0 +1,32 @@
+{
+  "id": "remove-a-camera",
+  "instruction": "Take cam-floor out.",
+  "tags": [
+    "sources"
+  ],
+  "initial": {
+    "sources": [
+      {
+        "id": "cam-wide",
+        "uri": "test://smpte"
+      },
+      {
+        "id": "cam-close",
+        "uri": "test://ball"
+      },
+      {
+        "id": "cam-floor",
+        "uri": "test://snow"
+      }
+    ],
+    "program": "cam-wide"
+  },
+  "expect_changes": [
+    {
+      "what": "source",
+      "id": "cam-floor",
+      "to": "removed"
+    }
+  ],
+  "settle_ms": 3500
+}

@@ -311,6 +311,9 @@ pub enum Event {
     /// them by hand. Clients that render a UI re-read them and nothing else
     /// happens; the programme is untouched.
     UiChanged { ui: UiDefaults },
+    /// A hook did not get its say: it timed out, or the thing behind it could
+    /// not be reached. The take went ahead anyway. See 03 section 8.
+    HookBlocked { hook: String, plugin: String, reason: String },
 }
 
 /// What a surface starts with: the layout, the theme and the gallery mode.

@@ -1,0 +1,27 @@
+{
+  "id": "gain-up-to-plus-three",
+  "instruction": "Set the close camera to +3 dB.",
+  "tags": [
+    "parameterised",
+    "audio"
+  ],
+  "initial": {
+    "sources": [
+      {
+        "id": "cam-wide",
+        "uri": "test://smpte"
+      },
+      {
+        "id": "cam-close",
+        "uri": "test://ball"
+      }
+    ]
+  },
+  "expect_changes": [
+    {
+      "what": "gain",
+      "id": "cam-close",
+      "to": "3.0 dB"
+    }
+  ]
+}
