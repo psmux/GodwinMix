@@ -429,6 +429,17 @@ impl Multiview {
         let compositor = gstutil::make_live_aggregator("compositor", "mv-comp")?;
         compositor.set_property_from_str("background", "black");
         crate::probe::set_bool(&compositor, "ignore-inactive-pads", true);
+        // Start the output where the first tile is, not at zero.
+        //
+        // The mosaic is built when a client asks for it, which may be an hour
+        // into the broadcast, and the tiles arrive over a proxy carrying the
+        // programme's running time. An aggregator whose output starts at zero
+        // then has an hour of mosaic to cover before it reaches the present,
+        // and it covers it as fast as the machine allows: an 8 fps mosaic on a
+        // mixer that had been up three seconds opened with two dozen identical
+        // frames, all encoded, all pushed at the websocket. Ten minutes in it
+        // would have been five thousand.
+        compositor.set_property_from_str("start-time-selection", "first");
 
         let vcaps = gstutil::capsfilter(
             "mv-caps",
@@ -491,6 +502,26 @@ impl Multiview {
         self.watch = Some(watch);
     }
 
+    /// Share the programme's clock and base time.
+    ///
+    /// The mosaic is now built long after the programme started, and its tiles
+    /// arrive over a proxy carrying the programme's running times. A pipeline
+    /// that picked its own base time would judge those buffers against a
+    /// timeline that began a moment ago: the compositor saw them as ancient,
+    /// ran fast to catch up, and the mosaic came out at twice the framerate it
+    /// was asked for. Same clock, same base time, same running times, and the
+    /// measured fps matches the configured one.
+    pub fn follow_clock_of(&self, programme: &gst::Pipeline) {
+        let Some(clock) = programme.clock() else { return };
+        self.pipeline.use_clock(Some(&clock));
+        // start-time NONE stops the pipeline resetting base time when it
+        // changes state, which would undo the line below.
+        self.pipeline.set_start_time(gst::ClockTime::NONE);
+        if let Some(base) = programme.base_time() {
+            self.pipeline.set_base_time(base);
+        }
+    }
+
     /// Attach one more tile, fed from a `proxysink` in another pipeline.
     pub fn add_tile(&mut self, source: Option<SourceId>, proxy: &gst::Element) -> Result<()> {
         let tag = source.clone().unwrap_or_else(|| "program".into());
@@ -499,6 +530,16 @@ impl Multiview {
         src.set_property("proxysink", proxy);
         let queue = gstutil::queue_thread(&format!("mv-q-{tag}"))?;
         let rate = make("videorate", &format!("mv-rate-{tag}"))?;
+        // Start at the first buffer that arrives, not at the start of the
+        // segment. The mosaic is built when a client asks for it, which may be
+        // an hour into the broadcast, and the tiles then arrive carrying the
+        // programme's running time. Without this, videorate fills the gap
+        // between the segment start and that first buffer with duplicates: an
+        // 8 fps mosaic on a mixer that had been up ten minutes opened with
+        // nearly five thousand identical frames, encoded and pushed at the
+        // speed of the machine, before it settled to the rate it was asked
+        // for.
+        crate::probe::set_bool(&rate, "skip-to-first", true);
         let scale = make("videoscale", &format!("mv-scale-{tag}"))?;
         let caps = gstutil::capsfilter(
             &format!("mv-caps-{tag}"),
@@ -936,6 +977,61 @@ mod tests {
         assert_eq!(mv.live_pipelines(), 0, "the mosaic outlived its last subscriber");
         assert!(!mv.is_built());
 
+        let _ = handle.send(crate::mixer::Command::Shutdown);
+        tokio::task::spawn_blocking(move || thread.join()).await.unwrap().unwrap();
+    }
+
+    /// The mosaic must arrive at the rate it was asked for. It did not: built
+    /// long after the programme, on its own base time, the compositor judged
+    /// the proxied tiles against a timeline that had just begun and ran fast
+    /// to catch up, so an 8 fps mosaic came out at 16. This counts frames.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn the_mosaic_runs_at_the_rate_it_was_asked_for() {
+        init();
+        let cfg = mixer_cfg(MultiviewConfig {
+            width: 320,
+            height: 180,
+            fps: 8,
+            linger_secs: 1,
+            ..Default::default()
+        });
+        let (mut mix, handle, cmd_rx, _bus_rx) = crate::mixer::Mixer::build(cfg).unwrap();
+        mix.start().unwrap();
+        let mv = mix.multiview_handle();
+        let thread = crate::mixer::spawn(mix, cmd_rx, handle.clone());
+
+        // Two seconds of programme before anybody asks, which is what makes
+        // this worth testing: the tiles then carry a running time the mosaic
+        // has never seen, and an aggregator starting at zero would cover the
+        // gap in one burst.
+        tokio::time::sleep(Duration::from_secs(2)).await;
+        let mut sub = mv.subscribe(MultiviewRequest::configured());
+        tokio::time::timeout(Duration::from_secs(3), sub.recv()).await.unwrap().unwrap();
+        let started = Instant::now();
+        let mut frames = 0u32;
+        let mut instant = 0u32;
+        while started.elapsed() < Duration::from_secs(2) {
+            let before = Instant::now();
+            if tokio::time::timeout(Duration::from_millis(500), sub.recv()).await.is_ok() {
+                frames += 1;
+                if before.elapsed() < Duration::from_millis(10) {
+                    instant += 1;
+                }
+            }
+        }
+        let rate = frames as f64 / started.elapsed().as_secs_f64();
+        assert!(
+            (rate - 8.0).abs() < 2.0,
+            "asked for 8 fps and got {rate:.1} ({frames} frames)"
+        );
+        assert!(instant < 4, "{instant} frames arrived back to back: the mosaic burst");
+        let reported = mv.fps();
+        assert!(
+            (reported - rate).abs() < 2.0,
+            "the metric says {reported:.1} fps and the frames say {rate:.1}"
+        );
+
+        drop(sub);
         let _ = handle.send(crate::mixer::Command::Shutdown);
         tokio::task::spawn_blocking(move || thread.join()).await.unwrap().unwrap();
     }
