@@ -11,13 +11,27 @@ use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 
 /// The six presets that ship with GodwinMix (06 section 5).
-pub const NAMES: &[&str] =
-    &["default", "church", "classroom", "esports", "headless-agent", "broadcast"];
+pub const NAMES: &[&str] = &[
+    "default",
+    "church",
+    "classroom",
+    "esports",
+    "headless-agent",
+    "broadcast",
+];
 
 /// The panels the first party UI ships (05 section 3). A preset's layout may
 /// also name a panel a plugin provides, which is prefixed with its plugin name.
-pub const PANELS: &[&str] =
-    &["header", "multiview", "sources", "outputs", "media", "alerts", "scenes", "welcome"];
+pub const PANELS: &[&str] = &[
+    "header",
+    "multiview",
+    "sources",
+    "outputs",
+    "media",
+    "alerts",
+    "scenes",
+    "welcome",
+];
 
 /// The UI slots a layout may fill (05 section 3).
 pub const SLOTS: &[&str] = &["header", "main", "sidebar", "strip", "footer", "modal"];
@@ -99,10 +113,14 @@ impl PluginSpec {
     /// `ndi@^1` becomes `{ name: "ndi", range: "^1" }`. A bare name is `*`.
     pub fn parse(text: &str) -> Self {
         match text.split_once('@') {
-            Some((name, range)) => {
-                Self { name: name.trim().to_string(), range: range.trim().to_string() }
-            }
-            None => Self { name: text.trim().to_string(), range: "*".into() },
+            Some((name, range)) => Self {
+                name: name.trim().to_string(),
+                range: range.trim().to_string(),
+            },
+            None => Self {
+                name: text.trim().to_string(),
+                range: "*".into(),
+            },
         }
     }
 }
@@ -126,7 +144,10 @@ impl Preset {
             .find(|p| p.kind == "preset")
             .with_context(|| format!("{} has no [[provides]] of kind \"preset\"", self.name))?;
         provide.preset.as_ref().with_context(|| {
-            format!("{} provides a preset but has no [provides.preset] table", self.name)
+            format!(
+                "{} provides a preset but has no [provides.preset] table",
+                self.name
+            )
         })
     }
 
@@ -159,8 +180,12 @@ impl Preset {
     pub fn has(&self, relative: &str) -> bool {
         match &self.dir {
             Some(dir) => dir.join(relative).exists(),
-            None => super::embedded::file(&self.name, relative).is_some()
-                || super::embedded::entries(&self.name, relative).next().is_some(),
+            None => {
+                super::embedded::file(&self.name, relative).is_some()
+                    || super::embedded::entries(&self.name, relative)
+                        .next()
+                        .is_some()
+            }
         }
     }
 
@@ -178,7 +203,11 @@ impl Preset {
                     if path.extension().and_then(|e| e.to_str()) != Some("json") {
                         continue;
                     }
-                    let name = path.file_name().unwrap_or_default().to_string_lossy().to_string();
+                    let name = path
+                        .file_name()
+                        .unwrap_or_default()
+                        .to_string_lossy()
+                        .to_string();
                     let body = std::fs::read_to_string(&path)
                         .with_context(|| format!("reading {}", path.display()))?;
                     found.push((name, body));
@@ -199,7 +228,9 @@ impl Preset {
 
 /// Where the presets live in a source checkout.
 pub fn directory() -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR")).join("../..").join("presets")
+    Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../..")
+        .join("presets")
 }
 
 /// Read one official preset's manifest out of the source tree.
@@ -209,7 +240,10 @@ pub fn directory() -> PathBuf {
 pub fn manifest(name: &str) -> Result<Manifest> {
     let path = directory().join(name).join("gmx-plugin.toml");
     let text = std::fs::read_to_string(&path).with_context(|| {
-        format!("there is no preset called {name:?}: {} is missing", path.display())
+        format!(
+            "there is no preset called {name:?}: {} is missing",
+            path.display()
+        )
     })?;
     parse(&text).with_context(|| format!("reading {}", path.display()))
 }
@@ -247,7 +281,9 @@ pub fn search_paths() -> Vec<PathBuf> {
 }
 
 pub fn home_dir() -> Option<PathBuf> {
-    std::env::var_os("HOME").or_else(|| std::env::var_os("USERPROFILE")).map(PathBuf::from)
+    std::env::var_os("HOME")
+        .or_else(|| std::env::var_os("USERPROFILE"))
+        .map(PathBuf::from)
 }
 
 /// Load a preset from a directory on disk.
@@ -261,7 +297,11 @@ pub fn load(dir: &Path) -> Result<Preset> {
         )
     })?;
     let manifest = parse(&text).with_context(|| format!("reading {}", path.display()))?;
-    Ok(Preset { name: manifest.plugin.name.clone(), dir: Some(dir.to_path_buf()), manifest })
+    Ok(Preset {
+        name: manifest.plugin.name.clone(),
+        dir: Some(dir.to_path_buf()),
+        manifest,
+    })
 }
 
 /// Find a preset by name, or load one from a path.
@@ -286,9 +326,17 @@ pub fn resolve(name_or_path: &str) -> Result<Preset> {
     if let Some(text) = super::embedded::file(name_or_path, "gmx-plugin.toml") {
         let manifest = parse(text)
             .with_context(|| format!("the built in preset {name_or_path} has a bad manifest"))?;
-        return Ok(Preset { name: name_or_path.to_string(), dir: None, manifest });
+        return Ok(Preset {
+            name: name_or_path.to_string(),
+            dir: None,
+            manifest,
+        });
     }
-    let known = list().into_iter().map(|p| p.name).collect::<Vec<_>>().join(", ");
+    let known = list()
+        .into_iter()
+        .map(|p| p.name)
+        .collect::<Vec<_>>()
+        .join(", ");
     anyhow::bail!(
         "there is no preset called {name_or_path:?}. \
          This build knows: {known}. A directory works too: `gmx preset apply ./my-preset`"
@@ -301,7 +349,9 @@ pub fn list() -> Vec<Preset> {
     let mut found: Vec<Preset> = Vec::new();
     let mut seen: Vec<String> = Vec::new();
     for dir in search_paths() {
-        let Ok(entries) = std::fs::read_dir(&dir) else { continue };
+        let Ok(entries) = std::fs::read_dir(&dir) else {
+            continue;
+        };
         for entry in entries.flatten() {
             let path = entry.path();
             if !path.join("gmx-plugin.toml").is_file() {
@@ -319,9 +369,15 @@ pub fn list() -> Vec<Preset> {
         if seen.iter().any(|s| s == name) {
             continue;
         }
-        let Some(text) = super::embedded::file(name, "gmx-plugin.toml") else { continue };
+        let Some(text) = super::embedded::file(name, "gmx-plugin.toml") else {
+            continue;
+        };
         let Ok(manifest) = parse(text) else { continue };
-        found.push(Preset { name: (*name).to_string(), dir: None, manifest });
+        found.push(Preset {
+            name: (*name).to_string(),
+            dir: None,
+            manifest,
+        });
     }
     found.sort_by(|a, b| a.name.cmp(&b.name));
     found
@@ -333,8 +389,20 @@ mod tests {
 
     #[test]
     fn a_plugin_spec_splits_at_the_at_sign() {
-        assert_eq!(PluginSpec::parse("ndi@^1"), PluginSpec { name: "ndi".into(), range: "^1".into() });
-        assert_eq!(PluginSpec::parse("ndi"), PluginSpec { name: "ndi".into(), range: "*".into() });
+        assert_eq!(
+            PluginSpec::parse("ndi@^1"),
+            PluginSpec {
+                name: "ndi".into(),
+                range: "^1".into()
+            }
+        );
+        assert_eq!(
+            PluginSpec::parse("ndi"),
+            PluginSpec {
+                name: "ndi".into(),
+                range: "*".into()
+            }
+        );
     }
 
     #[test]
@@ -349,11 +417,17 @@ mod tests {
 
     #[test]
     fn a_preset_reads_its_own_files_whether_it_came_from_disk_or_the_binary() {
-        let from_binary =
-            Preset { name: "church".into(), dir: None, manifest: manifest("church").unwrap() };
+        let from_binary = Preset {
+            name: "church".into(),
+            dir: None,
+            manifest: manifest("church").unwrap(),
+        };
         let from_disk = load(&directory().join("church")).unwrap();
         let block = from_disk.block().unwrap().clone();
-        assert_eq!(from_binary.read(&block.config).unwrap(), from_disk.read(&block.config).unwrap());
+        assert_eq!(
+            from_binary.read(&block.config).unwrap(),
+            from_disk.read(&block.config).unwrap()
+        );
         assert_eq!(
             from_binary.json_files(&block.scenes).unwrap().len(),
             from_disk.json_files(&block.scenes).unwrap().len()

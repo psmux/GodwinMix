@@ -15,7 +15,11 @@ pub type Scope = BTreeMap<String, f64>;
 
 /// Evaluate an expression against a scope.
 pub fn eval(source: &str, scope: &Scope) -> Result<f64, String> {
-    let mut p = Parser { text: source, rest: source.trim(), scope };
+    let mut p = Parser {
+        text: source,
+        rest: source.trim(),
+        scope,
+    };
     let value = p.expr()?;
     if !p.rest.is_empty() {
         return Err(p.fail(&format!("unexpected {:?}", p.rest)));
@@ -70,22 +74,32 @@ impl Parser<'_> {
             }
             return Ok(value);
         }
-        let number = self.rest.len() - self.rest.trim_start_matches(|c: char| c.is_ascii_digit() || c == '.').len();
+        let number = self.rest.len()
+            - self
+                .rest
+                .trim_start_matches(|c: char| c.is_ascii_digit() || c == '.')
+                .len();
         if number > 0 {
             let (text, rest) = self.rest.split_at(number);
             self.rest = rest;
-            return text.parse::<f64>().map_err(|_| self.fail(&format!("{text:?} is not a number")));
+            return text
+                .parse::<f64>()
+                .map_err(|_| self.fail(&format!("{text:?} is not a number")));
         }
-        let name = self
-            .rest
-            .len()
-            - self.rest.trim_start_matches(|c: char| c.is_alphanumeric() || c == '_').len();
+        let name = self.rest.len()
+            - self
+                .rest
+                .trim_start_matches(|c: char| c.is_alphanumeric() || c == '_')
+                .len();
         if name > 0 {
             let (text, rest) = self.rest.split_at(name);
             self.rest = rest;
             return self.scope.get(text).copied().ok_or_else(|| {
                 let known: Vec<&str> = self.scope.keys().map(String::as_str).collect();
-                self.fail(&format!("{text:?} is not a parameter here. Known names: {}", known.join(", ")))
+                self.fail(&format!(
+                    "{text:?} is not a parameter here. Known names: {}",
+                    known.join(", ")
+                ))
             });
         }
         Err(self.fail("expected a number, a parameter name or a bracket"))
@@ -141,7 +155,10 @@ mod tests {
             ("0.5", 0.5),
         ] {
             let got = eval(text, &s).unwrap_or_else(|e| panic!("{text}: {e}"));
-            assert!((got - want).abs() < 1e-9, "{text} gave {got}, wanted {want}");
+            assert!(
+                (got - want).abs() < 1e-9,
+                "{text} gave {got}, wanted {want}"
+            );
         }
     }
 

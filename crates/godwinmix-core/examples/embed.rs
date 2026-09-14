@@ -33,7 +33,11 @@ async fn main() -> Result<()> {
         env_filter: std::env::var("RUST_LOG").ok(),
     });
     let status = run().await?;
-    println!("programme was on {:?} with {} source(s)", status.program, status.sources.len());
+    println!(
+        "programme was on {:?} with {} source(s)",
+        status.program,
+        status.sources.len()
+    );
     Ok(())
 }
 
@@ -85,8 +89,12 @@ pub async fn run() -> Result<MixerStatus> {
     )
     .expect("a valid source document");
     let (tx, rx) = tokio::sync::oneshot::channel();
-    handle.send(Command::AddSource(Box::new(source), Some(tx))).ok();
-    rx.await.context("the mixer thread stopped")?.map_err(anyhow::Error::msg)?;
+    handle
+        .send(Command::AddSource(Box::new(source), Some(tx)))
+        .ok();
+    rx.await
+        .context("the mixer thread stopped")?
+        .map_err(anyhow::Error::msg)?;
 
     // Take it. `None` would cut back to the slate.
     let (tx, rx) = tokio::sync::oneshot::channel();
@@ -97,7 +105,9 @@ pub async fn run() -> Result<MixerStatus> {
             ack: Some(tx),
         })
         .ok();
-    rx.await.context("the mixer thread stopped")?.map_err(anyhow::Error::msg)?;
+    rx.await
+        .context("the mixer thread stopped")?
+        .map_err(anyhow::Error::msg)?;
 
     tokio::time::sleep(Duration::from_secs(2)).await;
 
@@ -106,6 +116,8 @@ pub async fn run() -> Result<MixerStatus> {
     let status = rx.await.context("the mixer thread stopped")?;
 
     handle.send(Command::Shutdown).ok();
-    tokio::task::spawn_blocking(move || thread.join()).await.ok();
+    tokio::task::spawn_blocking(move || thread.join())
+        .await
+        .ok();
     Ok(status)
 }

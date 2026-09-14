@@ -124,7 +124,6 @@ pub enum FilterAttachSide {
     Programme,
 }
 
-
 /// One row of the `[[tokens]]` table.
 ///
 /// ```toml
@@ -178,7 +177,13 @@ pub struct Canvas {
 
 impl Default for Canvas {
     fn default() -> Self {
-        Self { width: 1920, height: 1080, fps: 30, sample_rate: 48000, channels: 2 }
+        Self {
+            width: 1920,
+            height: 1080,
+            fps: 30,
+            sample_rate: 48000,
+            channels: 2,
+        }
     }
 }
 
@@ -400,7 +405,12 @@ pub struct ControlConfig {
 
 impl Default for ControlConfig {
     fn default() -> Self {
-        Self { bind: "0.0.0.0:8080".into(), ui_dir: None, plugins_dir: None, token: None }
+        Self {
+            bind: "0.0.0.0:8080".into(),
+            ui_dir: None,
+            plugins_dir: None,
+            token: None,
+        }
     }
 }
 
@@ -983,7 +993,8 @@ fn default_queue_secs() -> f64 {
 
 impl OutputConfig {
     pub fn reconnect_policy(&self) -> ReconnectConfig {
-        self.reconnect.unwrap_or_else(|| ReconnectConfig::preset(self.policy))
+        self.reconnect
+            .unwrap_or_else(|| ReconnectConfig::preset(self.policy))
     }
 
     /// An output with nothing but an id and an address.
@@ -1023,19 +1034,22 @@ pub struct ReconnectConfig {
 impl ReconnectConfig {
     pub fn preset(policy: OutputPolicy) -> Self {
         match policy {
-            OutputPolicy::Own => {
-                Self { initial_delay_ms: 100, max_delay_ms: 2_000, multiplier: 1.6 }
-            }
-            OutputPolicy::Cdn => {
-                Self { initial_delay_ms: 1_000, max_delay_ms: 30_000, multiplier: 2.0 }
-            }
+            OutputPolicy::Own => Self {
+                initial_delay_ms: 100,
+                max_delay_ms: 2_000,
+                multiplier: 1.6,
+            },
+            OutputPolicy::Cdn => Self {
+                initial_delay_ms: 1_000,
+                max_delay_ms: 30_000,
+                multiplier: 2.0,
+            },
         }
     }
 
     /// Delay before attempt number `attempt`, counting from zero.
     pub fn delay_for(&self, attempt: u32) -> std::time::Duration {
-        let scaled =
-            self.initial_delay_ms as f64 * self.multiplier.powi(attempt.min(16) as i32);
+        let scaled = self.initial_delay_ms as f64 * self.multiplier.powi(attempt.min(16) as i32);
         let ms = scaled.min(self.max_delay_ms as f64) as u64;
         std::time::Duration::from_millis(ms)
     }
@@ -1158,8 +1172,8 @@ impl Config {
     pub fn load(path: &Path) -> Result<Self> {
         let raw = std::fs::read_to_string(path)
             .with_context(|| format!("reading config {}", path.display()))?;
-        let mut cfg: Config = toml::from_str(&raw)
-            .with_context(|| format!("parsing config {}", path.display()))?;
+        let mut cfg: Config =
+            toml::from_str(&raw).with_context(|| format!("parsing config {}", path.display()))?;
         cfg.source_path = path.to_path_buf();
 
         // Once the UI has managed sources, its list wins. Merging the two would
@@ -1168,8 +1182,8 @@ impl Config {
         if store.exists() {
             let raw = std::fs::read_to_string(&store)
                 .with_context(|| format!("reading {}", store.display()))?;
-            let stored: StoredRuntime = toml::from_str(&raw)
-                .with_context(|| format!("parsing {}", store.display()))?;
+            let stored: StoredRuntime =
+                toml::from_str(&raw).with_context(|| format!("parsing {}", store.display()))?;
             if let Some(sources) = stored.sources {
                 tracing::info!(
                     path = %store.display(), count = sources.len(),
@@ -1201,17 +1215,25 @@ impl Config {
     /// machine: a preset's, checked before it is written anywhere, or one that
     /// arrived over the wire. `label` is what an error names.
     pub fn from_toml(text: &str, label: &str) -> Result<Self> {
-        let cfg: Config =
-            toml::from_str(text).with_context(|| format!("parsing {label}"))?;
+        let cfg: Config = toml::from_str(text).with_context(|| format!("parsing {label}"))?;
         cfg.validate()?;
         Ok(cfg)
     }
 
     fn validate(&self) -> Result<()> {
-        anyhow::ensure!(self.canvas.width > 0 && self.canvas.height > 0, "canvas dimensions must be positive");
-        anyhow::ensure!(self.canvas.width % 2 == 0 && self.canvas.height % 2 == 0, "canvas dimensions must be even for 4:2:0 chroma");
+        anyhow::ensure!(
+            self.canvas.width > 0 && self.canvas.height > 0,
+            "canvas dimensions must be positive"
+        );
+        anyhow::ensure!(
+            self.canvas.width % 2 == 0 && self.canvas.height % 2 == 0,
+            "canvas dimensions must be even for 4:2:0 chroma"
+        );
         anyhow::ensure!(self.canvas.fps > 0, "canvas fps must be positive");
-        anyhow::ensure!(matches!(self.canvas.channels, 1 | 2), "only mono and stereo are supported");
+        anyhow::ensure!(
+            matches!(self.canvas.channels, 1 | 2),
+            "only mono and stereo are supported"
+        );
         anyhow::ensure!(
             (1..=100).contains(&self.multiview.jpeg_quality),
             "multiview.jpeg_quality must be between 1 and 100"
@@ -1357,8 +1379,7 @@ mod tests {
         // anyone who can reach the control port.
         let cfg: Config = toml::from_str("").unwrap();
         assert!(!cfg.security.allow_exec_sources);
-        let cfg: Config =
-            toml::from_str("[security]\nallow_exec_sources = true\n").unwrap();
+        let cfg: Config = toml::from_str("[security]\nallow_exec_sources = true\n").unwrap();
         assert!(cfg.security.allow_exec_sources);
     }
 
@@ -1382,14 +1403,23 @@ mod tests {
     #[test]
     fn the_overlay_frame_rate_defaults_the_same_either_way() {
         let missing: Config = toml::from_str("").unwrap();
-        let present: Config = toml::from_str("[browser]
-").unwrap();
-        let partial: Config = toml::from_str("[browser]
-sidecar = \"/opt/b\"\n").unwrap();
+        let present: Config = toml::from_str(
+            "[browser]
+",
+        )
+        .unwrap();
+        let partial: Config = toml::from_str(
+            "[browser]
+sidecar = \"/opt/b\"\n",
+        )
+        .unwrap();
         assert_eq!(missing.browser.overlay_fps, default_overlay_fps());
         assert_eq!(present.browser.overlay_fps, default_overlay_fps());
         assert_eq!(partial.browser.overlay_fps, default_overlay_fps());
-        assert!(default_overlay_fps() > 0, "zero would stop the page painting");
+        assert!(
+            default_overlay_fps() > 0,
+            "zero would stop the page painting"
+        );
 
         // And it is still overridable, which is the point of it being config.
         let set: Config = toml::from_str("[browser]\noverlay_fps = 25\n").unwrap();
@@ -1407,11 +1437,23 @@ sidecar = \"/opt/b\"\n").unwrap();
         assert_eq!(s.rebuild_delay(2), None);
         assert_eq!(s.rebuild_delay(3), Some(std::time::Duration::from_secs(30)));
         assert_eq!(s.rebuild_delay(4), Some(std::time::Duration::from_secs(60)));
-        assert_eq!(s.rebuild_delay(5), Some(std::time::Duration::from_secs(120)));
-        assert_eq!(s.rebuild_delay(6), Some(std::time::Duration::from_secs(240)));
+        assert_eq!(
+            s.rebuild_delay(5),
+            Some(std::time::Duration::from_secs(120))
+        );
+        assert_eq!(
+            s.rebuild_delay(6),
+            Some(std::time::Duration::from_secs(240))
+        );
         // Capped, and it stays capped however long it has been broken.
-        assert_eq!(s.rebuild_delay(7), Some(std::time::Duration::from_secs(300)));
-        assert_eq!(s.rebuild_delay(600), Some(std::time::Duration::from_secs(300)));
+        assert_eq!(
+            s.rebuild_delay(7),
+            Some(std::time::Duration::from_secs(300))
+        );
+        assert_eq!(
+            s.rebuild_delay(600),
+            Some(std::time::Duration::from_secs(300))
+        );
     }
 
     /// Two hours of rebuilding every twelve seconds is 600 attempts. Under
@@ -1433,7 +1475,10 @@ sidecar = \"/opt/b\"\n").unwrap();
     /// behaviour back rather than a mixer that has decided to give up.
     #[test]
     fn a_zero_backoff_never_waits() {
-        let s = StallConfig { rebuild_backoff_secs: 0, ..Default::default() };
+        let s = StallConfig {
+            rebuild_backoff_secs: 0,
+            ..Default::default()
+        };
         assert_eq!(s.rebuild_delay(50), None);
     }
 
@@ -1441,10 +1486,16 @@ sidecar = \"/opt/b\"\n").unwrap();
     fn a_partial_stall_section_is_accepted() {
         let cfg: Config = toml::from_str("[stall]\nrebuild_attempts = 1\n").unwrap();
         assert_eq!(cfg.stall.rebuild_attempts, 1);
-        assert_eq!(cfg.stall.rebuild_backoff_secs, default_rebuild_backoff_secs());
+        assert_eq!(
+            cfg.stall.rebuild_backoff_secs,
+            default_rebuild_backoff_secs()
+        );
         assert!(cfg.stall.hold_last_frame);
         let missing: Config = toml::from_str("").unwrap();
-        assert_eq!(missing.stall.restart_after_secs, default_restart_after_stall_secs());
+        assert_eq!(
+            missing.stall.restart_after_secs,
+            default_restart_after_stall_secs()
+        );
         assert!(missing.stall.hold_last_frame);
     }
 
@@ -1581,7 +1632,8 @@ sidecar = \"/opt/b\"\n").unwrap();
         .unwrap();
         assert_eq!(cfg.filters[0].type_id, "chroma/filter");
         assert!(cfg.filters[0].attach.programme);
-        cfg.validate().expect("a programme filter with good params is accepted");
+        cfg.validate()
+            .expect("a programme filter with good params is accepted");
 
         let nowhere: Config = toml::from_str(
             r#"
@@ -1591,7 +1643,9 @@ sidecar = \"/opt/b\"\n").unwrap();
             "#,
         )
         .unwrap();
-        let err = nowhere.validate().expect_err("a filter with no attachment is refused");
+        let err = nowhere
+            .validate()
+            .expect_err("a filter with no attachment is refused");
         assert!(format!("{err:#}").contains("where it goes"), "{err:#}");
     }
 
@@ -1616,7 +1670,13 @@ sidecar = \"/opt/b\"\n").unwrap();
     #[test]
     fn odd_canvas_is_rejected() {
         let mut cfg = Config {
-            canvas: Canvas { width: 1921, height: 1080, fps: 30, sample_rate: 48000, channels: 2 },
+            canvas: Canvas {
+                width: 1921,
+                height: 1080,
+                fps: 30,
+                sample_rate: 48000,
+                channels: 2,
+            },
             program: Default::default(),
             multiview: Default::default(),
             snapshot: Default::default(),

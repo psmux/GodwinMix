@@ -47,7 +47,7 @@ pub fn chain(settings: &Settings, canvas: Canvas) -> String {
     format!(
         "capsfilter name={HEAD} caps=\"{}\" ! decodebin name=gmx-decode ! \
          videoconvert ! videoscale ! videorate ! {}",
-        settings.device_caps().replace('"', ""),
+        settings.device_caps(canvas).replace('"', ""),
         wiring::canvas_video_caps(canvas.width, canvas.height, canvas.fps)
     )
 }
@@ -107,7 +107,9 @@ fn by_factory(factory: &str, device: &str) -> Result<gst::Element, String> {
     // A camera is live: its frames are worth what they were worth when they
     // were taken, and a pipeline that tried to catch up would show old ones.
     elements::set_flag(&element, "is-live", true);
-    elements::set_flag(&element, "do-timestamp", true);
+    // `do-timestamp` is left alone: a capture element stamps its frames from
+    // when it took them, and replacing that with a clock reading taken when
+    // the buffer was pushed is a jitter `videorate` downstream then believes.
     Ok(element)
 }
 

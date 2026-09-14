@@ -251,6 +251,23 @@ mod tests {
     }
 
     #[test]
+    fn binding_puts_the_address_on_the_sink_the_description_named() {
+        gst::init().unwrap();
+        let description = Wiring::audio_only("audiotestsrc")
+            .description(Transport::Unixfd)
+            .expect("a description");
+        let pipeline = crate::capture::build(&description).expect("it parses");
+        bind(&pipeline, Transport::Unixfd, "/tmp/gmx-test/media").expect("it binds");
+        let sink = pipeline
+            .by_name(AUDIO_SINK)
+            .expect("the audio sink is named");
+        assert_eq!(
+            sink.property::<Option<String>>("socket-path").as_deref(),
+            Some("/tmp/gmx-test/media.audio")
+        );
+    }
+
+    #[test]
     fn the_canvas_caps_are_the_media_contract() {
         let caps = canvas_video_caps(1280, 720, 30);
         assert!(caps.contains("format=I420"));

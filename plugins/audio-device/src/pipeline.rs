@@ -27,9 +27,6 @@ pub const SOURCE: &str = "gmx-src";
 /// The gain and mute element, changed while the input runs.
 pub const VOLUME: &str = "gmx-volume";
 
-/// Ten milliseconds, in the microseconds the audio base source counts in.
-const BUFFER_US: i64 = 10_000;
-
 /// The capture elements to try, in order, on this platform.
 ///
 /// Linux leads with PipeWire because that is what a current desktop runs and
@@ -128,15 +125,21 @@ fn by_factory(factory: &str, device: &str) -> Result<gst::Element, String> {
     Ok(element)
 }
 
-/// Ask the driver for small buffers. Every audio source inherits these from
-/// `GstAudioBaseSrc`; one that does not simply declines and the split element
-/// downstream does the work instead.
-fn tune(element: &gst::Element) {
-    elements::set_number(element, "latency-time", BUFFER_US);
-    elements::set_number(element, "buffer-time", BUFFER_US * 8);
-    elements::set_flag(element, "provide-clock", false);
-    elements::set_flag(element, "do-timestamp", true);
-}
+/// What every capture element here has in common.
+///
+/// Note what is *not* done: the driver's own buffer size is left alone.
+/// Asking Core Audio for a ten millisecond device buffer (`latency-time`)
+/// makes `osxaudiosrc` deliver about five buffers and then stop, measured on a
+/// MacBook Pro's built in microphone, and the same request is ignored or
+/// rounded by most ALSA and WASAPI drivers anyway. The media contract's ten
+/// millisecond buffers are made true downstream by `audiobuffersplit`, which
+/// costs one split and cannot stall a driver.
+///
+/// `do-timestamp` is left alone for the same kind of reason: an audio source
+/// stamps its buffers from the samples it has actually read, which is exact,
+/// and replacing that with a clock reading taken when the buffer was pushed is
+/// a jitter `audiorate` downstream believes and answers with dropped buffers.
+fn tune(_element: &gst::Element) {}
 
 fn attach(pipeline: &gst::Pipeline, source: &gst::Element) -> Result<(), String> {
     let head = pipeline
@@ -205,6 +208,31 @@ mod tests {
         assert!(
             pipeline.by_name("gmx-video-queue").is_none(),
             "there is no picture here"
+        );
+    }
+
+    /// The regression that cost an afternoon: forcing the driver's buffer
+    /// size made this five buffers in three seconds instead of three hundred.
+    #[test]
+    fn the_samples_actually_flow_from_whatever_this_machine_has() {
+        use godwinmix_capture_common::{capture, Capture};
+        godwinmix_capture_common::init().unwrap();
+        let description = format!(
+            "{} ! queue name=gmx-audio-queue ! fakesink sync=false",
+            chain()
+        );
+        let pipeline = capture::build(&description).expect("it parses");
+        let Ok(source) = open(&Settings::default()) else {
+            return; // no sound input on this machine, so nothing to measure
+        };
+        attach(&pipeline, &source).expect("it links");
+        let capture = Capture::start(pipeline, Some("gmx-audio-queue"), None).expect("it plays");
+        std::thread::sleep(std::time::Duration::from_millis(2_000));
+        let seen = capture.buffers();
+        assert!(
+            seen > 100,
+            "only {seen} buffers in two seconds, and ten milliseconds each means about two \
+             hundred. Something is throttling the driver.",
         );
     }
 

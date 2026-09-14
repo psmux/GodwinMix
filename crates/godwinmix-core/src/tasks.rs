@@ -136,7 +136,11 @@ impl Tasks {
             .get(&id)
             .map(|e| e.cancel.clone())
             .unwrap_or_default();
-        let ctx = TaskContext { id: id.clone(), tasks: self.clone(), cancel };
+        let ctx = TaskContext {
+            id: id.clone(),
+            tasks: self.clone(),
+            cancel,
+        };
         let tasks = self.clone();
         tokio::spawn(async move {
             let outcome = work(ctx.clone()).await;
@@ -171,7 +175,9 @@ impl Tasks {
 
     fn finish(&self, id: &str, outcome: Result<Value, String>) {
         let mut entries = self.entries.lock();
-        let Some(entry) = entries.get_mut(id) else { return };
+        let Some(entry) = entries.get_mut(id) else {
+            return;
+        };
         entry.finished_at = Some(Instant::now());
         // A task that was asked to stop and then stopped is cancelled, not
         // failed: the caller asked for this and does not need an error.
@@ -250,8 +256,7 @@ fn view(id: &str, e: &Entry) -> TaskView {
 /// cap loses its oldest finished entries. A running task is never dropped.
 fn prune(entries: &mut HashMap<String, Entry>) {
     entries.retain(|_, e| {
-        e.state == TaskState::Running
-            || e.finished_at.is_none_or(|at| at.elapsed() < TTL)
+        e.state == TaskState::Running || e.finished_at.is_none_or(|at| at.elapsed() < TTL)
     });
     while entries.len() > MAX_TASKS {
         let oldest = entries
@@ -305,7 +310,10 @@ mod tests {
             ctx.progress(0.5);
             Ok(json!({ "name": "clip.mp4", "converted": true }))
         });
-        assert!(id.starts_with("media-convert-"), "a legible id, not a UUID: {id}");
+        assert!(
+            id.starts_with("media-convert-"),
+            "a legible id, not a UUID: {id}"
+        );
 
         for _ in 0..100 {
             if tasks.get(&id).unwrap().state.finished() {
@@ -317,7 +325,10 @@ mod tests {
         assert_eq!(view.state, TaskState::Completed);
         assert_eq!(view.progress, Some(1.0));
         assert_eq!(view.result.unwrap()["name"], "clip.mp4");
-        assert_eq!(view.poll_interval_ms, None, "a finished task is not polled again");
+        assert_eq!(
+            view.poll_interval_ms, None,
+            "a finished task is not polled again"
+        );
         assert_eq!(view.kind, "media.convert");
     }
 
@@ -325,9 +336,11 @@ mod tests {
     async fn work_that_goes_wrong_is_failed_with_its_reason() {
         let tasks = Tasks::new();
         let id = tasks.spawn("plugin.add", |_| async move {
-            Err("the manifest names api = 2 and this core speaks 1. Ask the author for a \
+            Err(
+                "the manifest names api = 2 and this core speaks 1. Ask the author for a \
                  build against api 1."
-                .to_string())
+                    .to_string(),
+            )
         });
         for _ in 0..100 {
             if tasks.get(&id).unwrap().state.finished() {
@@ -353,7 +366,11 @@ mod tests {
             Ok(json!({ "stopped": false }))
         });
         let view = tasks.cancel(&id).expect("the task exists");
-        assert_eq!(view.state, TaskState::Running, "the request landed, the work has not stopped yet");
+        assert_eq!(
+            view.state,
+            TaskState::Running,
+            "the request landed, the work has not stopped yet"
+        );
         for _ in 0..200 {
             if tasks.get(&id).unwrap().state.finished() {
                 break;
@@ -370,7 +387,10 @@ mod tests {
         assert_eq!(body["task_id"], "media-convert-1");
         assert_eq!(body["poll_interval_ms"], POLL_INTERVAL_MS);
         assert_eq!(body["outcome"], "indeterminate");
-        assert_eq!(body["name"], "clip.mp4", "what the method knew already rides along");
+        assert_eq!(
+            body["name"], "clip.mp4",
+            "what the method knew already rides along"
+        );
         assert!(body["next"].as_str().unwrap().contains("task.get"));
     }
 

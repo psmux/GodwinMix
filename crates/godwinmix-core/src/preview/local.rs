@@ -86,7 +86,9 @@ pub fn unsupported_message() -> String {
 /// Printed by `godwinmix --info` and returned by `preview.open`, so a client
 /// never has to guess or construct it.
 pub fn socket_path(runtime_dir: &std::path::Path, target: &Target) -> std::path::PathBuf {
-    runtime_dir.join("preview").join(format!("{}.sock", target.slug()))
+    runtime_dir
+        .join("preview")
+        .join(format!("{}.sock", target.slug()))
 }
 
 /// The directory the sockets live in, created on demand.
@@ -142,25 +144,39 @@ mod imp {
             crate::probe::set_bool(&sink, "sync", false);
 
             let branch = vec![queue, sink];
-            pipeline.add_many(&branch).context("adding a local preview branch")?;
+            pipeline
+                .add_many(&branch)
+                .context("adding a local preview branch")?;
             gst::Element::link_many(branch.iter().collect::<Vec<_>>())
                 .context("linking a local preview branch")?;
 
-            let mut preview =
-                Self { target, path, tee: tee.clone(), pad: None, branch, pipeline: pipeline.clone() };
+            let mut preview = Self {
+                target,
+                path,
+                tee: tee.clone(),
+                pad: None,
+                branch,
+                pipeline: pipeline.clone(),
+            };
             preview.attach()?;
             debug!(path = %preview.path.display(), "local raw preview open");
             Ok(preview)
         }
 
         fn attach(&mut self) -> Result<()> {
-            let head = self.branch.first().context("an empty local preview branch")?;
-            let sink = head.static_pad("sink").context("the branch head has no sink pad")?;
+            let head = self
+                .branch
+                .first()
+                .context("an empty local preview branch")?;
+            let sink = head
+                .static_pad("sink")
+                .context("the branch head has no sink pad")?;
             let pad = self
                 .tee
                 .request_pad_simple("src_%u")
                 .context("the raw video tee refused a pad for a local preview")?;
-            pad.link(&sink).context("linking a local preview onto the raw tee")?;
+            pad.link(&sink)
+                .context("linking a local preview onto the raw tee")?;
             for el in self.branch.iter().rev() {
                 el.sync_state_with_parent().ok();
             }

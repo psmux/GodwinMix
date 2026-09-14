@@ -202,7 +202,11 @@ impl Shared {
 
     fn shape_of(&self, req: MultiviewRequest) -> MultiviewShape {
         let fps = if req.fps <= 0 { self.cfg.fps } else { req.fps };
-        let width = if req.width <= 0 { self.cfg.width } else { req.width };
+        let width = if req.width <= 0 {
+            self.cfg.width
+        } else {
+            req.width
+        };
         let fps = fps.clamp(1, MAX_MOSAIC_FPS);
         let width = even(width.clamp(MIN_MOSAIC_WIDTH, MAX_MOSAIC_WIDTH));
         // Keep the configured aspect: the UI draws click regions over the
@@ -308,7 +312,9 @@ impl MultiviewHandle {
     /// Frames per second measured over the life of the current pipeline, zero
     /// when there is none. `gmx_multiview_fps`.
     pub fn fps(&self) -> f64 {
-        let Some(since) = *self.shared.since.lock() else { return 0.0 };
+        let Some(since) = *self.shared.since.lock() else {
+            return 0.0;
+        };
         let secs = since.elapsed().as_secs_f64();
         if secs <= 0.0 {
             return 0.0;
@@ -362,7 +368,11 @@ impl MultiviewHandle {
             self.shared.generation.fetch_add(1, Ordering::SeqCst);
             self.shared.settle();
         }
-        MultiviewSubscription { shared: self.shared.clone(), id, frames }
+        MultiviewSubscription {
+            shared: self.shared.clone(),
+            id,
+            frames,
+        }
     }
 
     /// Called by the mixer when the pipeline has been created or destroyed.
@@ -394,7 +404,9 @@ impl MultiviewHandle {
     }
 
     fn publisher(&self) -> Publisher {
-        Publisher { shared: self.shared.clone() }
+        Publisher {
+            shared: self.shared.clone(),
+        }
     }
 }
 
@@ -467,7 +479,10 @@ impl Drop for MultiviewSubscription {
             info!("last multiview subscriber left, taking the mosaic down");
             // Stamped with the generation this decision was made at, not with
             // whatever it is by the time the mixer thread reads it.
-            shared.ask_at(DemandAt { demand: Demand::Teardown, generation: gen });
+            shared.ask_at(DemandAt {
+                demand: Demand::Teardown,
+                generation: gen,
+            });
         });
     }
 }
@@ -525,10 +540,8 @@ impl Multiview {
         // would have been five thousand.
         compositor.set_property_from_str("start-time-selection", "first");
 
-        let vcaps = gstutil::capsfilter(
-            "mv-caps",
-            &CanvasCaps::video_at(cfg.width, cfg.height, fps),
-        )?;
+        let vcaps =
+            gstutil::capsfilter("mv-caps", &CanvasCaps::video_at(cfg.width, cfg.height, fps))?;
         let vqueue = gstutil::queue_preview("mv-q")?;
         let vconv = make("videoconvert", "mv-conv")?;
         let enc = make("jpegenc", "mv-jpeg")?;
@@ -596,7 +609,9 @@ impl Multiview {
     /// was asked for. Same clock, same base time, same running times, and the
     /// measured fps matches the configured one.
     pub fn follow_clock_of(&self, programme: &gst::Pipeline) {
-        let Some(clock) = programme.clock() else { return };
+        let Some(clock) = programme.clock() else {
+            return;
+        };
         self.pipeline.use_clock(Some(&clock));
         // start-time NONE stops the pipeline resetting base time when it
         // changes state, which would undo the line below.
@@ -635,7 +650,9 @@ impl Multiview {
         )?;
 
         let branch = vec![src, queue, rate, scale, caps];
-        self.pipeline.add_many(&branch).context("adding tile branch")?;
+        self.pipeline
+            .add_many(&branch)
+            .context("adding tile branch")?;
         gst::Element::link_many(&branch).context("linking tile branch")?;
 
         let pad = self
@@ -657,7 +674,11 @@ impl Multiview {
             el.sync_state_with_parent().ok();
         }
 
-        self.tiles.push(Tile { source, pad, branch });
+        self.tiles.push(Tile {
+            source,
+            pad,
+            branch,
+        });
         self.relayout();
         debug!(%tag, "added multiview tile");
         Ok(())
@@ -694,13 +715,21 @@ impl Multiview {
             tile.pad.set_property("ypos", y);
             tile.pad.set_property("width", grid.cell_w);
             tile.pad.set_property("height", grid.cell_h);
-            tile.pad.set_property("zorder", if tile.source.is_none() { 1u32 } else { 0u32 });
+            tile.pad
+                .set_property("zorder", if tile.source.is_none() { 1u32 } else { 0u32 });
         }
-        info!(tiles = self.tiles.len(), cols = grid.cols, rows = grid.rows, "multiview relaid out");
+        info!(
+            tiles = self.tiles.len(),
+            cols = grid.cols,
+            rows = grid.rows,
+            "multiview relaid out"
+        );
     }
 
     pub fn start(&self) -> Result<()> {
-        self.pipeline.set_state(gst::State::Playing).context("starting multiview")?;
+        self.pipeline
+            .set_state(gst::State::Playing)
+            .context("starting multiview")?;
         Ok(())
     }
 
@@ -713,7 +742,11 @@ impl Multiview {
     }
 
     pub fn shape(&self) -> MultiviewShape {
-        MultiviewShape { fps: self.cfg.fps, width: self.cfg.width, height: self.cfg.height }
+        MultiviewShape {
+            fps: self.cfg.fps,
+            width: self.cfg.width,
+            height: self.cfg.height,
+        }
     }
 
     /// Everything the UI needs to draw clickable regions over the video.
@@ -788,7 +821,10 @@ mod tests {
         let mv = Multiview::build(&h, default_shape(&h), &fake_proxy("pv")).unwrap();
         let s = mv.status();
         assert_eq!(s.cells.len(), 1);
-        assert!(s.cells[0].source.is_none(), "cell 0 must be the program return");
+        assert!(
+            s.cells[0].source.is_none(),
+            "cell 0 must be the program return"
+        );
         mv.stop();
     }
 
@@ -798,7 +834,8 @@ mod tests {
         let h = handle();
         let mut mv = Multiview::build(&h, default_shape(&h), &fake_proxy("pv2")).unwrap();
         for i in 1..=3 {
-            mv.add_tile(Some(format!("cam{i}")), &fake_proxy(&format!("c{i}"))).unwrap();
+            mv.add_tile(Some(format!("cam{i}")), &fake_proxy(&format!("c{i}")))
+                .unwrap();
         }
         // Program plus three cameras is four tiles, so a 2x2 grid.
         let s = mv.status();
@@ -829,10 +866,15 @@ mod tests {
         let shape = default_shape(&h);
         let mut mv = Multiview::build(&h, shape, &fake_proxy("pv3")).unwrap();
         for i in 1..=8 {
-            mv.add_tile(Some(format!("cam{i}")), &fake_proxy(&format!("d{i}"))).unwrap();
+            mv.add_tile(Some(format!("cam{i}")), &fake_proxy(&format!("d{i}")))
+                .unwrap();
             for c in mv.status().cells {
                 assert!(c.x + c.w <= shape.width, "cell {} overflows width", c.index);
-                assert!(c.y + c.h <= shape.height, "cell {} overflows height", c.index);
+                assert!(
+                    c.y + c.h <= shape.height,
+                    "cell {} overflows height",
+                    c.index
+                );
             }
         }
         mv.stop();
@@ -863,7 +905,11 @@ mod tests {
         let mv = Multiview::build(&h, default_shape(&h), &fake_proxy("pv5")).unwrap();
         assert_eq!(h.live_pipelines(), 1);
         drop(mv);
-        assert_eq!(h.live_pipelines(), 0, "a dropped mosaic must not stay alive");
+        assert_eq!(
+            h.live_pipelines(),
+            0,
+            "a dropped mosaic must not stay alive"
+        );
     }
 
     /// The heart of "nothing runs unless asked": the demand sink sees a build
@@ -877,7 +923,10 @@ mod tests {
             Arc::new(move |d: DemandAt| seen.lock().push(d.demand)) as DemandSink
         };
         let h = MultiviewHandle::new(
-            MultiviewConfig { linger_secs: 2, ..Default::default() },
+            MultiviewConfig {
+                linger_secs: 2,
+                ..Default::default()
+            },
             tokio::runtime::Handle::current(),
             sink,
         );
@@ -895,8 +944,18 @@ mod tests {
         assert_eq!(seen.lock().len(), 1, "a second client must not rebuild");
 
         // A wider one rebuilds, and the mosaic follows the highest request.
-        let c = h.subscribe(MultiviewRequest { fps: 12, width: 1280 });
-        assert_eq!(h.wanted().unwrap(), MultiviewShape { fps: 12, width: 1280, height: 720 });
+        let c = h.subscribe(MultiviewRequest {
+            fps: 12,
+            width: 1280,
+        });
+        assert_eq!(
+            h.wanted().unwrap(),
+            MultiviewShape {
+                fps: 12,
+                width: 1280,
+                height: 720
+            }
+        );
         assert!(matches!(seen.lock()[1], Demand::Build(s) if s.width == 1280));
         h.mark_built(h.wanted());
 
@@ -930,7 +989,10 @@ mod tests {
             Arc::new(move |d: DemandAt| seen.lock().push(d.demand)) as DemandSink
         };
         let h = MultiviewHandle::new(
-            MultiviewConfig { linger_secs: 2, ..Default::default() },
+            MultiviewConfig {
+                linger_secs: 2,
+                ..Default::default()
+            },
             tokio::runtime::Handle::current(),
             sink,
         );
@@ -957,18 +1019,27 @@ mod tests {
             Arc::new(move |d: DemandAt| seen.lock().push(d.demand)) as DemandSink
         };
         let h = MultiviewHandle::new(
-            MultiviewConfig { enabled: false, ..Default::default() },
+            MultiviewConfig {
+                enabled: false,
+                ..Default::default()
+            },
             tokio::runtime::Handle::current(),
             sink,
         );
-        let sub = h.subscribe(MultiviewRequest { fps: 30, width: 1920 });
+        let sub = h.subscribe(MultiviewRequest {
+            fps: 30,
+            width: 1920,
+        });
         assert!(!sub.active());
         assert!(!h.wants_thumbs());
         assert_eq!(h.subscribers(), 0);
         assert!(h.wanted().is_none());
         drop(sub);
         tokio::time::sleep(Duration::from_secs(5)).await;
-        assert!(seen.lock().is_empty(), "a disabled mosaic must ask for nothing");
+        assert!(
+            seen.lock().is_empty(),
+            "a disabled mosaic must ask for nothing"
+        );
     }
 
     /// A mixer small enough to start inside a test, with the mosaic settings
@@ -994,27 +1065,42 @@ mod tests {
     #[tokio::test(flavor = "multi_thread")]
     async fn a_mixer_with_multiview_off_never_builds_a_mosaic() {
         init();
-        let cfg = mixer_cfg(MultiviewConfig { enabled: false, ..Default::default() });
+        let cfg = mixer_cfg(MultiviewConfig {
+            enabled: false,
+            ..Default::default()
+        });
         let (mut mix, handle, cmd_rx, _bus_rx) = crate::mixer::Mixer::build(cfg).unwrap();
         mix.start().unwrap();
         let mv = mix.multiview_handle();
         let thread = crate::mixer::spawn(mix, cmd_rx, handle.clone());
 
-        let mut sub = mv.subscribe(MultiviewRequest { fps: 8, width: 1280 });
+        let mut sub = mv.subscribe(MultiviewRequest {
+            fps: 8,
+            width: 1280,
+        });
         assert!(!sub.active());
         // Long enough that a build would have happened if one were coming.
         assert!(
-            tokio::time::timeout(Duration::from_millis(600), sub.recv()).await.is_err(),
+            tokio::time::timeout(Duration::from_millis(600), sub.recv())
+                .await
+                .is_err(),
             "a disabled mosaic must never produce a frame"
         );
-        assert_eq!(mv.live_pipelines(), 0, "a mosaic pipeline exists and must not");
+        assert_eq!(
+            mv.live_pipelines(),
+            0,
+            "a mosaic pipeline exists and must not"
+        );
         assert!(!mv.is_built());
         assert!(!mv.wants_thumbs(), "no source needs a thumbnail end");
         assert_eq!(handle.status().await.unwrap().multiview.cells.len(), 0);
 
         drop(sub);
         let _ = handle.send(crate::mixer::Command::Shutdown);
-        tokio::task::spawn_blocking(move || thread.join()).await.unwrap().unwrap();
+        tokio::task::spawn_blocking(move || thread.join())
+            .await
+            .unwrap()
+            .unwrap();
         assert_eq!(mv.live_pipelines(), 0);
     }
 
@@ -1033,7 +1119,11 @@ mod tests {
         mix.start().unwrap();
         let mv = mix.multiview_handle();
         let thread = crate::mixer::spawn(mix, cmd_rx, handle.clone());
-        assert_eq!(mv.live_pipelines(), 0, "a mosaic before anybody asked for one");
+        assert_eq!(
+            mv.live_pipelines(),
+            0,
+            "a mosaic before anybody asked for one"
+        );
 
         let mut sub = mv.subscribe(MultiviewRequest::configured());
         let frame = tokio::time::timeout(Duration::from_secs(2), sub.recv())
@@ -1056,7 +1146,11 @@ mod tests {
         assert_eq!(mv.subscribers(), 0);
         // Still up during the linger.
         tokio::time::sleep(Duration::from_millis(300)).await;
-        assert_eq!(mv.live_pipelines(), 1, "torn down before the linger elapsed");
+        assert_eq!(
+            mv.live_pipelines(),
+            1,
+            "torn down before the linger elapsed"
+        );
         // And gone after it.
         for _ in 0..40 {
             if mv.live_pipelines() == 0 {
@@ -1064,14 +1158,21 @@ mod tests {
             }
             tokio::time::sleep(Duration::from_millis(100)).await;
         }
-        assert_eq!(mv.live_pipelines(), 0, "the mosaic outlived its last subscriber");
+        assert_eq!(
+            mv.live_pipelines(),
+            0,
+            "the mosaic outlived its last subscriber"
+        );
         assert!(!mv.is_built());
         // And the metrics go to zero rather than keeping the last value.
         let stats = mv.stats();
         assert_eq!((stats.subscribers, stats.fps, stats.built), (0, 0.0, false));
 
         let _ = handle.send(crate::mixer::Command::Shutdown);
-        tokio::task::spawn_blocking(move || thread.join()).await.unwrap().unwrap();
+        tokio::task::spawn_blocking(move || thread.join())
+            .await
+            .unwrap()
+            .unwrap();
     }
 
     /// The mosaic must arrive at the rate it was asked for. It did not: built
@@ -1099,13 +1200,19 @@ mod tests {
         // gap in one burst.
         tokio::time::sleep(Duration::from_secs(2)).await;
         let mut sub = mv.subscribe(MultiviewRequest::configured());
-        tokio::time::timeout(Duration::from_secs(3), sub.recv()).await.unwrap().unwrap();
+        tokio::time::timeout(Duration::from_secs(3), sub.recv())
+            .await
+            .unwrap()
+            .unwrap();
         let started = Instant::now();
         let mut frames = 0u32;
         let mut instant = 0u32;
         while started.elapsed() < Duration::from_secs(2) {
             let before = Instant::now();
-            if tokio::time::timeout(Duration::from_millis(500), sub.recv()).await.is_ok() {
+            if tokio::time::timeout(Duration::from_millis(500), sub.recv())
+                .await
+                .is_ok()
+            {
                 frames += 1;
                 if before.elapsed() < Duration::from_millis(10) {
                     instant += 1;
@@ -1117,7 +1224,10 @@ mod tests {
             (rate - 8.0).abs() < 2.0,
             "asked for 8 fps and got {rate:.1} ({frames} frames)"
         );
-        assert!(instant < 4, "{instant} frames arrived back to back: the mosaic burst");
+        assert!(
+            instant < 4,
+            "{instant} frames arrived back to back: the mosaic burst"
+        );
         let reported = mv.fps();
         assert!(
             (reported - rate).abs() < 2.0,
@@ -1126,7 +1236,10 @@ mod tests {
 
         drop(sub);
         let _ = handle.send(crate::mixer::Command::Shutdown);
-        tokio::task::spawn_blocking(move || thread.join()).await.unwrap().unwrap();
+        tokio::task::spawn_blocking(move || thread.join())
+            .await
+            .unwrap()
+            .unwrap();
     }
 
     /// Codex's finding: teardown was decided from a generation and an
@@ -1144,7 +1257,10 @@ mod tests {
             Arc::new(move |d: DemandAt| seen.lock().push(d)) as DemandSink
         };
         let h = MultiviewHandle::new(
-            MultiviewConfig { linger_secs: 1, ..Default::default() },
+            MultiviewConfig {
+                linger_secs: 1,
+                ..Default::default()
+            },
             tokio::runtime::Handle::current(),
             sink,
         );
@@ -1158,7 +1274,10 @@ mod tests {
             .iter()
             .find(|d| matches!(d.demand, Demand::Teardown))
             .expect("no teardown was ever asked for");
-        assert!(h.accepts(teardown), "the teardown is current until somebody arrives");
+        assert!(
+            h.accepts(teardown),
+            "the teardown is current until somebody arrives"
+        );
 
         // The mixer thread has not read it yet, and a client turns up.
         let _b = h.subscribe(MultiviewRequest::configured());
@@ -1204,7 +1323,11 @@ mod tests {
         let live = async {
             loop {
                 let status = handle.status().await.unwrap();
-                if status.sources.iter().any(|s| s.state == crate::state::SourceState::Live) {
+                if status
+                    .sources
+                    .iter()
+                    .any(|s| s.state == crate::state::SourceState::Live)
+                {
                     return;
                 }
                 tokio::time::sleep(Duration::from_millis(100)).await;
@@ -1234,7 +1357,10 @@ mod tests {
         }
 
         let _ = handle.send(crate::mixer::Command::Shutdown);
-        tokio::task::spawn_blocking(move || thread.join()).await.unwrap().unwrap();
+        tokio::task::spawn_blocking(move || thread.join())
+            .await
+            .unwrap()
+            .unwrap();
     }
 
     /// Reported from live runs: the core stopped answering HTTP entirely right
@@ -1272,7 +1398,10 @@ mod tests {
         let poller = tokio::spawn(async move {
             for _ in 0..300 {
                 let at = Instant::now();
-                if tokio::time::timeout(Duration::from_secs(3), polling.status()).await.is_err() {
+                if tokio::time::timeout(Duration::from_secs(3), polling.status())
+                    .await
+                    .is_err()
+                {
                     return Err("the mixer stopped answering status");
                 }
                 let ms = at.elapsed().as_millis() as u64;
@@ -1299,13 +1428,19 @@ mod tests {
         );
 
         let _ = handle.send(crate::mixer::Command::Shutdown);
-        tokio::task::spawn_blocking(move || thread.join()).await.unwrap().unwrap();
+        tokio::task::spawn_blocking(move || thread.join())
+            .await
+            .unwrap()
+            .unwrap();
     }
 
     #[tokio::test]
     async fn a_request_is_clamped_and_keeps_the_configured_aspect() {
         let h = handle();
-        let s = h.shared.shape_of(MultiviewRequest { fps: 240, width: 4096 });
+        let s = h.shared.shape_of(MultiviewRequest {
+            fps: 240,
+            width: 4096,
+        });
         assert_eq!((s.width, s.height, s.fps), (1920, 1080, MAX_MOSAIC_FPS));
         let s = h.shared.shape_of(MultiviewRequest { fps: -1, width: 1 });
         assert_eq!((s.width, s.height), (MIN_MOSAIC_WIDTH, 90));

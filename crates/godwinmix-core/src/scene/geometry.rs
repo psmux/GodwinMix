@@ -60,7 +60,12 @@ impl Rect {
     /// middle 90 percent, which is the title safe box.
     pub fn inset_fraction(&self, fraction: f64) -> Rect {
         let (dx, dy) = (self.w * fraction / 2.0, self.h * fraction / 2.0);
-        Rect::new(self.x + dx, self.y + dy, self.w - dx * 2.0, self.h - dy * 2.0)
+        Rect::new(
+            self.x + dx,
+            self.y + dy,
+            self.w - dx * 2.0,
+            self.h - dy * 2.0,
+        )
     }
 
     /// Rounded to whole pixels, for a message a person reads.
@@ -119,7 +124,12 @@ pub fn fitted(frame: Rect, content: (f64, f64), fit: Fit, align: super::document
     };
     let (w, h) = (cw * scale, ch * scale);
     let f = align.factors();
-    Rect::new(frame.x + (frame.w - w) * f.x, frame.y + (frame.h - h) * f.y, w, h)
+    Rect::new(
+        frame.x + (frame.w - w) * f.x,
+        frame.y + (frame.h - h) * f.y,
+        w,
+        h,
+    )
 }
 
 /// Compose a parent transform with a child's, giving the child's transform in
@@ -130,11 +140,20 @@ pub fn fitted(frame: Rect, content: (f64, f64), fit: Fit, align: super::document
 /// apply time. Doing it here, once, is what removes the class of bug OBS
 /// collected across issues 2913, 4173, 5478, 9297, 9298 and 9558.
 pub fn compose(parent: &Transform, child: &Transform) -> Transform {
-    let scale = Vec2::new(parent.scale.x * child.scale.x, parent.scale.y * child.scale.y);
-    let offset = Vec2::new(child.position.x * parent.scale.x, child.position.y * parent.scale.y);
+    let scale = Vec2::new(
+        parent.scale.x * child.scale.x,
+        parent.scale.y * child.scale.y,
+    );
+    let offset = Vec2::new(
+        child.position.x * parent.scale.x,
+        child.position.y * parent.scale.y,
+    );
     let theta = parent.rotation.to_radians();
     let (sin, cos) = theta.sin_cos();
-    let rotated = Vec2::new(offset.x * cos - offset.y * sin, offset.x * sin + offset.y * cos);
+    let rotated = Vec2::new(
+        offset.x * cos - offset.y * sin,
+        offset.x * sin + offset.y * cos,
+    );
     let frame = child.frame.map(|f| Frame::new(f.w, f.h));
     Transform {
         position: Vec2::new(parent.position.x + rotated.x, parent.position.y + rotated.y),
@@ -185,7 +204,11 @@ fn walk<'a>(
         let transform = compose(parent, &item.transform);
         let alpha = opacity * item.opacity;
         let label = item.name.clone().unwrap_or_else(|| item.id.to_string());
-        let here = if path.is_empty() { label } else { format!("{path} / {label}") };
+        let here = if path.is_empty() {
+            label
+        } else {
+            format!("{path} / {label}")
+        };
         match &item.content {
             super::document::Content::Children { children } => {
                 walk(children, &transform, alpha, &here, canvas, out)
@@ -205,7 +228,13 @@ fn walk<'a>(
 /// document stores. A crop wider than the source is clamped rather than
 /// refused: OBS files in the wild contain them.
 pub fn normalise_crop(left: f64, top: f64, right: f64, bottom: f64, size: (f64, f64)) -> Crop {
-    let clamp = |v: f64, of: f64| if of > 0.0 { (v / of).clamp(0.0, 1.0) } else { 0.0 };
+    let clamp = |v: f64, of: f64| {
+        if of > 0.0 {
+            (v / of).clamp(0.0, 1.0)
+        } else {
+            0.0
+        }
+    };
     Crop {
         left: clamp(left, size.0),
         top: clamp(top, size.1),
@@ -230,7 +259,10 @@ mod tests {
             frame: Some(Frame::new(480.0, 270.0)),
             ..Transform::default()
         };
-        assert_eq!(item_rect(&t, &canvas()), Rect::new(1400.0, 40.0, 480.0, 270.0));
+        assert_eq!(
+            item_rect(&t, &canvas()),
+            Rect::new(1400.0, 40.0, 480.0, 270.0)
+        );
     }
 
     #[test]
@@ -241,7 +273,10 @@ mod tests {
             frame: Some(Frame::new(480.0, 270.0)),
             ..Transform::default()
         };
-        assert_eq!(item_rect(&t, &canvas()), Rect::new(720.0, 405.0, 480.0, 270.0));
+        assert_eq!(
+            item_rect(&t, &canvas()),
+            Rect::new(720.0, 405.0, 480.0, 270.0)
+        );
     }
 
     #[test]
@@ -259,7 +294,10 @@ mod tests {
         ];
         for (fit, (w, h)) in cases {
             let r = fitted(frame, content, fit, Align::Center);
-            assert!((r.w - w).abs() < EPSILON && (r.h - h).abs() < EPSILON, "{fit:?} gave {r:?}");
+            assert!(
+                (r.w - w).abs() < EPSILON && (r.h - h).abs() < EPSILON,
+                "{fit:?} gave {r:?}"
+            );
         }
     }
 
@@ -274,11 +312,15 @@ mod tests {
 
     #[test]
     fn a_group_multiplies_into_its_children() {
-        let mut child = Item::new(Content::Source { source: "cam".into() });
+        let mut child = Item::new(Content::Source {
+            source: "cam".into(),
+        });
         child.name = Some("child".into());
         child.transform.position = Vec2::new(100.0, 50.0);
         child.transform.frame = Some(Frame::new(200.0, 100.0));
-        let mut group = Item::new(Content::Children { children: vec![child] });
+        let mut group = Item::new(Content::Children {
+            children: vec![child],
+        });
         group.name = Some("group".into());
         group.transform.position = Vec2::new(1000.0, 500.0);
         group.transform.scale = Vec2::new(2.0, 2.0);
@@ -286,7 +328,11 @@ mod tests {
 
         let items = [group];
         let placed = flatten(&items, &canvas());
-        assert_eq!(placed.len(), 1, "the group itself is not a placement, its children are");
+        assert_eq!(
+            placed.len(),
+            1,
+            "the group itself is not a placement, its children are"
+        );
         assert_eq!(placed[0].rect, Rect::new(1200.0, 600.0, 400.0, 200.0));
         assert_eq!(placed[0].opacity, 0.5);
         assert_eq!(placed[0].path, "group / child");
@@ -294,21 +340,31 @@ mod tests {
 
     #[test]
     fn a_rotated_group_carries_its_children_round_with_it() {
-        let mut child = Item::new(Content::Source { source: "cam".into() });
+        let mut child = Item::new(Content::Source {
+            source: "cam".into(),
+        });
         child.transform.position = Vec2::new(100.0, 0.0);
         child.transform.frame = Some(Frame::new(10.0, 10.0));
-        let mut group = Item::new(Content::Children { children: vec![child] });
+        let mut group = Item::new(Content::Children {
+            children: vec![child],
+        });
         group.transform.rotation = 90.0;
         let items = [group];
         let placed = flatten(&items, &canvas());
         assert!(placed[0].rect.x.abs() < EPSILON, "{:?}", placed[0].rect);
-        assert!((placed[0].rect.y - 100.0).abs() < EPSILON, "{:?}", placed[0].rect);
+        assert!(
+            (placed[0].rect.y - 100.0).abs() < EPSILON,
+            "{:?}",
+            placed[0].rect
+        );
         assert_eq!(placed[0].transform.rotation, 90.0);
     }
 
     #[test]
     fn an_invisible_item_is_not_placed_at_all() {
-        let mut item = Item::new(Content::Source { source: "cam".into() });
+        let mut item = Item::new(Content::Source {
+            source: "cam".into(),
+        });
         item.visible = false;
         let items = [item];
         assert!(flatten(&items, &canvas()).is_empty());
@@ -321,7 +377,10 @@ mod tests {
         assert_eq!(c.top, 0.0);
         assert!((c.bottom - 1.0 / 12.0).abs() < 1e-9);
         // A crop wider than the source clamps rather than going past the edge.
-        assert_eq!(normalise_crop(4000.0, 0.0, 0.0, 0.0, (1920.0, 1080.0)).left, 1.0);
+        assert_eq!(
+            normalise_crop(4000.0, 0.0, 0.0, 0.0, (1920.0, 1080.0)).left,
+            1.0
+        );
     }
 
     #[test]

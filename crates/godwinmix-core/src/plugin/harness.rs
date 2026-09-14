@@ -31,11 +31,11 @@
 
 use super::source::SourceRequest;
 use super::{MediaEnds, StreamMode};
-use godwinmix_protocol::plugin::manifest::Manifest as PluginManifest;
 use crate::caps::CanvasCaps;
 use crate::config::{BrowserConfig, Canvas, SourceConfig};
 use crate::probe::Backends;
 use anyhow::{Context, Result};
+use godwinmix_protocol::plugin::manifest::Manifest as PluginManifest;
 use gstreamer as gst;
 use gstreamer::prelude::*;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -45,7 +45,13 @@ use std::time::{Duration, Instant};
 /// The canvas the harness runs on: small enough to be quick on a Pi, large
 /// enough that scaling and conversion are real work.
 pub fn test_canvas() -> CanvasCaps {
-    CanvasCaps::new(&Canvas { width: 1280, height: 720, fps: 30, sample_rate: 48000, channels: 2 })
+    CanvasCaps::new(&Canvas {
+        width: 1280,
+        height: 720,
+        fps: 30,
+        sample_rate: 48000,
+        channels: 2,
+    })
 }
 
 /// How long buffers are counted for.
@@ -66,11 +72,19 @@ pub struct CheckResult {
 
 impl CheckResult {
     fn pass(name: &'static str, detail: impl Into<String>) -> Self {
-        Self { name, passed: true, detail: detail.into() }
+        Self {
+            name,
+            passed: true,
+            detail: detail.into(),
+        }
     }
 
     fn fail(name: &'static str, detail: impl Into<String>) -> Self {
-        Self { name, passed: false, detail: detail.into() }
+        Self {
+            name,
+            passed: false,
+            detail: detail.into(),
+        }
     }
 }
 
@@ -91,7 +105,12 @@ impl Report {
         self.checks
             .iter()
             .map(|c| {
-                format!("{} {:<22} {}", if c.passed { "ok  " } else { "FAIL" }, c.name, c.detail)
+                format!(
+                    "{} {:<22} {}",
+                    if c.passed { "ok  " } else { "FAIL" },
+                    c.name,
+                    c.detail
+                )
             })
             .collect()
     }
@@ -121,7 +140,9 @@ struct Counter {
 
 impl Counter {
     fn install(self: &Arc<Self>, proxy: &gst::Element) -> Result<()> {
-        let pad = proxy.static_pad("sink").context("a proxy sink with no sink pad")?;
+        let pad = proxy
+            .static_pad("sink")
+            .context("a proxy sink with no sink pad")?;
         let me = self.clone();
         let last = std::sync::Mutex::new(None::<gst::ClockTime>);
         pad.add_probe(gst::PadProbeType::BUFFER, move |_pad, info| {
@@ -155,7 +176,10 @@ pub fn check_source(cfg: &SourceConfig, allow_exec: bool) -> Result<Report> {
         .context("probing the backends for the harness")?;
     let browser = BrowserConfig::default();
     let provide = super::source::resolve_config(cfg)?;
-    let mut report = Report { type_id: provide.manifest.provide_id(), checks: Vec::new() };
+    let mut report = Report {
+        type_id: provide.manifest.provide_id(),
+        checks: Vec::new(),
+    };
     let declared = provide.manifest.media;
 
     let request = SourceRequest {
@@ -187,9 +211,21 @@ pub fn check_source(cfg: &SourceConfig, allow_exec: bool) -> Result<Report> {
     audio.install(&ends.audio)?;
 
     report.checks.push(reaches_playing(&ends));
-    report.checks.push(caps_match(&ends, &canvas, declared.video, "video caps", &ends.video));
+    report.checks.push(caps_match(
+        &ends,
+        &canvas,
+        declared.video,
+        "video caps",
+        &ends.video,
+    ));
     if declared.audio.present() {
-        report.checks.push(caps_match(&ends, &canvas, declared.audio, "audio caps", &ends.audio));
+        report.checks.push(caps_match(
+            &ends,
+            &canvas,
+            declared.audio,
+            "audio caps",
+            &ends.audio,
+        ));
     }
     std::thread::sleep(SAMPLE);
     report.checks.push(enough_buffers(
@@ -202,7 +238,10 @@ pub fn check_source(cfg: &SourceConfig, allow_exec: bool) -> Result<Report> {
 
     let _ = ends.pipeline.set_state(gst::State::Null);
     source.stop()?;
-    report.checks.push(CheckResult::pass("stop", "the pipeline is in NULL and the kind let go"));
+    report.checks.push(CheckResult::pass(
+        "stop",
+        "the pipeline is in NULL and the kind let go",
+    ));
     Ok(report)
 }
 
@@ -225,7 +264,10 @@ fn enough_audio(counter: &Counter, mode: StreamMode) -> CheckResult {
     }
     let back = counter.regressions.load(Ordering::Relaxed);
     if back > 0 {
-        return CheckResult::fail("audio buffers", format!("{back} buffers went backwards in time"));
+        return CheckResult::fail(
+            "audio buffers",
+            format!("{back} buffers went backwards in time"),
+        );
     }
     let got = counter.nanos.load(Ordering::Relaxed);
     let want = (SAMPLE.as_nanos() as f64 * EXPECTED_SHARE) as u64;
@@ -277,7 +319,11 @@ fn caps_match(
     if !mode.present() {
         return CheckResult::pass(name, "not declared, not expected");
     }
-    let want = if name.starts_with("video") { canvas.video() } else { canvas.audio() };
+    let want = if name.starts_with("video") {
+        canvas.video()
+    } else {
+        canvas.audio()
+    };
     let Some(pad) = proxy.static_pad("sink") else {
         return CheckResult::fail(name, "the proxy sink has no sink pad");
     };
@@ -321,7 +367,10 @@ fn enough_buffers(
     if seen < floor {
         return CheckResult::fail(
             name,
-            format!("{seen} buffers in {}s, wanted at least {floor}", SAMPLE.as_secs()),
+            format!(
+                "{seen} buffers in {}s, wanted at least {floor}",
+                SAMPLE.as_secs()
+            ),
         );
     }
     CheckResult::pass(name, format!("{seen} buffers, none out of order"))
@@ -356,9 +405,13 @@ pub fn check_manifest(root: &std::path::Path) -> CheckResult {
             let Some(file) = file else { continue };
             let full = root.join(file);
             match std::fs::read_to_string(&full) {
-                Err(e) => problems.push(format!("tools[{index}].{key}: {file} could not be read: {e}")),
+                Err(e) => problems.push(format!(
+                    "tools[{index}].{key}: {file} could not be read: {e}"
+                )),
                 Ok(text) => match serde_json::from_str::<serde_json::Value>(&text) {
-                    Err(e) => problems.push(format!("tools[{index}].{key}: {file} is not JSON: {e}")),
+                    Err(e) => {
+                        problems.push(format!("tools[{index}].{key}: {file} is not JSON: {e}"))
+                    }
                     Ok(schema) => {
                         if schema.get("type").and_then(|v| v.as_str()) != Some("object") {
                             problems.push(format!(
@@ -420,7 +473,13 @@ pub fn check_spawn(root: &std::path::Path, provide: &str) -> CheckResult {
         super::host::source::canvas_of(&canvas),
         provide,
         serde_json::json!({}),
-        |t| Ok(format!("{}/harness.{}", std::env::temp_dir().display(), t.as_str())),
+        |t| {
+            Ok(format!(
+                "{}/harness.{}",
+                std::env::temp_dir().display(),
+                t.as_str()
+            ))
+        },
     );
     let took = started.elapsed();
     let result = match outcome {
@@ -452,7 +511,10 @@ pub fn check_configure(root: &std::path::Path, provide: &str) -> CheckResult {
         Err(e) => return CheckResult::fail("configure", format!("{e}")),
     };
     let Some(decl) = manifest.provide(provide) else {
-        return CheckResult::fail("configure", format!("there is no provide called `{provide}`"));
+        return CheckResult::fail(
+            "configure",
+            format!("there is no provide called `{provide}`"),
+        );
     };
     let Some(settings) = decl.settings.as_ref() else {
         return CheckResult::pass("configure", "no settings schema, so nothing to try");
@@ -488,7 +550,13 @@ pub fn check_configure(root: &std::path::Path, provide: &str) -> CheckResult {
         super::host::source::canvas_of(&canvas),
         provide,
         serde_json::json!({}),
-        |t| Ok(format!("{}/harness.{}", std::env::temp_dir().display(), t.as_str())),
+        |t| {
+            Ok(format!(
+                "{}/harness.{}",
+                std::env::temp_dir().display(),
+                t.as_str()
+            ))
+        },
     );
     if let Err(e) = handshake {
         child.shutdown("the harness is done with it");
@@ -500,7 +568,9 @@ pub fn check_configure(root: &std::path::Path, provide: &str) -> CheckResult {
         match child.call("configure", serde_json::json!({ "params": case })) {
             Ok(answer) => {
                 let applied = answer.get("applied").and_then(serde_json::Value::as_bool);
-                let restart = answer.get("restart_required").and_then(serde_json::Value::as_bool);
+                let restart = answer
+                    .get("restart_required")
+                    .and_then(serde_json::Value::as_bool);
                 if applied != Some(true) && restart != Some(true) {
                     refused.push(format!("{case} answered {answer}"));
                 }
@@ -518,7 +588,10 @@ pub fn check_configure(root: &std::path::Path, provide: &str) -> CheckResult {
     }
     child.shutdown("the harness is done with it");
     if refused.is_empty() {
-        CheckResult::pass("configure", format!("{total} example(s), every one answered"))
+        CheckResult::pass(
+            "configure",
+            format!("{total} example(s), every one answered"),
+        )
     } else {
         CheckResult::fail("configure", refused.join("; "))
     }
@@ -530,8 +603,12 @@ pub fn check_configure(root: &std::path::Path, provide: &str) -> CheckResult {
 /// schema with four properties and three examples each would otherwise be
 /// eighty one `configure` calls and a minute of test time.
 fn schema_examples(path: &std::path::Path) -> Vec<serde_json::Value> {
-    let Ok(text) = std::fs::read_to_string(path) else { return Vec::new() };
-    let Ok(schema) = serde_json::from_str::<serde_json::Value>(&text) else { return Vec::new() };
+    let Ok(text) = std::fs::read_to_string(path) else {
+        return Vec::new();
+    };
+    let Ok(schema) = serde_json::from_str::<serde_json::Value>(&text) else {
+        return Vec::new();
+    };
     let mut out = Vec::new();
     // A default object first: the state a plugin is in before anyone edits it.
     let mut defaults = serde_json::Map::new();
@@ -547,7 +624,9 @@ fn schema_examples(path: &std::path::Path) -> Vec<serde_json::Value> {
         out.push(serde_json::Value::Object(defaults.clone()));
     }
     for (name, property) in properties {
-        let Some(examples) = property.get("examples").and_then(|v| v.as_array()) else { continue };
+        let Some(examples) = property.get("examples").and_then(|v| v.as_array()) else {
+            continue;
+        };
         for example in examples {
             let mut case = defaults.clone();
             case.insert(name.clone(), example.clone());
@@ -579,11 +658,16 @@ struct Intervals {
 
 impl Intervals {
     fn install(self: &Arc<Self>, proxy: &gst::Element) -> Result<()> {
-        let pad = proxy.static_pad("sink").context("a proxy sink with no sink pad")?;
+        let pad = proxy
+            .static_pad("sink")
+            .context("a proxy sink with no sink pad")?;
         let me = self.clone();
         pad.add_probe(gst::PadProbeType::BUFFER, move |_pad, _info| {
             let now = Instant::now();
-            let mut last = me.last.lock().expect("the interval mutex is never poisoned");
+            let mut last = me
+                .last
+                .lock()
+                .expect("the interval mutex is never poisoned");
             if let Some(then) = *last {
                 let gap = now.duration_since(then).as_micros() as u64;
                 me.longest.fetch_max(gap, Ordering::Relaxed);
@@ -612,7 +696,11 @@ impl Intervals {
 
 impl Default for Intervals {
     fn default() -> Self {
-        Self { last: Mutex::new(None), longest: AtomicU64::new(0), frames: AtomicU64::new(0) }
+        Self {
+            last: Mutex::new(None),
+            longest: AtomicU64::new(0),
+            frames: AtomicU64::new(0),
+        }
     }
 }
 
@@ -660,7 +748,16 @@ pub fn check_kill(cfg: &SourceConfig, allow_exec: bool) -> CheckResult {
         Err(e) => return CheckResult::fail("kill", format!("{e:#}")),
     };
     let watch = Arc::new(Intervals::default());
-    if let Err(e) = watch.install(&ends.video) {
+    // A source with no picture is watched on its sound instead. The question
+    // this check asks is whether the media comes back after the process dies,
+    // and for a microphone the media is audio.
+    let carries_video = provide.manifest.media.video != StreamMode::None;
+    let watched = if carries_video {
+        &ends.video
+    } else {
+        &ends.audio
+    };
+    if let Err(e) = watch.install(watched) {
         return CheckResult::fail("kill", format!("{e}"));
     }
     let _ = ends.pipeline.set_state(gst::State::Playing);
@@ -671,8 +768,15 @@ pub fn check_kill(cfg: &SourceConfig, allow_exec: bool) -> CheckResult {
     if before == 0 {
         let _ = ends.pipeline.set_state(gst::State::Null);
         let _ = source.stop();
-        return CheckResult::fail("kill", "no frames arrived before the kill, so there was \
-                                          nothing to interrupt");
+        let what = if carries_video {
+            "frames"
+        } else {
+            "audio buffers"
+        };
+        return CheckResult::fail(
+            "kill",
+            format!("no {what} arrived before the kill, so there was nothing to interrupt"),
+        );
     }
     watch.reset();
     let killed = kill_behind(&mut source);
@@ -730,7 +834,11 @@ fn wait_for_frames(watch: &Arc<Intervals>, before: u64) -> Interval {
         }
         std::thread::sleep(Duration::from_millis(50));
     }
-    Interval { frames: 0, longest: watch.longest(), came_back: false }
+    Interval {
+        frames: 0,
+        longest: watch.longest(),
+        came_back: false,
+    }
 }
 
 /// Check 8: what this plugin costs, and what the core added for it.
@@ -750,7 +858,10 @@ pub fn check_footprint(pid: Option<u32>, transport: Option<&str>) -> CheckResult
     std::thread::sleep(Duration::from_secs(1));
     let samples = sampler.sample(&[pid, std::process::id()]);
     let plugin = samples.get(&pid).copied().unwrap_or_default();
-    let core = samples.get(&std::process::id()).copied().unwrap_or_default();
+    let core = samples
+        .get(&std::process::id())
+        .copied()
+        .unwrap_or_default();
     CheckResult::pass(
         "footprint",
         format!(
@@ -765,7 +876,9 @@ pub fn check_footprint(pid: Option<u32>, transport: Option<&str>) -> CheckResult
 }
 
 fn percent(value: Option<f64>) -> String {
-    value.map(|v| format!("{v:.0}%")).unwrap_or_else(|| "not measured here".into())
+    value
+        .map(|v| format!("{v:.0}%"))
+        .unwrap_or_else(|| "not measured here".into())
 }
 
 fn megabytes(value: Option<u64>) -> String {
@@ -780,8 +893,8 @@ fn megabytes(value: Option<u64>) -> String {
 /// waits for a restart and the footprint waits a second to have something to
 /// average. That is the fifteen second run against the sixty second one.
 pub fn check_plugin(root: &std::path::Path, quick: bool) -> Result<Report> {
-    let manifest = PluginManifest::load(root.join("gmx-plugin.toml"))
-        .map_err(|e| anyhow::anyhow!("{e}"))?;
+    let manifest =
+        PluginManifest::load(root.join("gmx-plugin.toml")).map_err(|e| anyhow::anyhow!("{e}"))?;
     // Register the directory under test so the media checks can reach it by
     // `type`, exactly as a source added to a running mixer would. Registered
     // where it stands rather than installed: testing a working copy must not
@@ -792,7 +905,10 @@ pub fn check_plugin(root: &std::path::Path, quick: bool) -> Result<Report> {
     }
     let already = super::loader::get(&manifest.plugin.name).is_some();
     super::loader::insert(installed);
-    let _restore = Restore { name: manifest.plugin.name.clone(), remove: !already };
+    let _restore = Restore {
+        name: manifest.plugin.name.clone(),
+        remove: !already,
+    };
     let provide = manifest
         .provides
         .iter()
@@ -800,13 +916,19 @@ pub fn check_plugin(root: &std::path::Path, quick: bool) -> Result<Report> {
         .or_else(|| manifest.provides.first())
         .context("the manifest declares no provides, so there is nothing to check")?;
     let type_id = format!("{}/{}", manifest.plugin.name, provide.id);
-    let mut report = Report { type_id: type_id.clone(), checks: Vec::new() };
+    let mut report = Report {
+        type_id: type_id.clone(),
+        checks: Vec::new(),
+    };
     report.checks.push(check_manifest(root));
     report.checks.push(check_spawn(root, &provide.id));
     if provide.kind != "source" {
         report.checks.push(CheckResult::pass(
             "media",
-            format!("a {} provide carries no media, so checks 2, 3 and 6 do not apply", provide.kind),
+            format!(
+                "a {} provide carries no media, so checks 2, 3 and 6 do not apply",
+                provide.kind
+            ),
         ));
         report.checks.push(check_configure(root, &provide.id));
         return Ok(report);
@@ -815,12 +937,17 @@ pub fn check_plugin(root: &std::path::Path, quick: bool) -> Result<Report> {
     cfg.type_id = Some(type_id);
     match check_source(&cfg, false) {
         Ok(media) => report.checks.extend(media.checks),
-        Err(e) => report.checks.push(CheckResult::fail("media", format!("{e:#}"))),
+        Err(e) => report
+            .checks
+            .push(CheckResult::fail("media", format!("{e:#}"))),
     }
     report.checks.push(check_configure(root, &provide.id));
     if !quick {
         report.checks.push(check_kill(&cfg, false));
-        report.checks.push(check_footprint(None, provide.transports.first().map(|t| t.as_str())));
+        report.checks.push(check_footprint(
+            None,
+            provide.transports.first().map(|t| t.as_str()),
+        ));
     }
     Ok(report)
 }
@@ -890,8 +1017,11 @@ mod tests {
         // A file the harness makes itself, so the check needs nothing but
         // GStreamer. Written once and removed at the end, like every other
         // temporary this crate makes.
-        let path = std::env::temp_dir()
-            .join(format!("gmx-harness-{}-{}.mkv", std::process::id(), line!()));
+        let path = std::env::temp_dir().join(format!(
+            "gmx-harness-{}-{}.mkv",
+            std::process::id(),
+            line!()
+        ));
         if let Err(e) = write_clip(&path) {
             println!("skipping: could not write a clip to check against: {e}");
             return;

@@ -60,7 +60,10 @@ impl StreamClients {
     pub fn open(self: &Arc<Self>, kind: &str) -> ClientGuard {
         *self.counts.lock().entry(kind.to_string()).or_insert(0) += 1;
         self.opened.fetch_add(1, Ordering::Relaxed);
-        ClientGuard { clients: self.clone(), kind: kind.to_string() }
+        ClientGuard {
+            clients: self.clone(),
+            kind: kind.to_string(),
+        }
     }
 
     /// Every kind with at least one client. A kind with none is not listed,
@@ -137,7 +140,10 @@ mod tests {
         drop(b);
         drop(c);
         assert_eq!(clients.total(), 0);
-        assert!(clients.counts().is_empty(), "a kind with no clients must not linger");
+        assert!(
+            clients.counts().is_empty(),
+            "a kind with no clients must not linger"
+        );
         // Opened is a counter, not a gauge: it never goes down.
         assert_eq!(clients.opened(), 3);
         assert_eq!(a_guard_kind(&clients), "mjpeg");

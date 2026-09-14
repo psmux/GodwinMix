@@ -58,7 +58,10 @@ fn with(base: FakeRegistry, extra: &[&str]) -> FakeRegistry {
 #[test]
 fn the_shipped_catalogue_parses() {
     let cat = Catalogue::shipped().expect("codecs.toml must parse");
-    assert!(cat.video.len() > 10, "the vendor table is the point of the file");
+    assert!(
+        cat.video.len() > 10,
+        "the vendor table is the point of the file"
+    );
     assert!(!cat.audio.is_empty());
     assert!(!cat.graphics.is_empty());
     assert!(!cat.container.is_empty());
@@ -71,7 +74,11 @@ fn the_shipped_catalogue_parses() {
 fn the_shipped_catalogue_is_well_formed() {
     let cat = Catalogue::shipped().unwrap();
     let problems = cat.validate();
-    assert!(problems.is_empty(), "codecs.toml has problems:\n  {}", problems.join("\n  "));
+    assert!(
+        problems.is_empty(),
+        "codecs.toml has problems:\n  {}",
+        problems.join("\n  ")
+    );
 }
 
 #[test]
@@ -84,7 +91,11 @@ fn every_entry_carries_a_license() {
         assert!(e.license.is_some(), "audio entry {} has no license", e.id());
     }
     for e in &cat.graphics {
-        assert!(e.license.is_some(), "graphics entry {} has no license", e.id());
+        assert!(
+            e.license.is_some(),
+            "graphics entry {} has no license",
+            e.id()
+        );
     }
 }
 
@@ -113,13 +124,21 @@ fn every_derived_property_names_a_unit_and_a_variable_that_exist() {
     for e in &cat.audio {
         check(&e.id(), &e.properties);
     }
-    assert!(derived > 10, "the unit indirection should be used widely, found {derived}");
+    assert!(
+        derived > 10,
+        "the unit indirection should be used widely, found {derived}"
+    );
 }
 
 #[test]
 fn the_software_entries_are_always_there() {
     let cat = Catalogue::shipped().unwrap();
-    for id in ["h264-software-openh264", "h264-software-x264", "aac-avenc", "software"] {
+    for id in [
+        "h264-software-openh264",
+        "h264-software-x264",
+        "aac-avenc",
+        "software",
+    ] {
         assert!(
             cat.video_entry(id).is_some()
                 || cat.audio_entry(id).is_some()
@@ -134,9 +153,14 @@ fn the_software_entries_are_always_there() {
 #[test]
 fn the_pi_entry_says_what_the_pi_5_does_not_have() {
     let cat = Catalogue::shipped().unwrap();
-    let pi = cat.video_entry("h264-v4l2").expect("the V4L2 entry is the Pi 4's");
+    let pi = cat
+        .video_entry("h264-v4l2")
+        .expect("the V4L2 entry is the Pi 4's");
     let comment = pi.comment.clone().unwrap_or_default();
-    assert!(comment.contains("Pi 5"), "the Pi 5 has no encoder and the entry must say so");
+    assert!(
+        comment.contains("Pi 5"),
+        "the Pi 5 has no encoder and the entry must say so"
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -183,18 +207,32 @@ fn nvdec_without_nvenc_keeps_the_fast_decoder_and_the_software_encoder() {
     let cat = Catalogue::shipped().unwrap();
     let box_ = with(laptop(), &["nvh264dec"]);
     let sel = cat.select(&Request::default(), &box_).unwrap();
-    assert_eq!(sel.video_decode.element, "nvh264dec", "the decoder is installed and usable");
-    assert_eq!(sel.video_encode.element, "x264enc", "and the encoder falls back on its own");
+    assert_eq!(
+        sel.video_decode.element, "nvh264dec",
+        "the decoder is installed and usable"
+    );
+    assert_eq!(
+        sel.video_encode.element, "x264enc",
+        "and the encoder falls back on its own"
+    );
 }
 
 #[test]
 fn pinning_a_backend_that_is_not_here_fails_with_the_list_of_ones_that_are() {
     let cat = Catalogue::shipped().unwrap();
-    let req = Request { encode: Accel::Nvidia, ..Default::default() };
-    let err = cat.select(&req, &laptop()).expect_err("nvidia is not installed on a laptop");
+    let req = Request {
+        encode: Accel::Nvidia,
+        ..Default::default()
+    };
+    let err = cat
+        .select(&req, &laptop())
+        .expect_err("nvidia is not installed on a laptop");
     let text = format!("{err:#}");
     assert!(text.contains("nvidia"), "{text}");
-    assert!(text.contains("h264-software-x264"), "the error must list what was available: {text}");
+    assert!(
+        text.contains("h264-software-x264"),
+        "the error must list what was available: {text}"
+    );
     assert!(text.contains("installed"), "{text}");
 }
 
@@ -202,7 +240,11 @@ fn pinning_a_backend_that_is_not_here_fails_with_the_list_of_ones_that_are() {
 fn pinning_software_is_always_satisfiable() {
     let cat = Catalogue::shipped().unwrap();
     let gpu = with(laptop(), &["nvh264enc", "nvh264dec"]);
-    let req = Request { encode: Accel::Software, decode: Accel::Software, ..Default::default() };
+    let req = Request {
+        encode: Accel::Software,
+        decode: Accel::Software,
+        ..Default::default()
+    };
     let sel = cat.select(&req, &gpu).unwrap();
     assert_eq!(sel.video_encode.accel, "software");
     assert_eq!(sel.video_decode.accel, "software");
@@ -215,11 +257,17 @@ fn pinning_software_is_always_satisfiable() {
 fn the_container_keeps_selection_to_codecs_it_can_carry() {
     let mut cat = Catalogue::shipped().unwrap();
     cat.set_rank("av1-software", 900);
-    let av1 = with(laptop(), &["svtav1enc", "dav1ddec", "av1parse", "mpegtsmux"]);
+    let av1 = with(
+        laptop(),
+        &["svtav1enc", "dav1ddec", "av1parse", "mpegtsmux"],
+    );
     let flv = cat.select(&Request::default(), &av1).unwrap();
     assert_eq!(flv.video_encode.codec, "h264", "flv cannot carry AV1");
 
-    let ts = Request { container: Some("mpegts".into()), ..Default::default() };
+    let ts = Request {
+        container: Some("mpegts".into()),
+        ..Default::default()
+    };
     let sel = cat.select(&ts, &av1).unwrap();
     assert_eq!(sel.video_encode.codec, "av1");
     assert_eq!(sel.video_encode.element, "svtav1enc");
@@ -238,13 +286,30 @@ fn a_gpu_compositor_is_not_taken_until_somebody_has_verified_it_here() {
     let cat = Catalogue::shipped().unwrap();
     let gpu = with(
         laptop(),
-        &["nvh264enc", "nvh264dec", "cudacompositor", "cudaconvert", "cudaupload", "cudadownload"],
+        &[
+            "nvh264enc",
+            "nvh264dec",
+            "cudacompositor",
+            "cudaconvert",
+            "cudaupload",
+            "cudadownload",
+        ],
     );
     let sel = cat.select(&Request::default(), &gpu).unwrap();
-    assert_eq!(sel.graphics.id, "software", "unverified GPU entries are not taken on their own");
-    assert!(sel.graphics.why.contains("verified"), "{}", sel.graphics.why);
+    assert_eq!(
+        sel.graphics.id, "software",
+        "unverified GPU entries are not taken on their own"
+    );
+    assert!(
+        sel.graphics.why.contains("verified"),
+        "{}",
+        sel.graphics.why
+    );
 
-    let pinned = Request { graphics: Accel::Cuda, ..Default::default() };
+    let pinned = Request {
+        graphics: Accel::Cuda,
+        ..Default::default()
+    };
     let sel = cat.select(&pinned, &gpu).unwrap();
     assert_eq!(sel.graphics.compositor, "cudacompositor");
     assert_eq!(sel.graphics.memory, "cuda");
@@ -256,8 +321,14 @@ fn a_verified_gpu_entry_is_taken_on_its_own() {
     let mut cat = Catalogue::shipped().unwrap();
     let here = super::select::current_platform();
     let gl = cat.graphics.iter_mut().find(|g| g.id() == "gl").unwrap();
-    gl.verified.push(model::Verified { platform: here, ..Default::default() });
-    let reg = with(laptop(), &["glvideomixer", "glcolorconvert", "gldownload", "glupload"]);
+    gl.verified.push(model::Verified {
+        platform: here,
+        ..Default::default()
+    });
+    let reg = with(
+        laptop(),
+        &["glvideomixer", "glcolorconvert", "gldownload", "glupload"],
+    );
     let sel = cat.select(&Request::default(), &reg).unwrap();
     assert_eq!(sel.graphics.id, "gl");
     assert_eq!(sel.graphics.memory, "gl");
@@ -293,7 +364,10 @@ properties = { preset = 10, "target-bitrate" = { unit = "kbit", from = "video.bi
     cat.overlay(cfg.codecs.clone());
     assert!(cat.validate().is_empty(), "{:?}", cat.validate());
 
-    let reg = with(laptop(), &["svtav1enc", "dav1ddec", "av1parse", "mpegtsmux"]);
+    let reg = with(
+        laptop(),
+        &["svtav1enc", "dav1ddec", "av1parse", "mpegtsmux"],
+    );
     let req = super::request_from(&cfg, &cat);
     assert_eq!(req.container.as_deref(), Some("mpegts"));
     let sel = cat.select(&req, &reg).unwrap();
@@ -323,7 +397,11 @@ properties = { "speed-preset" = "ultrafast" }
     let mut cat = Catalogue::shipped().unwrap();
     let before = cat.video.len();
     cat.overlay(cfg.codecs.clone());
-    assert_eq!(cat.video.len(), before, "an override must not add a second entry");
+    assert_eq!(
+        cat.video.len(),
+        before,
+        "an override must not add a second entry"
+    );
     let e = cat.video_entry("h264-software-x264").unwrap();
     assert_eq!(e.rank, 1);
     assert_eq!(e.properties.len(), 1, "the entry is replaced, not merged");
@@ -344,7 +422,10 @@ fn the_environment_can_nudge_a_rank_without_restating_an_entry() {
     });
     assert_eq!(cat.video_entry("h264-software-x264").unwrap().rank, 10);
     let sel = cat
-        .select(&Request::default(), &with(permissive_only(), &["x264enc", "avdec_h264"]))
+        .select(
+            &Request::default(),
+            &with(permissive_only(), &["x264enc", "avdec_h264"]),
+        )
         .unwrap();
     assert_eq!(sel.video_encode.element, "openh264enc");
 }
@@ -358,7 +439,10 @@ fn the_environment_can_take_an_entry_out() {
     });
     assert!(cat.video_entry("h264-software-x264").unwrap().disabled);
     let sel = cat
-        .select(&Request::default(), &with(permissive_only(), &["x264enc", "avdec_h264"]))
+        .select(
+            &Request::default(),
+            &with(permissive_only(), &["x264enc", "avdec_h264"]),
+        )
         .unwrap();
     assert_eq!(sel.video_encode.element, "openh264enc");
 }
@@ -407,7 +491,9 @@ fn gst() {
 fn selection_resolves_on_this_machine() {
     gst();
     let cat = Catalogue::shipped().unwrap();
-    let sel = cat.select(&Request::default(), &GstRegistry).expect("every machine must resolve");
+    let sel = cat
+        .select(&Request::default(), &GstRegistry)
+        .expect("every machine must resolve");
     assert!(crate::probe::exists(&sel.video_encode.element));
     assert!(crate::probe::exists(&sel.video_decode.element));
     assert!(crate::probe::exists(&sel.audio_encode.element));
@@ -425,7 +511,9 @@ fn the_software_entry_resolves_on_this_machine_when_it_is_forced() {
         graphics: Accel::Software,
         ..Default::default()
     };
-    let sel = cat.select(&req, &GstRegistry).expect("the software floor must hold everywhere");
+    let sel = cat
+        .select(&req, &GstRegistry)
+        .expect("the software floor must hold everywhere");
     assert_eq!(sel.video_encode.accel, "software");
     assert_eq!(sel.graphics.compositor, "compositor");
     assert_eq!(sel.graphics.convert, "videoconvert");
@@ -439,7 +527,10 @@ fn codec_list_serialises() {
     gst();
     let listing = list();
     assert!(!listing.entries.is_empty());
-    assert!(listing.entries.iter().any(|e| e.present), "something must be installed here");
+    assert!(
+        listing.entries.iter().any(|e| e.present),
+        "something must be installed here"
+    );
     let json = serde_json::to_string(&listing).expect("codec.list has to serialise");
     assert!(json.contains("\"platform\""));
     assert!(json.contains("\"considered\""));
@@ -451,18 +542,32 @@ fn codec_list_serialises() {
 fn catalogue_properties_reach_a_real_encoder() {
     gst();
     let cat = Catalogue::shipped().unwrap();
-    let Some(e) = cat.video_entry("h264-software-x264") else { return };
+    let Some(e) = cat.video_entry("h264-software-x264") else {
+        return;
+    };
     if !crate::probe::exists("x264enc") {
         return;
     }
     let el = gstreamer::ElementFactory::make("x264enc").build().unwrap();
-    let vars = Vars { video_bitrate_kbps: 2500, keyframe_frames: 60, fps: 30, ..Default::default() };
+    let vars = Vars {
+        video_bitrate_kbps: 2500,
+        keyframe_frames: 60,
+        fps: 30,
+        ..Default::default()
+    };
     super::apply::apply(&el, &e.properties, &vars);
     super::apply::apply_keyframe(&el, e.keyframe.as_ref(), &vars);
     use gstreamer::prelude::*;
-    assert_eq!(el.property::<u32>("bitrate"), 2500, "kbit stays kbit for x264enc");
+    assert_eq!(
+        el.property::<u32>("bitrate"),
+        2500,
+        "kbit stays kbit for x264enc"
+    );
     assert_eq!(el.property::<u32>("key-int-max"), 60);
-    assert!(!el.property::<bool>("byte-stream"), "flv wants AVC sample format");
+    assert!(
+        !el.property::<bool>("byte-stream"),
+        "flv wants AVC sample format"
+    );
 }
 
 /// openh264 wants bits where x264 wants kilobits, and that conversion is the
@@ -475,8 +580,13 @@ fn the_same_catalogue_bitrate_reaches_openh264_in_bits() {
     }
     let cat = Catalogue::shipped().unwrap();
     let e = cat.video_entry("h264-software-openh264").unwrap();
-    let el = gstreamer::ElementFactory::make("openh264enc").build().unwrap();
-    let vars = Vars { video_bitrate_kbps: 2500, ..Default::default() };
+    let el = gstreamer::ElementFactory::make("openh264enc")
+        .build()
+        .unwrap();
+    let vars = Vars {
+        video_bitrate_kbps: 2500,
+        ..Default::default()
+    };
     super::apply::apply(&el, &e.properties, &vars);
     use gstreamer::prelude::*;
     assert_eq!(el.property::<u32>("bitrate"), 2_500_000);
@@ -492,8 +602,13 @@ fn doctor_lines_cover_every_entry() {
     // present encoders each cost a second. Run against a fake registry that
     // has nothing, so this test stays fast and still proves the shape.
     let lines = check::doctor_lines(&cat, &FakeRegistry::with(&[]));
-    assert_eq!(lines.len(), cat.video.len() + cat.audio.len() + cat.graphics.len());
-    assert!(lines.iter().all(|l| l.starts_with("codec ") || l.starts_with("graphics ")));
+    assert_eq!(
+        lines.len(),
+        cat.video.len() + cat.audio.len() + cat.graphics.len()
+    );
+    assert!(lines
+        .iter()
+        .all(|l| l.starts_with("codec ") || l.starts_with("graphics ")));
     assert!(lines.iter().any(|l| l.contains("not installed here")));
 }
 
@@ -503,14 +618,24 @@ fn doctor_lines_cover_every_entry() {
 fn the_software_entry_survives_a_one_second_encode_here() {
     gst();
     let cat = Catalogue::shipped().unwrap();
-    let req = Request { encode: Accel::Software, ..Default::default() };
+    let req = Request {
+        encode: Accel::Software,
+        ..Default::default()
+    };
     let sel = cat.select(&req, &GstRegistry).unwrap();
     let report = check::test_entry(&cat, &sel.video_encode.id, 1.0, 320, 180, 30)
         .expect("the software entry must round trip");
     assert!(report.ok, "{}", report.note);
-    assert!(report.frames_out > 20, "got {} frames back", report.frames_out);
+    assert!(
+        report.frames_out > 20,
+        "got {} frames back",
+        report.frames_out
+    );
     let psnr = report.psnr_db.expect("a video round trip has a psnr");
-    assert!(psnr > check::PSNR_FLOOR, "psnr {psnr} is too low to be the same picture");
+    assert!(
+        psnr > check::PSNR_FLOOR,
+        "psnr {psnr} is too low to be the same picture"
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -610,7 +735,10 @@ fn every_platform_resolves_an_encoder_and_a_compositor() {
             panic!("{name} must resolve a programme encoder: {e:#}");
         });
         assert_eq!(sel.video_encode.element, expect, "on {name}");
-        assert_eq!(sel.graphics.compositor, "compositor", "software stays the default on {name}");
+        assert_eq!(
+            sel.graphics.compositor, "compositor",
+            "software stays the default on {name}"
+        );
         assert!(!sel.audio_encode.element.is_empty(), "on {name}");
     }
 }
@@ -621,7 +749,11 @@ fn every_platform_resolves_an_encoder_and_a_compositor() {
 #[test]
 fn forcing_software_works_on_every_platform() {
     let cat = Catalogue::shipped().unwrap();
-    let req = Request { encode: Accel::Software, decode: Accel::Software, ..Default::default() };
+    let req = Request {
+        encode: Accel::Software,
+        decode: Accel::Software,
+        ..Default::default()
+    };
     for (name, reg) in [
         ("windows", windows_registry()),
         ("linux-intel", linux_intel_registry()),

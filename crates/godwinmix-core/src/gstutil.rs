@@ -337,7 +337,11 @@ pub fn completed_colorimetry(caps: &gst::CapsRef) -> Option<gst::Caps> {
     } else {
         VideoColorimetry::new(
             have.range(),
-            if have.matrix() == VideoColorMatrix::Unknown { default.matrix() } else { have.matrix() },
+            if have.matrix() == VideoColorMatrix::Unknown {
+                default.matrix()
+            } else {
+                have.matrix()
+            },
             if have.transfer() == VideoTransferFunction::Unknown {
                 default.transfer()
             } else {
@@ -412,14 +416,28 @@ impl BusOwner {
 /// Messages we care about from a pipeline bus.
 #[derive(Debug, Clone)]
 pub enum BusEvent {
-    Error { pipeline: BusOwner, src: String, message: String, debug: Option<String> },
-    Warning { pipeline: BusOwner, src: String, message: String },
-    Eos { pipeline: BusOwner },
+    Error {
+        pipeline: BusOwner,
+        src: String,
+        message: String,
+        debug: Option<String>,
+    },
+    Warning {
+        pipeline: BusOwner,
+        src: String,
+        message: String,
+    },
+    Eos {
+        pipeline: BusOwner,
+    },
     /// Peak level per channel in dBFS, from a `level` element. `src` is that
     /// element's name, which is the only thing in the message that says which
     /// meter it came from: the program's own and one per source all post on the
     /// same bus, and without the name they are indistinguishable.
-    Level { src: String, peak_db: Vec<f64> },
+    Level {
+        src: String,
+        peak_db: Vec<f64>,
+    },
 }
 
 /// A running bus watcher. Dropping it stops the thread and guarantees no
@@ -476,7 +494,10 @@ fn share_device_contexts(bus: &gst::Bus) {
             gst::MessageView::NeedContext(need) => {
                 let wanted = need.context_type();
                 if SHARED_CONTEXT_TYPES.contains(&wanted) {
-                    let held = shared_contexts().lock().ok().and_then(|c| c.get(wanted).cloned());
+                    let held = shared_contexts()
+                        .lock()
+                        .ok()
+                        .and_then(|c| c.get(wanted).cloned());
                     if let (Some(ctx), Some(el)) = (
                         held,
                         msg.src().and_then(|s| s.downcast_ref::<gst::Element>()),
@@ -553,7 +574,9 @@ pub fn watch_bus(
                         message: w.error().to_string(),
                     })
                 }
-                MessageView::Eos(_) => Some(BusEvent::Eos { pipeline: owner.clone() }),
+                MessageView::Eos(_) => Some(BusEvent::Eos {
+                    pipeline: owner.clone(),
+                }),
                 MessageView::Element(e) => e
                     .structure()
                     .filter(|s| s.name() == "level")
@@ -637,7 +660,10 @@ mod tests {
 
         answer_latency_here(&proxy).unwrap();
         let mut query = gst::query::Latency::new();
-        assert!(src.query(&mut query), "the answer should stand in for the other pipeline");
+        assert!(
+            src.query(&mut query),
+            "the answer should stand in for the other pipeline"
+        );
         let (live, min, max) = query.result();
         assert!(live, "the programme is live");
         assert_eq!(min, gst::ClockTime::ZERO, "the join itself adds nothing");
@@ -658,7 +684,9 @@ mod tests {
         let comp = make_live_aggregator("compositor", "ca-comp").unwrap();
         let downstream = capsfilter(
             "ca-filter",
-            &gst::Caps::builder("video/x-raw").field("format", "I420").build(),
+            &gst::Caps::builder("video/x-raw")
+                .field("format", "I420")
+                .build(),
         )
         .unwrap();
         let sink = make("fakesink", "ca-sink").unwrap();
@@ -678,16 +706,28 @@ mod tests {
 
         // And a filter is honoured, the way a real peer would honour it: the
         // aggregator sends its whole template and expects an answer inside it.
-        let filter = gst::Caps::builder("video/x-raw").field("width", 1280i32).build();
+        let filter = gst::Caps::builder("video/x-raw")
+            .field("width", 1280i32)
+            .build();
         let got = src.peer_query_caps(Some(&filter));
-        assert!(got.is_subset(&filter), "answer {got} is outside the filter {filter}");
+        assert!(
+            got.is_subset(&filter),
+            "answer {got} is outside the filter {filter}"
+        );
         assert!(!got.is_empty(), "the filter and the answer do intersect");
 
         // And the allocation query that follows every negotiation is answered
         // here too, with nothing on offer.
         let mut alloc = gst::query::Allocation::new(Some(&answer), true);
-        assert!(src.peer_query(&mut alloc), "the allocation query should be answered here");
-        assert_eq!(alloc.allocation_pools().count(), 0, "nothing was offered, and that is the answer");
+        assert!(
+            src.peer_query(&mut alloc),
+            "the allocation query should be answered here"
+        );
+        assert_eq!(
+            alloc.allocation_pools().count(),
+            0,
+            "nothing was offered, and that is the answer"
+        );
     }
 
     #[test]
@@ -700,7 +740,10 @@ mod tests {
         let bus = pipeline.bus().unwrap();
         bus.post(gst::message::Eos::new()).unwrap();
         std::thread::sleep(Duration::from_millis(400));
-        assert!(matches!(rx.try_recv(), Ok(BusEvent::Eos { .. })), "live watcher should deliver");
+        assert!(
+            matches!(rx.try_recv(), Ok(BusEvent::Eos { .. })),
+            "live watcher should deliver"
+        );
 
         drop(watch);
         std::thread::sleep(Duration::from_millis(400));
@@ -708,7 +751,10 @@ mod tests {
         // retired pipeline's dying error would trigger a spurious reconnect.
         bus.post(gst::message::Eos::new()).unwrap();
         std::thread::sleep(Duration::from_millis(400));
-        assert!(rx.try_recv().is_err(), "stopped watcher still delivered a message");
+        assert!(
+            rx.try_recv().is_err(),
+            "stopped watcher still delivered a message"
+        );
 
         let _ = pipeline.set_state(gst::State::Null);
     }
@@ -735,7 +781,10 @@ mod tests {
             f.store(true, std::sync::atomic::Ordering::SeqCst);
         })
         .expect("blocking an idle pad must succeed");
-        assert!(flag.load(std::sync::atomic::Ordering::SeqCst), "work did not run");
+        assert!(
+            flag.load(std::sync::atomic::Ordering::SeqCst),
+            "work did not run"
+        );
     }
 
     #[test]
@@ -769,7 +818,10 @@ mod tests {
     }
 
     fn colorimetry_of(caps: &gst::Caps) -> String {
-        caps.structure(0).unwrap().get::<String>("colorimetry").unwrap()
+        caps.structure(0)
+            .unwrap()
+            .get::<String>("colorimetry")
+            .unwrap()
     }
 
     #[test]
@@ -787,7 +839,11 @@ mod tests {
         gst::init().unwrap();
         // Limited range, BT.601 matrix, nothing else said: keep the matrix.
         let c = completed_colorimetry(&video_caps(Some("1:4:0:0"), 720)).unwrap();
-        assert!(colorimetry_of(&c).starts_with("1:4:"), "{}", colorimetry_of(&c));
+        assert!(
+            colorimetry_of(&c).starts_with("1:4:"),
+            "{}",
+            colorimetry_of(&c)
+        );
         assert!(!colorimetry_of(&c).contains(":0"), "{}", colorimetry_of(&c));
     }
 
@@ -797,7 +853,9 @@ mod tests {
         assert!(completed_colorimetry(&video_caps(Some("bt709"), 720)).is_none());
         assert!(completed_colorimetry(&video_caps(Some("bt601"), 480)).is_none());
         assert!(completed_colorimetry(&video_caps(None, 720)).is_none());
-        let audio = gst::Caps::builder("audio/x-raw").field("colorimetry", "0:0:0:0").build();
+        let audio = gst::Caps::builder("audio/x-raw")
+            .field("colorimetry", "0:0:0:0")
+            .build();
         assert!(completed_colorimetry(&audio).is_none());
     }
 }

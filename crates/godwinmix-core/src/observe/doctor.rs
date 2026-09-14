@@ -35,7 +35,11 @@ pub struct Check {
 
 impl Check {
     fn new(name: &str, verdict: Verdict, detail: impl Into<String>) -> Self {
-        Self { name: name.into(), verdict, detail: detail.into() }
+        Self {
+            name: name.into(),
+            verdict,
+            detail: detail.into(),
+        }
     }
 }
 
@@ -133,7 +137,12 @@ pub fn exit_code(checks: &[Check]) -> i32 {
 /// runs down the left hand column.
 pub fn format(checks: &[Check]) -> String {
     use std::fmt::Write as _;
-    let width = checks.iter().map(|c| c.name.len()).max().unwrap_or(10).clamp(10, 32);
+    let width = checks
+        .iter()
+        .map(|c| c.name.len())
+        .max()
+        .unwrap_or(10)
+        .clamp(10, 32);
     let mut out = String::new();
     for c in checks {
         let mark = match c.verdict {
@@ -141,13 +150,23 @@ pub fn format(checks: &[Check]) -> String {
             Verdict::Warn => "warn",
             Verdict::Fail => "FAIL",
         };
-        let _ = writeln!(out, "{mark}  {:<width$}  {}", c.name, c.detail, width = width);
+        let _ = writeln!(
+            out,
+            "{mark}  {:<width$}  {}",
+            c.name,
+            c.detail,
+            width = width
+        );
     }
     let failed = checks.iter().filter(|c| c.verdict == Verdict::Fail).count();
     let warned = checks.iter().filter(|c| c.verdict == Verdict::Warn).count();
     let _ = match (failed, warned) {
         (0, 0) => writeln!(out, "\nall {} checks passed", checks.len()),
-        (0, w) => writeln!(out, "\n{} checks passed, {w} worth reading", checks.len() - w),
+        (0, w) => writeln!(
+            out,
+            "\n{} checks passed, {w} worth reading",
+            checks.len() - w
+        ),
         (f, _) => writeln!(out, "\n{f} of {} checks failed", checks.len()),
     };
     out
@@ -188,14 +207,20 @@ fn elements() -> Vec<Check> {
         checks.push(Check::new(
             "elements",
             Verdict::Ok,
-            format!("all {} elements the default pipeline needs are here", REQUIRED.len()),
+            format!(
+                "all {} elements the default pipeline needs are here",
+                REQUIRED.len()
+            ),
         ));
     } else {
         for (name, why) in &missing_required {
             checks.push(Check::new(
                 "elements",
                 Verdict::Fail,
-                format!("{name} is missing, and it is what does {why}. {}", install_hint(name)),
+                format!(
+                    "{name} is missing, and it is what does {why}. {}",
+                    install_hint(name)
+                ),
             ));
         }
     }
@@ -203,7 +228,10 @@ fn elements() -> Vec<Check> {
         checks.push(Check::new(
             "elements",
             Verdict::Warn,
-            format!("{name} is missing, so {why} will not work. {}", install_hint(name)),
+            format!(
+                "{name} is missing, so {why} will not work. {}",
+                install_hint(name)
+            ),
         ));
     }
     checks
@@ -244,7 +272,10 @@ fn encoder(name: &str, candidates: &[&str]) -> Check {
         None => Check::new(
             name,
             Verdict::Fail,
-            format!("none of {} is installed, so nothing can be encoded", candidates.join(", ")),
+            format!(
+                "none of {} is installed, so nothing can be encoded",
+                candidates.join(", ")
+            ),
         ),
         // A machine with only the software encoder runs, and says so, because
         // the person choosing a board should choose knowing.
@@ -253,9 +284,11 @@ fn encoder(name: &str, candidates: &[&str]) -> Check {
             Verdict::Warn,
             format!("{first} only, which is software. Expect a core per 1080p30 encode"),
         ),
-        Some((first, rest)) => {
-            Check::new(name, Verdict::Ok, format!("{first} will be chosen; also here: {}", rest.join(", ")))
-        }
+        Some((first, rest)) => Check::new(
+            name,
+            Verdict::Ok,
+            format!("{first} will be chosen; also here: {}", rest.join(", ")),
+        ),
     }
 }
 
@@ -302,7 +335,9 @@ fn one_line(text: &str) -> String {
         .map(str::trim)
         .filter(|l| {
             !l.is_empty()
-                && !l.chars().all(|c| matches!(c, '|' | '^' | '-' | ' ' | '0'..='9'))
+                && !l
+                    .chars()
+                    .all(|c| matches!(c, '|' | '^' | '-' | ' ' | '0'..='9'))
         })
         .collect::<Vec<_>>()
         .join("; ")
@@ -317,7 +352,9 @@ fn port_free(bind: &str) -> Check {
         Err(e) if e.kind() == std::io::ErrorKind::AddrInUse => Check::new(
             "control port",
             Verdict::Fail,
-            format!("{bind} is already taken. Another mixer is running, or something else has the port"),
+            format!(
+                "{bind} is already taken. Another mixer is running, or something else has the port"
+            ),
         ),
         Err(e) => Check::new(
             "control port",
@@ -339,12 +376,19 @@ fn runtime_dir_writable(dir: &Path) -> Check {
     match std::fs::write(&probe, b"x") {
         Ok(()) => {
             let _ = std::fs::remove_file(&probe);
-            Check::new("runtime directory", Verdict::Ok, format!("{} is writable", dir.display()))
+            Check::new(
+                "runtime directory",
+                Verdict::Ok,
+                format!("{} is writable", dir.display()),
+            )
         }
         Err(e) => Check::new(
             "runtime directory",
             Verdict::Fail,
-            format!("{} is not writable: {e}. Logs and the session log have nowhere to go", dir.display()),
+            format!(
+                "{} is not writable: {e}. Logs and the session log have nowhere to go",
+                dir.display()
+            ),
         ),
     }
 }
@@ -365,16 +409,26 @@ fn disk_space(dir: &Path) -> Check {
                 Check::new(
                     "disk space",
                     Verdict::Fail,
-                    format!("{gb:.1} GB free under {}. Logs rotate at 250 MB and a show needs more", dir.display()),
+                    format!(
+                        "{gb:.1} GB free under {}. Logs rotate at 250 MB and a show needs more",
+                        dir.display()
+                    ),
                 )
             } else if free < 5 * 1_073_741_824 {
                 Check::new(
                     "disk space",
                     Verdict::Warn,
-                    format!("{gb:.1} GB free under {}, which is enough for logs but not for recording", dir.display()),
+                    format!(
+                        "{gb:.1} GB free under {}, which is enough for logs but not for recording",
+                        dir.display()
+                    ),
                 )
             } else {
-                Check::new("disk space", Verdict::Ok, format!("{gb:.1} GB free under {}", dir.display()))
+                Check::new(
+                    "disk space",
+                    Verdict::Ok,
+                    format!("{gb:.1} GB free under {}", dir.display()),
+                )
             }
         }
     }
@@ -387,7 +441,9 @@ fn disk_space(dir: &Path) -> Check {
 /// that is the difference between a mixer that switches cleanly and one that
 /// does not, so the UI asks the machine rather than assuming a laptop.
 fn machine_class() -> Check {
-    let cores = std::thread::available_parallelism().map(|n| n.get()).unwrap_or(1);
+    let cores = std::thread::available_parallelism()
+        .map(|n| n.get())
+        .unwrap_or(1);
     let ram_gb = total_memory_bytes().map(|b| b as f64 / 1_073_741_824.0);
     let (default, why) = gallery_default(cores, ram_gb);
     let ram = match ram_gb {
@@ -406,7 +462,9 @@ fn machine_class() -> Check {
 /// `core.info` answers with this when no preset has chosen a mode, so a client
 /// on a Pi starts on icons without having to guess from `hardwareConcurrency`.
 pub fn gallery_default_here() -> &'static str {
-    let cores = std::thread::available_parallelism().map(|n| n.get()).unwrap_or(1);
+    let cores = std::thread::available_parallelism()
+        .map(|n| n.get())
+        .unwrap_or(1);
     let ram_gb = total_memory_bytes().map(|b| b as f64 / 1_073_741_824.0);
     gallery_default(cores, ram_gb).0
 }
@@ -440,7 +498,11 @@ fn free_bytes(dir: &Path) -> Option<u64> {
         }
         // `f_frsize` is the fragment size and is what `f_bavail` counts. Some
         // platforms leave it zero, in which case `f_bsize` is the answer.
-        let unit = if s.f_frsize > 0 { s.f_frsize as u64 } else { s.f_bsize as u64 };
+        let unit = if s.f_frsize > 0 {
+            s.f_frsize as u64
+        } else {
+            s.f_bsize as u64
+        };
         Some(unit.saturating_mul(s.f_bavail as u64))
     }
 }
@@ -457,7 +519,11 @@ fn free_bytes(dir: &Path) -> Option<u64> {
             total_free: *mut u64,
         ) -> i32;
     }
-    let wide: Vec<u16> = dir.as_os_str().encode_wide().chain(std::iter::once(0)).collect();
+    let wide: Vec<u16> = dir
+        .as_os_str()
+        .encode_wide()
+        .chain(std::iter::once(0))
+        .collect();
     let mut free = 0u64;
     // SAFETY: the path is NUL terminated and outlives the call; the three
     // out parameters are stack locals we own.
@@ -574,7 +640,10 @@ mod tests {
                 assert!(c.detail.contains("Install"), "{c:?}");
             }
         }
-        assert_eq!(exit_code(&checks), i32::from(checks.iter().any(|c| c.verdict == Verdict::Fail)));
+        assert_eq!(
+            exit_code(&checks),
+            i32::from(checks.iter().any(|c| c.verdict == Verdict::Fail))
+        );
     }
 
     #[test]
@@ -595,11 +664,21 @@ mod tests {
         assert_eq!(check.verdict, Verdict::Fail);
         assert!(check.detail.contains("godwinmix.toml"), "{check:?}");
 
-        std::fs::write(&path, "[canvas]\nwidth = 1280\nheight = 720\nfps = 30\nsample_rate = 48000\nchannels = 2\n").unwrap();
-        assert_eq!(config_check(&path, Some(&Config::load(&path))).verdict, Verdict::Ok);
+        std::fs::write(
+            &path,
+            "[canvas]\nwidth = 1280\nheight = 720\nfps = 30\nsample_rate = 48000\nchannels = 2\n",
+        )
+        .unwrap();
+        assert_eq!(
+            config_check(&path, Some(&Config::load(&path))).verdict,
+            Verdict::Ok
+        );
         // And a file that is not there is a warning, not a failure: an
         // operator checking a machine before writing one is doing it right.
-        assert_eq!(config_check(&dir.join("absent.toml"), None).verdict, Verdict::Warn);
+        assert_eq!(
+            config_check(&dir.join("absent.toml"), None).verdict,
+            Verdict::Warn
+        );
         let _ = std::fs::remove_dir_all(&dir);
     }
 
@@ -635,7 +714,10 @@ mod tests {
             assert!(free > 0, "a writable temp directory with no free space");
         }
         if let Some(ram) = total_memory_bytes() {
-            assert!(ram > 128 * 1024 * 1024, "under 128 MB of RAM is not a machine this runs on");
+            assert!(
+                ram > 128 * 1024 * 1024,
+                "under 128 MB of RAM is not a machine this runs on"
+            );
         }
         let _ = std::fs::remove_dir_all(&dir);
     }

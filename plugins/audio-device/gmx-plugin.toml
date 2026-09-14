@@ -23,7 +23,14 @@ id = "source"
 # Sound and nothing else. A device with a camera in it is a separate
 # `camera/source`.
 media = { video = "none", audio = "raw", alpha = false, thumb = false }
-transports = ["unixfd", "container"]
+# The container and nothing else, on purpose. `unixfd` passes one file
+# descriptor per buffer, which is what makes it free for 93 MB/s of video and
+# what makes it wrong here: sound at the canvas contract is 384 kB/s in ten
+# millisecond buffers, so the socket transport would be a hundred descriptors a
+# second to save a copy of 3,840 bytes. A streamable Matroska stream on a pipe
+# costs one memcpy per buffer, works on Windows too, and is the cheaper of the
+# two at this rate.
+transports = ["container"]
 capabilities = ["restart-in-place", "health"]
 # The device's own buffer is its latency and it differs per driver, so the
 # number is left at 0 and the aligner absorbs what arrives. `latency-report`

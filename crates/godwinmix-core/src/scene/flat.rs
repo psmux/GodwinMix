@@ -123,7 +123,10 @@ impl Collection {
                 id: scene.id,
                 parent: None,
                 order,
-                props: Props::Scene { name: scene.name.clone(), color: scene.color.clone() },
+                props: Props::Scene {
+                    name: scene.name.clone(),
+                    color: scene.color.clone(),
+                },
             });
             push_items(&scene.items, scene.id, &mut records);
         }
@@ -168,13 +171,17 @@ fn push_items(items: &[Item], parent: Id, out: &mut Vec<Record>) {
 impl From<&Content> for FlatContent {
     fn from(c: &Content) -> FlatContent {
         match c {
-            Content::Source { source } => FlatContent::Source { source: source.clone() },
-            Content::Ref { scene, overrides } => {
-                FlatContent::Reference { scene: *scene, overrides: overrides.clone() }
-            }
-            Content::Graphic { graphic, params } => {
-                FlatContent::Graphic { graphic: graphic.clone(), params: params.clone() }
-            }
+            Content::Source { source } => FlatContent::Source {
+                source: source.clone(),
+            },
+            Content::Ref { scene, overrides } => FlatContent::Reference {
+                scene: *scene,
+                overrides: overrides.clone(),
+            },
+            Content::Graphic { graphic, params } => FlatContent::Graphic {
+                graphic: graphic.clone(),
+                params: params.clone(),
+            },
             Content::Children { .. } => FlatContent::Group,
         }
     }
@@ -282,16 +289,20 @@ fn build_items(
             );
         };
         let content = match &props.content {
-            FlatContent::Source { source } => Content::Source { source: source.clone() },
-            FlatContent::Reference { scene, overrides } => {
-                Content::Ref { scene: *scene, overrides: overrides.clone() }
-            }
-            FlatContent::Graphic { graphic, params } => {
-                Content::Graphic { graphic: graphic.clone(), params: params.clone() }
-            }
-            FlatContent::Group => {
-                Content::Children { children: build_items(record.id, children, depth, seen)? }
-            }
+            FlatContent::Source { source } => Content::Source {
+                source: source.clone(),
+            },
+            FlatContent::Reference { scene, overrides } => Content::Ref {
+                scene: *scene,
+                overrides: overrides.clone(),
+            },
+            FlatContent::Graphic { graphic, params } => Content::Graphic {
+                graphic: graphic.clone(),
+                params: params.clone(),
+            },
+            FlatContent::Group => Content::Children {
+                children: build_items(record.id, children, depth, seen)?,
+            },
         };
         seen.insert(record.id);
         items.push(Item {
@@ -336,9 +347,15 @@ mod tests {
         let mut overrides = BTreeMap::new();
         overrides.insert(
             lower.items[0].id,
-            Override { params: Some(serde_json::json!({ "name": "Ada" })), ..Override::default() },
+            Override {
+                params: Some(serde_json::json!({ "name": "Ada" })),
+                ..Override::default()
+            },
         );
-        let mut reference = Item::new(Content::Ref { scene: lower.id, overrides });
+        let mut reference = Item::new(Content::Ref {
+            scene: lower.id,
+            overrides,
+        });
         reference.name = Some("lower third".into());
         doc.scenes[0].items.push(reference);
         doc.scenes.push(lower);
@@ -379,8 +396,11 @@ mod tests {
             .filter(|r| matches!(&r.props, Props::Item(p) if p.content == FlatContent::Group))
             .collect();
         assert_eq!(groups.len(), 1);
-        let kids: Vec<&Record> =
-            flat.records.iter().filter(|r| r.parent == Some(groups[0].id)).collect();
+        let kids: Vec<&Record> = flat
+            .records
+            .iter()
+            .filter(|r| r.parent == Some(groups[0].id))
+            .collect();
         assert_eq!(kids.len(), 1);
     }
 
@@ -415,7 +435,10 @@ mod tests {
             }
         }
         let err = flat.to_tree().unwrap_err().to_string();
-        assert!(err.contains("loop") || err.contains("not in this store"), "{err}");
+        assert!(
+            err.contains("loop") || err.contains("not in this store"),
+            "{err}"
+        );
     }
 
     #[test]
@@ -423,6 +446,10 @@ mod tests {
         let doc = sample();
         let mut flat = doc.to_flat();
         flat.records.reverse();
-        assert_eq!(flat.to_tree().unwrap(), doc, "shuffling the records changed the tree");
+        assert_eq!(
+            flat.to_tree().unwrap(),
+            doc,
+            "shuffling the records changed the tree"
+        );
     }
 }

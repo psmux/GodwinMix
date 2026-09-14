@@ -134,7 +134,11 @@ pub fn no_such_cell(target: &Target, cells: &[CellAssignment]) -> String {
     format!(
         "no cell for '{name}' on the mosaic. On it now: {}. Add the source, or ask for \
          /mjpeg/sheet.",
-        if on_sheet.is_empty() { "nothing".to_string() } else { on_sheet.join(", ") }
+        if on_sheet.is_empty() {
+            "nothing".to_string()
+        } else {
+            on_sheet.join(", ")
+        }
     )
 }
 
@@ -143,7 +147,14 @@ mod tests {
     use super::*;
 
     fn cell(index: u32, source: Option<&str>, x: i32, y: i32, w: i32, h: i32) -> CellAssignment {
-        CellAssignment { index, source: source.map(String::from), x, y, w, h }
+        CellAssignment {
+            index,
+            source: source.map(String::from),
+            x,
+            y,
+            w,
+            h,
+        }
     }
 
     #[test]
@@ -152,7 +163,10 @@ mod tests {
         assert_eq!(Target::parse("program"), Target::Program);
         assert_eq!(Target::parse("preview"), Target::Preview);
         assert_eq!(Target::parse("cam1"), Target::Source("cam1".into()));
-        assert_eq!(Target::parse("cam1").pick(), Some(Pick::Source("cam1".into())));
+        assert_eq!(
+            Target::parse("cam1").pick(),
+            Some(Pick::Source("cam1".into()))
+        );
         assert_eq!(Target::Item("x".into()).pick(), None);
     }
 
@@ -171,7 +185,11 @@ mod tests {
     #[test]
     fn a_whole_sheet_at_its_own_size_is_passed_through_untouched() {
         let jpeg = b"not really a jpeg".to_vec();
-        assert_eq!(cut(&jpeg, None, None).unwrap(), jpeg, "the cheap path must not re-encode");
+        assert_eq!(
+            cut(&jpeg, None, None).unwrap(),
+            jpeg,
+            "the cheap path must not re-encode"
+        );
     }
 
     #[test]
@@ -179,7 +197,11 @@ mod tests {
         // A real two by two mosaic, encoded so the cut has something to decode.
         let mut img = image::RgbImage::new(64, 64);
         for (x, y, p) in img.enumerate_pixels_mut() {
-            *p = image::Rgb([if x < 32 { 255 } else { 0 }, if y < 32 { 255 } else { 0 }, 0]);
+            *p = image::Rgb([
+                if x < 32 { 255 } else { 0 },
+                if y < 32 { 255 } else { 0 },
+                0,
+            ]);
         }
         let sheet = snapshot::encode_jpeg(&img).unwrap();
         let c = cell(0, Some("cam1"), 32, 0, 32, 32);
@@ -193,10 +215,16 @@ mod tests {
 
     #[test]
     fn a_missing_cell_says_what_is_on_the_sheet() {
-        let cells = vec![cell(0, None, 0, 0, 10, 10), cell(1, Some("cam1"), 10, 0, 10, 10)];
+        let cells = vec![
+            cell(0, None, 0, 0, 10, 10),
+            cell(1, Some("cam1"), 10, 0, 10, 10),
+        ];
         let message = no_such_cell(&Target::Source("cam9".into()), &cells);
         assert!(message.contains("cam9"), "{message}");
         assert!(message.contains("program, cam1"), "{message}");
-        assert!(message.contains("/mjpeg/sheet"), "the message must name the next step");
+        assert!(
+            message.contains("/mjpeg/sheet"),
+            "the message must name the next step"
+        );
     }
 }

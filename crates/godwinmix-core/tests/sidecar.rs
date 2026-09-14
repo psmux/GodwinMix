@@ -91,8 +91,11 @@ settings = "settings.json"
 fn write_plugin(at: &Path) {
     std::fs::create_dir_all(at).expect("the plugin directory");
     std::fs::write(at.join("gmx-plugin.toml"), MANIFEST).expect("the manifest");
-    std::fs::write(at.join("settings.json"), r#"{"type":"object","properties":{}}"#)
-        .expect("the settings schema");
+    std::fs::write(
+        at.join("settings.json"),
+        r#"{"type":"object","properties":{}}"#,
+    )
+    .expect("the settings schema");
     let entry = at.join("run.sh");
     std::fs::write(&entry, PLUGIN).expect("the plugin");
     use std::os::unix::fs::PermissionsExt;
@@ -108,7 +111,9 @@ fn temp(tag: &str) -> PathBuf {
 
 fn which(name: &str) -> Option<PathBuf> {
     std::env::var_os("PATH").and_then(|paths| {
-        std::env::split_paths(&paths).map(|d| d.join(name)).find(|p| p.is_file())
+        std::env::split_paths(&paths)
+            .map(|d| d.join(name))
+            .find(|p| p.is_file())
     })
 }
 
@@ -132,7 +137,11 @@ fn a_plugin_is_installed_registered_and_removed_without_a_trace() {
     let installed = loader::install_from_path(&source).expect("it installs");
     assert_eq!(installed.name(), "shellbars");
     assert_eq!(installed.version(), "0.1.0");
-    assert!(plugins.join("shellbars").join("0.1.0").join("run.sh").is_file());
+    assert!(plugins
+        .join("shellbars")
+        .join("0.1.0")
+        .join("run.sh")
+        .is_file());
     // The entry point keeps its executable bit, or the process would never
     // start and nothing would say why.
     use std::os::unix::fs::PermissionsExt;
@@ -144,8 +153,7 @@ fn a_plugin_is_installed_registered_and_removed_without_a_trace() {
 
     // It is in the same table every built in kind is in.
     assert!(godwinmix_core::plugin::source::by_type("shellbars/source").is_some());
-    assert!(godwinmix_core::plugin::source::available()
-        .contains(&"shellbars/source".to_string()));
+    assert!(godwinmix_core::plugin::source::available().contains(&"shellbars/source".to_string()));
     let described = godwinmix_core::plugin::source::described();
     assert!(described.iter().any(|k| k.id == "shellbars/source"));
 
@@ -213,7 +221,11 @@ fn a_shell_plugin_reaches_the_canvas_through_the_container_transport() {
 /// How many descriptors this process holds. The same counting the exec tests
 /// in `input.rs` already do.
 fn descriptors() -> usize {
-    let dir = if cfg!(target_os = "macos") { "/dev/fd" } else { "/proc/self/fd" };
+    let dir = if cfg!(target_os = "macos") {
+        "/dev/fd"
+    } else {
+        "/proc/self/fd"
+    };
     std::fs::read_dir(dir).map(|d| d.count()).unwrap_or(0)
 }
 

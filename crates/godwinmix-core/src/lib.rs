@@ -55,15 +55,15 @@ pub mod multiview;
 pub mod observe;
 pub mod output;
 pub mod plugin;
-pub mod preview;
 pub mod preset;
+pub mod preview;
 pub mod probe;
 pub mod safety;
 pub mod scene;
 pub mod snapshot;
-pub mod telemetry;
 pub mod state;
 pub mod tasks;
+pub mod telemetry;
 
 /// The handful of names a program that embeds the engine reaches for first.
 ///

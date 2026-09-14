@@ -10,6 +10,9 @@ use crate::pipeline;
 use crate::settings::Settings;
 use crate::tools;
 
+/// How long `start` waits for the first samples before carrying on.
+const FIRST_BUFFER_WITHIN: Duration = Duration::from_millis(1_500);
+
 pub struct AudioSource {
     settings: Settings,
     reporter: Option<Reporter>,
@@ -44,6 +47,15 @@ impl AudioSource {
             pipeline::build(&self.settings, params.transport, &params.media).map_err(internal)?;
         let capture = Capture::start(pipeline, Some("gmx-audio-queue"), self.reporter.clone())
             .map_err(internal)?;
+        // A sound card opens faster than a camera but not instantly, and the
+        // core connects the moment this returns. Waiting here means the samples
+        // are already flowing when it does. Bounded well inside the core's five
+        // second budget for `start`.
+        if !capture.wait_for_data(FIRST_BUFFER_WITHIN) {
+            if let Some(detail) = capture.fault() {
+                return Err(internal(format!("{} did not start: {detail}", self.what())));
+            }
+        }
         if let Some(r) = &self.reporter {
             r.info(format!(
                 "{} is running at 48 kHz stereo over {}",

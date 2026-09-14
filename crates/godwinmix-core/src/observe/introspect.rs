@@ -83,7 +83,9 @@ fn found(name: &str) -> Result<gst::Pipeline> {
 /// Graphviz, right now, for one pipeline.
 pub fn dot(name: &str) -> Result<String> {
     let pipeline = found(name)?;
-    Ok(pipeline.debug_to_dot_data(gst::DebugGraphDetails::ALL).to_string())
+    Ok(pipeline
+        .debug_to_dot_data(gst::DebugGraphDetails::ALL)
+        .to_string())
 }
 
 // --- pipeline.latency --------------------------------------------------------
@@ -117,7 +119,11 @@ pub fn latency(name: &str) -> Result<LatencyReport> {
     let pipeline = found(name)?;
     let mut query = gst::query::Latency::new();
     let answered = pipeline.query(&mut query);
-    let (live, min, max) = if answered { query.result() } else { (false, gst::ClockTime::ZERO, None) };
+    let (live, min, max) = if answered {
+        query.result()
+    } else {
+        (false, gst::ClockTime::ZERO, None)
+    };
 
     let mut stages = Vec::new();
     for element in pipeline.iterate_recurse().into_iter().flatten() {
@@ -177,7 +183,10 @@ pub fn queues(name: &str) -> Result<Vec<QueueFill>> {
     let pipeline = found(name)?;
     let mut out = Vec::new();
     for element in pipeline.iterate_recurse().into_iter().flatten() {
-        let factory = element.factory().map(|f| f.name().to_string()).unwrap_or_default();
+        let factory = element
+            .factory()
+            .map(|f| f.name().to_string())
+            .unwrap_or_default();
         if !factory.starts_with("queue") {
             continue;
         }
@@ -317,7 +326,12 @@ pub struct StageTimer {
 impl StageTimer {
     fn start(name: String, kind: &'static str) -> Self {
         let at = std::time::Instant::now();
-        Self { started: at.duration_since(*ORIGIN).as_secs_f64() * 1000.0, name, kind, at }
+        Self {
+            started: at.duration_since(*ORIGIN).as_secs_f64() * 1000.0,
+            name,
+            kind,
+            at,
+        }
     }
 }
 
@@ -356,12 +370,21 @@ pub fn plugin_stage(kind: &'static str, instance: &str) -> StageTimer {
 pub fn startup_report() -> StartupReport {
     let mut stages = STAGES.lock().clone();
     stages.sort_by(|a, b| a.started_ms.total_cmp(&b.started_ms));
-    let slow = stages.iter().filter(|s| s.slow).map(|s| s.name.clone()).collect();
+    let slow = stages
+        .iter()
+        .filter(|s| s.slow)
+        .map(|s| s.name.clone())
+        .collect();
     let total_ms = stages
         .iter()
         .map(|s| s.started_ms + s.took_ms)
         .fold(0.0f64, f64::max);
-    StartupReport { total_ms, stages, slow, threshold_ms: SLOW_MS }
+    StartupReport {
+        total_ms,
+        stages,
+        slow,
+        threshold_ms: SLOW_MS,
+    }
 }
 
 /// The report as a person reads it, one line per stage with the slow ones
@@ -370,7 +393,13 @@ pub fn format_startup_report(report: &StartupReport) -> String {
     use std::fmt::Write as _;
     let mut out = String::new();
     let _ = writeln!(out, "startup: {:.0} ms in total", report.total_ms);
-    let width = report.stages.iter().map(|s| s.name.len()).max().unwrap_or(4).clamp(4, 40);
+    let width = report
+        .stages
+        .iter()
+        .map(|s| s.name.len())
+        .max()
+        .unwrap_or(4)
+        .clamp(4, 40);
     for s in &report.stages {
         let _ = writeln!(
             out,
@@ -383,9 +412,18 @@ pub fn format_startup_report(report: &StartupReport) -> String {
         );
     }
     if report.slow.is_empty() {
-        let _ = writeln!(out, "nothing took longer than {:.0} ms", report.threshold_ms);
+        let _ = writeln!(
+            out,
+            "nothing took longer than {:.0} ms",
+            report.threshold_ms
+        );
     } else {
-        let _ = writeln!(out, "over {:.0} ms: {}", report.threshold_ms, report.slow.join(", "));
+        let _ = writeln!(
+            out,
+            "over {:.0} ms: {}",
+            report.threshold_ms,
+            report.slow.join(", ")
+        );
     }
     out
 }
@@ -440,7 +478,10 @@ mod tests {
         register_pipeline("introspect-queues", &p);
         p.set_state(gst::State::Paused).unwrap();
         let fills = queues("introspect-queues").expect("queues");
-        let q = fills.iter().find(|q| q.element == "pgm-vq").expect("the queue");
+        let q = fills
+            .iter()
+            .find(|q| q.element == "pgm-vq")
+            .expect("the queue");
         assert_eq!(q.max_buffers, 30);
         assert!((0.0..=1.0).contains(&q.fullest));
         p.set_state(gst::State::Null).unwrap();
@@ -456,7 +497,10 @@ mod tests {
         let _ = p.state(gst::ClockTime::from_seconds(5));
         let report = latency("introspect-latency").expect("latency");
         assert_eq!(report.pipeline, "introspect-latency");
-        assert!(report.min_ms.is_some(), "a running pipeline should answer a latency query");
+        assert!(
+            report.min_ms.is_some(),
+            "a running pipeline should answer a latency query"
+        );
         p.set_state(gst::State::Null).unwrap();
         unregister_pipeline("introspect-latency");
     }
@@ -468,7 +512,13 @@ mod tests {
         p.set_state(gst::State::Playing).unwrap();
         let _ = p.state(gst::ClockTime::from_seconds(5));
         let report = clock().expect("clock");
-        assert!(report.pipelines.iter().any(|c| c.name == "introspect-clock"), "{report:?}");
+        assert!(
+            report
+                .pipelines
+                .iter()
+                .any(|c| c.name == "introspect-clock"),
+            "{report:?}"
+        );
         p.set_state(gst::State::Null).unwrap();
         unregister_pipeline("introspect-clock");
     }
@@ -481,7 +531,10 @@ mod tests {
             assert!(pipeline("introspect-gone").is_some());
             p.set_state(gst::State::Null).unwrap();
         }
-        assert!(pipeline("introspect-gone").is_none(), "a weak reference kept a pipeline alive");
+        assert!(
+            pipeline("introspect-gone").is_none(),
+            "a weak reference kept a pipeline alive"
+        );
         assert!(!names().contains(&"introspect-gone".to_string()));
     }
 
@@ -496,8 +549,14 @@ mod tests {
             std::thread::sleep(std::time::Duration::from_millis(260));
         }
         let report = startup_report();
-        assert!(report.slow.contains(&"observe-test-slow".to_string()), "{report:?}");
-        assert!(!report.slow.contains(&"observe-test-quick".to_string()), "{report:?}");
+        assert!(
+            report.slow.contains(&"observe-test-slow".to_string()),
+            "{report:?}"
+        );
+        assert!(
+            !report.slow.contains(&"observe-test-quick".to_string()),
+            "{report:?}"
+        );
         let text = format_startup_report(&report);
         assert!(text.contains("observe-test-slow"), "{text}");
         assert!(text.contains("SLOW"), "{text}");
