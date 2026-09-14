@@ -4,7 +4,7 @@ version = "0.2.0"
 edition = "2021"
 rust-version = "1.88"
 description = "The reference terminal UI for GodwinMix: a plain client of /rpc"
-license = "AGPL-3.0-or-later"
+license = "Apache-2.0"
 
 # One binary. `gmx-tui` is what an operator types over SSH.
 [[bin]]

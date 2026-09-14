@@ -30,12 +30,13 @@ pub enum Picture {
 }
 
 impl Picture {
+    /// `--picture`. There is no name for `None` here: no picture is what
+    /// leaving `--multiview` off means, and it is the default.
     pub fn parse(name: &str) -> Option<Self> {
         match name.to_lowercase().as_str() {
             "blocks" | "block" => Some(Self::Blocks),
             "kitty" => Some(Self::Kitty),
             "sixel" => Some(Self::Sixel),
-            "none" | "off" => Some(Self::None),
             _ => None,
         }
     }

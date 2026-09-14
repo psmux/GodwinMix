@@ -70,7 +70,10 @@ pub fn parse<I: IntoIterator<Item = String>>(argv: I) -> Parsed {
                 if picture.is_some() {
                     Ok(())
                 } else {
-                    Err(format!("--picture takes kitty, sixel, blocks or none, not '{v}'"))
+                    Err(format!(
+                        "--picture takes kitty, sixel or blocks, not '{v}'. \
+                         Leave --multiview off for no picture at all."
+                    ))
                 }
             }),
             other => Err(format!("no such option '{other}'. Run gmx-tui --help.")),
