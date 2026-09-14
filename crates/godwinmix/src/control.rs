@@ -287,14 +287,14 @@ async fn guard_legacy(State(ctx): State<Ctx>, req: Request, next: Next) -> Respo
                 .into_response()
         }
     };
-    if let Some(refusal) = legacy_refusal(&ctx, &token, req.method(), req.uri().path()) {
+    if let Some(refusal) = legacy_refusal_at(&ctx, &token, req.method(), req.uri().path()) {
         return (StatusCode::FORBIDDEN, Json(json!({ "error": refusal }))).into_response();
     }
     next.run(req).await
 }
 
 /// Why this token may not use this legacy path, if it may not.
-fn legacy_refusal(
+fn legacy_refusal_at(
     ctx: &Ctx,
     token: &godwinmix_protocol::scope::Token,
     http: &Method,
@@ -302,17 +302,25 @@ fn legacy_refusal(
 ) -> Option<String> {
     let (route, _) = rest::resolve(&ctx.legacy_routes, http, path).ok()?;
     let def = ctx.registry.get(route.method)?;
-    if !token.has(def.scope) {
-        return Some(
-            RpcError::scope(route.method, def.scope.as_str(), &token.scope_names()).message,
-        );
-    }
     if ctx.app.rehearsal && route.method == "output.add" {
         return Some(
             "this core was started with --rehearsal and will not add an output, so nothing \
              here reaches a real destination. Start a core without --rehearsal to go on air."
                 .to_string(),
         );
+    }
+    legacy_refusal(token, def, path)
+}
+
+/// The part of it that depends only on the token and the method, so a test
+/// can reach it without building a whole router.
+fn legacy_refusal(
+    token: &godwinmix_protocol::scope::Token,
+    def: &godwinmix_protocol::method::MethodDef<Call>,
+    path: &str,
+) -> Option<String> {
+    if !token.has(def.scope) {
+        return Some(RpcError::scope(def.name, def.scope.as_str(), &token.scope_names()).message);
     }
     // A token whose policy is `confirm = required` must not be able to remove
     // a source, drop an output or shut the mixer down through a door that has
@@ -324,7 +332,7 @@ fn legacy_refusal(
             "this token needs a confirmation before a destructive call, and the deprecated \
              {path} cannot carry one. Call {} on /api/v1 instead: it answers -32020 with a \
              confirm_token, and the same call carrying `confirm` goes through.",
-            route.method
+            def.name
         ));
     }
     None
