@@ -219,9 +219,10 @@ function fileDrop(client) {
     const dt = e.dataTransfer;
     if (!dt) return;
     if (dt.files && dt.files.length) {
-      shell.emit && shell.emit("files", dt.files);
+      // The media panel claims this when it mounts; without it there is
+      // nowhere to put a file and saying so beats swallowing the drop.
       if (shell.onFiles) shell.onFiles(dt.files);
-      else toast({ text: "Open the Media panel to upload files." });
+      else toast({ text: "There is nowhere to put a file: the Media panel is not on screen." });
       return;
     }
     const text = dt.getData("text/uri-list") || dt.getData("text/plain");

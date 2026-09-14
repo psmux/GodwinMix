@@ -111,9 +111,20 @@ export class Keymap {
     return () => target.removeEventListener("keydown", handler);
   }
 
+  /**
+   * The three chords that still work while the operator is typing.
+   *
+   * Everything else belongs to the field: Ctrl+A selects the text, Ctrl+Z
+   * undoes the typing, Delete deletes a character. Taking those from a text box
+   * to drive the tray is the sort of thing that makes a person distrust a
+   * keyboard.
+   */
+  static WHILE_TYPING = new Set(["Ctrl+K", "Ctrl+N", "Ctrl+,"]);
+
   handle(e) {
     if (!this.enabled) return false;
-    if (typing(e.target)) return false;
+    const typed = typing(e.target);
+    if (typed && !Keymap.WHILE_TYPING.has(chordOf(e))) return false;
     const chord = chordOf(e);
     let id = this.map[chord];
     // Cmd+Backspace is Delete on a Mac keyboard that has no Delete key.
