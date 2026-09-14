@@ -81,24 +81,34 @@ pub struct CodecReport {
 }
 
 impl CodecReport {
-    /// The report in the shape it goes into the catalogue's `verified` list,
-    /// ready to paste into a pull request.
-    pub fn verified_toml(&self) -> String {
+    /// What happened, in one line, for a `verified` record.
+    pub fn one_line(&self) -> String {
         let psnr = match self.psnr_db {
             Some(p) => format!("psnr {p:.1} dB, "),
             None => String::new(),
         };
         format!(
-            "verified = [{{ platform = \"{}\", driver = \"fill in\", gstreamer = \"{}\", \
-             by = \"fill in\", date = \"{}\", report = \"{}{}/{} frames, {:.2} core at real time, {:.0} MB RSS\" }}]",
-            self.platform,
-            self.gstreamer,
-            today(),
-            psnr,
+            "{psnr}{}/{} frames, {:.2} core at real time, {:.0} MB RSS",
             self.frames_out,
             self.frames_in,
             self.cpu_percent / 100.0,
             self.rss_mb,
+        )
+    }
+
+    /// The report in the shape it goes into the catalogue's `verified` list,
+    /// ready to paste into a pull request.
+    ///
+    /// `gmx codec verify` fills the blanks in and writes the record for you;
+    /// this is what `gmx codec test` prints for somebody doing it by hand.
+    pub fn verified_toml(&self) -> String {
+        format!(
+            "verified = [{{ platform = \"{}\", driver = \"fill in\", gstreamer = \"{}\", \
+             by = \"fill in\", date = \"{}\", report = \"{}\" }}]",
+            self.platform,
+            self.gstreamer,
+            today(),
+            self.one_line(),
         )
     }
 
@@ -136,7 +146,7 @@ impl CodecReport {
 /// Today as `YYYY-MM-DD`, UTC. Written out rather than pulled in, because one
 /// date in one report is not worth a dependency. Civil from days, Howard
 /// Hinnant's algorithm.
-fn today() -> String {
+pub fn today() -> String {
     let Ok(d) = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH) else {
         return "unknown".into();
     };
