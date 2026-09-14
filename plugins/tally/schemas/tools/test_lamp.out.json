@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "test_lamp result",
+  "description": "Which lamp was lit, in what colour, for how long, and where the packet went.",
+  "type": "object",
+  "properties": {
+    "content": {
+      "type": "array",
+      "description": "One text block.",
+      "items": { "type": "object" }
+    }
+  },
+  "additionalProperties": true
+}
