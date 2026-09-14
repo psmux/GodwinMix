@@ -61,9 +61,13 @@ impl NodeRecord {
         }
     }
 
+    /// Online means beating, not merely connected.
+    ///
+    /// Three missed beats is the tolerance 04 section 5 sets. A socket that is
+    /// still open on a machine that has stopped answering is exactly the case
+    /// this has to catch, so the heartbeat is the test and the socket is not.
     pub fn online(&self) -> bool {
-        self.link.as_ref().is_some_and(|l| !l.is_closed())
-            && self.heartbeat_age_ms() < HEARTBEAT_TOLERANCE_MS
+        !self.expected_only && self.heartbeat_age_ms() < HEARTBEAT_TOLERANCE_MS
     }
 
     pub fn heartbeat_age_ms(&self) -> u64 {
@@ -137,9 +141,27 @@ impl Nodes {
 
     /// A node has connected. Replaces any previous link.
     pub fn joined(&self, hello: &Hello, identity: Option<String>, from: String, link: Arc<Peer>) {
+        self.record(hello, identity, from, Some(link));
+    }
+
+    /// The same, with no socket behind it. Tests build a registry this way so
+    /// the reconciler can be exercised without a network.
+    #[cfg(test)]
+    pub fn joined_without_link(&self, hello: &Hello, from: String) {
+        self.record(hello, None, from, None);
+    }
+
+    fn record(
+        &self,
+        hello: &Hello,
+        identity: Option<String>,
+        from: String,
+        link: Option<Arc<Peer>>,
+    ) {
         let mut inner = self.inner.write();
         let record = inner.entry(hello.name.clone()).or_insert_with(|| NodeRecord::new(&hello.name));
-        if let Some(old) = record.link.replace(link) {
+        let old = std::mem::replace(&mut record.link, link);
+        if let Some(old) = old {
             old.close("the node connected again, so the old bridge is stale");
         }
         record.identity = identity;
