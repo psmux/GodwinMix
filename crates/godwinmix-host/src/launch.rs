@@ -348,6 +348,9 @@ bin = { "linux-armv7" = "bin/clock" }"#);
         );
     }
 
+    /// Unix only: the plan it asserts on names `sh`, which Windows has no
+    /// copy of. Launching a shell plugin is refused there, and the other
+    /// runtimes (Rust, Python, Go, Node) are planned by the tests beside this.
     #[cfg(unix)]
     #[test]
     fn a_shell_plugin_runs_under_sh() {

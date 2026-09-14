@@ -7,6 +7,11 @@
 //! checked is what any transition plugin has to do, so a dissolve or a clock
 //! wipe written by somebody else passes the same test.
 
+// Unix only, and the whole file rather than each test: the supervisor starts
+// the plugin as a real child process and the fixtures around it are shell.
+// `plugins/wipe`'s own unit tests are not gated and do run on Windows, so what
+// is missing there is the supervisor driving it end to end, not the wipe.
+// docs/explanation/cross-platform.md lists this with the rest.
 #![cfg(unix)]
 
 use godwinmix_core::plugin::harness;

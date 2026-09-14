@@ -204,6 +204,9 @@ mod tests {
     /// A plugin in one line of shell: it says hello, waits for the answer, and
     /// says it is initialised. Enough to prove the replay drives a real
     /// process through a real pipe.
+    /// Unix only: the plugin under test is one line of `sh`. The replay
+    /// itself spawns whatever argv it is handed and is not platform
+    /// specific; the empty transcript test below covers it without a shell.
     #[cfg(unix)]
     #[test]
     fn a_shell_plugin_walks_the_handshake_with_no_core() {
@@ -223,6 +226,7 @@ mod tests {
         assert_eq!(out.sent, 1);
     }
 
+    /// Unix only, and for the same reason as the one above it.
     #[cfg(unix)]
     #[test]
     fn a_plugin_that_says_the_wrong_thing_is_told_what_was_wanted() {
