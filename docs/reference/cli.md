@@ -213,6 +213,37 @@ and `gmx ui list` marks it with a star.
 
 See [surfaces](surfaces.md).
 
+## The session log
+
+The session log is every command, every event and every supervisor decision in
+one JSONL file. `godwinmix --info` prints the path. These three commands are
+what turn it from a file into an artefact; the format is in
+[the session log reference](session-log.md).
+
+| Command | Does |
+|---|---|
+| `gmx session show <file>` | the log as a timeline a person reads |
+| `gmx session show <file> --from 20:13 --to 20:16` | only that range; a prefix of the time of day is enough |
+| `gmx session show <file> --all` | including the records the timeline folds away |
+| `gmx session replay <file> --against test-core` | re-issue the commands at their recorded timing against a core built in this process, and compare what changed |
+| `gmx session replay <file> --against test-core --source-fixture cam1.mkv` | with one media file standing in for every source |
+| `gmx session replay <file> --against test-core --fast` | as fast as it will go, rather than at the recorded timing |
+| `gmx session replay <file> --against test-core --write-expectations` | print the deltas it produced, as an `expect_changes.json` |
+| `gmx session diff <a> <b>` | what changed between two runs |
+
+`replay` and `diff` exit non zero when a state delta differs, which is what
+makes a recorded session a regression test. `--against test-core` is the only
+thing there is to replay against: replaying against a live mixer would mean
+re-taking somebody's programme.
+
+Sources are replaced with deterministic doubles, so a session recorded in a
+church hall runs on a laptop with no network. `output.*`, `plugin.add`,
+`media.upload` and `core.shutdown` are skipped and the report says why.
+
+See [turn a bug into a test](../how-to/turn-a-bug-into-a-test.md) for the loop
+this sits in, and `tests/sessions/README.md` for the corpus that runs in
+`cargo test`.
+
 ## Chaos
 
 Break something on purpose, to see that the programme survives it. Both

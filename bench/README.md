@@ -30,12 +30,29 @@ Useful flags:
 * `--json` for CI.
 * `--budget` exits non zero when a row is over its target for the named
   machine.
+* `--nightly` is the whole thing in one word: every row over the full window,
+  compared to the budgets, written to `results/<machine>-<date>.md`, and a non
+  zero exit when a row is over. It is what `.github/workflows/nightly.yml`
+  runs, so the workflow and a person reproducing it by hand type the same
+  thing.
 * `--quick` measures two seconds a row instead of thirty five. For working on
   the bench itself. The numbers are too noisy to publish.
 * `--seconds`, `--warmup` to change the window.
 
 The rows, what they mean and how they are sampled are in
 `docs/explanation/footprint.md`.
+
+## Nightly
+
+```
+./target/release/gmx bench --nightly --machine pi5
+```
+
+The nightly workflow runs it on the GitHub Linux runner as `ci-linux` and
+uploads the result. That runner is not one of the reference machines, so only
+the machine independent budgets apply to it: resident memory and binary size.
+The per machine CPU targets are measured on the real hardware and recorded
+here.
 
 ## What goes in results/
 

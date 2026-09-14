@@ -1195,6 +1195,12 @@ export interface UiChangedEvent {
   ui?: UiDefaults;
 }
 
+export interface HookBlockedEvent {
+  hook: string;
+  plugin: string;
+  reason: string;
+}
+
 export interface MediaChangedEvent {
   conversion?: unknown;
   name?: string;
@@ -1460,6 +1466,7 @@ export interface EventPayloads {
   "output.state": OutputStateEvent;
   "adbreak.changed": AdbreakChangedEvent;
   "ui.changed": UiChangedEvent;
+  "hook.blocked": HookBlockedEvent;
   "media.changed": MediaChangedEvent;
   "meters": Meters;
   "tally": Tally;
@@ -1620,6 +1627,7 @@ export const EVENT_NAMES: readonly EventName[] = [
   "output.state",
   "adbreak.changed",
   "ui.changed",
+  "hook.blocked",
   "media.changed",
   "meters",
   "tally",

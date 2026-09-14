@@ -35,7 +35,7 @@ godwinmix-host = { workspace = true }
 # GStreamer itself and the bench command builds elements directly.
 gstreamer = { workspace = true }
 
-tokio = { workspace = true, features = ["rt-multi-thread", "macros", "sync", "signal", "time", "io-std", "io-util", "fs"] }
+tokio = { workspace = true, features = ["rt-multi-thread", "macros", "sync", "signal", "time", "io-std", "io-util", "fs", "process"] }
 axum = { workspace = true, features = ["ws"] }
 tokio-tungstenite = { workspace = true }
 tower-http = { workspace = true, features = ["fs", "cors", "trace"] }

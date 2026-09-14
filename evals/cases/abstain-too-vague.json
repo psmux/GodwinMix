@@ -1,0 +1,22 @@
+{
+  "id": "abstain-too-vague",
+  "instruction": "Make it look better.",
+  "tags": [
+    "abstain"
+  ],
+  "initial": {
+    "sources": [
+      {
+        "id": "cam-wide",
+        "uri": "test://smpte"
+      },
+      {
+        "id": "cam-close",
+        "uri": "test://ball"
+      }
+    ],
+    "program": "cam-wide"
+  },
+  "expect_changes": [],
+  "notes": "Nothing here says what to do. Acting on a guess is worse than asking."
+}

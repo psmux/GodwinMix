@@ -1301,6 +1301,14 @@ class AdbreakChangedEvent(TypedDict, total=False):
 class UiChangedEvent(TypedDict, total=False):
     ui: UiDefaults
 
+class HookBlockedEvent(TypedDict, total=False):
+    hook: str
+    # The hook name, for example take.before.
+    plugin: str
+    # The plugin that owns it, or the URL or command when it came from [[hooks]] in the config.
+    reason: str
+    # What went wrong and what to do about it.
+
 class MediaChangedEvent(TypedDict, total=False):
     conversion: Any
     name: str
@@ -1448,6 +1456,7 @@ EVENT_NAMES = (
     "output.state",
     "adbreak.changed",
     "ui.changed",
+    "hook.blocked",
     "media.changed",
     "meters",
     "tally",

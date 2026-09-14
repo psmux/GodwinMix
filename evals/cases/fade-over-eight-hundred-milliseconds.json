@@ -1,0 +1,38 @@
+{
+  "id": "fade-over-eight-hundred-milliseconds",
+  "instruction": "Fade to the close camera over 800 milliseconds.",
+  "tags": [
+    "parameterised",
+    "pending"
+  ],
+  "pending": "transitions land in Phase 6; there is no program.take {transition} yet",
+  "initial": {
+    "sources": [
+      {
+        "id": "cam-wide",
+        "uri": "test://smpte"
+      },
+      {
+        "id": "cam-close",
+        "uri": "test://ball"
+      }
+    ],
+    "program": "cam-wide"
+  },
+  "expect_changes": [
+    {
+      "what": "param",
+      "id": "program.take.transition",
+      "to": "fade"
+    },
+    {
+      "what": "param",
+      "id": "program.take.duration_ms",
+      "to": "800"
+    },
+    {
+      "what": "program",
+      "to": "cam-close"
+    }
+  ]
+}

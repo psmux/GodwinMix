@@ -1,0 +1,131 @@
+name: nightly
+
+# Two things that are too slow for a pull request and too important to run by
+# hand: the operator eval suite (09 section 5 item 20) and the footprint bench
+# against the budgets in 09 section 3.
+#
+# Both upload what they measured. A nightly whose numbers nobody kept is a
+# nightly nobody can compare against.
+
+on:
+  schedule:
+    # 03:20 UTC, which is out of the way of everybody's working day and not on
+    # the hour, where every other project's cron already is.
+    - cron: "20 3 * * *"
+  workflow_dispatch:
+    inputs:
+      driver:
+        description: "eval driver: scripted, claude or codex"
+        default: scripted
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+
+concurrency:
+  group: nightly
+  cancel-in-progress: false
+
+jobs:
+  evals:
+    name: operator eval
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+
+      - name: GStreamer
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev \
+            libgstreamer-plugins-bad1.0-dev gstreamer1.0-plugins-base gstreamer1.0-plugins-good \
+            gstreamer1.0-plugins-bad gstreamer1.0-plugins-ugly gstreamer1.0-libav gstreamer1.0-tools
+
+      - name: Build
+        run: cargo build --release --locked
+
+      # The runner has no GPU and no display, which is the machine most of the
+      # people this is for actually have.
+      - name: Run the suite
+        env:
+          LIBGL_ALWAYS_SOFTWARE: "1"
+          GST_GL_DISABLED: "1"
+        run: python3 evals/run.py --driver "${{ inputs.driver || 'scripted' }}"
+
+      - name: The report
+        if: always()
+        run: cat evals/results/*.md >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: eval-results
+          path: evals/results/
+          retention-days: 90
+
+  bench:
+    name: footprint
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+
+      - name: GStreamer
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev \
+            libgstreamer-plugins-bad1.0-dev gstreamer1.0-plugins-base gstreamer1.0-plugins-good \
+            gstreamer1.0-plugins-bad gstreamer1.0-plugins-ugly gstreamer1.0-libav gstreamer1.0-tools
+
+      - name: Build
+        run: cargo build --release --locked
+
+      # `ci-linux` is not one of the five reference machines, so only the
+      # machine independent budgets apply to it: resident memory and binary
+      # size. The per machine CPU targets are measured on the real hardware in
+      # the lab and recorded there.
+      - name: gmx bench --nightly
+        env:
+          LIBGL_ALWAYS_SOFTWARE: "1"
+          GST_GL_DISABLED: "1"
+        run: ./target/release/gmx bench --nightly --machine ci-linux --encode software
+
+      - name: The numbers
+        if: always()
+        run: cat bench/results/ci-linux-*.md >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: bench-results
+          path: bench/results/
+          retention-days: 90
+
+  corpus:
+    name: session corpus
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+
+      - name: GStreamer
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev \
+            libgstreamer-plugins-bad1.0-dev gstreamer1.0-plugins-base gstreamer1.0-plugins-good \
+            gstreamer1.0-plugins-bad gstreamer1.0-plugins-ugly gstreamer1.0-libav gstreamer1.0-tools
+
+      # It runs on every pull request too. It runs again here because the
+      # replay keeps the timing the session was recorded at, and a machine
+      # under load is the one that finds the ordering nobody thought about.
+      - name: Replay every recorded session
+        env:
+          LIBGL_ALWAYS_SOFTWARE: "1"
+          GST_GL_DISABLED: "1"
+        run: cargo test --release --locked -p godwinmix --test sessions

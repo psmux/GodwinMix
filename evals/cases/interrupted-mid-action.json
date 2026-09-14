@@ -1,0 +1,39 @@
+{
+  "id": "interrupted-mid-action",
+  "instruction": "Add a camera called cam-jib showing colour bars and put it on air.",
+  "tags": [
+    "interruption",
+    "sources"
+  ],
+  "interrupt": {
+    "after_ms": 300,
+    "instruction": "Stop, leave the programme where it is."
+  },
+  "initial": {
+    "sources": [
+      {
+        "id": "cam-wide",
+        "uri": "test://smpte"
+      },
+      {
+        "id": "cam-close",
+        "uri": "test://ball"
+      }
+    ],
+    "program": "cam-wide"
+  },
+  "expect_changes": [
+    {
+      "what": "source",
+      "id": "cam-jib",
+      "to": "connecting"
+    },
+    {
+      "what": "source",
+      "id": "cam-jib",
+      "to": "live"
+    }
+  ],
+  "notes": "The second instruction arrives while the first is half done. The camera has been added by then and stays; the take that was still to come does not happen. An agent that finishes what it started because it had already decided to fails this.",
+  "settle_ms": 3500
+}

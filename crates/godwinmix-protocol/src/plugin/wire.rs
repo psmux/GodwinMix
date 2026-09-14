@@ -550,7 +550,11 @@ impl InstanceState {
         match self {
             Self::Starting => false,
             Self::Ready | Self::Stopped => {
-                matches!(method, "configure" | "start" | "health" | "discover" | "tool.call" | "shutdown")
+                matches!(
+                    method,
+                    "configure" | "start" | "health" | "discover" | "tool.call" | "hook"
+                        | "shutdown"
+                )
             }
             Self::Running | Self::Stalled | Self::Degraded | Self::OverBudget => matches!(
                 method,
@@ -563,6 +567,7 @@ impl InstanceState {
                     | "audio.set"
                     | "render"
                     | "tool.call"
+                    | "hook"
                     | "shutdown"
             ),
             Self::Failed => false,

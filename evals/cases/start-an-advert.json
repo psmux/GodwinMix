@@ -1,0 +1,44 @@
+{
+  "id": "start-an-advert",
+  "instruction": "Play the advert now.",
+  "tags": [
+    "adbreak"
+  ],
+  "initial": {
+    "sources": [
+      {
+        "id": "cam-wide",
+        "uri": "test://smpte"
+      },
+      {
+        "id": "cam-close",
+        "uri": "test://ball"
+      }
+    ],
+    "program": "cam-close"
+  },
+  "expect_changes": [
+    {
+      "what": "source",
+      "id": "__ad__",
+      "to": "connecting"
+    },
+    {
+      "what": "adbreak",
+      "to": "armed"
+    },
+    {
+      "what": "adbreak",
+      "to": "on air"
+    },
+    {
+      "what": "program",
+      "to": "__ad__"
+    },
+    {
+      "what": "source",
+      "id": "__ad__",
+      "to": "live"
+    }
+  ]
+}

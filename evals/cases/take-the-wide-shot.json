@@ -1,0 +1,26 @@
+{
+  "id": "take-the-wide-shot",
+  "instruction": "Put the wide camera on air.",
+  "tags": [
+    "take"
+  ],
+  "initial": {
+    "sources": [
+      {
+        "id": "cam-wide",
+        "uri": "test://smpte"
+      },
+      {
+        "id": "cam-close",
+        "uri": "test://ball"
+      }
+    ]
+  },
+  "expect_changes": [
+    {
+      "what": "program",
+      "to": "cam-wide"
+    }
+  ],
+  "notes": "The plainest thing an operator ever says."
+}

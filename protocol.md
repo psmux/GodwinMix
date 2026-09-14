@@ -2000,6 +2000,7 @@ Subscribe with `core.subscribe`. Patterns match the part after `event/`, so `pro
 | `event/output.state` |  | `output_state_changed` | A destination connected, dropped or is retrying. |
 | `event/adbreak.changed` |  | `ad_break_changed` | An ad break was armed, went on air, or ended. |
 | `event/ui.changed` |  |  | The surface defaults changed: a preset was applied, or an operator set the layout, theme or gallery mode by hand. Nothing on air moves. |
+| `event/hook.blocked` |  |  | A hook did not get its say: it did not answer inside its timeout, or the thing behind it could not be reached. Whatever the hook was attached to went ahead anyway, which is the rule that keeps a slow hook off the frame path. See 03 section 8. |
 | `event/media.changed` |  | `media_changed` | A file in the library was uploaded, deleted, or its conversion moved on. |
 | `event/meters` | `meters` | `audio_level, source_audio_level` | Peak dBFS for the programme bus and every source, in one message at 10 per second. Replaces the two separate meter events on /ws. |
 | `event/tally` | `tally` |  | Which sources are on programme, on preview, or off. Derived by the core so a Stream Deck does not have to. |

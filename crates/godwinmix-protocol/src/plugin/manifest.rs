@@ -294,12 +294,14 @@ pub const HOOKS: &[&str] = &[
     "take.after",
     "source.added",
     "source.removed",
+    "source.state",
     "output.state",
     "alert.raised",
     "session.start",
     "session.end",
     "plugin.loaded",
     "plugin.failed",
+    "plugin.state",
 ];
 
 /// What a `media` stream key may say.

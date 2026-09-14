@@ -168,7 +168,12 @@ async fn add(call: Call, params: Value) -> Result<Value, RpcError> {
         .await
         .map_err(|e| call.mixer_error(e))?;
     // The whole resulting object, so no follow up read is needed (AIP-134).
-    body(find(&call, &id).await?)
+    let record = find(&call, &id).await?;
+    // The hook call site. Nothing waits on it; see `control/hooks/`.
+    call.app.hooks.fire(godwinmix_core::hooks::name::SOURCE_ADDED, || {
+        serde_json::json!({ "source": record.id, "uri": record.uri, "state": record.state })
+    });
+    body(record)
 }
 
 async fn remove(call: Call, params: Value) -> Result<Value, RpcError> {
@@ -188,6 +193,10 @@ async fn remove(call: Call, params: Value) -> Result<Value, RpcError> {
         .await
         .map_err(|e| call.mixer_error(e))?;
     let after = call.app.mixer.status().await.map_err(|e| call.mixer_error(e))?;
+    // The hook call site.
+    call.app.hooks.fire(godwinmix_core::hooks::name::SOURCE_REMOVED, || {
+        serde_json::json!({ "source": req.id, "uri": source.uri })
+    });
     Ok(serde_json::json!({
         "removed": req.id,
         "program": after.program,

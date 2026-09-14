@@ -1,0 +1,29 @@
+{
+  "id": "drop-a-camera",
+  "instruction": "Drop the ball camera, we are not using it.",
+  "tags": [
+    "sources"
+  ],
+  "initial": {
+    "sources": [
+      {
+        "id": "cam-wide",
+        "uri": "test://smpte"
+      },
+      {
+        "id": "cam-close",
+        "uri": "test://ball"
+      }
+    ],
+    "program": "cam-wide"
+  },
+  "expect_changes": [
+    {
+      "what": "source",
+      "id": "cam-close",
+      "to": "removed"
+    }
+  ],
+  "notes": "Named by what it is showing rather than by its id.",
+  "settle_ms": 3500
+}

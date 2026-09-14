@@ -62,6 +62,8 @@ Start here if you have never run it.
 * [Use a webcam](how-to/use-a-webcam.md)
 * [Capture the screen](how-to/capture-the-screen.md)
 * [Record to a file](how-to/record-to-a-file.md)
+* [Run your own code when something happens](how-to/hooks.md)
+* [Turn a bug into a test](how-to/turn-a-bug-into-a-test.md)
 
 ## Reference
 
@@ -89,6 +91,8 @@ Start here if you have never run it.
 * [The plugin lifecycle](reference/plugin-lifecycle.md)
 * [The network plugins: srt, whip, ingest and ndi](reference/plugins-network.md)
 * [The client libraries](reference/clients.md)
+* [Hooks](reference/hooks.md)
+* [The session log](reference/session-log.md)
 
 ## Explanation
 
@@ -101,6 +105,7 @@ Start here if you have never run it.
 * [The crate map](explanation/architecture.md)
 * [Cross platform: what is gated where, and why](explanation/cross-platform.md)
 * [Trust and signing](explanation/trust-and-signing.md)
+* [Why the evals grade the world](explanation/evals.md)
 
 ## For AI agents
 

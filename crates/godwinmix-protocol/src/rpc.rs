@@ -211,6 +211,10 @@ pub fn event_name_and_payload(event: &Event) -> Option<(&'static str, Value)> {
         ),
         Event::AdBreakChanged { ad } => ("adbreak.changed", payload(json!({ "ad": ad }))),
         Event::UiChanged { ui } => ("ui.changed", payload(json!({ "ui": ui }))),
+        Event::HookBlocked { hook, plugin, reason } => (
+            "hook.blocked",
+            payload(json!({ "hook": hook, "plugin": plugin, "reason": reason })),
+        ),
         Event::SourcePosition { source, position_ms, duration_ms } => (
             "source.position",
             payload(json!({

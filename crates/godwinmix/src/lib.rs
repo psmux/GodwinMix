@@ -223,6 +223,9 @@ enum Command {
     /// `godwinmix-develop` where that tool reads them. `--print` shows what it
     /// would write and writes nothing.
     Skill(cli::skill::SkillArgs),
+    /// The session log as an artefact: show a timeline, replay a session
+    /// against a test core, diff two runs. See `src/cli/session.rs`.
+    Session(cli::session::SessionArgs),
 
     /// Inspect and test the codec catalogue.
     ///
@@ -473,6 +476,14 @@ pub async fn run() -> Result<()> {
         }
         Some(Command::Agent(args)) => return cli::agent::run(args.cmd).await,
         Some(Command::Skill(args)) => return cli::skill::run(args.cmd),
+        Some(Command::Session(args)) => {
+            // A replay builds a real pipeline, so GStreamer comes up first.
+            // `show` and `diff` need nothing and pay nothing for it.
+            if matches!(args.cmd, cli::session::SessionCmd::Replay { .. }) {
+                gstreamer::init().context("initialising GStreamer")?;
+            }
+            return cli::session::run(args.cmd).await;
+        }
         Some(Command::Import { cmd }) => return cli::scene::run_import(cmd),
         Some(Command::Scene { cmd }) => return cli::scene::run_scene(cmd),
         Some(Command::Observe(cmd)) => {
@@ -685,6 +696,17 @@ pub async fn run() -> Result<()> {
         },
         args.rehearsal,
     );
+    // The hook call site for the daemon's own lifecycle. `session.start` goes
+    // out once the control plane is built and before anything is served, so a
+    // recorder started by a hook is running before the first take.
+    let session_hooks = state.hooks.clone();
+    session_hooks.fire(godwinmix_core::hooks::name::SESSION_START, || {
+        serde_json::json!({
+            "version": env!("CARGO_PKG_VERSION"),
+            "bind": bind,
+            "log": godwinmix_core::observe::session::session().path(),
+        })
+    });
     let server = tokio::spawn(async move {
         if let Err(e) = control::serve(&bind, state).await {
             error!(?e, "control server stopped");
@@ -701,6 +723,14 @@ pub async fn run() -> Result<()> {
         _ = quit.notified() => {}
     }
     info!("shutting down");
+    // The other half. Fired before the mixer stops, so a hook that wants to
+    // read the state one last time still can, and given a moment to leave.
+    session_hooks.fire(godwinmix_core::hooks::name::SESSION_END, || {
+        serde_json::json!({ "version": env!("CARGO_PKG_VERSION") })
+    });
+    if session_hooks.any(godwinmix_core::hooks::name::SESSION_END) {
+        tokio::time::sleep(std::time::Duration::from_millis(250)).await;
+    }
     let _ = handle.send(mixer::Command::Shutdown);
     server.abort();
     let _ = tokio::task::spawn_blocking(move || mixer_thread.join()).await;

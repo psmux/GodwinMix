@@ -1,0 +1,28 @@
+{
+  "id": "unmute-the-wide-camera",
+  "instruction": "Unmute the wide camera.",
+  "tags": [
+    "parameterised",
+    "audio"
+  ],
+  "initial": {
+    "sources": [
+      {
+        "id": "cam-wide",
+        "uri": "test://smpte"
+      },
+      {
+        "id": "cam-close",
+        "uri": "test://ball"
+      }
+    ],
+    "mute": "cam-wide"
+  },
+  "expect_changes": [
+    {
+      "what": "mute",
+      "id": "cam-wide",
+      "to": "unmuted"
+    }
+  ]
+}
