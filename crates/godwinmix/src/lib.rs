@@ -382,7 +382,12 @@ pub async fn run() -> Result<()> {
         startup_report: args.startup_report,
     };
     match core_observe::start(&handle, &observe_options) {
-        Ok(dir) => info!(runtime_dir = %dir.display(), "logs and the session log are here"),
+        Ok(dir) => {
+            info!(runtime_dir = %dir.display(), "logs and the session log are here");
+            // Local raw preview sockets go beside the logs, and `--info` prints
+            // the directory so a native client never has to guess.
+            mix.preview_sockets_in(dir);
+        }
         Err(e) => warn!(?e, "no runtime directory, so logs stay on stderr only"),
     }
 
@@ -392,6 +397,8 @@ pub async fn run() -> Result<()> {
     }
 
     let multiview = mix.multiview_handle();
+    let preview = mix.preview_handle();
+    let encoder = mix.encoder_handle();
 
     // Bus messages from every pipeline are funnelled into the same command
     // queue the operator's requests use, so the mixer handles a camera dying
@@ -420,6 +427,8 @@ pub async fn run() -> Result<()> {
         &cfg_for_control,
         handle.clone(),
         multiview,
+        preview,
+        encoder,
         library,
         converter,
         quit.clone(),
