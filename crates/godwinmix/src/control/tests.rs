@@ -214,6 +214,8 @@ fn the_table_matches_the_scopes_in_the_protocol_document() {
             "filter.remove",
             "media.remove",
             "output.remove",
+            "plugin.add",
+            "plugin.remove",
             "preset.apply",
             "source.remove"
         ],

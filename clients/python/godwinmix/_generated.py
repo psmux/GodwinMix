@@ -66,6 +66,12 @@ class AddOutputRequest(TypedDict, total=False):
     uri: str
     # rtmp:// or rtmps:// URL including the stream key.
 
+class AddPluginRequest(TypedDict, total=False):
+    """`plugin.add`."""
+
+    source: str
+    # A local directory with `gmx-plugin.toml` at its root. Git, an index and a signed release are Phase 5; this takes a path.
+
 class AddSourceRequest(TypedDict, total=False):
     """`source.add`."""
 
@@ -257,6 +263,21 @@ class IdRequest(TypedDict, total=False):
 
     id: str
 
+class InstanceRecord(TypedDict, total=False):
+    """One running instance and its cost."""
+
+    buffers_dropped: int
+    cpu_percent: Optional[float]
+    instance: str
+    media_latency_ms: Optional[int]
+    pid: Optional[int]
+    plugin: str
+    # The plugin it belongs to. Carried on the instance as well as on the plugin, because `plugin.stats` is a flat list and a caller holding one row should not have to go back for the name.
+    provide: str
+    restarts: int
+    rss_bytes: Optional[int]
+    state: str
+
 class Limits(TypedDict, total=False):
     """The ceilings a client should plan against rather than discover by being refused."""
 
@@ -400,6 +421,72 @@ class PipelineRequest(TypedDict, total=False):
 
     name: str
 
+class PluginDescription(TypedDict, total=False):
+    """The whole of one plugin, for an agent about to use it."""
+
+    description: str
+    enabled: bool
+    hooks: List[str]
+    instances: List[InstanceRecord]
+    # Every running instance of it, with what it costs.
+    manifest: Any
+    # The manifest as JSON, every table of it.
+    name: str
+    problem: Optional[str]
+    # Why it is not loaded, when it is not.
+    provides: List[str]
+    # The type ids it contributes: what goes in `type` on a source, an output or a filter.
+    root: str
+    # Where it is installed.
+    schemas: Dict[str, Any]
+    # Per provide id, its settings schema.
+    skills: Dict[str, Any]
+    # Per provide id, the description line from its SKILL.md.
+    tools: List[str]
+    # Its MCP tools, as `gmx_<plugin>_<tool>`. Reachable with `search_tools`; never in the hot list.
+    version: str
+
+class PluginListing(TypedDict, total=False):
+    plugins: List[PluginRecord]
+    plugins_dir: str
+    # Where plugins are read from on this machine.
+
+class PluginName(TypedDict, total=False):
+    """Anything that names one plugin. The field is `id` because that is what the REST layer fills in from `/api/v1/plugins/{id}`, and a plugin's id is its name: the namespace of every id it contributes. `name` is accepted as well, for a JSON-RPC caller who wrote the obvious thing."""
+
+    id: str
+
+class PluginRecord(TypedDict, total=False):
+    """One plugin as the core reports it."""
+
+    description: str
+    enabled: bool
+    hooks: List[str]
+    instances: List[InstanceRecord]
+    # Every running instance of it, with what it costs.
+    name: str
+    problem: Optional[str]
+    # Why it is not loaded, when it is not.
+    provides: List[str]
+    # The type ids it contributes: what goes in `type` on a source, an output or a filter.
+    root: str
+    # Where it is installed.
+    tools: List[str]
+    # Its MCP tools, as `gmx_<plugin>_<tool>`. Reachable with `search_tools`; never in the hot list.
+    version: str
+
+class PluginRemoved(TypedDict, total=False):
+    provides: List[str]
+    # What went with it, so a caller can see the blast radius.
+    removed: str
+    tools: List[str]
+
+class PluginSettings(TypedDict, total=False):
+    name: str
+    schemas: Dict[str, Any]
+    # The JSON Schema every surface renders, one per provide.
+    settings: Dict[str, Any]
+
 class PreviewClosed(TypedDict, total=False):
     """What `preview.close` answers with."""
 
@@ -473,6 +560,13 @@ class SetFilterRequest(TypedDict, total=False):
     params: Dict[str, Any]
     # The settings to apply. Only the keys named are changed.
 
+class SetSettingsRequest(TypedDict, total=False):
+    """`plugin.settings.set`."""
+
+    id: str
+    settings: Dict[str, Any]
+    # Only the keys named are changed.
+
 Severity = Union[Literal['info', 'warning', 'error'], Literal['critical']]
 
 class Snapshot(TypedDict, total=False):
@@ -533,6 +627,9 @@ class SourceStatus(TypedDict, total=False):
     uri: str
     video_idle_ms: Optional[int]
     # Milliseconds since the last video buffer, or None if none has arrived.
+
+class StatsListing(TypedDict, total=False):
+    instances: List[InstanceRecord]
 
 class SubscribeRequest(TypedDict, total=False):
     """`core.subscribe`: which events, and which expensive streams."""
@@ -714,6 +811,16 @@ METHODS = (
     {"name": "pipeline.latency", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/pipeline/latency"), "summary": 'How much delay one pipeline is carrying, and which stage put it there.'},
     {"name": "pipeline.list", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/pipeline/list"), "summary": 'Every pipeline running right now, by the name the other pipeline methods accept.'},
     {"name": "pipeline.queues", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/pipeline/queues"), "summary": 'Every queue in one pipeline with how full it is, fullest first. A queue that stays full is where the trouble is.'},
+    {"name": "plugin.add", "scope": "admin", "mutating": True, "destructive": True, "rest": ("POST", "/api/v1/plugins"), "summary": 'Install a plugin from a local directory, while live. The directory is the one with gmx-plugin.toml at its root.'},
+    {"name": "plugin.describe", "scope": "read", "mutating": False, "destructive": False, "rest": ("POST", "/api/v1/plugins/{id}/describe"), "summary": 'One plugin in full: its manifest, the settings schema of every provide, and the description from each SKILL.md.'},
+    {"name": "plugin.disable", "scope": "admin", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/plugins/{id}/disable"), "summary": 'Turn a plugin off without uninstalling it. It registers nothing and runs no process until it is enabled again.'},
+    {"name": "plugin.enable", "scope": "admin", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/plugins/{id}/enable"), "summary": 'Turn a plugin back on. It registers what it declares and its instances start.'},
+    {"name": "plugin.list", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/plugins"), "summary": 'Every plugin installed, with what it provides and what each running instance is costing in cpu, memory, latency, dropped buffers and restarts.'},
+    {"name": "plugin.reload", "scope": "admin", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/plugins/{id}/reload"), "summary": "Read a plugin's directory again and swap its running instances one at a time, with the freeze frame covering each."},
+    {"name": "plugin.remove", "scope": "admin", "mutating": True, "destructive": True, "rest": ("DELETE", "/api/v1/plugins/{id}"), "summary": 'Uninstall a plugin and unwind everything it registered: its provides, its tools, its panels, its hooks and its discovery matchers.'},
+    {"name": "plugin.settings.get", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/plugins/{id}/settings"), "summary": "A plugin's settings as they stand, with its schema beside them."},
+    {"name": "plugin.settings.set", "scope": "admin", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/plugins/{id}/settings"), "summary": "Change a plugin's settings. A plugin that cannot take a change while running says so rather than being restarted behind your back."},
+    {"name": "plugin.stats", "scope": "read", "mutating": False, "destructive": False, "rest": ("POST", "/api/v1/plugins/{id}/stats"), "summary": 'Per instance cpu, memory, media latency, dropped buffers and restarts, refreshed once a second.'},
     {"name": "preset.apply", "scope": "admin", "mutating": True, "destructive": True, "rest": ("POST", "/api/v1/preset/apply"), "summary": 'Put a preset on this core: its config, its scenes, its layout, its theme and its gallery mode. Pass dry_run to get the plan and write nothing.'},
     {"name": "preset.list", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/preset/list"), "summary": 'Every preset this core can apply: the six built in, plus anything installed beside the binary or under ~/.godwinmix/presets.'},
     {"name": "preset.save", "scope": "admin", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/preset/save"), "summary": "Turn this core's working setup into a preset directory somebody else can apply. Stream keys and the control token are replaced with placeholders."},
@@ -1109,6 +1216,96 @@ class GeneratedMethods:
         if name is not None:
             params["name"] = name
         return await self._call("pipeline.queues", params)
+
+    async def plugin_add(
+        self,
+        source: str,
+    ) -> PluginRecord:
+        """Install a plugin from a local directory, while live. The directory is the one with gmx-plugin.toml at its root."""
+        params: Dict[str, Any] = {}
+        params["source"] = source
+        return await self._call("plugin.add", params)
+
+    async def plugin_describe(
+        self,
+        id: str,
+    ) -> PluginDescription:
+        """One plugin in full: its manifest, the settings schema of every provide, and the description from each SKILL.md."""
+        params: Dict[str, Any] = {}
+        params["id"] = id
+        return await self._call("plugin.describe", params)
+
+    async def plugin_disable(
+        self,
+        id: str,
+    ) -> PluginRecord:
+        """Turn a plugin off without uninstalling it. It registers nothing and runs no process until it is enabled again."""
+        params: Dict[str, Any] = {}
+        params["id"] = id
+        return await self._call("plugin.disable", params)
+
+    async def plugin_enable(
+        self,
+        id: str,
+    ) -> PluginRecord:
+        """Turn a plugin back on. It registers what it declares and its instances start."""
+        params: Dict[str, Any] = {}
+        params["id"] = id
+        return await self._call("plugin.enable", params)
+
+    async def plugin_list(
+        self,
+    ) -> PluginListing:
+        """Every plugin installed, with what it provides and what each running instance is costing in cpu, memory, latency, dropped buffers and restarts."""
+        params: Dict[str, Any] = {}
+        return await self._call("plugin.list", params)
+
+    async def plugin_reload(
+        self,
+        id: str,
+    ) -> PluginRecord:
+        """Read a plugin's directory again and swap its running instances one at a time, with the freeze frame covering each."""
+        params: Dict[str, Any] = {}
+        params["id"] = id
+        return await self._call("plugin.reload", params)
+
+    async def plugin_remove(
+        self,
+        id: str,
+    ) -> PluginRemoved:
+        """Uninstall a plugin and unwind everything it registered: its provides, its tools, its panels, its hooks and its discovery matchers."""
+        params: Dict[str, Any] = {}
+        params["id"] = id
+        return await self._call("plugin.remove", params)
+
+    async def plugin_settings_get(
+        self,
+        id: str,
+    ) -> PluginSettings:
+        """A plugin's settings as they stand, with its schema beside them."""
+        params: Dict[str, Any] = {}
+        params["id"] = id
+        return await self._call("plugin.settings.get", params)
+
+    async def plugin_settings_set(
+        self,
+        id: str,
+        *,
+        settings: Optional[Dict[str, Any]] = None,
+    ) -> PluginSettings:
+        """Change a plugin's settings. A plugin that cannot take a change while running says so rather than being restarted behind your back."""
+        params: Dict[str, Any] = {}
+        params["id"] = id
+        if settings is not None:
+            params["settings"] = settings
+        return await self._call("plugin.settings.set", params)
+
+    async def plugin_stats(
+        self,
+    ) -> StatsListing:
+        """Per instance cpu, memory, media latency, dropped buffers and restarts, refreshed once a second."""
+        params: Dict[str, Any] = {}
+        return await self._call("plugin.stats", params)
 
     async def preset_apply(
         self,

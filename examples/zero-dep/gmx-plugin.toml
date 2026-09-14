@@ -1,0 +1,23 @@
+[plugin]
+name = "zero-dep"
+version = "0.1.0"
+api = 1
+description = "Colour bars in under two hundred lines of Python that import nothing outside the standard library."
+license = "Apache-2.0"
+platforms = ["linux-x86_64", "linux-aarch64", "macos-aarch64", "macos-x86_64"]
+placements = ["sidecar", "node"]
+process = "per-instance"
+
+[run]
+python = "main.py"
+
+[[provides]]
+kind = "source"
+id = "source"
+uri_schemes = ["zero-dep://"]
+rank = 120
+media = { video = "raw", audio = "none", alpha = false, thumb = true }
+transports = ["container"]
+capabilities = ["restart-in-place", "health"]
+latency_ms = 0
+settings = "settings.json"

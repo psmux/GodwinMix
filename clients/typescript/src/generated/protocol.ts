@@ -47,6 +47,11 @@ export interface AddOutputRequest {
   [key: string]: unknown;
 }
 
+/** `plugin.add`. */
+export interface AddPluginRequest {
+  source: string;
+}
+
 /** `source.add`. */
 export interface AddSourceRequest {
   id?: string | null;
@@ -216,6 +221,20 @@ export interface IdRequest {
   id: string;
 }
 
+/** One running instance and its cost. */
+export interface InstanceRecord {
+  buffers_dropped: number;
+  cpu_percent?: number | null;
+  instance: string;
+  media_latency_ms?: number | null;
+  pid?: number | null;
+  plugin: string;
+  provide: string;
+  restarts: number;
+  rss_bytes?: number | null;
+  state: string;
+}
+
 /**
  * The ceilings a client should plan against rather than discover by being
  * refused.
@@ -349,6 +368,66 @@ export interface PipelineRequest {
   name?: string;
 }
 
+/** The whole of one plugin, for an agent about to use it. */
+export interface PluginDescription {
+  description: string;
+  enabled: boolean;
+  hooks: string[];
+  instances: InstanceRecord[];
+  manifest: unknown;
+  name: string;
+  problem?: string | null;
+  provides: string[];
+  root: string;
+  schemas: Record<string, unknown>;
+  skills: Record<string, unknown>;
+  tools: string[];
+  version: string;
+}
+
+export interface PluginListing {
+  plugins: PluginRecord[];
+  plugins_dir: string;
+}
+
+/**
+ * Anything that names one plugin.
+ *
+ * The field is `id` because that is what the REST layer fills in from
+ * `/api/v1/plugins/{id}`, and a plugin's id is its name: the namespace of
+ * every id it contributes. `name` is accepted as well, for a JSON-RPC caller
+ * who wrote the obvious thing.
+ */
+export interface PluginName {
+  id: string;
+}
+
+/** One plugin as the core reports it. */
+export interface PluginRecord {
+  description: string;
+  enabled: boolean;
+  hooks: string[];
+  instances: InstanceRecord[];
+  name: string;
+  problem?: string | null;
+  provides: string[];
+  root: string;
+  tools: string[];
+  version: string;
+}
+
+export interface PluginRemoved {
+  provides: string[];
+  removed: string;
+  tools: string[];
+}
+
+export interface PluginSettings {
+  name: string;
+  schemas: Record<string, unknown>;
+  settings: Record<string, unknown>;
+}
+
 /** What `preview.close` answers with. */
 export interface PreviewClosed {
   closed: boolean;
@@ -412,6 +491,12 @@ export interface SessionLogRequest {
 export interface SetFilterRequest {
   id: string;
   params?: Record<string, unknown>;
+}
+
+/** `plugin.settings.set`. */
+export interface SetSettingsRequest {
+  id: string;
+  settings?: Record<string, unknown>;
 }
 
 export type Severity = "info" | "warning" | "error" | "critical";
@@ -481,6 +566,10 @@ export interface SourceStatus {
   uri: string;
   video_idle_ms?: number | null;
   [key: string]: unknown;
+}
+
+export interface StatsListing {
+  instances: InstanceRecord[];
 }
 
 /** `core.subscribe`: which events, and which expensive streams. */
@@ -660,6 +749,16 @@ export interface MethodParams {
   "pipeline.latency": PipelineRequest;
   "pipeline.list": Record<string, never>;
   "pipeline.queues": PipelineRequest;
+  "plugin.add": AddPluginRequest;
+  "plugin.describe": PluginName;
+  "plugin.disable": PluginName;
+  "plugin.enable": PluginName;
+  "plugin.list": Record<string, never>;
+  "plugin.reload": PluginName;
+  "plugin.remove": PluginName;
+  "plugin.settings.get": PluginName;
+  "plugin.settings.set": SetSettingsRequest;
+  "plugin.stats": Record<string, never>;
   "preset.apply": ApplyRequest;
   "preset.list": Record<string, never>;
   "preset.save": SaveRequest;
@@ -717,6 +816,16 @@ export interface MethodResults {
   "pipeline.latency": Record<string, unknown>;
   "pipeline.list": Record<string, unknown>;
   "pipeline.queues": Record<string, unknown>;
+  "plugin.add": PluginRecord;
+  "plugin.describe": PluginDescription;
+  "plugin.disable": PluginRecord;
+  "plugin.enable": PluginRecord;
+  "plugin.list": PluginListing;
+  "plugin.reload": PluginRecord;
+  "plugin.remove": PluginRemoved;
+  "plugin.settings.get": PluginSettings;
+  "plugin.settings.set": PluginSettings;
+  "plugin.stats": StatsListing;
   "preset.apply": ApplyResult;
   "preset.list": Record<string, unknown>;
   "preset.save": Record<string, unknown>;
@@ -808,6 +917,16 @@ export const METHODS: readonly MethodInfo[] = [
   { name: "pipeline.latency", summary: "How much delay one pipeline is carrying, and which stage put it there.", scope: "read", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/pipeline/latency" } },
   { name: "pipeline.list", summary: "Every pipeline running right now, by the name the other pipeline methods accept.", scope: "read", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/pipeline/list" } },
   { name: "pipeline.queues", summary: "Every queue in one pipeline with how full it is, fullest first. A queue that stays full is where the trouble is.", scope: "read", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/pipeline/queues" } },
+  { name: "plugin.add", summary: "Install a plugin from a local directory, while live. The directory is the one with gmx-plugin.toml at its root.", scope: "admin", mutating: true, destructive: true, rest: { method: "POST", path: "/api/v1/plugins" } },
+  { name: "plugin.describe", summary: "One plugin in full: its manifest, the settings schema of every provide, and the description from each SKILL.md.", scope: "read", mutating: false, destructive: false, rest: { method: "POST", path: "/api/v1/plugins/{id}/describe" } },
+  { name: "plugin.disable", summary: "Turn a plugin off without uninstalling it. It registers nothing and runs no process until it is enabled again.", scope: "admin", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/plugins/{id}/disable" } },
+  { name: "plugin.enable", summary: "Turn a plugin back on. It registers what it declares and its instances start.", scope: "admin", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/plugins/{id}/enable" } },
+  { name: "plugin.list", summary: "Every plugin installed, with what it provides and what each running instance is costing in cpu, memory, latency, dropped buffers and restarts.", scope: "read", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/plugins" } },
+  { name: "plugin.reload", summary: "Read a plugin's directory again and swap its running instances one at a time, with the freeze frame covering each.", scope: "admin", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/plugins/{id}/reload" } },
+  { name: "plugin.remove", summary: "Uninstall a plugin and unwind everything it registered: its provides, its tools, its panels, its hooks and its discovery matchers.", scope: "admin", mutating: true, destructive: true, rest: { method: "DELETE", path: "/api/v1/plugins/{id}" } },
+  { name: "plugin.settings.get", summary: "A plugin's settings as they stand, with its schema beside them.", scope: "read", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/plugins/{id}/settings" } },
+  { name: "plugin.settings.set", summary: "Change a plugin's settings. A plugin that cannot take a change while running says so rather than being restarted behind your back.", scope: "admin", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/plugins/{id}/settings" } },
+  { name: "plugin.stats", summary: "Per instance cpu, memory, media latency, dropped buffers and restarts, refreshed once a second.", scope: "read", mutating: false, destructive: false, rest: { method: "POST", path: "/api/v1/plugins/{id}/stats" } },
   { name: "preset.apply", summary: "Put a preset on this core: its config, its scenes, its layout, its theme and its gallery mode. Pass dry_run to get the plan and write nothing.", scope: "admin", mutating: true, destructive: true, rest: { method: "POST", path: "/api/v1/preset/apply" } },
   { name: "preset.list", summary: "Every preset this core can apply: the six built in, plus anything installed beside the binary or under ~/.godwinmix/presets.", scope: "read", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/preset/list" } },
   { name: "preset.save", summary: "Turn this core's working setup into a preset directory somebody else can apply. Stream keys and the control token are replaced with placeholders.", scope: "admin", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/preset/save" } },
@@ -1038,6 +1157,56 @@ export class GeneratedMethods {
   /** Every queue in one pipeline with how full it is, fullest first. A queue that stays full is where the trouble is. */
   pipelineQueues(params: PipelineRequest = {}): Promise<Record<string, unknown>> {
     return this._call("pipeline.queues", params as unknown as Record<string, unknown>) as Promise<Record<string, unknown>>;
+  }
+
+  /** Install a plugin from a local directory, while live. The directory is the one with gmx-plugin.toml at its root. */
+  pluginAdd(params: AddPluginRequest): Promise<PluginRecord> {
+    return this._call("plugin.add", params as unknown as Record<string, unknown>) as Promise<PluginRecord>;
+  }
+
+  /** One plugin in full: its manifest, the settings schema of every provide, and the description from each SKILL.md. */
+  pluginDescribe(params: PluginName): Promise<PluginDescription> {
+    return this._call("plugin.describe", params as unknown as Record<string, unknown>) as Promise<PluginDescription>;
+  }
+
+  /** Turn a plugin off without uninstalling it. It registers nothing and runs no process until it is enabled again. */
+  pluginDisable(params: PluginName): Promise<PluginRecord> {
+    return this._call("plugin.disable", params as unknown as Record<string, unknown>) as Promise<PluginRecord>;
+  }
+
+  /** Turn a plugin back on. It registers what it declares and its instances start. */
+  pluginEnable(params: PluginName): Promise<PluginRecord> {
+    return this._call("plugin.enable", params as unknown as Record<string, unknown>) as Promise<PluginRecord>;
+  }
+
+  /** Every plugin installed, with what it provides and what each running instance is costing in cpu, memory, latency, dropped buffers and restarts. */
+  pluginList(): Promise<PluginListing> {
+    return this._call("plugin.list", {}) as Promise<PluginListing>;
+  }
+
+  /** Read a plugin's directory again and swap its running instances one at a time, with the freeze frame covering each. */
+  pluginReload(params: PluginName): Promise<PluginRecord> {
+    return this._call("plugin.reload", params as unknown as Record<string, unknown>) as Promise<PluginRecord>;
+  }
+
+  /** Uninstall a plugin and unwind everything it registered: its provides, its tools, its panels, its hooks and its discovery matchers. */
+  pluginRemove(params: PluginName): Promise<PluginRemoved> {
+    return this._call("plugin.remove", params as unknown as Record<string, unknown>) as Promise<PluginRemoved>;
+  }
+
+  /** A plugin's settings as they stand, with its schema beside them. */
+  pluginSettingsGet(params: PluginName): Promise<PluginSettings> {
+    return this._call("plugin.settings.get", params as unknown as Record<string, unknown>) as Promise<PluginSettings>;
+  }
+
+  /** Change a plugin's settings. A plugin that cannot take a change while running says so rather than being restarted behind your back. */
+  pluginSettingsSet(params: SetSettingsRequest): Promise<PluginSettings> {
+    return this._call("plugin.settings.set", params as unknown as Record<string, unknown>) as Promise<PluginSettings>;
+  }
+
+  /** Per instance cpu, memory, media latency, dropped buffers and restarts, refreshed once a second. */
+  pluginStats(): Promise<StatsListing> {
+    return this._call("plugin.stats", {}) as Promise<StatsListing>;
   }
 
   /** Put a preset on this core: its config, its scenes, its layout, its theme and its gallery mode. Pass dry_run to get the plan and write nothing. */

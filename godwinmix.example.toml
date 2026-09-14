@@ -176,10 +176,14 @@ bind = "0.0.0.0:8080"
 # for deployments that keep secrets out of config files.
 # token = "change-me"
 #
-# Where plugins live. Each plugin's `ui/` directory is served at
-# `/plugins/<name>/ui/`, which is how a plugin adds a panel to the web UI: drop
-# a file at <plugins_dir>/<name>/ui/panel.js with the panel contract and it
-# appears on the next reload. See docs/how-to/write-a-panel.md.
+# Where plugins live. One directory per plugin, one per version inside it:
+# <plugins_dir>/<name>/<version>/gmx-plugin.toml. Everything under it is read
+# at startup and on `plugin.add`; a manifest that does not validate is listed
+# by `gmx plugin list` with the reason rather than dropped in silence.
+#
+# The same directory serves panels: `<plugins_dir>/<name>/<version>/ui/` is
+# published at `/plugins/<name>/ui/`, which is how a plugin adds a panel to the
+# web UI. See docs/how-to/install-a-plugin.md and docs/how-to/write-a-panel.md.
 # plugins_dir = "~/.godwinmix/plugins"
 #
 # Read the web UI from this directory instead of from the copy built into the
@@ -369,6 +373,23 @@ queue_secs = 5.0
 #
 # [plugins.ndi]
 # discovery_interval_secs = 5
+#
+# Three keys in that table are the core's, not the plugin's, and are the only
+# ones it reads: a budget for the plugin's own processes, and what to do when
+# one goes over it. Watch a plugin's real numbers with `gmx plugin stats`
+# before setting these, because a limit below what a plugin honestly needs is a
+# source that restarts every few seconds.
+#
+# [plugins.ndi]
+# max_rss_mb = 512
+# max_cpu_percent = 60
+# on_over_budget = "restart"   # or "disable", or "alert" (the default)
+#
+# A breach has to hold for three samples, which is three seconds, before
+# anything happens: one busy second while a plugin opens a file is not a plugin
+# that is broken. When it does, the core logs it, emits
+# `event/plugin.state {state: "over-budget"}` and acts on that instance alone.
+# It never acts on itself, and the programme output never stops.
 
 # --- what a surface starts with --------------------------------------------
 # The `[ui]` table is the layout, the theme and the gallery mode a client opens

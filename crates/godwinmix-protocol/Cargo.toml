@@ -13,6 +13,9 @@ repository.workspace = true
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
 schemars = { workspace = true }
+# `gmx-plugin.toml` is read here rather than in the host so that the SDK, the
+# harness and the index all parse a manifest with the same code.
+toml = { workspace = true }
 # One warning line in `types.rs` and two mutexes. Both are facades with no
 # runtime of their own; neither pulls in a media stack or a server.
 tracing = { workspace = true }

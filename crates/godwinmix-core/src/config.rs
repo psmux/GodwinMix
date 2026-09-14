@@ -70,6 +70,11 @@ pub struct Config {
     /// silently dropped, which is the closed schema the audit named.
     #[serde(flatten, default)]
     pub extra: std::collections::BTreeMap<String, toml::Value>,
+    /// The file this was read from. Empty for a config built in code, which is
+    /// what an embedded core has. Not part of the file's own schema: it is
+    /// where the file was, and `plugin.settings.set` writes back to it.
+    #[serde(skip)]
+    pub source_path: std::path::PathBuf,
 }
 
 /// What a surface starts with. The type lives in the protocol crate because
@@ -1155,6 +1160,7 @@ impl Config {
             .with_context(|| format!("reading config {}", path.display()))?;
         let mut cfg: Config = toml::from_str(&raw)
             .with_context(|| format!("parsing config {}", path.display()))?;
+        cfg.source_path = path.to_path_buf();
 
         // Once the UI has managed sources, its list wins. Merging the two would
         // mean a source deleted in the UI reappearing on the next restart.
@@ -1626,6 +1632,7 @@ sidecar = \"/opt/b\"\n").unwrap();
             outputs: vec![],
             filters: vec![],
             plugins: Default::default(),
+            source_path: Default::default(),
             tokens: vec![],
             ui: Default::default(),
             extra: Default::default(),

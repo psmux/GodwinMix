@@ -23,6 +23,7 @@ mod filters;
 mod media;
 mod outputs;
 mod preview;
+mod plugins;
 pub mod presets;
 mod program;
 mod sources;
@@ -59,6 +60,7 @@ pub fn registry() -> Registry<Call> {
     agent::register(&mut reg);
     filters::register(&mut reg);
     preview::register(&mut reg);
+    plugins::register(&mut reg);
     presets::register(&mut reg);
     crate::observe::register(&mut reg);
     // Other modules add their own here. One line each, and they land on
