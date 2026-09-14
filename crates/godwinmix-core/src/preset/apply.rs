@@ -57,7 +57,7 @@ pub fn run(preset: &Preset, plan: &Plan) -> Result<Applied> {
         gallery: plan.gallery.clone(),
         layout: plan.layout.clone(),
     };
-    let store = write_ui(&plan.config_path, &ui)?;
+    let store = write_ui(&plan.config_path, &ui, &plan.surface)?;
     wrote.push(store);
 
     Ok(Applied {
@@ -198,14 +198,25 @@ fn write_scenes(
 }
 
 /// The `[ui]` section of the runtime store: what a surface starts with.
-fn write_ui(config_path: &Path, ui: &UiDefaults) -> Result<PathBuf> {
+///
+/// `surface` is the preset's choice of UI: `web`, `none`, or the name of a
+/// surface plugin. It is written beside the other defaults rather than into
+/// `UiDefaults` because it is not part of the wire type every client parses:
+/// it is a note to whoever starts a UI on this machine, and `gmx ui` reads it.
+fn write_ui(config_path: &Path, ui: &UiDefaults, surface: &str) -> Result<PathBuf> {
     let path = Config::runtime_store_path(&crate::config::path_in_force(config_path));
     let mut table: toml::Table = match std::fs::read_to_string(&path).ok() {
         Some(text) => toml::from_str(&text)
             .with_context(|| format!("{} is not valid TOML", path.display()))?,
         None => toml::Table::new(),
     };
-    table.insert("ui".into(), toml::Value::try_from(ui).context("writing the [ui] section")?);
+    let mut section = toml::Value::try_from(ui).context("writing the [ui] section")?;
+    if let Some(map) = section.as_table_mut() {
+        if !surface.trim().is_empty() {
+            map.insert("surface".into(), toml::Value::String(surface.trim().into()));
+        }
+    }
+    table.insert("ui".into(), section);
     let body = format!(
         "# Sources and outputs managed from the GodwinMix UI or API, and the\n\
          # surface defaults a preset chose. These lists take precedence over the\n\
@@ -302,6 +313,24 @@ mod tests {
         assert!(text.contains("[ui]"), "{text}");
         assert_eq!(applied.ui.preset.as_deref(), Some("church"));
         assert_eq!(applied.ui.gallery.as_deref(), Some("icon"), "the church preset ships icon mode");
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn the_presets_choice_of_surface_is_written_where_gmx_ui_reads_it() {
+        let dir = work("surface");
+        let config = dir.join("godwinmix.toml");
+        let (plan, _) = apply_named("church", &Options::new(&config)).unwrap();
+
+        let store = Config::runtime_store_path(&config);
+        let table: toml::Table = toml::from_str(&std::fs::read_to_string(&store).unwrap()).unwrap();
+        let ui = table.get("ui").and_then(toml::Value::as_table).expect("a [ui] section");
+        assert_eq!(
+            ui.get("surface").and_then(toml::Value::as_str),
+            Some(plan.surface.as_str()),
+            "the preset's surface reaches the store: {table}"
+        );
+        assert!(!plan.surface.is_empty(), "every preset names a surface");
         std::fs::remove_dir_all(&dir).ok();
     }
 

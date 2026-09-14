@@ -229,8 +229,30 @@ fn on_path(exe: &str) -> Option<PathBuf> {
 // The subcommands
 // ---------------------------------------------------------------------------
 
+/// The surface a preset chose, out of the `[ui]` section of the runtime store.
+///
+/// `gmx preset apply church` writes `surface = "web"` there. It is a note to
+/// whoever starts a UI on this machine, which is this command, so `gmx ui`
+/// says which one the preset meant rather than leaving an operator to guess.
+pub fn chosen() -> Option<String> {
+    let store = godwinmix_core::config::Config::runtime_store_path(
+        &godwinmix_core::config::path_in_force(Path::new("")),
+    );
+    let text = std::fs::read_to_string(store).ok()?;
+    let table: toml::Table = toml::from_str(&text).ok()?;
+    let name = table
+        .get("ui")?
+        .as_table()?
+        .get("surface")?
+        .as_str()?
+        .trim()
+        .to_string();
+    (!name.is_empty()).then_some(name)
+}
+
 fn list(json: bool) -> Result<()> {
     let surfaces = installed();
+    let chose = chosen();
     if json {
         let rows: Vec<serde_json::Value> = surfaces
             .iter()
@@ -245,10 +267,17 @@ fn list(json: bool) -> Result<()> {
                     "root": s.root.display().to_string(),
                     "command": s.found.as_ref().ok().map(|p| p.display().to_string()),
                     "problem": s.found.as_ref().err(),
+                    "chosen_by_preset": chose.as_deref() == Some(s.name.as_str()),
                 })
             })
             .collect();
-        println!("{}", serde_json::to_string_pretty(&rows)?);
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&serde_json::json!({
+                "surfaces": rows,
+                "chosen_by_preset": chose,
+            }))?
+        );
         return Ok(());
     }
 
@@ -264,24 +293,44 @@ fn list(json: bool) -> Result<()> {
     }
 
     let width = surfaces.iter().map(|s| s.name.len()).max().unwrap_or(4).max(4);
-    println!("{:<width$}  {:<8} {}", "NAME", "API", "COMMAND", width = width);
+    println!("  {:<width$}  {:<5} {}", "NAME", "API", "COMMAND", width = width);
     for surface in &surfaces {
         let command = match &surface.found {
             Ok(path) => path.display().to_string(),
             Err(problem) => format!("not found ({problem})"),
         };
+        // A star on the one the applied preset chose.
+        let mark = if chose.as_deref() == Some(surface.name.as_str()) { "*" } else { " " };
         println!(
-            "{:<width$}  {:<8} {}",
+            "{mark} {:<width$}  {:<5} {}",
             surface.name,
             surface.api,
             command,
             width = width
         );
         if !surface.description.is_empty() {
-            println!("{:<width$}  {:<8} {}", "", "", surface.description, width = width);
+            println!("  {:<width$}  {:<5} {}", "", "", surface.description, width = width);
         }
     }
-    println!("\nStart one with `gmx ui <name>`.");
+    match chose {
+        Some(name) if surfaces.iter().any(|s| s.name == name) => {
+            println!("\n* is the surface the applied preset chose. Start it with `gmx ui {name}`.")
+        }
+        // `web` and `none` are preset answers that name no plugin: the web UI
+        // is served by the core itself, and `none` means a headless install.
+        Some(name) if name == "web" => println!(
+            "\nThe applied preset chose the web UI, which the core serves itself: \
+             open the mixer's address in a browser."
+        ),
+        Some(name) if name == "none" => {
+            println!("\nThe applied preset chose no UI. Start one anyway with `gmx ui <name>`.")
+        }
+        Some(name) => println!(
+            "\nThe applied preset chose the surface '{name}', which is not installed here. \
+             Install it with `gmx plugin add`, or start one of the above."
+        ),
+        None => println!("\nStart one with `gmx ui <name>`."),
+    }
     Ok(())
 }
 
