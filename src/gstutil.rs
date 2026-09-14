@@ -335,12 +335,63 @@ pub fn completed_colorimetry(caps: &gst::CapsRef) -> Option<gst::Caps> {
     Some(caps)
 }
 
+/// Who a bus message belongs to.
+///
+/// The mixer used to work this out by stripping an `input-` or `output-`
+/// prefix off a label it had made itself, which meant the attribution of every
+/// error depended on a naming convention nothing enforced. The owner is
+/// declared when the watcher is installed, so a message can only be attributed
+/// to the thing that actually posted it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum BusOwner {
+    /// The programme pipeline, the one failure this design cannot absorb.
+    Programme,
+    Source(String),
+    Output(String),
+    Multiview,
+    /// Anything else with a bus, named for the log.
+    Other(String),
+}
+
+impl std::fmt::Display for BusOwner {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.label())
+    }
+}
+
+impl BusOwner {
+    /// What this owner is called in a log line and a thread name.
+    pub fn label(&self) -> String {
+        match self {
+            Self::Programme => "program".into(),
+            Self::Source(id) => format!("input-{id}"),
+            Self::Output(id) => format!("output-{id}"),
+            Self::Multiview => "multiview".into(),
+            Self::Other(name) => name.clone(),
+        }
+    }
+
+    pub fn source(&self) -> Option<&str> {
+        match self {
+            Self::Source(id) => Some(id),
+            _ => None,
+        }
+    }
+
+    pub fn output(&self) -> Option<&str> {
+        match self {
+            Self::Output(id) => Some(id),
+            _ => None,
+        }
+    }
+}
+
 /// Messages we care about from a pipeline bus.
 #[derive(Debug, Clone)]
 pub enum BusEvent {
-    Error { pipeline: String, src: String, message: String, debug: Option<String> },
-    Warning { pipeline: String, src: String, message: String },
-    Eos { pipeline: String },
+    Error { pipeline: BusOwner, src: String, message: String, debug: Option<String> },
+    Warning { pipeline: BusOwner, src: String, message: String },
+    Eos { pipeline: BusOwner },
     /// Peak level per channel in dBFS, from a `level` element. `src` is that
     /// element's name, which is the only thing in the message that says which
     /// meter it came from: the program's own and one per source all post on the
@@ -435,10 +486,10 @@ fn share_device_contexts(bus: &gst::Bus) {
 #[must_use = "dropping the BusWatch immediately stops the watcher"]
 pub fn watch_bus(
     pipeline: &gst::Pipeline,
-    label: impl Into<String>,
+    owner: BusOwner,
     tx: tokio::sync::mpsc::UnboundedSender<BusEvent>,
 ) -> Result<BusWatch> {
-    let label = label.into();
+    let label = owner.label();
     let bus = pipeline.bus().context("pipeline has no bus")?;
     share_device_contexts(&bus);
     let stop = Arc::new(AtomicBool::new(false));
@@ -461,7 +512,7 @@ pub fn watch_bus(
                         .unwrap_or_else(|| "unknown".into());
                     error!(pipeline = %label, %src, error = %e.error(), "pipeline error");
                     Some(BusEvent::Error {
-                        pipeline: label.clone(),
+                        pipeline: owner.clone(),
                         src,
                         message: e.error().to_string(),
                         debug: e.debug().map(|d| d.to_string()),
@@ -474,12 +525,12 @@ pub fn watch_bus(
                         .unwrap_or_else(|| "unknown".into());
                     warn!(pipeline = %label, %src, warning = %w.error(), "pipeline warning");
                     Some(BusEvent::Warning {
-                        pipeline: label.clone(),
+                        pipeline: owner.clone(),
                         src,
                         message: w.error().to_string(),
                     })
                 }
-                MessageView::Eos(_) => Some(BusEvent::Eos { pipeline: label.clone() }),
+                MessageView::Eos(_) => Some(BusEvent::Eos { pipeline: owner.clone() }),
                 MessageView::Element(e) => e
                     .structure()
                     .filter(|s| s.name() == "level")

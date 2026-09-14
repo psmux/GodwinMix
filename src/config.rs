@@ -33,6 +33,61 @@ pub struct Config {
     pub sources: Vec<SourceConfig>,
     #[serde(default)]
     pub outputs: Vec<OutputConfig>,
+    /// Filters attached at startup. Each one names a built in or plugin
+    /// provided filter and where it goes.
+    #[serde(default)]
+    pub filters: Vec<FilterConfig>,
+    /// Settings belonging to a plugin, one table per plugin name. The core
+    /// never reads inside these; it hands `[plugins.ndi]` to the plugin called
+    /// `ndi` and nothing else sees it.
+    #[serde(default)]
+    pub plugins: std::collections::BTreeMap<String, Params>,
+    /// Every other top level table. Without this a plugin's section was
+    /// silently dropped, which is the closed schema the audit named.
+    #[serde(flatten, default)]
+    pub extra: std::collections::BTreeMap<String, toml::Value>,
+}
+
+/// A plugin's own settings, as written in `params = { .. }` or in
+/// `[plugins.<name>]`. A TOML table, uninterpreted by the core.
+pub type Params = toml::Table;
+
+/// Where a filter goes. Either on one source, on the input or the programme
+/// side of the proxy boundary, or on the programme itself.
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct FilterConfig {
+    pub id: String,
+    #[serde(rename = "type")]
+    pub type_id: String,
+    #[serde(default)]
+    pub attach: FilterAttach,
+    #[serde(default)]
+    pub params: Params,
+}
+
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
+pub struct FilterAttach {
+    /// The source this filter belongs to, when it belongs to one.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source: Option<String>,
+    /// `input` puts it before the proxy boundary, where it also reaches the
+    /// thumbnail; `programme` puts it on this source's programme branch only.
+    #[serde(default)]
+    pub side: FilterAttachSide,
+    /// Set instead of `source` to filter the whole programme.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub programme: bool,
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum FilterAttachSide {
+    /// Between the source's canvas capsfilter and its tee: the programme and
+    /// the thumbnail both see it.
+    #[default]
+    Input,
+    /// Between this source's programme queue and the compositor pad.
+    Programme,
 }
 
 /// The fixed raw format that every branch of the graph must produce.
@@ -194,6 +249,15 @@ impl RtmpClient {
     /// Element to fall back to, if this setting permits a fallback at all.
     pub fn fallback_element(self) -> Option<&'static str> {
         matches!(self, Self::Auto).then_some(Self::LIBRTMP_ELEMENT)
+    }
+
+    /// How this setting is spelled in `params.client`.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Auto => "auto",
+            Self::Rtmp2 => Self::RTMP2_ELEMENT,
+            Self::Librtmp => Self::LIBRTMP_ELEMENT,
+        }
     }
 }
 
@@ -447,7 +511,18 @@ pub struct SourceConfig {
     pub id: String,
     #[serde(default)]
     pub name: Option<String>,
+    /// The plugin qualified provide id: `file/source`, `rtmp/source`,
+    /// `browser/source` and so on. Absent means "work it out from the URI",
+    /// which is what every config written before this said.
+    #[serde(rename = "type", default, skip_serializing_if = "Option::is_none")]
+    pub type_id: Option<String>,
+    /// Still accepted, and still how most sources are written. It is resolved
+    /// to a `type` by scheme and rank and kept in `params.uri`.
+    #[serde(default)]
     pub uri: String,
+    /// What this source's kind makes of it. The core does not read inside.
+    #[serde(default, skip_serializing_if = "Params::is_empty")]
+    pub params: Params,
     /// Seconds without a buffer before the source is treated as dead and its
     /// program pad is faded to the slate.
     #[serde(default = "default_stall_timeout")]
@@ -469,6 +544,10 @@ pub struct SourceConfig {
     /// after a restart returns the source to the level it had.
     #[serde(default)]
     pub muted: bool,
+    /// Every key the core does not know. They reach the source's kind through
+    /// `effective_params` rather than being dropped on the floor.
+    #[serde(flatten, default)]
+    pub extra: std::collections::BTreeMap<String, toml::Value>,
 }
 
 fn default_stall_timeout() -> f64 {
@@ -478,6 +557,87 @@ fn default_stall_timeout() -> f64 {
 impl SourceConfig {
     pub fn display_name(&self) -> &str {
         self.name.as_deref().unwrap_or(&self.id)
+    }
+
+    /// A source with nothing but an id and an address, for a caller building
+    /// one by hand.
+    pub fn bare(id: &str, uri: &str) -> Self {
+        Self {
+            id: id.to_string(),
+            name: None,
+            type_id: None,
+            uri: uri.to_string(),
+            params: Params::new(),
+            stall_timeout_secs: default_stall_timeout(),
+            rtmp_client: RtmpClient::default(),
+            superimpose: Superimpose::default(),
+            gain: crate::state::unity_gain(),
+            muted: false,
+            extra: Default::default(),
+        }
+    }
+
+    /// The params the kind actually receives: what was written in `params`,
+    /// plus the legacy fields the migration table maps in, plus anything the
+    /// core did not recognise.
+    ///
+    /// Every mapped field warns once, naming the key to write instead, so an
+    /// operator who reads their logs can move over before the old names go.
+    pub fn effective_params(&self) -> Params {
+        let mut out = self.params.clone();
+        // `uri` is not a migration, it is the ordinary way to write a source,
+        // so it is carried without a warning.
+        if !self.uri.trim().is_empty() && !out.contains_key("uri") {
+            out.insert("uri".into(), toml::Value::String(self.uri.clone()));
+        }
+        // The migration table from the plugin architecture, one row per line.
+        // Each mapped field warns once, naming the key to write instead.
+        let mapped: [(&str, &str, Option<toml::Value>); 2] = [
+            (
+                "rtmp_client",
+                "client",
+                (self.rtmp_client != RtmpClient::default())
+                    .then(|| toml::Value::String(self.rtmp_client.as_str().into())),
+            ),
+            (
+                "superimpose",
+                "superimpose",
+                (self.superimpose != Superimpose::default())
+                    .then(|| toml::Value::String("auto".into())),
+            ),
+        ];
+        for (from, key, value) in mapped {
+            let Some(value) = value else { continue };
+            if out.contains_key(key) {
+                continue;
+            }
+            tracing::warn!(
+                source = %self.id,
+                "`{from}` on a source is now `params.{key}`; the old key will not be read after this release"
+            );
+            out.insert(key.to_string(), value);
+        }
+        for (k, v) in &self.extra {
+            out.entry(k.clone()).or_insert_with(|| v.clone());
+        }
+        out
+    }
+
+    /// Check `params` against the kind this source resolves to. A bad param
+    /// names the field and what it accepts, rather than failing at build time
+    /// inside GStreamer.
+    pub fn validate_params(&self) -> anyhow::Result<()> {
+        let provide = crate::plugin::source::resolve_config(self)?;
+        let params = self.effective_params();
+        match provide.manifest.plugin {
+            "rtmp" => crate::plugin::kinds::rtmp::validate(&params),
+            "hls" => crate::plugin::kinds::live::validate(&params),
+            "file" => crate::plugin::kinds::file::validate(&params),
+            "exec" => crate::plugin::kinds::exec::validate(&params),
+            "browser" => crate::plugin::kinds::browser::validate(&params),
+            "layered" => crate::plugin::kinds::layered::validate(&params),
+            _ => Ok(()),
+        }
     }
 }
 
@@ -498,7 +658,15 @@ pub enum OutputPolicy {
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct OutputConfig {
     pub id: String,
+    /// The plugin qualified provide id: `rtmp/output`, `srt/output`. Absent
+    /// means "work it out from the URI".
+    #[serde(rename = "type", default, skip_serializing_if = "Option::is_none")]
+    pub type_id: Option<String>,
+    #[serde(default)]
     pub uri: String,
+    /// What this output's kind makes of it.
+    #[serde(default, skip_serializing_if = "Params::is_empty")]
+    pub params: Params,
     #[serde(default)]
     pub policy: OutputPolicy,
     /// Overrides the policy preset when present.
@@ -508,6 +676,9 @@ pub struct OutputConfig {
     /// makes a short network hiccup invisible to the viewer.
     #[serde(default = "default_queue_secs")]
     pub queue_secs: f64,
+    /// Every key the core does not know, handed to the output's kind.
+    #[serde(flatten, default)]
+    pub extra: std::collections::BTreeMap<String, toml::Value>,
 }
 
 fn default_queue_secs() -> f64 {
@@ -517,6 +688,32 @@ fn default_queue_secs() -> f64 {
 impl OutputConfig {
     pub fn reconnect_policy(&self) -> ReconnectConfig {
         self.reconnect.unwrap_or_else(|| ReconnectConfig::preset(self.policy))
+    }
+
+    /// An output with nothing but an id and an address.
+    pub fn bare(id: &str, uri: &str) -> Self {
+        Self {
+            id: id.to_string(),
+            type_id: None,
+            uri: uri.to_string(),
+            params: Params::new(),
+            policy: OutputPolicy::default(),
+            reconnect: None,
+            queue_secs: default_queue_secs(),
+            extra: Default::default(),
+        }
+    }
+
+    /// The params the output's kind receives, with `uri` carried in.
+    pub fn effective_params(&self) -> Params {
+        let mut out = self.params.clone();
+        if !self.uri.trim().is_empty() && !out.contains_key("uri") {
+            out.insert("uri".into(), toml::Value::String(self.uri.clone()));
+        }
+        for (k, v) in &self.extra {
+            out.entry(k.clone()).or_insert_with(|| v.clone());
+        }
+        out
     }
 }
 

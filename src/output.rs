@@ -29,7 +29,8 @@
 //! from applying backpressure to the encoder that every other output shares.
 
 use crate::config::OutputConfig;
-use crate::gstutil::{self, make, BusEvent};
+use crate::gstutil::{self, make, BusEvent, BusOwner};
+use crate::plugin::output::{Output, OutputCtx};
 use crate::state::{safe_uri_label, OutputId, OutputState, OutputStatus};
 use anyhow::{Context, Result};
 use gstreamer as gst;
@@ -45,7 +46,6 @@ const RELINK_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(5);
 /// The currently running output pipeline and the pieces of it we keep hold of.
 struct Live {
     pipeline: gst::Pipeline,
-    sink: gst::Element,
     watch: gstutil::BusWatch,
 }
 
@@ -84,6 +84,13 @@ pub struct OutputSlot {
     /// bus errors in quick succession, and without this each one would arm its
     /// own reconnect, producing a storm rather than a retry.
     reconnect_armed: AtomicBool,
+    /// The destination itself: the muxer, the sink and the honest answer to
+    /// whether the far end has accepted us. Everything above this line is the
+    /// same for RTMP, SRT and whatever comes next.
+    kind: Mutex<Box<dyn Output>>,
+    /// What the implementation said about itself at `initialize`.
+    manifest: crate::plugin::Manifest,
+    capabilities: crate::plugin::CapabilitySet,
 }
 
 impl OutputSlot {
@@ -115,6 +122,7 @@ impl OutputSlot {
             el.sync_state_with_parent().ok();
         }
 
+        let (kind, ready) = crate::plugin::output::open(cfg)?;
         let slot = Arc::new(Self {
             cfg: cfg.clone(),
             feed_video,
@@ -131,6 +139,9 @@ impl OutputSlot {
             failed: AtomicBool::new(false),
             overfull_ticks: AtomicU32::new(0),
             reconnect_armed: AtomicBool::new(false),
+            kind: Mutex::new(kind),
+            manifest: ready.manifest,
+            capabilities: ready.capabilities,
         });
         slot.spin_up(false)?;
         Ok(slot)
@@ -183,40 +194,38 @@ impl OutputSlot {
         let vq = gstutil::queue_thread(&format!("out-{id}-mux-vq-{gen}"))?;
         let aq = gstutil::queue_thread(&format!("out-{id}-mux-aq-{gen}"))?;
 
-        let mux = make("flvmux", &format!("out-{id}-mux-{gen}"))?;
-        mux.set_property("streamable", true);
-        // Each connection is its own FLV stream and starts at zero. The
-        // continuity a viewer cares about is in the encoded bitstream, which is
-        // never interrupted, not in the container timestamps.
-        crate::probe::set_enum(&mux, "start-time-selection", "first");
-        crate::probe::set_bool(&mux, "enforce-increasing-timestamps", true);
-        crate::probe::set_bool(&mux, "skip-backwards-streams", true);
-
-        let sink = make("rtmp2sink", &format!("out-{id}-rtmp-{gen}"))?;
-        sink.set_property("location", &self.cfg.uri);
-        crate::probe::set_bool(&sink, "async-connect", true);
-        // The encoder already produced this in real time. Making the sink wait
-        // on the clock a second time only adds latency.
-        crate::probe::set_bool(&sink, "sync", false);
-        crate::probe::set_bool(&sink, "async", false);
-
         pipeline
-            .add_many([&vsrc, &vq, &asrc, &aq, &mux, &sink])
+            .add_many([&vsrc, &vq, &asrc, &aq])
             .context("adding output elements")?;
         gst::Element::link_many([&vsrc, &vq]).context("linking output video")?;
         gst::Element::link_many([&asrc, &aq]).context("linking output audio")?;
-        link_to_request_pad(&vq, &mux, "video")?;
-        link_to_request_pad(&aq, &mux, "audio")?;
         hold_audio_until_video_caps(&vq, &aq, id)?;
-        mux.link(&sink).context("linking muxer to rtmp sink")?;
+        // Everything above this line is the same for every destination. The
+        // muxer and the sink are the destination's own, and this is the only
+        // place the core hands over.
+        let params = self.cfg.effective_params();
+        self.kind
+            .lock()
+            .build(
+                &OutputCtx {
+                    id,
+                    generation: gen,
+                    pipeline: &pipeline,
+                    params: &params,
+                    cfg: &self.cfg,
+                },
+                &vq,
+                &aq,
+            )
+            .with_context(|| format!("building the {} half of output {id}", self.manifest.provide_id()))?;
 
         self.connected.store(false, Ordering::Relaxed);
 
-        let watch = gstutil::watch_bus(&pipeline, format!("output-{id}"), self.bus_tx.clone())
+        let watch = gstutil::watch_bus(&pipeline, BusOwner::Output(id.clone()), self.bus_tx.clone())
             .context("watching output bus")?;
         pipeline.set_state(gst::State::Playing).context("starting output pipeline")?;
 
-        *self.pipeline.lock() = Some(Live { pipeline, sink, watch });
+        *self.pipeline.lock() = Some(Live { pipeline, watch });
 
         // Ask the encoder for a keyframe. Without it the freshly connected
         // server has nothing decodable until the next scheduled one, which at a
@@ -291,8 +300,8 @@ impl OutputSlot {
     }
 
     /// Bus messages from this output's pipeline carry this label.
-    pub fn owns_pipeline(&self, label: &str) -> bool {
-        label == format!("output-{}", self.cfg.id)
+    pub fn owns_pipeline(&self, owner: &BusOwner) -> bool {
+        owner.output() == Some(self.cfg.id.as_str())
     }
 
     pub fn mark_failed(&self) {
@@ -314,25 +323,28 @@ impl OutputSlot {
     /// nothing about whether the far end ever answered, and an operator would
     /// see "live" against a destination that was refusing us.
     ///
-    /// `out-chunk-size` is zero until the RTMP handshake negotiates it, which
-    /// makes it a real connection signal.
+    /// Liveness is the implementation's own answer. It used to be a reading of
+    /// `rtmp2sink`'s `stats.out-chunk-size`, which no other sink has; an output
+    /// that cannot answer that question can still answer this one.
     pub fn refresh_connected(&self) {
-        let chunk = self
-            .pipeline
-            .lock()
-            .as_ref()
-            .and_then(|live| live.sink.property::<Option<gst::Structure>>("stats"))
-            .and_then(|s| s.get::<u32>("out-chunk-size").ok())
-            .unwrap_or(0);
-
-        let now = chunk > 0;
+        let now = self.pipeline.lock().is_some() && self.kind.lock().connected();
         if now != self.connected.swap(now, Ordering::Relaxed) {
             if now {
-                info!(output = %self.cfg.id, "rtmp connection established");
+                info!(output = %self.cfg.id, kind = %self.manifest.provide_id(), "output connection established");
             } else {
-                warn!(output = %self.cfg.id, "rtmp connection lost");
+                warn!(output = %self.cfg.id, kind = %self.manifest.provide_id(), "output connection lost");
             }
         }
+    }
+
+    /// What this output is, as a plugin qualified id.
+    pub fn type_id(&self) -> String {
+        self.manifest.provide_id()
+    }
+
+    /// What the core may assume about this output.
+    pub fn capabilities(&self) -> crate::plugin::CapabilitySet {
+        self.capabilities
     }
 
     /// A sustained near-full feed queue means the destination cannot keep up.
@@ -485,17 +497,6 @@ fn link_tee_to(tee: &gst::Element, dest: &gst::Element) -> Result<gst::Pad> {
     let sink = dest.static_pad("sink").context("destination has no sink pad")?;
     src.link(&sink).context("linking tee branch")?;
     Ok(src)
-}
-
-fn link_to_request_pad(src: &gst::Element, dest: &gst::Element, template: &str) -> Result<()> {
-    let sink_pad = dest
-        .request_pad_simple(template)
-        .with_context(|| format!("{} refused a {template} pad", dest.name()))?;
-    src.static_pad("src")
-        .context("source element has no src pad")?
-        .link(&sink_pad)
-        .with_context(|| format!("linking into {template}"))?;
-    Ok(())
 }
 
 #[cfg(test)]

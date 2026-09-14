@@ -24,6 +24,7 @@ pub mod media;
 pub mod mixer;
 pub mod multiview;
 pub mod output;
+pub mod plugin;
 pub mod probe;
 pub mod snapshot;
 pub mod state;
