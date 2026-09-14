@@ -588,7 +588,16 @@ async fn mixer_rows(args: &BenchArgs) -> Result<Vec<Row>> {
             "gmx bench --only snapshot".into(),
         )
         .load(with_tracker.minus(with_mosaic))
-        .note("Zero when nothing asks: the follower is not running then."),
+        .other(format!(
+            "{:.3} cores for the mosaic and the tracker together, tracker started {} time(s)",
+            with_tracker.cores,
+            tracker.starts()
+        ))
+        .note(
+            "The delta is against the mosaic on its own, so on a fast machine it \
+             can disappear into the noise between two windows. Zero when nothing \
+             asks is not a rounding: the follower is not running at all then.",
+        ),
     );
 
     drop(sub);
@@ -613,6 +622,23 @@ async fn file_source_row(args: &BenchArgs, clip: &Path) -> Result<Row> {
     );
     let baseline = measure_pipeline(args, &base).await?;
     let loaded = measure_pipeline(args, &with_file).await?;
+    let hw_decode = crate::probe::Backends::probe(
+        crate::config::Accel::Auto,
+        crate::config::Accel::Auto,
+    )
+    .map(|b| b.video_decode.accel != crate::config::Accel::Software)
+    .unwrap_or(false);
+    let mut note = String::from(
+        "In process, not container mode: a sidecar source pays about 41 MB more \
+         for its own GStreamer process.",
+    );
+    if hw_decode {
+        note.push_str(
+            " This machine decodes in hardware, and on macOS VideoToolbox runs in \
+             its own XPC process, so the decode does not appear in this process's \
+             CPU at all. The number is the mixer's own cost, not the machine's.",
+        );
+    }
     Ok(Row::new(
         "file-source",
         "Added RSS and CPU per 720p30 file source into the compositor, no encode",
@@ -620,10 +646,7 @@ async fn file_source_row(args: &BenchArgs, clip: &Path) -> Result<Row> {
         format!("gst-launch-1.0 {with_file}"),
     )
     .load(loaded.minus(baseline))
-    .note(
-        "In process, not container mode: a sidecar source pays about 41 MB more \
-         for its own GStreamer process.",
-    ))
+    .note(&note))
 }
 
 /// Two live 720p30 sources composited and encoded, once on x264 and once on
@@ -926,6 +949,13 @@ pub fn render_markdown(r: &Report) -> String {
             row.verdict,
         ));
     }
+    s.push_str(
+        "\nCPU is a fraction of one core over the window. RSS on a row that says \
+         \"added\" is a difference between two readings in one process, taken in \
+         the order the rows are printed, so a later row starts from whatever an \
+         earlier one did not give back to the operating system. For a clean \
+         figure on one row, run it on its own with `--only`.\n",
+    );
     s.push_str("\n## What produced each row\n\n");
     for row in &r.rows {
         s.push_str(&format!("### `{}`\n\n", row.id));
