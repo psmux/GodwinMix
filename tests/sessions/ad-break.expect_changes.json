@@ -1,0 +1,53 @@
+{
+  "changes": [
+    {
+      "what": "source",
+      "id": "cam1",
+      "to": "connecting"
+    },
+    {
+      "what": "program",
+      "to": "cam1"
+    },
+    {
+      "what": "source",
+      "id": "cam1",
+      "to": "live"
+    },
+    {
+      "what": "source",
+      "id": "__ad__",
+      "to": "connecting"
+    },
+    {
+      "what": "adbreak",
+      "to": "armed"
+    },
+    {
+      "what": "adbreak",
+      "to": "on air"
+    },
+    {
+      "what": "program",
+      "to": "__ad__"
+    },
+    {
+      "what": "source",
+      "id": "__ad__",
+      "to": "live"
+    },
+    {
+      "what": "program",
+      "to": "cam1"
+    },
+    {
+      "what": "adbreak",
+      "to": "ended"
+    },
+    {
+      "what": "source",
+      "id": "__ad__",
+      "to": "removed"
+    }
+  ]
+}

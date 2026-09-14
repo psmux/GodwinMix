@@ -148,7 +148,7 @@ impl AppState {
         godwinmix_core::telemetry::telemetry().bind_guard(safety.clone());
         let hooks = {
             let bus = mixer.clone();
-            hooks::Hooks::new(&cfg.hooks, Arc::new(move |event| bus.emit(event)))
+            hooks::Hooks::new(&cfg.hooks(), Arc::new(move |event| bus.emit(event)))
         };
         Self {
             mixer,

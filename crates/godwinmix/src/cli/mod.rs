@@ -15,4 +15,5 @@ pub mod observe;
 pub mod plugin;
 pub mod preset;
 pub mod scene;
+pub mod session;
 pub mod skill;

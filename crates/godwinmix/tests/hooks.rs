@@ -136,7 +136,7 @@ impl Core {
         // take while they are being measured.
         cfg.safety.min_hold_ms = 0;
         cfg.safety.flash_guard = false;
-        cfg.hooks = hooks;
+        cfg.set_hooks(hooks);
 
         let (mut mix, handle, cmd_rx, mut bus_rx) =
             Mixer::build(cfg.clone()).expect("building the mixer");
