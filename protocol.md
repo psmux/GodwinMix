@@ -127,7 +127,7 @@ Keys accepted on every method, handled before a method runs.
 | `scene.layout.paste` | `POST /api/v1/scenes/layout/paste` | operate |  | 1 | Put one scene's geometry onto another's items, matched by name first and slot order second. Items that match nothing are left alone. |
 | `scene.list` | `GET /api/v1/scenes` | read |  | 1 | Every scene in the collection, with how many items it has, the sources it draws and whether it is armed. |
 | `scene.params.get` | `GET /api/v1/scenes/params/get` | read |  | 1 | The collection's typed parameters, readable without their values, so a client discovers what is fillable before filling it. |
-| `scene.params.set` | `POST /api/v1/scenes/params/set` | operate |  | 1 | Set the collection's parameter values. A `{{name}}` in a string property follows them. |
+| `scene.params.set` | `POST /api/v1/scenes/params/set` | operate |  | 1 | Set the collection's parameter values, declaring any that are new. A `{{name}}` in any string property of any item follows them, so one call changes every lower third that uses it. |
 | `scene.preview.frame` | `GET /api/v1/scenes/preview/frame` | read |  | 1 | A still of the armed scene as base64 JPEG, the floor every client has. |
 | `scene.preview.set` | `POST /api/v1/scenes/preview/set` | operate |  | 1 | Arm a scene. The armed scene is the preview, and program.take with no argument takes it. |
 | `scene.redo` | `POST /api/v1/scenes/redo` | operate |  | 1 | Put back what undo took away. |
@@ -1696,7 +1696,9 @@ The collection's typed parameters, readable without their values, so a client di
 
 #### `scene.params.set`
 
-Set the collection's parameter values. A `{{name}}` in a string property follows them.
+Set the collection's parameter values, declaring any that are new. A `{{name}}` in any string property of any item follows them, so one call changes every lower third that uses it.
+
+MCP tool `set_scene_params` in the `search` profile: readOnlyHint false, destructiveHint false, idempotentHint true.
 
 ```json
 {

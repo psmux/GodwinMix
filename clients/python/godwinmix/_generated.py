@@ -172,6 +172,14 @@ class ApplyResult(TypedDict, total=False):
     plan: Any
     # The whole plan, as JSON. The same object `preset.list` rows point at.
 
+class Asset(TypedDict, total=False):
+    """A file the collection carries with it."""
+
+    path: str
+    # Relative to the collection root, always.
+    sha256: Optional[str]
+    size: Optional[int]
+
 class AudioSetParams(TypedDict, total=False):
     """`source.audio.set` takes an id as well as the levels: the id comes off the path on REST and out of the params on `/rpc`, and both land in one object."""
 
@@ -492,6 +500,22 @@ class GroupSourcesRequest(TypedDict, total=False):
     name: Optional[str]
     # The tray folder to put them in. Null takes them out of the one they are in.
     sources: List[str]
+
+class Header(TypedDict, total=False):
+    """Everything in the document that is not a scene or an item: the name, the canvas, the collection's parameters, the transitions it carries, the assets and the source labels. It is not a record and it has no id, so it cannot be diffed the way the tree is. It is carried whole, because it is small and because the alternative is that a command touching only the header produces an empty patch and is thrown away by `edit`, which is exactly what used to happen to `scene.params.set`, `source.set` and `source.group`: all three answered with the change and none of them kept it."""
+
+    assets: Dict[str, Any]
+    canvas: Canvas
+    name: str
+    params: Any
+    sources: Dict[str, Any]
+    transitions: List[Transition2]
+
+class HeaderChange(TypedDict, total=False):
+    """The header as it was and as it is."""
+
+    after: Header
+    before: Header
 
 class HistoryRequest(TypedDict, total=False):
     """`program.history`."""
@@ -848,6 +872,8 @@ class Patch(TypedDict, total=False):
     added: List[Record]
     client_seq: Optional[int]
     # The client's own sequence number, echoed back. A drag cannot wait for a round trip, so the client kit draws the move itself and reconciles when the echo arrives. Without this it cannot tell an echo of the move it has already drawn past from a correction, and the handle rubber bands backwards under the cursor. Every geometry command carries a `seq`; this is that number coming back.
+    header: Union[HeaderChange, None]
+    # The collection's own properties, when they changed. Absent for the ordinary case, which is every command that moves an item.
     label: Optional[str]
     # What the client called this change, for a label in an undo menu.
     removed: List[Id]
@@ -1213,6 +1239,15 @@ class SourceAudioState(TypedDict, total=False):
     page: Optional[float]
     # Absent on anything but a superimposed source, which is the only kind with separate sounds to balance.
 
+class SourceMeta(TypedDict, total=False):
+    """A source's name, colour and tray folder, as this collection has them."""
+
+    color: Optional[str]
+    # Free text so a client can use whatever it draws with. Absent means the client picks one by kind.
+    group: Optional[str]
+    # A tray folder: a tag on the source, purely for finding things. Not a scene group, which is a thing on the canvas.
+    name: Optional[str]
+
 class SourcePositionState(TypedDict, total=False):
     """Where a seekable source has got to, which is what the seek endpoint answers with. Both numbers are read back off the pipeline after the seek has landed, not taken from the request. A seek snaps to a key unit, so the frame an operator asked for and the frame they got are rarely the same millisecond, and a scrubber drawn from the request would sit a little away from the picture."""
 
@@ -1357,6 +1392,15 @@ class Transform(TypedDict, total=False):
     rotation: float
     # Degrees, clockwise, about the anchor.
     scale: Vec2
+
+class Transition2(TypedDict, total=False):
+    """A named transition between two scenes."""
+
+    duration_ms: int
+    id: Id
+    name: str
+    params: Any
+    type: str
 
 class TransitionRequest(TypedDict, total=False):
     """How a take gets there. See docs/reference/transitions.md."""
@@ -1628,7 +1672,7 @@ METHODS = (
     {"name": "scene.layout.paste", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/scenes/layout/paste"), "summary": "Put one scene's geometry onto another's items, matched by name first and slot order second. Items that match nothing are left alone."},
     {"name": "scene.list", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/scenes"), "summary": 'Every scene in the collection, with how many items it has, the sources it draws and whether it is armed.'},
     {"name": "scene.params.get", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/scenes/params/get"), "summary": "The collection's typed parameters, readable without their values, so a client discovers what is fillable before filling it."},
-    {"name": "scene.params.set", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/scenes/params/set"), "summary": "Set the collection's parameter values. A `{{name}}` in a string property follows them."},
+    {"name": "scene.params.set", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/scenes/params/set"), "summary": "Set the collection's parameter values, declaring any that are new. A `{{name}}` in any string property of any item follows them, so one call changes every lower third that uses it."},
     {"name": "scene.preview.frame", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/scenes/preview/frame"), "summary": 'A still of the armed scene as base64 JPEG, the floor every client has.'},
     {"name": "scene.preview.set", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/scenes/preview/set"), "summary": 'Arm a scene. The armed scene is the preview, and program.take with no argument takes it.'},
     {"name": "scene.redo", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/scenes/redo"), "summary": 'Put back what undo took away.'},
@@ -3011,7 +3055,7 @@ class GeneratedMethods:
         scene: Optional[str] = None,
         values: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
-        """Set the collection's parameter values. A `{{name}}` in a string property follows them."""
+        """Set the collection's parameter values, declaring any that are new. A `{{name}}` in any string property of any item follows them, so one call changes every lower third that uses it."""
         params: Dict[str, Any] = {}
         if scene is not None:
             params["scene"] = scene

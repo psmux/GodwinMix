@@ -664,6 +664,9 @@ impl Inner {
 /// Apply a patch to a document.
 fn apply(doc: &mut Collection, p: &Patch) -> Result<()> {
     let mut flat = doc.to_flat();
+    if let Some(header) = &p.header {
+        header.after.onto(&mut flat);
+    }
     for id in &p.removed {
         flat.records.retain(|r| r.id != *id);
     }

@@ -17,8 +17,63 @@ use std::collections::BTreeMap;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
+use crate::scene::document::{Asset, Canvas, SourceMeta, Transition};
 use crate::scene::flat::{FlatDocument, Record};
 use crate::scene::id::Id;
+
+/// Everything in the document that is not a scene or an item: the name, the
+/// canvas, the collection's parameters, the transitions it carries, the assets
+/// and the source labels.
+///
+/// It is not a record and it has no id, so it cannot be diffed the way the
+/// tree is. It is carried whole, because it is small and because the
+/// alternative is that a command touching only the header produces an empty
+/// patch and is thrown away by `edit`, which is exactly what used to happen to
+/// `scene.params.set`, `source.set` and `source.group`: all three answered with
+/// the change and none of them kept it.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct Header {
+    pub name: String,
+    pub canvas: Canvas,
+    pub params: serde_json::Value,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub transitions: Vec<Transition>,
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub assets: BTreeMap<Id, Asset>,
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub sources: BTreeMap<String, SourceMeta>,
+}
+
+impl Header {
+    /// The header of a flat document.
+    pub fn of(doc: &FlatDocument) -> Header {
+        Header {
+            name: doc.name.clone(),
+            canvas: doc.canvas,
+            params: doc.params.clone(),
+            transitions: doc.transitions.clone(),
+            assets: doc.assets.clone(),
+            sources: doc.sources.clone(),
+        }
+    }
+
+    /// Write it onto a flat document.
+    pub fn onto(&self, doc: &mut FlatDocument) {
+        doc.name = self.name.clone();
+        doc.canvas = self.canvas;
+        doc.params = self.params.clone();
+        doc.transitions = self.transitions.clone();
+        doc.assets = self.assets.clone();
+        doc.sources = self.sources.clone();
+    }
+}
+
+/// The header as it was and as it is.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct HeaderChange {
+    pub before: Header,
+    pub after: Header,
+}
 
 /// One record as it was and as it is.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
@@ -53,6 +108,10 @@ pub struct Patch {
     /// What the client called this change, for a label in an undo menu.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub label: Option<String>,
+    /// The collection's own properties, when they changed. Absent for the
+    /// ordinary case, which is every command that moves an item.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub header: Option<HeaderChange>,
     /// The client's own sequence number, echoed back.
     ///
     /// A drag cannot wait for a round trip, so the client kit draws the move
@@ -68,7 +127,10 @@ impl Patch {
     /// True when nothing actually changed, which is what an idempotent command
     /// asked to set what is already set produces.
     pub fn is_empty(&self) -> bool {
-        self.added.is_empty() && self.updated.is_empty() && self.removed.is_empty()
+        self.added.is_empty()
+            && self.updated.is_empty()
+            && self.removed.is_empty()
+            && self.header.is_none()
     }
 
     /// The patch that undoes this one.
@@ -85,6 +147,10 @@ impl Patch {
                 .collect(),
             removed: self.added.iter().map(|r| r.id).collect(),
             removed_records: self.added.clone(),
+            header: self
+                .header
+                .as_ref()
+                .map(|h| HeaderChange { before: h.after.clone(), after: h.before.clone() }),
             label: self.label.clone(),
             // An undo is the core's own change, not a replay of whatever the
             // client was predicting, so it carries no client sequence number:
@@ -130,6 +196,18 @@ impl Patch {
             self.removed.push(record.id);
             self.removed_records.push(before);
         }
+        // The header is carried whole, so merging two of them keeps the
+        // earlier `before` and the later `after`: the pair still describes the
+        // whole step, which is what makes undoing it put everything back.
+        self.header = match (self.header.take(), later.header.clone()) {
+            (Some(mine), Some(theirs)) => {
+                Some(HeaderChange { before: mine.before, after: theirs.after })
+            }
+            (mine, theirs) => mine.or(theirs),
+        };
+        if self.header.as_ref().is_some_and(|h| h.before == h.after) {
+            self.header = None;
+        }
         // A record changed and changed back is not a change. Without this, a
         // step that adds a sibling and removes it again leaves an update whose
         // before and after are the same record, and an undo menu shows an
@@ -163,6 +241,10 @@ pub fn diff(before: &FlatDocument, after: &FlatDocument) -> Patch {
             patch.removed.push(*id);
             patch.removed_records.push((*record).clone());
         }
+    }
+    let (was, is) = (Header::of(before), Header::of(after));
+    if was != is {
+        patch.header = Some(HeaderChange { before: was, after: is });
     }
     patch
 }
