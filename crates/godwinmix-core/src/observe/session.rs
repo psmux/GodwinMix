@@ -53,10 +53,7 @@ impl SessionLog {
         if let Some(dir) = path.parent() {
             std::fs::create_dir_all(dir)?;
         }
-        let file = std::fs::OpenOptions::new()
-            .create(true)
-            .append(true)
-            .open(&path)?;
+        let file = std::fs::OpenOptions::new().create(true).append(true).open(&path)?;
         *self.file.lock() = Some(file);
         *self.path.lock() = Some(path);
         Ok(())
@@ -128,8 +125,7 @@ impl SessionLog {
 
     /// One event off the state broadcast.
     pub fn record_event(&self, event: &Event) {
-        let body = serde_json::to_value(event)
-            .unwrap_or_else(|e| json!({ "unserialisable": e.to_string() }));
+        let body = serde_json::to_value(event).unwrap_or_else(|e| json!({ "unserialisable": e.to_string() }));
         self.record("event", json!({ "event": body }));
     }
 
@@ -153,16 +149,12 @@ impl SessionLog {
     /// Reads the file rather than keeping a ring in memory, because the file is
     /// the record and a second copy would be a second thing to get wrong.
     pub fn tail_since(&self, secs: u64) -> Vec<String> {
-        let Some(path) = self.path() else {
-            return Vec::new();
-        };
+        let Some(path) = self.path() else { return Vec::new() };
         let cutoff = std::time::SystemTime::now()
             .checked_sub(std::time::Duration::from_secs(secs))
             .unwrap_or(std::time::UNIX_EPOCH);
         let cutoff = crate::observe::logs::rfc3339(&cutoff);
-        let Ok(text) = std::fs::read_to_string(&path) else {
-            return Vec::new();
-        };
+        let Ok(text) = std::fs::read_to_string(&path) else { return Vec::new() };
         text.lines()
             .filter(|line| match ts_of(line) {
                 // Lexical comparison is date comparison for RFC 3339 in UTC,
@@ -260,10 +252,8 @@ mod tests {
         log.record("command", json!({ "method": "program.take" }));
         log.record("event", json!({ "event": "took" }));
         let text = std::fs::read_to_string(&path).unwrap();
-        let lines: Vec<Value> = text
-            .lines()
-            .map(|l| serde_json::from_str(l).unwrap())
-            .collect();
+        let lines: Vec<Value> =
+            text.lines().map(|l| serde_json::from_str(l).unwrap()).collect();
         assert_eq!(lines.len(), 2);
         assert_eq!(lines[0]["seq"], 0);
         assert_eq!(lines[1]["seq"], 1);
@@ -292,12 +282,7 @@ mod tests {
             source: "cam1".into(),
             state: SourceState::Stalled,
         });
-        log.record_decision(
-            "cam1",
-            "rebuild",
-            "no buffers for 10 s",
-            json!({ "behind_ms": -2427 }),
-        );
+        log.record_decision("cam1", "rebuild", "no buffers for 10 s", json!({ "behind_ms": -2427 }));
         log.record("anything", json!({ "x": 1 }));
         let _ = log.tail_since(3600);
         let _ = log.path();
@@ -335,16 +320,9 @@ mod tests {
         // A record from last year, written by hand the way an older run would
         // have left it.
         {
-            let mut f = std::fs::OpenOptions::new()
-                .append(true)
-                .open(&path)
+            let mut f = std::fs::OpenOptions::new().append(true).open(&path).unwrap();
+            writeln!(f, "{}", json!({ "seq": 0, "ts": "2020-01-01T00:00:00.000Z", "kind": "old" }))
                 .unwrap();
-            writeln!(
-                f,
-                "{}",
-                json!({ "seq": 0, "ts": "2020-01-01T00:00:00.000Z", "kind": "old" })
-            )
-            .unwrap();
         }
         log.record("new", json!({}));
         let tail = log.tail_since(3600);
@@ -372,34 +350,15 @@ mod tests {
             tx.send(Envelope { seq, event })
         };
 
-        tx(Event::Took {
-            source: Some("cam1".into()),
-            at_running_time_ms: 1234,
-        })
-        .unwrap();
-        tx(Event::SourceStateChanged {
-            source: "cam1".into(),
-            state: SourceState::Live,
-        })
-        .unwrap();
-        tx(Event::Alert {
-            severity: Severity::Warning,
-            message: "cam1 stalled".into(),
-        })
-        .unwrap();
+        tx(Event::Took { source: Some("cam1".into()), at_running_time_ms: 1234 }).unwrap();
+        tx(Event::SourceStateChanged { source: "cam1".into(), state: SourceState::Live }).unwrap();
+        tx(Event::Alert { severity: Severity::Warning, message: "cam1 stalled".into() }).unwrap();
         // Meters are counted, not written.
-        tx(Event::AudioLevel {
-            peak_db: vec![-21.0, -20.5],
-        })
-        .unwrap();
+        tx(Event::AudioLevel { peak_db: vec![-21.0, -20.5] }).unwrap();
 
         for _ in 0..50 {
             tokio::time::sleep(std::time::Duration::from_millis(20)).await;
-            if std::fs::read_to_string(path_in(&dir))
-                .map(|t| t.lines().count())
-                .unwrap_or(0)
-                >= 3
-            {
+            if std::fs::read_to_string(path_in(&dir)).map(|t| t.lines().count()).unwrap_or(0) >= 3 {
                 break;
             }
         }
@@ -409,18 +368,12 @@ mod tests {
         assert!(text.contains("\"took\""), "{text}");
         assert!(text.contains("source_state_changed"), "{text}");
         assert!(text.contains("cam1 stalled"), "{text}");
-        assert!(
-            !text.contains("audio_level"),
-            "meters should not be in the session log: {text}"
-        );
+        assert!(!text.contains("audio_level"), "meters should not be in the session log: {text}");
     }
 
     #[test]
     fn the_timestamp_is_found_without_parsing_the_line() {
-        assert_eq!(
-            ts_of(r#"{"a":1,"ts":"2026-01-01T00:00:00.000Z","b":2}"#),
-            Some("2026-01-01T00:00:00.000Z")
-        );
+        assert_eq!(ts_of(r#"{"a":1,"ts":"2026-01-01T00:00:00.000Z","b":2}"#), Some("2026-01-01T00:00:00.000Z"));
         assert_eq!(ts_of("{}"), None);
     }
 }

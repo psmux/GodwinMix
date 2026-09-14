@@ -40,39 +40,21 @@ pub const MANIFEST: Manifest = Manifest {
     tier: Tier::Core,
 };
 
-pub const PROVIDE: Provide = Provide {
-    manifest: MANIFEST,
-    claims,
-    make: new,
-};
+pub const PROVIDE: Provide = Provide { manifest: MANIFEST, claims, make: new };
 
 fn claims(uri: &str) -> Option<u16> {
-    uri.trim()
-        .to_lowercase()
-        .starts_with("test://")
-        .then_some(MANIFEST.rank)
+    uri.trim().to_lowercase().starts_with("test://").then_some(MANIFEST.rank)
 }
 
 /// The pattern after `test://`, defaulting to colour bars.
 fn pattern(uri: &str) -> String {
-    let rest = uri
-        .trim()
-        .trim_start_matches("test://")
-        .trim_start_matches("TEST://");
+    let rest = uri.trim().trim_start_matches("test://").trim_start_matches("TEST://");
     let name = rest.split(['?', '#', '/']).next().unwrap_or("");
-    if name.is_empty() {
-        "smpte".to_string()
-    } else {
-        name.to_string()
-    }
+    if name.is_empty() { "smpte".to_string() } else { name.to_string() }
 }
 
 fn new(req: SourceRequest<'_>) -> Result<Box<dyn Source>> {
-    Ok(Box::new(TestSource {
-        pattern: pattern(&req.cfg.uri),
-        ctx: req.ctx(),
-        running: false,
-    }))
+    Ok(Box::new(TestSource { pattern: pattern(&req.cfg.uri), ctx: req.ctx(), running: false }))
 }
 
 pub struct TestSource {
@@ -113,18 +95,12 @@ impl Source for TestSource {
         let ends = assemble(
             &self.ctx,
             thumb,
-            Ingest::default()
-                .with([vsrc.clone(), asrc.clone()])
-                .livesync(false),
+            Ingest::default().with([vsrc.clone(), asrc.clone()]).livesync(false),
             |w: &Wiring| {
-                vsrc.link(&w.norm.video_entry())
-                    .context("linking the test pattern")?;
-                asrc.link(&w.norm.audio_entry())
-                    .context("linking the test tone")?;
-                w.has_video
-                    .store(true, std::sync::atomic::Ordering::Relaxed);
-                w.has_audio
-                    .store(true, std::sync::atomic::Ordering::Relaxed);
+                vsrc.link(&w.norm.video_entry()).context("linking the test pattern")?;
+                asrc.link(&w.norm.audio_entry()).context("linking the test tone")?;
+                w.has_video.store(true, std::sync::atomic::Ordering::Relaxed);
+                w.has_audio.store(true, std::sync::atomic::Ordering::Relaxed);
                 Ok(KindParts::default())
             },
         )?;
@@ -142,11 +118,7 @@ impl Source for TestSource {
     }
 
     fn health(&self) -> Health {
-        Health::of(if self.running {
-            PluginState::Running
-        } else {
-            PluginState::Starting
-        })
+        Health::of(if self.running { PluginState::Running } else { PluginState::Starting })
     }
 
     fn call(&mut self, method: &str, _params: Value) -> Result<Value> {
@@ -170,10 +142,7 @@ fn pattern_help() -> String {
                 Install gst-plugins-base."
             .to_string();
     }
-    format!(
-        "write test://<pattern>, where <pattern> is one of: {}",
-        names.join(", ")
-    )
+    format!("write test://<pattern>, where <pattern> is one of: {}", names.join(", "))
 }
 
 /// Check the pattern before anything is built.
@@ -223,18 +192,9 @@ mod tests {
         gstreamer::init().expect("gstreamer");
         let e = validate(&params_for("test://bars")).expect_err("bars is not a pattern");
         let message = format!("{e:#}");
-        assert!(
-            message.contains("bars"),
-            "the error has to name what was asked for: {message}"
-        );
-        assert!(
-            message.contains("smpte"),
-            "and list what would work: {message}"
-        );
-        assert!(
-            message.contains("ball"),
-            "the whole list, not the default: {message}"
-        );
+        assert!(message.contains("bars"), "the error has to name what was asked for: {message}");
+        assert!(message.contains("smpte"), "and list what would work: {message}");
+        assert!(message.contains("ball"), "the whole list, not the default: {message}");
     }
 
     #[test]
@@ -252,14 +212,8 @@ mod tests {
     fn the_list_comes_off_the_element() {
         gstreamer::init().expect("gstreamer");
         let names = patterns();
-        assert!(
-            names.iter().any(|n| n == "smpte"),
-            "read from videotestsrc: {names:?}"
-        );
-        assert!(
-            names.len() > 5,
-            "videotestsrc has more than five patterns: {names:?}"
-        );
+        assert!(names.iter().any(|n| n == "smpte"), "read from videotestsrc: {names:?}");
+        assert!(names.len() > 5, "videotestsrc has more than five patterns: {names:?}");
     }
 
     /// And the setter refuses instead of panicking, which is the fault that

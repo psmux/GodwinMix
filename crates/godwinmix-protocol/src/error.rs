@@ -173,11 +173,7 @@ impl RpcError {
             format!(
                 "there is no {kind} '{id}'. {} {}: {}. Use one of those.",
                 if valid.len() == 1 { "The only" } else { "The" },
-                if valid.len() == 1 {
-                    kind.to_string()
-                } else {
-                    format!("{kind}s")
-                },
+                if valid.len() == 1 { kind.to_string() } else { format!("{kind}s") },
                 valid.join(", ")
             )
         };
@@ -194,11 +190,7 @@ impl RpcError {
             format!(
                 "{method} needs the '{needed}' scope and this token holds {}. \
                  Ask for a token with '{needed}' in its scopes.",
-                if held.is_empty() {
-                    "none".to_string()
-                } else {
-                    held.join(", ")
-                }
+                if held.is_empty() { "none".to_string() } else { held.join(", ") }
             ),
         )
         .with("method", method)
@@ -292,11 +284,7 @@ mod tests {
 
         // One id reads as English rather than as a template.
         let one = RpcError::not_found("output", "yt", &["primary".into()]);
-        assert!(
-            one.message.contains("The only output: primary"),
-            "{}",
-            one.message
-        );
+        assert!(one.message.contains("The only output: primary"), "{}", one.message);
 
         // None at all says what to do instead of listing nothing.
         let none = RpcError::not_found("source", "cam1", &[]);
@@ -314,8 +302,7 @@ mod tests {
 
     #[test]
     fn the_body_is_the_one_shape_everywhere() {
-        let e =
-            RpcError::new(ErrorCode::Safety, "held for 3200 ms more").with("retry_after_ms", 3200);
+        let e = RpcError::new(ErrorCode::Safety, "held for 3200 ms more").with("retry_after_ms", 3200);
         let b = e.body("0af7651916cd43dd8448eb211c80319c");
         assert_eq!(b["error"]["code"], -32003);
         assert_eq!(b["error"]["data"]["retry_after_ms"], 3200);

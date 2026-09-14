@@ -185,11 +185,7 @@ impl Catalogue {
         reg: &dyn Registry,
         seen: &mut Vec<Consideration>,
     ) -> Result<Chosen> {
-        let pin = if role == Role::Encode {
-            req.encode
-        } else {
-            req.decode
-        };
+        let pin = if role == Role::Encode { req.encode } else { req.decode };
         let label = format!("video.{}", role.as_str());
         let rows: Vec<(&VideoEntry, Consideration)> = self
             .video
@@ -198,24 +194,10 @@ impl Catalogue {
             .filter(|e| self.carries_video(req, &e.codec))
             .map(|e| {
                 let missing = missing_of(&e.needs(role), reg);
-                (
-                    e,
-                    row(
-                        &label,
-                        &e.id(),
-                        &e.accel,
-                        e.rank,
-                        e.element(role).unwrap(),
-                        missing,
-                    ),
-                )
+                (e, row(&label, &e.id(), &e.accel, e.rank, e.element(role).unwrap(), missing))
             })
             .collect();
-        let idx = choose(
-            &label,
-            pin,
-            &rows.iter().map(|(_, c)| c.clone()).collect::<Vec<_>>(),
-        )?;
+        let idx = choose(&label, pin, &rows.iter().map(|(_, c)| c.clone()).collect::<Vec<_>>())?;
         let (entry, _) = &rows[idx];
         for (i, (_, c)) in rows.iter().enumerate() {
             let mut c = c.clone();
@@ -259,27 +241,14 @@ impl Catalogue {
             .filter(|e| self.carries_audio(req, &e.codec))
             .map(|e| {
                 let missing = missing_of(&e.needs(role), reg);
-                (
-                    e,
-                    row(
-                        &label,
-                        &e.id(),
-                        &e.accel,
-                        e.rank,
-                        e.element(role).unwrap(),
-                        missing,
-                    ),
-                )
+                (e, row(&label, &e.id(), &e.accel, e.rank, e.element(role).unwrap(), missing))
             })
             .collect();
         // Audio has no hardware backends worth pinning, so the accel pin does
         // not apply here: forcing `hardware.encode = "nvidia"` must not take
         // the AAC encoder away.
-        let idx = choose(
-            &label,
-            Accel::Auto,
-            &rows.iter().map(|(_, c)| c.clone()).collect::<Vec<_>>(),
-        )?;
+        let idx =
+            choose(&label, Accel::Auto, &rows.iter().map(|(_, c)| c.clone()).collect::<Vec<_>>())?;
         let (entry, _) = &rows[idx];
         for (i, (_, c)) in rows.iter().enumerate() {
             let mut c = c.clone();
@@ -317,14 +286,8 @@ impl Catalogue {
         let pinned = req.graphics != Accel::Auto;
         let mut rows: Vec<(&GraphicsEntry, Consideration)> = Vec::new();
         for e in self.graphics.iter().filter(|e| !e.disabled) {
-            let mut c = row(
-                "graphics",
-                &e.id(),
-                &e.accel,
-                e.rank,
-                &e.compositor,
-                missing_of(&e.needs(), reg),
-            );
+            let mut c =
+                row("graphics", &e.id(), &e.accel, e.rank, &e.compositor, missing_of(&e.needs(), reg));
             // Honesty about upstream state. Every GPU compositor is rank none
             // in GStreamer 1.28 with open bugs on dynamic pad add and remove,
             // and a mixer adds and removes pads all day. So a GPU entry is
@@ -347,10 +310,7 @@ impl Catalogue {
         } else if entry.memory == "system" {
             "highest ranked entry present; GPU entries are taken only once verified here".into()
         } else {
-            format!(
-                "highest ranked entry present and verified on {}",
-                req.platform
-            )
+            format!("highest ranked entry present and verified on {}", req.platform)
         };
         for (i, (_, c)) in rows.iter().enumerate() {
             let mut c = c.clone();
@@ -372,29 +332,16 @@ impl Catalogue {
 }
 
 fn verified_here(e: &GraphicsEntry, platform: &str) -> bool {
-    e.verified
-        .iter()
-        .any(|v| v.platform == platform || v.platform == "any")
+    e.verified.iter().any(|v| v.platform == platform || v.platform == "any")
 }
 
 fn missing_of(needs: &[String], reg: &dyn Registry) -> Vec<String> {
     needs.iter().filter(|n| !reg.has(n)).cloned().collect()
 }
 
-fn row(
-    role: &str,
-    id: &str,
-    accel: &str,
-    rank: i32,
-    element: &str,
-    missing: Vec<String>,
-) -> Consideration {
+fn row(role: &str, id: &str, accel: &str, rank: i32, element: &str, missing: Vec<String>) -> Consideration {
     let present = missing.is_empty();
-    let note = if present {
-        String::new()
-    } else {
-        format!("missing {}", missing.join(", "))
-    };
+    let note = if present { String::new() } else { format!("missing {}", missing.join(", ")) };
     Consideration {
         role: role.into(),
         id: id.into(),
@@ -412,8 +359,7 @@ fn row(
 /// present. Returns the index into `rows`.
 fn choose(role: &str, pin: Accel, rows: &[Consideration]) -> Result<usize> {
     let want = pin.name();
-    let eligible =
-        |c: &Consideration| c.present && (want.is_none() || want == Some(c.accel.as_str()));
+    let eligible = |c: &Consideration| c.present && (want.is_none() || want == Some(c.accel.as_str()));
     let best = rows
         .iter()
         .enumerate()
@@ -439,15 +385,8 @@ fn no_entry_message(role: &str, want: Option<&str>, rows: &[Consideration]) -> S
         return s;
     }
     for c in rows {
-        let state = if c.present {
-            "installed".to_string()
-        } else {
-            format!("missing {}", c.missing.join(", "))
-        };
-        s.push_str(&format!(
-            "\n  {:<26} accel {:<16} rank {:<4} {}",
-            c.id, c.accel, c.rank, state
-        ));
+        let state = if c.present { "installed".to_string() } else { format!("missing {}", c.missing.join(", ")) };
+        s.push_str(&format!("\n  {:<26} accel {:<16} rank {:<4} {}", c.id, c.accel, c.rank, state));
     }
     s
 }

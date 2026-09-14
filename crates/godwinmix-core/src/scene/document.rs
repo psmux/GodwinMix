@@ -67,11 +67,7 @@ pub struct Canvas {
 
 impl Default for Canvas {
     fn default() -> Self {
-        Canvas {
-            width: 1920,
-            height: 1080,
-            fps: 30,
-        }
+        Canvas { width: 1920, height: 1080, fps: 30 }
     }
 }
 
@@ -86,17 +82,9 @@ impl Canvas {
                 .parse::<u32>()
                 .ok()
                 .filter(|n| *n > 0)
-                .ok_or_else(|| {
-                    format!(
-                        "{v:?} is not a {which}. Write it as WIDTHxHEIGHT, for example 1920x1080"
-                    )
-                })
+                .ok_or_else(|| format!("{v:?} is not a {which}. Write it as WIDTHxHEIGHT, for example 1920x1080"))
         };
-        Ok(Canvas {
-            width: parse(w, "width")?,
-            height: parse(h, "height")?,
-            ..Canvas::default()
-        })
+        Ok(Canvas { width: parse(w, "width")?, height: parse(h, "height")?, ..Canvas::default() })
     }
 }
 
@@ -117,12 +105,7 @@ pub struct Scene {
 impl Scene {
     /// An empty scene with a fresh id.
     pub fn new(name: impl Into<String>) -> Scene {
-        Scene {
-            id: Id::new(),
-            name: name.into(),
-            items: Vec::new(),
-            color: None,
-        }
+        Scene { id: Id::new(), name: name.into(), items: Vec::new(), color: None }
     }
 
     /// Every item in the scene, parents before children.
@@ -406,15 +389,7 @@ impl Align {
             [CenterLeft, Center, CenterRight],
             [BottomLeft, BottomCenter, BottomRight],
         ];
-        let bucket = |v: f64| {
-            if v < 0.25 {
-                0
-            } else if v > 0.75 {
-                2
-            } else {
-                1
-            }
-        };
+        let bucket = |v: f64| if v < 0.25 { 0 } else if v > 0.75 { 2 } else { 1 };
         ROW[bucket(y)][bucket(x)]
     }
 }
@@ -561,22 +536,14 @@ impl Collection {
 
     fn visit(&self, scene: &Scene, path: &mut Vec<Id>) -> Result<(), RefError> {
         for item in scene.walk() {
-            let Content::Ref { scene: target, .. } = &item.content else {
-                continue;
-            };
+            let Content::Ref { scene: target, .. } = &item.content else { continue };
             if path.contains(target) {
                 let mut cycle: Vec<String> = path.iter().map(|id| self.label(id)).collect();
                 cycle.push(self.label(target));
-                return Err(RefError::Cycle {
-                    via: item.id,
-                    path: cycle,
-                });
+                return Err(RefError::Cycle { via: item.id, path: cycle });
             }
             let Some(next) = self.scene(target) else {
-                return Err(RefError::Missing {
-                    item: item.id,
-                    scene: *target,
-                });
+                return Err(RefError::Missing { item: item.id, scene: *target });
             };
             path.push(*target);
             self.visit(next, path)?;
@@ -587,9 +554,7 @@ impl Collection {
 
     /// A scene's name when it has one, else its id, for an error message.
     fn label(&self, id: &Id) -> String {
-        self.scene(id)
-            .map(|s| s.name.clone())
-            .unwrap_or_else(|| id.to_string())
+        self.scene(id).map(|s| s.name.clone()).unwrap_or_else(|| id.to_string())
     }
 }
 
@@ -627,16 +592,12 @@ pub(crate) mod tests {
     /// A small collection used by several tests here and in `flat`.
     pub(crate) fn sample() -> Collection {
         let mut doc = Collection::new("Sunday service", Canvas::default());
-        let mut stage = Item::new(Content::Source {
-            source: "cam-wide".into(),
-        });
+        let mut stage = Item::new(Content::Source { source: "cam-wide".into() });
         stage.name = Some("stage".into());
         stage.transform.frame = Some(Frame::new(1920.0, 1080.0));
         stage.transform.fit = Fit::Cover;
 
-        let mut child = Item::new(Content::Source {
-            source: "cam-pulpit".into(),
-        });
+        let mut child = Item::new(Content::Source { source: "cam-pulpit".into() });
         child.transform.position = Vec2::new(1400.0, 40.0);
         child.transform.frame = Some(Frame::new(480.0, 270.0));
         child.transform.fit = Fit::Cover;
@@ -646,9 +607,7 @@ pub(crate) mod tests {
             enabled: true,
             params: json!({ "key": "#00ff00" }),
         });
-        let mut group = Item::new(Content::Children {
-            children: vec![child],
-        });
+        let mut group = Item::new(Content::Children { children: vec![child] });
         group.name = Some("corner".into());
         group.opacity = 0.9;
 
@@ -672,20 +631,10 @@ pub(crate) mod tests {
     #[test]
     fn keys_come_out_in_the_canonical_order() {
         let text = sample().to_json();
-        let order: Vec<usize> = [
-            "schemaVersion",
-            "\"id\"",
-            "\"name\"",
-            "canvas",
-            "params",
-            "scenes",
-        ]
-        .iter()
-        .map(|k| {
-            text.find(k)
-                .unwrap_or_else(|| panic!("{k} missing from {text}"))
-        })
-        .collect();
+        let order: Vec<usize> = ["schemaVersion", "\"id\"", "\"name\"", "canvas", "params", "scenes"]
+            .iter()
+            .map(|k| text.find(k).unwrap_or_else(|| panic!("{k} missing from {text}")))
+            .collect();
         let mut sorted = order.clone();
         sorted.sort_unstable();
         assert_eq!(order, sorted, "document keys came out in the wrong order");
@@ -696,10 +645,7 @@ pub(crate) mod tests {
         for (text, ok) in [
             (r#"{"source":"cam1"}"#, true),
             (r#"{"ref":"0192f3a4-1b2c-7d3e-8f40-51a2b3c4d5e6"}"#, true),
-            (
-                r#"{"graphic":"lowerthird/graphic","params":{"name":"Ada"}}"#,
-                true,
-            ),
+            (r#"{"graphic":"lowerthird/graphic","params":{"name":"Ada"}}"#, true),
             (r#"{"children":[]}"#, true),
             (r#"{"sauce":"cam1"}"#, false),
         ] {
@@ -712,15 +658,9 @@ pub(crate) mod tests {
         let mut doc = Collection::new("cycle", Canvas::default());
         let a = Scene::new("A");
         let mut b = Scene::new("B");
-        b.items.push(Item::new(Content::Ref {
-            scene: a.id,
-            overrides: BTreeMap::new(),
-        }));
+        b.items.push(Item::new(Content::Ref { scene: a.id, overrides: BTreeMap::new() }));
         let mut a = a;
-        a.items.push(Item::new(Content::Ref {
-            scene: b.id,
-            overrides: BTreeMap::new(),
-        }));
+        a.items.push(Item::new(Content::Ref { scene: b.id, overrides: BTreeMap::new() }));
         doc.scenes = vec![a, b];
         let err = doc.check_refs().unwrap_err();
         assert!(err.to_string().contains("A -> B -> A"), "{err}");
@@ -730,10 +670,7 @@ pub(crate) mod tests {
     fn a_reference_to_a_scene_that_is_not_here_names_the_item() {
         let mut doc = Collection::new("missing", Canvas::default());
         let mut scene = Scene::new("A");
-        let item = Item::new(Content::Ref {
-            scene: Id::new(),
-            overrides: BTreeMap::new(),
-        });
+        let item = Item::new(Content::Ref { scene: Id::new(), overrides: BTreeMap::new() });
         let id = item.id;
         scene.items.push(item);
         doc.scenes.push(scene);

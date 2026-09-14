@@ -40,43 +40,22 @@ pub const NAMES: &[&str] = &[
 /// or a person copies one and changes it rather than writing from nothing.
 const FILES: &[(&str, &str)] = &[
     ("full", include_str!("../../../../layouts/full.json")),
-    (
-        "pip-top-left",
-        include_str!("../../../../layouts/pip-top-left.json"),
-    ),
-    (
-        "pip-top-right",
-        include_str!("../../../../layouts/pip-top-right.json"),
-    ),
-    (
-        "pip-bottom-left",
-        include_str!("../../../../layouts/pip-bottom-left.json"),
-    ),
-    (
-        "pip-bottom-right",
-        include_str!("../../../../layouts/pip-bottom-right.json"),
-    ),
+    ("pip-top-left", include_str!("../../../../layouts/pip-top-left.json")),
+    ("pip-top-right", include_str!("../../../../layouts/pip-top-right.json")),
+    ("pip-bottom-left", include_str!("../../../../layouts/pip-bottom-left.json")),
+    ("pip-bottom-right", include_str!("../../../../layouts/pip-bottom-right.json")),
     ("two-box", include_str!("../../../../layouts/two-box.json")),
-    (
-        "three-box",
-        include_str!("../../../../layouts/three-box.json"),
-    ),
+    ("three-box", include_str!("../../../../layouts/three-box.json")),
     ("quad", include_str!("../../../../layouts/quad.json")),
     ("l-shape", include_str!("../../../../layouts/l-shape.json")),
     ("split", include_str!("../../../../layouts/split.json")),
-    (
-        "multiview",
-        include_str!("../../../../layouts/multiview.json"),
-    ),
+    ("multiview", include_str!("../../../../layouts/multiview.json")),
 ];
 
 /// The built in layout by name.
 pub fn builtin(name: &str) -> Result<Collection> {
     let (_, text) = FILES.iter().find(|(n, _)| *n == name).with_context(|| {
-        format!(
-            "there is no built in layout called {name:?}. The built in layouts are: {}",
-            NAMES.join(", ")
-        )
+        format!("there is no built in layout called {name:?}. The built in layouts are: {}", NAMES.join(", "))
     })?;
     Collection::from_json(text).with_context(|| format!("reading the built in layout {name:?}"))
 }
@@ -134,10 +113,7 @@ pub fn apply_into(
 /// How much to stretch any geometry the layout wrote as a literal, from the
 /// canvas the layout was authored at to the one being applied.
 fn ratio(from: Canvas, to: Canvas) -> (f64, f64) {
-    (
-        to.width as f64 / from.width as f64,
-        to.height as f64 / from.height as f64,
-    )
+    (to.width as f64 / from.width as f64, to.height as f64 / from.height as f64)
 }
 
 /// Fill in the defaults from the params schema and refuse anything the layout
@@ -152,11 +128,7 @@ fn resolve_values(layout: &Collection, given: &Values) -> Result<Values> {
             bail!(
                 "the layout {:?} has no parameter called {key:?}. It takes: {}",
                 layout.name,
-                if names.is_empty() {
-                    "nothing".to_string()
-                } else {
-                    names.join(", ")
-                }
+                if names.is_empty() { "nothing".to_string() } else { names.join(", ") }
             );
         }
     }
@@ -172,13 +144,7 @@ fn resolve_values(layout: &Collection, given: &Values) -> Result<Values> {
             });
         out.insert(key.clone(), value);
     }
-    for key in layout
-        .params
-        .get("required")
-        .and_then(Value::as_array)
-        .into_iter()
-        .flatten()
-    {
+    for key in layout.params.get("required").and_then(Value::as_array).into_iter().flatten() {
         let Some(key) = key.as_str() else { continue };
         let missing = out.get(key).is_none_or(|v| v.as_str() == Some(""));
         if missing {
@@ -232,21 +198,14 @@ fn resolve_items(
                 if graphic.is_empty() {
                     continue;
                 }
-                Content::Graphic {
-                    graphic,
-                    params: substitute(params, values),
-                }
+                Content::Graphic { graphic, params: substitute(params, values) }
             }
-            Content::Ref {
-                scene: target,
-                overrides,
-            } => Content::Ref {
-                scene: *target,
-                overrides: overrides.clone(),
-            },
-            Content::Children { children } => Content::Children {
-                children: resolve_items(children, values, scope, ratio, scene)?,
-            },
+            Content::Ref { scene: target, overrides } => {
+                Content::Ref { scene: *target, overrides: overrides.clone() }
+            }
+            Content::Children { children } => {
+                Content::Children { children: resolve_items(children, values, scope, ratio, scene)? }
+            }
         };
         for filter in &mut next.filters {
             filter.params = substitute(&filter.params, values);
@@ -271,8 +230,7 @@ fn scale_literals(transform: &mut Transform, (rx, ry): (f64, f64)) {
 fn bind(item: &mut Item, scope: &Scope) -> Result<()> {
     let label = item.name.clone().unwrap_or_else(|| item.id.to_string());
     for (path, source) in &item.bind {
-        let value =
-            expr::eval(source, scope).map_err(|e| anyhow::anyhow!("item {label:?}: {e}"))?;
+        let value = expr::eval(source, scope).map_err(|e| anyhow::anyhow!("item {label:?}: {e}"))?;
         let t = &mut item.transform;
         match path.as_str() {
             "position.x" => t.position.x = value,
@@ -303,9 +261,7 @@ fn substitute_text(text: &str, values: &Values) -> String {
     let mut out = String::with_capacity(text.len());
     let mut rest = text;
     while let Some(start) = rest.find("{{") {
-        let Some(end) = rest[start..].find("}}") else {
-            break;
-        };
+        let Some(end) = rest[start..].find("}}") else { break };
         out.push_str(&rest[..start]);
         let key = rest[start + 2..start + end].trim();
         match values.get(key) {
@@ -337,11 +293,9 @@ fn substitute(value: &Value, values: &Values) -> Value {
             Value::String(substitute_text(s, values))
         }
         Value::Array(a) => Value::Array(a.iter().map(|v| substitute(v, values)).collect()),
-        Value::Object(o) => Value::Object(
-            o.iter()
-                .map(|(k, v)| (k.clone(), substitute(v, values)))
-                .collect(),
-        ),
+        Value::Object(o) => {
+            Value::Object(o.iter().map(|(k, v)| (k.clone(), substitute(v, values))).collect())
+        }
         other => other.clone(),
     }
 }
@@ -373,12 +327,7 @@ mod tests {
         assert_eq!(files, NAMES);
         for name in NAMES {
             let doc = builtin(name).unwrap_or_else(|e| panic!("{name}: {e:#}"));
-            assert_eq!(
-                doc.scenes.len(),
-                1,
-                "a layout is one scene, {name} has {}",
-                doc.scenes.len()
-            );
+            assert_eq!(doc.scenes.len(), 1, "a layout is one scene, {name} has {}", doc.scenes.len());
             assert!(!doc.scenes[0].items.is_empty(), "{name} has no items");
             assert_eq!(doc.params["type"], "object", "{name} has no params block");
         }
@@ -389,21 +338,9 @@ mod tests {
         for name in NAMES {
             let layout = builtin(name).unwrap();
             let values = all_sources(&layout);
-            for canvas in [
-                Canvas {
-                    width: 1920,
-                    height: 1080,
-                    fps: 30,
-                },
-                Canvas {
-                    width: 1280,
-                    height: 720,
-                    fps: 30,
-                },
-            ] {
-                let scene = apply(&layout, &values, canvas).unwrap_or_else(|e| {
-                    panic!("{name} at {}x{}: {e:#}", canvas.width, canvas.height)
-                });
+            for canvas in [Canvas { width: 1920, height: 1080, fps: 30 }, Canvas { width: 1280, height: 720, fps: 30 }] {
+                let scene = apply(&layout, &values, canvas)
+                    .unwrap_or_else(|e| panic!("{name} at {}x{}: {e:#}", canvas.width, canvas.height));
                 let placed = flatten(&scene.items, &canvas);
                 assert!(!placed.is_empty(), "{name} produced no items");
                 let area = Rect::of(&canvas);
@@ -416,11 +353,7 @@ mod tests {
                         p.path,
                         p.rect.rounded()
                     );
-                    assert!(
-                        p.rect.w > 1.0 && p.rect.h > 1.0,
-                        "{name}: {} has no size",
-                        p.path
-                    );
+                    assert!(p.rect.w > 1.0 && p.rect.h > 1.0, "{name}: {} has no size", p.path);
                 }
             }
         }
@@ -464,11 +397,7 @@ mod tests {
         bigger.insert("inset".into(), Value::from(0.5));
         let second = apply_into(&layout, &bigger, canvas, first.id, None).unwrap();
         let ids = |s: &Scene| s.items.iter().map(|i| i.id).collect::<Vec<_>>();
-        assert_eq!(
-            ids(&first),
-            ids(&second),
-            "the inset must stay the same item"
-        );
+        assert_eq!(ids(&first), ids(&second), "the inset must stay the same item");
         let inset = |s: &Scene| s.items.last().unwrap().transform.frame.unwrap().w;
         assert!(inset(&second) > inset(&first), "the inset did not grow");
     }
@@ -517,9 +446,7 @@ mod tests {
     #[test]
     fn a_layout_that_needs_a_source_says_so_by_name() {
         let layout = builtin("full").unwrap();
-        let err = apply(&layout, &Values::new(), Canvas::default())
-            .unwrap_err()
-            .to_string();
+        let err = apply(&layout, &Values::new(), Canvas::default()).unwrap_err().to_string();
         assert!(err.contains("--values a="), "{err}");
     }
 
@@ -528,9 +455,7 @@ mod tests {
         let layout = builtin("full").unwrap();
         let mut values = all_sources(&layout);
         values.insert("wobble".into(), Value::from("x"));
-        let err = apply(&layout, &values, Canvas::default())
-            .unwrap_err()
-            .to_string();
+        let err = apply(&layout, &values, Canvas::default()).unwrap_err().to_string();
         assert!(err.contains("no parameter called \"wobble\""), "{err}");
         assert!(err.contains("It takes: a"), "{err}");
     }
@@ -540,10 +465,7 @@ mod tests {
         let values = parse_values("a=cam1, b=cam2 ,inset=0.4").unwrap();
         assert_eq!(values["a"], Value::from("cam1"));
         assert_eq!(values["inset"], Value::from(0.4));
-        assert!(parse_values("a")
-            .unwrap_err()
-            .to_string()
-            .contains("name=value"));
+        assert!(parse_values("a").unwrap_err().to_string().contains("name=value"));
     }
 
     #[test]
@@ -553,11 +475,7 @@ mod tests {
             let canvas = Canvas::default();
             let scene = apply(&layout, &all_sources(&layout), canvas).unwrap();
             for item in scene.walk() {
-                assert!(
-                    item.bind.is_empty(),
-                    "{name}: {:?} kept its bindings",
-                    item.name
-                );
+                assert!(item.bind.is_empty(), "{name}: {:?} kept its bindings", item.name);
             }
             let findings = validate::scene(&scene, &canvas);
             assert!(
@@ -575,9 +493,6 @@ mod tests {
         let scene = apply(&layout, &values, Canvas::default()).unwrap();
         let text = serde_json::to_string(&scene).unwrap();
         assert!(text.contains("Evening service"), "{text}");
-        assert!(
-            !text.contains("{{"),
-            "a binding was left unresolved: {text}"
-        );
+        assert!(!text.contains("{{"), "a binding was left unresolved: {text}");
     }
 }

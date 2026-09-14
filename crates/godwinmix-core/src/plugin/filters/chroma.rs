@@ -60,11 +60,7 @@ impl Filter for ChromaKey {
 
     fn build(&mut self, canvas: &CanvasCaps, params: &Params) -> Result<gst::Element> {
         validate(params)?;
-        let name = params
-            .get("id")
-            .and_then(|v| v.as_str())
-            .unwrap_or("chroma")
-            .to_string();
+        let name = params.get("id").and_then(|v| v.as_str()).unwrap_or("chroma").to_string();
         let bin = gst::Bin::with_name(&format!("filter-{name}"));
         let pre = make("videoconvert", &format!("filter-{name}-pre"))?;
         let alpha = make("alpha", &format!("filter-{name}-alpha"))?;
@@ -72,19 +68,12 @@ impl Filter for ChromaKey {
         let caps = gstutil::capsfilter(&format!("filter-{name}-caps"), &canvas.video())?;
         apply(&alpha, params);
 
-        bin.add_many([&pre, &alpha, &post, &caps])
-            .context("adding chroma key elements")?;
+        bin.add_many([&pre, &alpha, &post, &caps]).context("adding chroma key elements")?;
         gst::Element::link_many([&pre, &alpha, &post, &caps]).context("linking the chroma key")?;
-        let sink = pre
-            .static_pad("sink")
-            .context("chroma key has no sink pad")?;
-        let src = caps
-            .static_pad("src")
-            .context("chroma key has no src pad")?;
-        bin.add_pad(&gst::GhostPad::with_target(&sink)?)
-            .context("ghosting the sink pad")?;
-        bin.add_pad(&gst::GhostPad::with_target(&src)?)
-            .context("ghosting the src pad")?;
+        let sink = pre.static_pad("sink").context("chroma key has no sink pad")?;
+        let src = caps.static_pad("src").context("chroma key has no src pad")?;
+        bin.add_pad(&gst::GhostPad::with_target(&sink)?).context("ghosting the sink pad")?;
+        bin.add_pad(&gst::GhostPad::with_target(&src)?).context("ghosting the src pad")?;
         self.alpha = Some(alpha);
         Ok(bin.upcast())
     }
@@ -92,9 +81,7 @@ impl Filter for ChromaKey {
     fn configure(&mut self, params: &Params) -> Result<Configure> {
         validate(params)?;
         let Some(alpha) = &self.alpha else {
-            return Ok(Configure::RestartRequired(
-                "the filter is not built yet".into(),
-            ));
+            return Ok(Configure::RestartRequired("the filter is not built yet".into()));
         };
         apply(alpha, params);
         Ok(Configure::Applied)
@@ -108,15 +95,8 @@ impl Filter for ChromaKey {
 /// Write every setting the params carry onto the element, defensively: a
 /// property this GStreamer version does not have is a warning, not a crash.
 fn apply(alpha: &gst::Element, params: &Params) {
-    let method = params
-        .get("method")
-        .and_then(|v| v.as_str())
-        .unwrap_or("green");
-    let element_method = METHODS
-        .iter()
-        .find(|(k, _)| *k == method)
-        .map(|(_, v)| *v)
-        .unwrap_or("green");
+    let method = params.get("method").and_then(|v| v.as_str()).unwrap_or("green");
+    let element_method = METHODS.iter().find(|(k, _)| *k == method).map(|(_, v)| *v).unwrap_or("green");
     crate::probe::set_enum(alpha, "method", element_method);
     if let Some(v) = params.get("target_r").and_then(|v| v.as_integer()) {
         crate::probe::set_int(alpha, "target-r", v.clamp(0, 255));
@@ -213,10 +193,7 @@ mod tests {
     use super::*;
 
     fn params(pairs: &[(&str, toml::Value)]) -> Params {
-        pairs
-            .iter()
-            .map(|(k, v)| (k.to_string(), v.clone()))
-            .collect()
+        pairs.iter().map(|(k, v)| (k.to_string(), v.clone())).collect()
     }
 
     #[test]
@@ -275,9 +252,7 @@ mod tests {
             },
             params,
         };
-        input
-            .attach_filter(&filter, &canvas, false)
-            .expect("a filter goes on at build time");
+        input.attach_filter(&filter, &canvas, false).expect("a filter goes on at build time");
         assert_eq!(input.filter_ids(), vec!["key".to_string()]);
 
         input.start().expect("the source starts with the key on it");

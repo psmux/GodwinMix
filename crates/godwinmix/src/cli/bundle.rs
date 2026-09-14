@@ -37,10 +37,7 @@ impl Default for Zip {
 
 impl Zip {
     pub fn new() -> Self {
-        Self {
-            out: Vec::new(),
-            entries: Vec::new(),
-        }
+        Self { out: Vec::new(), entries: Vec::new() }
     }
 
     /// Add one file. `name` is the path inside the archive, forward slashes,
@@ -63,21 +60,13 @@ impl Zip {
         self.out.extend_from_slice(&0u16.to_le_bytes()); // mod time
         self.out.extend_from_slice(&0x21u16.to_le_bytes()); // mod date: 1980-01-01
         self.out.extend_from_slice(&crc.to_le_bytes());
-        self.out
-            .extend_from_slice(&(data.len() as u32).to_le_bytes());
-        self.out
-            .extend_from_slice(&(data.len() as u32).to_le_bytes());
-        self.out
-            .extend_from_slice(&(name.len() as u16).to_le_bytes());
+        self.out.extend_from_slice(&(data.len() as u32).to_le_bytes());
+        self.out.extend_from_slice(&(data.len() as u32).to_le_bytes());
+        self.out.extend_from_slice(&(name.len() as u16).to_le_bytes());
         self.out.extend_from_slice(&0u16.to_le_bytes()); // extra length
         self.out.extend_from_slice(name.as_bytes());
         self.out.extend_from_slice(data);
-        self.entries.push(Entry {
-            name,
-            crc,
-            size: data.len() as u32,
-            offset,
-        });
+        self.entries.push(Entry { name, crc, size: data.len() as u32, offset });
         true
     }
 
@@ -95,8 +84,7 @@ impl Zip {
             self.out.extend_from_slice(&e.crc.to_le_bytes());
             self.out.extend_from_slice(&e.size.to_le_bytes());
             self.out.extend_from_slice(&e.size.to_le_bytes());
-            self.out
-                .extend_from_slice(&(e.name.len() as u16).to_le_bytes());
+            self.out.extend_from_slice(&(e.name.len() as u16).to_le_bytes());
             self.out.extend_from_slice(&0u16.to_le_bytes()); // extra
             self.out.extend_from_slice(&0u16.to_le_bytes()); // comment
             self.out.extend_from_slice(&0u16.to_le_bytes()); // disk number
@@ -127,11 +115,7 @@ fn crc32(data: &[u8]) -> u32 {
         for (i, entry) in table.iter_mut().enumerate() {
             let mut c = i as u32;
             for _ in 0..8 {
-                c = if c & 1 != 0 {
-                    0xEDB8_8320 ^ (c >> 1)
-                } else {
-                    c >> 1
-                };
+                c = if c & 1 != 0 { 0xEDB8_8320 ^ (c >> 1) } else { c >> 1 };
             }
             *entry = c;
         }
@@ -147,9 +131,7 @@ fn crc32(data: &[u8]) -> u32 {
 // --- redaction ---------------------------------------------------------------
 
 /// Keys whose value never leaves the machine.
-const SECRET_KEYS: &[&str] = &[
-    "token", "secret", "password", "passwd", "key", "auth", "cookie",
-];
+const SECRET_KEYS: &[&str] = &["token", "secret", "password", "passwd", "key", "auth", "cookie"];
 
 /// The config with everything that authorises anybody replaced.
 ///
@@ -198,9 +180,7 @@ fn redact_value(value: &mut toml::Value, key: &str) {
 /// taken out, because on every streaming service the last path segment is the
 /// stream key.
 pub fn redact_uri(uri: &str) -> String {
-    let Some((scheme, rest)) = uri.split_once("://") else {
-        return uri.to_string();
-    };
+    let Some((scheme, rest)) = uri.split_once("://") else { return uri.to_string() };
     let (rest, _query) = rest.split_once('?').unwrap_or((rest, ""));
     let had_query = uri.contains('?');
     // user:password@host
@@ -249,85 +229,43 @@ pub async fn build(options: &BundleOptions) -> Result<(PathBuf, Vec<String>)> {
         }
     };
 
-    add(
-        &mut zip,
-        "versions.txt",
-        versions().into_bytes(),
-        &mut included,
-    );
+    add(&mut zip, "versions.txt", versions().into_bytes(), &mut included);
 
     if let Ok(text) = std::fs::read_to_string(&options.config_path) {
-        add(
-            &mut zip,
-            "config.redacted.toml",
-            redact_config(&text).into_bytes(),
-            &mut included,
-        );
+        add(&mut zip, "config.redacted.toml", redact_config(&text).into_bytes(), &mut included);
     }
 
     // The doctor runs locally whether or not a mixer is up: its answers are
     // about the machine.
     gstreamer::init().ok();
     let checks = godwinmix_core::observe::doctor::run(&options.config_path);
-    add(
-        &mut zip,
-        "doctor.txt",
-        godwinmix_core::observe::doctor::format(&checks).into_bytes(),
-        &mut included,
-    );
+    add(&mut zip, "doctor.txt", godwinmix_core::observe::doctor::format(&checks).into_bytes(), &mut included);
 
     // A running mixer answers with its own last hour, which is authoritative
     // and is fetched below. Without one, the file on disk is what there is.
     if options.url.is_none() {
-        let session = godwinmix_core::observe::session::session()
-            .tail_since(3600)
-            .join("\n");
+        let session = godwinmix_core::observe::session::session().tail_since(3600).join("\n");
         let session = if session.is_empty() {
-            std::fs::read_to_string(godwinmix_core::observe::session::path_in(
-                &options.runtime_dir,
-            ))
-            .map(|text| tail_lines(&text, 20_000))
-            .unwrap_or_default()
+            std::fs::read_to_string(godwinmix_core::observe::session::path_in(&options.runtime_dir))
+                .map(|text| tail_lines(&text, 20_000))
+                .unwrap_or_default()
         } else {
             session
         };
         if !session.is_empty() {
-            add(
-                &mut zip,
-                "session-last-hour.jsonl",
-                session.into_bytes(),
-                &mut included,
-            );
+            add(&mut zip, "session-last-hour.jsonl", session.into_bytes(), &mut included);
         }
     }
 
     for path in godwinmix_core::observe::logs::log_files(&options.runtime_dir) {
-        let Ok(bytes) = std::fs::read(&path) else {
-            continue;
-        };
-        let name = path
-            .file_name()
-            .unwrap_or_default()
-            .to_string_lossy()
-            .to_string();
+        let Ok(bytes) = std::fs::read(&path) else { continue };
+        let name = path.file_name().unwrap_or_default().to_string_lossy().to_string();
         // Ten megabytes of each, from the end, which is the part that matters.
         let cut = bytes.len().saturating_sub(10 * 1024 * 1024);
-        add(
-            &mut zip,
-            &format!("logs/{name}"),
-            bytes[cut..].to_vec(),
-            &mut included,
-        );
+        add(&mut zip, &format!("logs/{name}"), bytes[cut..].to_vec(), &mut included);
     }
 
-    add(
-        &mut zip,
-        "levels.json",
-        godwinmix_core::observe::logs::levels()
-            .to_string()
-            .into_bytes(),
-        &mut included,
-    );
+    add(&mut zip, "levels.json", godwinmix_core::observe::logs::levels().to_string().into_bytes(), &mut included);
 
     if let Some(url) = &options.url {
         for (name, data) in from_running_mixer(url, options.token.as_deref()).await {
@@ -337,20 +275,10 @@ pub async fn build(options: &BundleOptions) -> Result<(PathBuf, Vec<String>)> {
         // In process, which is what a bundle taken by the core itself has.
         for name in godwinmix_core::observe::introspect::names() {
             if let Ok(dot) = godwinmix_core::observe::introspect::dot(&name) {
-                add(
-                    &mut zip,
-                    &format!("dot/{name}.dot"),
-                    dot.into_bytes(),
-                    &mut included,
-                );
+                add(&mut zip, &format!("dot/{name}.dot"), dot.into_bytes(), &mut included);
             }
         }
-        add(
-            &mut zip,
-            "metrics.txt",
-            godwinmix_core::observe::metrics::render().into_bytes(),
-            &mut included,
-        );
+        add(&mut zip, "metrics.txt", godwinmix_core::observe::metrics::render().into_bytes(), &mut included);
     }
 
     let bytes = zip.finish();
@@ -383,15 +311,9 @@ async fn from_running_mixer(url: &str, token: Option<&str>) -> Vec<(String, Vec<
     for (name, path) in [
         ("metrics.txt", "/metrics".to_string()),
         ("status.json", "/api/status".to_string()),
-        (
-            "startup-report.json",
-            "/api/v1/core/startup_report".to_string(),
-        ),
+        ("startup-report.json", "/api/v1/core/startup_report".to_string()),
         ("pipeline-clock.json", "/api/v1/pipeline/clock".to_string()),
-        (
-            "session-last-hour.jsonl",
-            "/api/v1/core/session_log?secs=3600".to_string(),
-        ),
+        ("session-last-hour.jsonl", "/api/v1/core/session_log?secs=3600".to_string()),
     ] {
         if let Ok(response) = get(path).await {
             if let Ok(bytes) = response.bytes().await {
@@ -407,11 +329,7 @@ async fn from_running_mixer(url: &str, token: Option<&str>) -> Vec<(String, Vec<
             .await
             .ok()
             .and_then(|v| v["pipelines"].as_array().cloned())
-            .map(|a| {
-                a.iter()
-                    .filter_map(|v| v.as_str().map(str::to_string))
-                    .collect()
-            })
+            .map(|a| a.iter().filter_map(|v| v.as_str().map(str::to_string)).collect())
             .unwrap_or_default(),
         Err(_) => Vec::new(),
     };
@@ -472,10 +390,7 @@ mod tests {
         let end = &bytes[bytes.len() - 22..];
         assert_eq!(&end[..4], b"PK\x05\x06");
         assert_eq!(u16::from_le_bytes([end[10], end[11]]), 2, "two entries");
-        assert!(
-            bytes.windows(4).any(|w| w == b"PK\x01\x02"),
-            "no central directory"
-        );
+        assert!(bytes.windows(4).any(|w| w == b"PK\x01\x02"), "no central directory");
     }
 
     #[test]
@@ -485,11 +400,7 @@ mod tests {
         assert!(!zip.add("a.txt", b"second"));
         let bytes = zip.finish();
         let end = &bytes[bytes.len() - 22..];
-        assert_eq!(
-            u16::from_le_bytes([end[10], end[11]]),
-            1,
-            "the duplicate was written"
-        );
+        assert_eq!(u16::from_le_bytes([end[10], end[11]]), 1, "the duplicate was written");
     }
 
     /// The CRC is the one thing in a zip that cannot be checked by looking at
@@ -513,11 +424,7 @@ mod tests {
         std::fs::write(&path, zip.finish()).unwrap();
         // No unzip on this runner means no assertion; the structural test
         // above still holds.
-        if let Ok(out) = std::process::Command::new("unzip")
-            .arg("-t")
-            .arg(&path)
-            .output()
-        {
+        if let Ok(out) = std::process::Command::new("unzip").arg("-t").arg(&path).output() {
             assert!(
                 out.status.success(),
                 "unzip refused the archive: {}{}",
@@ -569,14 +476,8 @@ uri = "rtmp://user:swordfish@camera.local/live/secretkey?auth=zzz"
             "rtmp://host/app/REDACTED"
         );
         // Nothing to take out of a two part URL: no key is present.
-        assert_eq!(
-            redact_uri("http://example.com/page"),
-            "http://example.com/page"
-        );
-        assert_eq!(
-            redact_uri("file:///media/clip.mp4"),
-            "file:///media/REDACTED"
-        );
+        assert_eq!(redact_uri("http://example.com/page"), "http://example.com/page");
+        assert_eq!(redact_uri("file:///media/clip.mp4"), "file:///media/REDACTED");
         assert_eq!(redact_uri("not a uri"), "not a uri");
     }
 
@@ -587,11 +488,8 @@ uri = "rtmp://user:swordfish@camera.local/live/secretkey?auth=zzz"
         let config = dir.join("godwinmix.toml");
         std::fs::write(&config, "[control]\ntoken = \"hunter2\"\n").unwrap();
         std::fs::create_dir_all(dir.join(".godwinmix")).unwrap();
-        std::fs::write(
-            dir.join(".godwinmix").join("godwinmix.log"),
-            "{\"level\":\"info\"}\n",
-        )
-        .unwrap();
+        std::fs::write(dir.join(".godwinmix").join("godwinmix.log"), "{\"level\":\"info\"}\n")
+            .unwrap();
 
         let out = dir.join("bundle.zip");
         let (path, included) = build(&BundleOptions {
@@ -624,10 +522,7 @@ uri = "rtmp://user:swordfish@camera.local/live/secretkey?auth=zzz"
     fn the_default_name_is_a_file_name_on_every_platform() {
         let name = default_name();
         assert!(name.ends_with(".zip"));
-        assert!(
-            !name.contains(':'),
-            "a colon is not a file name character on Windows: {name}"
-        );
+        assert!(!name.contains(':'), "a colon is not a file name character on Windows: {name}");
         assert!(!name.contains('/'), "{name}");
     }
 }

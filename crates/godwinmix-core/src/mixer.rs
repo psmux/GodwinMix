@@ -279,9 +279,7 @@ pub struct MixerHandle {
 
 impl MixerHandle {
     pub fn send(&self, cmd: Command) -> Result<()> {
-        self.tx
-            .send(cmd)
-            .map_err(|_| anyhow::anyhow!("mixer is not running"))
+        self.tx.send(cmd).map_err(|_| anyhow::anyhow!("mixer is not running"))
     }
 
     /// Send a command and wait for the mixer to accept or reject it.
@@ -296,8 +294,7 @@ impl MixerHandle {
     pub async fn status(&self) -> Result<MixerStatus> {
         let (tx, rx) = oneshot::channel();
         self.send(Command::Status(tx))?;
-        rx.await
-            .map_err(|_| anyhow::anyhow!("mixer dropped the status request"))
+        rx.await.map_err(|_| anyhow::anyhow!("mixer dropped the status request"))
     }
 
     /// Move part of a source's audio and get back where it ended up. Like
@@ -313,16 +310,8 @@ impl MixerHandle {
         media: Vec<Option<f64>>,
     ) -> Result<AudioOutcome> {
         let (tx, rx) = oneshot::channel();
-        self.send(Command::SetAudio {
-            source,
-            gain,
-            muted,
-            page,
-            media,
-            reply: tx,
-        })?;
-        rx.await
-            .map_err(|_| anyhow::anyhow!("mixer dropped the audio request"))
+        self.send(Command::SetAudio { source, gain, muted, page, media, reply: tx })?;
+        rx.await.map_err(|_| anyhow::anyhow!("mixer dropped the audio request"))
     }
 
     /// Move a source and get back where it actually landed. Waits on a value
@@ -330,13 +319,8 @@ impl MixerHandle {
     /// is not a failure the caller should see as a generic 400.
     pub async fn seek(&self, source: SourceId, position_ms: u64) -> Result<SeekOutcome> {
         let (tx, rx) = oneshot::channel();
-        self.send(Command::Seek {
-            source,
-            position_ms,
-            reply: tx,
-        })?;
-        rx.await
-            .map_err(|_| anyhow::anyhow!("mixer dropped the seek request"))
+        self.send(Command::Seek { source, position_ms, reply: tx })?;
+        rx.await.map_err(|_| anyhow::anyhow!("mixer dropped the seek request"))
     }
 
     /// Put a filter on a source or on the programme, live.
@@ -345,8 +329,7 @@ impl MixerHandle {
     /// once the filter is actually in the pipeline, so a caller that gets `Ok`
     /// knows the picture has changed.
     pub async fn add_filter(&self, cfg: crate::config::FilterConfig) -> Result<()> {
-        self.request(|ack| Command::AddFilter(Box::new(cfg), Some(ack)))
-            .await
+        self.request(|ack| Command::AddFilter(Box::new(cfg), Some(ack))).await
     }
 
     /// Change a filter in place. `filter.set`.
@@ -356,34 +339,26 @@ impl MixerHandle {
         params: crate::config::Params,
     ) -> Result<FilterOutcome> {
         let (tx, rx) = oneshot::channel();
-        self.send(Command::SetFilter {
-            id,
-            params,
-            reply: tx,
-        })?;
-        rx.await
-            .map_err(|_| anyhow::anyhow!("mixer dropped the filter request"))
+        self.send(Command::SetFilter { id, params, reply: tx })?;
+        rx.await.map_err(|_| anyhow::anyhow!("mixer dropped the filter request"))
     }
 
     /// Take a filter out. `filter.remove`.
     pub async fn remove_filter(&self, id: String) -> Result<()> {
-        self.request(|ack| Command::RemoveFilter(id, Some(ack)))
-            .await
+        self.request(|ack| Command::RemoveFilter(id, Some(ack))).await
     }
 
     /// Every filter in place. `filter.list`.
     pub async fn filters(&self) -> Result<Vec<FilterStatus>> {
         let (tx, rx) = oneshot::channel();
         self.send(Command::ListFilters(tx))?;
-        rx.await
-            .map_err(|_| anyhow::anyhow!("mixer dropped the filter listing"))
+        rx.await.map_err(|_| anyhow::anyhow!("mixer dropped the filter listing"))
     }
 
     pub async fn configs(&self) -> Result<RuntimeConfigs> {
         let (tx, rx) = oneshot::channel();
         self.send(Command::Configs(tx))?;
-        rx.await
-            .map_err(|_| anyhow::anyhow!("mixer dropped the configs request"))
+        rx.await.map_err(|_| anyhow::anyhow!("mixer dropped the configs request"))
     }
 
     pub fn subscribe(&self) -> broadcast::Receiver<Envelope> {
@@ -732,6 +707,7 @@ struct SourceTimeline {
 /// is not left wondering for a minute whether the mixer has died.
 const FREEZE_HOLD: Duration = Duration::from_secs(45);
 
+
 // ---------------------------------------------------------------------------
 // Building the programme chain from catalogue entries
 //
@@ -763,10 +739,7 @@ fn encoder_vars(cfg: &Config) -> crate::catalogue::apply::Vars {
 /// compositor picks its own internal format and forcing I420 on it would send
 /// the frame back through system memory to satisfy a caps filter nobody
 /// needed.
-fn programme_caps(
-    canvas: &CanvasCaps,
-    gfx: &crate::catalogue::select::GraphicsChoice,
-) -> gst::Caps {
+fn programme_caps(canvas: &CanvasCaps, gfx: &crate::catalogue::select::GraphicsChoice) -> gst::Caps {
     let Some(feature) = memory_feature(&gfx.memory) else {
         return canvas.video();
     };
@@ -852,14 +825,9 @@ fn upload_bridge(
 /// setter is defensive, so a parser for a codec that has no such thing simply
 /// ignores it.
 fn parser_for(name: Option<&str>, element_name: &str) -> Result<Vec<gst::Element>> {
-    let Some(name) = name else {
-        return Ok(Vec::new());
-    };
+    let Some(name) = name else { return Ok(Vec::new()) };
     if !crate::probe::exists(name) {
-        warn!(
-            parser = name,
-            "the catalogue names a parser this machine does not have"
-        );
+        warn!(parser = name, "the catalogue names a parser this machine does not have");
         return Ok(Vec::new());
     }
     let el = make(name, element_name)?;
@@ -912,10 +880,7 @@ impl Mixer {
         let (tx, rx) = mpsc::unbounded_channel();
         let (bus_tx, bus_rx) = mpsc::unbounded_channel();
         let events = EventBus::new(256);
-        let handle = MixerHandle {
-            tx,
-            events: events.clone(),
-        };
+        let handle = MixerHandle { tx, events: events.clone() };
 
         let program = gst::Pipeline::with_name("program");
 
@@ -1052,17 +1017,7 @@ impl Mixer {
         let mut slate_chain: Vec<gst::Element> = vec![slate.clone(), slate_caps.clone()];
         slate_chain.extend(upload_bridge(gfx, "slate")?);
 
-        let fixed = [
-            &vmix,
-            &vmix_caps,
-            &vraw_tee,
-            &amix,
-            &amix_caps,
-            &level,
-            &araw_tee,
-            &silence,
-            &silence_caps,
-        ];
+        let fixed = [&vmix, &vmix_caps, &vraw_tee, &amix, &amix_caps, &level, &araw_tee, &silence, &silence_caps];
         let all: Vec<&gst::Element> = fixed
             .into_iter()
             .chain(vchain.iter())
@@ -1080,13 +1035,12 @@ impl Mixer {
             .context("linking audio mixer")?;
         link_from(&araw_tee, &achain).context("linking audio encoder")?;
 
-        gst::Element::link_many(slate_chain.iter().collect::<Vec<_>>()).context("linking slate")?;
+        gst::Element::link_many(slate_chain.iter().collect::<Vec<_>>())
+            .context("linking slate")?;
         gst::Element::link(&silence, &silence_caps).context("linking silence")?;
 
         // Slate sits at the bottom of the z order, fully opaque, forever.
-        let slate_pad = vmix
-            .request_pad_simple("sink_%u")
-            .context("compositor refused slate pad")?;
+        let slate_pad = vmix.request_pad_simple("sink_%u").context("compositor refused slate pad")?;
         set_pad_u32(&slate_pad, "zorder", 0);
         slate_pad.set_property("alpha", 1.0f64);
         slate_chain
@@ -1096,9 +1050,7 @@ impl Mixer {
             .link(&slate_pad)
             .context("linking slate into the mixer")?;
 
-        let silence_pad = amix
-            .request_pad_simple("sink_%u")
-            .context("mixer refused silence pad")?;
+        let silence_pad = amix.request_pad_simple("sink_%u").context("mixer refused silence pad")?;
         silence_pad.set_property("volume", 1.0f64);
         silence_caps
             .static_pad("src")
@@ -1179,14 +1131,9 @@ impl Mixer {
             }
         }
 
-        self.watches.push(gstutil::watch_bus(
-            &self.program,
-            gstutil::BusOwner::Programme,
-            self.bus_tx.clone(),
-        )?);
-        self.program
-            .set_state(gst::State::Playing)
-            .context("starting program pipeline")?;
+        self.watches
+            .push(gstutil::watch_bus(&self.program, gstutil::BusOwner::Programme, self.bus_tx.clone())?);
+        self.program.set_state(gst::State::Playing).context("starting program pipeline")?;
 
         for src in self.cfg.sources.clone() {
             let id = src.id.clone();
@@ -1371,9 +1318,7 @@ impl Mixer {
         // before it starts, so the first frame out of it is already keyed. The
         // programme side ones need the branch registered first and go on below.
         let configured = self.configured_filters(&cfg.id);
-        for f in configured
-            .iter()
-            .filter(|f| f.attach.side == crate::config::FilterAttachSide::Input)
+        for f in configured.iter().filter(|f| f.attach.side == crate::config::FilterAttachSide::Input)
         {
             if let Err(e) = input.attach_filter(f, &self.canvas, false) {
                 warn!(source = %cfg.id, filter = %f.id, ?e, "could not attach a configured filter");
@@ -1386,8 +1331,7 @@ impl Mixer {
         // operator mid-break, and the program return cell already shows it.
         if in_multiview {
             if let (Some(mv), Some(thumb)) = (&mut self.multiview, input.thumb_proxy()) {
-                mv.add_tile(Some(cfg.id.clone()), &thumb)
-                    .context("adding multiview tile")?;
+                mv.add_tile(Some(cfg.id.clone()), &thumb).context("adding multiview tile")?;
             }
         }
 
@@ -1420,9 +1364,7 @@ impl Mixer {
                 // open on black. A failure here means the file is missing or
                 // unreadable, and must abort rather than cutting the programme
                 // to black for the ad's whole duration.
-                slot.input
-                    .preroll(AD_PREROLL)
-                    .context("preparing media source")
+                slot.input.preroll(AD_PREROLL).context("preparing media source")
             } else {
                 slot.input.start().context("starting input pipeline")
             }
@@ -1570,13 +1512,13 @@ impl Mixer {
 
     /// Change a filter wherever it is.
     fn set_filter(&mut self, id: &str, params: &crate::config::Params) -> FilterOutcome {
-        let outcome = if let Some(slot) = self.programme_filters.iter_mut().find(|f| f.id() == id) {
+        let outcome = if let Some(slot) =
+            self.programme_filters.iter_mut().find(|f| f.id() == id)
+        {
             slot.configure(params)
         } else {
-            let Some(source) = self
-                .sources
-                .iter()
-                .find(|s| s.input.filter_ids().iter().any(|f| f == id))
+            let Some(source) =
+                self.sources.iter().find(|s| s.input.filter_ids().iter().any(|f| f == id))
             else {
                 return FilterOutcome::NoSuchFilter(format!(
                     "no filter called {id} on the programme or on any source"
@@ -1604,7 +1546,9 @@ impl Mixer {
             .sources
             .iter()
             .find(|s| s.input.filter_ids().iter().any(|f| f == id))
-            .with_context(|| format!("no filter called {id} on the programme or on any source"))?;
+            .with_context(|| {
+                format!("no filter called {id} on the programme or on any source")
+            })?;
         source.input.remove_filter(id)?;
         self.broadcast_status();
         Ok(())
@@ -1642,9 +1586,7 @@ impl Mixer {
     /// start at zero, and a compositor judging them against a programme that
     /// has been up for minutes sees them as ancient history.
     fn adopt_clock(&self, pipeline: &gst::Pipeline) {
-        let Some(clock) = self.program.clock() else {
-            return;
-        };
+        let Some(clock) = self.program.clock() else { return };
         pipeline.use_clock(Some(&clock));
         // start-time NONE stops the pipeline resetting base time when it
         // changes state, which would undo the line below.
@@ -1682,9 +1624,7 @@ impl Mixer {
     /// programme if it was there; the programme shows the slate meanwhile, as
     /// for any dead source.
     fn rebuild_source(&mut self, id: &SourceId) {
-        let Some(slot) = self.sources.iter().find(|s| &s.input.id == id) else {
-            return;
-        };
+        let Some(slot) = self.sources.iter().find(|s| &s.input.id == id) else { return };
         let mut cfg = slot.input.config.clone();
         // Carry the desk across. The config this source was built with holds the
         // fader it started at, and a source that comes back an hour later at
@@ -1710,11 +1650,7 @@ impl Mixer {
         // branch while that thread is still pushing and the two wait on each
         // other.
         let held = was_program && self.cfg.stall.hold_last_frame && has_picture;
-        let removed = if held {
-            self.retire_branch(id)
-        } else {
-            self.remove_source(id)
-        };
+        let removed = if held { self.retire_branch(id) } else { self.remove_source(id) };
         if let Err(e) = removed {
             warn!(source = %id, ?e, "could not remove the failed source before building it again");
         }
@@ -1780,9 +1716,7 @@ impl Mixer {
                 );
                 let _ = self.events.send(Event::Alert {
                     severity: Severity::Warning,
-                    message: format!(
-                        "{avoid} has no picture to hold; {next} is on programme meanwhile"
-                    ),
+                    message: format!("{avoid} has no picture to hold; {next} is on programme meanwhile"),
                 });
                 Some(next)
             }
@@ -1882,9 +1816,7 @@ impl Mixer {
     /// The end of a rebuild: the source is back (or is not), so finish what
     /// `rebuild_source` began. Called wherever an add completes.
     fn finish_rebuild(&mut self, cfg: &SourceConfig, added: &Result<()>) {
-        let Some(was_program) = self.rebuilding.remove(&cfg.id) else {
-            return;
-        };
+        let Some(was_program) = self.rebuilding.remove(&cfg.id) else { return };
         match added {
             Ok(()) => {
                 info!(source = %cfg.id, was_program, "source built again");
@@ -1905,11 +1837,7 @@ impl Mixer {
                 // with the failures, which is what stops this being the twelve
                 // second loop that ran for two hours on 2026-09-12.
                 let failures = *self.rebuild_failures.get(&cfg.id).unwrap_or(&0);
-                let delay = self
-                    .cfg
-                    .stall
-                    .rebuild_delay(failures)
-                    .unwrap_or(Duration::from_secs(10));
+                let delay = self.cfg.stall.rebuild_delay(failures).unwrap_or(Duration::from_secs(10));
                 warn!(source = %cfg.id, ?e, failures, ?delay, "building the source again failed; trying again later");
                 self.rebuilding.insert(cfg.id.clone(), was_program);
                 let handle = self.handle.clone();
@@ -1949,13 +1877,8 @@ impl Mixer {
         // The programme-side queues for this source: `pgm-vq-<id>` and
         // `pgm-aq-<id>`, which are the branch's second and fourth elements.
         let level = |q: Option<&gst::Element>| {
-            q.map(|q| {
-                (
-                    q.property::<u32>("current-level-buffers"),
-                    q.property::<u64>("current-level-time") / 1_000_000,
-                )
-            })
-            .unwrap_or((0, 0))
+            q.map(|q| (q.property::<u32>("current-level-buffers"), q.property::<u64>("current-level-time") / 1_000_000))
+                .unwrap_or((0, 0))
         };
         let (vq_buffers, vq_time_ms) = level(Some(&slot.branch.vq));
         let (aq_buffers, aq_time_ms) = level(Some(&slot.branch.aq));
@@ -1979,9 +1902,7 @@ impl Mixer {
     /// just before it is rebuilt, and once when its first picture arrives, so
     /// a build that worked and a build that did not can be read side by side.
     fn log_timeline(&self, id: &SourceId, why: &'static str, stalled: bool) {
-        let Some(slot) = self.sources.iter().find(|s| &s.input.id == id) else {
-            return;
-        };
+        let Some(slot) = self.sources.iter().find(|s| &s.input.id == id) else { return };
         let t = self.timeline_of(slot);
         if stalled {
             warn!(
@@ -2140,23 +2061,15 @@ impl Mixer {
     /// and layout. Once this sidecar exists it is the authoritative list, which
     /// keeps "where do sources come from" a question with a single answer.
     fn persist_runtime(&self) {
-        let Some(path) = &self.runtime_store else {
-            return;
-        };
-        let RuntimeConfigs {
-            sources: live,
-            outputs,
-        } = self.runtime_configs();
+        let Some(path) = &self.runtime_store else { return };
+        let RuntimeConfigs { sources: live, outputs } = self.runtime_configs();
 
         #[derive(serde::Serialize)]
         struct Stored<'a> {
             sources: &'a [SourceConfig],
             outputs: &'a [OutputConfig],
         }
-        let body = match toml::to_string_pretty(&Stored {
-            sources: &live,
-            outputs: &outputs,
-        }) {
+        let body = match toml::to_string_pretty(&Stored { sources: &live, outputs: &outputs }) {
             Ok(b) => format!(
                 "# Sources and outputs managed from the GodwinMix UI or API.\n\
                  # These lists take precedence over the ones in the config file.\n\
@@ -2184,11 +2097,7 @@ impl Mixer {
     /// scheduled one is armed on the pipeline clock, which gets it onto the
     /// intended frame rather than whenever a control message happened to
     /// arrive.
-    pub fn take(
-        &mut self,
-        source: Option<SourceId>,
-        at_running_time_ms: Option<u64>,
-    ) -> Result<()> {
+    pub fn take(&mut self, source: Option<SourceId>, at_running_time_ms: Option<u64>) -> Result<()> {
         if let Some(id) = &source {
             if !self.sources.iter().any(|s| &s.input.id == id) {
                 anyhow::bail!("no such source {id}");
@@ -2219,11 +2128,7 @@ impl Mixer {
             prev.unschedule();
         }
         let id = self.schedule_command(
-            Command::Take {
-                source,
-                at_running_time_ms: None,
-                ack: None,
-            },
+            Command::Take { source, at_running_time_ms: None, ack: None },
             at_ms,
         )?;
         self.pending_take = Some(id);
@@ -2234,14 +2139,8 @@ impl Mixer {
     /// Arm a command on the pipeline clock, so it lands on the intended frame
     /// rather than whenever a control message happened to arrive.
     fn schedule_command(&self, cmd: Command, at_ms: u64) -> Result<gst::SingleShotClockId> {
-        let clock = self
-            .program
-            .clock()
-            .context("program pipeline has no clock")?;
-        let base = self
-            .program
-            .base_time()
-            .context("program pipeline has no base time")?;
+        let clock = self.program.clock().context("program pipeline has no clock")?;
+        let base = self.program.base_time().context("program pipeline has no base time")?;
         let id = clock.new_single_shot_id(base + gst::ClockTime::from_mseconds(at_ms));
         let tx = self.handle.clone();
         let cell = std::sync::Mutex::new(Some(cmd));
@@ -2268,12 +2167,8 @@ impl Mixer {
             let healthy = matches!(slot.input.observed_state(), SourceState::Live);
             let on = is_program && healthy;
 
-            slot.branch
-                .vpad
-                .set_property("alpha", if on { 1.0f64 } else { 0.0f64 });
-            slot.branch
-                .vpad
-                .set_property("zorder", if is_program { 2u32 } else { 1u32 });
+            slot.branch.vpad.set_property("alpha", if on { 1.0f64 } else { 0.0f64 });
+            slot.branch.vpad.set_property("zorder", if is_program { 2u32 } else { 1u32 });
             targets.push((slot.branch.apad.clone(), if on { 1.0f64 } else { 0.0f64 }));
         }
 
@@ -2313,39 +2208,22 @@ impl Mixer {
         // immediate path runs shortly before the cue, so the window between
         // preroll and roll is always the same short one that is known good.
         if let Some(cue) = at_running_time_ms {
-            let now = self
-                .running_time()
-                .unwrap_or(gst::ClockTime::ZERO)
-                .mseconds();
-            let build_at =
-                cue.saturating_sub(AD_LEAD_IN.mseconds() + AD_PREROLL.as_millis() as u64);
+            let now = self.running_time().unwrap_or(gst::ClockTime::ZERO).mseconds();
+            let build_at = cue.saturating_sub(AD_LEAD_IN.mseconds() + AD_PREROLL.as_millis() as u64);
             if build_at > now {
                 if let Some(prev) = self.pending_ad_end.take() {
                     prev.unschedule();
                 }
-                info!(
-                    cue_ms = cue,
-                    build_at_ms = build_at,
-                    "ad break armed on the pipeline clock"
-                );
+                info!(cue_ms = cue, build_at_ms = build_at, "ad break armed on the pipeline clock");
                 self.ad_cue_ms = Some(cue);
                 let id = self.schedule_command(
-                    Command::AdBreak {
-                        uri,
-                        at_running_time_ms: None,
-                        return_to,
-                        ack: None,
-                    },
+                    Command::AdBreak { uri, at_running_time_ms: None, return_to, ack: None },
                     build_at,
                 )?;
                 self.pending_ad_end = Some(id);
                 return Ok(());
             }
-            warn!(
-                cue_ms = cue,
-                now_ms = now,
-                "ad cue is already past; rolling now"
-            );
+            warn!(cue_ms = cue, now_ms = now, "ad cue is already past; rolling now");
         }
 
         if self.ad.is_some() {
@@ -2378,14 +2256,8 @@ impl Mixer {
             return Err(e).context("preparing the ad break");
         }
 
-        self.ad = Some(AdStatus {
-            uri,
-            return_to,
-            on_air: false,
-        });
-        let _ = self.events.send(Event::AdBreakChanged {
-            ad: self.ad.clone(),
-        });
+        self.ad = Some(AdStatus { uri, return_to, on_air: false });
+        let _ = self.events.send(Event::AdBreakChanged { ad: self.ad.clone() });
 
         self.roll_ad()
     }
@@ -2416,10 +2288,7 @@ impl Mixer {
         // The same offset goes on both pads so the ad stays in lip sync.
         slot.branch.vpad.set_offset(cue.nseconds() as i64);
         slot.branch.apad.set_offset(cue.nseconds() as i64);
-        debug!(
-            cue_ms = cue.mseconds(),
-            "rebasing the ad onto programme time"
-        );
+        debug!(cue_ms = cue.mseconds(), "rebasing the ad onto programme time");
 
         // The file's own duration, known now that it has prerolled.
         let duration = slot
@@ -2432,9 +2301,7 @@ impl Mixer {
         if let Some(ad) = &mut self.ad {
             ad.on_air = true;
         }
-        let _ = self.events.send(Event::AdBreakChanged {
-            ad: self.ad.clone(),
-        });
+        let _ = self.events.send(Event::AdBreakChanged { ad: self.ad.clone() });
         info!(
             cue_ms = cue.mseconds(),
             duration_ms = duration.map(|d| d.mseconds()),
@@ -2473,9 +2340,7 @@ impl Mixer {
             prev.unschedule();
         }
         self.ad_cue_ms = None;
-        let Some(ad) = self.ad.take() else {
-            return Ok(());
-        };
+        let Some(ad) = self.ad.take() else { return Ok(()) };
         info!(return_to = ?ad.return_to, "ad break finished, returning to live");
         self.take(ad.return_to.clone(), None).ok();
         if self.sources.iter().any(|s| s.input.id == AD_ID) {
@@ -2526,11 +2391,7 @@ impl Mixer {
 
     pub fn handle(&mut self, cmd: Command) -> Result<bool> {
         match cmd {
-            Command::Take {
-                source,
-                at_running_time_ms,
-                ack,
-            } => {
+            Command::Take { source, at_running_time_ms, ack } => {
                 // A scheduled cue that lands on the ad has to start it playing,
                 // not merely reveal a paused pipeline.
                 if at_running_time_ms.is_none()
@@ -2546,12 +2407,7 @@ impl Mixer {
                     r?;
                 }
             }
-            Command::AdBreak {
-                uri,
-                at_running_time_ms,
-                return_to,
-                ack,
-            } => {
+            Command::AdBreak { uri, at_running_time_ms, return_to, ack } => {
                 let r = self.start_ad_break(uri, at_running_time_ms, return_to);
                 reply(ack, &r);
                 r?;
@@ -2581,11 +2437,7 @@ impl Mixer {
                 // Which way a source comes back is its own declaration, not a
                 // flag on the core's struct. A kind without `restart-in-place`
                 // is built again from nothing.
-                if self
-                    .sources
-                    .iter()
-                    .any(|s| s.input.id == id && !s.input.restarts_in_place())
-                {
+                if self.sources.iter().any(|s| s.input.id == id && !s.input.restarts_in_place()) {
                     self.rebuild_source(&id);
                 } else if let Some(slot) = self.sources.iter_mut().find(|s| s.input.id == id) {
                     slot.stalled_ticks = 0;
@@ -2598,21 +2450,10 @@ impl Mixer {
                     }
                 }
             }
-            Command::SetAudio {
-                source,
-                gain,
-                muted,
-                page,
-                media,
-                reply,
-            } => {
+            Command::SetAudio { source, gain, muted, page, media, reply } => {
                 let _ = reply.send(self.set_audio(&source, gain, muted, page, &media));
             }
-            Command::Seek {
-                source,
-                position_ms,
-                reply,
-            } => {
+            Command::Seek { source, position_ms, reply } => {
                 let _ = reply.send(self.seek(&source, position_ms));
             }
             Command::ReconnectOutput(id, ack) => {
@@ -2667,22 +2508,12 @@ impl Mixer {
 
     fn on_bus(&mut self, ev: BusEvent) {
         match ev {
-            BusEvent::Error {
-                pipeline,
-                src,
-                message,
-                debug: dbg,
-            } => {
+            BusEvent::Error { pipeline, src, message, debug: dbg } => {
                 debug!(%pipeline, %src, %message, ?dbg, "bus error");
 
                 // An output failing is expected over a long broadcast. Rebuild
                 // just its muxer and sink; the encoder never notices.
-                if let Some(out) = self
-                    .outputs
-                    .iter()
-                    .find(|o| o.owns_pipeline(&pipeline))
-                    .cloned()
-                {
+                if let Some(out) = self.outputs.iter().find(|o| o.owns_pipeline(&pipeline)).cloned() {
                     // A dying connection emits several errors; only the first
                     // arms a retry.
                     if out.try_arm_reconnect() {
@@ -2719,11 +2550,7 @@ impl Mixer {
                     message: format!("program pipeline error from {src}: {message}"),
                 });
             }
-            BusEvent::Warning {
-                pipeline,
-                src,
-                message,
-            } => {
+            BusEvent::Warning { pipeline, src, message } => {
                 debug!(%pipeline, %src, %message, "bus warning");
             }
             BusEvent::Level { src, peak_db } => {
@@ -2774,6 +2601,7 @@ impl Mixer {
         // Reassert visibility so a stall fades to slate and a recovery fades
         // back, without either needing its own event.
         self.apply_visibility(true);
+
 
         // Held frames that have run out of time. Before the liveness sweep, so
         // a source that has come back releases its own held frame there rather
@@ -2908,9 +2736,7 @@ impl Mixer {
     }
 
     fn arm_output_reconnect(&mut self, id: OutputId) {
-        let Some(out) = self.outputs.iter().find(|o| o.id() == &id) else {
-            return;
-        };
+        let Some(out) = self.outputs.iter().find(|o| o.id() == &id) else { return };
         let attempt = self.output_attempts.entry(id.clone()).or_insert(0);
         let delay = out.cfg.reconnect_policy().delay_for(*attempt);
         *attempt += 1;
@@ -3122,10 +2948,7 @@ impl Mixer {
                 return SeekOutcome::Failed(format!("{e:#}"));
             }
         };
-        let now = SourcePositionState {
-            position_ms: landed,
-            duration_ms: slot.input.duration_ms(),
-        };
+        let now = SourcePositionState { position_ms: landed, duration_ms: slot.input.duration_ms() };
         info!(
             source = %id, asked_ms = position_ms, landed_ms = landed,
             duration_ms = ?now.duration_ms, "source moved"
@@ -3267,11 +3090,7 @@ impl Mixer {
     fn multiview_demand(&mut self, d: Demand) -> Result<()> {
         match d {
             Demand::Build(shape) => {
-                if self
-                    .multiview
-                    .as_ref()
-                    .is_some_and(|mv| mv.shape() == shape)
-                {
+                if self.multiview.as_ref().is_some_and(|mv| mv.shape() == shape) {
                     return Ok(());
                 }
                 // A rebuild at another size drops the old one first, so there
@@ -3318,10 +3137,7 @@ impl Mixer {
 
     pub fn shutdown(&mut self) {
         info!("shutting down mixer");
-        for p in [self.pending_take.take(), self.pending_ad_end.take()]
-            .into_iter()
-            .flatten()
-        {
+        for p in [self.pending_take.take(), self.pending_ad_end.take()].into_iter().flatten() {
             p.unschedule();
         }
         for out in &self.outputs {
@@ -3342,10 +3158,7 @@ impl Mixer {
 /// couple of hundred milliseconds. If another take happens mid-fade the
 /// generation changes and this one gives up rather than fighting it.
 fn ramp_volumes(targets: Vec<(gst::Pad, f64)>, duration: Duration, generation: Arc<AtomicU64>) {
-    let start: Vec<f64> = targets
-        .iter()
-        .map(|(p, _)| p.property::<f64>("volume"))
-        .collect();
+    let start: Vec<f64> = targets.iter().map(|(p, _)| p.property::<f64>("volume")).collect();
     if targets
         .iter()
         .zip(&start)
@@ -3451,8 +3264,8 @@ pub fn spawn(
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use crate::plugin::branch::meter_name;
+    use super::*;
 
     /// The mixer runs on a plain OS thread with no Tokio context. Arming a
     /// reconnect from there used to call `tokio::spawn` and panic with "there
@@ -3477,8 +3290,9 @@ mod tests {
         });
         worker.join().unwrap();
 
-        let got =
-            rt.block_on(async { tokio::time::timeout(Duration::from_secs(2), rx.recv()).await });
+        let got = rt.block_on(async {
+            tokio::time::timeout(Duration::from_secs(2), rx.recv()).await
+        });
         assert_eq!(got.unwrap(), Some(7), "scheduled work never ran");
     }
 
@@ -3492,22 +3306,14 @@ mod tests {
         let ids = ["cam", "cam-1", "cam-1-backup", "feed-a-b-c"];
         for id in ids {
             let posted = meter_name(id);
-            let matched: Vec<&str> = ids
-                .iter()
-                .copied()
-                .filter(|candidate| meter_name(candidate) == posted)
-                .collect();
+            let matched: Vec<&str> =
+                ids.iter().copied().filter(|candidate| meter_name(candidate) == posted).collect();
             assert_eq!(matched, vec![id], "{posted} was attributed to {matched:?}");
         }
 
         // The mistake this guards against, spelled out.
         let posted = meter_name("cam-1-backup");
-        let naive = posted
-            .strip_prefix("pgm-alevel-")
-            .unwrap()
-            .split('-')
-            .next()
-            .unwrap();
+        let naive = posted.strip_prefix("pgm-alevel-").unwrap().split('-').next().unwrap();
         assert_eq!(naive, "cam", "the naive read really does go wrong");
         assert_ne!(naive, "cam-1-backup");
 
@@ -3551,12 +3357,8 @@ mod tests {
     #[test]
     fn a_seek_makes_the_aligner_work_the_offset_out_again() {
         let _ = gst::init();
-        let vpad = gst::Pad::builder(gst::PadDirection::Sink)
-            .name("vsink")
-            .build();
-        let apad = gst::Pad::builder(gst::PadDirection::Sink)
-            .name("asink")
-            .build();
+        let vpad = gst::Pad::builder(gst::PadDirection::Sink).name("vsink").build();
+        let apad = gst::Pad::builder(gst::PadDirection::Sink).name("asink").build();
         let aligner = TimelineAligner {
             id: "clip1".into(),
             offset: Mutex::new(None),
@@ -3564,11 +3366,7 @@ mod tests {
             vpad: vpad.clone(),
             apad: apad.clone(),
         };
-        assert_eq!(
-            aligner.offset(),
-            None,
-            "nothing is placed before a segment arrives"
-        );
+        assert_eq!(aligner.offset(), None, "nothing is placed before a segment arrives");
 
         // The source is added a minute into the programme. Its first segment
         // decides the offset.
@@ -3678,17 +3476,12 @@ mod tests {
         let (mix, _handle, _cmds, _bus) = Mixer::build(cfg)?;
         let seen = Arc::new(AtomicU64::new(0));
         let counter = seen.clone();
-        let pad = mix
-            .venc_tee
-            .static_pad("sink")
-            .context("the encoder tee has no sink pad")?;
+        let pad = mix.venc_tee.static_pad("sink").context("the encoder tee has no sink pad")?;
         pad.add_probe(gst::PadProbeType::BUFFER, move |_, _| {
             counter.fetch_add(1, Ordering::Relaxed);
             gst::PadProbeReturn::Ok
         });
-        mix.program
-            .set_state(gst::State::Playing)
-            .context("starting the programme")?;
+        mix.program.set_state(gst::State::Playing).context("starting the programme")?;
         let bus = mix.program.bus().context("the programme has no bus")?;
         let mut failure = None;
         for _ in 0..100 {
@@ -3736,10 +3529,7 @@ mod tests {
         let frames = roll_programme(programme_config(crate::config::Accel::Gl))
             .await
             .expect("the gl programme must run where the elements exist");
-        assert!(
-            frames > 0,
-            "nothing reached the encoder through the GL compositor"
-        );
+        assert!(frames > 0, "nothing reached the encoder through the GL compositor");
     }
 
     /// Pinning a graphics backend that is not here says so rather than
@@ -3755,10 +3545,7 @@ mod tests {
             .expect("cuda is not here and must be reported");
         let text = format!("{err:#}");
         assert!(text.contains("cuda"), "{text}");
-        assert!(
-            text.contains("software"),
-            "the error must list what was available: {text}"
-        );
+        assert!(text.contains("software"), "the error must list what was available: {text}");
     }
 
     /// A panic inside one command must not end the mixer thread.
@@ -3787,16 +3574,10 @@ mod tests {
             panic!("a command went wrong");
         }));
         std::panic::set_hook(previous);
-        assert!(
-            outcome.is_err(),
-            "the panic has to be caught, not propagated"
-        );
+        assert!(outcome.is_err(), "the panic has to be caught, not propagated");
 
         // What the loop does next: say so, and carry on.
-        mix.alert(
-            Severity::Error,
-            "the mixer failed while handling source.add".into(),
-        );
+        mix.alert(Severity::Error, "the mixer failed while handling source.add".into());
         let envelope = tokio::time::timeout(Duration::from_secs(2), events.recv())
             .await
             .expect("an alert arrives")
@@ -3804,10 +3585,7 @@ mod tests {
         match envelope.event {
             Event::Alert { severity, message } => {
                 assert_eq!(severity, Severity::Error);
-                assert!(
-                    message.contains("source.add"),
-                    "the alert names the command: {message}"
-                );
+                assert!(message.contains("source.add"), "the alert names the command: {message}");
             }
             other => panic!("expected an alert, got {other:?}"),
         }

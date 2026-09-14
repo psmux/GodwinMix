@@ -17,12 +17,12 @@
 //! behind `search_tools`. The hot list is a pure function of the profile, so
 //! adding a source or a plugin never invalidates a client's prompt cache.
 
-use crate::control::call::Call;
-use anyhow::{Context, Result};
-use base64::Engine;
 use godwinmix_protocol::mcp_tools;
 use godwinmix_protocol::method::{rest_transform, Registry};
 use godwinmix_protocol::scope::Profile;
+use crate::control::call::Call;
+use anyhow::{Context, Result};
+use base64::Engine;
 use reqwest::header::CONTENT_TYPE;
 use reqwest::{Method, StatusCode};
 use serde_json::{json, Map, Value};
@@ -65,10 +65,7 @@ pub async fn run(url: &str, token: Option<String>, profile: Profile) -> Result<(
         if let Some(reply) = server.handle(&line).await {
             let mut text = serde_json::to_string(&reply).context("encoding reply")?;
             text.push('\n');
-            stdout
-                .write_all(text.as_bytes())
-                .await
-                .context("writing stdout")?;
+            stdout.write_all(text.as_bytes()).await.context("writing stdout")?;
             stdout.flush().await.context("flushing stdout")?;
         }
     }
@@ -98,22 +95,14 @@ impl Server {
         let req: Value = match serde_json::from_str(line) {
             Ok(v) => v,
             Err(e) => {
-                return Some(error_reply(
-                    Value::Null,
-                    PARSE_ERROR,
-                    format!("invalid JSON: {e}"),
-                ))
+                return Some(error_reply(Value::Null, PARSE_ERROR, format!("invalid JSON: {e}")))
             }
         };
         let id = req.get("id").cloned();
         let method = req.get("method").and_then(Value::as_str);
         let params = req.get("params").cloned().unwrap_or(Value::Null);
         let Some(method) = method else {
-            return Some(error_reply(
-                id.unwrap_or(Value::Null),
-                INVALID_REQUEST,
-                "missing method",
-            ));
+            return Some(error_reply(id.unwrap_or(Value::Null), INVALID_REQUEST, "missing method"));
         };
         let Some(id) = id else {
             debug!(method, "notification");
@@ -126,10 +115,7 @@ impl Server {
             "tools/list" => Ok(json!({ "tools": self.tools() })),
             "tools/call" => match params.get("name").and_then(Value::as_str) {
                 Some(name) => {
-                    let args = params
-                        .get("arguments")
-                        .cloned()
-                        .unwrap_or_else(|| json!({}));
+                    let args = params.get("arguments").cloned().unwrap_or_else(|| json!({}));
                     Ok(self.call(name, &args).await)
                 }
                 None => Err((INVALID_PARAMS, "tools/call needs params.name".to_string())),
@@ -165,10 +151,7 @@ impl Server {
     /// `search_tools`: everything that is not in the hot list, found by what
     /// the agent is trying to do rather than by name.
     fn search(&self, args: &Value) -> Value {
-        let query = args
-            .get("query")
-            .and_then(Value::as_str)
-            .unwrap_or_default();
+        let query = args.get("query").and_then(Value::as_str).unwrap_or_default();
         if query.trim().is_empty() {
             return error_result(
                 "search_tools needs a `query`: what you are trying to do, in plain words, \
@@ -203,11 +186,8 @@ impl Server {
     /// from, so a tool cannot point at a path that does not exist.
     fn plan(&self, tool: &str, args: &Value) -> Result<Plan, String> {
         let Some(method) = mcp_tools::method_for(&self.registry, tool) else {
-            let names: Vec<&str> = self
-                .registry
-                .iter()
-                .filter_map(|m| m.mcp.as_ref().map(|b| b.tool))
-                .collect();
+            let names: Vec<&str> =
+                self.registry.iter().filter_map(|m| m.mcp.as_ref().map(|b| b.tool)).collect();
             return Err(format!(
                 "there is no tool {tool:?}. Tools: {}. Use search_tools to find one by what \
                  it does.",
@@ -254,12 +234,7 @@ impl Server {
         // when the mixer happens to be down too.
         self.check_required(tool, method, &args, &path)?;
         let image = tool == "snapshot";
-        Ok(Plan {
-            verb,
-            path,
-            args,
-            image,
-        })
+        Ok(Plan { verb, path, args, image })
     }
 
     /// Every required property of the tool's own input schema, present and
@@ -272,16 +247,11 @@ impl Server {
         args: &Value,
         path: &str,
     ) -> Result<(), String> {
-        let Some(def) = mcp_tools::all_tools(&self.registry)
-            .into_iter()
-            .find(|t| t["name"] == tool)
+        let Some(def) = mcp_tools::all_tools(&self.registry).into_iter().find(|t| t["name"] == tool)
         else {
             return Ok(());
         };
-        let required = def["inputSchema"]["required"]
-            .as_array()
-            .cloned()
-            .unwrap_or_default();
+        let required = def["inputSchema"]["required"].as_array().cloned().unwrap_or_default();
         let missing: Vec<String> = required
             .iter()
             .filter_map(Value::as_str)
@@ -301,11 +271,7 @@ impl Server {
         Err(format!(
             "{tool} needs {}. Call it again with {} filled in; the schema is on the tool, \
              and {method} rejects it for the same reason.",
-            missing
-                .iter()
-                .map(|m| format!("`{m}`"))
-                .collect::<Vec<_>>()
-                .join(" and "),
+            missing.iter().map(|m| format!("`{m}`")).collect::<Vec<_>>().join(" and "),
             missing.join(" and ")
         ))
     }
@@ -321,12 +287,7 @@ impl Server {
                 let query: Vec<(String, String)> = map
                     .iter()
                     .map(|(k, v)| {
-                        (
-                            k.clone(),
-                            v.as_str()
-                                .map(String::from)
-                                .unwrap_or_else(|| v.to_string()),
-                        )
+                        (k.clone(), v.as_str().map(String::from).unwrap_or_else(|| v.to_string()))
                     })
                     .collect();
                 req = req.query(&query);
@@ -350,17 +311,11 @@ impl Server {
                 .and_then(|v| v.to_str().ok())
                 .unwrap_or("image/jpeg")
                 .to_string();
-            let bytes = resp
-                .bytes()
-                .await
-                .map_err(|e| format!("reading image: {e}"))?;
+            let bytes = resp.bytes().await.map_err(|e| format!("reading image: {e}"))?;
             let data = base64::engine::general_purpose::STANDARD.encode(&bytes);
             return Ok(json!({ "content": [{ "type": "image", "data": data, "mimeType": mime }] }));
         }
-        let text = resp
-            .text()
-            .await
-            .map_err(|e| format!("reading response: {e}"))?;
+        let text = resp.text().await.map_err(|e| format!("reading response: {e}"))?;
         Ok(text_result(render_body(&text)))
     }
 }
@@ -387,10 +342,7 @@ fn refusal(status: StatusCode, text: &str) -> String {
             let message = v["error"]["message"].as_str().unwrap_or(text.trim());
             let data = &v["error"]["data"];
             if data.is_object() {
-                format!(
-                    "{message}\n{}",
-                    serde_json::to_string(data).unwrap_or_default()
-                )
+                format!("{message}\n{}", serde_json::to_string(data).unwrap_or_default())
             } else {
                 message.to_string()
             }
@@ -495,16 +447,10 @@ mod tests {
     #[tokio::test]
     async fn notifications_get_no_reply() {
         let s = server();
-        assert!(s
-            .handle(r#"{"jsonrpc":"2.0","method":"notifications/initialized"}"#)
-            .await
-            .is_none());
+        assert!(s.handle(r#"{"jsonrpc":"2.0","method":"notifications/initialized"}"#).await.is_none());
         // Even an unknown notification stays silent; answering it would be a
         // protocol violation.
-        assert!(s
-            .handle(r#"{"jsonrpc":"2.0","method":"notifications/whatever"}"#)
-            .await
-            .is_none());
+        assert!(s.handle(r#"{"jsonrpc":"2.0","method":"notifications/whatever"}"#).await.is_none());
     }
 
     #[tokio::test]
@@ -522,32 +468,14 @@ mod tests {
         let r = ask(r#"{"jsonrpc":"2.0","id":3,"method":"tools/list"}"#).await;
         let tools = r["result"]["tools"].as_array().expect("tools array");
         let names: Vec<&str> = tools.iter().map(|t| t["name"].as_str().unwrap()).collect();
-        for expected in [
-            "take",
-            "list_sources",
-            "agent_state",
-            "add_source",
-            "search_tools",
-        ] {
-            assert!(
-                names.contains(&expected),
-                "missing tool {expected}: {names:?}"
-            );
+        for expected in ["take", "list_sources", "agent_state", "add_source", "search_tools"] {
+            assert!(names.contains(&expected), "missing tool {expected}: {names:?}");
         }
         for t in tools {
             let name = t["name"].as_str().unwrap();
-            assert!(
-                !t["description"].as_str().unwrap().is_empty(),
-                "{name} has no description"
-            );
-            assert_eq!(
-                t["inputSchema"]["type"], "object",
-                "{name} schema is not an object"
-            );
-            assert!(
-                t["annotations"]["readOnlyHint"].is_boolean(),
-                "{name} has no annotations"
-            );
+            assert!(!t["description"].as_str().unwrap().is_empty(), "{name} has no description");
+            assert_eq!(t["inputSchema"]["type"], "object", "{name} schema is not an object");
+            assert!(t["annotations"]["readOnlyHint"].is_boolean(), "{name} has no annotations");
             if name == mcp_tools::SEARCH_TOOL {
                 continue;
             }
@@ -574,13 +502,7 @@ mod tests {
         // reconnect. search_tools is last, because it is the way out.
         assert_eq!(
             names,
-            vec![
-                "agent_state",
-                "take",
-                "add_source",
-                "list_sources",
-                "search_tools"
-            ]
+            vec!["agent_state", "take", "add_source", "list_sources", "search_tools"]
         );
         // A tool that is not in the list is still callable by name.
         assert!(s.plan("remove_output", &json!({ "id": "yt" })).is_ok());
@@ -591,34 +513,19 @@ mod tests {
     #[tokio::test]
     async fn search_tools_finds_what_is_not_in_the_hot_list() {
         let s = Server::new("http://127.0.0.1:1", None, Profile::Minimal);
-        let r = s
-            .call(
-                mcp_tools::SEARCH_TOOL,
-                &json!({ "query": "reconnect an output" }),
-            )
-            .await;
+        let r = s.call(mcp_tools::SEARCH_TOOL, &json!({ "query": "reconnect an output" })).await;
         assert!(r.get("isError").is_none(), "{r:#?}");
         let text = r["content"][0]["text"].as_str().unwrap();
         assert!(text.contains("reconnect_output"), "{text}");
-        assert!(
-            text.contains("inputSchema"),
-            "a match has to carry its schema: {text}"
-        );
+        assert!(text.contains("inputSchema"), "a match has to carry its schema: {text}");
 
         // Plain words, no tool name in them at all.
-        let r = s
-            .call(
-                mcp_tools::SEARCH_TOOL,
-                &json!({ "query": "play a clip then rejoin live" }),
-            )
-            .await;
+        let r = s.call(mcp_tools::SEARCH_TOOL, &json!({ "query": "play a clip then rejoin live" })).await;
         let text = r["content"][0]["text"].as_str().unwrap();
         assert!(text.contains("ad_break"), "{text}");
 
         // Nothing at all still tells the agent what exists.
-        let r = s
-            .call(mcp_tools::SEARCH_TOOL, &json!({ "query": "zzzzqqq" }))
-            .await;
+        let r = s.call(mcp_tools::SEARCH_TOOL, &json!({ "query": "zzzzqqq" })).await;
         let text = r["content"][0]["text"].as_str().unwrap();
         assert!(text.contains("Nothing matches"), "{text}");
         // And an empty query is a mistake worth naming.
@@ -635,10 +542,7 @@ mod tests {
         assert_eq!(r["result"]["isError"], true);
         let text = r["result"]["content"][0]["text"].as_str().unwrap();
         assert!(text.contains("uri"), "{text}");
-        assert!(
-            !text.contains("could not reach"),
-            "it never left the process: {text}"
-        );
+        assert!(!text.contains("could not reach"), "it never left the process: {text}");
 
         // An empty string is missing too, not a value.
         let s = server();
@@ -673,24 +577,16 @@ mod tests {
         assert_eq!(r["result"]["isError"], true);
         let text = r["result"]["content"][0]["text"].as_str().unwrap();
         assert!(text.contains("explode") && text.contains("take"), "{text}");
-        assert!(
-            text.contains("search_tools"),
-            "the way out has to be named: {text}"
-        );
+        assert!(text.contains("search_tools"), "the way out has to be named: {text}");
     }
 
     #[tokio::test]
     async fn an_unreachable_mixer_is_an_error_result() {
         // Port 1 has nothing listening; the failure must come back as a tool
         // result the agent can read, not take the server down.
-        let r =
-            ask(r#"{"jsonrpc":"2.0","id":10,"method":"tools/call","params":{"name":"status"}}"#)
-                .await;
+        let r = ask(r#"{"jsonrpc":"2.0","id":10,"method":"tools/call","params":{"name":"status"}}"#).await;
         assert_eq!(r["result"]["isError"], true);
-        assert!(r["result"]["content"][0]["text"]
-            .as_str()
-            .unwrap()
-            .contains("could not reach"));
+        assert!(r["result"]["content"][0]["text"].as_str().unwrap().contains("could not reach"));
     }
 
     /// Plans go to `/api/v1`, at the paths the transform rule produces.
@@ -703,37 +599,24 @@ mod tests {
         };
         assert_eq!(at("take", json!({})), "POST /api/v1/program/take");
         assert_eq!(at("list_sources", json!({})), "GET /api/v1/sources");
-        assert_eq!(
-            at("add_source", json!({ "uri": "rtmp://h/l" })),
-            "POST /api/v1/sources"
-        );
-        assert_eq!(
-            at("remove_source", json!({ "id": "cam1" })),
-            "DELETE /api/v1/sources/cam1"
-        );
+        assert_eq!(at("add_source", json!({ "uri": "rtmp://h/l" })), "POST /api/v1/sources");
+        assert_eq!(at("remove_source", json!({ "id": "cam1" })), "DELETE /api/v1/sources/cam1");
         assert_eq!(
             at("reconnect_output", json!({ "id": "yt" })),
             "POST /api/v1/outputs/yt/reconnect"
         );
         assert_eq!(at("agent_state", json!({})), "GET /api/v1/agent/state");
-        assert_eq!(
-            at("snapshot", json!({ "id": "program" })),
-            "GET /api/v1/snapshot/program"
-        );
+        assert_eq!(at("snapshot", json!({ "id": "program" })), "GET /api/v1/snapshot/program");
 
         // The id moves from the body to the path, so the body carries only the
         // rest of the arguments.
-        let p = s
-            .plan("snapshot", &json!({ "id": "program", "width": 640 }))
-            .unwrap();
+        let p = s.plan("snapshot", &json!({ "id": "program", "width": 640 })).unwrap();
         assert!(p.image);
         assert_eq!(p.args["width"], 640);
         assert!(p.args.get("id").is_none());
 
         // An id that would change the route is refused rather than encoded.
-        assert!(s
-            .plan("remove_source", &json!({ "id": "../status" }))
-            .is_err());
+        assert!(s.plan("remove_source", &json!({ "id": "../status" })).is_err());
         assert!(s.plan("remove_source", &json!({})).is_err());
     }
 
@@ -748,18 +631,9 @@ mod tests {
                 "data": { "valid": ["cam1", "cam2"], "retryable": false }
             }
         });
-        let text = refusal(
-            StatusCode::NOT_FOUND,
-            &serde_json::to_string(&body).unwrap(),
-        );
-        assert!(
-            text.contains("cam9") && text.contains("cam1, cam2"),
-            "{text}"
-        );
-        assert!(
-            text.contains("\"retryable\":false"),
-            "the data rides along: {text}"
-        );
+        let text = refusal(StatusCode::NOT_FOUND, &serde_json::to_string(&body).unwrap());
+        assert!(text.contains("cam9") && text.contains("cam1, cam2"), "{text}");
+        assert!(text.contains("\"retryable\":false"), "the data rides along: {text}");
         // A legacy route's plain text answer still reads.
         let text = refusal(StatusCode::BAD_REQUEST, "no such source cam9");
         assert!(text.contains("no such source cam9"), "{text}");

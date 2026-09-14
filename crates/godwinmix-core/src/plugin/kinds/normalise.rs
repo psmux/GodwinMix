@@ -46,13 +46,7 @@ impl ThumbEnd {
     }
 
     fn elements(&self) -> [&gst::Element; 5] {
-        [
-            &self.queue,
-            &self.scale,
-            &self.rate,
-            &self.caps,
-            &self.proxy,
-        ]
+        [&self.queue, &self.scale, &self.rate, &self.caps, &self.proxy]
     }
 }
 
@@ -101,11 +95,7 @@ impl Normaliser {
         // running time is minutes in, so livesync judges every early frame late
         // and discards it: an eight second ad lost its first 1.4 seconds. Media
         // sources are rebased on the mixer pad instead.
-        let vsync = if livesync {
-            optional_livesync(&format!("{id}-vsync"))?
-        } else {
-            None
-        };
+        let vsync = if livesync { optional_livesync(&format!("{id}-vsync"))? } else { None };
         let vtee = make("tee", &format!("{id}-vtee"))?;
         vtee.set_property("allow-not-linked", true);
 

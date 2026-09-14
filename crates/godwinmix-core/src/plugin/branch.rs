@@ -119,23 +119,12 @@ impl ProgrammeBranch {
             alevel,
             amute.clone(),
         ];
-        ctx.program
-            .add_many(&elements)
-            .context("adding source branch")?;
+        ctx.program.add_many(&elements).context("adding source branch")?;
         gst::Element::link_many([&elements[0], &elements[1]]).context("linking source video")?;
-        gst::Element::link_many([
-            &elements[2],
-            &elements[3],
-            &elements[4],
-            &elements[5],
-            &elements[6],
-        ])
-        .context("linking source audio")?;
+        gst::Element::link_many([&elements[2], &elements[3], &elements[4], &elements[5], &elements[6]])
+            .context("linking source audio")?;
 
-        let vpad = ctx
-            .vmix
-            .request_pad_simple("sink_%u")
-            .context("compositor refused a pad")?;
+        let vpad = ctx.vmix.request_pad_simple("sink_%u").context("compositor refused a pad")?;
         vpad.set_property("zorder", 1u32);
         // New sources arrive invisible and silent. Nothing reaches program
         // until an operator asks for it.
@@ -150,10 +139,7 @@ impl ProgrammeBranch {
             .link(&vpad)
             .context("linking video into mixer")?;
 
-        let apad = ctx
-            .amix
-            .request_pad_simple("sink_%u")
-            .context("mixer refused a pad")?;
+        let apad = ctx.amix.request_pad_simple("sink_%u").context("mixer refused a pad")?;
         apad.set_property("volume", 0.0f64);
         // The mute is the last thing before the mixer, so it is what links in.
         amute
@@ -162,17 +148,7 @@ impl ProgrammeBranch {
             .link(&apad)
             .context("linking audio into mixer")?;
 
-        Ok(Self {
-            id: id.clone(),
-            elements,
-            vq,
-            again,
-            amute,
-            aq,
-            vpad,
-            apad,
-            meter,
-        })
+        Ok(Self { id: id.clone(), elements, vq, again, amute, aq, vpad, apad, meter })
     }
 
     /// Bring every element up to the pipeline's state.
@@ -196,8 +172,7 @@ impl ProgrammeBranch {
             tracing::warn!(source = %self.id, "ignoring a fader value that is not a number");
             return;
         }
-        self.again
-            .set_property("volume", gain.clamp(0.0, MAX_SOURCE_GAIN));
+        self.again.set_property("volume", gain.clamp(0.0, MAX_SOURCE_GAIN));
     }
 
     pub fn muted(&self) -> bool {

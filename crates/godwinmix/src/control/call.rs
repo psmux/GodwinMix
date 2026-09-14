@@ -8,14 +8,14 @@
 //! The order matters and is the same on `/rpc` and on `/api/v1`, because they
 //! are the same call arriving by different doors.
 
-use crate::control::AppState;
-use godwinmix_core::snapshot::Tracker;
 use godwinmix_protocol::error::{ErrorCode, RpcError};
 use godwinmix_protocol::idempotency::Lookup;
 use godwinmix_protocol::method::Registry;
 use godwinmix_protocol::rpc::CallEnvelope;
 use godwinmix_protocol::scope::{ConfirmPolicy, Token};
 use godwinmix_protocol::MutationMeta;
+use crate::control::AppState;
+use godwinmix_core::snapshot::Tracker;
 use serde::de::DeserializeOwned;
 use serde_json::{json, Value};
 use std::sync::Arc;
@@ -108,18 +108,11 @@ pub async fn dispatch(
             ),
         )
         .with("method", method)
-        .with(
-            "nearest",
-            near.iter().map(|s| s.to_string()).collect::<Vec<_>>(),
-        ));
+        .with("nearest", near.iter().map(|s| s.to_string()).collect::<Vec<_>>()));
     };
 
     if !token.has(def.scope) {
-        return Err(RpcError::scope(
-            method,
-            def.scope.as_str(),
-            &token.scope_names(),
-        ));
+        return Err(RpcError::scope(method, def.scope.as_str(), &token.scope_names()));
     }
     if let Some(refusal) = rehearsal_refusal(app, method) {
         return Err(refusal);
@@ -145,9 +138,7 @@ pub async fn dispatch(
 
     // A replay is looked up before the work and stored after it, so two
     // clients racing on one key both end up with the first answer.
-    let key = envelope
-        .idempotency_key
-        .filter(|_| def.mutating && !dry_run);
+    let key = envelope.idempotency_key.filter(|_| def.mutating && !dry_run);
     if let Some(key) = &key {
         if let Lookup::Replay(body) = app.idempotency.lookup(key, method, &params)? {
             info!(%trace_id, method, key, "replayed from the idempotency cache");
@@ -220,10 +211,7 @@ pub fn dry_run_answer(method: &str, would_change: bool, diff: Vec<String>) -> Va
 /// Every mutating answer says whether retrying is safe, so a client never has
 /// to guess (03 section 6).
 fn stamp(body: &mut Value, idempotent: bool) {
-    let meta = MutationMeta {
-        replayed: false,
-        should_retry: idempotent,
-    };
+    let meta = MutationMeta { replayed: false, should_retry: idempotent };
     if let Some(map) = body.as_object_mut() {
         map.insert("should_retry".into(), json!(meta.should_retry));
     }
