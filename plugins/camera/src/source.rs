@@ -2,7 +2,7 @@
 
 use std::time::Duration;
 
-use godwinmix_capture_common::Capture;
+use godwinmix_capture_common::{capture, Capture};
 use godwinmix_sdk::prelude::*;
 use serde_json::Value;
 
@@ -15,6 +15,14 @@ use crate::tools;
 /// The core allows a plugin five seconds to answer `start`. A camera on macOS
 /// takes about two to wake up; this leaves the rest of the budget alone.
 const FIRST_FRAME_WITHIN: Duration = Duration::from_millis(2_500);
+
+/// How many times to ask for the camera before giving up.
+///
+/// `restart-in-place` hands the device back and asks for it again within
+/// milliseconds, and on macOS it is not free yet. Three tries over half a
+/// second covers it and still leaves most of the core's five second budget.
+const OPEN_ATTEMPTS: u32 = 3;
+const OPEN_GAP: Duration = Duration::from_millis(250);
 
 pub struct CameraSource {
     canvas: Canvas,
@@ -55,34 +63,24 @@ impl CameraSource {
     }
 
     fn open(&mut self, params: &StartParams) -> Result<(), RpcError> {
-        let pipeline = pipeline::build(
-            &self.settings,
-            params.canvas,
-            params.transport,
-            &params.media,
-        )
-        .map_err(internal)?;
-        let capture = Capture::start(pipeline, Some("gmx-video-queue"), self.reporter.clone())
-            .map_err(internal)?;
-        // A camera takes a second or two to hand over its first frame, and the
-        // core builds its half of the pipeline the moment this returns. Waiting
-        // here means the picture is already flowing when the core connects,
-        // rather than the operator watching an empty socket. Bounded well
-        // inside the core's five second budget for `start`; a camera that never
-        // arrives still starts, and `health` says what happened.
-        if !capture.wait_for_data(FIRST_FRAME_WITHIN) {
-            if let Some(detail) = capture.fault() {
-                return Err(internal(format!("{} did not start: {detail}", self.what())));
-            }
-            if let Some(r) = &self.reporter {
-                r.warn(format!(
-                    "{} has not sent a frame yet after {:.1} s. Carrying on; `health` will \
-                     say whether it arrives.",
-                    self.what(),
-                    FIRST_FRAME_WITHIN.as_secs_f32()
-                ));
-            }
-        }
+        let settings = self.settings.clone();
+        let params = params.clone();
+        let reporter = self.reporter.clone();
+        let capture = capture::open_with_retry(OPEN_ATTEMPTS, OPEN_GAP, FIRST_FRAME_WITHIN, reporter.as_ref(), || {
+            let pipeline = pipeline::build(
+                &settings,
+                params.canvas,
+                params.transport,
+                &params.media,
+            )?;
+            Capture::start(pipeline, Some("gmx-video-queue"), reporter.clone())
+        })
+        .map_err(|why| {
+            internal(format!(
+                "{} would not start: {why}",
+                describe(&settings)
+            ))
+        })?;
         if let Some(r) = &self.reporter {
             r.info(format!(
                 "{} is running at {}x{}@{} over {}",
@@ -95,7 +93,7 @@ impl CameraSource {
         }
         self.canvas = params.canvas;
         self.capture = Some(capture);
-        self.last_start = Some(params.clone());
+        self.last_start = Some(params);
         Ok(())
     }
 
@@ -167,6 +165,15 @@ impl Source for CameraSource {
 
     fn call(&mut self, method: &str, params: Value) -> Result<Value, RpcError> {
         tools::dispatch(method, params)
+    }
+}
+
+/// The camera as an error message would name it, without needing `self`.
+fn describe(settings: &Settings) -> String {
+    if settings.label.is_empty() {
+        "the camera".into()
+    } else {
+        format!("the camera '{}'", settings.label)
     }
 }
 

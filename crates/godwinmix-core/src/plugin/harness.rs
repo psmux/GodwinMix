@@ -796,7 +796,13 @@ pub fn check_kill(cfg: &SourceConfig, allow_exec: bool) -> CheckResult {
             ),
         );
     }
-    if longest > MAX_FRAME_INTERVAL {
+    // The interval limit is about the picture. A freeze frame is what covers a
+    // gap in the programme's video, and there is no such thing for sound: the
+    // aligner fills a gap with silence, so a source whose audio pauses for a
+    // few tens of milliseconds across a restart has not stalled the programme.
+    // What matters for an audio only source is that the sound came back, which
+    // was checked above.
+    if carries_video && longest > MAX_FRAME_INTERVAL {
         return CheckResult::fail(
             "kill",
             format!(

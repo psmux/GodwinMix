@@ -42,7 +42,11 @@ pub const CANDIDATES: &[&str] = if cfg!(target_os = "linux") {
 } else if cfg!(target_os = "macos") {
     &["avfvideosrc"]
 } else if cfg!(target_os = "windows") {
-    &["d3d11screencapturesrc", "dxgiscreencapsrc", "gdiscreencapsrc"]
+    &[
+        "d3d11screencapturesrc",
+        "dxgiscreencapsrc",
+        "gdiscreencapsrc",
+    ]
 } else {
     &["videotestsrc"]
 };
@@ -60,7 +64,11 @@ pub fn chain(factory: &str, canvas: Canvas) -> String {
     parts.push("videoconvert".into());
     parts.push("videoscale".into());
     parts.push("videorate".into());
-    parts.push(wiring::canvas_video_caps(canvas.width, canvas.height, canvas.fps));
+    parts.push(wiring::canvas_video_caps(
+        canvas.width,
+        canvas.height,
+        canvas.fps,
+    ));
     parts[0] = format!("{} name={HEAD}", parts[0]);
     parts.join(" ! ")
 }
@@ -73,8 +81,7 @@ pub fn build(
     address: &str,
 ) -> Result<gst::Pipeline, String> {
     let factory = factory_for(settings)?;
-    let description =
-        wiring::Wiring::video_only(chain(&factory, canvas)).description(transport)?;
+    let description = wiring::Wiring::video_only(chain(&factory, canvas)).description(transport)?;
     let pipeline = capture::build(&description)?;
     wiring::bind(&pipeline, transport, address)?;
     let source = open(&factory, settings)?;
@@ -118,7 +125,12 @@ pub fn open(factory: &str, settings: &Settings) -> Result<gst::Element, String> 
         .map_err(|e| format!("this machine has no '{factory}' element: {e}"))?;
     // AVFoundation's video source is a camera unless it is told otherwise.
     elements::set_flag(&element, "capture-screen", true);
-    for name in ["capture-screen-cursor", "show-pointer", "show-cursor", "cursor"] {
+    for name in [
+        "capture-screen-cursor",
+        "show-pointer",
+        "show-cursor",
+        "cursor",
+    ] {
         elements::set_flag(&element, name, settings.show_cursor);
     }
     for name in ["device-index", "monitor-index", "monitor"] {
@@ -189,8 +201,14 @@ mod tests {
     fn the_chain_ends_at_the_canvas_contract() {
         let chain = chain("ximagesrc", canvas());
         assert!(chain.contains("format=I420"), "{chain}");
-        assert!(chain.contains("width=1280,height=720,framerate=30/1"), "{chain}");
-        assert!(chain.starts_with(&format!("capsfilter caps=video/x-raw name={HEAD}")), "{chain}");
+        assert!(
+            chain.contains("width=1280,height=720,framerate=30/1"),
+            "{chain}"
+        );
+        assert!(
+            chain.starts_with(&format!("capsfilter caps=video/x-raw name={HEAD}")),
+            "{chain}"
+        );
         assert!(!chain.contains("d3d11"), "{chain}");
     }
 
@@ -199,10 +217,16 @@ mod tests {
         godwinmix_capture_common::init().unwrap();
         let chain = chain("d3d11screencapturesrc", canvas());
         if elements::exists("d3d11download") {
-            assert!(chain.starts_with(&format!("d3d11convert name={HEAD}")), "{chain}");
+            assert!(
+                chain.starts_with(&format!("d3d11convert name={HEAD}")),
+                "{chain}"
+            );
             assert!(chain.contains("d3d11download"), "{chain}");
         } else {
-            assert!(!chain.contains("d3d11download"), "not on this platform: {chain}");
+            assert!(
+                !chain.contains("d3d11download"),
+                "not on this platform: {chain}"
+            );
         }
     }
 
@@ -217,7 +241,11 @@ mod tests {
         if cfg!(target_os = "windows") {
             assert_eq!(
                 CANDIDATES,
-                &["d3d11screencapturesrc", "dxgiscreencapsrc", "gdiscreencapsrc"]
+                &[
+                    "d3d11screencapturesrc",
+                    "dxgiscreencapsrc",
+                    "gdiscreencapsrc"
+                ]
             );
         }
     }

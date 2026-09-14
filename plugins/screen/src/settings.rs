@@ -35,7 +35,10 @@ impl Settings {
                 .min(15) as u32,
             region: parse_region(&text(params, "region")),
             // The schema's default is true, so a missing key means true here.
-            show_cursor: params.get("show_cursor").and_then(Value::as_bool).unwrap_or(true),
+            show_cursor: params
+                .get("show_cursor")
+                .and_then(Value::as_bool)
+                .unwrap_or(true),
             display: text(params, "display"),
             node_id: text(params, "node_id"),
             label: text(params, "label"),
@@ -58,15 +61,26 @@ impl Settings {
 }
 
 fn text(params: &Value, key: &str) -> String {
-    params.get(key).and_then(Value::as_str).unwrap_or_default().trim().to_string()
+    params
+        .get(key)
+        .and_then(Value::as_str)
+        .unwrap_or_default()
+        .trim()
+        .to_string()
 }
 
 fn parse_region(text: &str) -> Option<Region> {
-    let numbers: Vec<u32> = text.split(',').filter_map(|n| n.trim().parse().ok()).collect();
+    let numbers: Vec<u32> = text
+        .split(',')
+        .filter_map(|n| n.trim().parse().ok())
+        .collect();
     match numbers[..] {
-        [x, y, width, height] if width > 0 && height > 0 => {
-            Some(Region { x, y, width, height })
-        }
+        [x, y, width, height] if width > 0 && height > 0 => Some(Region {
+            x,
+            y,
+            width,
+            height,
+        }),
         _ => None,
     }
 }
@@ -88,7 +102,12 @@ mod tests {
     fn a_region_is_read_and_a_broken_one_is_ignored() {
         assert_eq!(
             Settings::from(&json!({"region": "10,20,640,480"})).region,
-            Some(Region { x: 10, y: 20, width: 640, height: 480 })
+            Some(Region {
+                x: 10,
+                y: 20,
+                width: 640,
+                height: 480
+            })
         );
         assert_eq!(Settings::from(&json!({"region": ""})).region, None);
         assert_eq!(Settings::from(&json!({"region": "10,20"})).region, None);

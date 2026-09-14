@@ -12,6 +12,7 @@
 //! | [`wiring`] | turn a chain of elements into a pipeline description that ends at the transport the core negotiated |
 //! | [`capture`] | run that pipeline: a bus watch on its own thread, a frame count, and a `health` with a number in it |
 //! | [`devices`] | GStreamer's `DeviceMonitor`, read as `discover` candidates |
+//! | [`fifo`] | the programme FIFO an output receives media on, opened without deadlocking the core |
 //! | [`space`] | free bytes on the filesystem holding a path |
 //!
 //! Nothing here blocks a streaming thread, and nothing here allocates per
@@ -19,7 +20,9 @@
 //! watch is a thread that wakes ten times a second and usually goes back to
 //! sleep.
 
-// Every module but `space` is safe Rust. That one makes two system calls for
+// Every module but `space` and `fifo` is safe Rust. Those two make system
+// calls, for the free space on a disk and for a FIFO that must be opened
+// without waiting, and there is no safe way to ask. That one makes two system calls for
 // the free space on a disk, the same two the core's own doctor makes, and
 // there is no safe way to ask.
 #![deny(unsafe_op_in_unsafe_fn)]
@@ -27,6 +30,7 @@
 pub mod capture;
 pub mod devices;
 pub mod elements;
+pub mod fifo;
 pub mod space;
 pub mod wiring;
 
