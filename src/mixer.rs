@@ -650,6 +650,149 @@ struct SourceTimeline {
 /// is not left wondering for a minute whether the mixer has died.
 const FREEZE_HOLD: Duration = Duration::from_secs(45);
 
+
+// ---------------------------------------------------------------------------
+// Building the programme chain from catalogue entries
+//
+// None of these name a codec, a parser or a muxer. They take what the
+// catalogue chose and turn it into elements, which is why adding AV1 or a new
+// GPU compositor is a block in `codecs.toml` and not a change here.
+// ---------------------------------------------------------------------------
+
+/// The running configuration in the units the catalogue's `{unit, from}`
+/// properties name.
+fn encoder_vars(cfg: &Config) -> crate::catalogue::apply::Vars {
+    let fps = cfg.canvas.fps.max(1) as i64;
+    crate::catalogue::apply::Vars {
+        video_bitrate_kbps: cfg.program.video_bitrate_kbps as i64,
+        audio_bitrate_kbps: cfg.program.audio_bitrate_kbps as i64,
+        keyframe_secs: cfg.program.keyframe_interval_secs as i64,
+        keyframe_frames: fps * cfg.program.keyframe_interval_secs as i64,
+        fps,
+        cpu_count: crate::catalogue::apply::cpu_count(),
+    }
+}
+
+/// The caps the compositor's output is pinned to.
+///
+/// With the software entry this is the canvas contract unchanged: I420 at
+/// canvas size, colorimetry pinned, which is what every source is already
+/// converted to. With a GPU entry the format is left to the backend and only
+/// the geometry and the memory type are pinned, because a GL or CUDA
+/// compositor picks its own internal format and forcing I420 on it would send
+/// the frame back through system memory to satisfy a caps filter nobody
+/// needed.
+fn programme_caps(canvas: &CanvasCaps, gfx: &crate::catalogue::select::GraphicsChoice) -> gst::Caps {
+    let Some(feature) = memory_feature(&gfx.memory) else {
+        return canvas.video();
+    };
+    gst::Caps::builder("video/x-raw")
+        .features([feature])
+        .field("width", canvas.width)
+        .field("height", canvas.height)
+        .field("framerate", canvas.fps)
+        .field("pixel-aspect-ratio", gst::Fraction::new(1, 1))
+        .build()
+}
+
+fn memory_feature(memory: &str) -> Option<&'static str> {
+    Some(match memory {
+        "gl" => "memory:GLMemory",
+        "cuda" => "memory:CUDAMemory",
+        "va" => "memory:VAMemory",
+        "d3d11" => "memory:D3D11Memory",
+        "d3d12" => "memory:D3D12Memory",
+        "vulkan" => "memory:VulkanImage",
+        _ => return None,
+    })
+}
+
+/// Everything between the raw programme tee and the encoder.
+///
+/// Software: one `videoconvert`, which is what this has always been. GPU: the
+/// backend's own converter, and a download plus a `videoconvert` only when the
+/// encoder cannot take frames in the compositor's memory. That last case is
+/// the honest one on a Mac, where the compositor is GL and VideoToolbox wants
+/// system memory; on an NVIDIA box with NVENC the frame never comes down.
+fn encode_bridge(
+    gfx: &crate::catalogue::select::GraphicsChoice,
+    enc: &crate::catalogue::select::Chosen,
+) -> Result<Vec<gst::Element>> {
+    if !gfx.is_gpu() {
+        return Ok(vec![make("videoconvert", "venc-conv")?]);
+    }
+    let mut out = Vec::new();
+    if crate::probe::exists(&gfx.convert) {
+        out.push(make(&gfx.convert, "venc-gconv")?);
+    }
+    if enc.memory != gfx.memory {
+        out.extend(download_bridge(gfx, "venc")?);
+    }
+    Ok(out)
+}
+
+/// Bring frames back to system memory, for a branch that needs them there.
+fn download_bridge(
+    gfx: &crate::catalogue::select::GraphicsChoice,
+    prefix: &str,
+) -> Result<Vec<gst::Element>> {
+    if !gfx.is_gpu() {
+        return Ok(Vec::new());
+    }
+    let mut out = Vec::new();
+    if let Some(d) = gfx.download.as_deref().filter(|d| crate::probe::exists(d)) {
+        out.push(make(d, &format!("{prefix}-download"))?);
+    }
+    out.push(make("videoconvert", &format!("{prefix}-conv"))?);
+    Ok(out)
+}
+
+/// Put a system memory picture into the compositor's memory, once.
+fn upload_bridge(
+    gfx: &crate::catalogue::select::GraphicsChoice,
+    prefix: &str,
+) -> Result<Vec<gst::Element>> {
+    if !gfx.is_gpu() {
+        return Ok(Vec::new());
+    }
+    match gfx.upload.as_deref().filter(|u| crate::probe::exists(u)) {
+        Some(u) => Ok(vec![make(u, &format!("{prefix}-upload"))?]),
+        None => Ok(Vec::new()),
+    }
+}
+
+/// The parser the catalogue named for this codec, if it is installed.
+///
+/// `config-interval = -1` puts SPS and PPS in front of every keyframe, so a
+/// player joining mid stream can decode without waiting for the next one. The
+/// setter is defensive, so a parser for a codec that has no such thing simply
+/// ignores it.
+fn parser_for(name: Option<&str>, element_name: &str) -> Result<Vec<gst::Element>> {
+    let Some(name) = name else { return Ok(Vec::new()) };
+    if !crate::probe::exists(name) {
+        warn!(parser = name, "the catalogue names a parser this machine does not have");
+        return Ok(Vec::new());
+    }
+    let el = make(name, element_name)?;
+    crate::probe::set_int(&el, "config-interval", -1);
+    Ok(vec![el])
+}
+
+/// Link a tee to a chain of elements that were built as a list.
+fn link_from(head: &gst::Element, chain: &[gst::Element]) -> Result<()> {
+    let all: Vec<&gst::Element> = std::iter::once(head).chain(chain.iter()).collect();
+    gst::Element::link_many(all)?;
+    Ok(())
+}
+
+/// Compositor pads disagree about the width of `zorder` across backends, and
+/// a mismatch is a panic rather than an error.
+fn set_pad_u32(pad: &gst::Pad, prop: &str, v: u32) {
+    if pad.find_property(prop).is_some() {
+        pad.set_property(prop, v);
+    }
+}
+
 impl Mixer {
     #[allow(clippy::type_complexity)]
     pub fn build(
@@ -661,7 +804,15 @@ impl Mixer {
         mpsc::UnboundedReceiver<BusEvent>,
     )> {
         let canvas = CanvasCaps::new(&cfg.canvas);
-        let backends = Backends::probe(cfg.hardware.decode, cfg.hardware.encode)?;
+        // What this machine will encode with, and what it will composite on,
+        // comes from the catalogue rather than from names written here. That
+        // is the whole point: AV1, or a GPU compositor, or a board nobody has
+        // heard of yet, is an entry in codecs.toml and not a change to this
+        // function.
+        let sel = crate::catalogue::select(&cfg, None)?;
+        crate::catalogue::log_selection(&sel);
+        let vars = encoder_vars(&cfg);
+        let backends = Backends::from_selection(&sel);
         backends.apply_decoder_ranks();
 
         let rt = tokio::runtime::Handle::try_current().context(
@@ -677,8 +828,9 @@ impl Mixer {
         let program = gst::Pipeline::with_name("program");
 
         // --- video: mix, encode, fan out --------------------------------
-        let vmix = gstutil::make_live_aggregator("compositor", "vmix")?;
-        vmix.set_property_from_str("background", "black");
+        let gfx = &sel.graphics;
+        let vmix = gstutil::make_live_aggregator(&gfx.compositor, "vmix")?;
+        crate::probe::set_enum(&vmix, "background", "black");
         crate::probe::set_bool(&vmix, "ignore-inactive-pads", true);
         // Claim a fixed upstream latency up front.
         //
@@ -689,67 +841,62 @@ impl Mixer {
         // nothing.
         crate::probe::set_int(&vmix, "min-upstream-latency", MIN_UPSTREAM_LATENCY_NS);
 
-        let vmix_caps = gstutil::capsfilter("vmix-caps", &canvas.video())?;
+        let vmix_caps = gstutil::capsfilter("vmix-caps", &programme_caps(&canvas, gfx))?;
         let vraw_tee = make("tee", "vraw-tee")?;
         vraw_tee.set_property("allow-not-linked", true);
 
-        let venc_q = gstutil::queue_thread("venc-q")?;
+        let venc = make(&sel.video_encode.element, "venc")?;
+        crate::catalogue::apply::apply(&venc, &sel.video_encode.properties, &vars);
+        crate::catalogue::apply::apply_keyframe(&venc, sel.video_encode.keyframe.as_ref(), &vars);
+        let venc_tee = make("tee", "venc-tee")?;
+        venc_tee.set_property("allow-not-linked", true);
 
-        // Whatever the encoder wants, from the canvas's I420. x264enc takes I420 and
+        // queue, whatever it takes to get the canvas into the shape this
+        // encoder wants, the encoder, its parser, the tee. With the software
+        // graphics entry the bridge is one `videoconvert`, exactly as before;
+        // with a GPU entry the frame has been on the GPU since the compositor
+        // and comes down only if the encoder cannot take it there.
+        let mut vchain: Vec<gst::Element> = vec![gstutil::queue_thread("venc-q")?];
+        vchain.extend(encode_bridge(gfx, &sel.video_encode)?);
+        vchain.push(venc.clone());
+        vchain.extend(parser_for(sel.video_encode.parser.as_deref(), "vparse")?);
+        vchain.push(venc_tee.clone());
 
-        // this passes it through untouched; nvh264enc takes NV12 and RGB formats
-
-        // only, and without this the programme failed to link on the first machine
-
-        // with an NVIDIA GPU. One 720p conversion per frame is the cost, and only
-
-        // where an encoder needs it.
-
-        let venc_conv = make("videoconvert", "venc-conv")?;
-        let venc = make(backends.video_encode.element, "venc")?;
-        crate::probe::configure_video_encoder(
-            &venc,
-            backends.video_encode.accel,
-            cfg.program.video_bitrate_kbps,
-            (cfg.canvas.fps as u32) * cfg.program.keyframe_interval_secs,
-        );
-        let vparse = make("h264parse", "vparse")?;
-        crate::probe::set_int(&vparse, "config-interval", -1);
-        // Hold the video back by the AAC encoder's uncompensated delay, so
-        // what the viewer hears lines up with what they see. Applied at the
-        // encoder's own pad: the raw programme tee for the multiview is not
-        // shifted, and the FLV muxer sees both streams already aligned.
+        // Hold the video back by the audio encoder's uncompensated delay, so
+        // what the viewer hears lines up with what they see. The figure is
+        // `priming_delay_ms` on the audio entry. Applied at the encoder's own
+        // pad: the raw programme tee for the multiview is not shifted, and the
+        // muxer sees both streams already aligned.
         let av_offset_ns = match cfg.program.av_offset_ms {
             Some(ms) => ms * 1_000_000,
-            None => {
-                let samples = crate::probe::audio_encoder_delay_samples(backends.audio_encode);
-                (samples * 1_000_000_000 / cfg.canvas.sample_rate.max(1) as u64) as i64
-            }
+            None => (sel.audio_encode.priming_delay_ms.unwrap_or(0) * 1_000_000) as i64,
         };
         if let Some(sink) = venc.static_pad("sink") {
             sink.set_offset(av_offset_ns);
         }
         info!(
-            audio_encoder = backends.audio_encode,
+            audio_encoder = %sel.audio_encode.element,
             offset_ms = av_offset_ns / 1_000_000,
             "video held back to match the audio encoder's delay"
         );
-        let venc_tee = make("tee", "venc-tee")?;
-        venc_tee.set_property("allow-not-linked", true);
 
-        // Raw program video for the multiview's return cell.
-        let pgm_v_q = gstutil::queue_thread("pgm-v-q")?;
-        let pgm_v_scale = make("videoscale", "pgm-v-scale")?;
-        let pgm_v_rate = make("videorate", "pgm-v-rate")?;
-        let pgm_v_caps = gstutil::capsfilter(
+        // Raw program video for the multiview's return cell. It leaves the
+        // same tee, so on a GPU entry it is the one branch that comes back to
+        // system memory.
+        let pgm_video_proxy = make("proxysink", "pgm-v-proxy")?;
+        let mut rchain: Vec<gst::Element> = vec![gstutil::queue_thread("pgm-v-q")?];
+        rchain.extend(download_bridge(gfx, "pgm-v")?);
+        rchain.push(make("videorate", "pgm-v-rate")?);
+        rchain.push(make("videoscale", "pgm-v-scale")?);
+        rchain.push(gstutil::capsfilter(
             "pgm-v-caps",
             &CanvasCaps::video_at(
                 crate::input::THUMB_WIDTH,
                 crate::input::THUMB_HEIGHT,
                 gst::Fraction::new(cfg.multiview.fps.max(1), 1),
             ),
-        )?;
-        let pgm_video_proxy = make("proxysink", "pgm-v-proxy")?;
+        )?);
+        rchain.push(pgm_video_proxy.clone());
 
         // --- audio: mix, encode, fan out --------------------------------
         let amix = gstutil::make_live_aggregator("audiomixer", "amix")?;
@@ -759,8 +906,11 @@ impl Mixer {
         let araw_tee = make("tee", "araw-tee")?;
         araw_tee.set_property("allow-not-linked", true);
 
-        let aenc_q = gstutil::queue_thread("aenc-q")?;
-        let aconv = make("audioconvert", "aenc-conv")?;
+        let aenc = make(&sel.audio_encode.element, "aenc")?;
+        crate::catalogue::apply::apply(&aenc, &sel.audio_encode.properties, &vars);
+        let aenc_tee = make("tee", "aenc-tee")?;
+        aenc_tee.set_property("allow-not-linked", true);
+
         // Defensive. The mixer is a live aggregator whose inputs are stamped
         // by another process against its own wall clock, so a contiguous
         // stream into the encoder is worth guaranteeing rather than assuming.
@@ -769,12 +919,14 @@ impl Mixer {
         // stepped backwards; this output, captured straight into ffmpeg,
         // measured clean without it. Kept because it costs nothing and closes
         // a gap that would otherwise be real the day an input drifts.
-        let arate = make("audiorate", "aenc-rate")?;
-        let aenc = make(backends.audio_encode, "aenc")?;
-        crate::probe::configure_audio_encoder(&aenc, cfg.program.audio_bitrate_kbps);
-        let aparse = make("aacparse", "aparse")?;
-        let aenc_tee = make("tee", "aenc-tee")?;
-        aenc_tee.set_property("allow-not-linked", true);
+        let mut achain: Vec<gst::Element> = vec![
+            gstutil::queue_thread("aenc-q")?,
+            make("audioconvert", "aenc-conv")?,
+            make("audiorate", "aenc-rate")?,
+            aenc.clone(),
+        ];
+        achain.extend(parser_for(sel.audio_encode.parser.as_deref(), "aparse")?);
+        achain.push(aenc_tee.clone());
 
         // The mosaic carries no audio, so the operator confirms that program
         // has sound from a meter instead. `level` passes audio through
@@ -799,38 +951,41 @@ impl Mixer {
         silence.set_property("is-live", true);
         let silence_caps = gstutil::capsfilter("silence-caps", &canvas.audio())?;
 
-        program
-            .add_many([
-                &vmix, &vmix_caps, &vraw_tee, &venc_q, &venc_conv, &venc, &vparse, &venc_tee,
-                &pgm_v_q, &pgm_v_rate, &pgm_v_scale, &pgm_v_caps, &pgm_video_proxy,
-                &amix, &amix_caps, &level, &araw_tee, &aenc_q, &aconv, &arate, &aenc, &aparse, &aenc_tee,
-                &slate, &slate_caps, &silence, &silence_caps,
-            ])
-            .context("adding program elements")?;
+        // On a GPU entry the slate is uploaded once here, like every other
+        // source, and never comes back down.
+        let mut slate_chain: Vec<gst::Element> = vec![slate.clone(), slate_caps.clone()];
+        slate_chain.extend(upload_bridge(gfx, "slate")?);
+
+        let fixed = [&vmix, &vmix_caps, &vraw_tee, &amix, &amix_caps, &level, &araw_tee, &silence, &silence_caps];
+        let all: Vec<&gst::Element> = fixed
+            .into_iter()
+            .chain(vchain.iter())
+            .chain(rchain.iter())
+            .chain(achain.iter())
+            .chain(slate_chain.iter())
+            .collect();
+        program.add_many(all).context("adding program elements")?;
 
         gst::Element::link_many([&vmix, &vmix_caps, &vraw_tee]).context("linking video mixer")?;
-        gst::Element::link_many([&vraw_tee, &venc_q, &venc_conv, &venc, &vparse, &venc_tee])
-            .context("linking video encoder")?;
-        gst::Element::link_many([
-            &vraw_tee, &pgm_v_q, &pgm_v_rate, &pgm_v_scale, &pgm_v_caps, &pgm_video_proxy,
-        ])
-        .context("linking program return video")?;
+        link_from(&vraw_tee, &vchain).context("linking video encoder")?;
+        link_from(&vraw_tee, &rchain).context("linking program return video")?;
 
         gst::Element::link_many([&amix, &amix_caps, &level, &araw_tee])
             .context("linking audio mixer")?;
-        gst::Element::link_many([&araw_tee, &aenc_q, &aconv, &arate, &aenc, &aparse, &aenc_tee])
-            .context("linking audio encoder")?;
+        link_from(&araw_tee, &achain).context("linking audio encoder")?;
 
-        gst::Element::link(&slate, &slate_caps).context("linking slate")?;
+        gst::Element::link_many(slate_chain.iter().collect::<Vec<_>>())
+            .context("linking slate")?;
         gst::Element::link(&silence, &silence_caps).context("linking silence")?;
 
         // Slate sits at the bottom of the z order, fully opaque, forever.
         let slate_pad = vmix.request_pad_simple("sink_%u").context("compositor refused slate pad")?;
-        slate_pad.set_property("zorder", 0u32);
+        set_pad_u32(&slate_pad, "zorder", 0);
         slate_pad.set_property("alpha", 1.0f64);
-        slate_caps
-            .static_pad("src")
-            .unwrap()
+        slate_chain
+            .last()
+            .and_then(|e| e.static_pad("src"))
+            .context("the slate chain has no source pad")?
             .link(&slate_pad)
             .context("linking slate into the mixer")?;
 
@@ -2830,6 +2985,7 @@ mod tests {
             multiview: Default::default(),
             control: Default::default(),
             hardware: Default::default(),
+            codecs: Default::default(),
             media: Default::default(),
             security: Default::default(),
             browser: Default::default(),
@@ -2843,5 +2999,109 @@ mod tests {
             format!("{err:#}").contains("Tokio runtime"),
             "unhelpful error: {err:#}"
         );
+    }
+
+    fn programme_config(graphics: crate::config::Accel) -> crate::config::Config {
+        let mut cfg = crate::config::Config {
+            canvas: crate::config::Canvas {
+                width: 320,
+                height: 180,
+                fps: 30,
+                sample_rate: 48000,
+                channels: 2,
+            },
+            program: Default::default(),
+            multiview: Default::default(),
+            control: Default::default(),
+            hardware: Default::default(),
+            codecs: Default::default(),
+            media: Default::default(),
+            security: Default::default(),
+            browser: Default::default(),
+            stall: Default::default(),
+            sources: vec![],
+            outputs: vec![],
+        };
+        cfg.multiview.enabled = false;
+        cfg.hardware.graphics = graphics;
+        cfg
+    }
+
+    /// Build a programme, roll it, and count what reaches the encoder tee.
+    /// Returns the number of encoded buffers seen and the first bus error.
+    async fn roll_programme(cfg: crate::config::Config) -> Result<u64> {
+        let (mix, _handle, _cmds, _bus) = Mixer::build(cfg)?;
+        let seen = Arc::new(AtomicU64::new(0));
+        let counter = seen.clone();
+        let pad = mix.venc_tee.static_pad("sink").context("the encoder tee has no sink pad")?;
+        pad.add_probe(gst::PadProbeType::BUFFER, move |_, _| {
+            counter.fetch_add(1, Ordering::Relaxed);
+            gst::PadProbeReturn::Ok
+        });
+        mix.program.set_state(gst::State::Playing).context("starting the programme")?;
+        let bus = mix.program.bus().context("the programme has no bus")?;
+        let mut failure = None;
+        for _ in 0..100 {
+            if seen.load(Ordering::Relaxed) > 0 {
+                break;
+            }
+            if let Some(msg) = bus.timed_pop_filtered(
+                gst::ClockTime::from_mseconds(50),
+                &[gst::MessageType::Error],
+            ) {
+                if let gst::MessageView::Error(e) = msg.view() {
+                    failure = Some(anyhow::anyhow!("{}", e.error()));
+                    break;
+                }
+            }
+            tokio::time::sleep(Duration::from_millis(20)).await;
+        }
+        let _ = mix.program.set_state(gst::State::Null);
+        match failure {
+            Some(e) => Err(e),
+            None => Ok(seen.load(Ordering::Relaxed)),
+        }
+    }
+
+    /// The software graphics entry is the default and is what a machine with
+    /// no GPU, or with a GPU nobody has verified, gets. It must encode.
+    #[tokio::test]
+    async fn the_software_graphics_entry_runs_a_programme() {
+        let _ = gst::init();
+        let frames = roll_programme(programme_config(crate::config::Accel::Software))
+            .await
+            .expect("the software programme must run on every machine");
+        assert!(frames > 0, "nothing reached the encoder");
+    }
+
+    /// And the GPU entry, pinned, builds the same programme with the frame
+    /// uploaded once and composited on the GPU. Skipped where the elements are
+    /// not installed, which is most CI runners.
+    #[tokio::test]
+    async fn the_gl_graphics_entry_runs_a_programme_when_it_is_pinned() {
+        let _ = gst::init();
+        if !crate::probe::exists("glvideomixer") || !crate::probe::exists("gldownload") {
+            return;
+        }
+        let frames = roll_programme(programme_config(crate::config::Accel::Gl))
+            .await
+            .expect("the gl programme must run where the elements exist");
+        assert!(frames > 0, "nothing reached the encoder through the GL compositor");
+    }
+
+    /// Pinning a graphics backend that is not here says so rather than
+    /// quietly falling back, because an operator who pinned one wants to know.
+    #[tokio::test]
+    async fn pinning_a_graphics_backend_that_is_absent_fails_loudly() {
+        let _ = gst::init();
+        if crate::probe::exists("cudacompositor") {
+            return;
+        }
+        let err = Mixer::build(programme_config(crate::config::Accel::Cuda))
+            .err()
+            .expect("cuda is not here and must be reported");
+        let text = format!("{err:#}");
+        assert!(text.contains("cuda"), "{text}");
+        assert!(text.contains("software"), "the error must list what was available: {text}");
     }
 }

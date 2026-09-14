@@ -13,6 +13,7 @@
 //! be a copy of the other. `run` below is what both call.
 
 pub mod caps;
+pub mod catalogue;
 pub mod config;
 pub mod convert;
 pub mod control;
@@ -61,6 +62,12 @@ struct Args {
     #[arg(long)]
     probe: bool,
 
+    /// Read an extra codec catalogue over the built in one. The same shape as
+    /// the shipped `codecs.toml`; entries whose id matches replace, the rest
+    /// are added. Applied after the config's `[codecs]` table.
+    #[arg(long)]
+    codecs: Option<PathBuf>,
+
     #[command(subcommand)]
     command: Option<Command>,
 }
@@ -90,6 +97,15 @@ enum Command {
         /// Bearer token for a mixer whose API requires one.
         #[arg(long, env = "GODWINMIX_TOKEN")]
         token: Option<String>,
+    },
+    /// Inspect and test the codec catalogue.
+    ///
+    /// The catalogue is `codecs.toml`: which codec the programme is encoded
+    /// in, which element does it, and what that element wants set. These
+    /// subcommands need no running mixer.
+    Codec {
+        #[command(subcommand)]
+        cmd: catalogue::cli::Codec,
     },
 }
 
@@ -121,6 +137,11 @@ pub async fn run() -> Result<()> {
             let token = token.or_else(|| config::env_var("TOKEN"));
             return mcp::run(&url, token).await;
         }
+        Some(Command::Codec { cmd }) => {
+            gstreamer::init().context("initialising GStreamer")?;
+            let cfg = Config::load(&config::path_in_force(&args.config)).ok();
+            return catalogue::cli::run(cmd, cfg.as_ref(), args.codecs.as_deref());
+        }
         None => {}
     }
 
@@ -137,12 +158,8 @@ pub async fn run() -> Result<()> {
     gstreamer::init().context("initialising GStreamer")?;
 
     if args.probe {
-        let b = probe::Backends::probe(config::Accel::Auto, config::Accel::Auto)?;
-        println!("video decoder : {}  ({:?})", b.video_decode.element, b.video_decode.accel);
-        println!("video encoder : {}  ({:?})", b.video_encode.element, b.video_encode.accel);
-        println!("audio decoder : {}", b.audio_decode);
-        println!("audio encoder : {}", b.audio_encode);
-        return Ok(());
+        let cfg = Config::load(&config::path_in_force(&args.config)).ok();
+        return catalogue::cli::print_probe(cfg.as_ref(), args.codecs.as_deref());
     }
 
     // The LiveboxMix config name is still read when there is no GodwinMix one.

@@ -1,31 +1,42 @@
-//! Runtime codec backend selection.
+//! Runtime codec backend selection, and the defensive property setters.
 //!
 //! The same binary has to run on an NVIDIA server, an Intel box with a VA
-//! capable iGPU, a Windows workstation, a Mac, and a rented VM with no GPU at
-//! all. Nothing above this module knows which of those it is on. We probe the
-//! registry once at startup, pick the best available decoder and encoder
-//! independently, and hand the rest of the program a pair of element names.
+//! capable iGPU, a Windows workstation, a Mac, a Raspberry Pi and a rented VM
+//! with no GPU at all. Nothing above this module knows which of those it is
+//! on. The registry is probed once at startup, the best available decoder and
+//! encoder are picked independently, and the rest of the program gets a pair
+//! of element names.
 //!
-//! Two rules keep this honest:
+//! What used to be four static tables in this file is now `codecs.toml`, read
+//! by `crate::catalogue`. A new GPU generation or a renamed element is an
+//! entry somebody sends rather than a core release. This module is what is
+//! left: the shape the rest of the code already asks for, and the property
+//! setters that keep a missing property a warning instead of a panic.
+//!
+//! Two rules keep it honest:
 //!
 //! 1. Decode and encode are chosen separately. A machine with NVDEC but no
 //!    NVENC licence is a real configuration and it should use both the fast
 //!    decoder and the software encoder.
-//! 2. Every property is set defensively. Backends disagree about names,
-//!    units and integer widths, and a property that does not exist on this
-//!    version of this plugin must be a logged warning, never a panic. A mixer
-//!    that refuses to start because it could not set `rc-lookahead` is worse
-//!    than one that runs with the default.
+//! 2. Every property is set defensively. Backends disagree about names, units
+//!    and integer widths, and a property that does not exist on this version
+//!    of this plugin must be a logged warning, never a panic. A mixer that
+//!    refuses to start because it could not set `rc-lookahead` is worse than
+//!    one that runs with the default.
 
+use crate::catalogue;
+use crate::catalogue::select::{GstRegistry, Request, Selection};
 use crate::config::Accel;
-use anyhow::{bail, Result};
+use anyhow::Result;
 use gstreamer as gst;
 use gstreamer::prelude::*;
-use tracing::{debug, info, warn};
+use std::collections::BTreeSet;
+use tracing::{debug, warn};
 
 /// A decoder choice, plus the element needed to pull frames back into system
-/// memory. Hardware decoders hand out GPU surfaces; the mixer works in system
-/// memory, so a download step is required for most accelerated backends.
+/// memory. Hardware decoders hand out GPU surfaces; the source path works in
+/// system memory, so a download step is required for most accelerated
+/// backends.
 #[derive(Debug, Clone, Copy)]
 pub struct DecoderChoice {
     pub accel: Accel,
@@ -47,69 +58,110 @@ pub struct Backends {
     pub audio_encode: &'static str,
 }
 
-/// Preference order, best first. Hardware before software within each family.
-const VIDEO_DECODERS: &[DecoderChoice] = &[
-    DecoderChoice { accel: Accel::Nvidia, element: "nvh264dec", download: Some("cudadownload") },
-    DecoderChoice { accel: Accel::Nvidia, element: "nvh264sldec", download: Some("cudadownload") },
-    DecoderChoice { accel: Accel::Va, element: "vah264dec", download: Some("vapostproc") },
-    DecoderChoice { accel: Accel::Va, element: "vaapih264dec", download: None },
-    DecoderChoice { accel: Accel::D3d11, element: "d3d11h264dec", download: Some("d3d11download") },
-    DecoderChoice { accel: Accel::VideoToolbox, element: "vtdec_hw", download: None },
-    DecoderChoice { accel: Accel::Software, element: "avdec_h264", download: None },
-    DecoderChoice { accel: Accel::Software, element: "openh264dec", download: None },
-];
+/// Catalogue entries are read from a file at runtime, but the rest of the code
+/// has always held element names as `&'static str` and they live for the whole
+/// process anyway. Interning gives back the `'static` without leaking a fresh
+/// copy every time something asks: the set is a few dozen names and never
+/// grows past the size of the catalogue.
+pub fn intern(s: &str) -> &'static str {
+    static NAMES: std::sync::OnceLock<parking_lot::Mutex<BTreeSet<&'static str>>> =
+        std::sync::OnceLock::new();
+    let names = NAMES.get_or_init(|| parking_lot::Mutex::new(BTreeSet::new()));
+    let mut guard = names.lock();
+    if let Some(found) = guard.get(s) {
+        return found;
+    }
+    let leaked: &'static str = Box::leak(s.to_string().into_boxed_str());
+    guard.insert(leaked);
+    leaked
+}
 
-const VIDEO_ENCODERS: &[EncoderChoice] = &[
-    EncoderChoice { accel: Accel::Nvidia, element: "nvh264enc" },
-    EncoderChoice { accel: Accel::Va, element: "vah264enc" },
-    EncoderChoice { accel: Accel::Va, element: "vaapih264enc" },
-    EncoderChoice { accel: Accel::MediaFoundation, element: "mfh264enc" },
-    EncoderChoice { accel: Accel::VideoToolbox, element: "vtenc_h264_hw" },
-    EncoderChoice { accel: Accel::VideoToolbox, element: "vtenc_h264" },
-    EncoderChoice { accel: Accel::Software, element: "x264enc" },
-];
-
-const AUDIO_DECODERS: &[&str] = &["avdec_aac", "faad"];
-const AUDIO_ENCODERS: &[&str] = &["fdkaacenc", "avenc_aac", "voaacenc"];
-
-/// The best AAC encoder installed, or None. Split out of `Backends::probe` so
-/// the file converter and the programme encoder cannot drift onto different
-/// lists.
-pub fn best_audio_encoder() -> Option<&'static str> {
-    AUDIO_ENCODERS.iter().copied().find(|f| exists(f))
+fn accel_of(name: &str) -> Accel {
+    match name {
+        "nvidia" => Accel::Nvidia,
+        "va" => Accel::Va,
+        "qsv" => Accel::Qsv,
+        "amf" => Accel::Amf,
+        "videotoolbox" => Accel::VideoToolbox,
+        "mediafoundation" => Accel::MediaFoundation,
+        "d3d11" => Accel::D3d11,
+        "d3d12" => Accel::D3d12,
+        "cuda" => Accel::Cuda,
+        "gl" => Accel::Gl,
+        "vulkan" => Accel::Vulkan,
+        "v4l2" => Accel::V4l2,
+        "software" => Accel::Software,
+        other => {
+            // A catalogue the operator extended with a vendor this build has
+            // no variant for. It still gets selected by rank; it just cannot
+            // be pinned by name from `[hardware]`.
+            debug!(accel = other, "catalogue accel has no config variant; treated as auto");
+            Accel::Auto
+        }
+    }
 }
 
 pub fn exists(factory: &str) -> bool {
     gst::ElementFactory::find(factory).is_some()
 }
 
-impl Backends {
-    pub fn probe(decode_pref: Accel, encode_pref: Accel) -> Result<Self> {
-        let video_decode = pick_decoder(decode_pref)?;
-        let video_encode = pick_encoder(encode_pref)?;
-
-        let audio_decode = AUDIO_DECODERS
-            .iter()
-            .copied()
-            .find(|f| exists(f))
-            .ok_or_else(|| anyhow::anyhow!("no AAC decoder available (tried {AUDIO_DECODERS:?})"))?;
-        let audio_encode = best_audio_encoder()
-            .ok_or_else(|| anyhow::anyhow!("no AAC encoder available (tried {AUDIO_ENCODERS:?})"))?;
-
-        let b = Self { video_decode, video_encode, audio_decode, audio_encode };
-        info!(
-            decoder = b.video_decode.element,
-            decode_accel = ?b.video_decode.accel,
-            encoder = b.video_encode.element,
-            encode_accel = ?b.video_encode.accel,
-            audio_decoder = b.audio_decode,
-            audio_encoder = b.audio_encode,
-            "selected codec backends"
-        );
-        if b.video_encode.accel == Accel::Software {
-            warn!("using software H.264 encoding; expect roughly one core per 1080p30 output");
+/// The best AAC encoder installed, or None. Split out so the file converter
+/// and the programme encoder cannot drift onto different lists.
+pub fn best_audio_encoder() -> Option<&'static str> {
+    let cat = catalogue::global();
+    let mut best: Option<(i32, &str)> = None;
+    for e in &cat.audio {
+        if e.disabled || e.codec != "aac" {
+            continue;
         }
-        Ok(b)
+        let Some(enc) = e.encoder.as_deref() else { continue };
+        if !exists(enc) {
+            continue;
+        }
+        if best.is_none_or(|(rank, _)| e.rank > rank) {
+            best = Some((e.rank, enc));
+        }
+    }
+    best.map(|(_, e)| intern(e))
+}
+
+impl Backends {
+    /// Select against the catalogue and the live registry.
+    pub fn probe(decode_pref: Accel, encode_pref: Accel) -> Result<Self> {
+        let cat = catalogue::global();
+        let req = Request {
+            container: cat.programme_container.clone().or_else(|| Some("flv".into())),
+            decode: decode_pref,
+            encode: encode_pref,
+            graphics: Accel::Auto,
+            ..Request::default()
+        };
+        let sel = cat.select(&req, &GstRegistry)?;
+        catalogue::log_selection(&sel);
+        Ok(Self::from_selection(&sel))
+    }
+
+    /// The same shape, from a selection somebody else already made, so the
+    /// mixer probes once and the source path reuses the answer.
+    pub fn from_selection(sel: &Selection) -> Self {
+        Self {
+            video_decode: DecoderChoice {
+                accel: accel_of(&sel.video_decode.accel),
+                element: intern(&sel.video_decode.element),
+                download: sel
+                    .video_decode
+                    .download
+                    .as_deref()
+                    .filter(|d| exists(d))
+                    .map(intern),
+            },
+            video_encode: EncoderChoice {
+                accel: accel_of(&sel.video_encode.accel),
+                element: intern(&sel.video_encode.element),
+            },
+            audio_decode: intern(&sel.audio_decode.element),
+            audio_encode: intern(&sel.audio_encode.element),
+        }
     }
 
     /// Raise the rank of the chosen decoder so that `decodebin`, and anything
@@ -124,34 +176,6 @@ impl Backends {
         if let Some(f) = gst::ElementFactory::find(self.audio_decode) {
             f.set_rank(gst::Rank::PRIMARY + 256);
         }
-    }
-}
-
-fn pick_decoder(pref: Accel) -> Result<DecoderChoice> {
-    let mut candidates = VIDEO_DECODERS.iter().filter(|d| exists(d.element));
-    match pref {
-        Accel::Auto => candidates
-            .next()
-            .copied()
-            .ok_or_else(|| anyhow::anyhow!("no H.264 decoder available at all")),
-        want => match candidates.find(|d| d.accel == want) {
-            Some(d) => Ok(*d),
-            None => bail!("hardware.decode = {want:?} was requested but no matching decoder is installed"),
-        },
-    }
-}
-
-fn pick_encoder(pref: Accel) -> Result<EncoderChoice> {
-    let mut candidates = VIDEO_ENCODERS.iter().filter(|e| exists(e.element));
-    match pref {
-        Accel::Auto => candidates
-            .next()
-            .copied()
-            .ok_or_else(|| anyhow::anyhow!("no H.264 encoder available at all")),
-        want => match candidates.find(|e| e.accel == want) {
-            Some(e) => Ok(*e),
-            None => bail!("hardware.encode = {want:?} was requested but no matching encoder is installed"),
-        },
     }
 }
 
@@ -204,86 +228,82 @@ pub fn set_int(el: &gst::Element, prop: &str, v: i64) {
         el.set_property(prop, v);
     } else if t == f64::static_type() {
         el.set_property(prop, v as f64);
+    } else if t == bool::static_type() {
+        el.set_property(prop, v != 0);
+    } else if t.is_a(glib::Type::ENUM) || t.is_a(glib::Type::FLAGS) {
+        // A catalogue that writes `preset = 10` against an enum property.
+        set_enum(el, prop, &v.to_string());
     } else {
         warn!(element = %el.name(), prop, ?t, "unexpected property type, skipping");
     }
 }
 
-pub fn set_bool(el: &gst::Element, prop: &str, v: bool) {
-    if writable_property(el, prop).is_some() {
+pub fn set_float(el: &gst::Element, prop: &str, v: f64) {
+    let Some(pspec) = writable_property(el, prop) else {
+        return;
+    };
+    let t = pspec.value_type();
+    if t == f64::static_type() {
         el.set_property(prop, v);
+    } else if t == f32::static_type() {
+        el.set_property(prop, v as f32);
+    } else {
+        set_int(el, prop, v.round() as i64);
+    }
+}
+
+pub fn set_bool(el: &gst::Element, prop: &str, v: bool) {
+    let Some(pspec) = writable_property(el, prop) else {
+        return;
+    };
+    // The same name can be a boolean on one backend and an enum on the next.
+    // `zerolatency` is a gboolean on the old nvh264enc and the catalogue will
+    // meet a build where it is not, so coerce rather than panic.
+    let t = pspec.value_type();
+    if t == bool::static_type() {
+        el.set_property(prop, v);
+    } else {
+        set_int(el, prop, v as i64);
     }
 }
 
 /// Set an enum or flags property by its nickname. Nicknames are stable across
 /// plugin versions in a way that numeric enum values are not.
-pub fn set_enum(el: &gst::Element, prop: &str, nick: &str) {
-    if writable_property(el, prop).is_some() {
-        el.set_property_from_str(prop, nick);
-    }
-}
-
-/// Apply low latency, constant bitrate, no B-frame settings appropriate to the
-/// selected backend.
 ///
-/// B-frames are disabled everywhere. They cost latency and buy very little at
-/// live streaming bitrates, and reordering makes a mid-stream splice harder to
-/// reason about.
-pub fn configure_video_encoder(
-    el: &gst::Element,
-    accel: Accel,
-    bitrate_kbps: u32,
-    keyframe_frames: u32,
-) {
-    match accel {
-        Accel::Software => {
-            set_int(el, "bitrate", bitrate_kbps as i64);
-            set_int(el, "key-int-max", keyframe_frames as i64);
-            set_int(el, "bframes", 0);
-            set_enum(el, "tune", "zerolatency");
-            set_enum(el, "speed-preset", "veryfast");
-            set_enum(el, "pass", "cbr");
-            set_bool(el, "aud", false);
-            // flvmux wants AVC sample format, not Annex B byte stream.
-            set_bool(el, "byte-stream", false);
+/// The nickname is checked before it is used. `set_property_from_str` panics
+/// on a value the enum does not know, and since the catalogue is data now, a
+/// nickname a different version of the element has never heard of has to be a
+/// warning: `preset = "p4"` is right for the current nvcodec and wrong for the
+/// one on a five year old distribution, and neither should stop a broadcast.
+pub fn set_enum(el: &gst::Element, prop: &str, nick: &str) {
+    let Some(pspec) = writable_property(el, prop) else {
+        return;
+    };
+    let t = pspec.value_type();
+    if t.is_a(glib::Type::ENUM) {
+        let class = glib::EnumClass::with_type(t);
+        if class.as_ref().and_then(|c| c.value_by_nick(nick)).is_none()
+            && class.as_ref().and_then(|c| c.value(nick.parse::<i32>().unwrap_or(i32::MIN))).is_none()
+        {
+            warn!(element = %el.name(), prop, nick, "this element version has no such value, skipping");
+            return;
         }
-        Accel::Nvidia => {
-            set_int(el, "bitrate", bitrate_kbps as i64);
-            set_int(el, "max-bitrate", bitrate_kbps as i64);
-            set_int(el, "gop-size", keyframe_frames as i64);
-            set_int(el, "bframes", 0);
-            set_int(el, "b-frames", 0);
-            set_enum(el, "rc-mode", "cbr");
-            set_enum(el, "preset", "low-latency-hq");
-            set_bool(el, "zerolatency", true);
+    } else if t.is_a(glib::Type::FLAGS) {
+        let class = glib::FlagsClass::with_type(t);
+        if class.as_ref().and_then(|c| c.value_by_nick(nick)).is_none() {
+            warn!(element = %el.name(), prop, nick, "this element version has no such flag, skipping");
+            return;
         }
-        Accel::Va => {
-            set_int(el, "bitrate", bitrate_kbps as i64);
-            set_int(el, "key-int-max", keyframe_frames as i64);
-            set_int(el, "b-frames", 0);
-            set_enum(el, "rate-control", "cbr");
+    } else if t != String::static_type() {
+        // A number or a boolean written as a string in the catalogue.
+        if let Ok(n) = nick.parse::<i64>() {
+            set_int(el, prop, n);
+            return;
         }
-        Accel::VideoToolbox => {
-            set_int(el, "bitrate", bitrate_kbps as i64);
-            set_int(el, "max-keyframe-interval", keyframe_frames as i64);
-            set_bool(el, "realtime", true);
-            set_bool(el, "allow-frame-reordering", false);
-            set_enum(el, "rate-control", "cbr");
-        }
-        Accel::MediaFoundation | Accel::D3d11 => {
-            set_int(el, "bitrate", bitrate_kbps as i64);
-            set_int(el, "gop-size", keyframe_frames as i64);
-            set_int(el, "bframes", 0);
-            set_enum(el, "rc-mode", "cbr");
-            set_bool(el, "low-latency", true);
-        }
-        Accel::Auto => unreachable!("Auto is resolved to a concrete backend during probe"),
     }
+    el.set_property_from_str(prop, nick);
 }
 
-/// AAC encoders take bitrate in bits per second, unlike every video encoder
-/// here, which takes kilobits. Getting this wrong gives you either a 160 bit/s
-/// stream or a 160 Mbit/s one, and both fail in confusing ways.
 /// Samples of encoder delay the AAC encoder does not take out of its
 /// timestamps, so audio leaves it that much late relative to video.
 ///
@@ -291,14 +311,20 @@ pub fn configure_video_encoder(
 /// coincide comes out of the programme tail with the beep 43 ms late through
 /// fdkaacenc and 21 ms late through avenc_aac, whatever the video encoder,
 /// with or without the mixers in the path. Those are the two encoders'
-/// documented priming delays (2048 and 1024 samples at 48 kHz). voaacenc is
-/// assumed to behave like a standard AAC-LC encoder; it was not measured.
+/// documented priming delays (2048 and 1024 samples at 48 kHz). The numbers
+/// now live in `codecs.toml` as `priming_delay_ms`, which is where somebody
+/// measuring a third encoder can put theirs.
 pub fn audio_encoder_delay_samples(element: &str) -> u64 {
-    match element {
-        "fdkaacenc" => 2048,
-        "avenc_aac" | "voaacenc" => 1024,
-        _ => 0,
-    }
+    audio_encoder_delay_ms(element) * 48_000 / 1000
+}
+
+pub fn audio_encoder_delay_ms(element: &str) -> u64 {
+    catalogue::global()
+        .audio
+        .iter()
+        .find(|e| e.encoder.as_deref() == Some(element))
+        .and_then(|e| e.priming_delay_ms)
+        .unwrap_or(0)
 }
 
 pub fn configure_audio_encoder(el: &gst::Element, bitrate_kbps: u32) {
@@ -325,26 +351,40 @@ mod tests {
         assert!(exists(b.audio_encode));
     }
 
+    /// The software floor is the whole promise of the catalogue: a machine
+    /// with no GPU still encodes.
+    #[test]
+    fn software_is_always_available_as_a_floor() {
+        init();
+        let b = Backends::probe(Accel::Software, Accel::Software)
+            .expect("the software entries must resolve on every machine");
+        assert_eq!(b.video_encode.accel, Accel::Software);
+        assert_eq!(b.video_decode.accel, Accel::Software);
+    }
+
     #[test]
     fn requesting_absent_hardware_fails_loudly() {
         init();
         // No machine has every backend, so at least one forced request must
         // fail. Assert on whichever is genuinely missing here.
-        let all = [Accel::Nvidia, Accel::Va, Accel::VideoToolbox, Accel::D3d11];
-        let missing: Vec<_> = all
-            .into_iter()
-            .filter(|a| !VIDEO_DECODERS.iter().any(|d| d.accel == *a && exists(d.element)))
-            .collect();
-        for a in missing {
-            assert!(pick_decoder(a).is_err(), "{a:?} should have been reported absent");
+        let cat = catalogue::global();
+        for want in [Accel::Nvidia, Accel::Va, Accel::VideoToolbox, Accel::D3d11, Accel::Amf] {
+            let name = want.name().unwrap();
+            let installed = cat
+                .video
+                .iter()
+                .any(|e| e.accel == name && e.decoder.as_deref().is_some_and(exists));
+            if installed {
+                continue;
+            }
+            let err = Backends::probe(want, Accel::Auto).expect_err("{want:?} should be absent");
+            let text = format!("{err:#}");
+            assert!(text.contains(name), "the error should name the accel: {text}");
+            assert!(
+                text.contains("rank"),
+                "the error should list the entries that were available: {text}"
+            );
         }
-    }
-
-    #[test]
-    fn software_is_always_available_as_a_floor() {
-        init();
-        assert!(pick_decoder(Accel::Software).is_ok());
-        assert!(pick_encoder(Accel::Software).is_ok());
     }
 
     #[test]
@@ -355,9 +395,27 @@ mod tests {
         set_int(&el, "bitrate", 4000);
         set_bool(&el, "realtime", true);
         set_enum(&el, "rc-mode", "cbr");
+        set_float(&el, "quality", 0.5);
         // And a real property must still take effect, coerced to the right width.
         set_int(&el, "max-size-buffers", 42);
         assert_eq!(el.property::<u32>("max-size-buffers"), 42);
+    }
+
+    /// The catalogue is data, so a nickname from a different version of an
+    /// element will turn up sooner or later. It must be a warning.
+    #[test]
+    fn an_enum_nickname_this_version_does_not_know_is_skipped() {
+        init();
+        let el = gst::ElementFactory::make("videotestsrc").build().unwrap();
+        let before = el.property_value("pattern");
+        set_enum(&el, "pattern", "not-a-pattern-anyone-has");
+        assert_eq!(
+            format!("{:?}", el.property_value("pattern")),
+            format!("{before:?}"),
+            "an unknown nickname must leave the property alone"
+        );
+        set_enum(&el, "pattern", "ball");
+        assert_ne!(format!("{:?}", el.property_value("pattern")), format!("{before:?}"));
     }
 
     #[test]
@@ -384,5 +442,22 @@ mod tests {
         assert!(q.find_property("current-level-time").is_some());
         assert!(writable_property(&q, "current-level-time").is_none());
         set_int(&q, "current-level-time", 5);
+    }
+
+    #[test]
+    fn the_priming_delay_comes_from_the_catalogue() {
+        init();
+        assert_eq!(audio_encoder_delay_ms("avenc_aac"), 21);
+        assert_eq!(audio_encoder_delay_ms("fdkaacenc"), 43);
+        assert_eq!(audio_encoder_delay_ms("something-nobody-measured"), 0);
+    }
+
+    /// Interning is what lets the rest of the code keep `&'static str` while
+    /// the names come from a file. It must hand back one pointer per name.
+    #[test]
+    fn interning_a_name_twice_gives_the_same_pointer() {
+        let a = intern("x264enc");
+        let b = intern("x264enc");
+        assert!(std::ptr::eq(a, b));
     }
 }

@@ -104,11 +104,48 @@ bind = "0.0.0.0:8080"
 # token = "change-me"
 
 [hardware]
-# auto, nvidia, va, videotoolbox, mediafoundation, d3d11, software.
-# `auto` picks the best backend present. Naming one makes startup fail if it is
-# missing, which is what you want on a server you control.
+# auto, nvidia, va, qsv, amf, videotoolbox, mediafoundation, d3d11, d3d12,
+# v4l2, vulkan, software.
+# `auto` picks the highest ranked catalogue entry whose elements are installed.
+# Naming one makes startup fail, with the list of the entries that were
+# available, if it is missing. That is what you want on a server you control.
+# `godwinmix --probe` prints the whole decision.
 decode = "auto"
 encode = "auto"
+# Which compositor and conversion backend the canvas is drawn on: auto, cuda,
+# gl, va, d3d11, d3d12, software. `auto` keeps the software compositor until a
+# GPU entry carries a `verified` record for this platform, because every GPU
+# compositor is rank none upstream and the ones with open bugs on dynamic pad
+# add and remove are exactly the ones a mixer exercises. Pin one to run the
+# soak that earns it a promotion.
+graphics = "auto"
+
+# --- codecs ----------------------------------------------------------------
+# Which codec the programme is encoded in, which element does it, and what that
+# element wants set, all live in codecs.toml, which ships inside the binary.
+# This table adds entries or replaces shipped ones by id; nothing here needs a
+# rebuild. `gmx codec list` prints the merged result and `gmx codec test <id>`
+# proves an entry actually encodes on this machine.
+#
+# See docs/how-to/add-a-codec-entry.md.
+#
+# [codecs]
+# # The container the programme is muxed into, which decides what codecs are
+# # eligible. RTMP is flv, and flv carries H.264 and AAC only.
+# programme_container = "mpegts"
+#
+# [[codecs.video]]
+# id = "av1-house"
+# codec = "av1"
+# accel = "software"
+# rank = 900
+# encoder = "svtav1enc"
+# decoder = "dav1ddec"
+# parser = "av1parse"
+# license = "BSD-3-Clause"
+# container = ["mpegts", "matroska"]
+# keyframe = { property = "intra-period-length", unit = "frames" }
+# properties = { preset = 10, "target-bitrate" = { unit = "kbit", from = "video.bitrate_kbps" } }
 
 # --- sources ---------------------------------------------------------------
 # Each source runs in its own pipeline. One dying cannot disturb the output.
