@@ -51,6 +51,21 @@ pub struct Marketplace {
     pub version: u32,
     #[serde(default)]
     pub plugins: Vec<Listing>,
+    /// Who signs the assets this marketplace lists, when its CI signs them.
+    /// A plugin resolved through a marketplace with this set is verified
+    /// against that identity rather than against nobody in particular.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub signing: Option<Signing>,
+}
+
+/// The sigstore identity a marketplace's CI signs with.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct Signing {
+    /// A regular expression the certificate's subject must match.
+    pub identity_regexp: String,
+    /// The OIDC issuer, `https://token.actions.githubusercontent.com` for a
+    /// marketplace whose CI is GitHub Actions.
+    pub oidc_issuer: String,
 }
 
 fn one() -> u32 {
@@ -175,6 +190,14 @@ impl Marketplace {
 
     pub fn find(&self, name: &str) -> Option<&Listing> {
         self.plugins.iter().find(|p| p.name == name)
+    }
+
+    /// What a signature from this marketplace has to be, if it says.
+    pub fn signing_identity(&self) -> Option<crate::verify::Identity> {
+        self.signing.as_ref().map(|s| crate::verify::Identity {
+            identity_regexp: s.identity_regexp.clone(),
+            oidc_issuer: s.oidc_issuer.clone(),
+        })
     }
 }
 

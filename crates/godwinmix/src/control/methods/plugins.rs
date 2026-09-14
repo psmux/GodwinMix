@@ -79,13 +79,50 @@ pub fn register(reg: &mut Registry<Call>) {
         MethodDef::new(
             "plugin.add",
             Scope::Admin,
-            "Install a plugin from a local directory, while live. The directory is the one \
-             with gmx-plugin.toml at its root.",
+            "Install a plugin, while live, from any source form: a GitHub release \
+             (owner/repo), a git URL, cargo:, npm:, pypi:, a local directory, or a bare name \
+             looked up in the marketplaces this mixer knows. The signature and the api level \
+             are checked before anything is copied.",
             handler(add),
         )
         .params(schema_of::<AddPluginRequest>)
         .result(schema_of::<PluginRecord>)
         .destructive(),
+    );
+
+    reg.register(
+        MethodDef::new(
+            "plugin.update",
+            Scope::Admin,
+            "Fetch a newer build of a plugin, install it beside the one that is running, and \
+             prove it starts. A build that does not answer `initialize` within ten seconds is \
+             rolled back and the plugin that was working stays working.",
+            handler(update),
+        )
+        .params(schema_of::<UpdatePluginRequest>)
+        .result(schema_of::<PluginUpdated>)
+        .destructive(),
+    );
+
+    reg.register(
+        MethodDef::new(
+            "plugin.search",
+            Scope::Read,
+            "Search every marketplace this mixer knows for a plugin, by name, description or \
+             kind. Answers what `gmx plugin add <name>` would install.",
+            handler(search),
+        )
+        .params(schema_of::<SearchRequest>)
+        .result(schema_of::<SearchResults>)
+        .tool(
+            "search_plugins",
+            Tier::Search,
+            "Find a plugin that is not installed yet. Searches the marketplaces this mixer \
+             is configured with, and answers each plugin's name, what it provides, its \
+             quality tier and the source to install it from. Use it when an operator asks \
+             for a capability this mixer does not have, before saying it cannot be done. \
+             Example: search_plugins {term: \"ndi\"}.",
+        ),
     );
 
     reg.register(
@@ -175,8 +212,10 @@ pub struct PluginName {
 /// `plugin.add`.
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 pub struct AddPluginRequest {
-    /// A local directory with `gmx-plugin.toml` at its root. Git, an index and
-    /// a signed release are Phase 5; this takes a path.
+    /// Where the plugin comes from. One of: `owner/repo` (a GitHub release,
+    /// optionally `@version`), a git URL ending in `.git`, `cargo:name`,
+    /// `npm:@scope/name`, `pypi:name`, `oci:ref`, an absolute path to a
+    /// directory, or a bare plugin name to look up in the marketplaces.
     pub source: String,
 }
 
@@ -209,8 +248,72 @@ pub struct PluginRecord {
     /// Why it is not loaded, when it is not.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub problem: Option<String>,
+    /// What was checked about where this came from: "signed", "signed, digest
+    /// only", or "custom, unreviewed". 06 section 4: an operator can only
+    /// judge a plugin if the catalogue says what was checked.
+    pub trust: String,
+    /// The sentence behind the label.
+    pub trust_detail: String,
+    /// Where it was installed from, as it was typed.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub source: String,
     /// Every running instance of it, with what it costs.
     pub instances: Vec<InstanceRecord>,
+}
+
+/// `plugin.update`.
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+pub struct UpdatePluginRequest {
+    #[serde(alias = "name")]
+    pub id: String,
+    /// Where the new build comes from. Defaults to wherever this plugin was
+    /// installed from last time.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source: Option<String>,
+}
+
+/// What `plugin.update` answers with.
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+pub struct PluginUpdated {
+    pub from: String,
+    pub to: String,
+    /// How long the new build took to answer `initialize`.
+    pub handshake_ms: u64,
+    pub plugin: PluginRecord,
+}
+
+/// `plugin.search`.
+#[derive(Debug, Clone, Default, Serialize, Deserialize, JsonSchema)]
+pub struct SearchRequest {
+    /// A word to look for in a plugin's name, description or kind. Empty
+    /// lists everything.
+    #[serde(default)]
+    pub term: String,
+}
+
+/// What `plugin.search` answers with.
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+pub struct SearchResults {
+    /// The marketplaces that were searched.
+    pub marketplaces: Vec<String>,
+    pub results: Vec<SearchResult>,
+}
+
+/// One plugin a marketplace lists.
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+pub struct SearchResult {
+    pub name: String,
+    pub description: String,
+    /// custom, bronze, silver or gold. 06 section 4.
+    pub tier: String,
+    pub kinds: Vec<String>,
+    /// The newest listed version this core's api range can run.
+    pub version: String,
+    /// What to pass to `plugin.add`.
+    pub source: String,
+    pub marketplace: String,
+    /// Whether it is already on this mixer.
+    pub installed: bool,
 }
 
 /// One running instance and its cost.
@@ -292,6 +395,12 @@ fn record(installed: &loader::Installed) -> PluginRecord {
         tools: installed.tools.clone(),
         hooks: installed.hooks.clone(),
         problem: installed.problem.clone(),
+        trust: installed.trust.label().to_string(),
+        trust_detail: installed
+            .trust
+            .explanation()
+            .replace("<name>", installed.name()),
+        source: installed.trust.source.clone(),
         instances,
     }
 }
@@ -361,53 +470,164 @@ async fn describe(call: Call, params: Value) -> Result<Value, RpcError> {
 
 async fn add(call: Call, params: Value) -> Result<Value, RpcError> {
     let req: AddPluginRequest = call.params(&params)?;
-    let path = std::path::PathBuf::from(&req.source);
-    if !path.exists() {
-        return Err(RpcError::new(
-            ErrorCode::NotFound,
-            format!(
-                "there is nothing at `{}`. `plugin.add` takes a local directory with \
-                 gmx-plugin.toml at its root; installing from a git URL or an index is not \
-                 in this release.",
-                req.source
-            ),
-        )
-        .with("source", req.source));
+    let source = godwinmix_host::sources::Source::parse(&req.source)
+        .or_else(|direct| {
+            // Not a source form. It may still be a name a marketplace knows,
+            // which is what the docs teach; the loader resolves that. Anything
+            // else keeps the parse error, which lists every form.
+            if godwinmix_host::marketplace::resolve(&req.source, &options(&call).only).is_some() {
+                Ok(godwinmix_host::sources::Source::Path(std::path::PathBuf::new()))
+            } else {
+                Err(direct)
+            }
+        })
+        .map_err(|e| {
+            RpcError::new(ErrorCode::NotFound, format!("{e:#}")).with("source", req.source.clone())
+        })?;
+    if let godwinmix_host::sources::Source::Path(path) = &source {
+        if !path.as_os_str().is_empty() && !path.exists() {
+            return Err(RpcError::new(
+                ErrorCode::NotFound,
+                format!(
+                    "there is nothing at `{}`. A path source is a directory with \
+                     gmx-plugin.toml at its root; `gmx plugin new` writes one.",
+                    req.source
+                ),
+            )
+            .with("source", req.source));
+        }
     }
     if call.dry_run {
-        let manifest = godwinmix_protocol::plugin::manifest::Manifest::load(
-            path.join("gmx-plugin.toml"),
-        )
-        .map_err(|e| RpcError::invalid_params(format!("{e}")))?;
-        return Ok(call.dry_run_answer(
-            true,
-            vec![format!(
-                "install {} v{} from {}, adding {} provide(s)",
-                manifest.plugin.name,
-                manifest.plugin.version,
-                path.display(),
-                manifest.provides.len()
-            )],
-        ));
+        return Ok(call.dry_run_answer(true, vec![dry_run_line(&req.source)]));
     }
     // A local copy of a directory and a manifest parse is usually quick, and a
-    // plugin with a venv to build or a node_modules to install is not. So this
-    // answers with a task handle either way, which is what 03 section 6 asks
-    // of every method that might take longer than five seconds: a client's own
-    // timeout then never leaves the work in an unknown state.
-    let source = path.clone();
+    // release to download, a venv to build or a crate to compile is not. So
+    // this answers with a task handle either way, which is what 03 section 6
+    // asks of every method that might take longer than five seconds: a
+    // client's own timeout then never leaves the work in an unknown state.
+    let spec = req.source.clone();
+    let opts = options(&call);
     Ok(super::tasks::spawn_task(
         &call.app.tasks,
         "plugin.add",
         Some(serde_json::json!({ "source": req.source })),
         move |_ctx| async move {
-            let installed = tokio::task::spawn_blocking(move || loader::install_from_path(&source))
+            let installed = tokio::task::spawn_blocking(move || loader::install(&spec, &opts))
                 .await
                 .map_err(|e| format!("the install task did not finish: {e}"))?
                 .map_err(|e| format!("{e:#}"))?;
             serde_json::to_value(record(&installed)).map_err(|e| e.to_string())
         },
     ))
+}
+
+/// One line saying what an install would do, for `--dry-run`.
+fn dry_run_line(spec: &str) -> String {
+    let path = std::path::Path::new(spec);
+    if path.join("gmx-plugin.toml").is_file() {
+        if let Ok(manifest) =
+            godwinmix_protocol::plugin::manifest::Manifest::load(path.join("gmx-plugin.toml"))
+        {
+            return format!(
+                "install {} v{} from {spec}, adding {} provide(s)",
+                manifest.plugin.name,
+                manifest.plugin.version,
+                manifest.provides.len()
+            );
+        }
+    }
+    format!(
+        "fetch {spec}, check its signature and its api level, and install it under the \
+         plugins directory"
+    )
+}
+
+async fn update(call: Call, params: Value) -> Result<Value, RpcError> {
+    let req: UpdatePluginRequest = call.params(&params)?;
+    let installed = find(&req.id)?;
+    // Where it came from last time, when the caller did not say.
+    let spec = req
+        .source
+        .clone()
+        .or_else(|| {
+            Some(installed.trust.source.clone()).filter(|s| !s.trim().is_empty())
+        })
+        .ok_or_else(|| {
+            RpcError::invalid_params(format!(
+                "`{}` has no record of where it was installed from, so there is nothing to \
+                 update it from. Say where: `gmx plugin update {} <source>`.",
+                req.id, req.id
+            ))
+        })?;
+    if call.dry_run {
+        return Ok(call.dry_run_answer(
+            true,
+            vec![format!(
+                "fetch {spec}, install it beside {} v{}, and roll back if it does not start",
+                installed.name(),
+                installed.version()
+            )],
+        ));
+    }
+    let name = req.id.clone();
+    let opts = options(&call);
+    Ok(super::tasks::spawn_task(
+        &call.app.tasks,
+        "plugin.update",
+        Some(serde_json::json!({ "plugin": req.id, "source": spec })),
+        move |_ctx| async move {
+            let updated =
+                tokio::task::spawn_blocking(move || loader::update(&name, &spec, &opts))
+                    .await
+                    .map_err(|e| format!("the update task did not finish: {e}"))?
+                    .map_err(|e| format!("{e:#}"))?;
+            serde_json::to_value(PluginUpdated {
+                from: updated.from,
+                to: updated.to,
+                handshake_ms: updated.handshake_ms as u64,
+                plugin: record(&updated.installed),
+            })
+            .map_err(|e| e.to_string())
+        },
+    ))
+}
+
+async fn search(call: Call, params: Value) -> Result<Value, RpcError> {
+    let req: SearchRequest = call.params(&params).unwrap_or(SearchRequest { term: String::new() });
+    let only = options(&call).only;
+    let found = godwinmix_host::marketplace::search(&req.term, &only);
+    let installed: Vec<String> = loader::list().iter().map(|p| p.name().to_string()).collect();
+    body(SearchResults {
+        marketplaces: godwinmix_host::marketplace::documents(&only)
+            .into_iter()
+            .map(|m| m.name)
+            .collect(),
+        results: found
+            .into_iter()
+            .map(|(market, listing)| SearchResult {
+                installed: installed.contains(&listing.name),
+                marketplace: market,
+                description: listing.description.clone(),
+                tier: listing.tier.to_string(),
+                kinds: listing.kinds.clone(),
+                version: listing
+                    .usable_version()
+                    .map(|v| v.version.clone())
+                    .unwrap_or_default(),
+                source: listing.source.clone(),
+                name: listing.name,
+            })
+            .collect(),
+    })
+}
+
+/// What the operator's config says an install may do.
+fn options(call: &Call) -> loader::InstallOptions {
+    loader::InstallOptions {
+        allow_unsigned: call.app.allow_unsigned,
+        only: call.app.marketplaces_only.clone(),
+        offline: false,
+    }
 }
 
 async fn remove(call: Call, params: Value) -> Result<Value, RpcError> {

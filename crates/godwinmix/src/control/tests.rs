@@ -216,12 +216,14 @@ fn the_table_matches_the_scopes_in_the_protocol_document() {
             "output.remove",
             "plugin.add",
             "plugin.remove",
+            "plugin.update",
             "preset.apply",
             "source.remove"
         ],
         "the destructive set is the one 03 section 6 marks, plus filter.remove (taking a \
-         filter out changes the picture and cannot be undone by repeating it) and \
-         preset.apply (it rewrites the operator's configuration file)"
+         filter out changes the picture and cannot be undone by repeating it), \
+         plugin.update (it replaces a running plugin, and rolls back rather than undoes) \
+         and preset.apply (it rewrites the operator's configuration file)"
     );
 }
 

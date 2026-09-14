@@ -15,6 +15,7 @@
 //!   budget.rs     [plugins.<name>] limits, and what happens on a breach
 //!   sampler.rs    cpu and rss per process, read cheaply once a second
 //!   offline.rs    `gmx plugin test --offline`: a transcript, a binary, no core
+//!   probe.rs      does a new build still say hello? what an update rolls back on
 //!   sources/      where a plugin comes from: github, git, cargo, npm, pypi, oci, path
 //!   verify.rs     the sigstore bundle check and the api range check
 //!   marketplace.rs  the JSON listing a plugin is resolved through
@@ -37,6 +38,7 @@ pub mod launch;
 pub mod lifecycle;
 pub mod marketplace;
 pub mod offline;
+pub mod probe;
 pub mod sampler;
 pub mod sources;
 pub mod verify;

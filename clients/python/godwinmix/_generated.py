@@ -70,7 +70,7 @@ class AddPluginRequest(TypedDict, total=False):
     """`plugin.add`."""
 
     source: str
-    # A local directory with `gmx-plugin.toml` at its root. Git, an index and a signed release are Phase 5; this takes a path.
+    # Where the plugin comes from. One of: `owner/repo` (a GitHub release, optionally `@version`), a git URL ending in `.git`, `cargo:name`, `npm:@scope/name`, `pypi:name`, `oci:ref`, an absolute path to a directory, or a bare plugin name to look up in the marketplaces.
 
 class AddSourceRequest(TypedDict, total=False):
     """`source.add`."""
@@ -442,8 +442,14 @@ class PluginDescription(TypedDict, total=False):
     # Per provide id, its settings schema.
     skills: Dict[str, Any]
     # Per provide id, the description line from its SKILL.md.
+    source: str
+    # Where it was installed from, as it was typed.
     tools: List[str]
     # Its MCP tools, as `gmx_<plugin>_<tool>`. Reachable with `search_tools`; never in the hot list.
+    trust: str
+    # What was checked about where this came from: "signed", "signed, digest only", or "custom, unreviewed". 06 section 4: an operator can only judge a plugin if the catalogue says what was checked.
+    trust_detail: str
+    # The sentence behind the label.
     version: str
 
 class PluginListing(TypedDict, total=False):
@@ -471,8 +477,14 @@ class PluginRecord(TypedDict, total=False):
     # The type ids it contributes: what goes in `type` on a source, an output or a filter.
     root: str
     # Where it is installed.
+    source: str
+    # Where it was installed from, as it was typed.
     tools: List[str]
     # Its MCP tools, as `gmx_<plugin>_<tool>`. Reachable with `search_tools`; never in the hot list.
+    trust: str
+    # What was checked about where this came from: "signed", "signed, digest only", or "custom, unreviewed". 06 section 4: an operator can only judge a plugin if the catalogue says what was checked.
+    trust_detail: str
+    # The sentence behind the label.
     version: str
 
 class PluginRemoved(TypedDict, total=False):
@@ -486,6 +498,15 @@ class PluginSettings(TypedDict, total=False):
     schemas: Dict[str, Any]
     # The JSON Schema every surface renders, one per provide.
     settings: Dict[str, Any]
+
+class PluginUpdated(TypedDict, total=False):
+    """What `plugin.update` answers with."""
+
+    from: str
+    handshake_ms: int
+    # How long the new build took to answer `initialize`.
+    plugin: PluginRecord
+    to: str
 
 class PreviewClosed(TypedDict, total=False):
     """What `preview.close` answers with."""
@@ -538,6 +559,35 @@ class SaveRequest(TypedDict, total=False):
     # The new preset's name. A slug: lower case letters, digits and hyphens.
     out: Optional[str]
     # Where to write it. Defaults to `~/.godwinmix/presets/<name>`.
+
+class SearchRequest(TypedDict, total=False):
+    """`plugin.search`."""
+
+    term: str
+    # A word to look for in a plugin's name, description or kind. Empty lists everything.
+
+class SearchResult(TypedDict, total=False):
+    """One plugin a marketplace lists."""
+
+    description: str
+    installed: bool
+    # Whether it is already on this mixer.
+    kinds: List[str]
+    marketplace: str
+    name: str
+    source: str
+    # What to pass to `plugin.add`.
+    tier: str
+    # custom, bronze, silver or gold. 06 section 4.
+    version: str
+    # The newest listed version this core's api range can run.
+
+class SearchResults(TypedDict, total=False):
+    """What `plugin.search` answers with."""
+
+    marketplaces: List[str]
+    # The marketplaces that were searched.
+    results: List[SearchResult]
 
 class SeekParams(TypedDict, total=False):
     """`source.seek`."""
@@ -726,6 +776,13 @@ class UiDefaults(TypedDict, total=False):
     theme: Optional[str]
     # A theme id the surface resolves, for example `dark` or `calm`.
 
+class UpdatePluginRequest(TypedDict, total=False):
+    """`plugin.update`."""
+
+    id: str
+    source: Optional[str]
+    # Where the new build comes from. Defaults to wherever this plugin was installed from last time.
+
 class ProgramTookEvent(TypedDict, total=False):
     at_running_time_ms: int
     duration_ms: int
@@ -811,16 +868,18 @@ METHODS = (
     {"name": "pipeline.latency", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/pipeline/latency"), "summary": 'How much delay one pipeline is carrying, and which stage put it there.'},
     {"name": "pipeline.list", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/pipeline/list"), "summary": 'Every pipeline running right now, by the name the other pipeline methods accept.'},
     {"name": "pipeline.queues", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/pipeline/queues"), "summary": 'Every queue in one pipeline with how full it is, fullest first. A queue that stays full is where the trouble is.'},
-    {"name": "plugin.add", "scope": "admin", "mutating": True, "destructive": True, "rest": ("POST", "/api/v1/plugins"), "summary": 'Install a plugin from a local directory, while live. The directory is the one with gmx-plugin.toml at its root.'},
+    {"name": "plugin.add", "scope": "admin", "mutating": True, "destructive": True, "rest": ("POST", "/api/v1/plugins"), "summary": 'Install a plugin, while live, from any source form: a GitHub release (owner/repo), a git URL, cargo:, npm:, pypi:, a local directory, or a bare name looked up in the marketplaces this mixer knows. The signature and the api level are checked before anything is copied.'},
     {"name": "plugin.describe", "scope": "read", "mutating": False, "destructive": False, "rest": ("POST", "/api/v1/plugins/{id}/describe"), "summary": 'One plugin in full: its manifest, the settings schema of every provide, and the description from each SKILL.md.'},
     {"name": "plugin.disable", "scope": "admin", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/plugins/{id}/disable"), "summary": 'Turn a plugin off without uninstalling it. It registers nothing and runs no process until it is enabled again.'},
     {"name": "plugin.enable", "scope": "admin", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/plugins/{id}/enable"), "summary": 'Turn a plugin back on. It registers what it declares and its instances start.'},
     {"name": "plugin.list", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/plugins"), "summary": 'Every plugin installed, with what it provides and what each running instance is costing in cpu, memory, latency, dropped buffers and restarts.'},
     {"name": "plugin.reload", "scope": "admin", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/plugins/{id}/reload"), "summary": "Read a plugin's directory again and swap its running instances one at a time, with the freeze frame covering each."},
     {"name": "plugin.remove", "scope": "admin", "mutating": True, "destructive": True, "rest": ("DELETE", "/api/v1/plugins/{id}"), "summary": 'Uninstall a plugin and unwind everything it registered: its provides, its tools, its panels, its hooks and its discovery matchers.'},
+    {"name": "plugin.search", "scope": "read", "mutating": False, "destructive": False, "rest": ("POST", "/api/v1/plugins/{id}/search"), "summary": 'Search every marketplace this mixer knows for a plugin, by name, description or kind. Answers what `gmx plugin add <name>` would install.'},
     {"name": "plugin.settings.get", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/plugins/{id}/settings"), "summary": "A plugin's settings as they stand, with its schema beside them."},
     {"name": "plugin.settings.set", "scope": "admin", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/plugins/{id}/settings"), "summary": "Change a plugin's settings. A plugin that cannot take a change while running says so rather than being restarted behind your back."},
     {"name": "plugin.stats", "scope": "read", "mutating": False, "destructive": False, "rest": ("POST", "/api/v1/plugins/{id}/stats"), "summary": 'Per instance cpu, memory, media latency, dropped buffers and restarts, refreshed once a second.'},
+    {"name": "plugin.update", "scope": "admin", "mutating": True, "destructive": True, "rest": ("POST", "/api/v1/plugins/{id}/update"), "summary": 'Fetch a newer build of a plugin, install it beside the one that is running, and prove it starts. A build that does not answer `initialize` within ten seconds is rolled back and the plugin that was working stays working.'},
     {"name": "preset.apply", "scope": "admin", "mutating": True, "destructive": True, "rest": ("POST", "/api/v1/preset/apply"), "summary": 'Put a preset on this core: its config, its scenes, its layout, its theme and its gallery mode. Pass dry_run to get the plan and write nothing.'},
     {"name": "preset.list", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/preset/list"), "summary": 'Every preset this core can apply: the six built in, plus anything installed beside the binary or under ~/.godwinmix/presets.'},
     {"name": "preset.save", "scope": "admin", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/preset/save"), "summary": "Turn this core's working setup into a preset directory somebody else can apply. Stream keys and the control token are replaced with placeholders."},
@@ -1221,7 +1280,7 @@ class GeneratedMethods:
         self,
         source: str,
     ) -> PluginRecord:
-        """Install a plugin from a local directory, while live. The directory is the one with gmx-plugin.toml at its root."""
+        """Install a plugin, while live, from any source form: a GitHub release (owner/repo), a git URL, cargo:, npm:, pypi:, a local directory, or a bare name looked up in the marketplaces this mixer knows. The signature and the api level are checked before anything is copied."""
         params: Dict[str, Any] = {}
         params["source"] = source
         return await self._call("plugin.add", params)
@@ -1278,6 +1337,17 @@ class GeneratedMethods:
         params["id"] = id
         return await self._call("plugin.remove", params)
 
+    async def plugin_search(
+        self,
+        *,
+        term: Optional[str] = None,
+    ) -> SearchResults:
+        """Search every marketplace this mixer knows for a plugin, by name, description or kind. Answers what `gmx plugin add <name>` would install."""
+        params: Dict[str, Any] = {}
+        if term is not None:
+            params["term"] = term
+        return await self._call("plugin.search", params)
+
     async def plugin_settings_get(
         self,
         id: str,
@@ -1306,6 +1376,19 @@ class GeneratedMethods:
         """Per instance cpu, memory, media latency, dropped buffers and restarts, refreshed once a second."""
         params: Dict[str, Any] = {}
         return await self._call("plugin.stats", params)
+
+    async def plugin_update(
+        self,
+        id: str,
+        *,
+        source: Optional[str] = None,
+    ) -> PluginUpdated:
+        """Fetch a newer build of a plugin, install it beside the one that is running, and prove it starts. A build that does not answer `initialize` within ten seconds is rolled back and the plugin that was working stays working."""
+        params: Dict[str, Any] = {}
+        params["id"] = id
+        if source is not None:
+            params["source"] = source
+        return await self._call("plugin.update", params)
 
     async def preset_apply(
         self,
