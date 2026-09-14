@@ -221,8 +221,22 @@ pub fn preparation(manifest: &Manifest, root: &Path) -> Vec<Vec<String>> {
             ]);
         }
     }
-    if run.node.is_some() && root.join("package-lock.json").exists() {
-        steps.push(vec!["npm".into(), "ci".into(), "--omit=dev".into()]);
+    if run.node.is_some() {
+        if root.join("package-lock.json").exists() {
+            steps.push(vec!["npm".into(), "ci".into(), "--omit=dev".into()]);
+        } else if root.join("package.json").exists() {
+            // A package published to npm almost never carries its lock file,
+            // so `npm ci` has nothing to read. `npm install` resolves the same
+            // dependency ranges; the lock file is what makes it reproducible,
+            // and the plugin that shipped one still gets `ci` above.
+            steps.push(vec![
+                "npm".into(),
+                "install".into(),
+                "--omit=dev".into(),
+                "--no-audit".into(),
+                "--no-fund".into(),
+            ]);
+        }
     }
     steps
 }

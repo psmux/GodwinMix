@@ -15,6 +15,9 @@
 //!   budget.rs     [plugins.<name>] limits, and what happens on a breach
 //!   sampler.rs    cpu and rss per process, read cheaply once a second
 //!   offline.rs    `gmx plugin test --offline`: a transcript, a binary, no core
+//!   sources/      where a plugin comes from: github, git, cargo, npm, pypi, oci, path
+//!   verify.rs     the sigstore bundle check and the api range check
+//!   marketplace.rs  the JSON listing a plugin is resolved through
 //! ```
 //!
 //! It is a crate of its own rather than a module of `godwinmix-core` because
@@ -32,14 +35,20 @@ pub mod channel;
 pub mod handshake;
 pub mod launch;
 pub mod lifecycle;
+pub mod marketplace;
 pub mod offline;
 pub mod sampler;
+pub mod sources;
+pub mod verify;
 
 pub use budget::{Budget, OverBudget, Stats};
 pub use channel::{Channel, LineError, Pending};
 pub use handshake::{negotiate, Negotiated, HANDSHAKE_TIMEOUT};
 pub use launch::{Launch, LaunchCtx, Runtime};
 pub use lifecycle::{Backoff, Lifecycle};
+pub use marketplace::{Listing, Marketplace, Tier};
+pub use sources::{FetchCtx, Fetched, Source};
+pub use verify::{Level, Signature, Trust};
 
 /// The tier this crate implements.
 pub const TIER: u8 = 2;
