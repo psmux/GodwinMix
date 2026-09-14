@@ -1,0 +1,107 @@
+{
+  "schemaVersion": 1,
+  "id": "0199c000-0000-701b-8000-c0ffee00001b",
+  "name": "split",
+  "canvas": {
+    "width": 1920,
+    "height": 1080,
+    "fps": 30
+  },
+  "params": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "required": [
+      "a"
+    ],
+    "properties": {
+      "a": {
+        "type": "string",
+        "default": "",
+        "title": "Camera",
+        "x-gmx-kind": "source"
+      },
+      "b": {
+        "type": "string",
+        "default": "",
+        "title": "Phone (portrait)",
+        "x-gmx-kind": "source"
+      }
+    }
+  },
+  "scenes": [
+    {
+      "id": "0199c000-0000-701c-8000-c0ffee00001c",
+      "name": "Split: a camera beside a phone",
+      "items": [
+        {
+          "id": "0199c000-0000-701d-8000-c0ffee00001d",
+          "name": "camera",
+          "content": {
+            "source": "{{a}}"
+          },
+          "transform": {
+            "position": {
+              "x": 0,
+              "y": 0
+            },
+            "rotation": 0,
+            "scale": {
+              "x": 1,
+              "y": 1
+            },
+            "anchor": {
+              "x": 0,
+              "y": 0
+            },
+            "frame": {
+              "w": 0,
+              "h": 0
+            },
+            "fit": "cover",
+            "align": "center"
+          },
+          "bind": {
+            "position.x": "0",
+            "position.y": "0",
+            "frame.w": "W - H*9/16",
+            "frame.h": "H"
+          }
+        },
+        {
+          "id": "0199c000-0000-701e-8000-c0ffee00001e",
+          "name": "phone",
+          "content": {
+            "source": "{{b}}"
+          },
+          "transform": {
+            "position": {
+              "x": 0,
+              "y": 0
+            },
+            "rotation": 0,
+            "scale": {
+              "x": 1,
+              "y": 1
+            },
+            "anchor": {
+              "x": 0,
+              "y": 0
+            },
+            "frame": {
+              "w": 0,
+              "h": 0
+            },
+            "fit": "cover",
+            "align": "center"
+          },
+          "bind": {
+            "position.x": "W - H*9/16",
+            "position.y": "0",
+            "frame.w": "H*9/16",
+            "frame.h": "H"
+          }
+        }
+      ]
+    }
+  ]
+}

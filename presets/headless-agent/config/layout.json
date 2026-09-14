@@ -1,0 +1,15 @@
+{
+  "header": [
+    "header"
+  ],
+  "main": [
+    "scenes"
+  ],
+  "sidebar": [
+    "sources",
+    "outputs"
+  ],
+  "footer": [
+    "alerts"
+  ]
+}

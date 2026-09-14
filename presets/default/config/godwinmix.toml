@@ -1,0 +1,57 @@
+# The default preset: two cameras in over RTMP, one destination out.
+#
+# This is the configuration GodwinMix ships with. Every other preset started as
+# a copy of it.
+
+[canvas]
+width = 1920
+height = 1080
+fps = 30
+sample_rate = 48000
+channels = 2
+
+[program]
+video_bitrate_kbps = 6000
+audio_bitrate_kbps = 160
+keyframe_interval_secs = 2
+audio_ramp_ms = 180
+
+[multiview]
+enabled = true
+width = 960
+height = 540
+fps = 8
+jpeg_quality = 60
+include_program = true
+
+[media]
+dir = "media"
+
+[control]
+bind = "0.0.0.0:8080"
+# token = "change-me"
+
+[hardware]
+decode = "auto"
+encode = "auto"
+
+[[sources]]
+id = "cam1"
+name = "Camera 1"
+type = "rtmp/source"
+uri = "rtmp://127.0.0.1:1935/live/cam1"
+params = { client = "auto" }
+
+[[sources]]
+id = "cam2"
+name = "Camera 2"
+type = "rtmp/source"
+uri = "rtmp://127.0.0.1:1935/live/cam2"
+params = { client = "auto" }
+
+[[outputs]]
+id = "primary"
+type = "rtmp/output"
+uri = "rtmp://127.0.0.1:1935/live/program"
+policy = "own"
+queue_secs = 5.0

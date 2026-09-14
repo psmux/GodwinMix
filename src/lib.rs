@@ -27,6 +27,7 @@ pub mod multiview;
 pub mod output;
 pub mod plugin;
 pub mod probe;
+pub mod scene;
 pub mod snapshot;
 pub mod state;
 
@@ -95,6 +96,17 @@ enum Command {
         token: Option<String>,
         #[command(subcommand)]
         cmd: ctl::Ctl,
+    },
+    /// Read a scene collection from another mixer.
+    Import {
+        #[command(subcommand)]
+        cmd: scene::cli::Import,
+    },
+    /// Work with scene documents: validate, resolve a layout, convert between
+    /// the nested document and the flat record store.
+    Scene {
+        #[command(subcommand)]
+        cmd: scene::cli::Scene,
     },
     /// Expose a running mixer to AI agents as Model Context Protocol tools.
     ///
@@ -185,6 +197,8 @@ pub async fn run() -> Result<()> {
             let cfg = Config::load(&config::path_in_force(&args.config)).ok();
             return catalogue::cli::run(cmd, cfg.as_ref(), args.codecs.as_deref());
         }
+        Some(Command::Import { cmd }) => return scene::cli::run_import(cmd),
+        Some(Command::Scene { cmd }) => return scene::cli::run_scene(cmd),
         None => {}
     }
 

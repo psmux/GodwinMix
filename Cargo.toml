@@ -57,6 +57,13 @@ libc = "0.2.189"
 # frames, which are already JPEG, and hand them back as JPEG.
 image = { version = "0.25", default-features = false, features = ["jpeg"] }
 base64 = "0.22"
+# The scene document is published as JSON Schema draft 2020-12 (schemas/scene.schema.json),
+# generated from the Rust types so the two cannot drift. A test regenerates and compares.
+schemars = "1"
+# Sixteen random bytes for a UUIDv7. The `uuid` crate would be a whole crate to
+# format a 128 bit integer we already have to generate ourselves; getrandom is
+# already in the tree under rustls and costs nothing new to compile.
+getrandom = "0.3"
 
 [profile.release]
 opt-level = 3

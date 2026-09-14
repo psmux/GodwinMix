@@ -1,0 +1,84 @@
+# The church preset: a Sunday service with two cameras, lyrics and slides,
+# going to YouTube and Facebook at the same time.
+#
+# Everything a volunteer has to change is in the first twenty lines.
+
+[canvas]
+width = 1920
+height = 1080
+fps = 30
+sample_rate = 48000
+channels = 2
+
+[program]
+video_bitrate_kbps = 4500
+audio_bitrate_kbps = 160
+keyframe_interval_secs = 2
+# A service has music in it. A short ramp keeps a take from clicking.
+audio_ramp_ms = 250
+
+[multiview]
+enabled = true
+width = 960
+height = 540
+fps = 8
+jpeg_quality = 60
+include_program = true
+
+[media]
+dir = "media"
+
+[control]
+bind = "0.0.0.0:8080"
+# Set this before the machine is on a network anybody else is on.
+# token = "change-me"
+
+[hardware]
+decode = "auto"
+encode = "auto"
+
+# The two cameras, by their NDI names. `gmx ctl device list` prints every NDI
+# sender on the network, and these are the names it shows.
+[[sources]]
+id = "cam-wide"
+name = "Wide"
+type = "ndi/source"
+uri = "ndi://CAM 1 (Wide)"
+params = { name = "CAM 1 (Wide)" }
+
+[[sources]]
+id = "cam-pulpit"
+name = "Pulpit"
+type = "ndi/source"
+uri = "ndi://CAM 2 (Pulpit)"
+params = { name = "CAM 2 (Pulpit)" }
+
+# The lyrics page. Any presentation program with a web output works here:
+# point this at its address.
+[[sources]]
+id = "lyrics"
+name = "Lyrics"
+type = "browser/source"
+uri = "web+http://127.0.0.1:8000/lyrics"
+params = { url = "http://127.0.0.1:8000/lyrics", superimpose = "auto" }
+
+[[sources]]
+id = "slides"
+name = "Slides"
+type = "browser/source"
+uri = "web+http://127.0.0.1:8000/slides"
+params = { url = "http://127.0.0.1:8000/slides", superimpose = "auto" }
+
+[[outputs]]
+id = "youtube"
+type = "rtmp/output"
+uri = "rtmp://a.rtmp.youtube.com/live2/YOUR-STREAM-KEY"
+policy = "cdn"
+queue_secs = 6.0
+
+[[outputs]]
+id = "facebook"
+type = "rtmp/output"
+uri = "rtmps://live-api-s.facebook.com:443/rtmp/YOUR-STREAM-KEY"
+policy = "cdn"
+queue_secs = 6.0

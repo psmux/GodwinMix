@@ -1,0 +1,243 @@
+{
+  "schemaVersion": 1,
+  "id": "0199c000-0000-7029-8000-c0ffee000029",
+  "name": "multiview",
+  "canvas": {
+    "width": 1920,
+    "height": 1080,
+    "fps": 30
+  },
+  "params": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "required": [
+      "program"
+    ],
+    "properties": {
+      "program": {
+        "type": "string",
+        "default": "",
+        "title": "Programme",
+        "x-gmx-kind": "source"
+      },
+      "a": {
+        "type": "string",
+        "default": "",
+        "title": "Source 1",
+        "x-gmx-kind": "source"
+      },
+      "b": {
+        "type": "string",
+        "default": "",
+        "title": "Source 2",
+        "x-gmx-kind": "source"
+      },
+      "c": {
+        "type": "string",
+        "default": "",
+        "title": "Source 3",
+        "x-gmx-kind": "source"
+      },
+      "d": {
+        "type": "string",
+        "default": "",
+        "title": "Source 4",
+        "x-gmx-kind": "source"
+      },
+      "cell": {
+        "type": "number",
+        "default": 0.2,
+        "minimum": 0.1,
+        "maximum": 0.4,
+        "title": "Cell width",
+        "description": "Each source cell's width, as a fraction of the canvas."
+      },
+      "gap": {
+        "type": "number",
+        "default": 0.01,
+        "minimum": 0.0,
+        "maximum": 0.05,
+        "title": "Gap",
+        "description": "Space between the cells, as a fraction of the canvas."
+      }
+    }
+  },
+  "scenes": [
+    {
+      "id": "0199c000-0000-702a-8000-c0ffee00002a",
+      "name": "Multiview: programme and four sources",
+      "items": [
+        {
+          "id": "0199c000-0000-702b-8000-c0ffee00002b",
+          "name": "programme",
+          "content": {
+            "source": "{{program}}"
+          },
+          "transform": {
+            "position": {
+              "x": 0,
+              "y": 0
+            },
+            "rotation": 0,
+            "scale": {
+              "x": 1,
+              "y": 1
+            },
+            "anchor": {
+              "x": 0,
+              "y": 0
+            },
+            "frame": {
+              "w": 0,
+              "h": 0
+            },
+            "fit": "contain",
+            "align": "center"
+          },
+          "bind": {
+            "position.x": "gap*W",
+            "position.y": "gap*H",
+            "frame.w": "W - 2*gap*W - cell*W - gap*W",
+            "frame.h": "(W - 2*gap*W - cell*W - gap*W)*9/16"
+          }
+        },
+        {
+          "id": "0199c000-0000-702c-8000-c0ffee00002c",
+          "name": "source 1",
+          "content": {
+            "source": "{{a}}"
+          },
+          "transform": {
+            "position": {
+              "x": 0,
+              "y": 0
+            },
+            "rotation": 0,
+            "scale": {
+              "x": 1,
+              "y": 1
+            },
+            "anchor": {
+              "x": 0,
+              "y": 0
+            },
+            "frame": {
+              "w": 0,
+              "h": 0
+            },
+            "fit": "contain",
+            "align": "center"
+          },
+          "bind": {
+            "position.x": "W - gap*W - cell*W",
+            "position.y": "gap*H + 0*(cell*W*9/16 + gap*H)",
+            "frame.w": "cell*W",
+            "frame.h": "cell*W*9/16"
+          }
+        },
+        {
+          "id": "0199c000-0000-702d-8000-c0ffee00002d",
+          "name": "source 2",
+          "content": {
+            "source": "{{b}}"
+          },
+          "transform": {
+            "position": {
+              "x": 0,
+              "y": 0
+            },
+            "rotation": 0,
+            "scale": {
+              "x": 1,
+              "y": 1
+            },
+            "anchor": {
+              "x": 0,
+              "y": 0
+            },
+            "frame": {
+              "w": 0,
+              "h": 0
+            },
+            "fit": "contain",
+            "align": "center"
+          },
+          "bind": {
+            "position.x": "W - gap*W - cell*W",
+            "position.y": "gap*H + 1*(cell*W*9/16 + gap*H)",
+            "frame.w": "cell*W",
+            "frame.h": "cell*W*9/16"
+          }
+        },
+        {
+          "id": "0199c000-0000-702e-8000-c0ffee00002e",
+          "name": "source 3",
+          "content": {
+            "source": "{{c}}"
+          },
+          "transform": {
+            "position": {
+              "x": 0,
+              "y": 0
+            },
+            "rotation": 0,
+            "scale": {
+              "x": 1,
+              "y": 1
+            },
+            "anchor": {
+              "x": 0,
+              "y": 0
+            },
+            "frame": {
+              "w": 0,
+              "h": 0
+            },
+            "fit": "contain",
+            "align": "center"
+          },
+          "bind": {
+            "position.x": "W - gap*W - cell*W",
+            "position.y": "gap*H + 2*(cell*W*9/16 + gap*H)",
+            "frame.w": "cell*W",
+            "frame.h": "cell*W*9/16"
+          }
+        },
+        {
+          "id": "0199c000-0000-702f-8000-c0ffee00002f",
+          "name": "source 4",
+          "content": {
+            "source": "{{d}}"
+          },
+          "transform": {
+            "position": {
+              "x": 0,
+              "y": 0
+            },
+            "rotation": 0,
+            "scale": {
+              "x": 1,
+              "y": 1
+            },
+            "anchor": {
+              "x": 0,
+              "y": 0
+            },
+            "frame": {
+              "w": 0,
+              "h": 0
+            },
+            "fit": "contain",
+            "align": "center"
+          },
+          "bind": {
+            "position.x": "W - gap*W - cell*W",
+            "position.y": "gap*H + 3*(cell*W*9/16 + gap*H)",
+            "frame.w": "cell*W",
+            "frame.h": "cell*W*9/16"
+          }
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,616 @@
+{
+  "$defs": {
+    "Align": {
+      "description": "The nine alignment keywords, used to place content inside its frame.",
+      "enum": [
+        "top-left",
+        "top-center",
+        "top-right",
+        "center-left",
+        "center",
+        "center-right",
+        "bottom-left",
+        "bottom-center",
+        "bottom-right"
+      ],
+      "type": "string"
+    },
+    "Asset": {
+      "additionalProperties": false,
+      "description": "A file the collection carries with it.",
+      "properties": {
+        "path": {
+          "description": "Relative to the collection root, always.",
+          "type": "string"
+        },
+        "sha256": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "size": {
+          "format": "uint64",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "path"
+      ],
+      "type": "object"
+    },
+    "Audio": {
+      "description": "Whether the item's source is heard. A source is audible when any live item\nof it says so, which is OBS's behaviour and changes no pad topology.",
+      "oneOf": [
+        {
+          "const": "follow",
+          "description": "Heard while the item is visible on programme.",
+          "type": "string"
+        },
+        {
+          "const": "always",
+          "description": "Heard whether the item is visible or not.",
+          "type": "string"
+        },
+        {
+          "const": "never",
+          "description": "Never heard.",
+          "type": "string"
+        }
+      ]
+    },
+    "Blend": {
+      "description": "OBS's blend enum, so an import carries across unchanged.",
+      "enum": [
+        "normal",
+        "add",
+        "screen",
+        "multiply",
+        "lighten",
+        "darken",
+        "subtract"
+      ],
+      "type": "string"
+    },
+    "Canvas": {
+      "additionalProperties": false,
+      "description": "The output raster. One per collection in this release; 11 section 1 leaves\nroom for several.",
+      "properties": {
+        "fps": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "height": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "width": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "width",
+        "height",
+        "fps"
+      ],
+      "type": "object"
+    },
+    "Content": {
+      "anyOf": [
+        {
+          "additionalProperties": false,
+          "description": "A source id: a slug, because an operator types it.",
+          "properties": {
+            "source": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "source"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "description": "Another scene in this collection, with sparse overrides keyed by the\ntarget's item id (USD's `over`, Godot's revertable override). Unity\nkeys overrides by array position and silently attaches them to the\nwrong entry when the source changes.",
+          "properties": {
+            "overrides": {
+              "additionalProperties": false,
+              "patternProperties": {
+                "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$": {
+                  "$ref": "#/$defs/Override"
+                }
+              },
+              "type": "object"
+            },
+            "ref": {
+              "$ref": "#/$defs/Id"
+            }
+          },
+          "required": [
+            "ref"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "description": "A graphic template, by its plugin qualified id.",
+          "properties": {
+            "graphic": {
+              "type": "string"
+            },
+            "params": true
+          },
+          "required": [
+            "graphic"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "description": "A group.",
+          "properties": {
+            "children": {
+              "items": {
+                "$ref": "#/$defs/Item"
+              },
+              "type": "array"
+            }
+          },
+          "required": [
+            "children"
+          ],
+          "type": "object"
+        }
+      ],
+      "description": "What an item shows.\n\nA group is an item whose content is an inline list of children: no special\ntype and no special rules. OBS made a group a modified scene and collected a\ndecade of transform corruption bugs (2913, 4173, 5478, 9297, 9298, 9558)."
+    },
+    "Crop": {
+      "additionalProperties": false,
+      "description": "How much of the content's own pixels to trim, normalised 0 to 1 so it\nsurvives a canvas change. vMix and CasparCG do this; OBS crops in pixels,\nwhich is why an OBS collection moved from 1080p to 720p loses its crops.",
+      "properties": {
+        "bottom": {
+          "format": "double",
+          "type": "number"
+        },
+        "left": {
+          "format": "double",
+          "type": "number"
+        },
+        "right": {
+          "format": "double",
+          "type": "number"
+        },
+        "top": {
+          "format": "double",
+          "type": "number"
+        }
+      },
+      "required": [
+        "left",
+        "top",
+        "right",
+        "bottom"
+      ],
+      "type": "object"
+    },
+    "Filter": {
+      "additionalProperties": false,
+      "description": "One filter in an item's chain.",
+      "properties": {
+        "enabled": {
+          "default": true,
+          "type": "boolean"
+        },
+        "name": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "params": {
+          "default": null
+        },
+        "type": {
+          "description": "The plugin qualified provide id, for example `chroma/filter`.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type"
+      ],
+      "type": "object"
+    },
+    "Fit": {
+      "description": "How content fills its frame. SVG's vocabulary, which replaces OBS's seven\nbounds types and maps onto `sizing-policy` on a `glvideomixer` pad.",
+      "oneOf": [
+        {
+          "const": "none",
+          "description": "The content's own size, scaled by `scale`. The frame is ignored.",
+          "type": "string"
+        },
+        {
+          "const": "contain",
+          "description": "Fit inside the frame, keeping the aspect ratio.",
+          "type": "string"
+        },
+        {
+          "const": "cover",
+          "description": "Fill the frame, keeping the aspect ratio, cropping the overflow.",
+          "type": "string"
+        },
+        {
+          "const": "stretch",
+          "description": "Fill the frame exactly, distorting the aspect ratio.",
+          "type": "string"
+        },
+        {
+          "const": "fit-width",
+          "description": "Scale so the width matches; the height falls where it falls.",
+          "type": "string"
+        },
+        {
+          "const": "fit-height",
+          "description": "Scale so the height matches; the width falls where it falls.",
+          "type": "string"
+        },
+        {
+          "const": "max",
+          "description": "Like `contain`, but never scale up past the content's own size.",
+          "type": "string"
+        }
+      ]
+    },
+    "Frame": {
+      "additionalProperties": false,
+      "description": "The rectangle an item is fitted into.",
+      "properties": {
+        "h": {
+          "format": "double",
+          "type": "number"
+        },
+        "w": {
+          "format": "double",
+          "type": "number"
+        }
+      },
+      "required": [
+        "w",
+        "h"
+      ],
+      "type": "object"
+    },
+    "Id": {
+      "description": "A UUID in the hyphenated form. Minted ids are version 7 (time ordered); ids derived from a layout are version 8.",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+      "type": "string"
+    },
+    "Item": {
+      "additionalProperties": false,
+      "description": "One placement of content in a scene. Not a \"layer\": the code already uses\nthat word for the superimposed page.",
+      "properties": {
+        "audio": {
+          "$ref": "#/$defs/Audio",
+          "default": "follow"
+        },
+        "bind": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "description": "Layout bindings: a geometry path such as `frame.w` against a small\narithmetic expression over the layout's params and `W`, `H`. Present\nonly in a layout preset; `layout::apply` resolves them and leaves this\nempty on the scene it produces.",
+          "type": "object"
+        },
+        "blend": {
+          "$ref": "#/$defs/Blend",
+          "default": "normal"
+        },
+        "content": {
+          "$ref": "#/$defs/Content"
+        },
+        "crop": {
+          "$ref": "#/$defs/Crop",
+          "default": {
+            "bottom": 0.0,
+            "left": 0.0,
+            "right": 0.0,
+            "top": 0.0
+          }
+        },
+        "filters": {
+          "description": "Filters belong to the item, not to the source. OBS attaches them to\nsources only, so a camera keyed in one scene is keyed in all of them and\nthe workaround is a nested scene per placement.",
+          "items": {
+            "$ref": "#/$defs/Filter"
+          },
+          "type": "array"
+        },
+        "id": {
+          "$ref": "#/$defs/Id"
+        },
+        "locked": {
+          "default": false,
+          "type": "boolean"
+        },
+        "name": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "opacity": {
+          "default": 1.0,
+          "format": "double",
+          "type": "number"
+        },
+        "transform": {
+          "$ref": "#/$defs/Transform",
+          "default": {
+            "align": "center",
+            "anchor": {
+              "x": 0.0,
+              "y": 0.0
+            },
+            "fit": "none",
+            "position": {
+              "x": 0.0,
+              "y": 0.0
+            },
+            "rotation": 0.0,
+            "scale": {
+              "x": 1.0,
+              "y": 1.0
+            }
+          }
+        },
+        "visible": {
+          "default": true,
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "id",
+        "content"
+      ],
+      "type": "object"
+    },
+    "Override": {
+      "additionalProperties": false,
+      "description": "A sparse change to one item of a referenced scene.",
+      "properties": {
+        "crop": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Crop"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "opacity": {
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "params": true,
+        "transform": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Transform"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "visible": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        }
+      },
+      "type": "object"
+    },
+    "Scene": {
+      "additionalProperties": false,
+      "description": "A named, ordered composition of items on the canvas.",
+      "properties": {
+        "color": {
+          "description": "A free colour for every client, the tally and the Stream Deck to agree\non (11 section 6b). Absent means the client picks one by kind.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "id": {
+          "$ref": "#/$defs/Id"
+        },
+        "items": {
+          "description": "Bottom of the stack first, the way the compositor takes them.",
+          "items": {
+            "$ref": "#/$defs/Item"
+          },
+          "type": "array"
+        },
+        "name": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "items"
+      ],
+      "type": "object"
+    },
+    "Transform": {
+      "additionalProperties": false,
+      "description": "Where an item sits and how it is sized.",
+      "properties": {
+        "align": {
+          "$ref": "#/$defs/Align",
+          "default": "center"
+        },
+        "anchor": {
+          "$ref": "#/$defs/Vec2",
+          "default": {
+            "x": 0.0,
+            "y": 0.0
+          },
+          "description": "Normalised 0 to 1 within the item's own box: (0,0) top left, (0.5,0.5)\ncentre, (1,1) bottom right."
+        },
+        "fit": {
+          "$ref": "#/$defs/Fit",
+          "default": "none"
+        },
+        "frame": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Frame"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The rectangle the content is fitted into, in canvas pixels. Absent\nmeans the content's own size, scaled."
+        },
+        "position": {
+          "$ref": "#/$defs/Vec2",
+          "default": {
+            "x": 0.0,
+            "y": 0.0
+          },
+          "description": "Canvas pixels, of the item's anchor point."
+        },
+        "rotation": {
+          "default": 0.0,
+          "description": "Degrees, clockwise, about the anchor.",
+          "format": "double",
+          "type": "number"
+        },
+        "scale": {
+          "$ref": "#/$defs/Vec2",
+          "default": {
+            "x": 1.0,
+            "y": 1.0
+          }
+        }
+      },
+      "type": "object"
+    },
+    "Transition": {
+      "additionalProperties": false,
+      "description": "A named transition between two scenes.",
+      "properties": {
+        "duration_ms": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "id": {
+          "$ref": "#/$defs/Id"
+        },
+        "name": {
+          "type": "string"
+        },
+        "params": true,
+        "type": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "type",
+        "duration_ms"
+      ],
+      "type": "object"
+    },
+    "Vec2": {
+      "additionalProperties": false,
+      "description": "A point or a pair of factors.",
+      "properties": {
+        "x": {
+          "default": 0.0,
+          "format": "double",
+          "type": "number"
+        },
+        "y": {
+          "default": 0.0,
+          "format": "double",
+          "type": "number"
+        }
+      },
+      "type": "object"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "A GodwinMix scene collection: canvas, parameters, scenes of items, transitions and assets. See docs/reference/scene-document.md.",
+  "properties": {
+    "assets": {
+      "additionalProperties": false,
+      "description": "Assets by id, each a path relative to the collection root with a hash.\nNever an absolute path: OBS stores those, which is why every commercial\nscene bundle ships a relink wizard.",
+      "patternProperties": {
+        "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$": {
+          "$ref": "#/$defs/Asset"
+        }
+      },
+      "type": "object"
+    },
+    "canvas": {
+      "$ref": "#/$defs/Canvas"
+    },
+    "id": {
+      "$ref": "#/$defs/Id"
+    },
+    "name": {
+      "type": "string"
+    },
+    "params": {
+      "default": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {},
+        "type": "object"
+      },
+      "description": "A JSON Schema block in OGraf's manifest shape, readable on its own\nwithout fetching values, so an agent discovers what is fillable before\nfilling it. `{{name}}` in a string prop binds to a property here."
+    },
+    "scenes": {
+      "items": {
+        "$ref": "#/$defs/Scene"
+      },
+      "type": "array"
+    },
+    "schemaVersion": {
+      "description": "The document format version. See `migrate`.",
+      "format": "uint32",
+      "minimum": 0,
+      "type": "integer"
+    },
+    "transitions": {
+      "items": {
+        "$ref": "#/$defs/Transition"
+      },
+      "type": "array"
+    }
+  },
+  "required": [
+    "schemaVersion",
+    "id",
+    "name",
+    "canvas",
+    "scenes"
+  ],
+  "title": "GodwinMix scene collection",
+  "type": "object"
+}

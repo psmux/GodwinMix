@@ -1,0 +1,62 @@
+# The headless agent preset: nobody is at the machine. An agent connects
+# over MCP and drives it, a web page is the picture, and the whole thing runs
+# unattended.
+
+[canvas]
+width = 1920
+height = 1080
+fps = 30
+sample_rate = 48000
+channels = 2
+
+[program]
+video_bitrate_kbps = 4500
+audio_bitrate_kbps = 160
+keyframe_interval_secs = 2
+audio_ramp_ms = 180
+
+# Nothing renders the multiview until a client asks for it, and on a headless
+# box nothing asks. Leaving it off saves the memory outright.
+[multiview]
+enabled = false
+width = 960
+height = 540
+fps = 5
+jpeg_quality = 55
+include_program = true
+
+[media]
+dir = "media"
+
+[control]
+bind = "0.0.0.0:8080"
+# An unattended box on a network is exactly where a token is not optional.
+# token = "change-me"
+
+[security]
+allow_exec_sources = false
+
+[hardware]
+decode = "auto"
+encode = "auto"
+
+[[sources]]
+id = "page"
+name = "Page"
+type = "browser/source"
+uri = "web+https://example.com/channel"
+params = { url = "https://example.com/channel", superimpose = "auto" }
+
+[[sources]]
+id = "standby"
+name = "Standby"
+type = "browser/source"
+uri = "web+https://example.com/standby"
+params = { url = "https://example.com/standby", superimpose = "off" }
+
+[[outputs]]
+id = "primary"
+type = "rtmp/output"
+uri = "rtmp://127.0.0.1:1935/live/channel"
+policy = "own"
+queue_secs = 5.0
