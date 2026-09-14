@@ -217,8 +217,8 @@ pub struct ClockReport {
     /// One row per pipeline in this process, so that a mosaic drifting from
     /// the programme is visible without asking twice.
     pub pipelines: Vec<PipelineClock>,
-    /// Remote nodes and their offsets. Empty until 04 lands; the field is here
-    /// so the shape does not change when it does.
+    /// Remote nodes and their offsets, one row per node the core has heard
+    /// from. Empty on a core with no node bridge.
     pub nodes: Vec<NodeClock>,
 }
 
@@ -260,7 +260,24 @@ pub fn clock() -> Result<ClockReport> {
         base_time_ms: programme.as_ref().and_then(|p| p.base_time()).map(ms),
         running_time_ms: programme.as_ref().and_then(running_time).map(ms),
         pipelines,
-        nodes: Vec::new(),
+        // Whatever each node last said on its heartbeat. Read rather than
+        // asked: the client clock on the node already knows its own offset,
+        // and asking across the network to find out how far the network is
+        // off would be a strange way round.
+        nodes: crate::node::runtime::get()
+            .map(|runtime| {
+                runtime
+                    .nodes
+                    .views()
+                    .into_iter()
+                    .map(|view| NodeClock {
+                        node: view.name,
+                        offset_ms: view.clock_offset_ms,
+                        jitter_ms: view.clock_jitter_ms,
+                    })
+                    .collect()
+            })
+            .unwrap_or_default(),
     })
 }
 

@@ -392,7 +392,7 @@ async fn set(call: Call, params: Value) -> Result<Value, RpcError> {
         // The reconciler's desired state moves first, so a tick landing during
         // the swap does not try to put the old instance back.
         match wanted.placement().node() {
-            Some(node) => runtime.reconciler.want(godwinmix_core::node::reconcile::Desired {
+            Some(_) => runtime.reconciler.want(godwinmix_core::node::reconcile::Desired {
                 instance: wanted.id.clone(),
                 type_id: wanted.type_id.clone().unwrap_or_default(),
                 place: wanted.placement(),

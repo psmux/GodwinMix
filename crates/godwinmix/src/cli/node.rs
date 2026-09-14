@@ -91,7 +91,10 @@ pub async fn run(base: &str, token: Option<&str>, cmd: Node) -> Result<()> {
                 );
                 return Ok(());
             }
-            println!("{:<16} {:<9} {:>9} {:>10}  {}", "NAME", "STATE", "BEAT", "CLOCK", "HOSTING");
+            println!(
+                "{:<16} {:<9} {:>9} {:>10}  HOSTING",
+                "NAME", "STATE", "BEAT", "CLOCK"
+            );
             for n in nodes {
                 let name = n.get("name").and_then(Value::as_str).unwrap_or("-");
                 let state = n.get("state").and_then(Value::as_str).unwrap_or("-");

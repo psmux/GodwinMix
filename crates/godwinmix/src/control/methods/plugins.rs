@@ -731,6 +731,20 @@ async fn remove(call: Call, params: Value) -> Result<Value, RpcError> {
     .await;
     let gone = loader::uninstall(&req.id)
         .map_err(|e| RpcError::new(ErrorCode::NotInState, format!("{e:#}")))?;
+    // Its credentials and its secrets go with it. A token minted for an
+    // instance of a plugin that is no longer installed is a key to a door that
+    // has been bricked up, and leaving one lying about is how a revoked plugin
+    // keeps calling.
+    let revoked = call.app.tokens.revoke_plugin(gone.name());
+    let forgotten = secrets().forget(gone.name());
+    if revoked > 0 || forgotten > 0 {
+        tracing::info!(
+            plugin = gone.name(),
+            revoked,
+            forgotten,
+            "revoked a removed plugin's tokens and forgot its secrets"
+        );
+    }
     // The hook call site: everything it registered goes with it, then the
     // rest of the world is told.
     call.app.hooks.unregister_plugin(gone.name());
@@ -892,7 +906,31 @@ async fn settings_set(call: Call, params: Value) -> Result<Value, RpcError> {
     // The settings live in the operator's config, which is the one place a
     // restart reads them back from. Everything else is derived.
     let mut current = call.app.plugin_settings.get(&req.id).cloned().unwrap_or_default();
+    // Secrets never reach the config file. A field the schema marks
+    // `"format": "secret"` is taken out here, sealed under the store's own
+    // key, and what is left is what gets written down. A field carrying the
+    // sentinel is a form handing back what it was given and means "unchanged".
+    let secret_fields = secret_fields_of(&installed);
+    if !secret_fields.is_empty() {
+        let mut incoming: godwinmix_core::config::Params = Default::default();
+        for (key, value) in &req.settings {
+            if let Ok(v) = toml::Value::try_from(value) {
+                incoming.insert(key.clone(), v);
+            }
+        }
+        for (field, value) in godwinmix_core::secrets::take(&mut incoming, &secret_fields) {
+            secrets()
+                .set(&req.id, &field, &value)
+                .map_err(|e| RpcError::internal(format!("sealing `{field}`: {e:#}")))?;
+        }
+        for field in &secret_fields {
+            current.remove(field);
+        }
+    }
     for (key, value) in &req.settings {
+        if secret_fields.iter().any(|f| f == key) {
+            continue;
+        }
         match toml::Value::try_from(value) {
             Ok(v) => {
                 current.insert(key.clone(), v);
@@ -921,14 +959,59 @@ fn settings_of(call: &Call, installed: &loader::Installed) -> PluginSettings {
             schemas.insert(id, schema);
         }
     }
-    let settings = call
-        .app
-        .plugin_settings
-        .get(installed.name())
-        .and_then(|t| serde_json::to_value(t).ok())
+    let mut table = call.app.plugin_settings.get(installed.name()).cloned().unwrap_or_default();
+    // What a surface sees where a secret is: the sentinel when one is stored,
+    // and nothing when one is not. The value itself never leaves the store.
+    let fields = secret_fields_of(installed);
+    if !fields.is_empty() {
+        let store = secrets();
+        let name = installed.name().to_string();
+        godwinmix_core::secrets::hide(&mut table, &fields, |field| store.has(&name, field));
+    }
+    let settings = serde_json::to_value(&table)
+        .ok()
         .and_then(|v| v.as_object().cloned())
         .unwrap_or_default();
     PluginSettings { name: installed.name().to_string(), settings, schemas }
+}
+
+/// Which of a plugin's settings fields the schema marks as secret.
+///
+/// Across every provide, because `[plugin] settings` are per plugin and a
+/// stream key declared on one provide is the same secret whichever of them
+/// reads it.
+fn secret_fields_of(installed: &loader::Installed) -> Vec<String> {
+    let mut fields = Vec::new();
+    for provide in &installed.manifest.provides {
+        let id = format!("{}/{}", installed.name(), provide.id);
+        if let Some(schema) = loader::settings_schema(&id) {
+            fields.extend(godwinmix_core::secrets::secret_fields(&schema));
+        }
+    }
+    fields.sort();
+    fields.dedup();
+    fields
+}
+
+/// The secret store, opened once under the plugins directory's parent.
+///
+/// `~/.godwinmix/secrets`, beside the plugins themselves. A process global
+/// because `settings_of` is called from a handler that has no place to keep
+/// one, and because there is exactly one of these per machine.
+fn secrets() -> &'static godwinmix_core::secrets::Secrets {
+    static STORE: std::sync::OnceLock<godwinmix_core::secrets::Secrets> =
+        std::sync::OnceLock::new();
+    STORE.get_or_init(|| {
+        let dir = godwinmix_host::marketplace::home_dir().join("secrets");
+        godwinmix_core::secrets::Secrets::open(&dir).unwrap_or_else(|e| {
+            // A store that will not open is a machine problem, not a reason to
+            // refuse to start. Secrets are then not stored and the settings
+            // form says a field is empty, which is true.
+            tracing::error!(error = %format!("{e:#}"), "no secret store; fields marked secret will not persist");
+            godwinmix_core::secrets::Secrets::open(&std::env::temp_dir().join("gmx-secrets"))
+                .expect("a temporary secret store")
+        })
+    })
 }
 
 /// A plugin has just landed: register its hooks, then say so.
