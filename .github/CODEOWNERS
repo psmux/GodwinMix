@@ -1,0 +1,29 @@
+# Who gets asked to review what.
+#
+# One maintainer today, so every line names the same person. The file exists
+# anyway: it is the place the answer goes when that stops being true, and a
+# contributor can see who will read their pull request before they open it.
+#
+# Last match wins, so the specific lines are below the general one.
+
+*                           @psmux
+
+# The pipeline. A change here can stop somebody's broadcast, so it is the one
+# area where a review is not a formality.
+/src/mixer.rs               @psmux
+/src/input.rs               @psmux
+/src/output.rs              @psmux
+/src/probe.rs               @psmux
+
+# The public contract. Changing any of these changes what every client and
+# every plugin can rely on.
+/src/control.rs             @psmux
+/src/state.rs               @psmux
+/godwinmix.example.toml     @psmux
+
+# Packaging, CI and the documentation front door.
+/deploy/                    @psmux
+/.github/                   @psmux
+/docs/                      @psmux
+/README.md                  @psmux
+/SECURITY.md                @psmux

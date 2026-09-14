@@ -1,0 +1,69 @@
+name: Feature request
+description: Something the mixer should do and does not
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        The most useful feature request describes the thing you were trying to
+        do, not the feature you decided would solve it. Often the first has an
+        answer today and the second is a year of work.
+
+        First response is targeted at under 48 hours. An answer of "not in the
+        first year" is a real answer and you will get it quickly rather than
+        after six months of silence.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: What you were trying to do
+      description: The situation, not the solution. Where were you, what were you running, what stopped you?
+      placeholder: |
+        Running a school play from a laptop in the wings. Two cameras and a
+        laptop showing slides. I had no way to get the slides in without
+        another machine publishing RTMP.
+    validations:
+      required: true
+
+  - type: textarea
+    id: today
+    attributes:
+      label: What you do today instead
+      description: The workaround, however ugly. If there is none, say so.
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What you think should exist
+      description: >
+        Optional. If you have a shape in mind, describe it, including what the
+        command or the API call would look like.
+
+  - type: dropdown
+    id: who
+    attributes:
+      label: Who is this for
+      description: Helps place it against the deployments the design is argued against.
+      options:
+        - A church or a place of worship
+        - A school or a university
+        - Esports or gaming
+        - A broadcaster or a production company
+        - A server side or unattended channel
+        - An AI agent operating the mixer
+        - Me, building something on top of it
+        - Something else
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before you post
+      options:
+        - label: I read the non goals in the README and this is not one of them
+          required: false
+        - label: I would be willing to help build it
+          required: false

@@ -63,7 +63,9 @@ than rustfmt's default, and a struct literal on one line when it fits.
 
 There is a local test rig under `dev/harness/` (mediamtx and a synthetic
 camera) for anything that needs a real RTMP endpoint. `dev/harness/up.sh`
-starts it and `dev/harness/down.sh` stops it.
+downloads mediamtx on first run, starts the RTMP server, a test page server and
+a mixer on a test config, and `dev/harness/down.sh` stops all of it. A
+`gmx harness up` that does the same thing without a shell script is planned.
 
 A change to the mixing, the source lifecycle or the output path should come
 with a test that fails without it. A change that cannot be tested without
@@ -112,12 +114,45 @@ Say in the description what the change does, what you tested, and what you know
 is still missing. If it changes behaviour anyone depends on (an HTTP route, a
 config key, an environment variable, a file name), say that first.
 
+## The friction log
+
+Every time somebody gets stuck on the path from "I want to use this" to "it
+works", it goes in [`docs/friction-log.md`](docs/friction-log.md). Not in a
+private note, not in a ticket that gets closed. In that file, where the next
+person can read it.
+
+The rule: if you got stuck, write it down, even if you worked it out yourself
+thirty seconds later. Especially then. A thirty second confusion that happens
+to everybody costs more in total than an hour long problem that happens to one
+person. Three things make an entry useful: what you were trying to do, what you
+saw, and what you expected instead. Do not polish it.
+
+That applies to AI agents as well as people. An agent that had to read the
+source to find out what a command does has hit friction, and the fix is the
+same fix.
+
+Every entry is triaged to one of three outcomes: fixed (the error message, the
+default or the page changed), documented (the behaviour is right and now the
+page says so), or accepted (the fix is expensive or waiting on something else,
+and the entry says which). An entry is never closed with "works as intended"
+and nothing else. If three people trip over the same intention, the intention
+is the problem.
+
+The measured time from nothing to a working plugin is the number this project
+keeps. The friction log is where the things that make that number worse are
+recorded.
+
 ## Response times
 
 First response on an issue or a pull request is targeted at under 48 hours.
 That first response might be a question or a "this needs a week", but you
 should not be left wondering whether anyone read it. If three days pass with
 nothing, assume it was missed and say so on the thread.
+
+This is a commitment rather than an aspiration, and the reason is in the
+evidence: a study of 111,094 pull requests found that the wait for a first
+reply is what decides whether a newcomer becomes a contributor. A "good first
+issue" label on its own does not work; a label plus a fast reply does.
 
 ## Security
 
