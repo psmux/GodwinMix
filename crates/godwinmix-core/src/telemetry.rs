@@ -196,6 +196,12 @@ impl Drop for Lease<'_> {
     }
 }
 
+impl Default for Telemetry {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Telemetry {
     /// A telemetry of its own. The process has one behind [`telemetry`]; the
     /// tests make their own so that two of them never share a reading.

@@ -37,7 +37,7 @@ use tracing::{error, info, warn};
 const EXAMPLE_CONFIG: &str = include_str!("../../../godwinmix.example.toml");
 
 /// Where a client subcommand looks for a mixer when nothing says otherwise.
-const DEFAULT_URL: &str = "http://127.0.0.1:8080";
+pub const DEFAULT_URL: &str = "http://127.0.0.1:8080";
 
 #[derive(Parser, Debug)]
 #[command(name = "godwinmix", about = "Live RTMP video mixer with hot source switching")]
@@ -187,6 +187,20 @@ enum Command {
         #[arg(long, value_name = "ADDR")]
         http: Option<String>,
     },
+    /// What an agent pays to look at this mixer, and the skills it reads.
+    ///
+    /// `gmx agent cost` prints the size of `agent.state`, of the MCP hot tool
+    /// list and of a snapshot, in bytes and in tokens. The budgets are in
+    /// `docs/reference/agent-state.md`.
+    Agent(cli::agent::AgentArgs),
+
+    /// Install the GodwinMix skills into an AI coding tool's directory.
+    ///
+    /// `gmx skill install --for claude` drops `godwinmix-operate` and
+    /// `godwinmix-develop` where that tool reads them. `--print` shows what it
+    /// would write and writes nothing.
+    Skill(cli::skill::SkillArgs),
+
     /// Inspect and test the codec catalogue.
     ///
     /// The catalogue is `codecs.toml`: which codec the programme is encoded
@@ -299,6 +313,8 @@ pub async fn run() -> Result<()> {
             let cfg = Config::load(&config::path_in_force(&args.config)).ok();
             return cli::codec::run(cmd, cfg.as_ref(), args.codecs.as_deref());
         }
+        Some(Command::Agent(args)) => return cli::agent::run(args.cmd).await,
+        Some(Command::Skill(args)) => return cli::skill::run(args.cmd),
         Some(Command::Import { cmd }) => return cli::scene::run_import(cmd),
         Some(Command::Scene { cmd }) => return cli::scene::run_scene(cmd),
         Some(Command::Observe(cmd)) => {
