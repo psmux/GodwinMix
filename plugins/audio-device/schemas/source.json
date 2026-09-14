@@ -1,0 +1,50 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Audio device",
+  "description": "A microphone, a line input or a sound card. Leave everything empty and the machine's default input runs at unity gain.",
+  "type": "object",
+  "properties": {
+    "device": {
+      "type": "string",
+      "title": "Input",
+      "description": "Which input. The id from `list_audio_inputs`, the name the system shows, or a number counting from 0. Empty means the machine's first input, which is usually the one the operating system calls the default.",
+      "default": "",
+      "maxLength": 512,
+      "examples": ["", "Scarlett 2i2 Analog Stereo", "alsa_input.usb-046d_C920", "1"]
+    },
+    "gain_db": {
+      "type": "number",
+      "title": "Gain",
+      "description": "How much to lift or cut this input before it reaches the mix. 0 is unity, which is what the device sends. Changes apply while the source is live.",
+      "default": 0,
+      "minimum": -60,
+      "maximum": 12,
+      "x-gmx-unit": "db",
+      "examples": [0, -6, 3.5]
+    },
+    "muted": {
+      "type": "boolean",
+      "title": "Muted",
+      "description": "Silence this input without stopping it. The device stays open, so unmuting is instant.",
+      "default": false,
+      "examples": [false, true]
+    },
+    "label": {
+      "type": "string",
+      "title": "Label",
+      "description": "A name for this input, shown wherever the source is listed.",
+      "default": "",
+      "maxLength": 64,
+      "examples": ["", "Lectern mic", "Desk out"]
+    },
+    "element": {
+      "type": "string",
+      "title": "Capture element",
+      "description": "Force one GStreamer capture element instead of letting the plugin choose. On Windows, `directsoundsrc` is the fallback for wasapi2src's stutter. Empty is the right answer almost always.",
+      "default": "",
+      "enum": ["", "pipewiresrc", "pulsesrc", "alsasrc", "osxaudiosrc", "wasapi2src", "directsoundsrc", "audiotestsrc"],
+      "examples": ["", "directsoundsrc", "audiotestsrc"]
+    }
+  },
+  "additionalProperties": false
+}

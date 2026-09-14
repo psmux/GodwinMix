@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "list_audio_inputs result",
+  "description": "Every sound input the operating system is offering, in the order it offers them.",
+  "type": "object",
+  "properties": {
+    "inputs": {
+      "type": "array",
+      "description": "One entry per input. `id` is what goes in an audio source's `device` setting.",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string", "description": "What to put in the `device` setting." },
+          "name": { "type": "string", "description": "What the operating system calls it." },
+          "api": { "type": "string", "description": "The capture API behind it: pipewire, pulse, coreaudio, wasapi2." }
+        },
+        "required": ["id", "name"],
+        "additionalProperties": false
+      }
+    }
+  },
+  "required": ["inputs"],
+  "additionalProperties": false
+}
