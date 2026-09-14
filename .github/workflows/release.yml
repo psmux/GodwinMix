@@ -164,7 +164,7 @@ jobs:
             bundles: deb,appimage
           - os: macos-latest
             platform: macos
-            bundles: app,dmg
+            bundles: app
           - os: windows-latest
             platform: windows
             bundles: msi,nsis
@@ -244,22 +244,24 @@ jobs:
       # `cargo tauri build`, not `cargo build`: the plain build produces a bare
       # executable and no installer, which is what the old workflow did and why
       # there has never been a .msi or a .deb to download.
-      #
-      # The .dmg is built on its own afterwards. Its step drives
-      # `bundle_dmg.sh`, which asks Finder over AppleScript to arrange the disk
-      # image window and times out with `AppleEvent timed out (-1712)` on a
-      # machine with no automation permission, which a CI runner is.
-      # `--skip-jenkins` is the switch that leaves Finder out of it.
       - name: Bundle
         working-directory: tauri-app
         run: cargo tauri build --bundles ${{ matrix.bundles }}
 
+      # The .app is built above and the .dmg wraps it here, on its own, because
+      # the dmg step drives `bundle_dmg.sh`, which asks Finder over AppleScript
+      # to arrange the disk image window and times out with
+      # `AppleEvent timed out (-1712)` on a machine with no automation
+      # permission, which a CI runner is. tauri-bundler passes
+      # `--skip-jenkins` to skip that when `CI` is `true`. GitHub sets `CI`
+      # already; setting it here is what makes the reason readable, and what
+      # makes this step work when somebody runs the workflow locally with act.
       - name: The disk image (macOS)
         if: runner.os == 'macOS'
         working-directory: tauri-app
-        run: |
-          export CI=true   # tauri passes --skip-jenkins to bundle_dmg.sh under CI
-          cargo tauri build --bundles dmg
+        env:
+          CI: "true"
+        run: cargo tauri build --bundles dmg
 
       # An installer with no media stack inside it is the failure this release
       # is meant to make impossible, so the bundle is opened and looked at.
