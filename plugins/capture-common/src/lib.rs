@@ -21,10 +21,9 @@
 //! sleep.
 
 // Every module but `space` and `fifo` is safe Rust. Those two make system
-// calls, for the free space on a disk and for a FIFO that must be opened
-// without waiting, and there is no safe way to ask. That one makes two system calls for
-// the free space on a disk, the same two the core's own doctor makes, and
-// there is no safe way to ask.
+// calls, for the free space on a disk and for a FIFO that has to be opened
+// without waiting for a writer, and there is no safe way to ask for either.
+// Both are a handful of lines with the reasoning written above them.
 #![deny(unsafe_op_in_unsafe_fn)]
 
 pub mod capture;
