@@ -1,0 +1,372 @@
+/* base.css: every value a theme can change, then the structure that uses them.
+   A theme file redefines custom properties and nothing else. No build step, no
+   preprocessor, no imports beyond this one file. See README.md beside it. */
+
+:root {
+  /* Surfaces, back to front. */
+  --bg: #090b0e;
+  --panel: #12151a;
+  --panel2: #171b21;
+  --raise: #1f242c;
+  --overlay: rgba(4, 6, 9, 0.72);
+
+  /* Lines. */
+  --line: #262c35;
+  --line-soft: #1b2028;
+
+  /* Text. */
+  --text: #e8ebf0;
+  --dim: #8b93a2;
+  --faint: #5b6373;
+  --on-accent: #06080c;
+
+  /* Meaning. Saturated red is spent only on what is going out: the tally, the
+     on air frame, the ad pill, the top of a meter. Faults use --bad, which is
+     duller on purpose, so a failed source never reads as a live one. */
+  --live: #ff2a36;
+  --bad: #d9584c;
+  --ok: #34d07f;
+  --warn: #eea62a;
+  --accent: #5590ff;
+  --select: #5590ff;
+  --select-fill: rgba(85, 144, 255, 0.16);
+
+  /* Default colours per source kind. A tile the operator has not coloured
+     takes the colour of its kind, so a tray reads at a glance. */
+  --kind-camera: #4f8cff;
+  --kind-stream: #b06cff;
+  --kind-file: #ff9a3c;
+  --kind-page: #2fc4a8;
+  --kind-graphic: #f05c8a;
+  --kind-other: #7b8494;
+
+  /* Type. */
+  --font: ui-sans-serif, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+  --num: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, monospace;
+  --fs: 13px;
+  --fs-sm: 11px;
+  --fs-lg: 15px;
+  --lh: 1.45;
+
+  /* Geometry. */
+  --radius: 8px;
+  --radius-sm: 5px;
+  --gap: 8px;
+  --pad: 10px;
+  --tile-w: 168px;
+  --header-h: 44px;
+  --border: 1px;
+
+  /* Motion. Set --anim to 0s for a still interface. */
+  --anim: 0.14s;
+  --anim-take: 0.45s;
+  --shadow: 0 8px 28px rgba(0, 0, 0, 0.5);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root { --anim: 0s; --anim-take: 0s; }
+}
+
+/* ---------------------------------------------------------------- reset */
+
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font: var(--fs)/var(--lh) var(--font);
+  overflow: hidden;
+  -webkit-font-smoothing: antialiased;
+  -webkit-tap-highlight-color: transparent;
+}
+button, input, select, textarea { font: inherit; color: inherit; }
+button { cursor: pointer; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+[hidden] { display: none !important; }
+
+/* ---------------------------------------------------------------- shell */
+
+gmx-shell {
+  display: grid;
+  grid-template-rows: auto 1fr auto auto;
+  grid-template-columns: 1fr auto;
+  grid-template-areas: "header header" "main sidebar" "strip strip" "footer footer";
+  height: 100%;
+}
+.slot-header { grid-area: header; border-bottom: var(--border) solid var(--line); background: var(--panel); }
+.slot-main { grid-area: main; overflow: auto; min-width: 0; }
+.slot-strip { grid-area: strip; }
+.slot-strip:empty { display: none; }
+.slot-sidebar {
+  grid-area: sidebar; width: 340px; max-width: 90vw; overflow: auto;
+  border-left: var(--border) solid var(--line); background: var(--panel);
+}
+.slot-sidebar:empty { display: none; }
+.slot-footer { grid-area: footer; border-top: var(--border) solid var(--line); background: var(--panel); }
+.slot-modal { position: fixed; inset: 0; z-index: 40; pointer-events: none; }
+.slot-modal > * { pointer-events: auto; }
+.slot-modal:empty { display: none; }
+
+@media (max-width: 760px) {
+  gmx-shell { grid-template-columns: 1fr; grid-template-areas: "header" "main" "strip" "footer"; }
+  .slot-sidebar {
+    position: fixed; right: 0; top: var(--header-h); bottom: 0; z-index: 30;
+    width: min(340px, 92vw); box-shadow: var(--shadow);
+  }
+}
+
+/* ---------------------------------------------------------------- bits */
+
+.row { display: flex; align-items: center; gap: var(--gap); }
+.col { display: flex; flex-direction: column; gap: var(--gap); }
+.grow { flex: 1 1 auto; min-width: 0; }
+.pad { padding: var(--pad); }
+.dim { color: var(--dim); }
+.faint { color: var(--faint); }
+.num { font-family: var(--num); font-variant-numeric: tabular-nums; }
+.sm { font-size: var(--fs-sm); }
+.ellipsis { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sr-only {
+  position: absolute; width: 1px; height: 1px; overflow: hidden;
+  clip: rect(0 0 0 0); clip-path: inset(50%); white-space: nowrap;
+}
+
+.btn {
+  background: var(--raise); color: var(--text); border: var(--border) solid var(--line);
+  border-radius: var(--radius-sm); padding: 5px 10px; line-height: 1.2;
+  transition: background var(--anim), border-color var(--anim);
+}
+.btn:hover { background: var(--panel2); border-color: var(--dim); }
+.btn:disabled { opacity: 0.45; cursor: default; }
+.btn.primary { background: var(--accent); color: var(--on-accent); border-color: var(--accent); }
+.btn.danger { color: var(--bad); }
+.btn.on { background: var(--accent); color: var(--on-accent); border-color: var(--accent); }
+.btn.icon { padding: 4px 7px; }
+
+input[type=text], input[type=password], input[type=number], input[type=url], select, textarea {
+  background: var(--bg); border: var(--border) solid var(--line);
+  border-radius: var(--radius-sm); padding: 5px 8px; width: 100%;
+}
+input::placeholder { color: var(--faint); }
+label { display: block; }
+
+.dot { width: 7px; height: 7px; border-radius: 50%; background: var(--faint); flex: none; }
+.dot.live { background: var(--ok); }
+.dot.connecting { background: var(--warn); }
+.dot.stalled { background: var(--warn); }
+.dot.failed, .dot.error { background: var(--bad); }
+
+.pill {
+  border-radius: 999px; padding: 2px 8px; font-size: var(--fs-sm);
+  border: var(--border) solid var(--line); background: var(--panel2);
+}
+.pill.live { background: var(--live); border-color: var(--live); color: #fff; }
+
+/* ---------------------------------------------------------------- header */
+
+.header {
+  display: flex; align-items: center; gap: var(--gap);
+  height: var(--header-h); padding: 0 var(--pad);
+}
+.tally {
+  display: flex; align-items: center; gap: 6px; font-weight: 600;
+  padding: 3px 10px; border-radius: var(--radius-sm);
+  background: var(--panel2); border: var(--border) solid var(--line);
+}
+.tally.on { background: var(--live); border-color: var(--live); color: #fff; }
+
+/* ---------------------------------------------------------------- meters */
+
+.meter { display: flex; gap: 2px; height: 100%; align-items: flex-end; }
+.meter .ch { flex: 1; background: var(--line-soft); border-radius: 1px; position: relative; overflow: hidden; }
+.meter .fill {
+  position: absolute; left: 0; right: 0; bottom: 0;
+  background: linear-gradient(to top, var(--ok) 0%, var(--ok) 62%, var(--warn) 82%, var(--live) 100%);
+}
+.meter.h { flex-direction: column; align-items: stretch; }
+.meter.h .fill { top: 0; right: auto; background: linear-gradient(to right, var(--ok) 0%, var(--ok) 62%, var(--warn) 82%, var(--live) 100%); }
+
+/* ---------------------------------------------------------------- gallery */
+
+.gallery {
+  display: grid; gap: var(--gap); padding: var(--pad);
+  grid-template-columns: repeat(auto-fill, minmax(var(--tile-w), 1fr));
+  position: relative; align-content: start; min-height: 120px;
+}
+.gallery.mode-icon, .gallery.mode-label { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); }
+
+.tile {
+  position: relative; border-radius: var(--radius); overflow: hidden;
+  background: var(--panel2); border: 2px solid var(--line-soft);
+  user-select: none; touch-action: manipulation;
+  transition: border-color var(--anim), transform var(--anim);
+}
+.tile:hover { border-color: var(--dim); }
+.tile.selected { border-color: var(--select); background: var(--select-fill); }
+.tile.program { border-color: var(--live); }
+.tile.program.took { animation: took var(--anim-take) ease-out; }
+.tile.armed { border-color: var(--warn); }
+.tile.dragging { opacity: 0.5; }
+.tile.drop-into { outline: 2px dashed var(--accent); outline-offset: -4px; }
+@keyframes took {
+  from { box-shadow: 0 0 0 0 var(--live); }
+  to { box-shadow: 0 0 0 12px rgba(255, 42, 54, 0); }
+}
+
+.tile .pic { aspect-ratio: 16 / 9; background: #000; display: block; width: 100%; object-fit: contain; }
+/* The plain background comes first so a WebKitGTK older than 2.38, which has no
+   color-mix, still gets a readable tile rather than a transparent one. */
+.tile .kindbox {
+  aspect-ratio: 16 / 9; display: grid; place-items: center;
+  background: var(--panel2);
+  background: color-mix(in srgb, var(--tile-color, var(--kind-other)) 22%, var(--panel2));
+}
+.tile .kindbox svg { width: 34%; max-width: 46px; opacity: 0.9; color: var(--tile-color, var(--kind-other)); }
+.tile .bar {
+  display: flex; align-items: center; gap: 6px; padding: 4px 6px;
+  border-top: var(--border) solid var(--line-soft); background: var(--panel);
+  border-left: 3px solid var(--tile-color, var(--kind-other));
+}
+.tile .name { font-size: var(--fs-sm); }
+.tile .name[contenteditable] { background: var(--bg); outline: 1px solid var(--accent); border-radius: 2px; }
+.tile .gear { opacity: 0; background: none; border: 0; color: var(--dim); padding: 0 2px; }
+.tile:hover .gear, .tile.selected .gear { opacity: 1; }
+.tile .badge {
+  position: absolute; top: 5px; left: 5px; font-size: var(--fs-sm);
+  background: var(--overlay); border-radius: 3px; padding: 0 5px;
+}
+.tile .strip {
+  position: absolute; left: 0; right: 0; bottom: 26px; padding: 4px 6px;
+  background: var(--overlay); opacity: 0; transition: opacity var(--anim);
+  display: flex; align-items: center; gap: 6px;
+}
+.tile:hover .strip, .tile:focus-within .strip { opacity: 1; }
+.tile .strip .meter { height: 16px; width: 14px; }
+.tile input[type=range] { width: 100%; accent-color: var(--accent); }
+
+.marquee {
+  position: absolute; border: 1px solid var(--select);
+  background: var(--select-fill); pointer-events: none; z-index: 5;
+}
+
+/* ---------------------------------------------------------------- program */
+
+.program { background: #000; display: grid; place-items: center; position: relative; }
+.program img { max-width: 100%; max-height: 100%; display: block; }
+.program.on { box-shadow: inset 0 0 0 2px var(--live); }
+
+/* ---------------------------------------------------------------- modal */
+
+.scrim { position: fixed; inset: 0; background: var(--overlay); display: grid; place-items: center; padding: var(--pad); }
+.dialog {
+  background: var(--panel); border: var(--border) solid var(--line); border-radius: var(--radius);
+  box-shadow: var(--shadow); max-width: min(860px, 96vw); max-height: 92vh;
+  display: flex; flex-direction: column; overflow: hidden; width: 100%;
+}
+.dialog > header { display: flex; align-items: center; gap: var(--gap); padding: var(--pad); border-bottom: var(--border) solid var(--line); }
+.dialog > .body { padding: var(--pad); overflow: auto; }
+.dialog > footer { display: flex; justify-content: flex-end; gap: var(--gap); padding: var(--pad); border-top: var(--border) solid var(--line); }
+.dialog h2 { margin: 0; font-size: var(--fs-lg); }
+
+.tabs { display: flex; gap: 2px; }
+.tabs button { background: none; border: 0; border-bottom: 2px solid transparent; padding: 6px 10px; color: var(--dim); }
+.tabs button.on { color: var(--text); border-bottom-color: var(--accent); }
+
+/* ---------------------------------------------------------------- picker */
+
+.picker-grid { display: grid; gap: var(--gap); grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); }
+.picker-grid.list { grid-template-columns: 1fr; }
+.kindtile {
+  display: flex; gap: var(--gap); align-items: flex-start; text-align: left;
+  background: var(--panel2); border: var(--border) solid var(--line);
+  border-radius: var(--radius); padding: var(--pad);
+}
+.kindtile:hover, .kindtile.on { border-color: var(--accent); }
+.kindtile svg { width: 26px; height: 26px; flex: none; color: var(--accent); }
+.kindtile .who { color: var(--faint); font-size: var(--fs-sm); }
+.group-title { color: var(--dim); font-size: var(--fs-sm); text-transform: uppercase; letter-spacing: 0.06em; margin: var(--pad) 0 4px; }
+
+/* ---------------------------------------------------------------- forms */
+
+.form { display: flex; flex-direction: column; gap: var(--gap); }
+.form .field { display: flex; flex-direction: column; gap: 3px; }
+.form .field > .lbl { color: var(--dim); font-size: var(--fs-sm); }
+.form .field .hint { color: var(--faint); font-size: var(--fs-sm); }
+.form .field.bad input, .form .field.bad select { border-color: var(--bad); }
+.form .err { color: var(--bad); font-size: var(--fs-sm); }
+.form fieldset { border: var(--border) solid var(--line); border-radius: var(--radius-sm); padding: var(--pad); margin: 0; }
+.form legend { color: var(--dim); font-size: var(--fs-sm); padding: 0 4px; }
+.form .unit { color: var(--faint); font-size: var(--fs-sm); margin-left: 4px; }
+.form .inline { display: flex; align-items: center; gap: 6px; }
+
+/* ---------------------------------------------------------------- toast */
+
+.toasts { position: fixed; left: 50%; bottom: 16px; transform: translateX(-50%); z-index: 60; display: flex; flex-direction: column; gap: 6px; align-items: center; }
+.toast {
+  background: var(--raise); border: var(--border) solid var(--line); border-radius: var(--radius);
+  box-shadow: var(--shadow); padding: 8px 12px; display: flex; align-items: center; gap: var(--gap);
+  max-width: min(560px, 94vw);
+}
+.toast.error { border-color: var(--bad); }
+.toast.warning { border-color: var(--warn); }
+
+/* ---------------------------------------------------------------- palette */
+
+.palette { position: fixed; inset: 0; background: var(--overlay); z-index: 50; display: flex; justify-content: center; padding-top: 12vh; }
+.palette .box { width: min(620px, 94vw); height: fit-content; max-height: 70vh; background: var(--panel); border: var(--border) solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow); display: flex; flex-direction: column; overflow: hidden; }
+.palette input { border: 0; border-bottom: var(--border) solid var(--line); border-radius: 0; padding: 10px 12px; }
+.palette ul { list-style: none; margin: 0; padding: 4px; overflow: auto; }
+.palette li { padding: 6px 8px; border-radius: var(--radius-sm); display: flex; gap: var(--gap); align-items: baseline; }
+.palette li.on { background: var(--raise); }
+.palette li .id { font-family: var(--num); font-size: var(--fs-sm); color: var(--dim); }
+
+/* ---------------------------------------------------------------- menu */
+
+.menu {
+  position: fixed; z-index: 70; min-width: 190px; padding: 4px;
+  background: var(--raise); border: var(--border) solid var(--line);
+  border-radius: var(--radius-sm); box-shadow: var(--shadow);
+}
+.menu button { display: flex; width: 100%; gap: var(--gap); justify-content: space-between; background: none; border: 0; text-align: left; padding: 5px 8px; border-radius: 3px; }
+.menu button:hover { background: var(--panel2); }
+.menu button[disabled] { opacity: 0.4; }
+.menu hr { border: 0; border-top: var(--border) solid var(--line); margin: 4px 0; }
+.menu .key { color: var(--faint); font-size: var(--fs-sm); }
+.menu .swatches { display: flex; gap: 4px; padding: 5px 8px; }
+.menu .swatches button { width: 18px; height: 18px; border-radius: 50%; padding: 0; border: var(--border) solid var(--line); }
+
+/* ---------------------------------------------------------------- empty */
+
+.empty { display: grid; place-items: center; padding: 40px var(--pad); text-align: center; color: var(--dim); }
+.empty h2 { margin: 0 0 6px; color: var(--text); font-size: var(--fs-lg); }
+.empty ol { text-align: left; margin: var(--pad) auto; max-width: 44ch; padding-left: 20px; }
+
+/* ---------------------------------------------------------------- drop */
+
+body.dropping::after {
+  content: "Drop to add"; position: fixed; inset: 0; z-index: 80;
+  display: grid; place-items: center; background: var(--overlay);
+  outline: 3px dashed var(--accent); outline-offset: -12px; font-size: var(--fs-lg);
+}
+
+/* Safari before 15 and WebKitGTK before 2.34 have no aspect-ratio. The padding
+   trick keeps the 16:9 box there, and the modern rule above wins where it is
+   supported. Only the two elements that need a fixed box are covered. */
+@supports not (aspect-ratio: 16 / 9) {
+  .tile .pic, .tile .kindbox {
+    height: 0;
+    padding-top: 56.25%;
+    position: relative;
+  }
+  .tile .kindbox > svg {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+  }
+}
+
+/* ---------------------------------------------------------------- panel iframe */
+
+iframe.panel { width: 100%; border: 0; background: var(--panel); display: block; }

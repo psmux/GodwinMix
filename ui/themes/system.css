@@ -1,0 +1,27 @@
+/* system: follow the operating system. Dark is the default set in base.css, so
+   only the light branch is written out here. Choosing this theme means the page
+   changes when the machine changes, with no reload. */
+
+@media (prefers-color-scheme: light) {
+  :root {
+    --bg: #f4f5f7;
+    --panel: #ffffff;
+    --panel2: #f0f2f5;
+    --raise: #e7eaef;
+    --overlay: rgba(255, 255, 255, 0.82);
+    --line: #d2d7de;
+    --line-soft: #e3e7ec;
+    --text: #14181e;
+    --dim: #5b6373;
+    --faint: #8b93a2;
+    --on-accent: #ffffff;
+    --live: #e01020;
+    --bad: #c0392b;
+    --ok: #1a9a56;
+    --warn: #b87300;
+    --accent: #1f66e0;
+    --select: #1f66e0;
+    --select-fill: rgba(31, 102, 224, 0.14);
+    --shadow: 0 8px 28px rgba(20, 24, 30, 0.18);
+  }
+}

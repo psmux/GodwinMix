@@ -1,53 +1,80 @@
 # Add a theme
 
-**Themes do not exist yet.** There is no theme directory, no `gmx theme`
-command and no stylesheet contract. This page says what is planned and what you
-can do today, so that nobody spends an afternoon looking for a feature that is
-not there.
+A theme is one CSS file of custom properties. There is no build step, no
+preprocessor and no JavaScript in it. Copy a file, change some colours, done.
 
-## What is planned
+## Four steps
 
-A theme will be a directory of CSS and, optionally, icons, dropped where the
-mixer can find it and selected in the UI's settings. It restyles the reference
-UI without forking it. The contract will be a documented set of custom
-properties (colours, spacing, the tally red, the on air bar) plus a stable set
-of class names on the shell, so that a theme survives a UI release.
+1. Copy `ui/themes/dark.css` to `ui/themes/midnight.css`.
+2. Change the values. Leave the property names alone.
+3. Add one line to the list at the top of `ui/shell/theme.js`:
 
-Themes land with the UI split (roadmap Phase 3), which turns `ui/index.html`
-into a client, a shell and six panels. A theme is not worth defining against a
-single 1,500 line file, because every release would break it.
+   ```js
+   { id: "midnight", title: "Midnight", href: "themes/midnight.css" },
+   ```
 
-The same phase brings panel plugins, which are a different thing: a panel adds
-a piece of UI, a theme restyles the UI that is there.
+4. Add the file to the `ASSETS` table in `src/ui.rs` so it ships in the binary.
 
-## What you can do today
+Reload. It is in the theme picker under Settings, and the choice is remembered
+per device.
 
-The UI is one page served by the binary, and the mixer will serve a directory
-of your own instead of the built in one:
+While you are working, skip step 4 and point the core at your checkout instead:
 
 ```toml
 [control]
-ui_dir = "/srv/godwinmix/ui"
+ui_dir = "/home/you/GodwinMix/ui"
 ```
 
-```sh
-cp ui/index.html /srv/godwinmix/ui/index.html
-# edit it, reload the browser
-```
+Files are then read from disk at request time, so a save and a reload is the
+whole loop.
 
-That is a fork, not a theme. Your copy will drift from the one in the release
-and you will have to merge changes by hand. It is worth doing for a fixed
-install (a church that wants its own colours on a screen nobody else sees) and
-not worth doing for anything you plan to keep up to date.
+## The properties that matter
 
-There is no build step: it is plain HTML, CSS and JavaScript with no framework.
-The CSS is the first 650 lines of the file.
+`ui/themes/base.css` defines the complete set on `:root` and then uses nothing
+else, so a theme that redefines three properties is valid and one that redefines
+all of them is complete. These are the ones you will actually reach for.
 
-## If you want to help shape it
+| Property | What it paints |
+|---|---|
+| `--bg` | the page behind everything |
+| `--panel`, `--panel2`, `--raise` | surfaces, back to front |
+| `--line`, `--line-soft` | borders, loud and quiet |
+| `--text`, `--dim`, `--faint` | text in three weights of attention |
+| `--live` | what is going out, and nothing else |
+| `--bad` | faults, deliberately duller than `--live` |
+| `--ok`, `--warn` | green and amber |
+| `--accent`, `--select`, `--select-fill` | focus, primary buttons, selection, the marquee |
+| `--kind-camera`, `--kind-stream`, `--kind-file`, `--kind-page`, `--kind-graphic`, `--kind-other` | the default tile colour per kind |
+| `--radius`, `--gap`, `--pad`, `--tile-w`, `--border` | geometry |
+| `--anim`, `--anim-take` | motion. Both `0s` gives a still interface |
 
-The thing most likely to make themes work or fail is the set of custom
-properties. If you have restyled a broadcast tool before and know which values
-matter (and which ones nobody ever changes), say so on an issue. That is
-cheaper to get right before the contract is written than after.
+The full table, with the geometry and type properties, is in
+`ui/themes/README.md`.
 
-Add the moment you got stuck to [the friction log](../friction-log.md).
+## The one rule
+
+Red means going out. `--live` is spent on the tally, the on air tile's frame,
+the ad pill and the top of a meter. If errors are also red, an operator glancing
+across the room cannot tell a camera that failed from a camera that is live.
+Faults use `--bad`, and `--bad` has to be visibly duller.
+
+## Four themes ship
+
+* `dark.css`, the default. Near black, so a lit studio picture is the brightest
+  thing on the screen.
+* `light.css`, for a bright room and for a projector.
+* `high-contrast.css`, pure black behind white, thicker borders, every text pair
+  above 7:1. It also changes `--border` and the kind colours, which is the
+  example to copy if your theme needs more than a palette swap.
+* `system.css`, which follows the operating system by redefining only the light
+  palette inside `@media (prefers-color-scheme: light)`.
+
+## How a preset picks one
+
+A preset ships its theme the way a plugin ships a panel: a CSS file under the
+package's `ui/` directory, served at `/plugins/<name>/ui/`, named in the
+manifest. Installing the preset adds it to the list and makes it the default.
+The operator can still pick another in Settings, and once they do, their choice
+wins: a preset chooses where someone starts, never what they are stuck with.
+
+See `ui/themes/CONTRIBUTING.md` for the paragraph version of that.

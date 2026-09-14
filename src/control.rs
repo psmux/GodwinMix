@@ -25,7 +25,7 @@ use axum::body::Body;
 use axum::extract::{DefaultBodyLimit, FromRef, Path, Query, Request, State};
 use axum::http::{header, HeaderMap, Method, StatusCode, Uri};
 use axum::middleware::{self, Next};
-use axum::response::{Html, IntoResponse, Response};
+use axum::response::{IntoResponse, Response};
 use axum::routing::{delete, get, post};
 use axum::{Json, Router};
 use futures_util::{sink::SinkExt, stream::StreamExt};
@@ -36,8 +36,6 @@ use std::time::Duration;
 use tokio::sync::broadcast;
 use tower_http::cors::CorsLayer;
 use tracing::{debug, info, warn};
-
-const UI: &str = include_str!("../ui/index.html");
 
 #[derive(Clone)]
 pub struct AppState {
@@ -111,17 +109,16 @@ pub fn router(app: AppState, snapshots: Arc<Tracker>) -> Router {
         .route("/ws", get(ws_upgrade))
         .route_layer(middleware::from_fn_with_state(state.clone(), require_token));
     Router::new()
-        .route("/", get(index))
+        // The page, its modules, its themes and `/plugins/<name>/ui/`. Served
+        // without the token: it is the same for everyone, holds nothing
+        // secret, and is where a browser finds out a token is needed at all.
+        .merge(crate::ui::router())
         .merge(guarded)
         // The Tauri shell and a browser on another origin both need this. It
         // sits outside the token check so that a preflight, which carries no
         // Authorization header by design, is answered rather than refused.
         .layer(CorsLayer::permissive())
         .with_state(state)
-}
-
-async fn index() -> Html<&'static str> {
-    Html(UI)
 }
 
 /// Turn away a request without the token. Does nothing when none is set.

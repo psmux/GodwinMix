@@ -176,8 +176,14 @@ impl Default for MultiviewConfig {
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct ControlConfig {
     pub bind: String,
-    /// Directory of static UI assets. Falls back to the embedded page.
+    /// Directory of static UI assets. Falls back to the embedded page. Point
+    /// it at the repository's `ui/` to edit the page without rebuilding.
     pub ui_dir: Option<String>,
+    /// Where plugins live. Each one's `ui/` directory is served at
+    /// `/plugins/<name>/ui/`, which is how a plugin adds a panel to the web
+    /// UI. Defaults to `~/.godwinmix/plugins`.
+    #[serde(default)]
+    pub plugins_dir: Option<String>,
     /// Bearer token every `/api/*` request and the WebSocket must carry.
     /// Unset means the control port is open to whoever can reach it, which is
     /// how it has always worked and is fine behind a firewall. The
@@ -190,7 +196,7 @@ pub struct ControlConfig {
 
 impl Default for ControlConfig {
     fn default() -> Self {
-        Self { bind: "0.0.0.0:8080".into(), ui_dir: None, token: None }
+        Self { bind: "0.0.0.0:8080".into(), ui_dir: None, plugins_dir: None, token: None }
     }
 }
 
