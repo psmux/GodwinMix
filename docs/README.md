@@ -40,6 +40,8 @@ Start here if you have never run it.
 * [Sources](reference/sources.md)
 * [Web page sources](reference/web-page-sources.md)
 * [The generated protocol reference](reference/protocol.md)
+* [The plugin manifest](reference/plugin-manifest.md)
+* [The plugin protocol](reference/plugin-protocol.md)
 
 ## Explanation
 
