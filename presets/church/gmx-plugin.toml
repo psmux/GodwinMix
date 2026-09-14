@@ -14,9 +14,19 @@ kind = "preset"
 id = "church"
 
 [provides.preset]
-plugins = ["ndi@^1", "browser@^1", "rtmp@^1", "lowerthird@^2", "tally@^1"]
+plugins = ["camera@^1", "browser@^1", "rtmp@^1"]
 config = "config/godwinmix.toml"
 layout = "config/layout.json"
 surface = "web"
 theme = "calm"
 scenes = "scenes"
+theme_css = "theme.css"
+gallery = "icon"
+
+# The three things the person does next. The welcome panel in the web UI
+# shows these in this order, and the README repeats them.
+steps = [
+  "Run `gmx ctl device list` and put your two cameras' names into the [[sources]] blocks.",
+  "Put your YouTube and Facebook stream keys into the two [[outputs]] blocks.",
+  "Run `gmx`, open http://localhost:8080 on the volunteer's screen, and press Wide.",
+]

@@ -3429,6 +3429,7 @@ mod tests {
             filters: vec![],
             plugins: Default::default(),
             tokens: vec![],
+            ui: Default::default(),
             extra: Default::default(),
         })
         .err()
@@ -3463,6 +3464,7 @@ mod tests {
             filters: vec![],
             plugins: Default::default(),
             tokens: vec![],
+            ui: Default::default(),
             extra: Default::default(),
         };
         cfg.multiview.enabled = false;

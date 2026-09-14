@@ -1,79 +1,14 @@
-//! The official presets, checked.
+//! The official presets, checked against the repository.
 //!
-//! A preset is data under `presets/<name>/`, not code: a manifest, a config, a
-//! UI layout, a theme and the scenes. `gmx preset apply` lands in a later wave.
-//! What is here is the reading and the checking, so that a preset with a typo
-//! in it fails the build rather than a volunteer's Sunday.
+//! The types and the loader moved to `crate::preset` when `gmx preset apply`
+//! was built; what is left here is the checking that runs over the six
+//! directories in the source tree, which is where it has always lived and
+//! which is what keeps a typo in a preset a failing build rather than a
+//! volunteer's Sunday.
 
-use std::path::{Path, PathBuf};
-
-use anyhow::{Context, Result};
-use serde::Deserialize;
-
-/// The six presets that ship with GodwinMix (06 section 5).
-pub const NAMES: &[&str] = &["default", "church", "classroom", "esports", "headless-agent", "broadcast"];
-
-/// The panels the first party UI ships (05 section 3). A preset's layout may
-/// also name a panel a plugin provides, which is prefixed with its plugin name.
-pub const PANELS: &[&str] =
-    &["header", "multiview", "sources", "outputs", "media", "alerts", "scenes"];
-
-/// The UI slots a layout may fill (05 section 3).
-pub const SLOTS: &[&str] = &["header", "main", "sidebar", "strip", "footer", "modal"];
-
-/// A plugin manifest, read far enough to check a preset. The full parser
-/// belongs to the plugin loader.
-#[derive(Debug, Clone, Deserialize)]
-pub struct Manifest {
-    pub plugin: PluginBlock,
-    #[serde(default)]
-    pub provides: Vec<Provide>,
-}
-
-#[derive(Debug, Clone, Deserialize)]
-pub struct PluginBlock {
-    pub name: String,
-    pub version: String,
-    pub api: u32,
-    pub description: String,
-    #[serde(default)]
-    pub license: Option<String>,
-}
-
-#[derive(Debug, Clone, Deserialize)]
-pub struct Provide {
-    pub kind: String,
-    pub id: String,
-    #[serde(default)]
-    pub preset: Option<PresetBlock>,
-}
-
-/// The `[provides.preset]` table of 03 section 4 and 06 section 5.
-#[derive(Debug, Clone, Deserialize)]
-pub struct PresetBlock {
-    /// Plugins by name and semver range, for example `ndi@^1`.
-    pub plugins: Vec<String>,
-    pub config: String,
-    pub layout: String,
-    /// `web`, `none`, or a surface plugin's name.
-    pub surface: String,
-    pub theme: String,
-    /// The directory of scene documents.
-    pub scenes: String,
-}
-
-/// Where the presets live, relative to the repository root.
-pub fn directory() -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR")).join("../..").join("presets")
-}
-
-/// Read one preset's manifest.
-pub fn manifest(name: &str) -> Result<Manifest> {
-    let path = directory().join(name).join("gmx-plugin.toml");
-    let text = std::fs::read_to_string(&path)
-        .with_context(|| format!("there is no preset called {name:?}: {} is missing", path.display()))?;
-    toml::from_str(&text).with_context(|| format!("reading {}", path.display()))
-}
+pub use crate::preset::manifest::{
+    directory, manifest, Manifest, PluginBlock, PresetBlock, Provide, NAMES, PANELS, SLOTS,
+};
 
 #[cfg(test)]
 mod tests {
@@ -81,9 +16,13 @@ mod tests {
     use crate::config::Config;
     use crate::scene::document::Collection;
     use crate::scene::{layout, validate};
+    use std::path::PathBuf;
     use std::collections::BTreeMap;
 
     fn preset_dir(name: &str) -> PathBuf {
+        // A config that names a built in kind is validated by that kind, and a
+        // kind asks GStreamer what its element accepts.
+        let _ = gstreamer::init();
         directory().join(name)
     }
 
