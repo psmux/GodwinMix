@@ -93,6 +93,12 @@ text = re.sub(r'(?m)^# token = .*$', f'token = "{token}"', text)
 # both have to let go before it comes down.
 text = re.sub(r'(?m)^linger_secs = .*$', 'linger_secs = 2', text)
 text = re.sub(r'(?m)^idle_secs = .*$', 'idle_secs = 2', text)
+# No minimum hold. The script takes half a dozen times in as many seconds,
+# which is exactly what the shipped eight second hold exists to refuse. The
+# hold itself has its own tests; what is being checked here is that a take
+# works at all, and that a scene take goes through the same door as a source
+# take.
+text = re.sub(r'(?m)^min_hold_ms = .*$', 'min_hold_ms = 0', text)
 open(dst, "w").write(text)
 PY
 if grep -q "^token = " "$WORK/godwinmix.toml" && grep -q "127.0.0.1:$PORT" "$WORK/godwinmix.toml"; then
@@ -267,11 +273,15 @@ else
     bad "$(tr '\n' '; ' <"$WORK/scene-new.log")"
 fi
 
-step "both items are on the canvas and neither is off it"
-if "$GMX" ctl scene check "smoke two" 2>&1 | grep -q "nothing to fix"; then
-    ok
+step "nothing in the scene is off the canvas or invisible"
+# A two box does reach outside the action safe box, and saying so is `info`.
+# What must not be there is a warning or an error: an item off the canvas, one
+# hidden behind another, or a reference that leads nowhere.
+CHECK="$("$GMX" ctl scene check "smoke two" 2>&1)"
+if grep -qE "^(warning|error)" <<<"$CHECK"; then
+    bad "$(tr '\n' '; ' <<<"$CHECK")"
 else
-    bad "$("$GMX" ctl scene check "smoke two" 2>&1 | tr '\n' '; ')"
+    ok
 fi
 
 step "gmx ctl take --scene puts the scene on air"
@@ -289,15 +299,31 @@ else
     bad "$(curl -fsS "$BASE/api/v1/program" "${AUTH[@]}")"
 fi
 
-step "the frame interval stays inside one frame across the take"
-# Two frames of slack at 30 fps. A lost frame reads as two intervals, which is
-# what the README's measurement calls a gap.
-WORST="$(curl -fsS "$BASE/metrics" | awk -F'[{} ]+' '/^gmx_programme_frame_interval_ms_bucket.*le="100"/ {print $NF}' | tail -1)"
-TOTAL="$(curl -fsS "$BASE/metrics" | awk '/^gmx_programme_frame_interval_ms_count/ {print $2}' | tail -1)"
-if [[ -n "$TOTAL" && "$WORST" == "$TOTAL" ]]; then
+# Measured across the take and not over the whole run: the first interval of a
+# pipeline that has just started is always long, and what is being asserted is
+# that a take costs nothing, not that start up is instant.
+interval_counts() {
+    curl -fsS "$BASE/metrics" | awk '
+        /^gmx_programme_frame_interval_ms_bucket\{le="100"\}/ { inside = $2 }
+        /^gmx_programme_frame_interval_ms_count/ { total = $2 }
+        END { print inside, total }'
+}
+
+step "taking a scene and taking it again costs no frame"
+read -r INSIDE_BEFORE TOTAL_BEFORE < <(interval_counts)
+"$GMX" ctl take --scene "smoke two" >/dev/null 2>&1
+sleep 0.5
+"$GMX" ctl take bars >/dev/null 2>&1
+sleep 0.5
+"$GMX" ctl take --scene "smoke two" >/dev/null 2>&1
+sleep 1
+read -r INSIDE_AFTER TOTAL_AFTER < <(interval_counts)
+FRAMES=$((TOTAL_AFTER - TOTAL_BEFORE))
+LATE=$(( (TOTAL_AFTER - TOTAL_BEFORE) - (INSIDE_AFTER - INSIDE_BEFORE) ))
+if [[ "$FRAMES" -gt 10 && "$LATE" == "0" ]]; then
     ok
 else
-    bad "frames outside the 100 ms bucket: $WORST of $TOTAL"
+    bad "$LATE of $FRAMES frames arrived more than 100 ms after the one before"
 fi
 
 step "applying a layout reshapes the scene in place"

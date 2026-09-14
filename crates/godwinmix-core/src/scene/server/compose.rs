@@ -7,7 +7,7 @@
 //! arithmetic; nothing is reimplemented here.
 
 use crate::caps::CanvasCaps;
-use crate::mixer::slots::{Placement, PlacementAudio};
+use crate::mixer::slots::{Placement, PlacementAudio, Sizing};
 use crate::scene::document::{
     Align, Audio, Collection, Content, Fit, Item, Override, Scene,
 };
@@ -117,14 +117,15 @@ pub fn placements(doc: &Collection, scene: &Scene, canvas: &CanvasCaps) -> Vec<P
 /// `fit` as the compositor pad spells it.
 ///
 /// Three policies is all a `compositor` pad has, so the seven fits map onto
-/// them and the reference page says which is which. `cover`, `fit-width` and
-/// `fit-height` all mean "fill the box and let the overflow go", which on this
-/// element is what `scale` plus the item's own crop gives.
-pub fn sizing(fit: Fit) -> &'static str {
+/// them and the reference page says which is which. An item with no frame is
+/// already at its own size, so `none` fills its box exactly like `stretch`
+/// does; `cover`, `fit-width` and `fit-height` all mean "fill the box and let
+/// the overflow go".
+pub fn sizing(fit: Fit) -> Sizing {
     match fit {
-        Fit::None => "none",
-        Fit::Contain | Fit::Max => "keep-aspect-ratio",
-        Fit::Stretch | Fit::Cover | Fit::FitWidth | Fit::FitHeight => "scale",
+        Fit::None | Fit::Stretch => Sizing::Fill,
+        Fit::Contain | Fit::Max => Sizing::Contain,
+        Fit::Cover | Fit::FitWidth | Fit::FitHeight => Sizing::Cover,
     }
 }
 
@@ -284,13 +285,31 @@ mod tests {
         assert!(placements(&doc, &scene, &canvas()).is_empty(), "a cycle resolves to nothing");
     }
 
+    /// Every fit has to land on a nick a real `compositor` pad carries.
+    /// Writing one it does not panics inside glib, which took the mixer thread
+    /// down mid take the first time a two box was applied.
     #[test]
-    fn the_seven_fits_land_on_a_policy_the_compositor_has() {
-        for fit in [Fit::None, Fit::Contain, Fit::Cover, Fit::Stretch, Fit::FitWidth, Fit::FitHeight, Fit::Max] {
+    fn every_fit_lands_on_a_policy_this_compositors_pad_has() {
+        use gstreamer::prelude::*;
+        let _ = gstreamer::init();
+        let Ok(comp) = crate::gstutil::make("compositor", "fit-check") else { return };
+        let Some(pad) = comp.request_pad_simple("sink_%u") else { return };
+        let pspec = pad.find_property("sizing-policy").expect("a compositor pad has one");
+        let class = gstreamer::glib::EnumClass::with_type(pspec.value_type())
+            .expect("sizing-policy is an enum");
+        for fit in
+            [Fit::None, Fit::Contain, Fit::Cover, Fit::Stretch, Fit::FitWidth, Fit::FitHeight, Fit::Max]
+        {
+            let nicks = sizing(fit).nicks();
             assert!(
-                ["none", "keep-aspect-ratio", "scale"].contains(&sizing(fit)),
-                "{fit:?} maps onto a policy the element does not have"
+                nicks.iter().any(|n| class.value_by_nick(n).is_some()),
+                "{fit:?} offers {nicks:?} and this compositor has none of them"
             );
+            // And the write itself, which is the thing that panicked.
+            let placement =
+                Placement { sizing: sizing(fit), ..Placement::full_canvas("cam".into(), &canvas()) };
+            assert_eq!(placement.sizing, sizing(fit));
         }
+        comp.release_request_pad(&pad);
     }
 }

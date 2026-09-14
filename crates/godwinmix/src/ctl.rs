@@ -622,104 +622,6 @@ fn refusal_message(text: &str) -> String {
         .unwrap_or_else(|| text.trim().to_string())
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn api() -> Api {
-        Api::new("http://mixer:8080/", None).unwrap()
-    }
-
-    /// The CLI does not carry a path table of its own. Every command resolves
-    /// through the same transform the server's router is built from, so a
-    /// renamed method cannot leave the CLI pointing at a dead URL.
-    #[test]
-    fn every_command_resolves_through_the_shared_transform() {
-        let api = api();
-        let at = |method: &str, id: Option<&str>| {
-            let (verb, url) = api.route(method, id).unwrap();
-            format!("{verb} {url}")
-        };
-        assert_eq!(at("core.status", None), "GET http://mixer:8080/api/v1/core/status");
-        assert_eq!(at("program.take", None), "POST http://mixer:8080/api/v1/program/take");
-        assert_eq!(at("program.revert", None), "POST http://mixer:8080/api/v1/program/revert");
-        assert_eq!(at("source.list", None), "GET http://mixer:8080/api/v1/sources");
-        assert_eq!(at("source.add", None), "POST http://mixer:8080/api/v1/sources");
-        assert_eq!(
-            at("source.remove", Some("cam1")),
-            "DELETE http://mixer:8080/api/v1/sources/cam1"
-        );
-        assert_eq!(
-            at("output.reconnect", Some("yt")),
-            "POST http://mixer:8080/api/v1/outputs/yt/reconnect"
-        );
-        assert_eq!(at("media.list", None), "GET http://mixer:8080/api/v1/media");
-        // A trailing slash on the base must not double up.
-        assert!(!at("core.info", None).contains("//api"));
-    }
-
-    /// Bodies are built from the api request types, so the JSON the CLI sends
-    /// is the JSON the schema describes.
-    #[test]
-    fn bodies_come_from_the_api_types() {
-        let take = TakeRequest {
-            source: Some("cam1".into()),
-            scene: None,
-            transition: None,
-            at_running_time_ms: Some(1500),
-        };
-        let v = serde_json::to_value(&take).unwrap();
-        assert_eq!(v["source"], "cam1");
-        assert_eq!(v["at_running_time_ms"], 1500);
-        // Omitted rather than null, so the server's defaults apply.
-        assert!(v.get("scene").is_none());
-
-        let add = AddSourceRequest {
-            id: None,
-            name: Some("Camera 2".into()),
-            uri: "rtmp://h/l/k".into(),
-            kind: Some("web".into()),
-            superimpose: Some("auto".into()),
-            params: Default::default(),
-        };
-        let v = serde_json::to_value(&add).unwrap();
-        assert!(v.get("id").is_none(), "a derived id is an absent key, not a null");
-        assert_eq!(v["kind"], "web");
-        assert_eq!(v["superimpose"], "auto");
-    }
-
-    #[test]
-    fn an_id_with_awkward_characters_cannot_change_the_route() {
-        assert_eq!(urlencode("cam-1"), "cam-1");
-        assert_eq!(urlencode("../status"), "..%2Fstatus");
-        assert_eq!(urlencode("a b"), "a%20b");
-        assert_eq!(urlencode("clip.mp4"), "clip.mp4");
-    }
-
-    /// A refusal is read out of the one error shape, so the operator sees the
-    /// mixer's own sentence and not an HTTP status code.
-    #[test]
-    fn a_refusal_shows_the_mixers_own_message() {
-        let body = serde_json::json!({
-            "error": {
-                "code": -32004,
-                "message": "there is no source 'cam9'. The sources: cam1, cam2. Use one of those.",
-                "data": { "valid": ["cam1", "cam2"], "retryable": false }
-            },
-            "trace_id": "0af7651916cd43dd8448eb211c80319c"
-        });
-        let message = refusal_message(&serde_json::to_string(&body).unwrap());
-        assert!(message.contains("cam9"), "{message}");
-        assert!(message.contains("cam1, cam2"), "{message}");
-
-        // A legacy route answers plain text, and that has to survive too, or a
-        // CLI pointed at an older mixer prints nothing useful.
-        assert_eq!(refusal_message("  no such source cam9  "), "no such source cam9");
-        // So does a body that is JSON but not an error envelope.
-        assert_eq!(refusal_message("{\"ok\":true}"), "{\"ok\":true}");
-    }
-}
-
 // ---------------------------------------------------------------------------
 // `gmx ctl scene ...`
 //
@@ -972,4 +874,102 @@ fn pair(text: &str, sep: char) -> Result<(f64, f64)> {
             .with_context(|| format!("{v:?} is not a number"))
     };
     Ok((read(a)?, read(b)?))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn api() -> Api {
+        Api::new("http://mixer:8080/", None).unwrap()
+    }
+
+    /// The CLI does not carry a path table of its own. Every command resolves
+    /// through the same transform the server's router is built from, so a
+    /// renamed method cannot leave the CLI pointing at a dead URL.
+    #[test]
+    fn every_command_resolves_through_the_shared_transform() {
+        let api = api();
+        let at = |method: &str, id: Option<&str>| {
+            let (verb, url) = api.route(method, id).unwrap();
+            format!("{verb} {url}")
+        };
+        assert_eq!(at("core.status", None), "GET http://mixer:8080/api/v1/core/status");
+        assert_eq!(at("program.take", None), "POST http://mixer:8080/api/v1/program/take");
+        assert_eq!(at("program.revert", None), "POST http://mixer:8080/api/v1/program/revert");
+        assert_eq!(at("source.list", None), "GET http://mixer:8080/api/v1/sources");
+        assert_eq!(at("source.add", None), "POST http://mixer:8080/api/v1/sources");
+        assert_eq!(
+            at("source.remove", Some("cam1")),
+            "DELETE http://mixer:8080/api/v1/sources/cam1"
+        );
+        assert_eq!(
+            at("output.reconnect", Some("yt")),
+            "POST http://mixer:8080/api/v1/outputs/yt/reconnect"
+        );
+        assert_eq!(at("media.list", None), "GET http://mixer:8080/api/v1/media");
+        // A trailing slash on the base must not double up.
+        assert!(!at("core.info", None).contains("//api"));
+    }
+
+    /// Bodies are built from the api request types, so the JSON the CLI sends
+    /// is the JSON the schema describes.
+    #[test]
+    fn bodies_come_from_the_api_types() {
+        let take = TakeRequest {
+            source: Some("cam1".into()),
+            scene: None,
+            transition: None,
+            at_running_time_ms: Some(1500),
+        };
+        let v = serde_json::to_value(&take).unwrap();
+        assert_eq!(v["source"], "cam1");
+        assert_eq!(v["at_running_time_ms"], 1500);
+        // Omitted rather than null, so the server's defaults apply.
+        assert!(v.get("scene").is_none());
+
+        let add = AddSourceRequest {
+            id: None,
+            name: Some("Camera 2".into()),
+            uri: "rtmp://h/l/k".into(),
+            kind: Some("web".into()),
+            superimpose: Some("auto".into()),
+            params: Default::default(),
+        };
+        let v = serde_json::to_value(&add).unwrap();
+        assert!(v.get("id").is_none(), "a derived id is an absent key, not a null");
+        assert_eq!(v["kind"], "web");
+        assert_eq!(v["superimpose"], "auto");
+    }
+
+    #[test]
+    fn an_id_with_awkward_characters_cannot_change_the_route() {
+        assert_eq!(urlencode("cam-1"), "cam-1");
+        assert_eq!(urlencode("../status"), "..%2Fstatus");
+        assert_eq!(urlencode("a b"), "a%20b");
+        assert_eq!(urlencode("clip.mp4"), "clip.mp4");
+    }
+
+    /// A refusal is read out of the one error shape, so the operator sees the
+    /// mixer's own sentence and not an HTTP status code.
+    #[test]
+    fn a_refusal_shows_the_mixers_own_message() {
+        let body = serde_json::json!({
+            "error": {
+                "code": -32004,
+                "message": "there is no source 'cam9'. The sources: cam1, cam2. Use one of those.",
+                "data": { "valid": ["cam1", "cam2"], "retryable": false }
+            },
+            "trace_id": "0af7651916cd43dd8448eb211c80319c"
+        });
+        let message = refusal_message(&serde_json::to_string(&body).unwrap());
+        assert!(message.contains("cam9"), "{message}");
+        assert!(message.contains("cam1, cam2"), "{message}");
+
+        // A legacy route answers plain text, and that has to survive too, or a
+        // CLI pointed at an older mixer prints nothing useful.
+        assert_eq!(refusal_message("  no such source cam9  "), "no such source cam9");
+        // So does a body that is JSON but not an error envelope.
+        assert_eq!(refusal_message("{\"ok\":true}"), "{\"ok\":true}");
+    }
 }
