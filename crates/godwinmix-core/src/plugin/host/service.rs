@@ -77,11 +77,12 @@ impl SidecarService {
         let provide = self.spec.provide.clone();
         let mut child = Sidecar::spawn(&self.instance, &self.spec.launch)
             .with_context(|| format!("starting `{}`", self.spec.launch.command_line()))?;
-        let outcome = child.handshake(
+        let outcome = child.handshake_for(
             Some(&self.spec.plugin),
             canvas_of(canvas),
             &self.spec.provide,
             params_json(params),
+            false,
             |t| {
                 anyhow::bail!(
                     "a {} provide carries no media, so there is no `{}` address to give it. \
@@ -107,9 +108,13 @@ impl SidecarService {
     }
 
     pub fn stop(&mut self, reason: &str) {
-        if let Some(child) = self.child.as_mut() {
-            child.shutdown(reason);
-        }
+        // Only when there was something running. A `SidecarService` that has
+        // already been stopped is dropped later, and clearing the rows again
+        // would wipe whatever has taken its instance name since: a reload
+        // builds the replacement under the same name, and the old value's own
+        // `Drop` used to take the new one's pid out from under it.
+        let Some(child) = self.child.as_mut() else { return };
+        child.shutdown(reason);
         self.child = None;
         crate::plugin::loader::set_pid(&self.instance, "", "", None);
         crate::plugin::loader::set_state(&self.instance, "stopped");

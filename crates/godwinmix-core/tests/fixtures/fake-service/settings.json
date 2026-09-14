@@ -1,0 +1,9 @@
+{
+  "type": "object",
+  "properties": {
+    "announce": {
+      "type": "string",
+      "description": "A source id to announce as having arrived, the moment the plugin is up."
+    }
+  }
+}

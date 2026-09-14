@@ -150,7 +150,7 @@ impl Supervisor {
             for provide in loader::provides_of_kind(kind.as_str()) {
                 if let Err(e) = self.start(&provide) {
                     warn!(%provide, ?e, "a plugin singleton would not start");
-                    failures.push((provide, e.to_string()));
+                    failures.push((provide, format!("{e:#}")));
                 }
             }
         }
@@ -192,6 +192,16 @@ impl Supervisor {
 
     /// Build the sidecar for one provide without starting it.
     fn build(&self, provide: &str, manifest: &'static crate::plugin::Manifest) -> Result<SidecarService> {
+        Ok(SidecarService::new(self.spec(provide, manifest)?))
+    }
+
+    /// The launch plan for one provide: the command line, the environment, the
+    /// token and the runtime directory.
+    fn spec(
+        &self,
+        provide: &str,
+        manifest: &'static crate::plugin::Manifest,
+    ) -> Result<SidecarSpec> {
         let instance = format!("{}-{}", manifest.plugin, manifest.id);
         let launched = loader::launch_for(
             provide,
@@ -199,7 +209,7 @@ impl Supervisor {
             loader::mint_token(provide, &instance),
             loader::rpc_url(),
         )?;
-        Ok(SidecarService::new(SidecarSpec {
+        Ok(SidecarSpec {
             plugin: launched.plugin,
             provide: launched.provide,
             manifest: *manifest,
@@ -207,7 +217,7 @@ impl Supervisor {
             ctx: launched.ctx,
             canvas: self.canvas.clone(),
             runtime: loader::runtime_dir(),
-        }))
+        })
     }
 
     /// Stop every singleton of one plugin and forget what they adopted.
@@ -302,17 +312,56 @@ impl Supervisor {
     /// `plugin.describe` prints. A bare tool name is accepted when exactly one
     /// plugin has it, because that is what a person types.
     pub fn tool_call(&self, name: &str, arguments: Value) -> Result<Value> {
-        let (plugin, tool) = match name.split_once('/') {
-            Some((p, t)) => (Some(p.to_string()), t.to_string()),
-            None => (None, name.to_string()),
+        // `<plugin>/<tool>`, `<tool>` when only one plugin has it, or
+        // `<plugin>/<provide>/<tool>` when a plugin has two instances that
+        // both answer and the caller means a particular one.
+        let parts: Vec<&str> = name.split('/').collect();
+        let (plugin, provide, tool) = match parts.as_slice() {
+            [tool] => (None, None, tool.to_string()),
+            [plugin, tool] => (Some(plugin.to_string()), None, tool.to_string()),
+            [plugin, provide, tool] => {
+                (Some(plugin.to_string()), Some(provide.to_string()), tool.to_string())
+            }
+            _ => {
+                anyhow::bail!(
+                    "`{name}` is not a tool name. Use `<plugin>/<tool>`, or \
+                     `<plugin>/<provide>/<tool>` to pick one of a plugin's instances."
+                )
+            }
         };
+        if let Some(provide) = provide {
+            let instance = format!("{}-{provide}", plugin.clone().unwrap_or_default());
+            let inner = self.inner.lock();
+            let entry = inner.instances.get(&instance).with_context(|| {
+                format!(
+                    "no instance called `{instance}`. Running now: {}",
+                    inner.instances.keys().cloned().collect::<Vec<_>>().join(", ")
+                )
+            })?;
+            return entry
+                .child
+                .call("tool.call", json!({ "name": tool, "arguments": arguments }));
+        }
         let inner = self.inner.lock();
-        let found: Vec<&Instance> = inner
-            .instances
-            .values()
-            .filter(|i| plugin.as_deref().is_none_or(|p| i.plugin == p))
-            .filter(|i| i.child.tools().iter().any(|t| *t == tool))
-            .collect();
+        // `[[tools]]` are declared once per plugin, not per provide, so every
+        // one of a plugin's instances answers to the same list. The service is
+        // the one that gets the call: a tool is control plane work and a
+        // service is the control plane kind. One instance per plugin, so a
+        // plugin with a service and a device is not "two plugins offer this".
+        let mut found: Vec<&Instance> = Vec::new();
+        for instance in inner.instances.values() {
+            if !plugin.as_deref().is_none_or(|p| instance.plugin == p) {
+                continue;
+            }
+            if !instance.child.tools().iter().any(|t| *t == tool) {
+                continue;
+            }
+            match found.iter().position(|i| i.plugin == instance.plugin) {
+                Some(at) if rank(instance.kind) < rank(found[at].kind) => found[at] = instance,
+                Some(_) => {}
+                None => found.push(instance),
+            }
+        }
         match found.as_slice() {
             [one] => one.child.call("tool.call", json!({ "name": tool, "arguments": arguments })),
             [] => {
@@ -674,34 +723,61 @@ impl Supervisor {
             let mut inner = self.inner.lock();
             inner.instances.remove(instance)
         };
-        if let Some(mut old) = previous {
-            old.child.stop("plugin.reload is swapping this instance");
+        if let Some(old) = previous {
+            // Taken apart rather than assigned over. Both instances carry the
+            // same name, and a `SidecarService` clears that name's rows when it
+            // goes; the old value has to be gone before the new one registers,
+            // or the running singleton ends up invisible to `plugin.list` and
+            // to the budget sampler.
+            let Instance { plugin: owner, provide: launch, .. } = &old;
+            let (owner, launch) = (owner.clone(), launch.clone());
+            drop(old);
             match fresh.start(&self.canvas, &params) {
                 Ok(()) => {
-                    old.child = fresh;
-                    old.backoff.clear();
-                    old.not_before = None;
-                    old.kind = manifest.kind;
-                    self.inner.lock().instances.insert(instance.to_string(), old);
+                    self.inner.lock().instances.insert(
+                        instance.to_string(),
+                        Instance {
+                            kind: manifest.kind,
+                            plugin: owner,
+                            provide: launch,
+                            child: fresh,
+                            backoff: Backoff::new(),
+                            not_before: None,
+                        },
+                    );
                     info!(%instance, "swapped under plugin.reload");
                     return Ok(());
                 }
                 Err(e) => {
-                    // The new one would not shake hands. Put the old one back,
-                    // from the launch plan it had, and report the failure.
+                    // The new one would not shake hands. Build the previous
+                    // version's launch plan again and start it, so a bad
+                    // reload is a no change rather than an outage.
                     let rolled = self
-                        .build(provide, manifest)
+                        .build(&launch, manifest)
                         .and_then(|mut back| back.start(&self.canvas, &params).map(|()| back));
-                    match rolled {
-                        Ok(back) => {
-                            old.child = back;
-                            self.inner.lock().instances.insert(instance.to_string(), old);
-                            warn!(%instance, ?e, "the new instance failed; the previous one is back");
-                        }
-                        Err(also) => {
-                            warn!(%instance, ?e, ?also, "the new instance failed and the old one would not come back");
-                        }
+                    let (child, note) = match rolled {
+                        Ok(back) => (back, None),
+                        Err(also) => (self.build(&launch, manifest)?, Some(also)),
+                    };
+                    match &note {
+                        None => warn!(%instance, ?e, "the new instance failed; the previous one is back"),
+                        Some(also) => warn!(
+                            %instance, ?e, ?also,
+                            "the new instance failed and the old one would not come back; the \
+                             pump will keep trying under the backoff"
+                        ),
                     }
+                    self.inner.lock().instances.insert(
+                        instance.to_string(),
+                        Instance {
+                            kind: manifest.kind,
+                            plugin: owner,
+                            provide: launch,
+                            child,
+                            backoff: Backoff::new(),
+                            not_before: None,
+                        },
+                    );
                     return Err(e);
                 }
             }
@@ -768,6 +844,15 @@ impl Supervisor {
 /// The whole sampling of a transition is budgeted in the mixer; this is the
 /// per call deadline inside it, so one slow answer cannot eat the lot.
 const RENDER_DEADLINE: Duration = Duration::from_millis(50);
+
+/// Which instance of a plugin answers a tool call, best first.
+fn rank(kind: ProvideKind) -> u8 {
+    match kind {
+        ProvideKind::Service => 0,
+        ProvideKind::Device => 1,
+        _ => 2,
+    }
+}
 
 /// The id a device named for something it found, if it named one.
 fn named_id(params: &Value) -> Option<String> {

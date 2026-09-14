@@ -1,0 +1,10 @@
+{
+  "type": "object",
+  "properties": {
+    "say": { "type": "string", "description": "Anything at all; it comes straight back." },
+    "take_it_away": {
+      "type": "boolean",
+      "description": "Also raise source.gone for whatever this plugin announced."
+    }
+  }
+}
