@@ -1,0 +1,30 @@
+# Shared code for the first party capture plugins: camera, audio-device,
+# screen and file-record.
+#
+# This is a library, not a plugin. It has no `gmx-plugin.toml` and
+# `gmx plugin add` has nothing to do with it. It lives under `plugins/`
+# because that is where the crates that use it live, and because the
+# workspace glob puts it in the build either way.
+#
+# What is in here is the part every capture plugin got wrong the first time:
+# choosing an element that actually exists on this machine, spelling the media
+# transport the same way the core reads it, watching the bus without blocking
+# anything, and counting frames so `health` has a number rather than an
+# opinion.
+
+[package]
+name = "godwinmix-capture-common"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.82"
+description = "Pipeline, device discovery and health helpers shared by the GodwinMix capture plugins"
+license = "Apache-2.0"
+repository = "https://github.com/psmux/godwinmix"
+
+[dependencies]
+godwinmix-sdk = { path = "../../crates/godwinmix-sdk", version = "0.1.0" }
+gstreamer = { workspace = true }
+serde_json = { workspace = true }
+
+[target.'cfg(unix)'.dependencies]
+libc = { workspace = true }
