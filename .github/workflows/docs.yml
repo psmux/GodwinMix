@@ -1,0 +1,79 @@
+name: docs
+
+# Documentation rots in two ways: a link points at a file that was renamed, and
+# a page describes a command that no longer exists. This job catches the first
+# kind, which is the one a machine can see.
+#
+# Pull requests get the offline check only: every relative link between files
+# in this repository has to resolve. External links are checked on a schedule,
+# because a third party site being down is not a reason to fail somebody's
+# pull request.
+
+on:
+  push:
+    branches: [main]
+    paths: ["**.md", ".github/workflows/docs.yml", ".lycheeignore"]
+  pull_request:
+    paths: ["**.md", ".github/workflows/docs.yml", ".lycheeignore"]
+  schedule:
+    - cron: "23 7 * * 2"
+  workflow_dispatch:
+
+jobs:
+  links:
+    name: links resolve
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Internal links
+        uses: lycheeverse/lychee-action@v2
+        with:
+          # --offline checks relative paths and anchors against the tree and
+          # never touches the network.
+          args: >-
+            --offline
+            --no-progress
+            --include-fragments
+            --exclude-path target
+            --exclude-path browser/target
+            --exclude-path tauri-app/target
+            './**/*.md'
+          fail: true
+
+      - name: External links
+        if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+        uses: lycheeverse/lychee-action@v2
+        with:
+          args: >-
+            --no-progress
+            --max-retries 2
+            --timeout 20
+            --accept 200,206,301,302,403,429
+            --exclude-path target
+            --exclude-path browser/target
+            --exclude-path tauri-app/target
+            './**/*.md'
+          fail: true
+
+  # Every page in docs/ has to be reachable from docs/README.md, or nobody
+  # will ever read it. Cheap to check, and it is how a new page gets linked
+  # rather than orphaned.
+  index:
+    name: every docs page is linked
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - shell: bash
+        run: |
+          missing=0
+          while IFS= read -r page; do
+            rel="${page#docs/}"
+            grep -q "$rel" docs/README.md || {
+              echo "$page is not linked from docs/README.md"
+              missing=1
+            }
+          done < <(find docs -name '*.md' ! -name 'README.md' | sort)
+          exit "$missing"

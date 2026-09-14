@@ -1,0 +1,196 @@
+name: quickstart
+
+# The five minute acceptance, run as a test.
+#
+# The claim in the README is that a `docker run` puts a web page on air to an
+# RTMP destination in under five minutes on a clean machine. This job does
+# exactly the commands in the README, against mediamtx in a container, and
+# prints the elapsed seconds into the job summary. If the claim stops being
+# true, this fails, which is the only way a number in a README stays honest.
+#
+# What is timed: from `docker run` to the programme decoding at the RTMP
+# server. The image build is reported separately, because a person following
+# the quickstart pulls a published image rather than compiling one.
+#
+# Known fragility, stated rather than hidden: the page is rendered by wpesrc
+# (WPE WebKit), because the CEF sidecar is a gigabyte and is moving to its own
+# repository. wpesrc in a GPU-less container has a history of dying inside
+# WPEBackend-fdo on Debian trixie (deploy/docker/README.md). If this job fails
+# in the browser rather than in the mixer, that is the cause, and the fix is in
+# the image rather than in the workflow.
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+    paths:
+      - "deploy/docker/**"
+      - ".github/workflows/quickstart.yml"
+      - "README.md"
+      - "src/**"
+      - "Cargo.*"
+  workflow_dispatch:
+  # Weekly, so a broken base image or a changed Debian package is found before
+  # somebody following the README finds it.
+  schedule:
+    - cron: "17 6 * * 1"
+
+env:
+  # The budget. Over this, the job fails.
+  BUDGET_SECS: 300
+  TOKEN: quickstart-token
+
+jobs:
+  five-minutes:
+    name: docker run to a page on air
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: ffprobe, to measure the output with something that is not the mixer
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends ffmpeg
+
+      # Not part of the timed section. A person doing this at home pulls.
+      - name: Build the image
+        run: |
+          start=$(date +%s)
+          docker build -f deploy/docker/Dockerfile -t godwinmix:ci .
+          echo "BUILD_SECS=$(( $(date +%s) - start ))" >> "$GITHUB_ENV"
+
+      - name: A network, an RTMP server and a page to put on air
+        run: |
+          docker network create gmx
+          docker run -d --name rtmp --network gmx \
+            -e MTX_RTMP=yes -e MTX_RTMPADDRESS=:1935 \
+            -e MTX_API=yes -e MTX_APIADDRESS=:9997 \
+            -e MTX_HLS=no -e MTX_WEBRTC=no -e MTX_RTSP=no -e MTX_SRT=no \
+            -p 127.0.0.1:1935:1935 -p 127.0.0.1:9997:9997 \
+            bluenviron/mediamtx:latest
+
+          # The page. Something that moves, so a frozen frame is not mistaken
+          # for a working one, and a solid colour a human can check in the
+          # artifact if this ever fails in a way the numbers do not explain.
+          mkdir -p page
+          cat > page/index.html <<'HTML'
+          <!doctype html><meta charset="utf-8"><title>quickstart</title>
+          <style>body{margin:0;background:#123;color:#eee;font:700 8vw system-ui;
+          display:grid;place-items:center;height:100vh}</style>
+          <div id="t">00</div>
+          <script>let n=0;setInterval(()=>{document.getElementById('t').textContent=
+          String(++n).padStart(2,'0');document.body.style.background=
+          `hsl(${n*7%360} 60% 25%)`},1000)</script>
+          HTML
+          docker run -d --name page --network gmx \
+            -v "$PWD/page:/usr/share/nginx/html:ro" nginx:alpine
+
+          # mediamtx answering its API is the proof the destination is up, so
+          # the mixer's own start time is not measuring someone else's.
+          for _ in $(seq 1 60); do
+            curl -sf http://127.0.0.1:9997/v3/config/global/get > /dev/null && break
+            sleep 1
+          done
+
+      - name: The quickstart, timed
+        id: timed
+        run: |
+          set -euo pipefail
+          start=$(date +%s)
+          step() { echo "[$(( $(date +%s) - start ))s] $*"; }
+
+          # 1. Start the mixer. Exactly the README's command, with the RTMP
+          #    server on the compose network instead of on localhost.
+          docker run -d --name godwinmix --network gmx --shm-size 1g \
+            -p 127.0.0.1:8080:8080 \
+            -e GODWINMIX_TOKEN="$TOKEN" \
+            godwinmix:ci
+          step "container started"
+
+          api() {
+            local method=$1 path=$2 body=${3:-}
+            if [ -n "$body" ]; then
+              curl -sf -X "$method" "http://127.0.0.1:8080$path" \
+                -H "Authorization: Bearer $TOKEN" \
+                -H 'content-type: application/json' -d "$body"
+            else
+              curl -sf -X "$method" "http://127.0.0.1:8080$path" \
+                -H "Authorization: Bearer $TOKEN"
+            fi
+          }
+
+          # 2. Wait for the control port. Cold start on a runner is a few
+          #    seconds; the budget for the whole thing is five minutes.
+          for _ in $(seq 1 120); do
+            api GET /api/status > /dev/null 2>&1 && break
+            sleep 1
+          done
+          api GET /api/status > /dev/null
+          step "control port answering"
+
+          # 3. The destination and the page, the two calls the README makes.
+          api POST /api/outputs '{"id":"primary","uri":"rtmp://rtmp:1935/live/program","policy":"own"}' > /dev/null
+          step "output added"
+          api POST /api/sources '{"id":"page","uri":"web+http://page/","name":"Quickstart page"}' > /dev/null
+          step "page added as a source"
+
+          # 4. Wait for the page to be live, then take it. A web source is 5 to
+          #    20 seconds; never take one that is not live.
+          for _ in $(seq 1 120); do
+            state=$(api GET /api/status | jq -r '.sources[] | select(.id=="page") | .state')
+            [ "$state" = "live" ] && break
+            sleep 1
+          done
+          [ "$state" = "live" ] || { echo "page never went live (last state: $state)"; exit 1; }
+          step "page live"
+
+          api POST /api/take '{"source":"page"}' > /dev/null
+          step "taken to programme"
+
+          # 5. Measured by something that shares no code with the mixer: read
+          #    the programme back off the RTMP server and count frames.
+          ffprobe -v error -rw_timeout 30000000 \
+            -select_streams v:0 -show_entries stream=codec_name,width,height,avg_frame_rate \
+            -count_frames -read_intervals '%+#60' -of json \
+            "rtmp://127.0.0.1:1935/live/program" > probe.json
+          frames=$(jq -r '.streams[0].nb_read_frames // 0' probe.json)
+          [ "${frames:-0}" -ge 30 ] || { echo "only $frames frames arrived at the RTMP server"; cat probe.json; exit 1; }
+          step "programme decoding at the RTMP server, $frames frames read"
+
+          echo "ELAPSED=$(( $(date +%s) - start ))" >> "$GITHUB_ENV"
+          echo "FRAMES=$frames" >> "$GITHUB_ENV"
+
+      - name: Say how long it took
+        if: always()
+        run: |
+          {
+            echo "## Quickstart, timed"
+            echo
+            echo "| | seconds |"
+            echo "|---|---|"
+            echo "| \`docker run\` to the programme decoding at the RTMP server | **${ELAPSED:-failed}** |"
+            echo "| budget | ${BUDGET_SECS} |"
+            echo "| image build (not counted: a user pulls) | ${BUILD_SECS:-?} |"
+            echo
+            echo "Frames read back off the RTMP server by ffprobe: ${FRAMES:-0}."
+            echo
+            echo "Runner: \`$(uname -srm)\`, $(nproc) cores. A GitHub runner has no GPU,"
+            echo "so this is the software encode path, which is the slowest one."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          if [ -z "${ELAPSED:-}" ]; then exit 1; fi
+          if [ "$ELAPSED" -gt "$BUDGET_SECS" ]; then
+            echo "::error::the quickstart took ${ELAPSED}s, over the ${BUDGET_SECS}s the README claims"
+            exit 1
+          fi
+
+      - name: What the containers said
+        if: failure()
+        run: |
+          echo "::group::godwinmix"; docker logs godwinmix 2>&1 | tail -200 || true; echo "::endgroup::"
+          echo "::group::mediamtx"; docker logs rtmp 2>&1 | tail -100 || true; echo "::endgroup::"
+          echo "::group::status"; curl -s -H "Authorization: Bearer $TOKEN" http://127.0.0.1:8080/api/status | jq . || true; echo "::endgroup::"
+
+      - name: Down
+        if: always()
+        run: docker rm -f godwinmix rtmp page > /dev/null 2>&1 || true
