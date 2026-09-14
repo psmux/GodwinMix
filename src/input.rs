@@ -918,11 +918,7 @@ impl InputPipeline {
             toml::Value::String(format!("{}-{}", self.id, cfg.id))
         });
         let slot = crate::plugin::filter::insert(
-            crate::plugin::Insertion {
-                pipeline: &self.pipeline,
-                upstream: &upstream,
-                downstream: &downstream,
-            },
+            crate::plugin::Insertion::between(&self.pipeline, &upstream, &downstream),
             crate::plugin::FilterSpec {
                 id: cfg.id.clone(),
                 type_id: cfg.type_id.clone(),
@@ -964,6 +960,17 @@ impl InputPipeline {
     /// The filters on this source, in the order they were added.
     pub fn filter_ids(&self) -> Vec<String> {
         self.filters.lock().iter().map(|f| f.id().to_string()).collect()
+    }
+
+    /// Each filter's id, type and side, for a listing.
+    pub fn filters(&self) -> Vec<(String, String, String)> {
+        self.filters
+            .lock()
+            .iter()
+            .map(|f| {
+                (f.id().to_string(), f.spec.type_id.clone(), f.spec.side.as_str().to_string())
+            })
+            .collect()
     }
 
     /// Bring the pipeline up to PAUSED and wait briefly for it to preroll.
@@ -1086,8 +1093,33 @@ impl InputPipeline {
 
     /// True when this source is running with the page's media decoded here
     /// rather than in the browser. Decided once when the pipeline is built.
+    ///
+    /// Reported in the status extras. Nothing in the supervisor reads it any
+    /// more: the two decisions it used to make are the two questions below,
+    /// and both are answered from what the kind declared.
     pub fn superimposed(&self) -> bool {
         self.superimposed
+    }
+
+    /// Whether the supervisor may NULL this pipeline and start it again, or
+    /// must build the source from nothing.
+    pub fn restarts_in_place(&self) -> bool {
+        self.capabilities.has(crate::plugin::Capability::RestartInPlace)
+    }
+
+    /// Whether this source puts its own output on the programme's timeline
+    /// already, in which case the aligner must leave it alone. A source with
+    /// its own compositor does, because that compositor runs on the clock and
+    /// base time the mixer gave this pipeline.
+    pub fn composites_its_own_timeline(&self) -> bool {
+        self.capabilities.has(crate::plugin::Capability::Alpha)
+    }
+
+    /// Whether this source can be scrubbed at all, before asking the pipeline.
+    /// A kind that never declares `seek` is not asked twice a second for the
+    /// rest of the broadcast.
+    pub fn declares_seek(&self) -> bool {
+        self.capabilities.has(crate::plugin::Capability::Seek)
     }
 
     /// What each side of this source's layered compositor has done, for a
@@ -1124,6 +1156,9 @@ impl InputPipeline {
     /// element to the proxies is built there is nothing upstream to ask, so that
     /// case leaves the answer open and this gets asked again on the next tick.
     pub fn refresh_seekable(&self) -> bool {
+        if !self.declares_seek() {
+            return false;
+        }
         let mut known = self.seekable.lock();
         if let Some(answer) = *known {
             return answer;

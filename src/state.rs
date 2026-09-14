@@ -50,18 +50,17 @@ pub struct SourceStatus {
     /// Same for audio. `None` here while `has_audio` is true means the source
     /// advertised an audio track that never produced a decoded sample.
     pub audio_idle_ms: Option<u64>,
-    /// True when this website source is running with its media decoded outside
-    /// the browser and the page drawn over it. False covers both a source that
-    /// never asked for it and one that asked and could not get it, because the
-    /// page turned out to have no address worth handing over.
-    #[serde(default)]
-    pub superimposed: bool,
-    /// Where this source's sounds sit against each other. `None` for anything
-    /// but a superimposed source, because everything else arrives already
-    /// mixed and there is nothing to balance. Absent rather than null in the
-    /// JSON, so a snapshot written by an older build still parses.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub audio: Option<SourceAudio>,
+    /// Everything only one kind of source has.
+    ///
+    /// `superimposed` and `audio` used to be fields of this universal shape,
+    /// which meant a kind could not report anything without a core release and
+    /// every client carried fields that were false for almost every source.
+    /// They are written here now, flattened, so the JSON on the wire is exactly
+    /// what it was: `superimposed` is still a top level boolean and `audio` is
+    /// still a top level object. What changed is that a new kind adds its own
+    /// keys without touching this struct.
+    #[serde(flatten, default, skip_serializing_if = "serde_json::Map::is_empty")]
+    pub extra: serde_json::Map<String, serde_json::Value>,
     /// The operator's fader for this source, 0.0 silent through 1.0 unity to a
     /// ceiling of 10.0. Read back off the volume element rather than remembered,
     /// so what the UI shows is what the pipeline is doing.
@@ -210,6 +209,31 @@ pub struct BackendInfo {
     pub audio_decoder: String,
     pub audio_encoder: String,
     pub hardware_accelerated: bool,
+}
+
+impl SourceStatus {
+    /// Put one kind specific field in the extras, dropping it if it does not
+    /// serialise. A field that cannot be written is a bug in the kind, not a
+    /// reason to fail a status snapshot the operator is waiting on.
+    pub fn put_extra(&mut self, key: &str, value: impl Serialize) {
+        match serde_json::to_value(value) {
+            Ok(v) => {
+                self.extra.insert(key.to_string(), v);
+            }
+            Err(e) => tracing::warn!(key, ?e, "a source's extra field could not be written"),
+        }
+    }
+
+    /// Read one back, for a client or a test.
+    pub fn extra(&self, key: &str) -> Option<&serde_json::Value> {
+        self.extra.get(key)
+    }
+
+    /// True when this website source is running with its media decoded outside
+    /// the browser and the page drawn over it.
+    pub fn superimposed(&self) -> bool {
+        self.extra("superimposed").and_then(|v| v.as_bool()).unwrap_or(false)
+    }
 }
 
 /// Pushed to every connected UI as it happens.
@@ -371,9 +395,7 @@ mod tests {
     /// under a key. Getting that wrong silently blanks the whole UI.
     #[test]
     fn event_json_shape_matches_what_the_ui_parses() {
-        let status = MixerStatus {
-            program: Some("cam1".into()),
-            sources: vec![SourceStatus {
+        let mut page = SourceStatus {
                 id: "page".into(),
                 name: "Live game".into(),
                 uri: "web+https://example.com/live-game".into(),
@@ -383,14 +405,19 @@ mod tests {
                 cell: Some(1),
                 video_idle_ms: Some(12),
                 audio_idle_ms: Some(9),
-                superimposed: true,
-                audio: Some(SourceAudio { page: 0.8, media: vec![1.0, 0.0] }),
+                extra: Default::default(),
                 gain: 0.5,
                 muted: true,
                 seekable: false,
                 position_ms: None,
                 duration_ms: None,
-            }],
+        };
+        // Written as extras, and still the same two top level keys on the wire.
+        page.put_extra("superimposed", true);
+        page.put_extra("audio", SourceAudio { page: 0.8, media: vec![1.0, 0.0] });
+        let status = MixerStatus {
+            program: Some("cam1".into()),
+            sources: vec![page],
             outputs: vec![],
             multiview: MultiviewStatus {
                 enabled: true,
@@ -524,10 +551,10 @@ mod tests {
             "cell": 0, "video_idle_ms": 12, "audio_idle_ms": null,
         });
         let s: SourceStatus = serde_json::from_value(older).unwrap();
-        assert!(!s.superimposed);
+        assert!(!s.superimposed());
         // Same again for the balance: a row from before it existed reports no
         // levels, which is exactly what a camera reports today.
-        assert_eq!(s.audio, None);
+        assert_eq!(s.extra("audio"), None);
         // The fader defaults to unity and the mute to off, which is where those
         // sources were before either control existed. A gain defaulting to 0.0
         // would bring a saved desk back with every source silent.
@@ -555,8 +582,7 @@ mod tests {
             cell: Some(2),
             video_idle_ms: Some(20),
             audio_idle_ms: Some(20),
-            superimposed: false,
-            audio: None,
+            extra: Default::default(),
             gain: 1.0,
             muted: false,
             seekable: false,
@@ -645,8 +671,7 @@ mod tests {
             cell: Some(2),
             video_idle_ms: Some(20),
             audio_idle_ms: Some(20),
-            superimposed: false,
-            audio: None,
+            extra: Default::default(),
             gain: 1.0,
             muted: false,
             seekable: false,
@@ -659,17 +684,19 @@ mod tests {
         assert_eq!(v["gain"], 1.0);
         assert_eq!(v["muted"], false);
 
-        let page = SourceStatus {
-            audio: Some(SourceAudio { page: 0.25, media: vec![1.0] }),
-            superimposed: true,
-            ..camera
-        };
+        let mut page = camera.clone();
+        page.put_extra("audio", SourceAudio { page: 0.25, media: vec![1.0] });
+        page.put_extra("superimposed", true);
         let v = serde_json::to_value(&page).unwrap();
         assert_eq!(v["audio"]["page"], 0.25);
         assert_eq!(v["audio"]["media"].as_array().unwrap().len(), 1);
-        // Round trip, because the CLI and the MCP server parse this back.
+        assert_eq!(v["superimposed"], true);
+        // Round trip, because the CLI and the MCP server parse this back. The
+        // extras come back as extras, which is what makes an unknown key from a
+        // newer kind survive a client that has never heard of it.
         let back: SourceStatus = serde_json::from_value(v).unwrap();
-        assert_eq!(back.audio, Some(SourceAudio { page: 0.25, media: vec![1.0] }));
+        assert!(back.superimposed());
+        assert_eq!(back.extra("audio").unwrap()["page"], 0.25);
     }
 
     #[test]
