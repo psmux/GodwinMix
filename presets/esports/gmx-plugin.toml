@@ -20,3 +20,13 @@ layout = "config/layout.json"
 surface = "web"
 theme = "neon"
 scenes = "scenes"
+theme_css = "theme.css"
+gallery = "live"
+
+# The three things the person does next. The welcome panel in the web UI
+# shows these in this order, and the README repeats them.
+steps = [
+  "Put the four player feeds and the caster camera into the [[sources]] blocks.",
+  "Put your destination's URL and stream key into the [[outputs]] block.",
+  "Run `gmx`, open http://localhost:8080, and press Quad to bring all four up.",
+]

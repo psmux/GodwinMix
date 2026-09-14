@@ -33,10 +33,9 @@ pub fn register(reg: &mut Registry<Call>) {
         .tool(
             "take",
             Tier::Minimal,
-            "Put a scene or a source on programme. The cut is instant and the outgoing \
-             stream is not disturbed. Pass `source` with an id from `agent_state`, or \
-             `scene` with a name, or neither to take the armed scene. Returns the new \
-             programme state. An unknown id is refused with the ids that work.",
+            "Put a scene or a source on programme. The cut is instant and the stream is \
+             not disturbed. Pass `source` with an id from `agent_state`, or `scene` with \
+             a name, or neither to take the armed scene. Returns the programme state.",
         ),
     );
 
@@ -135,11 +134,15 @@ async fn take(call: Call, params: Value) -> Result<Value, RpcError> {
         RpcError::invalid_params(e).with("transitions", json!(godwinmix_protocol::requests::TRANSITIONS))
     })?;
 
+    // A name that is wrong is answered before a safety rule is consulted: a
+    // caller who typed the wrong id needs to hear that, not how long the hold
+    // has left.
     if let Some(id) = req.source_id() {
         let ids = call.source_ids().await;
         if !ids.contains(&id) {
             return Err(RpcError::not_found("source", &id, &ids));
         }
+        call.app.safety.check(&call.token).map_err(|r| call.safety_error(r))?;
         return cut(&call, Some(id), req.at_running_time_ms).await;
     }
 
@@ -151,6 +154,7 @@ async fn take(call: Call, params: Value) -> Result<Value, RpcError> {
     let Some(which) = named else {
         // Nothing named and nothing armed: the slate, which is what
         // `program.take {}` has always meant.
+        call.app.safety.check(&call.token).map_err(|r| call.safety_error(r))?;
         return cut(&call, None, req.at_running_time_ms).await;
     };
     take_scene(&call, &which, req.at_running_time_ms).await
@@ -196,6 +200,9 @@ async fn take_scene(
         .with("missing", json!(missing))
         .with("scene", name));
     }
+    // The same rules a source take goes through, and in the same place: after
+    // the names have been checked and before the pipeline is touched.
+    call.app.safety.check(&call.token).map_err(|r| call.safety_error(r))?;
     call.app.history.expect(&call.token.id);
     call.app
         .mixer
@@ -206,6 +213,9 @@ async fn take_scene(
         })
         .await
         .map_err(|e| call.mixer_error(e))?;
+    // Only once the mixer has taken it, exactly as `cut` does: a take the
+    // pipeline refused must not start the hold on the next one.
+    call.app.safety.record(&call.token.id);
     body(state(call).await?)
 }
 
@@ -222,6 +232,10 @@ async fn revert(call: Call, _params: Value) -> Result<Value, RpcError> {
         )
         .with("program", now.program.clone()));
     };
+    // Revert is held to the rate limit and to the flash guard, but not to the
+    // minimum hold. The whole point of it is to undo a take that turned out
+    // wrong, and a revert that has to wait eight seconds is not one.
+    call.app.safety.check_revert(&call.token).map_err(|r| call.safety_error(r))?;
     cut(&call, previous, None).await
 }
 
@@ -238,6 +252,9 @@ async fn cut(
         .request(|ack| Command::Take { source, at_running_time_ms, ack: Some(ack) })
         .await
         .map_err(|e| call.mixer_error(e))?;
+    // Only once the mixer has taken it: a cut the pipeline refused must not
+    // start the hold on the next one.
+    call.app.safety.record(&call.token.id);
     body(state(call).await?)
 }
 

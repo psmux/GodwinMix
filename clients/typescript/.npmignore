@@ -1,0 +1,7 @@
+# What ships is dist/ and the README; `files` in package.json already says so.
+# This is the belt to that pair of braces, for an npm that ignores `files`.
+src/
+test/
+e2e/
+tsconfig.json
+*.tgz

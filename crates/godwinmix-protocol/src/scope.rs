@@ -65,6 +65,22 @@ impl Profile {
     }
 }
 
+/// A token's own safety numbers, `[[tokens]] safety = { .. }`.
+///
+/// The core's `[safety]` table is the default. A human token may move any of
+/// these in either direction; a token marked `agent` may only make them
+/// harder, which is enforced in `godwinmix_core::safety`. Held here rather
+/// than in the engine because the dispatcher has the token and not the config.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct TokenSafety {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub min_hold_ms: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub max_takes_per_minute: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub flash_guard: Option<bool>,
+}
+
 /// One credential, as the `[tokens]` table describes it.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Token {
@@ -76,6 +92,13 @@ pub struct Token {
     /// Accepted only by a core started with `--rehearsal`.
     pub rehearsal: bool,
     pub profile: Profile,
+    /// This credential belongs to an unattended agent rather than to a person
+    /// at a desk. It changes one thing: its `safety` override may only tighten
+    /// the core's limits, never loosen them.
+    pub agent: bool,
+    /// Per token safety numbers. `None` leaves the core's `[safety]` table in
+    /// force, which is the usual case.
+    pub safety: Option<TokenSafety>,
 }
 
 impl Token {
@@ -89,6 +112,8 @@ impl Token {
             confirm: ConfirmPolicy::None,
             rehearsal: false,
             profile: Profile::Standard,
+            agent: false,
+            safety: None,
         }
     }
 
@@ -316,6 +341,8 @@ mod tests {
             confirm: ConfirmPolicy::None,
             rehearsal: false,
             profile: Profile::Standard,
+            agent: false,
+            safety: None,
         }
     }
 

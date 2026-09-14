@@ -270,3 +270,23 @@ jobs:
       # CONTRIBUTING.md. This job exists so the count is visible in the log and
       # a reviewer can see a new one arrive.
       - run: cargo clippy --workspace --all-targets --locked
+
+  # The published client libraries are generated from protocol.json. A method
+  # added to the core without regenerating them fails here, in the language
+  # that would have shipped stale, and the TypeScript and Python suites run
+  # with nothing but their own runtimes.
+  clients:
+    name: clients (generated, TypeScript, Python)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python3 clients/gen/generate.py --check
+      - run: cd clients/typescript && npm test
+      - run: cd clients/python && python3 -m unittest -q
+      - run: bash examples/test-zero-dep.sh

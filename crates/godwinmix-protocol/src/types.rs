@@ -304,6 +304,40 @@ pub enum Event {
     /// being sent the whole item, because the listing is the one place a
     /// converted copy gets folded onto its original.
     MediaChanged { name: String, conversion: Option<ConversionState> },
+    /// The surface defaults changed: a preset was applied, or an operator set
+    /// them by hand. Clients that render a UI re-read them and nothing else
+    /// happens; the programme is untouched.
+    UiChanged { ui: UiDefaults },
+}
+
+/// What a surface starts with: the layout, the theme and the gallery mode.
+///
+/// Chosen by a preset (`preset.apply`), carried in `core.info` and pushed as
+/// `event/ui.changed`. None of it changes what the core does. It exists so the
+/// first page a volunteer sees is the one their preset chose rather than the
+/// one the last person to use this browser chose. 05 section 3b is where the
+/// four gallery modes are defined.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct UiDefaults {
+    /// The preset that set these, so a surface knows one has been applied.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub preset: Option<String>,
+    /// A theme id the surface resolves, for example `dark` or `calm`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub theme: Option<String>,
+    /// `live`, `snapshot`, `icon` or `label`. Absent means the surface asks
+    /// the machine, which is what `gmx doctor` proposes.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub gallery: Option<String>,
+    /// Slot to panels, top to bottom. Empty means the surface's own default.
+    #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
+    pub layout: std::collections::BTreeMap<String, Vec<String>>,
+}
+
+impl UiDefaults {
+    pub fn is_empty(&self) -> bool {
+        self == &Self::default()
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
@@ -377,6 +411,11 @@ pub struct CoreInfo {
     /// True when the core was started with `--rehearsal`, which refuses
     /// `output.add` and accepts rehearsal tokens.
     pub rehearsal: bool,
+    /// What a surface should start with, when a preset chose it. Absent on a
+    /// core no preset has been applied to, which is what puts the welcome
+    /// panel up in the reference UI.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ui: Option<UiDefaults>,
 }
 
 /// What every mutating method answers with alongside its result object.

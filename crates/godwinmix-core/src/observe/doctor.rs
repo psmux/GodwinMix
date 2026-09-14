@@ -401,6 +401,16 @@ fn machine_class() -> Check {
     )
 }
 
+/// What the gallery should default to on the machine this is running on.
+///
+/// `core.info` answers with this when no preset has chosen a mode, so a client
+/// on a Pi starts on icons without having to guess from `hardwareConcurrency`.
+pub fn gallery_default_here() -> &'static str {
+    let cores = std::thread::available_parallelism().map(|n| n.get()).unwrap_or(1);
+    let ram_gb = total_memory_bytes().map(|b| b as f64 / 1_073_741_824.0);
+    gallery_default(cores, ram_gb).0
+}
+
 /// The gallery default for a machine. Held apart from the check so it is
 /// testable without a machine of each size, and so the UI can call it.
 pub fn gallery_default(cores: usize, ram_gb: Option<f64>) -> (&'static str, &'static str) {

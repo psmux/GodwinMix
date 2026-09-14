@@ -620,6 +620,14 @@ pub fn watch_bus(
                 MessageView::Element(e) => e
                     .structure()
                     .filter(|s| s.name() == "level")
+                    // The telemetry probes read the RMS out of the same
+                    // message, and only while a client has asked for them.
+                    .inspect(|s| {
+                        crate::telemetry::note_level(
+                            e.src().map(|o| o.name().to_string()).as_deref(),
+                            s,
+                        )
+                    })
                     .and_then(parse_level)
                     .map(|peak_db| BusEvent::Level {
                         // The element's own name, not its path. A path carries
