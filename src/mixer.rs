@@ -3000,4 +3000,108 @@ mod tests {
             "unhelpful error: {err:#}"
         );
     }
+
+    fn programme_config(graphics: crate::config::Accel) -> crate::config::Config {
+        let mut cfg = crate::config::Config {
+            canvas: crate::config::Canvas {
+                width: 320,
+                height: 180,
+                fps: 30,
+                sample_rate: 48000,
+                channels: 2,
+            },
+            program: Default::default(),
+            multiview: Default::default(),
+            control: Default::default(),
+            hardware: Default::default(),
+            codecs: Default::default(),
+            media: Default::default(),
+            security: Default::default(),
+            browser: Default::default(),
+            stall: Default::default(),
+            sources: vec![],
+            outputs: vec![],
+        };
+        cfg.multiview.enabled = false;
+        cfg.hardware.graphics = graphics;
+        cfg
+    }
+
+    /// Build a programme, roll it, and count what reaches the encoder tee.
+    /// Returns the number of encoded buffers seen and the first bus error.
+    async fn roll_programme(cfg: crate::config::Config) -> Result<u64> {
+        let (mix, _handle, _cmds, _bus) = Mixer::build(cfg)?;
+        let seen = Arc::new(AtomicU64::new(0));
+        let counter = seen.clone();
+        let pad = mix.venc_tee.static_pad("sink").context("the encoder tee has no sink pad")?;
+        pad.add_probe(gst::PadProbeType::BUFFER, move |_, _| {
+            counter.fetch_add(1, Ordering::Relaxed);
+            gst::PadProbeReturn::Ok
+        });
+        mix.program.set_state(gst::State::Playing).context("starting the programme")?;
+        let bus = mix.program.bus().context("the programme has no bus")?;
+        let mut failure = None;
+        for _ in 0..100 {
+            if seen.load(Ordering::Relaxed) > 0 {
+                break;
+            }
+            if let Some(msg) = bus.timed_pop_filtered(
+                gst::ClockTime::from_mseconds(50),
+                &[gst::MessageType::Error],
+            ) {
+                if let gst::MessageView::Error(e) = msg.view() {
+                    failure = Some(anyhow::anyhow!("{}", e.error()));
+                    break;
+                }
+            }
+            tokio::time::sleep(Duration::from_millis(20)).await;
+        }
+        let _ = mix.program.set_state(gst::State::Null);
+        match failure {
+            Some(e) => Err(e),
+            None => Ok(seen.load(Ordering::Relaxed)),
+        }
+    }
+
+    /// The software graphics entry is the default and is what a machine with
+    /// no GPU, or with a GPU nobody has verified, gets. It must encode.
+    #[tokio::test]
+    async fn the_software_graphics_entry_runs_a_programme() {
+        let _ = gst::init();
+        let frames = roll_programme(programme_config(crate::config::Accel::Software))
+            .await
+            .expect("the software programme must run on every machine");
+        assert!(frames > 0, "nothing reached the encoder");
+    }
+
+    /// And the GPU entry, pinned, builds the same programme with the frame
+    /// uploaded once and composited on the GPU. Skipped where the elements are
+    /// not installed, which is most CI runners.
+    #[tokio::test]
+    async fn the_gl_graphics_entry_runs_a_programme_when_it_is_pinned() {
+        let _ = gst::init();
+        if !crate::probe::exists("glvideomixer") || !crate::probe::exists("gldownload") {
+            return;
+        }
+        let frames = roll_programme(programme_config(crate::config::Accel::Gl))
+            .await
+            .expect("the gl programme must run where the elements exist");
+        assert!(frames > 0, "nothing reached the encoder through the GL compositor");
+    }
+
+    /// Pinning a graphics backend that is not here says so rather than
+    /// quietly falling back, because an operator who pinned one wants to know.
+    #[tokio::test]
+    async fn pinning_a_graphics_backend_that_is_absent_fails_loudly() {
+        let _ = gst::init();
+        if crate::probe::exists("cudacompositor") {
+            return;
+        }
+        let err = Mixer::build(programme_config(crate::config::Accel::Cuda))
+            .err()
+            .expect("cuda is not here and must be reported");
+        let text = format!("{err:#}");
+        assert!(text.contains("cuda"), "{text}");
+        assert!(text.contains("software"), "the error must list what was available: {text}");
+    }
 }

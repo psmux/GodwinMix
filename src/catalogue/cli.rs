@@ -90,8 +90,8 @@ fn list(cat: &Catalogue, cfg: Option<&Config>, json: bool) -> Result<()> {
     }
     println!("catalogue on {} with GStreamer {}\n", listing.platform, listing.gstreamer);
     println!(
-        "{:<26} {:<10} {:<15} {:<5} {:<22} {:<9} {}",
-        "entry", "kind", "accel", "rank", "elements", "here", "license"
+        "{:<26} {:<10} {:<15} {:<5} {:<22} {:<9} license",
+        "entry", "kind", "accel", "rank", "elements", "here"
     );
     for e in &listing.entries {
         let elements = [e.encoder.as_deref(), e.decoder.as_deref()]
