@@ -110,7 +110,21 @@ pub enum Demand {
     Teardown,
 }
 
-type DemandSink = Arc<dyn Fn(Demand) + Send + Sync>;
+/// A demand with the subscriber generation it was decided at.
+///
+/// Teardown used to be decided from a generation and an emptiness check taken
+/// separately from the enqueueing, so a subscriber arriving between the two saw
+/// a pipeline that was already condemned, enqueued nothing of its own, and then
+/// lost the mosaic under it. The generation travels with the command now and
+/// the mixer thread refuses one that is no longer current, reconciling the
+/// count as it stands there instead of trusting the verb in the message.
+#[derive(Debug, Clone, Copy)]
+pub struct DemandAt {
+    pub demand: Demand,
+    pub generation: u64,
+}
+
+type DemandSink = Arc<dyn Fn(DemandAt) + Send + Sync>;
 
 /// What the mosaic is doing, for `/metrics` and for anybody who wants to know
 /// without holding a subscription. `gmx_multiview_subscribers` is
@@ -162,7 +176,13 @@ struct Shared {
 }
 
 impl Shared {
-    fn ask(&self, d: Demand) {
+    /// Say what is wanted, stamped with the generation it was decided at.
+    fn ask(&self, demand: Demand) {
+        let generation = self.generation.load(Ordering::SeqCst);
+        self.ask_at(DemandAt { demand, generation });
+    }
+
+    fn ask_at(&self, d: DemandAt) {
         if let Some(sink) = &self.demand {
             sink(d);
         }
@@ -204,6 +224,14 @@ impl Shared {
         if *self.shape.lock() != Some(shape) || !self.built.load(Ordering::Acquire) {
             self.ask(Demand::Build(shape));
         }
+    }
+
+    /// Whether a command that has reached the mixer thread is still the truth.
+    /// Anything that changed the subscriber list since it was decided has
+    /// bumped the generation and put its own command on the queue behind this
+    /// one, so the stale one is dropped and the fresh one decides.
+    fn current(&self, generation: u64) -> bool {
+        self.generation.load(Ordering::SeqCst) == generation
     }
 }
 
@@ -350,6 +378,21 @@ impl MultiviewHandle {
         self.shared.wanted()
     }
 
+    /// Whether a demand that has reached the mixer thread is still current.
+    ///
+    /// A subscriber that arrived after the demand was decided has bumped the
+    /// generation and asked for what it wants, so the stale command is dropped
+    /// rather than applied over the top of the fresh one.
+    pub fn accepts(&self, d: DemandAt) -> bool {
+        self.shared.current(d.generation)
+    }
+
+    /// The current subscriber generation, for a command the mixer thread
+    /// raises itself.
+    pub fn generation(&self) -> u64 {
+        self.shared.generation.load(Ordering::SeqCst)
+    }
+
     fn publisher(&self) -> Publisher {
         Publisher { shared: self.shared.clone() }
     }
@@ -412,15 +455,19 @@ impl Drop for MultiviewSubscription {
         shared.rt.clone().spawn(async move {
             tokio::time::sleep(linger).await;
             // A client that came back during the linger bumped the generation,
-            // and its own settle has already asked for what it needs.
-            if shared.generation.load(Ordering::SeqCst) != gen {
+            // and its own settle has already asked for what it needs. This is
+            // the cheap check; the one that matters is on the mixer thread,
+            // because a client can arrive between here and there.
+            if !shared.current(gen) {
                 return;
             }
             if !shared.subs.lock().is_empty() {
                 return;
             }
             info!("last multiview subscriber left, taking the mosaic down");
-            shared.ask(Demand::Teardown);
+            // Stamped with the generation this decision was made at, not with
+            // whatever it is by the time the mixer thread reads it.
+            shared.ask_at(DemandAt { demand: Demand::Teardown, generation: gen });
         });
     }
 }
@@ -827,7 +874,7 @@ mod tests {
         let seen: Arc<Mutex<Vec<Demand>>> = Arc::new(Mutex::new(Vec::new()));
         let sink = {
             let seen = seen.clone();
-            Arc::new(move |d: Demand| seen.lock().push(d)) as DemandSink
+            Arc::new(move |d: DemandAt| seen.lock().push(d.demand)) as DemandSink
         };
         let h = MultiviewHandle::new(
             MultiviewConfig { linger_secs: 2, ..Default::default() },
@@ -880,7 +927,7 @@ mod tests {
         let seen: Arc<Mutex<Vec<Demand>>> = Arc::new(Mutex::new(Vec::new()));
         let sink = {
             let seen = seen.clone();
-            Arc::new(move |d: Demand| seen.lock().push(d)) as DemandSink
+            Arc::new(move |d: DemandAt| seen.lock().push(d.demand)) as DemandSink
         };
         let h = MultiviewHandle::new(
             MultiviewConfig { linger_secs: 2, ..Default::default() },
@@ -907,7 +954,7 @@ mod tests {
         let seen: Arc<Mutex<Vec<Demand>>> = Arc::new(Mutex::new(Vec::new()));
         let sink = {
             let seen = seen.clone();
-            Arc::new(move |d: Demand| seen.lock().push(d)) as DemandSink
+            Arc::new(move |d: DemandAt| seen.lock().push(d.demand)) as DemandSink
         };
         let h = MultiviewHandle::new(
             MultiviewConfig { enabled: false, ..Default::default() },
@@ -1080,6 +1127,46 @@ mod tests {
         drop(sub);
         let _ = handle.send(crate::mixer::Command::Shutdown);
         tokio::task::spawn_blocking(move || thread.join()).await.unwrap().unwrap();
+    }
+
+    /// Codex's finding: teardown was decided from a generation and an
+    /// emptiness check taken separately from the enqueueing, so a subscriber
+    /// arriving between the two saw the pipeline, enqueued nothing, and then
+    /// lost it.
+    ///
+    /// The demand carries the generation it was decided at now, and the mixer
+    /// thread refuses one that is no longer current.
+    #[tokio::test(start_paused = true)]
+    async fn a_subscriber_arriving_after_a_teardown_was_decided_keeps_the_mosaic() {
+        let seen: Arc<Mutex<Vec<DemandAt>>> = Arc::new(Mutex::new(Vec::new()));
+        let sink = {
+            let seen = seen.clone();
+            Arc::new(move |d: DemandAt| seen.lock().push(d)) as DemandSink
+        };
+        let h = MultiviewHandle::new(
+            MultiviewConfig { linger_secs: 1, ..Default::default() },
+            tokio::runtime::Handle::current(),
+            sink,
+        );
+        let a = h.subscribe(MultiviewRequest::configured());
+        h.mark_built(h.wanted());
+        drop(a);
+        // Past the linger, so the teardown has been decided and posted.
+        tokio::time::sleep(Duration::from_millis(1_200)).await;
+        let teardown = *seen
+            .lock()
+            .iter()
+            .find(|d| matches!(d.demand, Demand::Teardown))
+            .expect("no teardown was ever asked for");
+        assert!(h.accepts(teardown), "the teardown is current until somebody arrives");
+
+        // The mixer thread has not read it yet, and a client turns up.
+        let _b = h.subscribe(MultiviewRequest::configured());
+        assert!(
+            !h.accepts(teardown),
+            "a teardown decided before this subscriber must be refused"
+        );
+        assert!(h.wanted().is_some(), "and the mosaic is still wanted");
     }
 
     /// A source with a thumbnail end, for the two tests below.
