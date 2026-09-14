@@ -53,6 +53,32 @@ impl SidecarService {
         self.child.as_ref().map(Sidecar::state).unwrap_or(InstanceState::Stopped)
     }
 
+    /// Has the process gone without saying so? Answered from the operating
+    /// system, not from what the instance last told us about itself.
+    ///
+    /// `instance_state` reads a cached lifecycle, and a plugin that is killed
+    /// says nothing on its way out: the state stayed at `ready` for the life
+    /// of the mixer, the supervisor never restarted it, and every call into it
+    /// waited for its own deadline. One non blocking wait a second answers it
+    /// properly. Returns true the first time it notices, so the caller can
+    /// announce it once.
+    pub fn notice_death(&mut self) -> bool {
+        let Some(child) = self.child.as_mut() else { return false };
+        if matches!(child.state(), InstanceState::Failed | InstanceState::Stopped) {
+            return false;
+        }
+        if child.running() {
+            return false;
+        }
+        child.lifecycle_mut().failed("the process exited without saying it would");
+        // Every call still waiting on it is answered now rather than left to
+        // its own deadline, which is the difference between an agent retrying
+        // and an agent hanging.
+        child.abandon("the process exited without saying it would");
+        crate::plugin::loader::set_state(&self.instance, "failed");
+        true
+    }
+
     pub fn pid(&self) -> Option<u32> {
         self.child.as_ref().and_then(Sidecar::pid)
     }

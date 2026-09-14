@@ -449,8 +449,28 @@ impl Supervisor {
         }
     }
 
-    /// One pass: notices, requests, restarts.
+    /// One pass: deaths, notices, requests, restarts.
     pub fn pump(&self) {
+        // Who has gone without saying so. A plugin that is killed says nothing
+        // on its way out, and the lifecycle everything else reads is a cache of
+        // what the plugin last told us, so a dead service stayed `ready` for
+        // the life of the mixer and was never restarted. One non blocking wait
+        // per instance per pass is what it costs to notice.
+        let died: Vec<String> = {
+            let mut inner = self.inner.lock();
+            inner
+                .instances
+                .iter_mut()
+                .filter_map(|(name, i)| i.child.notice_death().then(|| name.clone()))
+                .collect()
+        };
+        for instance in died {
+            // `notice_death` has already moved the lifecycle to failed and
+            // written `failed` into the registry, which is what `plugin.list`
+            // and `plugin.stats` read. `restart_the_dead` below picks it up on
+            // this same pass, under the backoff.
+            warn!(%instance, "a plugin process is gone; it will be started again");
+        }
         let work: Vec<(String, ProvideKind, Vec<crate::plugin::host::Notice>)> = {
             let inner = self.inner.lock();
             inner

@@ -144,6 +144,58 @@ fn a_service_and_a_device_are_started_as_one_instance_each() {
     let _ = std::fs::remove_dir_all(dir);
 }
 
+/// A service that is killed comes back.
+///
+/// The supervisor read a cached lifecycle to decide whether an instance was
+/// alive, and a plugin that is killed says nothing on its way out. So a
+/// service killed by the OOM killer, by a crash or by `gmx chaos` stayed
+/// `ready` for the life of the mixer: the restart never ran, and every call
+/// into it sat there until its own deadline.
+#[test]
+fn a_service_that_is_killed_is_noticed_and_started_again() {
+    let _lock = exclusive();
+    let dir = install("revive");
+    let supervisor = Supervisor::new(canvas(), settings(None));
+    supervisor.start_all();
+    let before = loader::stats()
+        .into_iter()
+        .find(|s| s.instance == "fakeservice-service")
+        .and_then(|s| s.pid)
+        .expect("the service is running and says so");
+
+    unsafe {
+        libc::kill(before as i32, libc::SIGKILL);
+    }
+    // No `wait_until_gone` here, and the reason is the whole point of the fix
+    // underneath: a killed child that nobody has waited on is a zombie, its
+    // pid is still allocated, and `kill -0` still answers yes. Asking the
+    // operating system whether the pid exists is not the same question as
+    // asking whether the plugin is running, which is why the supervisor now
+    // asks its own `Child` rather than a cached lifecycle.
+    //
+    // The pump runs on its own thread once `spawn_pump` is called; these tests
+    // drive it by hand so that the wait here is the test's and not a timer's.
+    let began = std::time::Instant::now();
+    let mut after = None;
+    while began.elapsed() < std::time::Duration::from_secs(30) {
+        supervisor.pump();
+        let now = loader::stats()
+            .into_iter()
+            .find(|s| s.instance == "fakeservice-service")
+            .and_then(|s| s.pid);
+        if let Some(pid) = now.filter(|pid| *pid != before) {
+            after = Some(pid);
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(50));
+    }
+    let after = after.expect("the killed service was never started again");
+    assert!(unsafe { libc::kill(after as i32, 0) } == 0, "the replacement {after} is not running");
+
+    supervisor.shutdown();
+    let _ = std::fs::remove_dir_all(dir);
+}
+
 /// The one a plugin author cares about: a tool call reaches the process and
 /// the answer comes back in MCP's shape.
 #[test]

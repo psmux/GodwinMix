@@ -184,6 +184,12 @@ impl Sidecar {
         &self.life
     }
 
+    /// Fail every call still waiting on this plugin, because it is not going
+    /// to answer any of them.
+    pub fn abandon(&self, why: &str) {
+        self.shared.channel.abandon(why);
+    }
+
     pub fn lifecycle_mut(&mut self) -> &mut Lifecycle {
         &mut self.life
     }
@@ -393,12 +399,18 @@ impl Sidecar {
                 std::thread::sleep(Duration::from_millis(50));
             }
             shared.channel.abandon(&reason);
+            // The child goes before the reader, and the order matters on
+            // Windows. There is no cancellable read on a Windows pipe handle
+            // from `std`, so the reader thread sits in `read` until the write
+            // end closes, and the write end closes when the process dies.
+            // Stopping the reader first meant joining a thread that was
+            // waiting for something this line had not done yet. Letting go of
+            // the child signals the group, waits, insists, reaps and sweeps up,
+            // all on an undertaker thread of its own. See `ExecChild`.
+            drop(child);
             if let Some(mut reader) = stderr {
                 reader.stop();
             }
-            // Letting go of the child is what signals the group, waits,
-            // insists, reaps and sweeps up. See `ExecChild`.
-            drop(child);
             info!(%instance, %reason, "stopped a plugin process");
         };
 
