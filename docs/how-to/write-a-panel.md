@@ -215,10 +215,12 @@ Never hand write a form for a plugin's settings. Ask for the schema and render
 it:
 
 ```js
-import { SchemaForm } from "/client/schema-form.js";
+// Imported when the form is wanted, not when the panel loads. The reader is
+// eleven kilobytes and a panel that never shows a form should never fetch it.
+const { SchemaForm } = await import("/client/schema-form.js");
 
-const described = await this.client.call("plugin.describe", { instance: "cam1" });
-const form = new SchemaForm(described.schema, described.values);
+const described = await this.client.call("plugin.describe", { id: "ndi" });
+const form = new SchemaForm(described.schemas["ndi/source"], {});
 this.appendChild(form.el);
 // later
 if (form.validate()) await this.client.call("source.set", form.read());
@@ -229,10 +231,54 @@ for conditional fields, `format: "secret"` for a password field that is never
 echoed back, `x-gmx-unit` for a unit suffix, and `x-gmx-group` for a collapsible
 section of advanced fields.
 
+## Loading your own code late
+
+The shell fetches what a page needs to be usable and nothing else: the composer,
+the command palette, the sandbox bridge, the schema form reader and the adapter
+for cores with no `/rpc` all arrive on the first thing that asks for them. A
+test in `crates/godwinmix/src/ui.rs` walks the import graph from `boot.js` and
+measures what is left, so a static import added to a hot path shows up as a
+failure rather than as a slower first paint.
+
+Do the same in a panel of any size. A `import()` inside the handler that needs
+it costs nothing at load and one request when it is used:
+
+```js
+this.button.onclick = async () => {
+  const { openBigThing } = await import("./big-thing.js");
+  openBigThing(this.client);
+};
+```
+
+## Designing scenes from a panel
+
+A panel that draws on the canvas or edits a scene should use the designer kits
+rather than its own arithmetic: the record mirror, drag prediction, handles from
+each plugin's `designer` block, snapping and the schema renderer are all in
+`ui/kits/`, documented in
+[designer-kits.md](../reference/designer-kits.md), and the same three kits ship
+in `@godwinmix/client` and in the Python library so your panel and a Tkinter
+surface behave the same way.
+
+```js
+import { SceneClient } from "/kits/protocol/index.js";
+
+this.scenes = new SceneClient(this.client, { undo: shell.undo });
+await this.scenes.start();
+this.scenes.onChange(() => this.render());
+```
+
 ## Testing it
 
 Open `/test/` for the shell's own suite, and add yours the same way: a page, a
 module, assertions that print to the console. There is no runner to install.
+The page is served only when the core was started with `GMX_UI_DEV=1`, which is
+what keeps its assertions out of what a volunteer's browser downloads.
+
+`dev/ui-tests.sh` runs that page against a core it starts itself, in headless
+Chrome, and prints every assertion. Its live suite drives the real panels over
+`/rpc`, so it is also the quickest way to see your own panel working against a
+mixer with a scene in it.
 
 While you are working, point the core at your checkout so you do not rebuild to
 see a change:
