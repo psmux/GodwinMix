@@ -1,0 +1,71 @@
+# GodwinMix as a system service on a headless server.
+#
+#   sudo install -m 0644 deploy/systemd/godwinmix.service /etc/systemd/system/
+#   sudo useradd --system --home /var/lib/godwinmix --shell /usr/sbin/nologin godwinmix
+#   sudo install -d -o godwinmix -g godwinmix /etc/godwinmix /var/lib/godwinmix /var/lib/godwinmix/media
+#   sudo install -m 0755 target/release/godwinmix /usr/local/bin/godwinmix
+#   sudo ln -sf /usr/local/bin/godwinmix /usr/local/bin/gmx
+#   godwinmix --example-config | sudo tee /etc/godwinmix/godwinmix.toml
+#   sudo systemctl enable --now godwinmix
+#
+# The token goes in /etc/godwinmix/env, not in the unit and not in the config:
+#   GODWINMIX_TOKEN=a-long-random-string
+# chmod 0600 it and chown it to root. The service reads it as the environment.
+
+[Unit]
+Description=GodwinMix live video mixer
+Documentation=https://github.com/psmux/GodwinMix
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=exec
+User=godwinmix
+Group=godwinmix
+EnvironmentFile=-/etc/godwinmix/env
+ExecStart=/usr/local/bin/godwinmix --config /etc/godwinmix/godwinmix.toml
+WorkingDirectory=/var/lib/godwinmix
+
+# SIGTERM closes the outputs and lets the muxers finish their last fragment.
+# Ten seconds is more than it needs and less than a viewer notices.
+KillSignal=SIGTERM
+TimeoutStopSec=10
+
+# A mixer that died at 3am should be back before anyone wakes up. The burst
+# limit stops a restart loop from filling the log with the same failure; the
+# unit gives up and stays failed instead, where monitoring can see it.
+Restart=on-failure
+RestartSec=5
+StartLimitBurst=5
+StartLimitIntervalSec=120
+
+# The encoder is the deadline in this process. Give it the scheduler's
+# attention ahead of whatever else is on the box.
+Nice=-5
+IOSchedulingClass=best-effort
+IOSchedulingPriority=2
+# Each source, each output and the multiview hold their own pipeline's
+# descriptors, and a page source adds a browser's worth.
+LimitNOFILE=65536
+
+# Hardening. The mixer reads its config, writes the runtime source list beside
+# it, reads the media directory and talks to the network. Nothing else.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/etc/godwinmix /var/lib/godwinmix
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictNamespaces=true
+RestrictRealtime=true
+RestrictSUIDSGID=true
+LockPersonality=true
+# A hardware encoder is a device node, so /dev cannot be hidden outright.
+# Comment the next two lines out if VA or NVENC stops being found.
+PrivateDevices=false
+DeviceAllow=/dev/dri rw
+
+[Install]
+WantedBy=multi-user.target
