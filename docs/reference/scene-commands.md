@@ -194,6 +194,11 @@ was the inset is the item that becomes full screen and the change is a property
 ramp rather than a cut between two sets of items. Without `scene`, a new one is
 made.
 
+`duration_ms` only means anything on a scene that is on air: there is nothing
+to ramp on pads nobody is drawing, so off air it is a cut whatever the number
+says. `easing` is `linear` or `ease` and defaults to `ease`, which is smooth at
+both ends.
+
 ```json
 {"method": "scene.layout.paste",
  "params": {"scene": "evening", "layout": {…}, "match": "name"}}

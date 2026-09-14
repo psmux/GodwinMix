@@ -249,6 +249,10 @@ pub enum Command {
     TakeScene {
         scene: Box<ProgramScene>,
         at_running_time_ms: Option<u64>,
+        /// How long to take getting there. 0 or absent is a cut, which is
+        /// what a take is. A duration is what a geometry command asks for
+        /// when it reshapes a scene that is already on air.
+        duration_ms: Option<u64>,
         ack: Option<Ack>,
     },
     /// Interrupt the programme with an ad, then return to live.
@@ -803,6 +807,9 @@ pub struct Mixer {
     /// The scene on air, flattened. `None` is the one item scene a bare source
     /// id means, or the slate when nothing is on.
     program_scene: Option<ProgramScene>,
+    /// Set for the one call to `apply_visibility` that follows a geometry
+    /// command with a duration, so the pads are eased rather than jumped.
+    ramp: Option<Duration>,
 }
 
 /// A scene as the compositor has it: a name to report and the placements that
@@ -1330,6 +1337,7 @@ impl Mixer {
             programme_filters: Vec::new(),
             pool,
             program_scene: None,
+            ramp: None,
         };
         Ok((mixer, handle, rx, bus_rx))
     }
@@ -2430,9 +2438,27 @@ impl Mixer {
     /// same cut a bare source id gets and the encoder cannot tell the two
     /// apart.
     pub fn take_scene(&mut self, scene: ProgramScene, at_running_time_ms: Option<u64>) -> Result<()> {
+        self.take_scene_over(scene, at_running_time_ms, None)
+    }
+
+    /// The same, easing into place over `duration_ms` rather than cutting.
+    ///
+    /// A duration only means anything when the pads are already drawing these
+    /// items, which is what keeping the item ids across a layout change buys:
+    /// the item that was the inset is the item that becomes full screen, so
+    /// the change is a property ramp on the pad it already has. A scene coming
+    /// from somewhere else is a cut whatever the duration says, because there
+    /// is nothing on those pads to ramp from.
+    pub fn take_scene_over(
+        &mut self,
+        scene: ProgramScene,
+        at_running_time_ms: Option<u64>,
+        duration_ms: Option<u64>,
+    ) -> Result<()> {
         if let Some(ms) = at_running_time_ms {
-            return self.schedule_scene_take(scene, ms);
+            return self.schedule_scene_take(scene, ms, duration_ms);
         }
+        let ramp = duration_ms.filter(|ms| *ms > 0).map(Duration::from_millis);
         let name = scene.name.clone();
         // A one item full canvas scene is a source take, and saying so keeps
         // the programme state, the tally and `program.revert` reading the same
@@ -2440,7 +2466,9 @@ impl Mixer {
         self.program_source = self.shorthand_source(&scene);
         self.program_scene = Some(scene);
         self.take_generation.fetch_add(1, Ordering::SeqCst);
+        self.ramp = ramp;
         self.apply_visibility(true);
+        self.ramp = None;
 
         let at = self.running_time().unwrap_or(gst::ClockTime::ZERO);
         info!(scene = %name, at_ms = at.mseconds(), "took scene to program");
@@ -2465,7 +2493,12 @@ impl Mixer {
         full.then(|| only.source.clone())
     }
 
-    fn schedule_scene_take(&mut self, scene: ProgramScene, at_ms: u64) -> Result<()> {
+    fn schedule_scene_take(
+        &mut self,
+        scene: ProgramScene,
+        at_ms: u64,
+        duration_ms: Option<u64>,
+    ) -> Result<()> {
         if let Some(prev) = self.pending_take.take() {
             prev.unschedule();
         }
@@ -2473,6 +2506,7 @@ impl Mixer {
             Command::TakeScene {
                 scene: Box::new(scene),
                 at_running_time_ms: None,
+                duration_ms,
                 ack: None,
             },
             at_ms,
@@ -2514,15 +2548,23 @@ impl Mixer {
     /// own when buffers resume, with no separate code path.
     fn apply_visibility(&mut self, ramp_audio: bool) {
         let placements = self.current_placements();
+        let over = self.ramp;
         let branches: Vec<(&SourceId, &ProgrammeBranch)> =
             self.sources.iter().map(|s| (&s.input.id, &s.branch)).collect();
-        match self.pool.apply(&placements, &branches) {
+        let applied = match over {
+            Some(_) => self.pool.apply_ramped(&placements, &branches),
+            None => self.pool.apply(&placements, &branches),
+        };
+        match applied {
             Ok(applied) => {
                 if !applied.missing.is_empty() {
                     warn!(
                         missing = ?applied.missing,
                         "the scene names sources this mixer does not have; they were skipped"
                     );
+                }
+                if let Some(over) = over {
+                    ramp_pads(applied.ramps, over, self.take_generation.clone());
                 }
             }
             Err(e) => {
@@ -2781,8 +2823,8 @@ impl Mixer {
                     r?;
                 }
             }
-            Command::TakeScene { scene, at_running_time_ms, ack } => {
-                let r = self.take_scene(*scene, at_running_time_ms);
+            Command::TakeScene { scene, at_running_time_ms, duration_ms, ack } => {
+                let r = self.take_scene_over(*scene, at_running_time_ms, duration_ms);
                 reply(ack, &r);
                 r?;
             }
@@ -3824,6 +3866,62 @@ impl Drop for Mixer {
     }
 }
 
+/// Ease a set of compositor pads from where they are to where a scene wants
+/// them.
+///
+/// The same shape as `ramp_volumes` below, and for the same reason: a ramp
+/// cannot run on the mixer thread, which has commands to answer, and it must
+/// not run on a streaming thread, which is carrying the programme. A thread
+/// that writes properties and checks a generation is what this codebase
+/// already does for a take's audio fade.
+///
+/// Properties, not control bindings. `GstInterpolationControlSource` sampled
+/// by the aggregator is the accurate way and is what transitions will want;
+/// it needs a crate this build does not carry, and at 60 steps a second the
+/// difference is not visible. The step is written down so the swap is a swap.
+fn ramp_pads(ramps: Vec<slots::Ramp>, over: Duration, generation: Arc<AtomicU64>) {
+    let moving: Vec<slots::Ramp> = ramps.into_iter().filter(|r| r.from != r.to).collect();
+    if moving.is_empty() {
+        return;
+    }
+    let mine = generation.load(Ordering::SeqCst);
+    std::thread::Builder::new()
+        .name("scene-ramp".into())
+        .spawn(move || {
+            let start = Instant::now();
+            loop {
+                // A newer take owns the pads now. Stopping here rather than
+                // finishing leaves them where that take put them.
+                if generation.load(Ordering::SeqCst) != mine {
+                    return;
+                }
+                let elapsed = start.elapsed();
+                if elapsed >= over {
+                    break;
+                }
+                let t = ease(elapsed.as_secs_f64() / over.as_secs_f64());
+                for r in &moving {
+                    r.from.lerp(&r.to, t).write(&r.pad);
+                }
+                std::thread::sleep(Duration::from_millis(16));
+            }
+            if generation.load(Ordering::SeqCst) == mine {
+                for r in &moving {
+                    r.from.lerp(&r.to, 1.0).write(&r.pad);
+                }
+            }
+        })
+        .map(|_| ())
+        .unwrap_or_else(|e| warn!(?e, "could not start the scene ramp; the change was a cut"));
+}
+
+/// Smooth at both ends. The one easing this build has; `easing` on the wire
+/// accepts `linear` and `ease` and anything else is refused by the command.
+fn ease(t: f64) -> f64 {
+    let t = t.clamp(0.0, 1.0);
+    t * t * (3.0 - 2.0 * t)
+}
+
 /// Fade a set of audiomixer pads to their targets.
 ///
 /// A hard jump in gain is audible as a click, so a take crossfades over a
@@ -4657,6 +4755,118 @@ mod tests {
             }
             panic!("the programme stopped producing frames");
         }
+    }
+
+    /// The other acceptance line: an animated layout change moves the inset in
+    /// rather than cutting to it, and costs no frame.
+    ///
+    /// `pip-bottom-right` applied twice onto the same scene, with a different
+    /// inset each time. `layout::apply_into` keeps the item ids, so the second
+    /// apply lands on the pads the first one is already drawing and the change
+    /// is a property ramp. What is asserted is that the pads actually moved
+    /// through the middle (a cut would jump) and that the picture never
+    /// stopped.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn an_animated_layout_change_moves_the_inset_in_without_a_gap() {
+        let mut mix = with_sources(&["a", "b"]).await;
+        let canvas = mix.canvas.clone();
+        let document_canvas = crate::scene::Canvas {
+            width: canvas.width as u32,
+            height: canvas.height as u32,
+            fps: 30,
+        };
+        let preset = crate::scene::layout::builtin("pip-bottom-right")
+            .expect("the layout ships with the core");
+        let scene_id = crate::scene::id::Id::new();
+
+        let resolve = |inset: f64| {
+            let values: crate::scene::layout::Values = [
+                ("a".to_string(), serde_json::Value::from("a")),
+                ("b".to_string(), serde_json::Value::from("b")),
+                ("inset".to_string(), serde_json::Value::from(inset)),
+            ]
+            .into_iter()
+            .collect();
+            let resolved = crate::scene::layout::apply_into(
+                &preset,
+                &values,
+                document_canvas,
+                scene_id,
+                Some("pip"),
+            )
+            .expect("the layout resolves");
+            let mut doc = crate::scene::Collection::new("show", document_canvas);
+            doc.scenes.push(resolved);
+            let placements = crate::scene::server::compose::placements(
+                &doc,
+                &doc.scenes[0],
+                &canvas,
+            );
+            (doc.scenes[0].items.iter().map(|i| i.id).collect::<Vec<_>>(), placements)
+        };
+
+        let (small_ids, small) = resolve(0.20);
+        let (big_ids, big) = resolve(0.45);
+        assert_eq!(small_ids, big_ids, "the layout has to keep its item ids across applies");
+        assert_eq!(small.len(), 2);
+
+        let gaps = Arc::new(Gaps::default());
+        gaps.watch(&mix.venc_tee.static_pad("sink").expect("the encoder tee has a sink pad"));
+
+        mix.take_scene(scene("pip", small.clone()), None).expect("the small inset");
+        gaps.wait_for(10).await;
+        let before = mix.pool.slots().iter().map(|s| s.pad.property::<i32>("width")).max();
+        gaps.largest.store(0, Ordering::Relaxed);
+
+        // The same scene, a bigger inset, over 300 ms.
+        mix.take_scene_over(scene("pip", big.clone()), None, Some(300))
+            .expect("the animated change");
+
+        // Halfway through, the inset must be between the two sizes: a cut
+        // would already be at the target.
+        tokio::time::sleep(Duration::from_millis(150)).await;
+        let target = big.iter().map(|p| p.width).min().expect("two items");
+        let start = small.iter().map(|p| p.width).min().expect("two items");
+        let midway = mix
+            .pool
+            .slots()
+            .iter()
+            .filter(|s| s.pad.property::<f64>("alpha") > 0.0)
+            .map(|s| s.pad.property::<i32>("width"))
+            .min()
+            .expect("something is on air");
+        assert!(
+            midway > start && midway < target,
+            "the inset was at {midway} halfway through a move from {start} to {target}: that is a cut, not a ramp"
+        );
+
+        // And it arrives.
+        tokio::time::sleep(Duration::from_millis(400)).await;
+        let landed = mix
+            .pool
+            .slots()
+            .iter()
+            .filter(|s| s.pad.property::<f64>("alpha") > 0.0)
+            .map(|s| s.pad.property::<i32>("width"))
+            .min()
+            .expect("something is on air");
+        assert_eq!(landed, target, "the ramp did not finish where the scene says");
+
+        gaps.wait_for(5).await;
+        let largest = gaps.largest.load(Ordering::Relaxed);
+        let frame = canvas.frame_duration().nseconds();
+        println!(
+            "animated layout: inset {start} to {target} over 300 ms, largest interval {:.1} ms, one frame is {:.1} ms",
+            largest as f64 / 1e6,
+            frame as f64 / 1e6
+        );
+        assert!(
+            largest <= frame * 2,
+            "largest interval was {largest} ns during the move, more than two frames"
+        );
+        assert_eq!(mix.pool.misses(), 0, "an animated layout change relinked the graph");
+        let _ = before;
+        mix.shutdown();
     }
 
     /// The acceptance measurement: a take between two eight item scenes must
