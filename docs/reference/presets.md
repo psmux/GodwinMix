@@ -163,6 +163,18 @@ them from then on.
 
 Nothing here restarts the encoder and nothing here touches the programme.
 
+### `core.info` on a core with no preset
+
+`core.info` still answers with a `ui` object, carrying only a `gallery` mode:
+the one `gmx doctor` proposes from this machine's cores and memory (`live` on
+eight cores with 8 GB, `snapshot` on four with 4, `icon` below that). There is
+no `preset` key, which is what tells a surface that nobody has set this core up
+yet, and is what puts the welcome tiles up in the reference UI.
+
+That mode is a first value, not an instruction: a browser that has already been
+told which gallery mode to use keeps it. A preset applied later is a deliberate
+act and does move it.
+
 ## `gmx preset save`
 
 Turns a working machine into a preset directory: the config with its secrets
