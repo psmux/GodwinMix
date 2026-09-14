@@ -38,6 +38,13 @@ bad() {
 cleanup() {
     if [[ -n "$CORE_PID" ]] && kill -0 "$CORE_PID" 2>/dev/null; then
         kill "$CORE_PID" 2>/dev/null
+        # Politely, then not. A core wedged on its way out is still a core
+        # holding a port and a few percent of a CPU when the next run starts.
+        for _ in 1 2 3 4 5 6 7 8 9 10; do
+            kill -0 "$CORE_PID" 2>/dev/null || break
+            sleep 0.5
+        done
+        kill -9 "$CORE_PID" 2>/dev/null
         wait "$CORE_PID" 2>/dev/null
     fi
     if [[ $KEEP -eq 1 ]]; then
@@ -116,7 +123,11 @@ else
 fi
 
 step "core starts"
-(cd "$WORK" && "$REPO/target/debug/godwinmix" --config "$WORK/godwinmix.toml") >"$LOG" 2>&1 &
+# `exec`, and it matters. Without it the subshell is one process and the core
+# is its child, `$!` names the subshell, and the cleanup below kills the
+# subshell and leaves the core running: two orphaned mixers at forty percent
+# of a core each were found on this machine after a few runs of this script.
+(cd "$WORK" && exec "$REPO/target/debug/godwinmix" --config "$WORK/godwinmix.toml") >"$LOG" 2>&1 &
 CORE_PID=$!
 for _ in $(seq 1 100); do
     curl -fsS "$BASE/api/v1/core/info" "${AUTH[@]}" >/dev/null 2>&1 && break
@@ -699,20 +710,27 @@ fi
 # --- the mixer as a server -------------------------------------------------
 # The acceptance line from the roadmap, checked end to end: a publisher sending
 # RTMP to the mixer's own address appears as a live source within five seconds
-# with nothing configured. It needs the ingest plugin built and a GStreamer that
-# can publish; both are announced and skipped rather than failed when absent.
+# with nothing configured.
+#
+# The plugin does not have to be staged first. `gmx plugin add ./plugins/ingest`
+# runs the manifest's [build] section when bin/gmx-ingest is not there, so the
+# first run of this on a clean checkout pays for a release build of the plugin
+# and every run after it does not. dev/harness/stage-plugins.sh does the same
+# builds up front if you would rather wait for them once, by hand.
+#
+# A GStreamer that cannot publish RTMP is announced and skipped. A build that
+# fails is a failure: the path is supposed to work from a clean checkout.
 INGEST="$REPO/plugins/ingest"
 step "an RTMP publisher appears as a live source in five seconds"
-if [ ! -x "$INGEST/bin/gmx-ingest" ]; then
-    printf 'skipped (dev/harness/stage-plugins.sh has not been run)\n'
-elif ! command -v gst-launch-1.0 >/dev/null 2>&1 \
+if ! command -v gst-launch-1.0 >/dev/null 2>&1 \
         || ! gst-inspect-1.0 rtmp2sink >/dev/null 2>&1 \
         || ! gst-inspect-1.0 x264enc >/dev/null 2>&1; then
     printf 'skipped (this build of GStreamer cannot publish RTMP)\n'
+elif ! GODWINMIX_URL="$BASE" GODWINMIX_TOKEN="$TOKEN" "$GMX" plugin add "$INGEST" \
+        >"$WORK/ingest-add.log" 2>&1; then
+    bad "plugin add ./plugins/ingest failed: $(tail -6 "$WORK/ingest-add.log" | tr '\n' '; ')"
 else
     RTMP_PORT="$(python3 -c 'import socket;s=socket.socket();s.bind(("127.0.0.1",0));print(s.getsockname()[1]);s.close()')"
-    GODWINMIX_URL="$BASE" GODWINMIX_TOKEN="$TOKEN" "$GMX" plugin add "$INGEST" \
-        >"$WORK/ingest-add.log" 2>&1 || true
     # Through the REST layer rather than `gmx ctl source add`, because the port
     # to listen on is a param and the CLI takes only an id, a type and a URI.
     # Params ride at the top level: AddSourceRequest flattens them, which is the

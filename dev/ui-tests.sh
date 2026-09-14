@@ -50,6 +50,13 @@ cleanup() {
     [[ -n "$CHROME_PID" ]] && kill "$CHROME_PID" 2>/dev/null
     if [[ -n "$CORE_PID" ]] && kill -0 "$CORE_PID" 2>/dev/null; then
         kill "$CORE_PID" 2>/dev/null
+        # Politely, then not. A core wedged on its way out is still a core
+        # holding a port and a few percent of a CPU when the next run starts.
+        for _ in 1 2 3 4 5 6 7 8 9 10; do
+            kill -0 "$CORE_PID" 2>/dev/null || break
+            sleep 0.5
+        done
+        kill -9 "$CORE_PID" 2>/dev/null
         wait "$CORE_PID" 2>/dev/null
     fi
     if [[ $KEEP -eq 1 ]]; then
@@ -86,7 +93,11 @@ min_hold_ms = 0
 TOML
 
 echo "starting a core on $BASE"
-(cd "$WORK" && GMX_UI_DEV=1 "$REPO/target/debug/godwinmix" --config "$WORK/godwinmix.toml") >"$LOG" 2>&1 &
+# `exec`, and it matters. Without it the subshell is one process and the core
+# is its child, `$!` names the subshell, and the cleanup below kills the
+# subshell and leaves the core running: two orphaned mixers at forty percent
+# of a core each were found on this machine after a few runs of this script.
+(cd "$WORK" && GMX_UI_DEV=1 exec "$REPO/target/debug/godwinmix" --config "$WORK/godwinmix.toml") >"$LOG" 2>&1 &
 CORE_PID=$!
 for _ in $(seq 1 120); do
     curl -fsS -H "Authorization: Bearer $TOKEN" "$BASE/api/v1/core/info" >/dev/null 2>&1 && break
