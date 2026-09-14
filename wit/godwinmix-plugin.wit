@@ -83,7 +83,9 @@ interface types {
         failing,
     }
 
-    record health {
+    /// Named `health-report` and not `health` so the record and the
+    /// `health` function of the service interface do not collide.
+    record health-report {
         state: health-state,
         detail: option<string>,
         latency-ms: option<u32>,
@@ -149,7 +151,7 @@ interface host {
 /// The `service` kind: control plane only, no media, a singleton named after
 /// its provide. Mirrors the stdio methods of 03 section 6 for a service.
 interface service {
-    use types.{hello, ready, health, configured, error};
+    use types.{hello, ready, health-report, configured, error};
 
     /// The handshake. Answering with an error fails the instance and the
     /// message reaches `event/plugin.state`.
@@ -158,7 +160,7 @@ interface service {
     /// The full validated params object as JSON, never a diff.
     configure: func(params-json: string) -> result<configured, error>;
 
-    health: func() -> health;
+    health: func() -> health-report;
 
     /// One of the plugin's `[[tools]]`, in MCP's shape. `arguments-json` is
     /// the arguments object; the result is the MCP result object
