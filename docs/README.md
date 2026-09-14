@@ -42,6 +42,10 @@ Start here if you have never run it.
 * [Write a source plugin in Rust](how-to/write-a-source-plugin.md)
 * [Install a plugin](how-to/install-a-plugin.md)
 * [Test a plugin](how-to/test-a-plugin.md)
+* [Receive a phone or an OBS stream](how-to/receive-a-phone-or-obs-stream.md)
+* [Receive and send SRT](how-to/srt.md)
+* [Send the programme to a WHIP endpoint](how-to/send-to-whip.md)
+* [Use NDI](how-to/use-ndi.md)
 
 ## Reference
 
@@ -60,6 +64,7 @@ Start here if you have never run it.
 * [The plugin manifest](reference/plugin-manifest.md)
 * [The plugin protocol](reference/plugin-protocol.md)
 * [The plugin lifecycle](reference/plugin-lifecycle.md)
+* [The network plugins: srt, whip, ingest and ndi](reference/plugins-network.md)
 * [The client libraries](reference/clients.md)
 
 ## Explanation
