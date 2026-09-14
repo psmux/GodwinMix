@@ -21,6 +21,7 @@ pub mod cli;
 pub mod control;
 pub mod ctl;
 pub mod mcp;
+pub mod mcp_http;
 pub mod observe;
 pub mod ui;
 
@@ -177,6 +178,14 @@ enum Command {
         /// callable by name and findable with `search_tools`.
         #[arg(long, env = "GODWINMIX_MCP_PROFILE", default_value = "standard")]
         profile: McpProfile,
+        /// Serve MCP over Streamable HTTP at this address instead of stdio.
+        ///
+        /// `--http 127.0.0.1:8765` puts the same tools on `POST /mcp`, with
+        /// server initiated messages on `GET /mcp`. Bind to a loopback
+        /// address unless something in front of it is doing the
+        /// authentication.
+        #[arg(long, value_name = "ADDR")]
+        http: Option<String>,
     },
     /// Inspect and test the codec catalogue.
     ///
@@ -280,10 +289,10 @@ pub async fn run() -> Result<()> {
             gstreamer::init().context("initialising GStreamer")?;
             return bench::run(b).await;
         }
-        Some(Command::Mcp { url, token, profile }) => {
+        Some(Command::Mcp { url, token, profile, http }) => {
             let url = url.or_else(|| config::env_var("URL")).unwrap_or_else(|| DEFAULT_URL.into());
             let token = token.or_else(|| config::env_var("TOKEN"));
-            return mcp::run(&url, token, profile.into()).await;
+            return mcp::run(&url, token, profile.into(), http).await;
         }
         Some(Command::Codec { cmd }) => {
             gstreamer::init().context("initialising GStreamer")?;

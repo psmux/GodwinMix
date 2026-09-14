@@ -78,6 +78,9 @@ Keys accepted on every method, handled before a method runs.
 | `source.list` | `GET /api/v1/sources` | read |  | 1 | Every source, with its state, whether it has video and audio, and its fader. |
 | `source.remove` | `DELETE /api/v1/sources/{id}` | operate | yes | 1 | Remove a source. If it is on programme the mixer cuts to the slate first. |
 | `source.seek` | `POST /api/v1/sources/{id}/seek` | operate |  | 1 | Move a seekable source to a position. Answers with where it actually landed. |
+| `task.cancel` | `POST /api/v1/task/cancel` | operate |  | 1 | Ask a piece of long running work to stop. Cooperative: the answer says the request landed, not that the work has stopped yet. |
+| `task.get` | `GET /api/v1/task` | read |  | 1 | How a piece of long running work is getting on, and its answer once it has one. |
+| `task.list` | `GET /api/v1/task/list` | read |  | 1 | Every background job this core knows about, newest first. |
 
 ### Params and results
 
@@ -126,9 +129,7 @@ MCP tool `agent_state` in the `minimal` profile: readOnlyHint true, destructiveH
 ```json
 {
   "params": {
-    "additionalProperties": false,
-    "properties": {},
-    "type": "object"
+    "$ref": "#/$defs/AgentStateRequest"
   },
   "result": {
     "type": "object"
@@ -851,6 +852,60 @@ MCP tool `seek_source` in the `search` profile: readOnlyHint false, destructiveH
   },
   "result": {
     "$ref": "#/$defs/SourcePositionState"
+  }
+}
+```
+
+#### `task.cancel`
+
+Ask a piece of long running work to stop. Cooperative: the answer says the request landed, not that the work has stopped yet.
+
+MCP tool `task_cancel` in the `search` profile: readOnlyHint false, destructiveHint false, idempotentHint true.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/TaskRequest"
+  },
+  "result": {
+    "type": "object"
+  }
+}
+```
+
+#### `task.get`
+
+How a piece of long running work is getting on, and its answer once it has one.
+
+MCP tool `task_get` in the `search` profile: readOnlyHint true, destructiveHint false, idempotentHint true.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/TaskRequest"
+  },
+  "result": {
+    "$ref": "#/$defs/TaskView"
+  }
+}
+```
+
+#### `task.list`
+
+Every background job this core knows about, newest first.
+
+```json
+{
+  "params": {
+    "additionalProperties": false,
+    "properties": {},
+    "type": "object"
+  },
+  "result": {
+    "items": {
+      "$ref": "#/$defs/TaskView"
+    },
+    "type": "array"
   }
 }
 ```

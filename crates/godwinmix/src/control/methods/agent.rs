@@ -29,11 +29,8 @@ pub const SNAPSHOT_URL: &str = "/api/v1/snapshot/{id}";
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "lowercase")]
 pub enum ResponseFormat {
-    /// The budgeted document. What you want unless you are debugging.
     #[default]
     Concise,
-    /// Everything concise has, plus the audio peak per source, the plugin
-    /// statistics and the last five takes.
     Detailed,
 }
 
@@ -133,11 +130,9 @@ pub fn register(reg: &mut Registry<Call>) {
             "Compact state written for agents, a few hundred bytes: the programme source, \
              each source's id and state, and a motion score saying how much its picture is \
              changing, so you can tell a live camera from a frozen or black one without \
-             looking at it. A source that has video and sound says nothing about them; one \
-             that has lost either says so. Start here. Pass \
-             `response_format: \"detailed\"` for the audio peak per source, plugin \
-             statistics and the last five takes. Use `snapshot` only when you need to see \
-             what is actually in the shot.",
+             looking at it. A working source says nothing about its video or sound; one \
+             that has lost either says so. Start here. `detailed` adds the audio peak per \
+             source and the last five takes.",
         ),
     );
 }
