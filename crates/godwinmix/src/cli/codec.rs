@@ -4,9 +4,9 @@
 //! machine encode with, and why that one. `--probe` is the whole decision on
 //! one screen before any camera is pointed at the box.
 
-use super::select::{GstRegistry, Request, Selection};
-use super::{check, Catalogue};
-use crate::config::Config;
+use godwinmix_core::catalogue::select::{GstRegistry, Request, Selection};
+use godwinmix_core::catalogue::{check, Catalogue};
+use godwinmix_core::config::Config;
 use anyhow::{Context, Result};
 use clap::Subcommand;
 use std::path::{Path, PathBuf};
@@ -45,7 +45,7 @@ pub enum Codec {
 }
 
 pub fn run(cmd: Codec, cfg: Option<&Config>, codecs: Option<&Path>) -> Result<()> {
-    let cat = super::init(cfg, codecs)?;
+    let cat = godwinmix_core::catalogue::init(cfg, codecs)?;
     match cmd {
         Codec::List { json } => list(&cat, cfg, json),
         Codec::Test { entry, seconds, width, height, fps, json } => {
@@ -74,7 +74,7 @@ pub fn run(cmd: Codec, cfg: Option<&Config>, codecs: Option<&Path>) -> Result<()
 
 fn request(cfg: Option<&Config>, cat: &Catalogue) -> Request {
     match cfg {
-        Some(c) => super::request_from(c, cat),
+        Some(c) => godwinmix_core::catalogue::request_from(c, cat),
         None => Request {
             container: cat.programme_container.clone().or_else(|| Some("flv".into())),
             ..Request::default()
@@ -83,7 +83,7 @@ fn request(cfg: Option<&Config>, cat: &Catalogue) -> Request {
 }
 
 fn list(cat: &Catalogue, cfg: Option<&Config>, json: bool) -> Result<()> {
-    let listing = super::listing(cat, &GstRegistry, &request(cfg, cat));
+    let listing = godwinmix_core::catalogue::listing(cat, &GstRegistry, &request(cfg, cat));
     if json {
         println!("{}", serde_json::to_string_pretty(&listing)?);
         return Ok(());
@@ -122,13 +122,13 @@ fn list(cat: &Catalogue, cfg: Option<&Config>, json: bool) -> Result<()> {
 /// What `godwinmix --probe` prints: every entry that was considered, present
 /// or absent, and the rank decision that followed.
 pub fn print_probe(cfg: Option<&Config>, codecs: Option<&Path>) -> Result<()> {
-    let cat = super::init(cfg, codecs)?;
+    let cat = godwinmix_core::catalogue::init(cfg, codecs)?;
     let req = request(cfg, &cat);
     let sel = cat.select(&req, &GstRegistry)?;
     println!(
         "GodwinMix on {} with GStreamer {}",
-        super::select::current_platform(),
-        super::gstreamer_version()
+        godwinmix_core::catalogue::select::current_platform(),
+        godwinmix_core::catalogue::gstreamer_version()
     );
     println!("programme container: {}\n", sel.container.as_deref().unwrap_or("any"));
     let mut role = String::new();
@@ -153,7 +153,7 @@ pub fn print_probe(cfg: Option<&Config>, codecs: Option<&Path>) -> Result<()> {
 }
 
 fn print_chosen(sel: &Selection) {
-    let pinned = |c: &super::select::Chosen| {
+    let pinned = |c: &godwinmix_core::catalogue::select::Chosen| {
         format!("{} ({}, entry {}, rank {})", c.element, c.accel, c.id, c.rank)
     };
     println!("  video decoder : {}", pinned(&sel.video_decode));

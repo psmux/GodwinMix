@@ -7,8 +7,8 @@
 //! each; this module is the REST spelling, which is what `curl` and
 //! `gmx dot cam1 | dot -Tsvg` use.
 
-use crate::mixer::MixerHandle;
-use crate::observe::{doctor, introspect, logs, metrics, session, trace};
+use godwinmix_core::mixer::MixerHandle;
+use godwinmix_core::observe::{doctor, introspect, logs, metrics, session, trace};
 use axum::extract::{Query, Request, State};
 use axum::http::{header, StatusCode};
 use axum::middleware::Next;
@@ -28,10 +28,10 @@ pub struct ObserveState {
     /// The mosaic broadcast, so a scrape can say how many clients are on it
     /// without a second counter kept in step by hand.
     /// The multiview handle, for the subscriber count and the mosaic rate.
-    pub multiview: Option<crate::multiview::MultiviewHandle>,
+    pub multiview: Option<godwinmix_core::multiview::MultiviewHandle>,
     /// The same bearer token the rest of the control plane uses. `None` leaves
     /// these routes as open as the rest of it.
-    pub tokens: Option<Arc<crate::api::scope::Tokens>>,
+    pub tokens: Option<Arc<godwinmix_protocol::scope::Tokens>>,
     /// Whether `/metrics` answers without the token.
     ///
     /// On by default, because a Prometheus server scrapes with no credentials
@@ -458,8 +458,8 @@ mod tests {
     #[tokio::test]
     async fn metrics_is_open_by_default_and_closed_when_the_operator_says_so() {
         let mut state = test_state();
-        state.tokens = Some(std::sync::Arc::new(crate::api::scope::Tokens::new(
-            vec![crate::api::scope::Token::legacy("secret")],
+        state.tokens = Some(std::sync::Arc::new(godwinmix_protocol::scope::Tokens::new(
+            vec![godwinmix_protocol::scope::Token::legacy("secret")],
             false,
         )));
         state.metrics_open = true;
@@ -555,7 +555,7 @@ mod tests {
     async fn the_programme_dot_comes_back_as_graphviz_ready_to_pipe() {
         let server = Served::start(test_state()).await;
         let pipeline = gstreamer::Pipeline::with_name("routes-programme");
-        crate::observe::register_pipeline(crate::observe::PROGRAMME, &pipeline);
+        godwinmix_core::observe::register_pipeline(godwinmix_core::observe::PROGRAMME, &pipeline);
 
         let response = server.get("/api/v1/pipeline/dot?name=programme").send().await.unwrap();
         assert_eq!(response.status(), 200);
@@ -564,7 +564,7 @@ mod tests {
         assert!(content_type.starts_with("text/vnd.graphviz"), "{content_type}");
         let text = response.text().await.unwrap();
         assert!(text.contains("digraph"), "{text}");
-        crate::observe::unregister_pipeline(crate::observe::PROGRAMME);
+        godwinmix_core::observe::unregister_pipeline(godwinmix_core::observe::PROGRAMME);
     }
 
     #[tokio::test]
@@ -593,14 +593,14 @@ mod tests {
         let server = Served::start(test_state()).await;
         let response = server.get("/api/v1/pipeline/list").send().await.unwrap();
         let out = response.headers().get("traceparent").unwrap().to_str().unwrap().to_string();
-        assert!(crate::observe::TraceId::from_traceparent(&out).is_some(), "{out}");
+        assert!(godwinmix_core::observe::TraceId::from_traceparent(&out).is_some(), "{out}");
     }
 
     #[tokio::test]
     async fn the_guarded_routes_need_the_token_and_the_right_one_gets_in() {
         let mut state = test_state();
-        state.tokens = Some(std::sync::Arc::new(crate::api::scope::Tokens::new(
-            vec![crate::api::scope::Token::legacy("secret")],
+        state.tokens = Some(std::sync::Arc::new(godwinmix_protocol::scope::Tokens::new(
+            vec![godwinmix_protocol::scope::Token::legacy("secret")],
             false,
         )));
         let server = Served::start(state).await;

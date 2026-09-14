@@ -8,11 +8,11 @@
 //! agent's only manual for the mixer, and the two profiles are budgeted in
 //! bytes by a test in mcp.rs, which fails rather than letting them grow.
 
-use crate::api::error::{ErrorCode, RpcError};
-use crate::api::method::{any_object, schema_of, Handler, MethodDef, Registry, Tier};
-use crate::api::requests::*;
-use crate::api::scope::Scope;
-use crate::api::types::*;
+use godwinmix_protocol::error::{ErrorCode, RpcError};
+use godwinmix_protocol::method::{any_object, schema_of, Handler, MethodDef, Registry, Tier};
+use godwinmix_protocol::requests::*;
+use godwinmix_protocol::scope::Scope;
+use godwinmix_protocol::types::*;
 use crate::control::call::Call;
 use serde_json::{json, Value};
 use std::future::Future;
@@ -69,8 +69,8 @@ fn register_core(reg: &mut Registry<Call>) {
                 body(CoreInfo {
                     core: "godwinmix".into(),
                     version: env!("CARGO_PKG_VERSION").into(),
-                    api_level: crate::api::API_LEVEL,
-                    api_compatible: crate::api::API_COMPATIBLE,
+                    api_level: godwinmix_protocol::API_LEVEL,
+                    api_compatible: godwinmix_protocol::API_COMPATIBLE,
                     features: call.app.features.as_ref().clone(),
                     limits: call.app.limits.clone(),
                     canvas: call.app.canvas,
@@ -158,7 +158,7 @@ fn register_introspection(reg: &mut Registry<Call>) {
              and a motion score saying how much its picture is changing.",
             handler(|call: Call, _| async move {
                 let status = call.app.mixer.status().await.map_err(|e| call.mixer_error(e))?;
-                body(crate::snapshot::agent_state(
+                body(godwinmix_core::snapshot::agent_state(
                     &status,
                     call.snapshots.latest().as_ref(),
                     call.snapshots.enabled(),
@@ -187,7 +187,7 @@ fn register_introspection(reg: &mut Registry<Call>) {
                 // The whole answer is the catalogue's own listing: which
                 // entries exist, which elements are present on this box, what
                 // was selected and why. `gmx codec list` prints the same data.
-                let mut value = body(crate::catalogue::list())?;
+                let mut value = body(godwinmix_core::catalogue::list())?;
                 // What the programme is encoding with right now, which is not
                 // always what a fresh selection would choose: an operator who
                 // edited codecs.toml since startup needs to see both.

@@ -6,22 +6,22 @@
 //! refuses to let a path exist that the reference does not describe.
 
 use super::*;
-use crate::api::method::Tier;
-use crate::api::scope::{ConfirmPolicy, Profile, Scope, Token};
-use crate::config::Superimpose;
+use godwinmix_protocol::method::Tier;
+use godwinmix_protocol::scope::{ConfirmPolicy, Profile, Scope, Token};
+use godwinmix_core::config::Superimpose;
 
 // --- the generated document -----------------------------------------------
 
-const PROTOCOL_JSON: &str = include_str!("../../protocol.json");
-const PROTOCOL_MD: &str = include_str!("../../protocol.md");
-const OPENAPI_JSON: &str = include_str!("../../openapi.json");
+const PROTOCOL_JSON: &str = include_str!("../../../../protocol.json");
+const PROTOCOL_MD: &str = include_str!("../../../../protocol.md");
+const OPENAPI_JSON: &str = include_str!("../../../../openapi.json");
 
 /// The CI drift check. `protocol.json` is committed so that a reader of the
 /// repository, and a client generator, can see the contract without building
 /// anything; that is only worth having if it cannot go stale.
 #[test]
 fn protocol_json_is_current() {
-    let generated = crate::api::protocol::json_text(descriptor());
+    let generated = godwinmix_protocol::protocol::json_text(descriptor());
     assert_eq!(
         generated, PROTOCOL_JSON,
         "protocol.json is out of date. Regenerate it with:\n  \
@@ -32,7 +32,7 @@ fn protocol_json_is_current() {
 
 #[test]
 fn protocol_md_is_current() {
-    let generated = crate::api::protocol::markdown(descriptor());
+    let generated = godwinmix_protocol::protocol::markdown(descriptor());
     assert_eq!(
         generated, PROTOCOL_MD,
         "protocol.md is out of date. Regenerate it with:\n  \
@@ -42,7 +42,7 @@ fn protocol_md_is_current() {
 
 #[test]
 fn openapi_json_is_current() {
-    let generated = crate::api::openapi::json_text(openapi());
+    let generated = godwinmix_protocol::openapi::json_text(openapi());
     assert_eq!(
         generated, OPENAPI_JSON,
         "openapi.json is out of date. Regenerate it with:\n  \
@@ -149,7 +149,7 @@ fn routes_in(text: &str) -> Vec<String> {
 #[test]
 fn every_legacy_alias_names_a_real_method() {
     let registry = methods::registry();
-    for (http, path, method) in crate::api::protocol::LEGACY_ROUTES {
+    for (http, path, method) in godwinmix_protocol::protocol::LEGACY_ROUTES {
         assert!(
             registry.get(method).is_some(),
             "{http} {path} says it is now {method}, and there is no such method"
@@ -170,7 +170,7 @@ fn every_rest_path_comes_from_the_transform_rule() {
         if hand_written.contains(&m.name) {
             continue;
         }
-        let expected = crate::api::method::rest_transform(m.name)
+        let expected = godwinmix_protocol::method::rest_transform(m.name)
             .unwrap_or_else(|| panic!("{} has no transform", m.name));
         assert_eq!(
             (rest.http, rest.path.as_str()),
@@ -231,7 +231,7 @@ fn a_read_only_method_changes_nothing() {
 /// bytes, at four bytes to a token.
 #[test]
 fn the_mcp_profiles_stay_inside_their_budgets() {
-    use crate::api::mcp_tools::*;
+    use godwinmix_protocol::mcp_tools::*;
     let reg = methods::registry();
 
     let standard = tools(&reg, Profile::Standard);
@@ -272,12 +272,12 @@ fn the_mcp_profiles_stay_inside_their_budgets() {
 /// plugin's method must not move it.
 #[test]
 fn adding_a_source_or_a_plugin_does_not_change_the_hot_tool_list() {
-    use crate::api::mcp_tools::tools;
+    use godwinmix_protocol::mcp_tools::tools;
     let before = tools(&methods::registry(), Profile::Standard);
 
     let mut reg = methods::registry();
     reg.register(
-        crate::api::method::MethodDef::new(
+        godwinmix_protocol::method::MethodDef::new(
             "ndi.discover",
             Scope::Operate,
             "a plugin's own method, registered after startup",
@@ -292,7 +292,7 @@ fn adding_a_source_or_a_plugin_does_not_change_the_hot_tool_list() {
     };
     assert_eq!(names(&before), names(&after), "the hot list moved when a tool was added");
     // The new tool is reachable, just not hot.
-    let all = crate::api::mcp_tools::all_tools(&reg);
+    let all = godwinmix_protocol::mcp_tools::all_tools(&reg);
     assert!(all.iter().any(|t| t["name"] == "ndi_discover"));
     assert!(!names(&after).contains(&"ndi_discover".to_string()));
 }
@@ -303,7 +303,7 @@ fn adding_a_source_or_a_plugin_does_not_change_the_hot_tool_list() {
 #[test]
 fn tool_annotations_match_what_the_server_enforces() {
     let reg = methods::registry();
-    for tool in crate::api::mcp_tools::all_tools(&reg) {
+    for tool in godwinmix_protocol::mcp_tools::all_tools(&reg) {
         let method = tool["method"].as_str().unwrap();
         let def = reg.get(method).unwrap();
         let a = &tool["annotations"];
@@ -326,7 +326,7 @@ fn tool_annotations_match_what_the_server_enforces() {
 /// every handler goes through.
 #[test]
 fn every_error_names_a_next_step() {
-    use crate::api::error::{ErrorCode, RpcError};
+    use godwinmix_protocol::error::{ErrorCode, RpcError};
     let errors = vec![
         RpcError::not_found("source", "cam9", &["cam1".into()]),
         RpcError::not_found("output", "yt", &[]),
@@ -424,7 +424,7 @@ fn a_read_only_token_is_refused_before_the_handler_runs() {
     assert!(!reader.has(reg.get("program.take").unwrap().scope));
     assert!(!reader.has(reg.get("core.shutdown").unwrap().scope));
 
-    let refusal = crate::api::error::RpcError::scope(
+    let refusal = godwinmix_protocol::error::RpcError::scope(
         "program.take",
         reg.get("program.take").unwrap().scope.as_str(),
         &reader.scope_names(),
@@ -522,7 +522,7 @@ fn ids_are_derived_from_hosts_and_names() {
 fn golive_ids_come_from_the_host() {
     assert_eq!(derived_id("web+http://127.0.0.1:8090/demo.html"), "127-0-0-1");
     assert_eq!(derived_id("web+https://www.example.com/live?x=1"), "example-com");
-    assert_eq!(derived_id(&crate::input::as_web_uri("example.com/page")), "example-com");
+    assert_eq!(derived_id(&godwinmix_core::input::as_web_uri("example.com/page")), "example-com");
     assert_eq!(derived_id("rtmp://a.rtmp.youtube.com/live2/KEY"), "a-rtmp-youtube-com");
     assert_eq!(derived_id("web+"), "source");
     let mut c = id_candidates("demo");
@@ -561,7 +561,7 @@ fn a_position_off_the_end_of_the_track_is_clamped_not_refused() {
 
 #[test]
 fn the_seek_request_needs_a_position() {
-    let parse = |v: Value| serde_json::from_value::<crate::api::SeekRequest>(v);
+    let parse = |v: Value| serde_json::from_value::<godwinmix_protocol::SeekRequest>(v);
     assert_eq!(parse(json!({ "position_ms": 42000 })).unwrap().position_ms, 42_000.0);
     // An integer and a float both arrive as the same thing, so a UI can send
     // whatever its slider gives it.
@@ -584,7 +584,7 @@ async fn body_json(r: Response) -> Value {
 async fn balancing_says_which_kind_of_no_it_is() {
     let ok = audio_response(
         "page",
-        AudioOutcome::Set(crate::state::SourceAudioState {
+        AudioOutcome::Set(godwinmix_core::state::SourceAudioState {
             gain: 1.0,
             muted: false,
             page: Some(0.8),
@@ -601,7 +601,7 @@ async fn balancing_says_which_kind_of_no_it_is() {
     // A camera answers with the fader and the mute and nothing else.
     let camera = audio_response(
         "cam1",
-        AudioOutcome::Set(crate::state::SourceAudioState {
+        AudioOutcome::Set(godwinmix_core::state::SourceAudioState {
             gain: 0.4,
             muted: true,
             page: None,
@@ -632,7 +632,7 @@ async fn balancing_says_which_kind_of_no_it_is() {
 async fn seeking_says_which_kind_of_no_it_is() {
     let ok = seek_response(
         "clip1",
-        SeekOutcome::Moved(crate::state::SourcePositionState {
+        SeekOutcome::Moved(godwinmix_core::state::SourcePositionState {
             position_ms: 42_000,
             duration_ms: Some(154_000),
         }),
@@ -644,7 +644,7 @@ async fn seeking_says_which_kind_of_no_it_is() {
 
     let early = seek_response(
         "clip1",
-        SeekOutcome::Moved(crate::state::SourcePositionState {
+        SeekOutcome::Moved(godwinmix_core::state::SourcePositionState {
             position_ms: 1_000,
             duration_ms: None,
         }),
@@ -677,20 +677,20 @@ async fn seeking_says_which_kind_of_no_it_is() {
 fn a_snapshot_is_named_with_or_without_the_extension() {
     for spelling in ["sheet", "sheet.jpg"] {
         assert!(
-            crate::snapshot::parse_pick(&snapshot_name(spelling)).is_some(),
+            godwinmix_core::snapshot::parse_pick(&snapshot_name(spelling)).is_some(),
             "{spelling} has to name the contact sheet"
         );
     }
     assert_eq!(
-        crate::snapshot::parse_pick(&snapshot_name("cam1")),
-        Some(crate::snapshot::Pick::Source("cam1".into()))
+        godwinmix_core::snapshot::parse_pick(&snapshot_name("cam1")),
+        Some(godwinmix_core::snapshot::Pick::Source("cam1".into()))
     );
     assert_eq!(
-        crate::snapshot::parse_pick(&snapshot_name("program.jpg")),
-        Some(crate::snapshot::Pick::Program)
+        godwinmix_core::snapshot::parse_pick(&snapshot_name("program.jpg")),
+        Some(godwinmix_core::snapshot::Pick::Program)
     );
     // An empty name is still nothing, rather than becoming ".jpg".
-    assert!(crate::snapshot::parse_pick(&snapshot_name("")).is_none());
+    assert!(godwinmix_core::snapshot::parse_pick(&snapshot_name("")).is_none());
 }
 
 /// The mosaic layout id has to be stable for as long as the cells are, and to
@@ -703,7 +703,7 @@ fn the_layout_travels_with_the_cells() {
         height: 540,
         cols: 2,
         rows: 1,
-        cells: vec![crate::state::CellAssignment {
+        cells: vec![godwinmix_core::state::CellAssignment {
             index: 1,
             source: Some(source.into()),
             x: 0,

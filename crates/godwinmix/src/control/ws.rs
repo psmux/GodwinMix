@@ -11,14 +11,14 @@
 //! not, there were no sequence numbers, and a client that fell behind was
 //! told nothing.
 
-use crate::api::rpc::{self, MeterBatch, Subscription};
-use crate::api::scope::Token;
-use crate::api::{Flush, Resync, Snapshot, SubscribeRequest, SubscribeResult, Tally};
-use crate::api::types::Event;
+use godwinmix_protocol::rpc::{self, MeterBatch, Subscription};
+use godwinmix_protocol::scope::Token;
+use godwinmix_protocol::{Flush, Resync, Snapshot, SubscribeRequest, SubscribeResult, Tally};
+use godwinmix_protocol::types::Event;
 use crate::control::call::dispatch;
 use crate::control::{Ctx, RunningTime};
-use crate::multiview::{MultiviewRequest, MultiviewSubscription};
-use crate::state::Envelope;
+use godwinmix_core::multiview::{MultiviewRequest, MultiviewSubscription};
+use godwinmix_core::state::Envelope;
 use axum::extract::ws::{Message, WebSocket};
 use futures_util::stream::{SplitSink, StreamExt};
 use futures_util::SinkExt;
@@ -178,11 +178,11 @@ impl Connection {
         let request = match rpc::parse(text) {
             Ok(r) => r,
             Err(bad) => {
-                let trace = crate::api::trace::new_id();
+                let trace = godwinmix_protocol::trace::new_id();
                 return self.send(rpc::error_frame(&bad.id, &bad.error, &trace)).await;
             }
         };
-        let id = crate::api::trace::incoming(
+        let id = godwinmix_protocol::trace::incoming(
             None,
             request.params.get("trace_id").and_then(Value::as_str),
         );
@@ -197,7 +197,7 @@ impl Connection {
         }
         // Inside the task local, so the call's log lines carry the same id the
         // client is holding, exactly as they do on /api/v1.
-        let answer = crate::observe::with_trace_id(
+        let answer = godwinmix_core::observe::with_trace_id(
             id,
             dispatch(
                 &self.ctx.registry,
@@ -230,7 +230,7 @@ impl Connection {
         // What the mosaic is asked to run at. Zero on either means "whatever
         // is configured", which is what the clamp in multiview.rs reads it as.
         self.wants_mosaic = match (&request.ext.multiview, wants_multiview) {
-            (Some(crate::api::MultiviewExt::On { fps, width }), true) => Some(MultiviewRequest {
+            (Some(godwinmix_protocol::MultiviewExt::On { fps, width }), true) => Some(MultiviewRequest {
                 fps: fps.unwrap_or(0) as i32,
                 width: width.unwrap_or(0) as i32,
             }),
@@ -275,7 +275,7 @@ impl Connection {
 
     /// Tell the client about the grid, when it wants the mosaic and the grid
     /// is not the one it already has.
-    async fn send_layout(&mut self, multiview: &crate::api::MultiviewStatus) -> Result<(), ()> {
+    async fn send_layout(&mut self, multiview: &godwinmix_protocol::MultiviewStatus) -> Result<(), ()> {
         if !self.sub.as_ref().is_some_and(|s| s.wants("multiview.layout")) {
             return Ok(());
         }

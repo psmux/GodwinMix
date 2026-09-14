@@ -6,43 +6,34 @@
 //! stream, because the output encoder is started once and runs for the life of
 //! the broadcast; everything that changes happens upstream of it in raw video.
 //!
-//! See `mixer.rs` for why that arrangement is the whole design.
+//! See `godwinmix-core` for the engine underneath: this crate is everything
+//! that serves it. The control plane and its method handlers, the REST and
+//! WebSocket layers, the `gmx ctl` client, the MCP server, the web UI, the
+//! bench command and the command line all live here, over
+//! `godwinmix_core` for the mixing and `godwinmix_protocol` for the contract.
 //!
 //! The program is a library with two thin binaries over it, `godwinmix` and
 //! `gmx`, because the short name is what an operator types and neither should
 //! be a copy of the other. `run` below is what both call.
 
-pub mod api;
 pub mod bench;
-pub mod caps;
-pub mod catalogue;
-pub mod config;
-pub mod convert;
+pub mod cli;
 pub mod control;
 pub mod ctl;
-pub mod gstutil;
-pub mod input;
 pub mod mcp;
-pub mod media;
-pub mod mixer;
-pub mod multiview;
 pub mod observe;
-pub mod output;
-pub mod plugin;
-pub mod probe;
-pub mod scene;
-pub mod snapshot;
-pub mod state;
 pub mod ui;
 
 use anyhow::{Context, Result};
 use clap::{Parser, Subcommand};
-use config::Config;
+use godwinmix_core::config::{self, Config};
+use godwinmix_core::observe::logs;
+use godwinmix_core::{convert, input, media, mixer, observe as core_observe, plugin};
 use std::path::PathBuf;
 use std::sync::Arc;
 use tracing::{error, info, warn};
 
-const EXAMPLE_CONFIG: &str = include_str!("../godwinmix.example.toml");
+const EXAMPLE_CONFIG: &str = include_str!("../../../godwinmix.example.toml");
 
 /// Where a client subcommand looks for a mixer when nothing says otherwise.
 const DEFAULT_URL: &str = "http://127.0.0.1:8080";
@@ -89,8 +80,8 @@ struct Args {
 
     /// How log lines are written. `auto` is human form on a terminal and JSON
     /// anywhere else, which is what a service unit and a container want.
-    #[arg(long, value_enum, default_value_t = observe::logs::Format::Auto)]
-    log_format: observe::logs::Format,
+    #[arg(long, value_enum, default_value_t = LogFormat::Auto)]
+    log_format: LogFormat,
 
     /// Print the whole control protocol as JSON Schema and exit: every
     /// method, event and type, with `api_level`. This is `protocol.json`, and
@@ -121,6 +112,28 @@ struct Args {
     command: Option<Command>,
 }
 
+/// The `--log-format` flag, as clap spells it.
+///
+/// `godwinmix_core::observe::logs::Format` is the same three choices without a
+/// command line parser in the engine's dependency tree; this converts into it.
+#[derive(Copy, Clone, Debug, PartialEq, Eq, clap::ValueEnum)]
+enum LogFormat {
+    /// Human form when stderr is a terminal, JSON when it is not.
+    Auto,
+    Json,
+    Human,
+}
+
+impl From<LogFormat> for logs::Format {
+    fn from(f: LogFormat) -> Self {
+        match f {
+            LogFormat::Auto => Self::Auto,
+            LogFormat::Json => Self::Json,
+            LogFormat::Human => Self::Human,
+        }
+    }
+}
+
 #[derive(Subcommand, Debug)]
 enum Command {
     /// Control a running mixer over its HTTP API.
@@ -137,13 +150,13 @@ enum Command {
     /// Read a scene collection from another mixer.
     Import {
         #[command(subcommand)]
-        cmd: scene::cli::Import,
+        cmd: cli::scene::Import,
     },
     /// Work with scene documents: validate, resolve a layout, convert between
     /// the nested document and the flat record store.
     Scene {
         #[command(subcommand)]
-        cmd: scene::cli::Scene,
+        cmd: cli::scene::Scene,
     },
     /// Expose a running mixer to AI agents as Model Context Protocol tools.
     ///
@@ -172,12 +185,12 @@ enum Command {
     /// subcommands need no running mixer.
     Codec {
         #[command(subcommand)]
-        cmd: catalogue::cli::Codec,
+        cmd: cli::codec::Codec,
     },
 
-    /// doctor, logs, trace, dot and support-bundle. See `src/observe/`.
+    /// doctor, logs, trace, dot and support-bundle. See `src/cli/observe.rs`.
     #[command(flatten)]
-    Observe(observe::cli::ObserveCmd),
+    Observe(cli::observe::ObserveCmd),
 
     /// Measure this machine's footprint and print the budget table.
     ///
@@ -228,7 +241,7 @@ enum McpProfile {
     Minimal,
 }
 
-impl From<McpProfile> for api::scope::Profile {
+impl From<McpProfile> for godwinmix_protocol::scope::Profile {
     fn from(p: McpProfile) -> Self {
         match p {
             McpProfile::Standard => Self::Standard,
@@ -241,13 +254,13 @@ impl From<McpProfile> for api::scope::Profile {
 pub async fn run() -> Result<()> {
     let args = Args::parse();
 
-    observe::introspect::begin();
+    core_observe::introspect::begin();
     // Every log line goes to stderr, which keeps stdout clean for the things
     // that are meant to be piped: MCP's protocol, and `gmx dot | dot -Tsvg`.
     // Levels start from `RUST_LOG` and move at runtime from there: see
-    // `observe::logs`.
-    observe::logs::init(observe::logs::Options {
-        format: args.log_format,
+    // `godwinmix_core::observe::logs`.
+    logs::init(logs::Options {
+        format: args.log_format.into(),
         node: config::env_var("NODE"),
         env_filter: std::env::var("RUST_LOG").ok(),
     });
@@ -275,17 +288,17 @@ pub async fn run() -> Result<()> {
         Some(Command::Codec { cmd }) => {
             gstreamer::init().context("initialising GStreamer")?;
             let cfg = Config::load(&config::path_in_force(&args.config)).ok();
-            return catalogue::cli::run(cmd, cfg.as_ref(), args.codecs.as_deref());
+            return cli::codec::run(cmd, cfg.as_ref(), args.codecs.as_deref());
         }
-        Some(Command::Import { cmd }) => return scene::cli::run_import(cmd),
-        Some(Command::Scene { cmd }) => return scene::cli::run_scene(cmd),
+        Some(Command::Import { cmd }) => return cli::scene::run_import(cmd),
+        Some(Command::Scene { cmd }) => return cli::scene::run_scene(cmd),
         Some(Command::Observe(cmd)) => {
             // These commands print a report to stdout. The mixer's own log on
             // stderr is noise around it unless the operator asked for it.
             if std::env::var_os("RUST_LOG").is_none() {
-                observe::logs::set_default_level(observe::logs::LevelCode::WARN);
+                logs::set_default_level(logs::LevelCode::WARN);
             }
-            return observe::cli::run(cmd).await;
+            return cli::observe::run(cmd).await;
         }
         None => {}
     }
@@ -295,11 +308,11 @@ pub async fn run() -> Result<()> {
     // regenerates it on a box with no media stack installed.
     if args.api_info {
         if args.openapi {
-            print!("{}", api::openapi::json_text(control::openapi()));
+            print!("{}", godwinmix_protocol::openapi::json_text(control::openapi()));
         } else if args.markdown {
-            print!("{}", api::protocol::markdown(control::descriptor()));
+            print!("{}", godwinmix_protocol::protocol::markdown(control::descriptor()));
         } else {
-            print!("{}", api::protocol::json_text(control::descriptor()));
+            print!("{}", godwinmix_protocol::protocol::json_text(control::descriptor()));
         }
         return Ok(());
     }
@@ -315,7 +328,7 @@ pub async fn run() -> Result<()> {
     input::reap_orphans_if_init();
 
     {
-        let _stage = observe::introspect::stage("gstreamer init");
+        let _stage = core_observe::introspect::stage("gstreamer init");
         gstreamer::init().context("initialising GStreamer")?;
     }
 
@@ -325,12 +338,12 @@ pub async fn run() -> Result<()> {
 
     if args.probe {
         let cfg = Config::load(&config::path_in_force(&args.config)).ok();
-        return catalogue::cli::print_probe(cfg.as_ref(), args.codecs.as_deref());
+        return cli::codec::print_probe(cfg.as_ref(), args.codecs.as_deref());
     }
 
     // The LiveboxMix config name is still read when there is no GodwinMix one.
     let config_path = config::path_in_force(&args.config);
-    let load = observe::introspect::stage("config");
+    let load = core_observe::introspect::stage("config");
     let cfg = Config::load(&config_path).with_context(|| {
         format!(
             "could not load {}. Run with --example-config to print a starting point.",
@@ -354,7 +367,7 @@ pub async fn run() -> Result<()> {
     let cfg_for_control = cfg.clone();
     drop(load);
 
-    let build = observe::introspect::stage("mixer build");
+    let build = core_observe::introspect::stage("mixer build");
     let (mut mix, handle, cmd_rx, mut bus_rx) = mixer::Mixer::build(cfg)?;
     mix.persist_runtime_to(Config::runtime_store_path(&config_path));
     drop(build);
@@ -364,17 +377,17 @@ pub async fn run() -> Result<()> {
     // before `mix.start`, because that is where the configured sources are
     // built and their lines are exactly the ones somebody debugging a box that
     // will not come up wants in the file.
-    let observe_options = observe::Options {
+    let observe_options = core_observe::Options {
         config_path: config_path.clone(),
         startup_report: args.startup_report,
     };
-    match observe::start(&handle, &observe_options) {
+    match core_observe::start(&handle, &observe_options) {
         Ok(dir) => info!(runtime_dir = %dir.display(), "logs and the session log are here"),
         Err(e) => warn!(?e, "no runtime directory, so logs stay on stderr only"),
     }
 
     {
-        let _stage = observe::introspect::stage("mixer start");
+        let _stage = core_observe::introspect::stage("mixer start");
         mix.start().context("starting mixer")?;
     }
 
@@ -420,7 +433,7 @@ pub async fn run() -> Result<()> {
 
     if args.startup_report {
         // stdout, because it is a report somebody asked for, not a log line.
-        print!("{}", observe::introspect::format_startup_report(&observe::startup_report()));
+        print!("{}", core_observe::introspect::format_startup_report(&core_observe::startup_report()));
     }
 
     tokio::select! {

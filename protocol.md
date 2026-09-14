@@ -1,6 +1,6 @@
 # GodwinMix control protocol
 
-Generated from the method table in `src/api/`. Do not edit by hand: `cargo test protocol_json_is_current` fails when this file and the code disagree, and `godwinmix --api-info` prints the JSON behind it.
+Generated from the method table in `crates/godwinmix-protocol/`. Do not edit by hand: `cargo test protocol_json_is_current` fails when this file and the code disagree, and `godwinmix --api-info` prints the JSON behind it.
 
 * `api_level`: 1
 * `api_compatible`: 1

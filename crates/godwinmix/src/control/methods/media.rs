@@ -1,13 +1,13 @@
 //! The clip library, ad breaks, and looking at the pictures.
 
 use super::{body, handler};
-use crate::api::error::{ErrorCode, RpcError};
-use crate::api::method::{any_object, schema_of, MethodDef, Registry, Tier};
-use crate::api::requests::*;
-use crate::api::scope::Scope;
-use crate::api::types::*;
+use godwinmix_protocol::error::{ErrorCode, RpcError};
+use godwinmix_protocol::method::{any_object, schema_of, MethodDef, Registry, Tier};
+use godwinmix_protocol::requests::*;
+use godwinmix_protocol::scope::Scope;
+use godwinmix_protocol::types::*;
 use crate::control::call::Call;
-use crate::mixer::Command;
+use godwinmix_core::mixer::Command;
 use base64::Engine;
 use serde_json::{json, Value};
 
@@ -27,7 +27,7 @@ pub fn register(reg: &mut Registry<Call>) {
                 body(listing)
             }),
         )
-        .result(schema_of::<crate::media::MediaListing>)
+        .result(schema_of::<godwinmix_core::media::MediaListing>)
         .tool(
             "list_media",
             Tier::Search,
@@ -74,7 +74,7 @@ pub fn register(reg: &mut Registry<Call>) {
             }),
         )
         .params(schema_of::<NameRequest>)
-        .result(schema_of::<crate::convert::ConversionState>)
+        .result(schema_of::<godwinmix_core::convert::ConversionState>)
         .tool(
             "convert_media",
             Tier::Search,
@@ -218,7 +218,7 @@ pub struct SnapshotRequest {
 
 async fn snapshot(call: Call, params: Value) -> Result<Value, RpcError> {
     let req: SnapshotRequest = call.params(&params)?;
-    let ask = crate::snapshot::Ask {
+    let ask = godwinmix_core::snapshot::Ask {
         width: req.width,
         force: req.force,
         allow_large: req.allow_large,
@@ -239,9 +239,9 @@ async fn remove_media(call: Call, params: Value) -> Result<Value, RpcError> {
     let path = call.app.library.resolve(&req.name).map_err(|e| {
         RpcError::not_found("media file", &req.name, &[]).with("detail", e.to_string())
     })?;
-    let target = crate::input::to_uri(&path.display().to_string());
+    let target = godwinmix_core::input::to_uri(&path.display().to_string());
     let configs = call.app.mixer.configs().await.map_err(|e| call.mixer_error(e))?;
-    if let Some(s) = configs.sources.iter().find(|s| crate::input::to_uri(&s.uri) == target) {
+    if let Some(s) = configs.sources.iter().find(|s| godwinmix_core::input::to_uri(&s.uri) == target) {
         return Err(RpcError::not_in_state(format!(
             "{} is the source \"{}\" on this mixer. Remove the source first, then delete \
              the file.",
@@ -249,7 +249,7 @@ async fn remove_media(call: Call, params: Value) -> Result<Value, RpcError> {
         ))
         .with("source", s.id.clone()));
     }
-    let converted = crate::convert::converted_sibling(&path);
+    let converted = godwinmix_core::convert::converted_sibling(&path);
     let would: Vec<String> = [path.clone(), converted]
         .into_iter()
         .filter(|p| p.exists())

@@ -238,15 +238,15 @@ pub async fn build(options: &BundleOptions) -> Result<(PathBuf, Vec<String>)> {
     // The doctor runs locally whether or not a mixer is up: its answers are
     // about the machine.
     gstreamer::init().ok();
-    let checks = super::doctor::run(&options.config_path);
-    add(&mut zip, "doctor.txt", super::doctor::format(&checks).into_bytes(), &mut included);
+    let checks = godwinmix_core::observe::doctor::run(&options.config_path);
+    add(&mut zip, "doctor.txt", godwinmix_core::observe::doctor::format(&checks).into_bytes(), &mut included);
 
     // A running mixer answers with its own last hour, which is authoritative
     // and is fetched below. Without one, the file on disk is what there is.
     if options.url.is_none() {
-        let session = super::session::session().tail_since(3600).join("\n");
+        let session = godwinmix_core::observe::session::session().tail_since(3600).join("\n");
         let session = if session.is_empty() {
-            std::fs::read_to_string(super::session::path_in(&options.runtime_dir))
+            std::fs::read_to_string(godwinmix_core::observe::session::path_in(&options.runtime_dir))
                 .map(|text| tail_lines(&text, 20_000))
                 .unwrap_or_default()
         } else {
@@ -257,7 +257,7 @@ pub async fn build(options: &BundleOptions) -> Result<(PathBuf, Vec<String>)> {
         }
     }
 
-    for path in super::logs::log_files(&options.runtime_dir) {
+    for path in godwinmix_core::observe::logs::log_files(&options.runtime_dir) {
         let Ok(bytes) = std::fs::read(&path) else { continue };
         let name = path.file_name().unwrap_or_default().to_string_lossy().to_string();
         // Ten megabytes of each, from the end, which is the part that matters.
@@ -265,7 +265,7 @@ pub async fn build(options: &BundleOptions) -> Result<(PathBuf, Vec<String>)> {
         add(&mut zip, &format!("logs/{name}"), bytes[cut..].to_vec(), &mut included);
     }
 
-    add(&mut zip, "levels.json", super::logs::levels().to_string().into_bytes(), &mut included);
+    add(&mut zip, "levels.json", godwinmix_core::observe::logs::levels().to_string().into_bytes(), &mut included);
 
     if let Some(url) = &options.url {
         for (name, data) in from_running_mixer(url, options.token.as_deref()).await {
@@ -273,12 +273,12 @@ pub async fn build(options: &BundleOptions) -> Result<(PathBuf, Vec<String>)> {
         }
     } else {
         // In process, which is what a bundle taken by the core itself has.
-        for name in super::introspect::names() {
-            if let Ok(dot) = super::introspect::dot(&name) {
+        for name in godwinmix_core::observe::introspect::names() {
+            if let Ok(dot) = godwinmix_core::observe::introspect::dot(&name) {
                 add(&mut zip, &format!("dot/{name}.dot"), dot.into_bytes(), &mut included);
             }
         }
-        add(&mut zip, "metrics.txt", super::metrics::render().into_bytes(), &mut included);
+        add(&mut zip, "metrics.txt", godwinmix_core::observe::metrics::render().into_bytes(), &mut included);
     }
 
     let bytes = zip.finish();
@@ -357,7 +357,7 @@ fn versions() -> String {
         env!("CARGO_PKG_VERSION"),
         std::env::consts::OS,
         std::env::consts::ARCH,
-        super::logs::rfc3339(&std::time::SystemTime::now()),
+        godwinmix_core::observe::logs::rfc3339(&std::time::SystemTime::now()),
     )
 }
 
@@ -369,7 +369,7 @@ fn tail_lines(text: &str, max: usize) -> String {
 
 /// A name for today's bundle that sorts and does not collide.
 pub fn default_name() -> String {
-    let ts = super::logs::rfc3339(&std::time::SystemTime::now())
+    let ts = godwinmix_core::observe::logs::rfc3339(&std::time::SystemTime::now())
         .replace([':', '.'], "-")
         .replace('Z', "");
     format!("godwinmix-support-{ts}.zip")

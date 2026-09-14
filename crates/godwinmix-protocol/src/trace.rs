@@ -163,8 +163,6 @@ pub fn sanitise_client_id(s: &str) -> Option<String> {
 mod tests {
     use super::*;
 
-    use super::*;
-
     #[test]
     fn ids_are_thirty_two_hex_characters_and_round_trip() {
         let id = TraceId::new();

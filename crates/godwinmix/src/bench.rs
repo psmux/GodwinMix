@@ -27,9 +27,9 @@
 //! are printed as "not yet" with their target, so the table has the same shape
 //! on every machine and the gaps are visible rather than absent.
 
-use crate::config::{Config, MultiviewConfig, SnapshotConfig, SourceConfig};
-use crate::multiview::{MultiviewHandle, MultiviewRequest};
-use crate::snapshot::Tracker;
+use godwinmix_core::config::{Config, MultiviewConfig, SnapshotConfig, SourceConfig};
+use godwinmix_core::multiview::{MultiviewHandle, MultiviewRequest};
+use godwinmix_core::snapshot::Tracker;
 use anyhow::{Context, Result};
 use clap::Args;
 use gstreamer as gst;
@@ -466,7 +466,7 @@ async fn measure_pipeline_added(args: &BenchArgs, desc: &str) -> Result<Load> {
 /// The config every mixer row is built from: 720p30, no outputs, no sources.
 fn bench_config(multiview: MultiviewConfig) -> Config {
     let mut cfg: Config = toml::from_str("").expect("an empty config is every default");
-    cfg.canvas = crate::config::Canvas {
+    cfg.canvas = godwinmix_core::config::Canvas {
         width: BENCH_WIDTH,
         height: BENCH_HEIGHT,
         fps: BENCH_FPS,
@@ -493,10 +493,10 @@ async fn mixer_rows(args: &BenchArgs) -> Result<Vec<Row>> {
         fps: 8,
         ..Default::default()
     });
-    let (mut mix, handle, cmd_rx, _bus_rx) = crate::mixer::Mixer::build(cfg)?;
+    let (mut mix, handle, cmd_rx, _bus_rx) = godwinmix_core::mixer::Mixer::build(cfg)?;
     mix.start().context("starting the mixer")?;
     let mv: MultiviewHandle = mix.multiview_handle();
-    let thread = crate::mixer::spawn(mix, cmd_rx, handle.clone());
+    let thread = godwinmix_core::mixer::spawn(mix, cmd_rx, handle.clone());
 
     let idle = steady(args.warmup(), args.window()).await;
     rows.push(
@@ -601,7 +601,7 @@ async fn mixer_rows(args: &BenchArgs) -> Result<Vec<Row>> {
     );
 
     drop(sub);
-    let _ = handle.send(crate::mixer::Command::Shutdown);
+    let _ = handle.send(godwinmix_core::mixer::Command::Shutdown);
     tokio::task::spawn_blocking(move || thread.join()).await.ok();
     Ok(rows)
 }
@@ -622,11 +622,11 @@ async fn file_source_row(args: &BenchArgs, clip: &Path) -> Result<Row> {
     );
     let baseline = measure_pipeline(args, &base).await?;
     let loaded = measure_pipeline(args, &with_file).await?;
-    let hw_decode = crate::probe::Backends::probe(
-        crate::config::Accel::Auto,
-        crate::config::Accel::Auto,
+    let hw_decode = godwinmix_core::probe::Backends::probe(
+        godwinmix_core::config::Accel::Auto,
+        godwinmix_core::config::Accel::Auto,
     )
-    .map(|b| b.video_decode.accel != crate::config::Accel::Software)
+    .map(|b| b.video_decode.accel != godwinmix_core::config::Accel::Software)
     .unwrap_or(false);
     let mut note = String::from(
         "In process, not container mode: a sidecar source pays about 41 MB more \
@@ -676,12 +676,12 @@ async fn programme_rows(args: &BenchArgs) -> Result<Vec<Row>> {
         .note("RSS is what this pipeline added to the process, not the process total."),
     );
 
-    let backends = crate::probe::Backends::probe(
-        crate::config::Accel::Auto,
-        crate::config::Accel::Auto,
+    let backends = godwinmix_core::probe::Backends::probe(
+        godwinmix_core::config::Accel::Auto,
+        godwinmix_core::config::Accel::Auto,
     )?;
     let hw = backends.video_encode.element;
-    if backends.video_encode.accel == crate::config::Accel::Software {
+    if backends.video_encode.accel == godwinmix_core::config::Accel::Software {
         rows.push(Row::not_yet(
             "two-live-hw",
             "720p30, two live sources, programme encode, hardware",
@@ -768,7 +768,7 @@ pub async fn cold_start_child(args: &BenchArgs) -> Result<()> {
         "uri": format!("file://{}", clip.display()),
     }))?;
     cfg.sources = vec![source];
-    let (mut mix, handle, cmd_rx, _bus_rx) = crate::mixer::Mixer::build(cfg)?;
+    let (mut mix, handle, cmd_rx, _bus_rx) = godwinmix_core::mixer::Mixer::build(cfg)?;
     let (tx, rx) = tokio::sync::oneshot::channel::<()>();
     let venc = mix
         .program_pipeline()
@@ -783,10 +783,10 @@ pub async fn cold_start_child(args: &BenchArgs) -> Result<()> {
         gst::PadProbeReturn::Remove
     });
     mix.start()?;
-    let thread = crate::mixer::spawn(mix, cmd_rx, handle.clone());
+    let thread = godwinmix_core::mixer::spawn(mix, cmd_rx, handle.clone());
     let waited = tokio::time::timeout(Duration::from_secs(30), rx).await;
     println!("cold-start-ms {:.0}", started.elapsed().as_secs_f64() * 1000.0);
-    let _ = handle.send(crate::mixer::Command::Shutdown);
+    let _ = handle.send(godwinmix_core::mixer::Command::Shutdown);
     let _ = tokio::task::spawn_blocking(move || thread.join()).await;
     waited.context("no encoded frame within thirty seconds")?.ok();
     Ok(())

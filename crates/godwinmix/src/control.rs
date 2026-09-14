@@ -25,18 +25,18 @@ pub mod methods;
 pub mod rest;
 pub mod ws;
 
-use crate::api::error::{ErrorCode, RpcError};
-use crate::api::idempotency;
-use crate::api::method::Registry;
-use crate::api::scope::{Confirmations, Tokens};
-use crate::api::types::{CanvasInfo, Limits, MultiviewStatus};
-use crate::api::{AddSourceRequest, GoLiveRequest, GoLiveResult, MultiviewLayout};
-use crate::config::{Config, OutputConfig, SnapshotConfig, SourceConfig};
-use crate::media::{MediaLibrary, MediaListing};
-use crate::mixer::{AudioOutcome, Command, MixerHandle, SeekOutcome};
-use crate::multiview::MultiviewHandle;
-use crate::snapshot::{self, Ask, Pick, Tracker};
-use crate::state::{Event, MixerStatus, SourceState};
+use godwinmix_protocol::error::{ErrorCode, RpcError};
+use godwinmix_protocol::idempotency;
+use godwinmix_protocol::method::Registry;
+use godwinmix_protocol::scope::{Confirmations, Tokens};
+use godwinmix_protocol::types::{CanvasInfo, Limits, MultiviewStatus};
+use godwinmix_protocol::{AddSourceRequest, GoLiveRequest, GoLiveResult, MultiviewLayout};
+use godwinmix_core::config::{Config, OutputConfig, SnapshotConfig, SourceConfig};
+use godwinmix_core::media::{MediaLibrary, MediaListing};
+use godwinmix_core::mixer::{AudioOutcome, Command, MixerHandle, SeekOutcome};
+use godwinmix_core::multiview::MultiviewHandle;
+use godwinmix_core::snapshot::{self, Ask, Pick, Tracker};
+use godwinmix_core::state::{Event, MixerStatus, SourceState};
 use anyhow::Result;
 use axum::body::Body;
 use axum::extract::ws::WebSocketUpgrade;
@@ -73,7 +73,7 @@ pub struct AppState {
     /// Ad clips available on this machine.
     pub library: Arc<MediaLibrary>,
     /// Runs file transcodes and remembers their progress.
-    pub converter: Arc<crate::convert::Converter>,
+    pub converter: Arc<godwinmix_core::convert::Converter>,
     /// Rung by `core.shutdown`. `main` waits on it alongside Ctrl-C and takes
     /// the whole process down the same way for either.
     pub quit: Arc<tokio::sync::Notify>,
@@ -98,7 +98,7 @@ impl AppState {
         mixer: MixerHandle,
         multiview: MultiviewHandle,
         library: Arc<MediaLibrary>,
-        converter: Arc<crate::convert::Converter>,
+        converter: Arc<godwinmix_core::convert::Converter>,
         quit: Arc<tokio::sync::Notify>,
         rehearsal: bool,
     ) -> Self {
@@ -114,7 +114,7 @@ impl AppState {
             limits: Limits {
                 max_upload_bytes: cfg.media.max_upload_bytes,
                 max_gain: MAX_GAIN,
-                max_call_secs: crate::api::MAX_CALL_SECS,
+                max_call_secs: godwinmix_protocol::MAX_CALL_SECS,
                 max_idempotency_key_bytes: 255,
                 event_queue: 256,
             },
@@ -276,7 +276,7 @@ async fn guard_legacy(State(ctx): State<Ctx>, req: Request, next: Next) -> Respo
 /// Why this token may not use this legacy path, if it may not.
 fn legacy_refusal(
     ctx: &Ctx,
-    token: &crate::api::scope::Token,
+    token: &godwinmix_protocol::scope::Token,
     http: &Method,
     path: &str,
 ) -> Option<String> {
@@ -314,10 +314,10 @@ pub fn trace_of(headers: &HeaderMap, explicit: Option<&str>) -> String {
 
 /// The same id, typed, for `observe::with_trace_id` so every log line a call
 /// produces carries it without being passed an argument.
-pub fn trace_id_of(headers: &HeaderMap, explicit: Option<&str>) -> crate::observe::TraceId {
+pub fn trace_id_of(headers: &HeaderMap, explicit: Option<&str>) -> godwinmix_core::observe::TraceId {
     let traceparent =
-        headers.get(crate::api::trace::TRACEPARENT).and_then(|v| v.to_str().ok());
-    crate::api::trace::incoming(traceparent, explicit)
+        headers.get(godwinmix_protocol::trace::TRACEPARENT).and_then(|v| v.to_str().ok());
+    godwinmix_protocol::trace::incoming(traceparent, explicit)
 }
 
 /// The whole protocol document, built once.
@@ -327,7 +327,7 @@ pub fn trace_id_of(headers: &HeaderMap, explicit: Option<&str>) -> crate::observ
 /// be printed on a machine with no GStreamer and no configuration.
 pub fn descriptor() -> &'static Value {
     static DOC: OnceLock<Value> = OnceLock::new();
-    DOC.get_or_init(|| crate::api::protocol::descriptor(&methods::registry()))
+    DOC.get_or_init(|| godwinmix_protocol::protocol::descriptor(&methods::registry(), godwinmix_core::plugin::described_kinds()))
 }
 
 /// The OpenAPI 3.1 description of the REST layer, built once.
@@ -336,7 +336,7 @@ pub fn descriptor() -> &'static Value {
 /// reads. Built from the same table as everything else.
 pub fn openapi() -> &'static Value {
     static DOC: OnceLock<Value> = OnceLock::new();
-    DOC.get_or_init(|| crate::api::openapi::openapi(&methods::registry()))
+    DOC.get_or_init(|| godwinmix_protocol::openapi::openapi(&methods::registry()))
 }
 
 async fn rpc_upgrade(
@@ -410,7 +410,7 @@ pub async fn add_source_now(app: &AppState, req: AddSourceRequest) -> Result<Str
         anyhow::bail!("a source needs a URL");
     }
     let uri = match req.kind.as_deref().map(str::to_ascii_lowercase).as_deref() {
-        Some("web") | Some("page") | Some("website") => crate::input::as_web_uri(&uri),
+        Some("web") | Some("page") | Some("website") => godwinmix_core::input::as_web_uri(&uri),
         _ => uri,
     };
     let name = req.name.filter(|n| !n.trim().is_empty());
@@ -496,7 +496,7 @@ pub async fn golive_now(app: &AppState, req: GoLiveRequest) -> Result<GoLiveResu
     if url.is_empty() {
         anyhow::bail!("golive needs a url");
     }
-    let uri = crate::input::as_web_uri(url);
+    let uri = godwinmix_core::input::as_web_uri(url);
     let superimpose = match req.superimpose.as_deref().map(str::trim) {
         None | Some("") | Some("auto") => "auto",
         Some("off") => "off",
@@ -637,7 +637,7 @@ pub async fn store_upload(app: &AppState, name: &str, body: Body) -> Result<Valu
              and restart, or put the file in the media directory yourself.",
         ));
     }
-    let name = crate::media::safe_upload_name(name)
+    let name = godwinmix_core::media::safe_upload_name(name)
         .map_err(|e| RpcError::invalid_params(e.to_string()))?;
     let dir = app.library.dir().to_path_buf();
     let part = dir.join(format!(".{name}.part"));
@@ -761,7 +761,7 @@ fn snapshot_name(name: &str) -> String {
 /// The layout a client matches frames against.
 pub fn layout_of(multiview: &MultiviewStatus) -> MultiviewLayout {
     MultiviewLayout {
-        id: crate::api::rpc::layout_id(&multiview.cells),
+        id: godwinmix_protocol::rpc::layout_id(&multiview.cells),
         width: multiview.width,
         height: multiview.height,
         cells: multiview.cells.clone(),
@@ -847,7 +847,7 @@ async fn upload_media(
 async fn convert_media(
     State(app): State<AppState>,
     Path(name): Path<String>,
-) -> Result<Json<crate::convert::ConversionState>, ApiError> {
+) -> Result<Json<godwinmix_core::convert::ConversionState>, ApiError> {
     let input = app.library.resolve(&name)?;
     let state = app.converter.start(name, input)?;
     Ok(Json(state))
@@ -860,15 +860,15 @@ async fn delete_media(
     Path(name): Path<String>,
 ) -> Result<Json<Value>, ApiError> {
     let path = app.library.resolve(&name)?;
-    let target = crate::input::to_uri(&path.display().to_string());
+    let target = godwinmix_core::input::to_uri(&path.display().to_string());
     let configs = app.mixer.configs().await?;
-    if let Some(s) = configs.sources.iter().find(|s| crate::input::to_uri(&s.uri) == target) {
+    if let Some(s) = configs.sources.iter().find(|s| godwinmix_core::input::to_uri(&s.uri) == target) {
         return Err(
             anyhow::anyhow!("{name} is the source \"{}\". Remove the source first.", s.id).into()
         );
     }
     let mut removed = Vec::new();
-    for p in [path.clone(), crate::convert::converted_sibling(&path)] {
+    for p in [path.clone(), godwinmix_core::convert::converted_sibling(&path)] {
         if p.exists() && std::fs::remove_file(&p).is_ok() {
             removed.push(p.display().to_string());
         }
@@ -947,7 +947,7 @@ async fn remove_source(
 async fn set_source_audio(
     State(app): State<AppState>,
     Path(id): Path<String>,
-    Json(req): Json<crate::api::AudioRequest>,
+    Json(req): Json<godwinmix_protocol::AudioRequest>,
 ) -> Result<Response, ApiError> {
     let gain = req.gain.map(checked_gain).transpose()?;
     let page = req.page.map(checked_gain).transpose()?;
@@ -989,7 +989,7 @@ fn audio_response(id: &str, outcome: AudioOutcome) -> Response {
 async fn seek_source(
     State(app): State<AppState>,
     Path(id): Path<String>,
-    Json(req): Json<crate::api::SeekRequest>,
+    Json(req): Json<godwinmix_protocol::SeekRequest>,
 ) -> Result<Response, ApiError> {
     let position_ms = checked_position(req.position_ms)?;
     let outcome = app.mixer.seek(id.clone(), position_ms).await?;
@@ -1033,7 +1033,7 @@ async fn reconnect_output(
 
 async fn list_outputs(
     State(app): State<AppState>,
-) -> Result<Json<Vec<crate::state::OutputStatus>>, ApiError> {
+) -> Result<Json<Vec<godwinmix_core::state::OutputStatus>>, ApiError> {
     Ok(Json(app.mixer.status().await?.outputs))
 }
 
@@ -1157,7 +1157,7 @@ impl RunningTime {
         if let Event::Status(status) = event {
             self.base_ms = status.running_time_ms;
             self.at = std::time::Instant::now();
-            self.layout = crate::api::rpc::layout_id(&status.multiview.cells);
+            self.layout = godwinmix_protocol::rpc::layout_id(&status.multiview.cells);
         }
     }
 
@@ -1215,7 +1215,7 @@ fn observe_state(state: &AppState) -> crate::observe::ObserveState {
         tokens: Some(state.tokens.clone()),
         // Prometheus scrapes with no credentials. See the field's own note.
         metrics_open: true,
-        config_path: crate::config::path_in_force(std::path::Path::new("godwinmix.toml")),
+        config_path: godwinmix_core::config::path_in_force(std::path::Path::new("godwinmix.toml")),
     }
 }
 

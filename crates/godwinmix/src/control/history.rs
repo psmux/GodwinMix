@@ -8,7 +8,7 @@
 //! In memory and bounded. The durable record is the session log, which is
 //! append only and which no method exposed to any client can edit.
 
-use crate::api::requests::TakeRecord;
+use godwinmix_protocol::requests::TakeRecord;
 use parking_lot::Mutex;
 use std::time::{Duration, Instant};
 
