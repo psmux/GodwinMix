@@ -679,9 +679,16 @@ pub struct Mixer {
     program: gst::Pipeline,
     vmix: gst::Element,
     amix: gst::Element,
+    vraw_tee: gst::Element,
     venc_tee: gst::Element,
     aenc_tee: gst::Element,
     pgm_video_proxy: gst::Element,
+    /// The programme's return branch to the mosaic: queue, download, rate,
+    /// scale, caps, proxysink. In the pipeline from the start, linked to
+    /// `vraw_tee` only while something reads it.
+    return_chain: Vec<gst::Element>,
+    /// The tee pad the return branch is on, while it is attached.
+    return_pad: Option<gst::Pad>,
 
     sources: Vec<SourceSlot>,
     outputs: Vec<Arc<OutputSlot>>,
@@ -1033,8 +1040,16 @@ impl Mixer {
         // Raw program video for the multiview's return cell. It leaves the
         // same tee, so on a GPU entry it is the one branch that comes back to
         // system memory.
+        //
+        // Built here and linked to the tee only when something is going to
+        // read it (`attach_programme_return`). Linked from the start, with a
+        // queue that blocked when full, it was a second consumer of every
+        // programme frame that nobody was consuming: the queue filled, and a
+        // full non leaky queue on a tee branch pushes back on the tee, which
+        // is the encoder's own path. Bounded and leaky, so even attached it
+        // drops its own frames rather than anyone else's.
         let pgm_video_proxy = make("proxysink", "pgm-v-proxy")?;
-        let mut rchain: Vec<gst::Element> = vec![gstutil::queue_thread("pgm-v-q")?];
+        let mut rchain: Vec<gst::Element> = vec![gstutil::queue_time("pgm-v-q", 0.5, true)?];
         rchain.extend(download_bridge(gfx, "pgm-v")?);
         rchain.push(make("videorate", "pgm-v-rate")?);
         rchain.push(make("videoscale", "pgm-v-scale")?);
@@ -1118,7 +1133,9 @@ impl Mixer {
 
         gst::Element::link_many([&vmix, &vmix_caps, &vraw_tee]).context("linking video mixer")?;
         link_from(&vraw_tee, &vchain).context("linking video encoder")?;
-        link_from(&vraw_tee, &rchain).context("linking program return video")?;
+        // Linked to each other but not to the tee. See `attach_programme_return`.
+        gst::Element::link_many(rchain.iter().collect::<Vec<_>>())
+            .context("linking program return video")?;
 
         gst::Element::link_many([&amix, &amix_caps, &level, &araw_tee])
             .context("linking audio mixer")?;
@@ -1165,9 +1182,12 @@ impl Mixer {
             program,
             vmix,
             amix,
+            vraw_tee: vraw_tee.clone(),
             venc_tee,
             aenc_tee,
             pgm_video_proxy,
+            return_chain: rchain,
+            return_pad: None,
             sources: Vec::new(),
             outputs: Vec::new(),
             multiview: None,
@@ -3181,6 +3201,51 @@ impl Mixer {
         &self.program
     }
 
+    /// Put the programme's return branch on the raw tee, because something is
+    /// now going to read it.
+    ///
+    /// Nothing runs unless asked. With no mosaic and no subscriber this branch
+    /// is in the pipeline but linked to nothing, which costs a few idle
+    /// elements and not one frame of work. The tee has `allow-not-linked`, so
+    /// an unrequested pad is not a fault.
+    fn attach_programme_return(&mut self) -> Result<()> {
+        if self.return_pad.is_some() {
+            return Ok(());
+        }
+        let head = self.return_chain.first().context("the return branch has no head")?;
+        let sink = head.static_pad("sink").context("the return branch head has no sink pad")?;
+        // States first, on this thread, while the branch is still fed by
+        // nothing. A state change on a streaming thread is what stalls an
+        // encoder, and the mixer thread is not one.
+        for el in &self.return_chain {
+            el.sync_state_with_parent().context("starting the programme return branch")?;
+        }
+        let pad = self
+            .vraw_tee
+            .request_pad_simple("src_%u")
+            .context("the raw programme tee refused a pad for the return branch")?;
+        pad.link(&sink).context("linking the programme return branch to the raw tee")?;
+        self.return_pad = Some(pad);
+        debug!("programme return branch attached for the mosaic");
+        Ok(())
+    }
+
+    /// Take the return branch back off the tee, so the programme fans out to
+    /// the encoder alone again.
+    fn detach_programme_return(&mut self) {
+        let Some(pad) = self.return_pad.take() else { return };
+        if let Some(peer) = pad.peer() {
+            let _ = pad.unlink(&peer);
+        }
+        if let Some(tee) = pad.parent_element() {
+            tee.release_request_pad(&pad);
+        }
+        for el in &self.return_chain {
+            let _ = el.set_state(gst::State::Null);
+        }
+        debug!("programme return branch detached: nothing is reading it");
+    }
+
     /// Build or destroy the mosaic because the subscriber count changed.
     /// Everything that decides *whether* lives in `multiview.rs`; this is only
     /// the part that has to happen on the mixer thread.
@@ -3194,6 +3259,8 @@ impl Mixer {
                 // is never a moment with two mosaic encoders running.
                 self.multiview = None;
                 self.mv.mark_built(None);
+                self.attach_programme_return()
+                    .context("attaching the programme return branch for the mosaic")?;
                 let mut mv = Multiview::build(&self.mv, shape, &self.pgm_video_proxy)
                     .context("building multiview")?;
                 mv.attach_watch(gstutil::watch_bus(
@@ -3227,6 +3294,7 @@ impl Mixer {
                 for slot in &self.sources {
                     slot.input.detach_thumb_end();
                 }
+                self.detach_programme_return();
             }
         }
         Ok(())
@@ -3751,6 +3819,51 @@ mod tests {
             busy.to_string().contains("Nothing was changed"),
             "the message must say the mixer is unchanged: {busy}"
         );
+    }
+
+    /// Nothing runs unless asked. The programme's return branch to the mosaic
+    /// used to be linked to the raw tee from the first frame, with a queue
+    /// that blocked when full, so with no mosaic it was a second consumer of
+    /// every frame that nobody read and a backpressure path onto the encoder's
+    /// own tee. It goes on when the mosaic does and comes off with it.
+    #[tokio::test]
+    async fn the_programme_return_branch_is_only_on_the_tee_while_the_mosaic_is() {
+        let _ = gst::init();
+        let mut cfg = programme_config(crate::config::Accel::Software);
+        cfg.multiview.enabled = true;
+        let (mut mix, _handle, _cmd_rx, _bus_rx) = Mixer::build(cfg).expect("the mixer builds");
+        assert!(mix.return_pad.is_none(), "the return branch was linked before anything read it");
+
+        let q = mix.return_chain.first().expect("the return branch has a queue").clone();
+        // 2 is GST_QUEUE_LEAK_DOWNSTREAM: a branch nobody reads drops its own
+        // frames instead of pushing back on the tee the encoder is also on.
+        assert_eq!(
+            q.property_value("leaky").transform::<i32>().unwrap().get::<i32>().unwrap(),
+            2,
+            "the branch queue must leak downstream"
+        );
+        assert!(
+            q.static_pad("sink").and_then(|p| p.peer()).is_none(),
+            "the return branch is linked to the tee with nothing reading it"
+        );
+
+        mix.start().expect("the programme starts");
+        mix.multiview_demand(Demand::Build(crate::multiview::MultiviewShape {
+            fps: 5,
+            width: 320,
+            height: 180,
+        }))
+        .expect("a subscriber builds the mosaic");
+        assert!(mix.return_pad.is_some(), "the mosaic was built without the programme return");
+        assert!(q.static_pad("sink").and_then(|p| p.peer()).is_some());
+
+        mix.multiview_demand(Demand::Teardown).expect("the last subscriber leaves");
+        assert!(mix.return_pad.is_none(), "the return branch outlived the mosaic");
+        assert!(
+            q.static_pad("sink").and_then(|p| p.peer()).is_none(),
+            "the return branch is still on the tee with nothing reading it"
+        );
+        mix.shutdown();
     }
 
     /// Two timers firing while the mixer is busy must not both queue. A
