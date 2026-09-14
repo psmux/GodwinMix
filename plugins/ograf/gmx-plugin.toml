@@ -1,0 +1,58 @@
+# The OGraf graphics host, and one graphic to show what a graphic looks like.
+#
+# Two provides, and they are different sorts of thing. `host` is a service: a
+# process that serves each graphic as a page and pushes load, update, play and
+# stop at it. `lower-third` is a graphic: no process, no media, just an OGraf
+# manifest and a web component that any client can render. A plugin that ships
+# graphics and nothing else declares only the second sort and needs no [run].
+[plugin]
+name = "ograf"
+version = "0.2.0"
+api = 1
+description = "An OGraf graphics host: serves a graphic template as a page and drives load, update, play and stop"
+license = "Apache-2.0"
+authors = ["GodwinMix"]
+repository = "https://github.com/psmux/godwinmix"
+platforms = ["linux-x86_64", "linux-aarch64", "macos-aarch64", "macos-x86_64", "windows-x86_64"]
+placements = ["sidecar"]
+process = "singleton"
+
+# Staged into bin/ by `dev/plugins.sh build`: a workspace member's target
+# directory sits above the plugin, and a manifest path may not climb out of the
+# plugin's own directory.
+[run]
+bin = { "linux-x86_64" = "bin/gmx-ograf", "linux-aarch64" = "bin/gmx-ograf", "macos-aarch64" = "bin/gmx-ograf", "macos-x86_64" = "bin/gmx-ograf", "windows-x86_64" = "bin/gmx-ograf.exe" }
+
+[[provides]]
+kind = "service"
+id = "host"
+settings = "schemas/host.json"
+skill = "skills/host/SKILL.md"
+capabilities = ["health"]
+
+[[provides]]
+kind = "graphic"
+id = "lower-third"
+graphic = "examples/lower-third/graphic.ograf.json"
+
+[provides.designer]
+icon = "ui/icons/lower-third.svg"
+thumbnail = "ui/icons/lower-third.svg"
+# A lower third sits in the bottom left of the canvas, a fifth of its height.
+# The numbers are the 16:9 canvas the scene document uses by default; a client
+# scales them to its own.
+default_frame = { position = { x = 120, y = 760 }, frame = { w = 960, h = 200 }, fit = "stretch", align = "bottom-left" }
+gizmos = ["move", "resize"]
+
+[[tools]]
+name = "graphic"
+description = "Drive a graphic that is on a scene: put its words in, play it on, take it off. `action` is one of where, status, load, update, play, stop. `instance` is the source id of the graphic placement, which `scene.get` gives you; leave it out with action `where` or `status` to hear about all of them. Example: graphic {instance: \"graphic-lower-third-9f2c41ab\", action: \"update\", values: {name: \"Ada Lovelace\", title: \"Analyst\"}} then graphic {instance: \"...\", action: \"play\"}. Prefer scene.apply_graphic, which finds the instance for you by field name."
+input = "schemas/tools/graphic.json"
+output = "schemas/tools/graphic.out.json"
+annotations = { readOnlyHint = false, destructiveHint = false, idempotentHint = true, openWorldHint = false }
+user_invocable = true
+model_invocable = true
+
+[build]
+command = "cargo build --release -p gmx-ograf"
+output = "bin/gmx-ograf"

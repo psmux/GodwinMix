@@ -1,0 +1,70 @@
+#!/bin/sh
+# Everything that can be checked without a core.
+#
+#   ./check
+#
+# What the core's harness adds on top (`gmx plugin test ./plugins/ograf`):
+# spawning the sidecar with the manifest's [run], the handshake, configure
+# against every example in the settings schema, and the footprint.
+
+set -eu
+cd "$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
+failed=0
+
+step() {
+    printf '%-34s' "$1"
+    shift
+    if output=$("$@" 2>&1); then
+        echo "ok"
+    else
+        echo "FAILED"
+        echo "$output" | sed 's/^/    /'
+        failed=1
+    fi
+}
+
+echo "checking ograf with $(cargo --version)"
+
+if cargo fmt --version >/dev/null 2>&1; then
+    step "cargo fmt" cargo fmt -p gmx-ograf -- --check
+else
+    printf '%-34s%s\n' "cargo fmt" "skipped (rustup component add rustfmt)"
+fi
+if cargo clippy --version >/dev/null 2>&1; then
+    step "cargo clippy" cargo clippy -p gmx-ograf --all-targets --quiet -- -D warnings
+else
+    printf '%-34s%s\n' "cargo clippy" "skipped (rustup component add clippy)"
+fi
+
+step "unit tests" cargo test -p gmx-ograf --quiet
+
+# The one thing a graphics host can check that nothing else can: that every
+# graphic it ships is an OGraf manifest with a schema, and that the component
+# beside it has the four methods the specification names.
+step "every graphic is well formed" python3 - <<'PY'
+import json, pathlib, sys
+bad = []
+for manifest in pathlib.Path("examples").rglob("*.ograf.json"):
+    doc = json.loads(manifest.read_text())
+    for key in ("id", "name", "main", "schema"):
+        if key not in doc:
+            bad.append(f"{manifest}: no {key}")
+    main = manifest.parent / doc.get("main", "")
+    if not main.is_file():
+        bad.append(f"{manifest}: {doc.get('main')} is not there")
+        continue
+    text = main.read_text()
+    for method in ("load", "updateAction", "playAction", "stopAction"):
+        if method not in text:
+            bad.append(f"{main}: no {method}")
+if bad:
+    print("\n".join(bad))
+    sys.exit(1)
+PY
+
+if [ "$failed" -eq 0 ]; then
+    echo "all checks passed"
+else
+    echo "something failed. Fix it, then run ./check again."
+fi
+exit "$failed"

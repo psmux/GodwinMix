@@ -1,0 +1,30 @@
+# The OGraf graphics host: a first party plugin, and a member of the
+# repository's workspace through the `plugins/*` glob in the root manifest.
+[package]
+name = "gmx-ograf"
+version = "0.2.0"
+edition = "2021"
+rust-version = "1.82"
+description = "An OGraf graphics host: serves a graphic template as a page and drives load, update, play and stop"
+license = "Apache-2.0"
+repository = "https://github.com/psmux/godwinmix"
+
+[[bin]]
+name = "gmx-ograf"
+path = "src/main.rs"
+
+[lib]
+name = "gmx_ograf"
+path = "src/lib.rs"
+
+[dependencies]
+godwinmix-sdk = { path = "../../crates/godwinmix-sdk" }
+serde_json = "1"
+# The page server is a hundred lines of HTTP/1.1 over a TcpListener rather than
+# a web framework. A sidecar that serves four routes on the loopback should not
+# carry a router, a middleware stack and a TLS backend into a Raspberry Pi's
+# memory; `net` and `rt` are what it needs and all it takes.
+tokio = { version = "1", features = ["rt", "rt-multi-thread", "macros", "sync", "time", "net", "io-util"] }
+
+[dev-dependencies]
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "time", "net", "io-util"] }

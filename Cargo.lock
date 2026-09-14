@@ -917,6 +917,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "gmx-ograf"
+version = "0.2.0"
+dependencies = [
+ "godwinmix-sdk",
+ "serde_json",
+ "tokio",
+]
+
+[[package]]
 name = "gmx-osc"
 version = "0.2.0"
 dependencies = [

@@ -1,0 +1,47 @@
+{
+  "$schema": "https://ograf.ebu.io/specification/json-schemas/graphics/schema.json",
+  "id": "lower-third",
+  "name": "Lower third",
+  "description": "A name and a title on a coloured bar, sliding in from the left and out again.",
+  "version": "1.0.0",
+  "author": { "name": "GodwinMix" },
+  "main": "graphic.mjs",
+  "supportsRealTime": true,
+  "supportsNonRealTime": false,
+  "stepCount": 1,
+  "schema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "title": "Lower third",
+    "properties": {
+      "name": {
+        "type": "string",
+        "title": "Name",
+        "description": "The big line. A person, a place, a score.",
+        "default": "",
+        "examples": ["Ada Lovelace"]
+      },
+      "title": {
+        "type": "string",
+        "title": "Title",
+        "description": "The small line under it.",
+        "default": "",
+        "examples": ["Analyst, Analytical Engine"]
+      },
+      "colour": {
+        "type": "string",
+        "title": "Bar colour",
+        "description": "The bar behind the words.",
+        "format": "color",
+        "default": "#1f6f4f"
+      },
+      "side": {
+        "type": "string",
+        "title": "Side",
+        "description": "Which way it slides in from.",
+        "enum": ["left", "right"],
+        "default": "left"
+      }
+    }
+  }
+}

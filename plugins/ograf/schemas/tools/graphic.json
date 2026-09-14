@@ -1,0 +1,40 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Drive a graphic",
+  "type": "object",
+  "required": ["action"],
+  "additionalProperties": false,
+  "properties": {
+    "action": {
+      "type": "string",
+      "title": "What to do",
+      "enum": ["where", "status", "load", "update", "play", "stop", "forget"],
+      "description": "where: the host's address and the graphics it serves. status: what a placement is showing, or all of them. load: put a graphic and its words into a placement. update: new words, no animation. play: the next step, or the step named. stop: off. forget: drop a placement whose item was removed.",
+      "examples": ["update", "play"]
+    },
+    "instance": {
+      "type": "string",
+      "title": "Placement",
+      "description": "The source id of the graphic placement, which scene.get gives you. Not needed for where, nor for status when you want all of them.",
+      "examples": ["graphic-lower-third-9f2c41ab"]
+    },
+    "graphic": {
+      "type": "string",
+      "title": "Graphic",
+      "description": "The plugin qualified id of the template. Needed by load.",
+      "examples": ["ograf/lower-third"]
+    },
+    "values": {
+      "type": "object",
+      "title": "Values",
+      "description": "The graphic's own fields, by name. Read them from the graphic's schema with scene.item.schema.",
+      "examples": [{ "name": "Ada Lovelace", "title": "Analyst" }]
+    },
+    "step": {
+      "type": "integer",
+      "title": "Step",
+      "description": "Which step to play. Left out, play moves to the next one. The graphic's stepCount says how many there are.",
+      "minimum": 0
+    }
+  }
+}
