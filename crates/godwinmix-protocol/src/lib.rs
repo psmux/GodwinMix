@@ -23,6 +23,7 @@
 //!   idempotency.rs  the 24 hour replay cache
 //!   trace.rs        one trace id per call
 //!   mcp_tools.rs    the tool list, generated, in two profiles
+//!   plugin/         the plugin contract: manifest, handshake, SKILL.md, transcripts
 //! ```
 //!
 //! Nothing here knows about GStreamer or about a server. The engine
@@ -36,6 +37,7 @@ pub mod idempotency;
 pub mod mcp_tools;
 pub mod method;
 pub mod openapi;
+pub mod plugin;
 pub mod protocol;
 pub mod requests;
 pub mod rpc;

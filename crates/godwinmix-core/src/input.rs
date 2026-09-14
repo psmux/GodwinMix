@@ -1877,7 +1877,9 @@ pub fn attach_exec_stdout(id: &str, src: &gst::Element, out: ExecStdout) -> Exec
     let ExecStdout::Pipe(mut pipe) = out;
     let Ok(appsrc) = src.clone().downcast::<gstreamer_app::AppSrc>() else {
         warn!(source = %id, "exec source is not an appsrc; stdout not attached");
-        return;
+        // Nothing to hold: the reader thread owns the pipe on this platform,
+        // and here there is not even a reader. See `ExecStdoutHeld`.
+        return None;
     };
     let token = Arc::new(AtomicBool::new(true));
     {
@@ -1911,6 +1913,9 @@ pub fn attach_exec_stdout(id: &str, src: &gst::Element, out: ExecStdout) -> Exec
             }
         })
         .ok();
+    // The thread owns the pipe, so there is no descriptor left for the caller
+    // to hold. `ExecStdoutHeld` is `Option<Infallible>` here for that reason.
+    None
 }
 
 pub fn make_exec_source(id: &str, spec: &ExecSpec) -> Result<(gst::Element, ExecChild)> {
