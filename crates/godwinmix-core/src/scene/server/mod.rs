@@ -172,7 +172,7 @@ impl SceneServer {
                 sources: {
                     let mut v: Vec<String> = compose::resolve(&inner.doc, s)
                         .iter()
-                        .flat_map(|i| sources_of(i))
+                        .flat_map(sources_of)
                         .collect();
                     v.sort();
                     v.dedup();

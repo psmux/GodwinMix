@@ -143,7 +143,7 @@ pub fn free_name(scene: &Scene, wanted: &str) -> String {
     }
     for n in 2..1000 {
         let candidate = format!("{wanted} {n}");
-        if !taken.iter().any(|n| *n == candidate) {
+        if !taken.contains(&candidate) {
             return candidate;
         }
     }

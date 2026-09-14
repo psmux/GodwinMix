@@ -93,6 +93,39 @@ pub enum PlacementAudio {
     Never,
 }
 
+/// How the picture fills its box, in the words the compositor pad has.
+///
+/// Three, because a `compositor` sink pad has three. The seven `fit` keywords
+/// of the document map onto them and the reference page says which is which,
+/// rather than the picture quietly being wrong. Each one carries the nicks to
+/// try in order: a pad built by an older `compositor` has no
+/// `keep-aspect-ratio-with-crop`, and writing a nick an element does not have
+/// panics inside glib rather than failing, so the first one the pad actually
+/// has is what gets written.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum Sizing {
+    /// Scale to the box exactly, aspect ratio and all. What `stretch` means,
+    /// and what an item at its own size gets because its box is its own size.
+    #[default]
+    Fill,
+    /// Fit inside the box, letterboxing the rest: `contain` and `max`.
+    Contain,
+    /// Fill the box and let the overflow go: `cover`, `fit-width`,
+    /// `fit-height`.
+    Cover,
+}
+
+impl Sizing {
+    /// The nicks to try, best first.
+    pub fn nicks(self) -> &'static [&'static str] {
+        match self {
+            Sizing::Fill => &["none"],
+            Sizing::Contain => &["keep-aspect-ratio", "none"],
+            Sizing::Cover => &["keep-aspect-ratio-with-crop", "keep-aspect-ratio", "none"],
+        }
+    }
+}
+
 /// What a scene wants drawn in one slot.
 ///
 /// Plain numbers in canvas pixels, worked out from the document by
@@ -111,8 +144,7 @@ pub struct Placement {
     /// Degrees clockwise. Snapped to the nearest right angle on the software
     /// path, which is all `videoflip` can do.
     pub rotation: f64,
-    /// `keep-aspect-ratio`, `scale` or `none`, as the compositor spells it.
-    pub sizing: &'static str,
+    pub sizing: Sizing,
     /// 0 to 1 each, where the picture sits inside its frame when the sizing
     /// policy leaves room.
     pub align: (f64, f64),
@@ -131,7 +163,7 @@ impl Placement {
             alpha: 1.0,
             crop: (0.0, 0.0, 0.0, 0.0),
             rotation: 0.0,
-            sizing: "keep-aspect-ratio",
+            sizing: Sizing::Contain,
             align: (0.5, 0.5),
             audio: PlacementAudio::Follow,
         }
@@ -199,12 +231,7 @@ impl Slot {
         set_i32(&self.pad, "ypos", p.ypos);
         set_i32(&self.pad, "width", p.width.max(0));
         set_i32(&self.pad, "height", p.height.max(0));
-        // `sizing-policy` is what `fit` maps onto. A compositor that does not
-        // have it scales to the box, which is `stretch`, and the reference
-        // page says so rather than the picture quietly being wrong.
-        if self.pad.has_property("sizing-policy") {
-            self.pad.set_property_from_str("sizing-policy", p.sizing);
-        }
+        set_sizing(&self.pad, p.sizing);
         for (name, v) in [("xalign", p.align.0), ("yalign", p.align.1)] {
             if self.pad.has_property(name) {
                 set_f64(&self.pad, name, v.clamp(0.0, 1.0));
@@ -628,6 +655,29 @@ pub struct Applied {
     pub missing: Vec<SourceId>,
     /// The slots that were claimed, in scene order.
     pub slots: Vec<usize>,
+}
+
+/// Write `sizing-policy`, if this pad has it and has a value it understands.
+///
+/// `set_property_from_str` panics inside glib on a nick the enum does not
+/// carry, so the nick is looked up first: a `compositor` built before
+/// `keep-aspect-ratio-with-crop` existed gets the next best thing rather than
+/// taking the mixer thread down mid take.
+fn set_sizing(pad: &gst::Pad, sizing: Sizing) {
+    let Some(pspec) = pad.find_property("sizing-policy") else { return };
+    let class = glib::EnumClass::with_type(pspec.value_type());
+    for nick in sizing.nicks() {
+        let known = class.as_ref().and_then(|c| c.value_by_nick(nick)).is_some();
+        if known {
+            pad.set_property_from_str("sizing-policy", nick);
+            return;
+        }
+    }
+    warn!(
+        pad = %pad.name(),
+        ?sizing,
+        "this compositor has none of the sizing policies this item could use"
+    );
 }
 
 /// Read a frame size off caps, for turning a normalised crop into pixels.
