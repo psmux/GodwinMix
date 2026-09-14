@@ -64,7 +64,7 @@ pub struct PresetBlock {
 
 /// Where the presets live, relative to the repository root.
 pub fn directory() -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR")).join("presets")
+    Path::new(env!("CARGO_MANIFEST_DIR")).join("../..").join("presets")
 }
 
 /// Read one preset's manifest.

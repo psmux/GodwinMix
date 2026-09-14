@@ -18,30 +18,28 @@
 //! and a query when a caller makes one. The only permanent cost on a hot path
 //! is the programme frame probe, which is two relaxed atomic adds.
 //!
+//! The `/metrics` route, the `log.*` and `pipeline.*` methods, the `gmx
+//! doctor`, `gmx logs` and `gmx support-bundle` commands and the support
+//! bundle itself are surfaces over this, and they live in the `godwinmix`
+//! crate with the rest of the server. What is here is the instrumentation an
+//! embedded engine gets whether or not anything is serving.
+//!
 //! ### What other modules call
 //!
 //! * `observe::start(...)` once from `run`, after the mixer is built.
-//! * `observe::router(...)` merged into the control plane's router.
-//! * `observe::rpc_layer()` around the api agent's `/rpc` router.
 //! * `observe::session().record(...)` for anything worth replaying.
 //! * `observe::current_trace_id()` anywhere that wants the current call's id.
 //! * `observe::source_span(id)` / `observe::output_span(id)` at the top of a
 //!   build, which is what tags every line underneath with its instance.
 
-pub mod bundle;
-pub mod cli;
 pub mod doctor;
 pub mod introspect;
 pub mod logs;
-pub mod methods;
 pub mod metrics;
-pub mod routes;
 pub mod session;
 pub mod trace;
 
 pub use introspect::{register_pipeline, startup_report, unregister_pipeline, PROGRAMME};
-pub use methods::register;
-pub use routes::{router, ObserveState};
 pub use session::session;
 pub use trace::{current_trace_id, with_trace_id, TraceId};
 
@@ -155,25 +153,6 @@ impl InstanceGuard {
 /// a problem the log is about to tell you about.
 pub fn in_instance<R>(instance: &str, f: impl FnOnce() -> R) -> R {
     tracing::info_span!("instance", instance = instance).in_scope(f)
-}
-
-/// Middleware that counts and times every call, for the api agent's `/rpc`
-/// router.
-///
-/// Used as `router.layer(observe::rpc_layer())`. It records
-/// `gmx_rpc_calls_total{method, code}` and `gmx_rpc_duration_ms{method}`,
-/// taking the method from the matched route rather than the URI so that a path
-/// carrying an id does not become an unbounded label.
-///
-/// `axum::middleware::from_fn` names its own types, so this is a macro rather
-/// than a function: `from_fn` returns a `FromFnLayer` over the closure's
-/// anonymous future type, which cannot be written down in a signature. The
-/// call site reads the same either way.
-#[macro_export]
-macro_rules! rpc_layer {
-    () => {
-        ::axum::middleware::from_fn($crate::observe::routes::rpc_metrics)
-    };
 }
 
 /// A temporary directory for a test, cleaned up by the test that made it.

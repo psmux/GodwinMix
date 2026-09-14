@@ -39,17 +39,17 @@ pub const NAMES: &[&str] = &[
 /// still has them. The files under `layouts/` are the source of truth; a plugin
 /// or a person copies one and changes it rather than writing from nothing.
 const FILES: &[(&str, &str)] = &[
-    ("full", include_str!("../../layouts/full.json")),
-    ("pip-top-left", include_str!("../../layouts/pip-top-left.json")),
-    ("pip-top-right", include_str!("../../layouts/pip-top-right.json")),
-    ("pip-bottom-left", include_str!("../../layouts/pip-bottom-left.json")),
-    ("pip-bottom-right", include_str!("../../layouts/pip-bottom-right.json")),
-    ("two-box", include_str!("../../layouts/two-box.json")),
-    ("three-box", include_str!("../../layouts/three-box.json")),
-    ("quad", include_str!("../../layouts/quad.json")),
-    ("l-shape", include_str!("../../layouts/l-shape.json")),
-    ("split", include_str!("../../layouts/split.json")),
-    ("multiview", include_str!("../../layouts/multiview.json")),
+    ("full", include_str!("../../../../layouts/full.json")),
+    ("pip-top-left", include_str!("../../../../layouts/pip-top-left.json")),
+    ("pip-top-right", include_str!("../../../../layouts/pip-top-right.json")),
+    ("pip-bottom-left", include_str!("../../../../layouts/pip-bottom-left.json")),
+    ("pip-bottom-right", include_str!("../../../../layouts/pip-bottom-right.json")),
+    ("two-box", include_str!("../../../../layouts/two-box.json")),
+    ("three-box", include_str!("../../../../layouts/three-box.json")),
+    ("quad", include_str!("../../../../layouts/quad.json")),
+    ("l-shape", include_str!("../../../../layouts/l-shape.json")),
+    ("split", include_str!("../../../../layouts/split.json")),
+    ("multiview", include_str!("../../../../layouts/multiview.json")),
 ];
 
 /// The built in layout by name.

@@ -1,7 +1,7 @@
 //! The event bus and the liveness tracking behind it.
 //!
 //! The data types that used to live here (`MixerStatus`, `Event`, every status
-//! record) moved to `crate::api::types`, so that one module is the single
+//! record) moved to `godwinmix_protocol::types`, so that one module is the single
 //! source of truth for the wire format and can carry `schemars` derives. They
 //! are re-exported here unchanged, so `crate::state::MixerStatus` still
 //! resolves and no caller had to be rewritten.
@@ -15,7 +15,7 @@ use std::sync::Arc;
 use std::time::Instant;
 use tokio::sync::broadcast;
 
-pub use crate::api::types::*;
+pub use godwinmix_protocol::types::*;
 
 /// One event with the sequence number it was published under.
 ///

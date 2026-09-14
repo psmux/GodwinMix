@@ -10,7 +10,7 @@
 //! In memory, per process. A key that survived a restart would be answering
 //! for a mixer that no longer holds the state the answer describes.
 
-use crate::api::error::{ErrorCode, RpcError};
+use crate::error::{ErrorCode, RpcError};
 use serde_json::Value;
 use std::collections::HashMap;
 use std::hash::{Hash, Hasher};

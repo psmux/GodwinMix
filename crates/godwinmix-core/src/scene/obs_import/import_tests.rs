@@ -8,8 +8,8 @@ use super::*;
 use crate::scene::geometry::flatten;
 use crate::scene::validate;
 
-const SIMPLE_RAW: &str = include_str!("../../../tests/fixtures/obs/simple.json");
-const FULL_RAW: &str = include_str!("../../../tests/fixtures/obs/full.json");
+const SIMPLE_RAW: &str = include_str!("../../../../../tests/fixtures/obs/simple.json");
+const FULL_RAW: &str = include_str!("../../../../../tests/fixtures/obs/full.json");
 
 /// The fixtures with Unix line endings whatever git checked them out as, so the
 /// tests that edit the text by hand match on Windows too.

@@ -8,11 +8,11 @@
 //! `protocol.json` is committed. A test regenerates it and fails on any
 //! difference, which is the CI drift check.
 
-use crate::api::error::ErrorCode;
-use crate::api::method::{schema_of, Registry, SchemaFn};
-use crate::api::requests;
-use crate::api::types;
-use crate::api::{API_COMPATIBLE, API_LEVEL};
+use crate::error::ErrorCode;
+use crate::method::{schema_of, Registry, SchemaFn};
+use crate::requests;
+use crate::types;
+use crate::{API_COMPATIBLE, API_LEVEL};
 use schemars::{generate::SchemaSettings, SchemaGenerator};
 use serde_json::{json, Map, Value};
 
@@ -305,7 +305,7 @@ pub const WELL_KNOWN: &[(&str, &str, &str)] = &[
 ];
 
 /// Build the whole document.
-pub fn descriptor<C>(registry: &Registry<C>) -> Value {
+pub fn descriptor<C>(registry: &Registry<C>, kinds: Value) -> Value {
     let mut g = SchemaSettings::draft2020_12().into_generator();
 
     let methods: Vec<Value> = registry.iter().map(|m| method_entry(m, &mut g)).collect();
@@ -333,29 +333,13 @@ pub fn descriptor<C>(registry: &Registry<C>) -> Value {
             .map(|(http, path, note)| json!({ "method": http, "path": path, "note": note }))
             .collect::<Vec<_>>(),
         "ext": ext_entries(),
-        "kinds": kinds(),
+        "kinds": kinds,
         "errors": error_entries(),
         "$defs": defs,
     })
 }
 
-/// What this build can be asked to make: every source, output and filter
-/// type id, with what the plugin behind it says it is.
-///
-/// The picker in the UI reads this so that a build with an extra kind offers
-/// it without the page being redeployed, and a build without one does not
-/// offer a tile that would be refused. Static data off the plugin registries:
-/// no pipeline is touched, which is why `--api-info` can print it on a
-/// machine with no GStreamer.
-fn kinds() -> Value {
-    json!({
-        "source": crate::plugin::source::described(),
-        "output": crate::plugin::output::described(),
-        "filter": crate::plugin::filter::described(),
-    })
-}
-
-fn method_entry<C>(m: &crate::api::method::MethodDef<C>, g: &mut SchemaGenerator) -> Value {
+fn method_entry<C>(m: &crate::method::MethodDef<C>, g: &mut SchemaGenerator) -> Value {
     let mut entry = Map::new();
     entry.insert("name".into(), json!(m.name));
     entry.insert("since".into(), json!(m.since));
@@ -375,9 +359,9 @@ fn method_entry<C>(m: &crate::api::method::MethodDef<C>, g: &mut SchemaGenerator
             json!({
                 "tool": mcp.tool,
                 "profile": match mcp.tier {
-                    crate::api::method::Tier::Minimal => "minimal",
-                    crate::api::method::Tier::Standard => "standard",
-                    crate::api::method::Tier::Search => "search",
+                    crate::method::Tier::Minimal => "minimal",
+                    crate::method::Tier::Standard => "standard",
+                    crate::method::Tier::Search => "search",
                 },
                 "readOnlyHint": !m.mutating,
                 "destructiveHint": m.destructive,
@@ -471,7 +455,7 @@ pub fn markdown(doc: &Value) -> String {
     let mut out = String::new();
     out.push_str("# GodwinMix control protocol\n\n");
     out.push_str(&format!(
-        "Generated from the method table in `src/api/`. Do not edit by hand: \
+        "Generated from the method table in `crates/godwinmix-protocol/`. Do not edit by hand: \
          `cargo test protocol_json_is_current` fails when this file and the code disagree, \
          and `godwinmix --api-info` prints the JSON behind it.\n\n\
          * `api_level`: {}\n* `api_compatible`: {}\n\n",

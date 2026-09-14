@@ -7,7 +7,6 @@
 //!
 //! 11 section 2 is the specification these types follow, key for key.
 
-pub mod cli;
 pub mod document;
 pub mod expr;
 pub mod flat;
@@ -38,7 +37,7 @@ mod doc_tests {
     use std::path::PathBuf;
 
     fn doc(path: &str) -> String {
-        let full = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(path);
+        let full = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..").join(path);
         std::fs::read_to_string(&full)
             .unwrap_or_else(|e| panic!("{}: {e}. The docs are part of the feature.", full.display()))
     }

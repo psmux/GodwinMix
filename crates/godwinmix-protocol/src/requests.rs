@@ -177,7 +177,7 @@ pub struct GoLiveResult {
     /// The output that was created or reused, if one was asked for.
     pub output: Option<String>,
     /// Where the source is now. It goes to programme as soon as it is live.
-    pub state: crate::api::types::SourceState,
+    pub state: crate::types::SourceState,
 }
 
 /// An id on its own: `source.get`, `source.remove`, `output.remove`,
@@ -230,7 +230,7 @@ pub struct ProgramState {
     pub previous: Option<String>,
     /// Present while an ad break is armed or on air.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub ad: Option<crate::api::types::AdStatus>,
+    pub ad: Option<crate::types::AdStatus>,
 }
 
 /// `core.subscribe`: which events, and which expensive streams.
@@ -328,7 +328,7 @@ pub struct MultiviewLayout {
     pub id: u32,
     pub width: i32,
     pub height: i32,
-    pub cells: Vec<crate::api::types::CellAssignment>,
+    pub cells: Vec<crate::types::CellAssignment>,
 }
 
 /// `event/tally`.
@@ -369,7 +369,7 @@ pub struct Flush {
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 pub struct Snapshot {
     pub seq: u64,
-    pub state: Box<crate::api::types::MixerStatus>,
+    pub state: Box<crate::types::MixerStatus>,
 }
 
 #[cfg(test)]

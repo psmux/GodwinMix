@@ -23,7 +23,6 @@
 
 pub mod apply;
 pub mod check;
-pub mod cli;
 pub mod model;
 pub mod select;
 
@@ -37,7 +36,7 @@ use std::sync::{Arc, OnceLock};
 use tracing::{info, warn};
 
 /// The catalogue that ships with the core.
-const SHIPPED: &str = include_str!("../../codecs.toml");
+const SHIPPED: &str = include_str!("../../../../codecs.toml");
 
 #[derive(Debug, Clone, Default, Deserialize, Serialize, PartialEq)]
 pub struct Catalogue {
