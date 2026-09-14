@@ -30,7 +30,7 @@ use build::Importer;
 mod import_tests;
 
 /// What became of one OBS source.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(tag = "outcome", rename_all = "snake_case")]
 pub enum Outcome {
     /// It came across whole.
@@ -47,7 +47,7 @@ pub enum Outcome {
 }
 
 /// One line of the report: an OBS source and what happened to it.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 pub struct SourceReport {
     /// The OBS plugin type, for example `ffmpeg_source`.
     pub obs_type: String,
@@ -59,7 +59,7 @@ pub struct SourceReport {
 }
 
 /// A source filter that had to be copied onto each placement.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 pub struct FilterReport {
     pub filter: String,
     pub obs_type: String,
@@ -69,7 +69,7 @@ pub struct FilterReport {
 }
 
 /// Everything the import did, for stdout and for `--report json`.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 pub struct Report {
     pub collection: String,
     pub canvas: Canvas,

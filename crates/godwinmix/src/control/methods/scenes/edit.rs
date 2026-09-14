@@ -273,7 +273,20 @@ pub(crate) fn push_preview_for(app: &crate::control::AppState) {
 /// names the next step rather than building a whole pipeline for one still.
 async fn preview_frame(call: Call, params: Value) -> Result<Value, RpcError> {
     let req: PreviewFrameRequest = call.params(&params)?;
-    let Some(layout) = server(&call).preview_layout(
+    still(&call, &req).await
+}
+
+/// A still of the armed scene at the default width.
+///
+/// So a mutating call can answer with a picture as well as the records
+/// (11 section 6: "every mutating call returns the records and can return a
+/// rendered frame, so the model checks its own work").
+pub(crate) async fn preview_still(call: &Call) -> Result<Value, RpcError> {
+    still(call, &PreviewFrameRequest::default()).await
+}
+
+async fn still(call: &Call, req: &PreviewFrameRequest) -> Result<Value, RpcError> {
+    let Some(layout) = server(call).preview_layout(
         req.width.unwrap_or(320) as i32,
         (req.width.unwrap_or(320) as f64 * 9.0 / 16.0) as i32,
     ) else {
@@ -288,7 +301,7 @@ async fn preview_frame(call: Call, params: Value) -> Result<Value, RpcError> {
     // here is what builds it: a still asked for on a core nobody is watching
     // costs the preview branch for as long as this call takes and no longer,
     // which is the same rule every other stream follows.
-    push_preview(&call);
+    push_preview(call);
     let mut sub = call.app.multiview.subscribe_preview(godwinmix_core::multiview::PreviewRequest {
         fps: 0,
         width: req.width.unwrap_or(640) as i32,

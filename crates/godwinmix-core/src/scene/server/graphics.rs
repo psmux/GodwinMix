@@ -43,6 +43,14 @@ use crate::scene::id::Id;
 /// reading `source.list` can tell at a glance what put it there.
 pub const SOURCE_PREFIX: &str = "graphic-";
 
+/// The tool a graphics host answers `load`, `update`, `play` and `stop` on.
+///
+/// A bare name and not `ograf/graphic`: the supervisor resolves one when
+/// exactly one plugin offers it, so the core names the capability rather than
+/// the plugin, and a second graphics host is a listable ambiguity rather than
+/// a thing the core cannot see. `plugins/ograf` is the first party one.
+pub const HOST_TOOL: &str = "graphic";
+
 /// The OGraf manifest, in the subset this host reads.
 ///
 /// Everything else the file carries is kept in `rest` and passed on: OGraf is

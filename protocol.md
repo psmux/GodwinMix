@@ -90,15 +90,18 @@ Keys accepted on every method, handled before a method runs.
 | `program.revert` | `POST /api/v1/program/revert` | operate |  | 1 | Take back to the shot before this one. |
 | `program.take` | `POST /api/v1/program/take` | operate |  | 1 | Put a scene or a source on programme. The cut is instant and the outgoing stream is not disturbed. |
 | `scene.add` | `POST /api/v1/scenes` | operate |  | 1 | Make an empty scene, or one built from a set of sources. |
+| `scene.apply_graphic` | `POST /api/v1/scenes/apply_graphic` | operate |  | 1 | Fill a graphic that is on a scene, by field name, and optionally play it on or take it off. Answers with the records and, if asked, a still. |
 | `scene.apply_layout` | `POST /api/v1/scenes/apply_layout` | operate |  | 1 | Apply a layout, making a scene or reshaping one that exists. Applying onto an existing scene keeps the item ids, so the change is a ramp and not a cut. |
 | `scene.create_from` | `POST /api/v1/scenes/create_from` | operate |  | 1 | A scene from a set of sources, laid out by the built in layout for that count (full, two-box, three-box, quad, then a grid) or by a named one. |
 | `scene.duplicate` | `POST /api/v1/scenes/{id}/duplicate` | operate |  | 1 | A copy of a scene with new ids throughout, so editing the copy cannot touch the original. |
 | `scene.edit.apply` | `POST /api/v1/scenes/edit/apply` | operate |  | 1 | Write a draft back into the live document. |
 | `scene.edit.begin` | `POST /api/v1/scenes/edit/begin` | operate |  | 1 | Take a working copy of a scene. Editing is off air by default: the draft is written back on the next take of that scene, or when you apply it. |
 | `scene.edit.discard` | `POST /api/v1/scenes/edit/discard` | operate |  | 1 | Throw a draft away. The live document is untouched. |
-| `scene.export` | `GET /api/v1/scenes/export` | read |  | 1 | The whole collection as JSON. The zip bundle with assets is Phase 5. |
+| `scene.export` | `GET /api/v1/scenes/export` | read |  | 1 | The whole collection: as JSON, or as a zip bundle carrying its assets with a hash each, which is what you send somebody. |
 | `scene.get` | `GET /api/v1/scenes/{id}` | read |  | 1 | One scene: its records and where every item actually lands on the canvas. |
+| `scene.graphic.list` | `GET /api/v1/scenes/graphic/list` | read |  | 1 | Every graphic template this core can place, with what each one takes. |
 | `scene.history.mark` | `POST /api/v1/scenes/history/mark` | operate |  | 1 | Group the changes that follow into one undo step, until the next mark. This is what makes a drag of forty moves one Ctrl+Z. |
+| `scene.import` | `POST /api/v1/scenes/import` | operate |  | 1 | Read a collection bundle, a zip or the directory it unpacks to, and add its scenes to this one. Answers with a relink report for any asset that did not come across. |
 | `scene.import.obs` | `POST /api/v1/scenes/import/obs` | operate |  | 1 | Read an OBS Studio scene collection and add its scenes to this one. |
 | `scene.item.add` | `POST /api/v1/scenes/item/add` | operate |  | 1 | Put something on a scene's canvas. With no transform it lands in the next free cell, so a drop never needs a dialog. |
 | `scene.item.align` | `POST /api/v1/scenes/item/align` | operate |  | 1 | Line items up on an edge: left, right, top, bottom, center-x or center-y. |
@@ -116,6 +119,7 @@ Keys accepted on every method, handled before a method runs.
 | `scene.item.move` | `POST /api/v1/scenes/item/move` | operate |  | 1 | Move an item to another scene, keeping its transform and filters. |
 | `scene.item.remove` | `POST /api/v1/scenes/item/remove` | operate | yes | 1 | Take an item off a scene. |
 | `scene.item.reorder` | `POST /api/v1/scenes/item/reorder` | operate |  | 1 | Move an item up or down the stack, between two named neighbours. |
+| `scene.item.schema` | `GET /api/v1/scenes/item/schema` | read |  | 1 | What one item type takes: a graphic's OGraf schema, or a source or filter plugin's settings schema. The same JSON Schema every client renders an inspector from. |
 | `scene.item.set` | `POST /api/v1/scenes/item/set` | operate |  | 1 | Assign an item's properties. Only the keys named move; the rest are left alone, so calling it twice with the same body changes nothing the second time. |
 | `scene.item.ungroup` | `POST /api/v1/scenes/item/ungroup` | operate |  | 1 | Take a group apart, leaving every child exactly where it looked. |
 | `scene.layout.copy` | `GET /api/v1/scenes/layout/copy` | read |  | 1 | Read one scene's geometry, to paste onto another. |
@@ -1103,6 +1107,23 @@ Make an empty scene, or one built from a set of sources.
 }
 ```
 
+#### `scene.apply_graphic`
+
+Fill a graphic that is on a scene, by field name, and optionally play it on or take it off. Answers with the records and, if asked, a still.
+
+MCP tool `apply_graphic` in the `search` profile: readOnlyHint false, destructiveHint false, idempotentHint true.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/ApplyGraphicRequest"
+  },
+  "result": {
+    "type": "object"
+  }
+}
+```
+
 #### `scene.apply_layout`
 
 Apply a layout, making a scene or reshaping one that exists. Applying onto an existing scene keeps the item ids, so the change is a ramp and not a cut.
@@ -1199,7 +1220,9 @@ Throw a draft away. The live document is untouched.
 
 #### `scene.export`
 
-The whole collection as JSON. The zip bundle with assets is Phase 5.
+The whole collection: as JSON, or as a zip bundle carrying its assets with a hash each, which is what you send somebody.
+
+MCP tool `export_collection` in the `search` profile: readOnlyHint true, destructiveHint false, idempotentHint true.
 
 ```json
 {
@@ -1229,6 +1252,25 @@ MCP tool `get_scene` in the `search` profile: readOnlyHint true, destructiveHint
 }
 ```
 
+#### `scene.graphic.list`
+
+Every graphic template this core can place, with what each one takes.
+
+MCP tool `list_graphics` in the `search` profile: readOnlyHint true, destructiveHint false, idempotentHint true.
+
+```json
+{
+  "params": {
+    "additionalProperties": false,
+    "properties": {},
+    "type": "object"
+  },
+  "result": {
+    "$ref": "#/$defs/GraphicListing"
+  }
+}
+```
+
 #### `scene.history.mark`
 
 Group the changes that follow into one undo step, until the next mark. This is what makes a drag of forty moves one Ctrl+Z.
@@ -1240,6 +1282,23 @@ Group the changes that follow into one undo step, until the next mark. This is w
   },
   "result": {
     "type": "object"
+  }
+}
+```
+
+#### `scene.import`
+
+Read a collection bundle, a zip or the directory it unpacks to, and add its scenes to this one. Answers with a relink report for any asset that did not come across.
+
+MCP tool `import_collection` in the `search` profile: readOnlyHint false, destructiveHint false, idempotentHint true.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/ImportRequest"
+  },
+  "result": {
+    "$ref": "#/$defs/ImportedReport"
   }
 }
 ```
@@ -1494,6 +1553,23 @@ Move an item up or down the stack, between two named neighbours.
 {
   "params": {
     "$ref": "#/$defs/ReorderRequest"
+  },
+  "result": {
+    "type": "object"
+  }
+}
+```
+
+#### `scene.item.schema`
+
+What one item type takes: a graphic's OGraf schema, or a source or filter plugin's settings schema. The same JSON Schema every client renders an inspector from.
+
+MCP tool `scene_item_schema` in the `search` profile: readOnlyHint true, destructiveHint false, idempotentHint true.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/ItemSchemaRequest"
   },
   "result": {
     "type": "object"

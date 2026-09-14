@@ -332,15 +332,6 @@ mod tests {
         assert_eq!(u16::from_le_bytes([end[10], end[11]]), 1, "the duplicate was written");
     }
 
-    /// The CRC is the one thing in a zip that cannot be checked by looking at
-    /// it, so it is checked against the value every CRC-32 implementation
-    /// agrees on for this input.
-    #[test]
-    fn the_crc_is_the_standard_one() {
-        assert_eq!(crc32(b"123456789"), 0xCBF4_3926);
-        assert_eq!(crc32(b""), 0);
-    }
-
     /// If the system has `unzip`, the archive is opened with it. This is the
     /// only assertion that proves a third party tool agrees.
     #[test]

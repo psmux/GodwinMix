@@ -4,7 +4,7 @@
 
 use super::*;
 use crate::scene::document::{Canvas, Filter, Frame, Item, Scene};
-use serde_json::json;
+use serde_json::{json, Value};
 
 /// A scratch directory that cleans up after itself.
 struct Dir(PathBuf);

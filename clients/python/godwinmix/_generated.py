@@ -118,6 +118,22 @@ class AddSourceRequest(TypedDict, total=False):
 class AgentStateRequest(TypedDict, total=False):
     response_format: ResponseFormat
 
+class ApplyGraphicRequest(TypedDict, total=False):
+    """`scene.apply_graphic`."""
+
+    frame: bool
+    # Answer with a still of the armed scene as well as the records.
+    graphic: str
+    # The graphic to fill, `ograf/lower-third`.
+    item: Optional[str]
+    # Which placement, by the name you gave the item or by its id. Left out, every placement of this graphic is filled.
+    play: bool
+    # Bring it on after filling it in.
+    stop: bool
+    # Take it off.
+    values: Dict[str, Any]
+    # The fields, by name. `scene.item.schema` says which there are.
+
 class ApplyLayoutRequest(TypedDict, total=False):
     """`scene.apply_layout`."""
 
@@ -187,6 +203,34 @@ class BindRequest(TypedDict, total=False):
     prop: str
     # A geometry path such as `frame.w` or `position.x`.
     scene: str
+
+class Bundle(TypedDict, total=False):
+    """What an importer is told before it reads the document."""
+
+    assets: List[BundleAsset]
+    # Every file carried, by the path inside the bundle.
+    bundle_version: int
+    # The envelope version. See [`BUNDLE_VERSION`].
+    canvas: Canvas
+    id: Id
+    # The collection's own stable id, repeated here so a listing can be read without unpacking the document.
+    name: str
+    requires: List[Requirement]
+    # Every plugin this collection needs, with the version range that will do. An importer that has none of them still gets the geometry.
+    skipped: List[str]
+    # What could not be carried, one line each, so a partial export is visible rather than silent.
+    written_by: str
+    # The build that wrote it, for a bug report.
+
+class BundleAsset(TypedDict, total=False):
+    """One file carried in the bundle."""
+
+    id: Id
+    # The asset id in the document.
+    path: str
+    # Relative to the bundle root, forward slashes. Never absolute: see the head of this module.
+    sha256: str
+    size: int
 
 class Canvas(TypedDict, total=False):
     """The output raster. One per collection in this release; 11 section 1 leaves room for several."""
@@ -293,9 +337,13 @@ class EditBeginRequest(TypedDict, total=False):
     scene: str
 
 class ExportRequest(TypedDict, total=False):
+    """`scene.export`."""
+
     collection: Optional[str]
     format: Optional[str]
-    # `json` in this build. `zip`, with the assets, is Phase 5.
+    # `json` for the document alone, `zip` for a bundle with its assets, or `dir` for the same bundle unpacked.
+    path: Optional[str]
+    # Where to write it, on the machine the mixer is running on. Required for `dir`. For `zip`, leaving it out hands the bytes back as base64.
 
 class Ext(TypedDict, total=False):
     """The `ext` table from 03 section 6. Every key is off by default. A terminal UI takes meters and tally and declines multiview; a Stream Deck takes tally only; an agent takes nothing."""
@@ -343,6 +391,15 @@ class FilterRecord(TypedDict, total=False):
 
 class FilterRemoved(TypedDict, total=False):
     removed: str
+
+class FilterReport(TypedDict, total=False):
+    """A source filter that had to be copied onto each placement."""
+
+    filter: str
+    obs_type: str
+    placements: List[str]
+    # The items it was copied onto, by their path in the document.
+    source: str
 
 class Finding(TypedDict, total=False):
     """One thing the validator found."""
@@ -411,6 +468,24 @@ class GoLiveResult(TypedDict, total=False):
     state: SourceState
     # Where the source is now. It goes to programme as soon as it is live.
 
+class GraphicListing(TypedDict, total=False):
+    """`scene.graphic.list`."""
+
+    graphics: List[GraphicType]
+
+class GraphicType(TypedDict, total=False):
+    """One graphic this core can place, as the catalogue has it."""
+
+    designer: Any
+    # The `[provides.designer]` block, when the plugin wrote one: the icon for the add gallery, the UI schema, the default frame and the gizmos.
+    manifest: str
+    # The OGraf manifest's path inside the plugin, so a client can fetch it.
+    ograf: Ograf
+    plugin: str
+    provide: str
+    type_id: str
+    # The plugin qualified id an item's `content.graphic` names, `ograf/lower-third`.
+
 class GroupSourcesRequest(TypedDict, total=False):
     """`source.group`."""
 
@@ -442,13 +517,40 @@ class ImportObsRequest(TypedDict, total=False):
     # The collection JSON exported from OBS (Scene Collection, Export), as a path on the machine the core is running on.
 
 class ImportReport(TypedDict, total=False):
+    config_toml: Optional[str]
+    # The `[[sources]]` block to paste into a config, so the sources the scenes draw can be added in one edit rather than one call each.
+    filters_duplicated: List[FilterReport]
+    # OBS attaches a filter to a source, so a camera keyed in one scene is keyed in all of them. Here filters belong to the item, so a source filter is copied onto each placement and each copy is named here. This is the one thing an import changes the meaning of, so it is reported rather than left for somebody to find on air.
     items: int
     scenes: List[str]
     # The scenes that were added, by the names they ended up with.
     skipped: List[str]
     # What could not be brought across, and why, one line each.
+    source_report: List[SourceReport]
+    # Every OBS source and what became of it: carried across, needing a plugin that is not installed, or skipped with the reason.
     sources: List[str]
     # The sources the collection needs, which have to be added separately.
+
+class ImportRequest(TypedDict, total=False):
+    """`scene.import`."""
+
+    path: str
+    # The bundle: a `.zip` or the directory it unpacks to, as a path on the machine the core is running on.
+
+class ImportedReport(TypedDict, total=False):
+    """What `scene.import` answers with."""
+
+    assets_at: Optional[str]
+    # Where the assets were written.
+    bundle: Bundle
+    # What the bundle said about itself.
+    items: int
+    missing_plugins: List[str]
+    # Plugins the collection needs that this core has not got. The scenes still came across; those items will draw nothing until it does.
+    relink: List[Relink]
+    # Assets that did not come across, with the items that draw them. Empty when everything landed.
+    scenes: List[str]
+    # The scenes that were added, by the names they ended up with.
 
 class InstanceRecord(TypedDict, total=False):
     """One running instance and its cost."""
@@ -499,6 +601,12 @@ class ItemRequest(TypedDict, total=False):
     item: str
     # The item's name or its id.
     scene: str
+
+class ItemSchemaRequest(TypedDict, total=False):
+    """`scene.item.schema`."""
+
+    type: str
+    # The item type: a graphic id like `ograf/lower-third`, or a plugin provide like `camera/source`.
 
 class ItemsRequest(TypedDict, total=False):
     """`scene.item.align`, `distribute`, `fit_to_canvas`, `cover_canvas`, `arrange_grid`, `match_size`, `group`."""
@@ -694,6 +802,23 @@ class NameRequest(TypedDict, total=False):
     name: str
     # File name as it appears in the media listing. The REST layer puts it in the path, where the transform rule calls it `id`, so both spellings are read.
 
+class Ograf(TypedDict, total=False):
+    """The OGraf manifest, in the subset this host reads. Everything else the file carries is kept in `rest` and passed on: OGraf is an EBU specification that will grow, and a key this build has not heard of is a key a newer client may want. Dropping it here would make the core the thing that has to be upgraded first."""
+
+    description: Optional[str]
+    id: str
+    # The graphic's own id, as the OGraf file gives it.
+    main: str
+    # The module the web component is in, relative to the manifest.
+    name: str
+    schema: Any
+    # The JSON Schema of the graphic's own data. What the inspector renders and what `scene.apply_graphic` fills by name.
+    stepCount: int
+    # How many steps `playAction` walks through. One means in and out.
+    supportsNonRealTime: bool
+    supportsRealTime: bool
+    version: Optional[str]
+
 class OutputStatus(TypedDict, total=False):
     id: str
     queue_secs: float
@@ -888,6 +1013,17 @@ class Record(TypedDict, total=False):
     parent: Union[Id, None]
     # The scene this item is in, or the group item it is a child of. Absent for a scene, which hangs off the document itself.
 
+class Relink(TypedDict, total=False):
+    """One asset an import could not put back."""
+
+    asset: Id
+    items: List[str]
+    # The items that draw it, by scene and item name, so the person fixing it knows what will be blank until they do.
+    path: str
+    # The path the document asks for.
+    reason: str
+    # Why it could not be used: missing, or a hash that does not match.
+
 class RenameSceneRequest(TypedDict, total=False):
     color: Optional[str]
     name: Optional[str]
@@ -905,6 +1041,16 @@ class ReorderRequest(TypedDict, total=False):
     scene: str
     seq: Optional[int]
     # A client's own sequence number, echoed on the patch.
+
+class Requirement(TypedDict, total=False):
+    """One plugin the collection needs."""
+
+    plugin: str
+    # The plugin name, `ograf`.
+    provides: List[str]
+    # The provide ids used, `ograf/lower-third`, so a reader can see what the collection actually asks the plugin for.
+    versions: str
+    # A semver range, `^0.2.0`, or `*` when the exporter had no version to name because the plugin was not installed where the export ran.
 
 class Resync(TypedDict, total=False):
     """`event/resync`: the client fell behind and the stream has a hole in it."""
@@ -1073,6 +1219,15 @@ class SourcePositionState(TypedDict, total=False):
     duration_ms: Optional[int]
     # Absent while the demuxer has not worked the duration out yet.
     position_ms: int
+
+class SourceReport(TypedDict, total=False):
+    """One line of the report: an OBS source and what happened to it."""
+
+    obs_name: str
+    obs_type: str
+    # The OBS plugin type, for example `ffmpeg_source`.
+    placements: int
+    # How many items in the collection use it.
 
 class SourceStatus(TypedDict, total=False):
     audio_idle_ms: Optional[int]
@@ -1436,15 +1591,18 @@ METHODS = (
     {"name": "program.revert", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/program/revert"), "summary": 'Take back to the shot before this one.'},
     {"name": "program.take", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/program/take"), "summary": 'Put a scene or a source on programme. The cut is instant and the outgoing stream is not disturbed.'},
     {"name": "scene.add", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/scenes"), "summary": 'Make an empty scene, or one built from a set of sources.'},
+    {"name": "scene.apply_graphic", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/scenes/apply_graphic"), "summary": 'Fill a graphic that is on a scene, by field name, and optionally play it on or take it off. Answers with the records and, if asked, a still.'},
     {"name": "scene.apply_layout", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/scenes/apply_layout"), "summary": 'Apply a layout, making a scene or reshaping one that exists. Applying onto an existing scene keeps the item ids, so the change is a ramp and not a cut.'},
     {"name": "scene.create_from", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/scenes/create_from"), "summary": 'A scene from a set of sources, laid out by the built in layout for that count (full, two-box, three-box, quad, then a grid) or by a named one.'},
     {"name": "scene.duplicate", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/scenes/{id}/duplicate"), "summary": 'A copy of a scene with new ids throughout, so editing the copy cannot touch the original.'},
     {"name": "scene.edit.apply", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/scenes/edit/apply"), "summary": 'Write a draft back into the live document.'},
     {"name": "scene.edit.begin", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/scenes/edit/begin"), "summary": 'Take a working copy of a scene. Editing is off air by default: the draft is written back on the next take of that scene, or when you apply it.'},
     {"name": "scene.edit.discard", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/scenes/edit/discard"), "summary": 'Throw a draft away. The live document is untouched.'},
-    {"name": "scene.export", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/scenes/export"), "summary": 'The whole collection as JSON. The zip bundle with assets is Phase 5.'},
+    {"name": "scene.export", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/scenes/export"), "summary": 'The whole collection: as JSON, or as a zip bundle carrying its assets with a hash each, which is what you send somebody.'},
     {"name": "scene.get", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/scenes/{id}"), "summary": 'One scene: its records and where every item actually lands on the canvas.'},
+    {"name": "scene.graphic.list", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/scenes/graphic/list"), "summary": 'Every graphic template this core can place, with what each one takes.'},
     {"name": "scene.history.mark", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/scenes/history/mark"), "summary": 'Group the changes that follow into one undo step, until the next mark. This is what makes a drag of forty moves one Ctrl+Z.'},
+    {"name": "scene.import", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/scenes/import"), "summary": 'Read a collection bundle, a zip or the directory it unpacks to, and add its scenes to this one. Answers with a relink report for any asset that did not come across.'},
     {"name": "scene.import.obs", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/scenes/import/obs"), "summary": 'Read an OBS Studio scene collection and add its scenes to this one.'},
     {"name": "scene.item.add", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/scenes/item/add"), "summary": "Put something on a scene's canvas. With no transform it lands in the next free cell, so a drop never needs a dialog."},
     {"name": "scene.item.align", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/scenes/item/align"), "summary": 'Line items up on an edge: left, right, top, bottom, center-x or center-y.'},
@@ -1462,6 +1620,7 @@ METHODS = (
     {"name": "scene.item.move", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/scenes/item/move"), "summary": 'Move an item to another scene, keeping its transform and filters.'},
     {"name": "scene.item.remove", "scope": "operate", "mutating": True, "destructive": True, "rest": ("POST", "/api/v1/scenes/item/remove"), "summary": 'Take an item off a scene.'},
     {"name": "scene.item.reorder", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/scenes/item/reorder"), "summary": 'Move an item up or down the stack, between two named neighbours.'},
+    {"name": "scene.item.schema", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/scenes/item/schema"), "summary": "What one item type takes: a graphic's OGraf schema, or a source or filter plugin's settings schema. The same JSON Schema every client renders an inspector from."},
     {"name": "scene.item.set", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/scenes/item/set"), "summary": "Assign an item's properties. Only the keys named move; the rest are left alone, so calling it twice with the same body changes nothing the second time."},
     {"name": "scene.item.ungroup", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/scenes/item/ungroup"), "summary": 'Take a group apart, leaving every child exactly where it looked.'},
     {"name": "scene.layout.copy", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/scenes/layout/copy"), "summary": "Read one scene's geometry, to paste onto another."},
@@ -2131,6 +2290,31 @@ class GeneratedMethods:
             params["color"] = color
         return await self._call("scene.add", params)
 
+    async def scene_apply_graphic(
+        self,
+        graphic: str,
+        *,
+        frame: Optional[bool] = None,
+        item: Optional[str] = None,
+        play: Optional[bool] = None,
+        stop: Optional[bool] = None,
+        values: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        """Fill a graphic that is on a scene, by field name, and optionally play it on or take it off. Answers with the records and, if asked, a still."""
+        params: Dict[str, Any] = {}
+        params["graphic"] = graphic
+        if frame is not None:
+            params["frame"] = frame
+        if item is not None:
+            params["item"] = item
+        if play is not None:
+            params["play"] = play
+        if stop is not None:
+            params["stop"] = stop
+        if values is not None:
+            params["values"] = values
+        return await self._call("scene.apply_graphic", params)
+
     async def scene_apply_layout(
         self,
         layout: str,
@@ -2221,13 +2405,16 @@ class GeneratedMethods:
         *,
         collection: Optional[str] = None,
         format: Optional[str] = None,
+        path: Optional[str] = None,
     ) -> Dict[str, Any]:
-        """The whole collection as JSON. The zip bundle with assets is Phase 5."""
+        """The whole collection: as JSON, or as a zip bundle carrying its assets with a hash each, which is what you send somebody."""
         params: Dict[str, Any] = {}
         if collection is not None:
             params["collection"] = collection
         if format is not None:
             params["format"] = format
+        if path is not None:
+            params["path"] = path
         return await self._call("scene.export", params)
 
     async def scene_get(
@@ -2239,6 +2426,13 @@ class GeneratedMethods:
         params["scene"] = scene
         return await self._call("scene.get", params)
 
+    async def scene_graphic_list(
+        self,
+    ) -> GraphicListing:
+        """Every graphic template this core can place, with what each one takes."""
+        params: Dict[str, Any] = {}
+        return await self._call("scene.graphic.list", params)
+
     async def scene_history_mark(
         self,
         *,
@@ -2249,6 +2443,15 @@ class GeneratedMethods:
         if label is not None:
             params["label"] = label
         return await self._call("scene.history.mark", params)
+
+    async def scene_import(
+        self,
+        path: str,
+    ) -> ImportedReport:
+        """Read a collection bundle, a zip or the directory it unpacks to, and add its scenes to this one. Answers with a relink report for any asset that did not come across."""
+        params: Dict[str, Any] = {}
+        params["path"] = path
+        return await self._call("scene.import", params)
 
     async def scene_import_obs(
         self,
@@ -2705,6 +2908,15 @@ class GeneratedMethods:
         if seq is not None:
             params["seq"] = seq
         return await self._call("scene.item.reorder", params)
+
+    async def scene_item_schema(
+        self,
+        type: str,
+    ) -> Dict[str, Any]:
+        """What one item type takes: a graphic's OGraf schema, or a source or filter plugin's settings schema. The same JSON Schema every client renders an inspector from."""
+        params: Dict[str, Any] = {}
+        params["type"] = type
+        return await self._call("scene.item.schema", params)
 
     async def scene_item_set(
         self,
