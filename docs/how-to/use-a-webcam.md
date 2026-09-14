@@ -52,7 +52,7 @@ started the mixer, which may be your terminal.
 ## 3. Add it
 
 ```sh
-gmx ctl source add cam1 camera/source
+gmx ctl source add cam1 --type camera/source
 ```
 
 That is the whole command. With no settings it takes the first camera on the
@@ -74,8 +74,21 @@ gmx take cam1
 
 To pick a particular camera, use the id from `list_cameras`:
 
+```toml
+[[sources]]
+id = "cam2"
+type = "camera/source"
+params = { device = "/dev/video2", label = "Stage wide" }
+```
+
+Settings travel in a `params` table, which is what the config file, the API and
+the UI's settings drawer all fill in. The command line adds a source without
+them; `source.add` over the API takes them with it:
+
 ```sh
-gmx ctl source add cam2 camera/source --set device=/dev/video2 --set label="Stage wide"
+curl -s -X POST http://127.0.0.1:8080/rpc -H 'content-type: application/json' \
+  -d '{"jsonrpc":"2.0","id":1,"method":"source.add","params":
+       {"id":"cam2","type":"camera/source","params":{"device":"/dev/video2"}}}'
 ```
 
 ## What the settings do, and what they do not
@@ -102,8 +115,11 @@ that, and it is what the plugin does when you leave `resolution` empty.
 
 It is a separate source, on purpose:
 
-```sh
-gmx ctl source add cam1mic audio-device/source --set device="HD Pro Webcam C920"
+```toml
+[[sources]]
+id = "cam1mic"
+type = "audio-device/source"
+params = { device = "HD Pro Webcam C920" }
 ```
 
 Keeping them apart is what lets you take the picture from the camera at the

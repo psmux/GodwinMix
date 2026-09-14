@@ -31,7 +31,18 @@ as BlackHole on macOS), added as `audio-device/source`.
 ```sh
 ./plugins/screen/build
 gmx plugin add ./plugins/screen
-gmx ctl source add lyrics screen/source --set monitor=1 --set show_cursor=false
+gmx ctl source add lyrics --type screen/source
+```
+
+That takes monitor 0 with the pointer showing. Settings travel in a `params`
+table, which is what the config file, the API and the UI's settings drawer all
+fill in:
+
+```toml
+[[sources]]
+id = "lyrics"
+type = "screen/source"
+params = { monitor = 1, show_cursor = false }
 ```
 
 Ask the machine what it will do first, which also tells you which permission is
@@ -82,7 +93,7 @@ installed:
 ```sh
 # Prints a node id for a screen cast the portal has granted.
 /usr/libexec/xdg-desktop-portal-tester screencast    # or your desktop's own helper
-gmx ctl source set lyrics node_id=42
+params = { node_id = "42" }
 ```
 
 With no `node_id` the plugin falls past PipeWire to `ximagesrc`, which captures

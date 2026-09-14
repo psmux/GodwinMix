@@ -18,14 +18,17 @@ as a source. Sound only.
 ```sh
 ./plugins/audio-device/build
 gmx plugin add ./plugins/audio-device
-gmx ctl source add desk audio-device/source
+gmx ctl source add desk --type audio-device/source
 ```
 
 With no settings at all that is the machine's first input at unity gain. To
 pick a particular one, get its id from the `list_audio_inputs` tool and:
 
-```sh
-gmx ctl source add desk audio-device/source --set device="Scarlett 2i2 Analog Stereo"
+```toml
+[[sources]]
+id = "desk"
+type = "audio-device/source"
+params = { device = "Scarlett 2i2 Analog Stereo" }
 ```
 
 ## Settings

@@ -25,12 +25,22 @@ in the core; the gap is written down in
 ```sh
 ./plugins/file-record/build
 gmx plugin add ./plugins/file-record
-gmx ctl output add archive file-record/output
+```
+
+Then write the output into the config file and restart the mixer:
+
+```toml
+[[outputs]]
+id = "archive"
+type = "file-record/output"
 ```
 
 That writes `archive-2026-09-13-1030.mp4` into `~/Videos/GodwinMix`.
 
-To stop and close the file properly:
+`gmx ctl output add` takes an RTMP address rather than a plugin type, because
+the core does not register `output` provides yet; see
+[the plugin reference](../reference/plugins.md). To stop a recording and close
+the file properly, remove the output:
 
 ```sh
 gmx ctl output remove archive
@@ -52,10 +62,11 @@ than the other way round.
 
 ## Name the files something useful
 
-```sh
-gmx ctl output add archive file-record/output \
-  --set directory=/media/archive \
-  --set pattern="{date}/sunday-{time}"
+```toml
+[[outputs]]
+id = "archive"
+type = "file-record/output"
+params = { directory = "/media/archive", pattern = "{date}/sunday-{time}" }
 ```
 
 | Token | Becomes |
@@ -70,8 +81,11 @@ own folder. The folders are made for you.
 
 ## Split by the clock
 
-```sh
-gmx ctl output add archive file-record/output --set split_after_minutes=30
+```toml
+[[outputs]]
+id = "archive"
+type = "file-record/output"
+params = { split_after_minutes = 30 }
 ```
 
 A new file every half hour: `archive-2026-09-13-1030-00000.mp4`, `-00001`, and
@@ -113,7 +127,7 @@ folder is and how much room is left.
 | the output will not add, on Windows | see Linux and macOS only, above |
 | `could not make the recording folder` | pick a folder you can write to |
 | the file exists but stays at 0 bytes | nothing is going out. A recorder records the programme, and the programme is empty until a source is on air |
-| `health` says failing and names an element | the container cannot hold what the programme is encoded as. Try `--set format=mkv` |
+| `health` says failing and names an element | the container cannot hold what the programme is encoded as. Try `format = "mkv"` |
 
 ## Next
 

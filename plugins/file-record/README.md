@@ -24,7 +24,18 @@ different size or bitrate from the stream.
 ```sh
 ./plugins/file-record/build
 gmx plugin add ./plugins/file-record
-gmx ctl output add archive file-record/output --set pattern=sunday-{date}
+```
+
+An output plugin's settings, and the output itself, are written in the config
+file today. `gmx ctl output add` takes an RTMP address, not a plugin type; the
+core does not register `output` provides yet, which is noted in
+[the plugin reference](../../docs/reference/plugins.md).
+
+```toml
+[[outputs]]
+id = "archive"
+type = "file-record/output"
+params = { pattern = "sunday-{date}" }
 ```
 
 The file appears in `~/Videos/GodwinMix` unless you say otherwise. To stop and

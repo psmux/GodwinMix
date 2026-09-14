@@ -34,7 +34,18 @@ This is the part that catches everybody.
 ```sh
 ./plugins/screen/build
 gmx plugin add ./plugins/screen
-gmx ctl source add lyrics screen/source --set monitor=1 --set show_cursor=false
+gmx ctl source add lyrics --type screen/source
+```
+
+That takes monitor 0 with the pointer showing. Settings travel in a `params`
+table, which is what the config file, the API and the UI's settings drawer all
+fill in:
+
+```toml
+[[sources]]
+id = "lyrics"
+type = "screen/source"
+params = { monitor = 1, show_cursor = false }
 ```
 
 `gmx ctl status` shows `lyrics` going live. `gmx take lyrics` puts it on air.
@@ -56,8 +67,11 @@ and what permission is outstanding.
 
 ## Part of a screen
 
-```sh
-gmx ctl source add slides screen/source --set region=0,0,1920,1080
+```toml
+[[sources]]
+id = "slides"
+type = "screen/source"
+params = { region = "0,0,1920,1080" }
 ```
 
 `X,Y,WIDTH,HEIGHT` in screen pixels from the top left. It is the portable way
@@ -77,8 +91,8 @@ untested, and a headless mixer on a server has no portal to talk to at all.
 What works today: take a node id from a portal session something else has
 already opened, and put it in `node_id`.
 
-```sh
-gmx ctl source set lyrics node_id=42
+```toml
+params = { node_id = "42" }
 ```
 
 With no `node_id` the plugin falls past PipeWire to `ximagesrc`, which captures
