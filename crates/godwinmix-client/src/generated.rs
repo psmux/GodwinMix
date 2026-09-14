@@ -130,6 +130,15 @@ pub struct AddOutputRequest {
     pub extra: BTreeMap<String, Value>,
 }
 
+/// `plugin.add`.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct AddPluginRequest {
+    /// A local directory with `gmx-plugin.toml` at its root. Git, an index and
+    /// a signed release are Phase 5; this takes a path.
+    pub source: String,
+}
+
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct AddSceneRequest {
@@ -698,6 +707,29 @@ pub struct ImportReport {
     pub sources: Vec<String>,
 }
 
+/// One running instance and its cost.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct InstanceRecord {
+    pub buffers_dropped: u64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cpu_percent: Option<f64>,
+    pub instance: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub media_latency_ms: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub pid: Option<u32>,
+    /// The plugin it belongs to. Carried on the instance as well as on the
+    /// plugin, because `plugin.stats` is a flat list and a caller holding one
+    /// row should not have to go back for the name.
+    pub plugin: String,
+    pub provide: String,
+    pub restarts: u32,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub rss_bytes: Option<u64>,
+    pub state: String,
+}
+
 /// `scene.item.filter.set` and `remove`.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
@@ -1131,6 +1163,98 @@ pub struct PipelineRequest {
     pub name: Option<String>,
 }
 
+/// The whole of one plugin, for an agent about to use it.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct PluginDescription {
+    pub description: String,
+    pub enabled: bool,
+    pub hooks: Vec<String>,
+    /// Every running instance of it, with what it costs.
+    pub instances: Vec<InstanceRecord>,
+    /// The manifest as JSON, every table of it.
+    pub manifest: Value,
+    pub name: String,
+    /// Why it is not loaded, when it is not.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub problem: Option<String>,
+    /// The type ids it contributes: what goes in `type` on a source, an output
+    /// or a filter.
+    pub provides: Vec<String>,
+    /// Where it is installed.
+    pub root: String,
+    /// Per provide id, its settings schema.
+    pub schemas: BTreeMap<String, Value>,
+    /// Per provide id, the description line from its SKILL.md.
+    pub skills: BTreeMap<String, Value>,
+    /// Its MCP tools, as `gmx_<plugin>_<tool>`. Reachable with `search_tools`;
+    /// never in the hot list.
+    pub tools: Vec<String>,
+    pub version: String,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct PluginListing {
+    pub plugins: Vec<PluginRecord>,
+    /// Where plugins are read from on this machine.
+    pub plugins_dir: String,
+}
+
+/// Anything that names one plugin.
+///
+/// The field is `id` because that is what the REST layer fills in from
+/// `/api/v1/plugins/{id}`, and a plugin's id is its name: the namespace of
+/// every id it contributes. `name` is accepted as well, for a JSON-RPC caller
+/// who wrote the obvious thing.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct PluginName {
+    pub id: String,
+}
+
+/// One plugin as the core reports it.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct PluginRecord {
+    pub description: String,
+    pub enabled: bool,
+    pub hooks: Vec<String>,
+    /// Every running instance of it, with what it costs.
+    pub instances: Vec<InstanceRecord>,
+    pub name: String,
+    /// Why it is not loaded, when it is not.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub problem: Option<String>,
+    /// The type ids it contributes: what goes in `type` on a source, an output
+    /// or a filter.
+    pub provides: Vec<String>,
+    /// Where it is installed.
+    pub root: String,
+    /// Its MCP tools, as `gmx_<plugin>_<tool>`. Reachable with `search_tools`;
+    /// never in the hot list.
+    pub tools: Vec<String>,
+    pub version: String,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct PluginRemoved {
+    /// What went with it, so a caller can see the blast radius.
+    pub provides: Vec<String>,
+    pub removed: String,
+    pub tools: Vec<String>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct PluginSettings {
+    pub name: String,
+    /// The JSON Schema every surface renders, one per provide.
+    pub schemas: BTreeMap<String, Value>,
+    pub settings: BTreeMap<String, Value>,
+}
+
 /// What `preview.close` answers with.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
@@ -1380,6 +1504,15 @@ pub struct SetItemRequest {
     pub seq: Option<u64>,
 }
 
+/// `plugin.settings.set`.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct SetSettingsRequest {
+    pub id: String,
+    /// Only the keys named are changed.
+    pub settings: BTreeMap<String, Value>,
+}
+
 /// `source.set`.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
@@ -1511,6 +1644,12 @@ pub struct SourceStatus {
     /// Anything this build does not know a name for.
     #[serde(flatten)]
     pub extra: BTreeMap<String, Value>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct StatsListing {
+    pub instances: Vec<InstanceRecord>,
 }
 
 /// `core.subscribe`: which events, and which expensive streams.
@@ -1839,7 +1978,7 @@ pub struct MethodInfo {
     pub rest: Option<(&'static str, &'static str)>,
 }
 
-pub const METHODS: [MethodInfo; 100] = [
+pub const METHODS: [MethodInfo; 110] = [
     MethodInfo { name: "adbreak.end", summary: "Cut a running ad short, or disarm one that is scheduled.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/adbreak/end")) },
     MethodInfo { name: "adbreak.start", summary: "Interrupt the programme with a clip, then rejoin live when it ends.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/adbreak/start")) },
     MethodInfo { name: "agent.state", summary: "The compact document written for agents: the programme, each source's state and a motion score saying how much its picture is changing.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/agent/state")) },
@@ -1873,6 +2012,16 @@ pub const METHODS: [MethodInfo; 100] = [
     MethodInfo { name: "pipeline.latency", summary: "How much delay one pipeline is carrying, and which stage put it there.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/pipeline/latency")) },
     MethodInfo { name: "pipeline.list", summary: "Every pipeline running right now, by the name the other pipeline methods accept.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/pipeline/list")) },
     MethodInfo { name: "pipeline.queues", summary: "Every queue in one pipeline with how full it is, fullest first. A queue that stays full is where the trouble is.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/pipeline/queues")) },
+    MethodInfo { name: "plugin.add", summary: "Install a plugin from a local directory, while live. The directory is the one with gmx-plugin.toml at its root.", scope: "admin", mutating: true, destructive: true, rest: Some(("POST", "/api/v1/plugins")) },
+    MethodInfo { name: "plugin.describe", summary: "One plugin in full: its manifest, the settings schema of every provide, and the description from each SKILL.md.", scope: "read", mutating: false, destructive: false, rest: Some(("POST", "/api/v1/plugins/{id}/describe")) },
+    MethodInfo { name: "plugin.disable", summary: "Turn a plugin off without uninstalling it. It registers nothing and runs no process until it is enabled again.", scope: "admin", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/plugins/{id}/disable")) },
+    MethodInfo { name: "plugin.enable", summary: "Turn a plugin back on. It registers what it declares and its instances start.", scope: "admin", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/plugins/{id}/enable")) },
+    MethodInfo { name: "plugin.list", summary: "Every plugin installed, with what it provides and what each running instance is costing in cpu, memory, latency, dropped buffers and restarts.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/plugins")) },
+    MethodInfo { name: "plugin.reload", summary: "Read a plugin's directory again and swap its running instances one at a time, with the freeze frame covering each.", scope: "admin", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/plugins/{id}/reload")) },
+    MethodInfo { name: "plugin.remove", summary: "Uninstall a plugin and unwind everything it registered: its provides, its tools, its panels, its hooks and its discovery matchers.", scope: "admin", mutating: true, destructive: true, rest: Some(("DELETE", "/api/v1/plugins/{id}")) },
+    MethodInfo { name: "plugin.settings.get", summary: "A plugin's settings as they stand, with its schema beside them.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/plugins/{id}/settings")) },
+    MethodInfo { name: "plugin.settings.set", summary: "Change a plugin's settings. A plugin that cannot take a change while running says so rather than being restarted behind your back.", scope: "admin", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/plugins/{id}/settings")) },
+    MethodInfo { name: "plugin.stats", summary: "Per instance cpu, memory, media latency, dropped buffers and restarts, refreshed once a second.", scope: "read", mutating: false, destructive: false, rest: Some(("POST", "/api/v1/plugins/{id}/stats")) },
     MethodInfo { name: "preset.apply", summary: "Put a preset on this core: its config, its scenes, its layout, its theme and its gallery mode. Pass dry_run to get the plan and write nothing.", scope: "admin", mutating: true, destructive: true, rest: Some(("POST", "/api/v1/preset/apply")) },
     MethodInfo { name: "preset.list", summary: "Every preset this core can apply: the six built in, plus anything installed beside the binary or under ~/.godwinmix/presets.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/preset/list")) },
     MethodInfo { name: "preset.save", summary: "Turn this core's working setup into a preset directory somebody else can apply. Stream keys and the control token are replaced with placeholders.", scope: "admin", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/preset/save")) },
@@ -2290,6 +2439,56 @@ impl Client {
     /// Every queue in one pipeline with how full it is, fullest first. A queue that stays full is where the trouble is.
     pub async fn pipeline_queues(&self, params: &PipelineRequest) -> Result<BTreeMap<String, Value>> {
         self.call("pipeline.queues", params).await
+    }
+
+    /// Install a plugin from a local directory, while live. The directory is the one with gmx-plugin.toml at its root.
+    pub async fn plugin_add(&self, params: &AddPluginRequest) -> Result<PluginRecord> {
+        self.call("plugin.add", params).await
+    }
+
+    /// One plugin in full: its manifest, the settings schema of every provide, and the description from each SKILL.md.
+    pub async fn plugin_describe(&self, params: &PluginName) -> Result<PluginDescription> {
+        self.call("plugin.describe", params).await
+    }
+
+    /// Turn a plugin off without uninstalling it. It registers nothing and runs no process until it is enabled again.
+    pub async fn plugin_disable(&self, params: &PluginName) -> Result<PluginRecord> {
+        self.call("plugin.disable", params).await
+    }
+
+    /// Turn a plugin back on. It registers what it declares and its instances start.
+    pub async fn plugin_enable(&self, params: &PluginName) -> Result<PluginRecord> {
+        self.call("plugin.enable", params).await
+    }
+
+    /// Every plugin installed, with what it provides and what each running instance is costing in cpu, memory, latency, dropped buffers and restarts.
+    pub async fn plugin_list(&self) -> Result<PluginListing> {
+        self.call("plugin.list", &serde_json::json!({})).await
+    }
+
+    /// Read a plugin's directory again and swap its running instances one at a time, with the freeze frame covering each.
+    pub async fn plugin_reload(&self, params: &PluginName) -> Result<PluginRecord> {
+        self.call("plugin.reload", params).await
+    }
+
+    /// Uninstall a plugin and unwind everything it registered: its provides, its tools, its panels, its hooks and its discovery matchers.
+    pub async fn plugin_remove(&self, params: &PluginName) -> Result<PluginRemoved> {
+        self.call("plugin.remove", params).await
+    }
+
+    /// A plugin's settings as they stand, with its schema beside them.
+    pub async fn plugin_settings_get(&self, params: &PluginName) -> Result<PluginSettings> {
+        self.call("plugin.settings.get", params).await
+    }
+
+    /// Change a plugin's settings. A plugin that cannot take a change while running says so rather than being restarted behind your back.
+    pub async fn plugin_settings_set(&self, params: &SetSettingsRequest) -> Result<PluginSettings> {
+        self.call("plugin.settings.set", params).await
+    }
+
+    /// Per instance cpu, memory, media latency, dropped buffers and restarts, refreshed once a second.
+    pub async fn plugin_stats(&self) -> Result<StatsListing> {
+        self.call("plugin.stats", &serde_json::json!({})).await
     }
 
     /// Put a preset on this core: its config, its scenes, its layout, its theme and its gallery mode. Pass dry_run to get the plan and write nothing.

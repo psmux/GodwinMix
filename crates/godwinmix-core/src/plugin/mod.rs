@@ -18,6 +18,8 @@ pub mod branch;
 pub mod filter;
 pub mod filters;
 pub mod harness;
+pub mod host;
+pub mod loader;
 pub mod kinds;
 pub mod output;
 pub mod outputs;
@@ -50,7 +52,7 @@ pub enum ProvideKind {
 }
 
 /// Where an implementation runs. A built in kind is `Core`; the same trait
-/// carries a crate compiled in by a custom build, and later a process.
+/// carries a crate compiled in by a custom build, and a process beside us.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum Tier {
@@ -196,8 +198,10 @@ impl CapabilitySet {
 /// What a plugin says about itself before anything is built.
 ///
 /// The Rust mirror of one `[[provides]]` entry in `gmx-plugin.toml`. A built in
-/// kind writes it as a constant; a sidecar will parse it off the handshake.
-#[derive(Debug, Clone)]
+/// kind writes it as a constant; a sidecar's is made by the loader from the
+/// plugin's own manifest and interned, which is why every field is a `'static`
+/// borrow and the whole thing is `Copy`.
+#[derive(Debug, Clone, Copy)]
 pub struct Manifest {
     /// The namespace. Every id from this plugin is `<plugin>/<id>`.
     pub plugin: &'static str,

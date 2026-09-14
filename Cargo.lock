@@ -820,6 +820,7 @@ dependencies = [
  "clap",
  "futures-util",
  "godwinmix-core",
+ "godwinmix-host",
  "godwinmix-protocol",
  "gstreamer",
  "libc",
@@ -853,6 +854,7 @@ dependencies = [
  "anyhow",
  "getrandom 0.3.4",
  "glib",
+ "godwinmix-host",
  "godwinmix-protocol",
  "gstreamer",
  "gstreamer-app",
@@ -876,7 +878,11 @@ dependencies = [
 name = "godwinmix-host"
 version = "0.2.0"
 dependencies = [
+ "anyhow",
  "godwinmix-protocol",
+ "serde",
+ "serde_json",
+ "tracing",
 ]
 
 [[package]]
@@ -888,6 +894,7 @@ dependencies = [
  "serde",
  "serde_json",
  "tokio",
+ "toml 0.9.12+spec-1.1.0",
  "tracing",
 ]
 
@@ -896,6 +903,7 @@ name = "godwinmix-sdk"
 version = "0.1.0"
 dependencies = [
  "glib",
+ "godwinmix-protocol",
  "gstreamer",
  "gstreamer-app",
  "serde",

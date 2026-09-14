@@ -1,0 +1,9 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Colour bars",
+  "type": "object",
+  "properties": {
+    "bars": { "type": "integer", "default": 8, "minimum": 2, "maximum": 8, "examples": [4, 8] }
+  },
+  "additionalProperties": false
+}
