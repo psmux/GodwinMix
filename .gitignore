@@ -1,7 +1,15 @@
-# Rust build output
+# Rust build output. The glob catches a crate built on its own, which happens
+# to godwinmix-sdk and to templates/rust because a plugin crate is its own
+# workspace.
 /target/
+**/target/
 browser/target/
 tauri-app/target/
+
+# A plugin template is a crate, and its lockfile belongs to whoever copies it,
+# not to this repository.
+templates/*/Cargo.lock
+crates/godwinmix-sdk/Cargo.lock
 
 # Tauri generated schemas
 tauri-app/gen/schemas/
