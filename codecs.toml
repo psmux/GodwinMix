@@ -1,0 +1,661 @@
+# The GodwinMix codec and graphics catalogue.
+#
+# This file is data, not code. A new GPU generation, a renamed element or a
+# different codec is an entry here, not a core release. It ships embedded in
+# the binary, an operator overrides it with a `[codecs]` table in their config
+# or with `--codecs <file>`, and `GMX_CODEC_RANK` adjusts a rank from the
+# environment without editing anything.
+#
+# How an entry is read
+# --------------------
+# `rank`      higher wins among the entries whose elements are installed.
+# `requires`  extra registry elements the entry needs. The role's own element
+#             (`encoder` for encoding, `decoder` for decoding) is always
+#             required on top of this, and naming the other role's element in
+#             `requires` does not block this one: a machine with NVDEC and no
+#             usable NVENC is a real configuration and keeps its fast decoder.
+# `properties` are set defensively. A property this element version does not
+#             have, or a nickname its enum does not know, is a logged warning
+#             and never a crash. A value written `{ unit = "...", from = "..." }`
+#             is filled in at build time from the running configuration and
+#             converted into the unit this element wants, so the catalogue
+#             states the bitrate once and openh264 gets bits while x264 gets
+#             kilobits.
+# `keyframe`  the property that carries the keyframe interval, and its unit.
+# `container` the containers this codec can be muxed into. Selection keeps to
+#             the container the programme is going out in.
+# `license`   every entry carries one. `gmx build` refuses to bundle a copyleft
+#             entry into a custom build, which is why the always present
+#             fallbacks are openh264 and SVT-AV1 and x264 is an entry the
+#             operator installs.
+# `verified`  appended by whoever ran `gmx codec test` on real hardware.
+#             `gmx doctor` compares this machine against the list and says so
+#             when an entry has never been tried on this driver.
+#
+# Variables a `from` may name, with the unit they are held in:
+#   video.bitrate_kbps   kbit      audio.bitrate_kbps   kbit
+#   keyframe.frames      frames    keyframe.secs        seconds
+#   canvas.fps           count     cpu.count            count
+# Units that convert into each other: bit, kbit, mbit; frames, seconds; count.
+
+# ---------------------------------------------------------------------------
+# H.264, hardware
+# ---------------------------------------------------------------------------
+
+[[video]]
+id = "h264-nvidia"
+codec = "h264"
+accel = "nvidia"
+rank = 240
+encoder = "nvh264enc"
+decoder = "nvh264dec"
+download = "cudadownload"
+parser = "h264parse"
+memory = "system"
+requires = ["nvh264enc"]
+license = "LGPL-2.1-or-later"
+container = ["flv", "mpegts", "mp4", "matroska"]
+keyframe = { property = "gop-size", unit = "frames" }
+verified = []
+comment = "NVENC on Linux and Windows. `preset` is the modern nvcodec naming; an older nvh264enc ignores it with a warning and keeps its default, which is why `zerolatency` is set as well."
+properties = { preset = "p4", tune = "ultra-low-latency", "rc-mode" = "cbr", bitrate = { unit = "kbit", from = "video.bitrate_kbps" }, "max-bitrate" = { unit = "kbit", from = "video.bitrate_kbps" }, bframes = 0, "b-frames" = 0, zerolatency = true, "aud" = false }
+
+[[video]]
+id = "h265-nvidia"
+codec = "h265"
+accel = "nvidia"
+rank = 230
+encoder = "nvh265enc"
+decoder = "nvh265dec"
+download = "cudadownload"
+parser = "h265parse"
+requires = ["nvh265enc"]
+license = "LGPL-2.1-or-later"
+container = ["mpegts", "mp4", "matroska"]
+keyframe = { property = "gop-size", unit = "frames" }
+verified = []
+properties = { preset = "p4", "rc-mode" = "cbr", bitrate = { unit = "kbit", from = "video.bitrate_kbps" }, "max-bitrate" = { unit = "kbit", from = "video.bitrate_kbps" }, bframes = 0, "b-frames" = 0, zerolatency = true }
+
+[[video]]
+id = "av1-nvidia"
+codec = "av1"
+accel = "nvidia"
+rank = 220
+encoder = "nvav1enc"
+decoder = "nvav1dec"
+download = "cudadownload"
+parser = "av1parse"
+requires = ["nvav1enc"]
+license = "LGPL-2.1-or-later"
+container = ["mpegts", "mp4", "matroska", "webm"]
+keyframe = { property = "gop-size", unit = "frames" }
+verified = []
+comment = "Ada and later. Ranked under H.264 on purpose: raise it in [codecs] and this machine sends AV1 with no rebuild."
+properties = { preset = "p4", "rc-mode" = "cbr", bitrate = { unit = "kbit", from = "video.bitrate_kbps" }, "max-bitrate" = { unit = "kbit", from = "video.bitrate_kbps" } }
+
+[[video]]
+id = "h264-va"
+codec = "h264"
+accel = "va"
+rank = 225
+encoder = "vah264enc"
+decoder = "vah264dec"
+download = "vapostproc"
+parser = "h264parse"
+requires = ["vah264enc"]
+license = "LGPL-2.1-or-later"
+container = ["flv", "mpegts", "mp4", "matroska"]
+keyframe = { property = "key-int-max", unit = "frames" }
+verified = []
+comment = "Intel Quick Sync and AMD on Mesa, both through VA-API on Linux."
+properties = { "rate-control" = "cbr", bitrate = { unit = "kbit", from = "video.bitrate_kbps" }, "b-frames" = 0, "target-usage" = 6 }
+
+[[video]]
+id = "h265-va"
+codec = "h265"
+accel = "va"
+rank = 215
+encoder = "vah265enc"
+decoder = "vah265dec"
+download = "vapostproc"
+parser = "h265parse"
+requires = ["vah265enc"]
+license = "LGPL-2.1-or-later"
+container = ["mpegts", "mp4", "matroska"]
+keyframe = { property = "key-int-max", unit = "frames" }
+verified = []
+properties = { "rate-control" = "cbr", bitrate = { unit = "kbit", from = "video.bitrate_kbps" }, "b-frames" = 0 }
+
+[[video]]
+id = "av1-va"
+codec = "av1"
+accel = "va"
+rank = 205
+encoder = "vaav1enc"
+decoder = "vaav1dec"
+download = "vapostproc"
+parser = "av1parse"
+requires = ["vaav1enc"]
+license = "LGPL-2.1-or-later"
+container = ["mpegts", "mp4", "matroska", "webm"]
+keyframe = { property = "key-int-max", unit = "frames" }
+verified = []
+properties = { "rate-control" = "cbr", bitrate = { unit = "kbit", from = "video.bitrate_kbps" } }
+
+[[video]]
+id = "h264-va-legacy"
+codec = "h264"
+accel = "va"
+rank = 150
+encoder = "vaapih264enc"
+decoder = "vaapih264dec"
+parser = "h264parse"
+requires = ["vaapih264enc"]
+license = "LGPL-2.1-or-later"
+container = ["flv", "mpegts", "mp4", "matroska"]
+keyframe = { property = "keyframe-period", unit = "frames" }
+verified = []
+comment = "The pre 1.22 gstreamer-vaapi elements. Still installed on long term distributions."
+properties = { "rate-control" = "cbr", bitrate = { unit = "kbit", from = "video.bitrate_kbps" } }
+
+[[video]]
+id = "h264-qsv"
+codec = "h264"
+accel = "qsv"
+rank = 220
+encoder = "qsvh264enc"
+decoder = "qsvh264dec"
+download = "d3d11download"
+parser = "h264parse"
+requires = ["qsvh264enc"]
+license = "LGPL-2.1-or-later"
+container = ["flv", "mpegts", "mp4", "matroska"]
+keyframe = { property = "gop-size", unit = "frames" }
+verified = []
+comment = "Intel Quick Sync on Windows. On Linux the same silicon is reached through the `va` entry."
+properties = { "rate-control" = "cbr", bitrate = { unit = "kbit", from = "video.bitrate_kbps" }, "max-bitrate" = { unit = "kbit", from = "video.bitrate_kbps" }, "low-latency" = true, "b-frames" = 0 }
+
+[[video]]
+id = "av1-qsv"
+codec = "av1"
+accel = "qsv"
+rank = 200
+encoder = "qsvav1enc"
+decoder = "qsvav1dec"
+download = "d3d11download"
+parser = "av1parse"
+requires = ["qsvav1enc"]
+license = "LGPL-2.1-or-later"
+container = ["mpegts", "mp4", "matroska", "webm"]
+keyframe = { property = "gop-size", unit = "frames" }
+verified = []
+properties = { "rate-control" = "cbr", bitrate = { unit = "kbit", from = "video.bitrate_kbps" } }
+
+[[video]]
+id = "h264-amf"
+codec = "h264"
+accel = "amf"
+rank = 210
+encoder = "amfh264enc"
+decoder = "d3d12h264dec"
+download = "d3d12download"
+parser = "h264parse"
+requires = ["amfh264enc"]
+license = "LGPL-2.1-or-later"
+container = ["flv", "mpegts", "mp4", "matroska"]
+keyframe = { property = "gop-size", unit = "frames" }
+verified = []
+comment = "AMD on Windows. AMF takes its bitrate in bits per second, unlike NVENC and VA."
+properties = { "usage" = "low-latency", "rate-control" = "cbr", bitrate = { unit = "bit", from = "video.bitrate_kbps" }, "max-bitrate" = { unit = "bit", from = "video.bitrate_kbps" } }
+
+[[video]]
+id = "av1-amf"
+codec = "av1"
+accel = "amf"
+rank = 195
+encoder = "amfav1enc"
+decoder = "d3d12av1dec"
+download = "d3d12download"
+parser = "av1parse"
+requires = ["amfav1enc"]
+license = "LGPL-2.1-or-later"
+container = ["mpegts", "mp4", "matroska", "webm"]
+keyframe = { property = "gop-size", unit = "frames" }
+verified = []
+properties = { "usage" = "low-latency", "rate-control" = "cbr", bitrate = { unit = "bit", from = "video.bitrate_kbps" } }
+
+[[video]]
+id = "h264-videotoolbox"
+codec = "h264"
+accel = "videotoolbox"
+rank = 215
+encoder = "vtenc_h264_hw"
+decoder = "vtdec_hw"
+parser = "h264parse"
+requires = ["vtenc_h264_hw"]
+license = "LGPL-2.1-or-later"
+container = ["flv", "mpegts", "mp4", "matroska"]
+keyframe = { property = "max-keyframe-interval", unit = "frames" }
+verified = []
+comment = "Apple silicon and Intel Macs. `vtenc_h264_hw` fails to load rather than falling back to software, which is what we want from a hardware entry; the software VideoToolbox encoder is a separate entry below."
+properties = { bitrate = { unit = "kbit", from = "video.bitrate_kbps" }, realtime = true, "allow-frame-reordering" = false, "rate-control" = "cbr" }
+
+[[video]]
+id = "h265-videotoolbox"
+codec = "h265"
+accel = "videotoolbox"
+rank = 205
+encoder = "vtenc_h265_hw"
+decoder = "vtdec_hw"
+parser = "h265parse"
+requires = ["vtenc_h265_hw"]
+license = "LGPL-2.1-or-later"
+container = ["mpegts", "mp4", "matroska"]
+keyframe = { property = "max-keyframe-interval", unit = "frames" }
+verified = []
+properties = { bitrate = { unit = "kbit", from = "video.bitrate_kbps" }, realtime = true, "allow-frame-reordering" = false, "rate-control" = "cbr" }
+
+[[video]]
+id = "h264-videotoolbox-any"
+codec = "h264"
+accel = "videotoolbox"
+rank = 140
+encoder = "vtenc_h264"
+decoder = "vtdec"
+parser = "h264parse"
+requires = ["vtenc_h264"]
+license = "LGPL-2.1-or-later"
+container = ["flv", "mpegts", "mp4", "matroska"]
+keyframe = { property = "max-keyframe-interval", unit = "frames" }
+verified = []
+comment = "VideoToolbox without the hardware requirement. Ranked below x264 would be dishonest and above it would hide a silent software path, so it sits between the hardware entries and the software ones."
+properties = { bitrate = { unit = "kbit", from = "video.bitrate_kbps" }, realtime = true, "allow-frame-reordering" = false }
+
+[[video]]
+id = "h264-mediafoundation"
+codec = "h264"
+accel = "mediafoundation"
+rank = 180
+encoder = "mfh264enc"
+decoder = "d3d11h264dec"
+download = "d3d11download"
+parser = "h264parse"
+requires = ["mfh264enc"]
+license = "LGPL-2.1-or-later"
+container = ["flv", "mpegts", "mp4", "matroska"]
+keyframe = { property = "gop-size", unit = "frames" }
+verified = []
+comment = "Windows on any GPU, through whatever encoder MFT the driver registers."
+properties = { "rc-mode" = "cbr", bitrate = { unit = "kbit", from = "video.bitrate_kbps" }, "low-latency" = true, bframes = 0 }
+
+[[video]]
+id = "h264-d3d11"
+codec = "h264"
+accel = "d3d11"
+rank = 185
+decoder = "d3d11h264dec"
+download = "d3d11download"
+parser = "h264parse"
+requires = []
+license = "LGPL-2.1-or-later"
+container = ["flv", "mpegts", "mp4", "matroska"]
+verified = []
+comment = "Decode only. Windows DXVA on any GPU, paired with whatever encoder wins on its own."
+
+[[video]]
+id = "h264-d3d12"
+codec = "h264"
+accel = "d3d12"
+rank = 175
+decoder = "d3d12h264dec"
+download = "d3d12download"
+parser = "h264parse"
+requires = []
+license = "LGPL-2.1-or-later"
+container = ["flv", "mpegts", "mp4", "matroska"]
+verified = []
+comment = "Decode only. Ranked under d3d11 because the D3D12 elements leak on pipeline rebuild upstream (#5244) and the mixer rebuilds a source branch every time one comes back."
+
+[[video]]
+id = "h264-v4l2"
+codec = "h264"
+accel = "v4l2"
+rank = 160
+encoder = "v4l2h264enc"
+decoder = "v4l2h264dec"
+parser = "h264parse"
+requires = ["v4l2h264enc"]
+license = "LGPL-2.1-or-later"
+container = ["flv", "mpegts", "mp4", "matroska"]
+verified = []
+comment = "Raspberry Pi 4 and other V4L2 stateful SoCs. The Raspberry Pi 5 has no hardware video encoder at all: on a Pi 5 this entry is absent and the programme is encoded by x264 on the CPU, which is the reason the older board is the easier target for a mixer. v4l2h264enc carries its bitrate and GOP inside an `extra-controls` structure rather than as plain properties, so there is nothing here to set; the defaults are what the driver gives."
+
+[[video]]
+id = "h264-vulkan"
+codec = "h264"
+accel = "vulkan"
+rank = 20
+encoder = "vulkanh264enc"
+decoder = "vulkanh264dec"
+download = "vulkandownload"
+parser = "h264parse"
+requires = ["vulkanh264enc"]
+license = "LGPL-2.1-or-later"
+container = ["flv", "mpegts", "mp4", "matroska"]
+verified = []
+comment = "New in GStreamer 1.26 and ranked far below software on purpose. It is here so somebody with the hardware can raise its rank, run `gmx codec test`, and send the report that earns it a promotion."
+properties = { bitrate = { unit = "kbit", from = "video.bitrate_kbps" } }
+
+# ---------------------------------------------------------------------------
+# Software: always present, and what a machine with no GPU gets
+# ---------------------------------------------------------------------------
+
+[[video]]
+id = "h264-software-x264"
+codec = "h264"
+accel = "software"
+rank = 72
+encoder = "x264enc"
+decoder = "avdec_h264"
+parser = "h264parse"
+requires = []
+license = "GPL-2.0-or-later"
+container = ["flv", "mpegts", "mp4", "matroska"]
+keyframe = { property = "key-int-max", unit = "frames" }
+verified = []
+comment = "Preferred over openh264 where it is installed, and never bundled: x264 is GPL and the operator installs gst-plugins-ugly themselves. B frames are off everywhere because they cost latency and buy little at live bitrates. `byte-stream = false` because the FLV muxer wants AVC sample format."
+properties = { "speed-preset" = "veryfast", tune = "zerolatency", pass = "cbr", bitrate = { unit = "kbit", from = "video.bitrate_kbps" }, bframes = 0, aud = false, "byte-stream" = false, threads = { unit = "count", from = "cpu.count" } }
+
+[[video]]
+id = "h264-software-openh264"
+codec = "h264"
+accel = "software"
+rank = 64
+encoder = "openh264enc"
+decoder = "openh264dec"
+parser = "h264parse"
+requires = []
+license = "BSD-2-Clause"
+container = ["flv", "mpegts", "mp4", "matroska"]
+keyframe = { property = "gop-size", unit = "frames" }
+verified = []
+comment = "The permissive fallback. Cisco's openh264 is BSD licensed, so it ships in every build including a closed custom one, and it is what the GPU free CI runner exercises on every commit."
+properties = { complexity = "low", "rate-control" = "bitrate", bitrate = { unit = "bit", from = "video.bitrate_kbps" }, "multi-thread" = { unit = "count", from = "cpu.count" } }
+
+[[video]]
+id = "h264-software-decode"
+codec = "h264"
+accel = "software"
+rank = 70
+decoder = "avdec_h264"
+parser = "h264parse"
+requires = []
+license = "LGPL-2.1-or-later"
+container = ["flv", "mpegts", "mp4", "matroska"]
+verified = []
+comment = "Decode only, so a machine whose only encoder is hardware still has an honest software decoder underneath it."
+
+[[video]]
+id = "av1-software"
+codec = "av1"
+accel = "software"
+rank = 60
+encoder = "svtav1enc"
+decoder = "dav1ddec"
+parser = "av1parse"
+requires = []
+license = "BSD-3-Clause"
+container = ["mpegts", "mp4", "matroska", "webm"]
+keyframe = { property = "intra-period-length", unit = "frames" }
+verified = []
+comment = "SVT-AV1 and dav1d, both permissively licensed. `preset` is a speed number on SVT-AV1, not a name: 10 is the fastest setting that still looks like AV1 at live bitrates."
+properties = { preset = 10, "target-bitrate" = { unit = "kbit", from = "video.bitrate_kbps" }, "logical-processors" = { unit = "count", from = "cpu.count" } }
+
+[[video]]
+id = "h265-software"
+codec = "h265"
+accel = "software"
+rank = 50
+encoder = "x265enc"
+decoder = "avdec_h265"
+parser = "h265parse"
+requires = []
+license = "GPL-2.0-or-later"
+container = ["mpegts", "mp4", "matroska"]
+keyframe = { property = "key-int-max", unit = "frames" }
+verified = []
+comment = "GPL like x264, and much slower. Present so an operator who wants HEVC out of a CPU can have it, not because anyone should."
+properties = { "speed-preset" = "ultrafast", tune = "zerolatency", bitrate = { unit = "kbit", from = "video.bitrate_kbps" } }
+
+# ---------------------------------------------------------------------------
+# Audio
+# ---------------------------------------------------------------------------
+
+[[audio]]
+id = "aac-fdk"
+codec = "aac"
+accel = "software"
+rank = 120
+encoder = "fdkaacenc"
+decoder = "avdec_aac"
+parser = "aacparse"
+requires = []
+license = "FDK-AAC"
+container = ["flv", "mpegts", "mp4", "matroska"]
+priming_delay_ms = 43
+verified = []
+comment = "2048 samples of priming delay at 48 kHz, measured on air with browser/dev/tail-offset.sh: a file whose flash and beep coincide came out with the beep 43 ms late, whatever the video encoder. The Fraunhofer licence is not redistributable, so this entry is never bundled."
+properties = { bitrate = { unit = "bit", from = "audio.bitrate_kbps" }, "rate-control" = "cbr", "perfect-timestamp" = true }
+
+[[audio]]
+id = "aac-avenc"
+codec = "aac"
+accel = "software"
+rank = 100
+encoder = "avenc_aac"
+decoder = "avdec_aac"
+parser = "aacparse"
+requires = []
+license = "LGPL-2.1-or-later"
+container = ["flv", "mpegts", "mp4", "matroska"]
+priming_delay_ms = 21
+verified = []
+comment = "1024 samples of priming at 48 kHz, measured the same way. This is the figure mixer.rs used to hold in a match arm; the mixer now takes it from here and holds the video back by it at the encoder's own pad."
+properties = { bitrate = { unit = "bit", from = "audio.bitrate_kbps" }, "perfect-timestamp" = true }
+
+[[audio]]
+id = "aac-vo"
+codec = "aac"
+accel = "software"
+rank = 80
+encoder = "voaacenc"
+decoder = "avdec_aac"
+parser = "aacparse"
+requires = []
+license = "Apache-2.0"
+container = ["flv", "mpegts", "mp4", "matroska"]
+priming_delay_ms = 21
+verified = []
+comment = "Assumed to behave like a standard AAC-LC encoder. Not measured; if you have it installed, run `gmx codec test aac-vo` and send the number."
+properties = { bitrate = { unit = "bit", from = "audio.bitrate_kbps" }, "perfect-timestamp" = true }
+
+[[audio]]
+id = "aac-software-decode"
+codec = "aac"
+accel = "software"
+rank = 90
+decoder = "faad"
+parser = "aacparse"
+requires = []
+license = "GPL-2.0-or-later"
+container = ["flv", "mpegts", "mp4", "matroska"]
+verified = []
+comment = "Decode only, for a build without gst-libav."
+
+[[audio]]
+id = "opus-software"
+codec = "opus"
+accel = "software"
+rank = 40
+encoder = "opusenc"
+decoder = "opusdec"
+parser = "opusparse"
+requires = []
+license = "BSD-3-Clause"
+container = ["mpegts", "matroska", "webm", "ogg"]
+priming_delay_ms = 0
+verified = []
+comment = "Ranked below AAC because RTMP cannot carry Opus. It is here for the SRT and WHIP outputs: raise its rank, or pin `[codecs] container = \"matroska\"`, and the programme is Opus with no rebuild. Opus reports its own lookahead in the pipeline latency, so there is no priming delay to compensate."
+properties = { bitrate = { unit = "bit", from = "audio.bitrate_kbps" }, "frame-size" = "10", "inband-fec" = false, bandwidth = "fullband" }
+
+# ---------------------------------------------------------------------------
+# Containers
+#
+# The output kind picks its container; the catalogue says which muxer that
+# container is and what it can carry, so a codec and a destination that cannot
+# agree are caught at selection rather than at the first frame.
+# ---------------------------------------------------------------------------
+
+[[container]]
+name = "flv"
+muxer = "flvmux"
+video = ["h264"]
+audio = ["aac"]
+streamable = true
+properties = { streamable = true, "start-time-selection" = "first", "enforce-increasing-timestamps" = true, "skip-backwards-streams" = true }
+
+[[container]]
+name = "mpegts"
+muxer = "mpegtsmux"
+video = ["h264", "h265", "av1"]
+audio = ["aac", "opus"]
+streamable = true
+
+[[container]]
+name = "mp4"
+muxer = "mp4mux"
+video = ["h264", "h265", "av1"]
+audio = ["aac", "opus"]
+streamable = false
+properties = { "faststart" = true }
+
+[[container]]
+name = "matroska"
+muxer = "matroskamux"
+video = ["h264", "h265", "av1"]
+audio = ["aac", "opus"]
+streamable = true
+properties = { streamable = true }
+
+[[container]]
+name = "webm"
+muxer = "webmmux"
+video = ["av1"]
+audio = ["opus"]
+streamable = true
+properties = { streamable = true }
+
+[[container]]
+name = "ogg"
+muxer = "oggmux"
+video = []
+audio = ["opus"]
+streamable = true
+
+# ---------------------------------------------------------------------------
+# Graphics: the compositor and the conversion backend
+#
+# The canvas contract at the plugin boundary does not change. What changes is
+# what the core does after the boundary: with a GPU entry a frame is uploaded
+# once and stays in device memory through conversion, compositing and into the
+# encoder, and comes back to system memory only for the multiview JPEG and for
+# a software encoder.
+#
+# Every GPU compositor here is rank none in GStreamer 1.28, which means
+# GStreamer itself will not auto select it. `glvideomixer` has open bugs on
+# dynamic pad add and remove (#3833), on DMA memory between GPU and CPU
+# (#3457) and a crash with `gltransformation` (#4515). So the software entry
+# stays the default until a GPU entry carries a `verified` record for this
+# platform, earned by `gmx codec test` plus a 60 minute add and remove soak.
+# Pinning `[hardware] graphics = "gl"` overrides that and is how the soak gets
+# run in the first place.
+# ---------------------------------------------------------------------------
+
+[[graphics]]
+id = "cuda"
+accel = "cuda"
+rank = 240
+compositor = "cudacompositor"
+convert = "cudaconvert"
+upload = "cudaupload"
+download = "cudadownload"
+memory = "cuda"
+requires = ["cudacompositor", "cudaconvert"]
+license = "LGPL-2.1-or-later"
+verified = []
+
+[[graphics]]
+id = "gl"
+accel = "gl"
+rank = 200
+compositor = "glvideomixer"
+convert = "glcolorconvert"
+upload = "glupload"
+download = "gldownload"
+memory = "gl"
+requires = ["glvideomixer", "glcolorconvert", "gldownload"]
+license = "LGPL-2.1-or-later"
+verified = []
+comment = "DMABUF import on Linux, IOSurface on macOS. `glvideomixer` is a bin that uploads on each of its own sink pads, so a source still arrives in system memory and nothing above the compositor has to know. One GL display is shared across every pipeline in the process, which is what stopped a descriptor leak here once already."
+
+[[graphics]]
+id = "va"
+accel = "va"
+rank = 200
+compositor = "vacompositor"
+convert = "vapostproc"
+upload = "vapostproc"
+download = "vapostproc"
+memory = "va"
+requires = ["vacompositor", "vapostproc"]
+license = "LGPL-2.1-or-later"
+verified = []
+
+[[graphics]]
+id = "d3d12"
+accel = "d3d12"
+rank = 190
+compositor = "d3d12compositor"
+convert = "d3d12convert"
+upload = "d3d12upload"
+download = "d3d12download"
+memory = "d3d12"
+requires = ["d3d12compositor", "d3d12convert"]
+license = "LGPL-2.1-or-later"
+verified = []
+comment = "Windows. The D3D12 device has to be shared across pipelines through need-context or the zero copy quietly becomes a copy, and the elements leak on pipeline rebuild upstream (#5244), which a mixer does every time a source comes back. Promotion waits on the soak."
+
+[[graphics]]
+id = "d3d11"
+accel = "d3d11"
+rank = 185
+compositor = "d3d11compositor"
+convert = "d3d11convert"
+upload = "d3d11upload"
+download = "d3d11download"
+memory = "d3d11"
+requires = ["d3d11compositor", "d3d11convert"]
+license = "LGPL-2.1-or-later"
+verified = []
+
+[[graphics]]
+id = "software"
+accel = "software"
+rank = 64
+compositor = "compositor"
+convert = "videoconvert"
+memory = "system"
+requires = ["compositor", "videoconvert"]
+license = "LGPL-2.1-or-later"
+verified = [{ platform = "any", driver = "cpu", gstreamer = "1.24+", by = "project CI", date = "2026-09-14", report = "the default path on every runner, GPU free included" }]
+comment = "Always present, and what a Pi or a five year old laptop gets. It is what the mixer has always done: `compositor` in I420 and one `videoconvert` in front of the encoder."
