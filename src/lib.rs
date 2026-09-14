@@ -27,6 +27,7 @@ pub mod output;
 pub mod probe;
 pub mod snapshot;
 pub mod state;
+pub mod ui;
 
 use anyhow::{Context, Result};
 use clap::{Parser, Subcommand};
@@ -160,6 +161,8 @@ pub async fn run() -> Result<()> {
         None => info!("control API is open: no token configured"),
     }
     let cfg_media = cfg.media.clone();
+    // Where the web UI and any plugin panels are read from.
+    ui::configure(cfg.control.ui_dir.as_deref(), cfg.control.plugins_dir.as_deref());
 
     let (mut mix, handle, cmd_rx, mut bus_rx) = mixer::Mixer::build(cfg)?;
     mix.persist_runtime_to(Config::runtime_store_path(&config_path));
