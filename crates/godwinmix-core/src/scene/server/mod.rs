@@ -392,7 +392,8 @@ impl SceneServer {
         // batch is one step: that is what "applies on one frame or not at all"
         // means for somebody pressing Ctrl+Z afterwards.
         inner.redo.clear();
-        inner.undo.push(p.inverse());
+        let step = p.inverse();
+        inner.push_undo(step);
         inner.save();
         drop(inner);
         let _ = self.patches.send(p.clone());
@@ -466,9 +467,11 @@ impl SceneServer {
         inner.doc = working;
         // The step that undoes what we just did goes on the other stack.
         if back {
+            // Bounded by the undo stack it came off, so no trim is needed here.
             inner.redo.push(p.inverse());
         } else {
-            inner.undo.push(p.inverse());
+            let step = p.inverse();
+            inner.push_undo(step);
         }
         inner.group = None;
         inner.save();
@@ -637,10 +640,20 @@ impl Inner {
             let older = self.undo.pop().expect("just checked");
             let mut merged = inverse;
             merged.merge(&older);
-            self.undo.push(merged);
+            self.push_undo(merged);
         } else {
-            self.undo.push(inverse);
+            self.push_undo(inverse);
         }
+    }
+
+    /// One step onto the undo stack, and the stack kept to its depth.
+    ///
+    /// Every push goes through here. A transaction's commit used to push its
+    /// one step directly and skip the trim, so a core that ran on transactions
+    /// (the designer's drag does, and so does every `scene.transaction`) kept
+    /// every step it had ever made.
+    fn push_undo(&mut self, step: Patch) {
+        self.undo.push(step);
         if self.undo.len() > UNDO_DEPTH {
             self.undo.remove(0);
         }

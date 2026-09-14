@@ -97,7 +97,9 @@ struct Inner {
 
 /// Everything that is not a source, kept running.
 pub struct Supervisor {
-    inner: Mutex<Inner>,
+    /// An `Arc` so that a correction can be made from a thread that does not
+    /// hold the supervisor: see `adopt`.
+    inner: Arc<Mutex<Inner>>,
     canvas: CanvasCaps,
     /// `[plugins.<name>]` from the operator's config, by plugin name.
     settings: Mutex<BTreeMap<String, Params>>,
@@ -108,7 +110,10 @@ pub struct Supervisor {
 impl Supervisor {
     pub fn new(canvas: CanvasCaps, settings: BTreeMap<String, Params>) -> Arc<Supervisor> {
         Arc::new(Supervisor {
-            inner: Mutex::new(Inner { instances: BTreeMap::new(), adopted: BTreeMap::new() }),
+            inner: Arc::new(Mutex::new(Inner {
+                instances: BTreeMap::new(),
+                adopted: BTreeMap::new(),
+            })),
             canvas,
             settings: Mutex::new(settings),
             mixer: Mutex::new(None),
@@ -272,7 +277,7 @@ impl Supervisor {
                 .collect()
         };
         for id in sources {
-            self.remove_source(&id);
+            self.remove_source(instance, &id);
         }
     }
 
@@ -535,8 +540,7 @@ impl Supervisor {
             match named_id(params).or_else(|| {
                 params.get("name").and_then(Value::as_str).map(slug)
             }) {
-                Some(id) if self.inner.lock().adopted.contains_key(&id) => self.remove_source(&id),
-                Some(id) => debug!(%instance, %id, "a device let go of a source it did not add"),
+                Some(id) => self.remove_source(instance, &id),
                 None => warn!(%instance, %name, "a device said something left but not what"),
             }
             return;
@@ -579,21 +583,75 @@ impl Supervisor {
             warn!(%instance, %id, "a device found a source but this core has no mixer to put it on");
             return;
         };
-        match mixer.send(Command::AddSource(Box::new(cfg), None)) {
-            Ok(()) => {
-                self.inner.lock().adopted.insert(id.clone(), instance.to_string());
-                info!(%instance, %id, name = %candidate.name, "a device added a source");
-            }
-            Err(e) => warn!(%instance, %id, ?e, "the mixer would not take a device's source"),
+        // Reserved before the command is sent and given back if the mixer
+        // will not have it. Recording it after `send` returned `Ok` recorded
+        // that the command reached a queue, which is not the same as the mixer
+        // accepting it: a candidate with a duplicate id or an address the
+        // pipeline cannot build left the supervisor believing it owned a
+        // source that does not exist, and `free_id` skipped that name for the
+        // life of the core.
+        let (ack, told) = tokio::sync::oneshot::channel();
+        self.inner.lock().adopted.insert(id.clone(), instance.to_string());
+        if let Err(e) = mixer.send(Command::AddSource(Box::new(cfg), Some(ack))) {
+            self.inner.lock().adopted.remove(&id);
+            warn!(%instance, %id, ?e, "the mixer would not take a device's source");
+            return;
+        }
+        // On a thread of its own, because building a source is a pipeline and
+        // the caller here is the supervisor's pump.
+        let table = self.inner.clone();
+        let (who, what, called) = (instance.to_string(), id.clone(), candidate.name.clone());
+        let watching = std::thread::Builder::new()
+            .name(format!("adopt-{id}"))
+            .spawn(move || match told.blocking_recv() {
+                Ok(Ok(())) => info!(instance = %who, id = %what, name = %called, "a device added a source"),
+                answer => {
+                    table.lock().adopted.remove(&what);
+                    warn!(
+                        instance = %who, id = %what, ?answer,
+                        "the mixer would not take a device's source"
+                    );
+                }
+            });
+        if watching.is_err() {
+            warn!(%instance, %id, "no thread to wait for the mixer's answer; the source was sent anyway");
         }
     }
 
-    fn remove_source(&self, id: &str) {
-        self.inner.lock().adopted.remove(id);
+    /// Take away a source a device put on, at that same device's asking.
+    ///
+    /// The ownership check is the point. `adopted` records which instance
+    /// added which source so that a device may not remove a camera an operator
+    /// added by hand; without checking it here, any device plugin could remove
+    /// any adopted source, including one another plugin owns.
+    fn remove_source(&self, instance: &str, id: &str) {
+        {
+            let mut inner = self.inner.lock();
+            match inner.adopted.get(id) {
+                Some(owner) if owner == instance => {}
+                Some(owner) => {
+                    warn!(
+                        %instance, %id, %owner,
+                        "a device asked to remove a source another plugin added; refused"
+                    );
+                    return;
+                }
+                None => {
+                    warn!(
+                        %instance, %id,
+                        "a device asked to remove a source it did not add; a source an \
+                         operator added is removed with source.remove, not over the plugin \
+                         channel"
+                    );
+                    return;
+                }
+            }
+            inner.adopted.remove(id);
+        }
         let Some(mixer) = self.mixer.lock().clone() else { return };
         match mixer.send(Command::RemoveSource(id.to_string(), None)) {
-            Ok(()) => info!(%id, "a device let go of a source"),
-            Err(e) => warn!(%id, ?e, "the mixer would not let go of a device's source"),
+            Ok(()) => info!(%instance, %id, "a device let go of a source"),
+            Err(e) => warn!(%instance, %id, ?e, "the mixer would not let go of a device's source"),
         }
     }
 
@@ -634,7 +692,7 @@ impl Supervisor {
             "source.remove" => {
                 match params.get("id").and_then(Value::as_str) {
                     Some(id) => {
-                        self.remove_source(&slug(id));
+                        self.remove_source(instance, &slug(id));
                         Ok(json!({"removed": true}))
                     }
                     None => Err("source.remove takes an id".to_string()),
