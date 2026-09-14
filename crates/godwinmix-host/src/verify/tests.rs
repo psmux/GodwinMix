@@ -187,6 +187,21 @@ fn the_labels_say_what_was_and_was_not_checked() {
 }
 
 #[test]
+fn what_was_asked_for_and_what_it_resolved_to_are_kept_apart() {
+    // An update refetches `source`. If the tag had been written there, an
+    // unpinned install would refetch the release it already has for ever,
+    // which is the bug this field split exists to prevent.
+    let trust = Trust::unsigned("psmux/gmx-ndi", "no signature").resolved_to("v1.2.0");
+    assert_eq!(trust.source, "psmux/gmx-ndi");
+    assert_eq!(trust.resolved, "v1.2.0");
+    assert_eq!(trust.origin(), "psmux/gmx-ndi (v1.2.0)");
+
+    // A source that resolved to itself reads as itself.
+    let path = Trust::unsigned("/opt/gmx/clock", "a local path");
+    assert_eq!(path.origin(), "/opt/gmx/clock");
+}
+
+#[test]
 fn a_trust_record_survives_a_round_trip_to_disk() {
     let dir = temp("record");
     let trust = Trust::unsigned("./clock", "a local path");

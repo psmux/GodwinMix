@@ -181,9 +181,9 @@ pub fn fetch_npm(package: &str, version: Option<&str>, ctx: &FetchCtx) -> Result
     )?;
     let tarball = out
         .lines()
+        .rev()
         .map(str::trim)
-        .filter(|l| l.ends_with(".tgz"))
-        .next_back()
+        .find(|l| l.ends_with(".tgz"))
         .map(|name| pack.join(name))
         .context("npm pack said nothing about what it wrote")?;
     let unpacked = ctx.staging.join("unpacked");

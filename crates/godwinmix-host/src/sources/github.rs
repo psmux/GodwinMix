@@ -70,7 +70,13 @@ pub fn fetch(
     let mut notes =
         vec![format!("{owner}/{repo} {tag}: {asset} ({} KB)", bytes / 1024)];
 
-    let origin = format!("{owner}/{repo}@{tag}");
+    // What to ask for again, which is not what this turned out to be: an
+    // unpinned add must stay unpinned or `gmx plugin update` would refetch the
+    // release it already has, forever.
+    let asked = match version {
+        Some(v) => format!("{owner}/{repo}@{v}"),
+        None => format!("{owner}/{repo}"),
+    };
     let trust = match archive::signature_for(&names, &asset) {
         Some(sig_name) => {
             let sig_url = assets
@@ -92,12 +98,13 @@ pub fn fetch(
             } else {
                 notes.push("cosign verified the signature".into());
             }
-            Trust::signed(&origin, signature)
+            Trust::signed(&asked, signature).resolved_to(&tag)
         }
         None => Trust::unsigned(
-            &origin,
+            &asked,
             format!("{tag} has no {asset}.sigstore.json beside the asset"),
-        ),
+        )
+        .resolved_to(&tag),
     };
 
     let unpacked = ctx.staging.join("unpacked");

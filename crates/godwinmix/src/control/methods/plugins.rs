@@ -400,7 +400,7 @@ fn record(installed: &loader::Installed) -> PluginRecord {
             .trust
             .explanation()
             .replace("<name>", installed.name()),
-        source: installed.trust.source.clone(),
+        source: installed.trust.origin(),
         instances,
     }
 }

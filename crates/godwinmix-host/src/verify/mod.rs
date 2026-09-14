@@ -10,11 +10,22 @@
 //!
 //! ## Why the signature check is written here rather than taken from a crate
 //!
-//! The `sigstore` crate is the obvious answer and it was measured rather than
-//! guessed: it brings its own TUF client, an X.509 stack, a protobuf runtime
-//! and the Rekor and Fulcio API models, and the release binary grew well past
-//! the 3 MB this project allows a single feature to cost. So the check here is
-//! in two levels, and the level reached is recorded rather than glossed over:
+//! The `sigstore` crate is the obvious answer, and it was measured rather than
+//! guessed. Added to this crate at 0.14 with `verify` and `sigstore-trust-root`
+//! on, and called from a path the binary actually reaches so that fat LTO
+//! cannot strip it, the release binary went from 15,512,032 bytes to
+//! 21,569,952: 5.78 MiB for one check, against the 3 MB this project allows a
+//! single feature to cost. It brings its own TUF client, an X.509 stack, a
+//! protobuf runtime, the Rekor and Fulcio API models, and aws-lc-rs beside the
+//! rustls already here.
+//!
+//! It also does not compile into this workspace as it stands. Its transitive
+//! `typed_path` carries a blanket `AsRef` impl for `Cow<'_, str>` that breaks
+//! inference in three untouched lines of `godwinmix-core`, so taking it would
+//! mean editing code that has nothing to do with signatures.
+//!
+//! So the check here is in two levels, and the level reached is recorded
+//! rather than glossed over:
 //!
 //!   * `cosign` on PATH: `cosign verify-blob` does the full cryptographic
 //!     verification, certificate chain to Fulcio's root and inclusion in the
@@ -40,9 +51,17 @@ use std::path::Path;
 /// restarts still knows, and carried in `plugin.list` and `plugin.describe`.
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
 pub struct Trust {
-    /// Where it was fetched from, as the operator typed it.
+    /// Where it was fetched from, as the operator typed it. This is what an
+    /// update refetches, so it must not carry the version that was resolved:
+    /// `psmux/gmx-ndi` asked again finds the newest release, and
+    /// `psmux/gmx-ndi@1.2.0` asked again finds 1.2.0 forever, which is what a
+    /// pin is for and what an unpinned install must not become.
     #[serde(default)]
     pub source: String,
+    /// What that turned out to be: the tag, the version, the commit. For the
+    /// report line and for `plugin.describe`, never for refetching.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub resolved: String,
     /// The signature, when there was one.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub signature: Option<Signature>,
@@ -57,13 +76,34 @@ impl Trust {
     pub fn unsigned(source: impl Into<String>, why: impl Into<String>) -> Self {
         Self {
             source: source.into(),
+            resolved: String::new(),
             signature: None,
             unsigned_because: Some(why.into()),
         }
     }
 
     pub fn signed(source: impl Into<String>, signature: Signature) -> Self {
-        Self { source: source.into(), signature: Some(signature), unsigned_because: None }
+        Self {
+            source: source.into(),
+            resolved: String::new(),
+            signature: Some(signature),
+            unsigned_because: None,
+        }
+    }
+
+    /// Record what the source turned out to be, keeping what was asked for.
+    pub fn resolved_to(mut self, resolved: impl Into<String>) -> Self {
+        self.resolved = resolved.into();
+        self
+    }
+
+    /// What was asked for, and what it turned out to be when those differ.
+    pub fn origin(&self) -> String {
+        if self.resolved.is_empty() || self.resolved == self.source {
+            self.source.clone()
+        } else {
+            format!("{} ({})", self.source, self.resolved)
+        }
     }
 
     pub fn is_signed(&self) -> bool {
@@ -305,6 +345,10 @@ fn number_or_string(v: &serde_json::Value) -> Option<u64> {
     v.as_u64().or_else(|| v.as_str().and_then(|s| s.parse().ok()))
 }
 
+/// What cosign said, when there was a cosign to ask: the identity and the
+/// issuer it matched, or a refusal.
+type CosignAnswer = Result<(Option<String>, Option<String>), Refused>;
+
 /// Run `cosign verify-blob` when cosign is installed.
 ///
 /// `None` means there is no cosign to run, which is not a failure: the caller
@@ -313,7 +357,7 @@ fn cosign_verify(
     artefact: &Path,
     bundle: &Path,
     identity: Option<&Identity>,
-) -> Option<Result<(Option<String>, Option<String>), Refused>> {
+) -> Option<CosignAnswer> {
     if std::env::var_os("GMX_NO_COSIGN").is_some() {
         return None;
     }

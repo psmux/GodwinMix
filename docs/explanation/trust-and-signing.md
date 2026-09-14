@@ -26,11 +26,32 @@ CI's signature, and this page is what the docs point at.
 ## The two levels, and why there are two
 
 The obvious way to check a sigstore bundle is the `sigstore` crate. That was
-measured rather than assumed. It brings its own TUF client, an X.509 stack, a
-protobuf runtime and the Rekor and Fulcio API models with it, and the release
-binary grew well past the 3 MB this project allows any one feature to cost. The
-core has to fit on a Raspberry Pi and start fast; a verifier that costs a fifth
-of the binary to check a file most operators install once is the wrong trade.
+measured rather than assumed, and the numbers are here so the decision can be
+argued with:
+
+| Build | Release binary |
+|---|---|
+| before any of this | 14,774,544 bytes |
+| with the check that shipped | 15,512,032 bytes |
+| with the `sigstore` crate instead | 21,569,952 bytes |
+
+The crate was added at 0.14 with `verify` and `sigstore-trust-root` on, and
+called from a path the binary actually reaches, because fat LTO strips a
+verifier nothing calls and a measurement of stripped code is not a measurement.
+It costs 5.78 MiB for one check, against the 3 MB this project allows any one
+feature. It brings its own TUF client, an X.509 stack, a protobuf runtime, the
+Rekor and Fulcio API models, and aws-lc-rs beside the rustls that is already
+here.
+
+It also does not compile into this workspace as it stands. Its transitive
+`typed_path` dependency carries a blanket `AsRef` implementation for
+`Cow<'_, str>` that breaks type inference in three untouched lines of the
+engine, so adopting it would mean editing code that has nothing to do with
+signatures.
+
+The core has to fit on a Raspberry Pi and start fast. A verifier that costs a
+third of the binary, to check a file most operators install once, is the wrong
+trade.
 
 So the check is in two levels, and the level reached is recorded rather than
 glossed over.

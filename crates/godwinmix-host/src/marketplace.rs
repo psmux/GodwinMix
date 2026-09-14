@@ -361,7 +361,7 @@ pub fn resolve(name: &str, only: &[String]) -> Option<(Marketplace, Listing)> {
         .into_iter()
         .filter_map(|m| m.find(name).cloned().map(|l| (m, l)))
         .collect();
-    found.sort_by(|a, b| b.1.tier.cmp(&a.1.tier));
+    found.sort_by_key(|found| std::cmp::Reverse(found.1.tier));
     found.into_iter().next()
 }
 
