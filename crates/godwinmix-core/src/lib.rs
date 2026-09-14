@@ -46,6 +46,7 @@ pub mod caps;
 pub mod catalogue;
 pub mod config;
 pub mod convert;
+pub mod encoder;
 pub mod gstutil;
 pub mod input;
 pub mod media;
