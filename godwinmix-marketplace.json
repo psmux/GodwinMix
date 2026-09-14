@@ -8,5 +8,81 @@
     "identity_regexp": "^https://github.com/psmux/godwinmix/.github/workflows/.+",
     "oidc_issuer": "https://token.actions.githubusercontent.com"
   },
-  "plugins": []
+  "plugins": [
+    {
+      "name": "director",
+      "source": "./plugins/director",
+      "description": "An automatic director: rule based out of the box, and able to consult a model when one is configured",
+      "tier": "gold",
+      "kinds": [
+        "service"
+      ],
+      "license": "Apache-2.0",
+      "repository": "https://github.com/psmux/godwinmix/tree/main/plugins/director",
+      "versions": [
+        {
+          "version": "0.2.0",
+          "api": 1,
+          "platforms": [
+            "linux-x86_64",
+            "linux-aarch64",
+            "macos-aarch64",
+            "macos-x86_64",
+            "windows-x86_64"
+          ],
+          "signed": true
+        }
+      ]
+    },
+    {
+      "name": "osc",
+      "source": "./plugins/osc",
+      "description": "OSC in and out: take, fader and mute from any control surface, tally and programme back out",
+      "tier": "gold",
+      "kinds": [
+        "service"
+      ],
+      "license": "Apache-2.0",
+      "repository": "https://github.com/psmux/godwinmix/tree/main/plugins/osc",
+      "versions": [
+        {
+          "version": "0.2.0",
+          "api": 1,
+          "platforms": [
+            "linux-x86_64",
+            "linux-aarch64",
+            "macos-aarch64",
+            "macos-x86_64",
+            "windows-x86_64"
+          ],
+          "signed": true
+        }
+      ]
+    },
+    {
+      "name": "tally",
+      "source": "./plugins/tally",
+      "description": "TSL UMD v5 tally: one lamp per source, over UDP or TCP, because tally lamps do not speak JSON",
+      "tier": "gold",
+      "kinds": [
+        "service"
+      ],
+      "license": "Apache-2.0",
+      "repository": "https://github.com/psmux/godwinmix/tree/main/plugins/tally",
+      "versions": [
+        {
+          "version": "0.2.0",
+          "api": 1,
+          "platforms": [
+            "linux-x86_64",
+            "linux-aarch64",
+            "macos-aarch64",
+            "macos-x86_64",
+            "windows-x86_64"
+          ],
+          "signed": true
+        }
+      ]
+    }
+  ]
 }
