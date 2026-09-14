@@ -72,9 +72,9 @@ export class SheetPainter {
     this.pending = true;
     try {
       const blob = new Blob([frame.jpeg], { type: "image/jpeg" });
-      const bitmap = await createImageBitmap(blob);
-      if (this.bitmap) this.bitmap.close();
-      this.bitmap = bitmap;
+      const decoded = await decode(blob);
+      if (this.bitmap && this.bitmap.close) this.bitmap.close();
+      this.bitmap = decoded;
       this._paint();
     } catch {
       // A truncated frame is not worth a message: the next one is along.
@@ -99,10 +99,38 @@ export class SheetPainter {
   }
 
   destroy() {
-    if (this.bitmap) this.bitmap.close();
+    if (this.bitmap && this.bitmap.close) this.bitmap.close();
     this.bitmap = null;
     this.targets.clear();
   }
+}
+
+/**
+ * One JPEG to something `drawImage` accepts.
+ *
+ * `createImageBitmap` is the one to use: it decodes off the main thread and the
+ * result can be closed, so a wall of tiles at eight frames a second does not
+ * leave a hundred decoded pictures for the collector. WebKit before Safari 15
+ * has no such thing, and the Tauri window on an older macOS is exactly that,
+ * so an <img> over an object URL stands in. Same interface to the caller.
+ */
+function decode(blob) {
+  if (typeof createImageBitmap === "function") return createImageBitmap(blob);
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(blob);
+    const img = new Image();
+    img.onload = () => {
+      // Revoking inside onload, never before: revoking early blanks the image
+      // on some builds and leaks one URL per frame on the rest.
+      URL.revokeObjectURL(url);
+      resolve(img);
+    };
+    img.onerror = () => {
+      URL.revokeObjectURL(url);
+      reject(new Error("the frame did not decode"));
+    };
+    img.src = url;
+  });
 }
 
 /**
