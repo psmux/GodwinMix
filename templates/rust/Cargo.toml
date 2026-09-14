@@ -1,0 +1,26 @@
+[package]
+name = "{{name}}"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.82"
+description = "{{description}}"
+license = "{{license}}"
+authors = ["{{author}}"]
+
+[dependencies]
+# The SDK. Once it is published this becomes a version, not a path.
+godwinmix-sdk = { path = "../../crates/godwinmix-sdk" }
+serde_json = "1"
+
+[features]
+default = []
+# Turn this on for the unixfd and shm transports, which are Linux and macOS
+# only and need GStreamer. Add them to `transports` in gmx-plugin.toml too.
+gst = ["godwinmix-sdk/gst"]
+
+[profile.release]
+# A plugin is a process the core starts. Small and quick to load matters more
+# than the last percent of throughput, which is spent in the media loop anyway.
+opt-level = 2
+lto = "thin"
+strip = true
