@@ -222,6 +222,7 @@ mod tests {
             platforms: Vec::new(),
             placements: vec!["sidecar".into()],
             process: "per-instance".into(),
+            wasi: Vec::new(),
         };
         let manifest = Manifest {
             plugin: meta,

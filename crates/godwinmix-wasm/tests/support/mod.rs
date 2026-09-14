@@ -62,9 +62,16 @@ impl Core {
         mixer.start().expect("the programme starts");
 
         let supervisor = Supervisor::new(mixer.canvas().clone(), settings);
-        for (provide, why) in supervisor.start_all() {
-            panic!("`{provide}` would not start: {why}");
-        }
+        let failures = supervisor.start_all();
+        assert!(
+            failures.is_empty(),
+            "the component should start: {}",
+            failures
+                .iter()
+                .map(|(provide, why)| format!("{provide}: {why}"))
+                .collect::<Vec<_>>()
+                .join("; ")
+        );
         assert_eq!(
             supervisor.transition_names(),
             vec!["wasm-ease".to_string()],

@@ -260,6 +260,7 @@ read by nothing else. A plain value is a switch about installing plugins.
 ```toml
 [plugins]
 allow_unsigned = true
+allow_wasi = []
 
 [plugins.ndi]
 discovery_interval_secs = 5
@@ -268,10 +269,22 @@ discovery_interval_secs = 5
 | Key | Default | Meaning |
 |---|---|---|
 | `allow_unsigned` | `true` | whether a plugin nothing signed may be installed. True is what `gmx plugin add ./my-plugin` needs, and it is the whole of the developer path. A mixer running unattended channels sets it false, and then only a signed release installs. |
+| `allow_wasi` | `[]` | which WebAssembly plugins may be given the WASI grants their manifest asks for. Empty means none: a component gets no filesystem and no sockets until an operator names it here. The manifest's `wasi` key is the other half, and neither works alone. |
 | `[plugins.<name>]` | none | that plugin's settings. The core never reads inside one. |
 
+Four keys inside a `[plugins.<name>]` table are the core's rather than the
+plugin's, and the core does read those:
+
+| Key | Default | Meaning |
+|---|---|---|
+| `max_rss_mb` | none | the memory ceiling. A process over it is restarted, disabled or logged per `on_over_budget`; a WebAssembly component is refused the allocation |
+| `max_cpu_percent` | none | the same, for CPU. Processes only |
+| `place` | none | which placement to run this plugin at. `wasm` sends a `service` or `transition` into the WebAssembly host instead of a process, when the manifest declares that placement |
+| `wasm_fuel`, `wasm_deadline_ms` | 500,000,000 and 500 | what one call into a component may spend. Both are ceilings; lowering one makes a slow component fail sooner |
+
 The trust label an install ends up with is in
-[trust and signing](../explanation/trust-and-signing.md).
+[trust and signing](../explanation/trust-and-signing.md). What the WASM grants
+mean is in [plugins as WebAssembly components](wasm.md).
 
 ## `[marketplaces]`
 
