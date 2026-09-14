@@ -104,6 +104,16 @@ impl NodeCa {
         &self.ca_pem
     }
 
+    /// The first sixteen hex digits of the root's SHA-256.
+    ///
+    /// It goes in front of every enrolment token, so the node can check that
+    /// the core answering it is the core that minted the token before it hands
+    /// the token over. Without it the one moment a node is not yet on mutual
+    /// TLS would be a moment somebody in the middle could take the token.
+    pub fn fingerprint(&self) -> String {
+        fingerprint_of(&self.ca_der)
+    }
+
     /// Sign a certificate for one node.
     pub fn issue_node(&self, name: &str) -> Result<Issued> {
         let identity = spiffe_of(name);
@@ -212,7 +222,13 @@ impl NodeCa {
             .with_safe_default_protocol_versions()
             .context("pick TLS versions")?
             .with_client_cert_verifier(verifier)
-            .with_single_cert(vec![first_cert(&me.cert_pem)?], private_key(&me.key_pem)?)
+            // The root goes out with the leaf. A node that is enrolling has
+            // nothing to check the leaf against yet, and the fingerprint in
+            // its token names the root, so the root has to be on the wire.
+            .with_single_cert(
+                vec![first_cert(&me.cert_pem)?, self.ca_der.clone()],
+                private_key(&me.key_pem)?,
+            )
             .context("load the core's own certificate")?;
         Ok(Arc::new(cfg))
     }
@@ -235,6 +251,108 @@ pub fn client_config(ca_pem: &str, identity: Option<&Issued>) -> Result<Arc<Clie
         None => builder.with_no_client_auth(),
     };
     Ok(Arc::new(cfg))
+}
+
+/// A TLS client for the one connection a node makes before it is trusted.
+///
+/// It checks that the chain the core presents contains a certificate whose
+/// SHA-256 begins with `pin`, and nothing else: there is no name to check
+/// against and no public root to chain to. `pin` comes from the enrolment
+/// token the operator carried over, so the check is as strong as the operator
+/// keeping that string to themselves, which is the same assumption every
+/// bootstrap in this shape makes.
+pub fn enrolling_client_config(pin: Option<&str>) -> Result<Arc<ClientConfig>> {
+    let provider = provider();
+    let verifier = Arc::new(PinnedRoot { pin: pin.map(str::to_string), provider: provider.clone() });
+    let cfg = ClientConfig::builder_with_provider(provider)
+        .with_safe_default_protocol_versions()
+        .context("pick TLS versions")?
+        .dangerous()
+        .with_custom_certificate_verifier(verifier)
+        .with_no_client_auth();
+    Ok(Arc::new(cfg))
+}
+
+/// The SHA-256 of one certificate, first sixteen hex digits.
+pub fn fingerprint_of(der: &CertificateDer<'_>) -> String {
+    let digest = ring::digest::digest(&ring::digest::SHA256, der.as_ref());
+    digest.as_ref().iter().take(8).map(|b| format!("{b:02x}")).collect()
+}
+
+/// Split `<fingerprint>.<secret>` back into its halves. A token with no dot is
+/// all secret and no pin, which is accepted with a warning rather than
+/// refused, because an operator who typed one by hand should still get a node
+/// up.
+pub fn split_token(token: &str) -> (Option<&str>, &str) {
+    match token.split_once('.') {
+        Some((pin, secret)) if !pin.is_empty() && !secret.is_empty() => (Some(pin), secret),
+        _ => (None, token),
+    }
+}
+
+#[derive(Debug)]
+struct PinnedRoot {
+    pin: Option<String>,
+    provider: Arc<rustls::crypto::CryptoProvider>,
+}
+
+impl rustls::client::danger::ServerCertVerifier for PinnedRoot {
+    fn verify_server_cert(
+        &self,
+        end_entity: &CertificateDer<'_>,
+        intermediates: &[CertificateDer<'_>],
+        _server_name: &rustls::pki_types::ServerName<'_>,
+        _ocsp: &[u8],
+        _now: rustls::pki_types::UnixTime,
+    ) -> Result<rustls::client::danger::ServerCertVerified, rustls::Error> {
+        let Some(pin) = &self.pin else {
+            tracing::warn!(
+                "this enrolment token carries no fingerprint, so the core answering could be                  anybody. Mint tokens with `gmx node token`, which puts one in"
+            );
+            return Ok(rustls::client::danger::ServerCertVerified::assertion());
+        };
+        let matched = std::iter::once(end_entity)
+            .chain(intermediates.iter())
+            .any(|c| fingerprint_of(c) == *pin);
+        if matched {
+            return Ok(rustls::client::danger::ServerCertVerified::assertion());
+        }
+        Err(rustls::Error::General(format!(
+            "the core answering does not hold the certificate authority this enrolment token              names ({pin}). Either this is the wrong core, or something is in the middle"
+        )))
+    }
+
+    fn verify_tls12_signature(
+        &self,
+        message: &[u8],
+        cert: &CertificateDer<'_>,
+        dss: &rustls::DigitallySignedStruct,
+    ) -> Result<rustls::client::danger::HandshakeSignatureValid, rustls::Error> {
+        rustls::crypto::verify_tls12_signature(
+            message,
+            cert,
+            dss,
+            &self.provider.signature_verification_algorithms,
+        )
+    }
+
+    fn verify_tls13_signature(
+        &self,
+        message: &[u8],
+        cert: &CertificateDer<'_>,
+        dss: &rustls::DigitallySignedStruct,
+    ) -> Result<rustls::client::danger::HandshakeSignatureValid, rustls::Error> {
+        rustls::crypto::verify_tls13_signature(
+            message,
+            cert,
+            dss,
+            &self.provider.signature_verification_algorithms,
+        )
+    }
+
+    fn supported_verify_schemes(&self) -> Vec<rustls::SignatureScheme> {
+        self.provider.signature_verification_algorithms.supported_schemes()
+    }
 }
 
 /// The node name in a presented client certificate, read out of its SPIFFE
@@ -424,6 +542,24 @@ mod tests {
     }
 
     #[test]
+    fn a_token_splits_into_a_pin_and_a_secret() {
+        assert_eq!(split_token("abcd1234.deadbeef"), (Some("abcd1234"), "deadbeef"));
+        assert_eq!(split_token("deadbeef"), (None, "deadbeef"));
+        assert_eq!(split_token(".deadbeef"), (None, ".deadbeef"));
+    }
+
+    #[test]
+    fn the_fingerprint_is_stable_and_short() {
+        let dir = std::env::temp_dir().join(format!("gmx-ca4-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let ca = NodeCa::open_or_create(&dir).unwrap();
+        let once = ca.fingerprint();
+        assert_eq!(once.len(), 16);
+        assert_eq!(once, NodeCa::open_or_create(&dir).unwrap().fingerprint());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
     fn both_sides_can_build_a_tls_config() {
         let dir = std::env::temp_dir().join(format!("gmx-ca3-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
@@ -432,6 +568,8 @@ mod tests {
         let node = ca.issue_node("studio-b").unwrap();
         client_config(ca.ca_pem(), Some(&node)).unwrap();
         client_config(ca.ca_pem(), None).unwrap();
+        enrolling_client_config(Some(&ca.fingerprint())).unwrap();
+        enrolling_client_config(None).unwrap();
         let _ = std::fs::remove_dir_all(&dir);
     }
 }
