@@ -138,7 +138,7 @@ async fn take(call: Call, params: Value) -> Result<Value, RpcError> {
     // caller who typed the wrong id needs to hear that, not how long the hold
     // has left.
     if let Some(id) = req.source_id() {
-        let ids = call.source_ids().await;
+        let ids = call.source_ids().await?;
         if !ids.contains(&id) {
             return Err(RpcError::not_found("source", &id, &ids));
         }
@@ -267,7 +267,7 @@ async fn take_scene(
         .map_err(|e| super::scenes::scene_error(call, e))?;
     // Every source the scene draws has to be here, or it is a composition with
     // holes in it and the caller should know before it is on air.
-    let ids = call.source_ids().await;
+    let ids = call.source_ids().await?;
     let missing: Vec<String> = {
         let mut m: Vec<String> =
             placements.iter().map(|p| p.source.clone()).filter(|s| !ids.contains(s)).collect();

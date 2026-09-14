@@ -13,6 +13,10 @@ process = "per-instance"
 [run]
 bin = { "linux-x86_64" = "bin/gmx-audio-device", "linux-aarch64" = "bin/gmx-audio-device", "linux-armv7" = "bin/gmx-audio-device", "macos-aarch64" = "bin/gmx-audio-device", "macos-x86_64" = "bin/gmx-audio-device", "windows-x86_64" = "bin/gmx-audio-device.exe" }
 
+# `gmx plugin add ./plugins/audio-device` runs this when bin/gmx-audio-device is not there.
+# The command runs in the directory you named, not in the installed copy:
+# this plugin is a workspace member and its dependencies are path
+# dependencies two levels up, so the copy is not a tree cargo can build.
 [build]
 command = "sh build"
 output = "bin/gmx-audio-device"

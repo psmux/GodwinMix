@@ -13,7 +13,10 @@ process = "per-instance"
 [run]
 bin = { "linux-x86_64" = "bin/gmx-camera", "linux-aarch64" = "bin/gmx-camera", "linux-armv7" = "bin/gmx-camera", "macos-aarch64" = "bin/gmx-camera", "macos-x86_64" = "bin/gmx-camera", "windows-x86_64" = "bin/gmx-camera.exe" }
 
-# `gmx plugin add` does not run this today; `./build` does the same thing.
+# `gmx plugin add ./plugins/camera` runs this when bin/gmx-camera is not there.
+# The command runs in the directory you named, not in the installed copy:
+# this plugin is a workspace member and its dependencies are path
+# dependencies two levels up, so the copy is not a tree cargo can build.
 [build]
 command = "sh build"
 output = "bin/gmx-camera"

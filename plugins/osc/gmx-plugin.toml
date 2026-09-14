@@ -32,6 +32,10 @@ annotations = { readOnlyHint = false, destructiveHint = false, idempotentHint = 
 user_invocable = true
 model_invocable = true
 
+# `gmx plugin add ./plugins/osc` runs this when bin/gmx-osc is not there.
+# The command runs in the directory you named, not in the installed copy:
+# this plugin is a workspace member and its dependencies are path
+# dependencies two levels up, so the copy is not a tree cargo can build.
 [build]
-command = "cargo build --release -p gmx-osc"
+command = "sh build"
 output = "bin/gmx-osc"

@@ -46,6 +46,10 @@ skill = "skills/whep/SKILL.md"
 [provides.designer]
 icon = "designer/icon.svg"
 
+# `gmx plugin add ./plugins/whip` runs this when bin/gmx-whip is not there.
+# The command runs in the directory you named, not in the installed copy:
+# this plugin is a workspace member and its dependencies are path
+# dependencies two levels up, so the copy is not a tree cargo can build.
 [build]
-command = "cargo build --release -p gmx-whip"
+command = "sh build"
 output = "bin/gmx-whip"

@@ -122,15 +122,56 @@ from `platforms` or ship the binary. There is no `sh` to run.
 
 ## `[build]`
 
-Only used when the plugin came from git. Both keys are required if the table is
-present.
+How to turn the source into the binary `[run] bin` names. Both keys are
+required if the table is present.
 
 | Key | Type | Meaning |
 |---|---|---|
 | `command` | string | What to run, for example `cargo build --release` |
-| `output` | string | The path that must exist afterwards |
+| `output` | string | The path that must exist afterwards, relative to the plugin root |
 
-The result is then treated as `bin`.
+Two installs run it.
+
+A git source always builds, because a clone is source and nothing else. The
+command runs in the clone, before anything is copied.
+
+A path install (`gmx plugin add ./my-plugin`) builds only when the binary
+`[run] bin` names for this machine is not in the installed copy after the copy.
+The copy skips `.git`, `target`, `node_modules`, `.venv` and `__pycache__`, so a
+plugin whose binary is still in its build tree arrives without one, and that is
+the case this covers. A plugin that already has its binary beside the manifest
+is copied and started, and the build command never runs.
+
+The command of a path install runs in the directory you named, not in the
+installed copy, and `output` is read there too. The installed copy is not a
+build tree: `target` was skipped on the way in, and a plugin that is a member of
+a cargo workspace has path dependencies that only resolve where it was checked
+out. What comes back into the installed copy is the one file `output` names,
+placed at the path `[run] bin` gives, with its executable bit set.
+
+So this, in `plugins/camera/gmx-plugin.toml`:
+
+```toml
+[run]
+bin = { "macos-aarch64" = "bin/gmx-camera", "linux-x86_64" = "bin/gmx-camera" }
+
+[build]
+command = "sh build"
+output = "bin/gmx-camera"
+```
+
+means `gmx plugin add ./plugins/camera` on a fresh checkout runs `sh build` in
+`plugins/camera`, waits for it, and then installs. The second install is quick,
+because `bin/gmx-camera` is there by then and nothing rebuilds.
+
+A build that fails stops the install, removes the half copied plugin, and
+prints the command, the directory it ran in, the exit status and the last
+dozen lines the build printed. A build that succeeds without producing
+`output` says that instead, and names the path it looked at.
+
+`output` is one path, not a table keyed by platform. A plugin whose binary has
+a different name per platform (`gmx-camera` and `gmx-camera.exe`) needs a
+command that produces the name this platform's `bin` entry asks for.
 
 ## `[[provides]]`
 

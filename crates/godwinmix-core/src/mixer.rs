@@ -4724,7 +4724,7 @@ mod tests {
         );
     }
 
-    fn programme_config(graphics: crate::config::Accel) -> crate::config::Config {
+    pub(super) fn programme_config(graphics: crate::config::Accel) -> crate::config::Config {
         let mut cfg = crate::config::Config {
             canvas: crate::config::Canvas {
                 width: 320,

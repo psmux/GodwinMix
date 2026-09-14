@@ -60,18 +60,25 @@ impl Call {
     }
 
     /// The ids that exist now, for a `-32004` that names the alternatives.
-    pub async fn source_ids(&self) -> Vec<String> {
-        match self.app.mixer.status().await {
-            Ok(s) => s.sources.iter().map(|s| s.id.clone()).collect(),
-            Err(_) => Vec::new(),
-        }
+    /// Every source the mixer has, or the mixer's own reason for not saying.
+    ///
+    /// The error matters more than it looks. These ids are what "no such
+    /// source, here is what there is" is built from, and a mixer that is too
+    /// busy to answer used to come back as an empty list: a take was then
+    /// refused with "the scene draws sources this mixer does not have. Sources
+    /// here: none", which is a confident sentence about a state that is not
+    /// true. Seen for real during a soak, where the mixer's command queue was
+    /// full and every take was refused for the wrong reason. The mixer's own
+    /// refusal already names the queue and says when to try again, so it is
+    /// passed through instead.
+    pub async fn source_ids(&self) -> Result<Vec<String>, RpcError> {
+        let status = self.app.mixer.status().await.map_err(|e| self.mixer_error(e))?;
+        Ok(status.sources.iter().map(|s| s.id.clone()).collect())
     }
 
-    pub async fn output_ids(&self) -> Vec<String> {
-        match self.app.mixer.status().await {
-            Ok(s) => s.outputs.iter().map(|o| o.id.clone()).collect(),
-            Err(_) => Vec::new(),
-        }
+    pub async fn output_ids(&self) -> Result<Vec<String>, RpcError> {
+        let status = self.app.mixer.status().await.map_err(|e| self.mixer_error(e))?;
+        Ok(status.outputs.iter().map(|o| o.id.clone()).collect())
     }
 
     /// The mixer's own refusals already name the state and the next step, so
