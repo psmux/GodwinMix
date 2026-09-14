@@ -380,10 +380,131 @@ test("a layout keeps every slot and refuses anything it does not know", () => {
   ok(!gone.sidebar.includes("ndi/senders"));
 });
 
+// ------------------------------------------------- the legacy adapter
+
+// The adapter is the thing that lets this page work against the mixer people
+// are running today, so it is worth a test even though it is temporary. A
+// stubbed fetch and a stubbed socket stand in for the server.
+
+async function legacySuite() {
+  const { LegacyTransport } = await import("../client/transport-legacy.js");
+  const STATUS = {
+    program: "cam1",
+    sources: [{ id: "cam1", name: "Cam 1", uri: "rtmp://x/1", state: "live" }],
+    outputs: [],
+    multiview: { enabled: true, cols: 2, rows: 1, cells: [{ index: 0, source: "cam1", x: 0, y: 0, w: 4, h: 3 }] },
+  };
+  const calls = [];
+  const realFetch = window.fetch;
+  const realSocket = window.WebSocket;
+  let socket = null;
+  window.fetch = async (url, init = {}) => {
+    const path = new URL(url, location.origin).pathname;
+    calls.push([init.method || "GET", path, init.body ? JSON.parse(init.body) : null]);
+    if (path === "/api/status") return { ok: true, status: 200, text: async () => JSON.stringify(STATUS) };
+    if (path === "/api/sources/cam9/audio") return { ok: false, status: 404, text: async () => '{"error":"no such source cam9"}' };
+    return { ok: true, status: 200, text: async () => "" };
+  };
+  window.WebSocket = class {
+    constructor(url) {
+      this.url = url;
+      socket = this;
+      setTimeout(() => this.onopen && this.onopen(), 0);
+    }
+    close() {}
+  };
+
+  const events = [];
+  const transport = new LegacyTransport({
+    base: location.origin,
+    token: "abc",
+    hooks: { onOpen() {}, onClose() {}, onEvent: (n, p) => events.push([n, p]), onFrame: () => events.push(["frame"]) },
+  });
+  transport.open();
+  await new Promise((r) => setTimeout(r, 30));
+
+  test("the legacy status poll becomes a snapshot, a layout and a flush", () => {
+    const names = events.map((e) => e[0]);
+    ok(names.includes("snapshot"), names.join(","));
+    ok(names.includes("multiview.layout"));
+    ok(names.includes("flush"));
+  });
+  test("the token rides in the socket query, because a header cannot", () => {
+    ok(socket.url.includes("token=abc"), socket.url);
+  });
+
+  events.length = 0;
+  socket.onmessage({ data: JSON.stringify({ type: "took", source: "cam2", at_running_time_ms: 9 }) });
+  test("took becomes program.took and is flushed", () => {
+    eq(events.map((e) => e[0]), ["program.took", "flush"]);
+    eq(events[0][1].source, "cam2");
+  });
+
+  events.length = 0;
+  socket.onmessage({ data: JSON.stringify({ type: "source_audio_level", source: "cam1", peak_db: [-12] }) });
+  socket.onmessage({ data: JSON.stringify({ type: "audio_level", peak_db: [-6] }) });
+  test("both old level events become one meters event each", () => {
+    eq(events.filter((e) => e[0] === "meters").map((e) => e[1]), [{ sources: { cam1: [-12] } }, { program: [-6] }]);
+  });
+
+  events.length = 0;
+  socket.onmessage({ data: new Uint8Array([0xff, 0xd8, 1]).buffer });
+  test("a bare JPEG is wrapped so the painter sees one shape", () => {
+    eq(events.filter((e) => e[0] === "frame").length, 1);
+  });
+  await transport.subscribe({ ext: {} });
+  events.length = 0;
+  socket.onmessage({ data: new Uint8Array([0xff, 0xd8, 1]).buffer });
+  test("with nothing wanting pictures the frames are dropped before the decode", () => {
+    eq(events.filter((e) => e[0] === "frame").length, 0);
+  });
+
+  calls.length = 0;
+  await transport.call("source.audio.set", { source: "cam1", media: [null, 0.5] });
+  test("only the moved audio channel is sent, and the array stays sparse", () => {
+    eq(calls[0][1], "/api/sources/cam1/audio");
+    eq(calls[0][2].media, [null, 0.5]);
+  });
+
+  let thrown = null;
+  try {
+    await transport.call("source.set", { source: "cam1", name: "Wide" });
+  } catch (e) {
+    thrown = e;
+  }
+  test("source.set answers method not found, so the tray keeps the name locally", () => {
+    eq(thrown.code, CODES.NO_METHOD);
+    ok(thrown.message.includes("/rpc"), thrown.message);
+  });
+
+  thrown = null;
+  try {
+    await transport.call("source.audio.set", { source: "cam9", gain: 1 });
+  } catch (e) {
+    thrown = e;
+  }
+  test("a 404 keeps the server's own sentence rather than inventing one", () => {
+    eq(thrown.code, CODES.NOT_FOUND);
+    eq(thrown.message, "no such source cam9");
+  });
+
+  transport.close();
+  window.fetch = realFetch;
+  window.WebSocket = realSocket;
+}
+
 // ---------------------------------------------------------------- summary
 
-const summary = `${passed} passed, ${failed} failed`;
-line(failed ? "fail" : "ok", summary);
-document.title = (failed ? "FAIL " : "ok ") + summary;
-if (out) out.dataset.result = failed ? "fail" : "pass";
-console.log(failed ? `FAILED: ${summary}` : `ALL PASSED: ${summary}`);
+function summarise() {
+  const summary = `${passed} passed, ${failed} failed`;
+  line(failed ? "fail" : "ok", summary);
+  document.title = (failed ? "FAIL " : "ok ") + summary;
+  if (out) out.dataset.result = failed ? "fail" : "pass";
+  console.log(failed ? `FAILED: ${summary}` : `ALL PASSED: ${summary}`);
+}
+
+legacySuite().catch((e) => {
+  failed += 1;
+  line("fail", "the legacy suite threw: " + e.message);
+  console.error(e);
+}).then(summarise);
