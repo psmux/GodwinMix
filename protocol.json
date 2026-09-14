@@ -2052,7 +2052,7 @@
       },
       "rest": {
         "method": "GET",
-        "path": "/api/v1/codec/list"
+        "path": "/api/v1/codecs"
       },
       "result": {
         "type": "object"

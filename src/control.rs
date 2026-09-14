@@ -294,6 +294,15 @@ pub fn descriptor() -> &'static Value {
     DOC.get_or_init(|| crate::api::protocol::descriptor(&methods::registry()))
 }
 
+/// The OpenAPI 3.1 description of the REST layer, built once.
+///
+/// The committed `openapi.json`, and what a client generator or Swagger UI
+/// reads. Built from the same table as everything else.
+pub fn openapi() -> &'static Value {
+    static DOC: OnceLock<Value> = OnceLock::new();
+    DOC.get_or_init(|| crate::api::openapi::openapi(&methods::registry()))
+}
+
 async fn rpc_upgrade(
     ws: WebSocketUpgrade,
     State(ctx): State<Ctx>,
@@ -644,7 +653,11 @@ pub async fn snapshot_bytes(
     name: &str,
     width: Option<u32>,
 ) -> Result<Vec<u8>, RpcError> {
-    let Some(pick) = snapshot::parse_pick(name) else {
+    // The legacy path spells it `cam1.jpg` and the versioned one spells it
+    // `cam1`, because `/api/v1/snapshot/{id}` takes an id like every other
+    // route. Both reach the same picture.
+    let with_suffix = snapshot_name(name);
+    let Some(pick) = snapshot::parse_pick(&with_suffix) else {
         return Err(RpcError::not_found("snapshot", name, &[]).with(
             "valid",
             vec!["sheet".to_string(), "program".to_string(), "<source id>".to_string()],
@@ -687,6 +700,15 @@ pub async fn snapshot_bytes(
     .await
     .map_err(|e| RpcError::internal(format!("snapshot task failed: {e}")))?
     .map_err(|e| RpcError::internal(format!("the mosaic frame could not be decoded: {e}")))
+}
+
+/// `sheet`, `sheet.jpg` and `cam1` all name a picture. The tracker's parser
+/// wants the extension, and an id in a path has no business carrying one.
+fn snapshot_name(name: &str) -> String {
+    match name.strip_suffix(".jpg") {
+        Some(_) => name.to_string(),
+        None => format!("{name}.jpg"),
+    }
 }
 
 /// The layout a client matches frames against.

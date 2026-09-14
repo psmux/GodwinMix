@@ -73,6 +73,11 @@ struct Args {
     #[arg(long)]
     markdown: bool,
 
+    /// With `--api-info`, print the OpenAPI 3.1 description of the REST layer
+    /// instead. This is `openapi.json`.
+    #[arg(long)]
+    openapi: bool,
+
     /// Refuse `output.add`, and accept only tokens marked `rehearsal`.
     ///
     /// An agent behaves differently when it believes a show is real, and it
@@ -174,11 +179,12 @@ pub async fn run() -> Result<()> {
     // protocol is a property of the build, not of this machine, and CI
     // regenerates it on a box with no media stack installed.
     if args.api_info {
-        let doc = control::descriptor();
-        if args.markdown {
-            print!("{}", api::protocol::markdown(doc));
+        if args.openapi {
+            print!("{}", api::openapi::json_text(control::openapi()));
+        } else if args.markdown {
+            print!("{}", api::protocol::markdown(control::descriptor()));
         } else {
-            print!("{}", api::protocol::json_text(doc));
+            print!("{}", api::protocol::json_text(control::descriptor()));
         }
         return Ok(());
     }

@@ -105,6 +105,12 @@ pub fn register(reg: &mut Registry<Call>) {
         ),
     );
 
+    register_adbreak(reg);
+    register_snapshot(reg);
+}
+
+/// Interrupting the programme with a clip, and rejoining live.
+fn register_adbreak(reg: &mut Registry<Call>) {
     reg.register(
         MethodDef::new(
             "adbreak.start",
@@ -164,7 +170,6 @@ pub fn register(reg: &mut Registry<Call>) {
         ),
     );
 
-    register_snapshot(reg);
 }
 
 fn register_snapshot(reg: &mut Registry<Call>) {

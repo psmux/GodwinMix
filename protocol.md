@@ -36,7 +36,7 @@ Keys accepted on every method, handled before a method runs.
 | `adbreak.end` | `POST /api/v1/adbreak/end` | operate |  | 1 | Cut a running ad short, or disarm one that is scheduled. |
 | `adbreak.start` | `POST /api/v1/adbreak/start` | operate |  | 1 | Interrupt the programme with a clip, then rejoin live when it ends. |
 | `agent.state` | `GET /api/v1/agent/state` | read |  | 1 | The compact document written for agents: the programme, each source's state and a motion score saying how much its picture is changing. |
-| `codec.list` | `GET /api/v1/codec/list` | read |  | 1 | The codecs and elements this machine can use. The catalogue proper is not built yet; this reports the backends actually selected. |
+| `codec.list` | `GET /api/v1/codecs` | read |  | 1 | The codecs and elements this machine can use. The catalogue proper is not built yet; this reports the backends actually selected. |
 | `core.api` | `GET /api/v1/core/api` | read |  | 1 | Every method, event and type as JSON Schema. The same document as protocol.json and `godwinmix --api-info`. |
 | `core.info` | `GET /api/v1/core/info` | read |  | 1 | What this core is, what it can do, and where its edges are. |
 | `core.shutdown` | `POST /api/v1/core/shutdown` | admin | yes | 1 | Stop the mixer, and with it the programme. Nothing else takes the show off air, so this is deliberately its own call. |

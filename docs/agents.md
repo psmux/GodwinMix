@@ -18,12 +18,36 @@ Three things, all on the same port as everything else.
 
 | | |
 |---|---|
-| `GET /api/agent/state` | one compact JSON document, sized for a model's context |
-| `GET /api/snapshot/sheet.jpg` | every source and the programme in one mosaic image |
-| `POST /api/take` | `{"source": "cam1"}`, the same call the UI makes |
+| `GET /api/v1/agent/state` | one compact JSON document, sized for a model's context |
+| `GET /api/v1/snapshot/sheet` | every source and the programme in one mosaic image |
+| `POST /api/v1/program/take` | `{"source": "cam1"}`, the same call the UI makes |
 
-`/api/status` still exists and is the full picture. `/api/agent/state` is the
-part of it a director needs, in the order a director needs it:
+The paths above are the current ones. The `/api/...` paths this page used to
+name still answer, with a `Deprecation: true` header, for one release. There
+is nothing to learn in the change: method names are `noun.verb` and the path
+follows from the name, so `source.list` is `GET /api/v1/sources` and
+`program.take` is `POST /api/v1/program/take`. `GET /api/v1/core/api` prints
+the whole table.
+
+Three things are worth knowing before writing any loop, and
+`docs/how-to/control-the-mixer.md` covers each properly:
+
+* Every refusal is one shape, and the message names the current state and the
+  next step. An unknown id answers with the ids that would have worked, so a
+  script recovers without a second call.
+* Every mutating call takes an `idempotency_key`, honoured for 24 hours, and
+  answers with the full resulting object. A call that timed out can be sent
+  again without doubling a take.
+* Anything destructive takes `dry_run: true` and answers the diff it would
+  make, read off the live state.
+
+An agent that wants to watch rather than poll opens one WebSocket at `/rpc`
+and sends `core.subscribe`; the core answers with a snapshot and then only
+deltas. An agent that does not need to watch should keep polling
+`agent.state`, which is what this page describes.
+
+`core.status` still exists and is the full picture. `agent.state` is the part
+of it a director needs, in the order a director needs it:
 
 ```json
 {
@@ -210,18 +234,27 @@ entry:
 }
 ```
 
-The tools, and the API call behind each:
+The tool list is generated from the method table, so it is whatever the mixer
+in front of you can do, and there are two sizes of it:
 
-| tool | does |
-|---|---|
-| `status` | `GET /api/status`, the full state |
-| `agent_state` | `GET /api/agent/state`, the compact one |
-| `take` | `POST /api/take`; `source` null cuts to black |
-| `add_source`, `remove_source` | `POST /api/sources`, `DELETE /api/sources/{id}` |
-| `list_outputs`, `add_output`, `remove_output`, `reconnect_output` | the `/api/outputs` calls |
-| `ad_break`, `end_ad_break` | `POST /api/adbreak`, `POST /api/adbreak/end` |
-| `snapshot` | a snapshot JPEG, returned as an image the model can look at; the sheet, the programme, or one source |
-| `go_live` | `POST /api/golive`, below |
+| | tools | about |
+|---|---|---|
+| `--profile standard` (default) | 12 | roughly 2,600 tokens |
+| `--profile minimal` | 5 | roughly 1,200 tokens, for a small context |
+
+`minimal` is `agent_state`, `take`, `add_source`, `list_sources` and
+`search_tools`; `standard` adds `status`, `snapshot`, `remove_source`,
+`revert`, `go_live`, `list_outputs` and `add_output`. Everything else, about
+twenty tools covering outputs, media, ad breaks, seeking, audio and codecs, is
+still callable by name and is found with `search_tools {"query": "..."}` in
+plain words. The hot list never changes shape at runtime, so adding a source
+or a plugin does not throw away a prompt cache.
+
+Every tool declares `readOnlyHint`, `destructiveHint` and `idempotentHint`,
+generated from the flags the server enforces, so they cannot be a lie.
+`godwinmix mcp --profile minimal | jq` prints the list without a client.
+`docs/how-to/use-with-an-ai-agent.md` has the per client configuration and the
+rehearsal credential.
 
 A session in Claude Code then goes: "look at the sheet and tell me which
 source has the presenter", "take it", "add https://... as a source called
