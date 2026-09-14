@@ -1,0 +1,30 @@
+[package]
+name = "{{name}}"
+version = "0.1.0"
+edition = "2021"
+# The wasm32-wasip2 target and the bindings generator both want this.
+rust-version = "1.85"
+description = "{{description}}"
+license = "{{license}}"
+authors = ["{{author}}"]
+
+# A plugin is its own crate with its own lockfile, even when it happens to sit
+# inside the GodwinMix checkout.
+[workspace]
+
+# A component is a cdylib. The wasm32-wasip2 target turns it into a component
+# at link time, so there is no second tool in the loop.
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+godwinmix-sdk-wasm = "{{sdk}}"
+serde_json = "1"
+
+[profile.release]
+# Size, not speed. A component's work is a policy decision or a curve; what
+# costs is the bytes the host has to compile at load.
+opt-level = "s"
+lto = true
+strip = true
+codegen-units = 1

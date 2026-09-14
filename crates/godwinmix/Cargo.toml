@@ -30,6 +30,10 @@ godwinmix-core = { workspace = true }
 # For `gmx plugin test --offline`, which replays a transcript against a plugin
 # binary with no core running at all.
 godwinmix-host = { workspace = true }
+# Tier W, behind the `wasm` feature. Optional because wasmtime is 24 MB of
+# release binary and most builds do not want it; `docs/reference/wasm.md` has
+# the measurement and the rule.
+godwinmix-wasm = { workspace = true, optional = true }
 
 # The control plane builds pipelines through the engine, but it also starts
 # GStreamer itself and the bench command builds elements directly.
@@ -53,6 +57,15 @@ futures-util = { workspace = true, features = ["sink", "std"] }
 reqwest = { workspace = true, features = ["json", "rustls-tls"] }
 libc = { workspace = true }
 base64 = { workspace = true }
+
+[features]
+default = []
+# Run `service` and `transition` plugins as WebAssembly components inside the
+# core (tier W). Off by default: it adds 24.4 MB to a release binary on
+# macos-aarch64, which is more than the 4 MB the budget in 09 section 4 item 4
+# allows a feature to cost before it has to be opt in. `gmx doctor` says
+# whether the build carries it.
+wasm = ["dep:godwinmix-wasm"]
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["test-util", "macros", "rt-multi-thread"] }

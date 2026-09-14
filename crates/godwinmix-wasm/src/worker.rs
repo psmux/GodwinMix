@@ -272,9 +272,14 @@ fn serve(
     while let Ok(job) = inbox.recv() {
         match job {
             Job::Shutdown { reason } => {
-                if let Exports::Service(e) = exports {
-                    let _ = e.godwinmix_plugin_service().call_shutdown(&mut *store, &reason);
-                }
+                let _ = match exports {
+                    Exports::Service(e) => {
+                        e.godwinmix_plugin_service().call_shutdown(&mut *store, &reason)
+                    }
+                    Exports::Transition(e) => {
+                        e.godwinmix_plugin_transition().call_shutdown(&mut *store, &reason)
+                    }
+                };
                 tracing::debug!(instance = %name, %reason, "a component was shut down");
                 return;
             }
@@ -336,15 +341,7 @@ fn service_call(
         }
         "health" => {
             let h = api.call_health(&mut *store)?;
-            Ok(json!({
-                "state": match h.state {
-                    bindings::types::HealthState::Ok => "ok",
-                    bindings::types::HealthState::Degraded => "degraded",
-                    bindings::types::HealthState::Failing => "failing",
-                },
-                "detail": h.detail,
-                "latency_ms": h.latency_ms,
-            }))
+            Ok(json!({ "state": health_word(h.state), "detail": h.detail, "latency_ms": h.latency_ms }))
         }
         "tool.call" => {
             let name = str_of(&params, "name");
@@ -397,9 +394,26 @@ fn transition_call(
                 Answer::Curve(t) => under("curve", parse(&t, "render")?),
             }
         }
-        "health" => Ok(json!({"state": "ok"})),
+        "configure" => {
+            let body = params.get("params").cloned().unwrap_or(params);
+            let answer = api
+                .call_configure(&mut *store, &body.to_string())?
+                .map_err(|e| instance::from_wit(&e))?;
+            Ok(json!({
+                "applied": answer.applied,
+                "restart_required": answer.restart_required,
+                "reason": answer.reason,
+            }))
+        }
+        "health" => {
+            let h = api.call_health(&mut *store)?;
+            Ok(json!({ "state": health_word(h.state), "detail": h.detail, "latency_ms": h.latency_ms }))
+        }
         "initialize" | "initialized" => Ok(json!({})),
-        other => anyhow::bail!("a transition component answers `render`; `{other}` is not it"),
+        other => anyhow::bail!(
+            "a transition component answers render, configure, health and shutdown; \
+             `{other}` is not one of them"
+        ),
     }
 }
 
@@ -409,6 +423,14 @@ fn under(key: &str, answer: Value) -> Result<Value> {
         return Ok(answer);
     }
     Ok(json!({ key: answer }))
+}
+
+fn health_word(state: bindings::types::HealthState) -> &'static str {
+    match state {
+        bindings::types::HealthState::Ok => "ok",
+        bindings::types::HealthState::Degraded => "degraded",
+        bindings::types::HealthState::Failing => "failing",
+    }
 }
 
 fn parse(text: &str, method: &str) -> Result<Value> {

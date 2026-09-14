@@ -1,0 +1,14 @@
+name: harness
+on: [push, pull_request]
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: install the wasm target
+        run: rustup target add wasm32-wasip2
+      # No GStreamer and no core: a tier W plugin's checks are a build and a
+      # transcript, and both run anywhere.
+      - name: check
+        run: ./check --quick

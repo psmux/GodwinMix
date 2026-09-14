@@ -65,11 +65,11 @@ pub struct CheckResult {
 }
 
 impl CheckResult {
-    fn pass(name: &'static str, detail: impl Into<String>) -> Self {
+    pub(crate) fn pass(name: &'static str, detail: impl Into<String>) -> Self {
         Self { name, passed: true, detail: detail.into() }
     }
 
-    fn fail(name: &'static str, detail: impl Into<String>) -> Self {
+    pub(crate) fn fail(name: &'static str, detail: impl Into<String>) -> Self {
         Self { name, passed: false, detail: detail.into() }
     }
 }
@@ -694,7 +694,7 @@ pub fn check_configure(root: &std::path::Path, provide: &str) -> CheckResult {
 /// One object per example of each property, rather than the cross product: a
 /// schema with four properties and three examples each would otherwise be
 /// eighty one `configure` calls and a minute of test time.
-fn schema_examples(path: &std::path::Path) -> Vec<serde_json::Value> {
+pub(crate) fn schema_examples(path: &std::path::Path) -> Vec<serde_json::Value> {
     let Ok(text) = std::fs::read_to_string(path) else { return Vec::new() };
     let Ok(schema) = serde_json::from_str::<serde_json::Value>(&text) else { return Vec::new() };
     let mut out = Vec::new();
@@ -962,6 +962,11 @@ pub fn check_plugin(root: &std::path::Path, quick: bool) -> Result<Report> {
     let installed = super::loader::read(root, &Default::default());
     if let Some(problem) = &installed.problem {
         anyhow::bail!("{problem}");
+    }
+    // Tier W: nothing here spawns, so the checks that are about a process do
+    // not apply and the ones that are about the contract run in this process.
+    if super::wasm::runs_as_wasm(&manifest) {
+        return super::wasmcheck::check(root, &manifest);
     }
     let already = super::loader::get(&manifest.plugin.name).is_some();
     super::loader::insert(installed);
