@@ -58,6 +58,11 @@ libc = "0.2.189"
 image = { version = "0.25", default-features = false, features = ["jpeg"] }
 base64 = "0.22"
 
+[dev-dependencies]
+# Paused time, so the multiview linger tests assert on two seconds without
+# waiting two seconds. Test only: the shipped binary does not carry it.
+tokio = { version = "1", features = ["test-util", "macros", "rt-multi-thread"] }
+
 [profile.release]
 opt-level = 3
 lto = "thin"
