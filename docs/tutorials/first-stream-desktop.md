@@ -1,102 +1,73 @@
-# Your first stream with the desktop app
+# Your first stream, on the desktop app
 
-By the end of this you will have a camera or a video file on air from your own
-machine, going out to an RTMP destination you choose, with a window you can
-click rather than a terminal.
+Fifteen minutes, one camera, one destination. You need the GodwinMix app
+installed and a stream key from wherever you are sending the picture (YouTube,
+Twitch, your own server).
 
-What you need: a Mac, a Windows PC or a Debian based Linux machine, and a place
-to stream to. A YouTube or Twitch stream key will do; so will mediamtx on your
-own network.
+## 1. Open the app
 
-## 1. Install GStreamer
+The window asks which mixer to use.
 
-The desktop app does not bundle it yet. Bundling a trimmed GStreamer inside the
-installer is planned, with a target of 150 MB for the Windows installer; until
-then this is a separate step and it is the only fiddly one.
+**This computer** is already chosen. Press Connect.
 
-| | |
-|---|---|
-| macOS | `brew install gstreamer` |
-| Debian, Ubuntu | `sudo apt install gstreamer1.0-plugins-base gstreamer1.0-plugins-good gstreamer1.0-plugins-bad gstreamer1.0-plugins-ugly gstreamer1.0-libav gstreamer1.0-tools` |
-| Windows | The runtime and development MSIs from [gstreamer.freedesktop.org](https://gstreamer.freedesktop.org/download/), or `choco install gstreamer gstreamer-devel`. Put `C:\gstreamer\1.0\msvc_x86_64\bin` on `PATH`. |
+The app starts the mixer, which takes a second or two, and the window fills
+with the mixer's own page: a black picture across the top, an empty list of
+sources on one side, an empty list of destinations on the other. The title bar
+says which mixer you are looking at and what version it is.
 
-## 2. Install GodwinMix
+If it asks again with something in red, the message says what went wrong. The
+mixer's own account of it is in **Open logs folder** in the menu.
 
-Download from the
-[latest release](https://github.com/psmux/GodwinMix/releases/latest):
+## 2. Add a source
 
-* macOS: the `.dmg`, then drag GodwinMix to Applications.
-* Windows: the `.msi`.
-* Debian or Ubuntu: the `.deb`, then `sudo dpkg -i godwinmix-desktop_*.deb`.
+Press **Add a source**. You are asked what kind: a camera or encoder sending
+RTMP, a video file, a website.
 
-The app is not signed yet, so macOS will refuse it on first open. Control click
-the app, choose Open, then Open again. Windows SmartScreen will want "More info"
-then "Run anyway". Signing is planned and until it happens this is the honest
-instruction rather than a pretence that it does not happen.
+For a camera or a phone encoder, give the address it publishes to, something
+like `rtmp://192.168.1.10:1935/live/cam1`, and a name you will recognise. For a
+video file, pick the file.
 
-## 3. Start it
+The source appears in the list with a small moving picture next to it once it
+is delivering. Nothing is on air yet.
 
-Open GodwinMix. The window is the same web UI the server serves, pointed at a
-mixer running on your own machine on port 8080.
+## 3. Put it on air
 
-The window has nothing to show until a mixer answers. If you are running from a
-clone rather than an installer, `dev/desktop.sh` starts a mixer first and then
-the app.
+Click the source.
 
-## 4. Add where the programme goes
+The big picture at the top is the programme: what leaves this machine. It is
+now your camera. Click another source and it cuts to that one, on the next
+frame, without stopping anything downstream. That is the whole of mixing.
 
-In the UI, open Outputs and add a destination:
+## 4. Add a destination
+
+Press **Add a destination**. Paste the full address your platform gave you,
+which is its server and your stream key joined together:
 
 ```
-rtmp://a.rtmp.youtube.com/live2/YOUR-STREAM-KEY
+rtmp://a.rtmp.youtube.com/live2/xxxx-xxxx-xxxx-xxxx
 ```
 
-Set the policy to `cdn` for a public ingest, which backs off much harder on
-reconnect than `own` does. Public ingests throttle aggressive reconnects and a
-tight retry loop gets you rate limited.
+It goes green when the platform accepts the connection. You are live. Check
+the platform's own page to see the picture arrive, which takes a few seconds.
 
-The output goes live carrying black and silence. Your destination will show you
-as streaming with a black picture. That is correct and it is the whole design:
-the encoder starts once, before there is anything to mix, and runs until you
-stop.
+## 5. Stop
 
-## 5. Add something to show
+**Quit** in the menu closes the app and stops the mixer with it, which closes
+the destination properly.
 
-Add a source in the UI. Anything in this list works:
+Closing the window does not stop anything: the window hides, the mixer keeps
+streaming, and the tray icon brings the window back. That is deliberate. A
+broadcast should not end because somebody tidied their desktop.
 
-| What you have | What to type |
-|---|---|
-| A video file | the path, or drag the file onto the window |
-| A camera publishing RTMP | `rtmp://its-address/live/key` |
-| An IP camera | `rtsp://user:password@camera/stream1` |
-| An HLS stream | `https://host/stream.m3u8` |
-| A web page | `web+https://example.com/scoreboard` |
+## What next
 
-A USB webcam or the machine's own screen is not in that list yet. Capture
-plugins (`gmx-camera`, `gmx-screen`, `gmx-audio-device`) are the next wave of
-work and they are how those arrive. Until then, anything that can publish RTMP
-to the mixer is a camera: OBS, a phone app, a hardware encoder.
-
-## 6. Take it
-
-Click its cell. Or press 1 to 9 for the first nine sources; 0 or Escape cuts to
-black. The cut lands on the next frame and the outgoing stream does not so much
-as hiccup.
-
-## 7. Closing the window does not stop the stream
-
-Two ways out, as buttons at the top right and in the application menu.
-
-* **Close window** leaves the mixer running. The stream does not live in this
-  window and closing it by accident must not take the programme down.
-* **Stop everything** asks twice, then shuts the mixer down and exits.
-
-## Next
-
-* [Choose a hardware encoder](../how-to/choose-a-hardware-encoder.md), because
-  the software one costs about half a core at 720p30 and your machine probably
-  has better.
-* [Roll an ad break](../how-to/ad-breaks.md).
-* [Run it on a server instead](../how-to/headless-server.md), and point this
-  same app at it by changing the address. Remote operation is the normal case,
-  not a special mode.
+* Your settings live in a file you can edit: **Open config folder** in the
+  menu. The canvas size, the bitrate and the reconnect behaviour are all there,
+  with a comment on every line.
+* The same app drives a mixer running on a server. **Connect to a mixer** in
+  the menu, then "Another machine" and its address. Everything above works the
+  same way, because it is the same page. See
+  [the desktop app](../how-to/desktop-app.md).
+* Nothing here needs the app at all. `gmx` does the same things from a terminal
+  and the API does them from a script, which is how a mixer with no screen is
+  run.
