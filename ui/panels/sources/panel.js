@@ -296,6 +296,40 @@ class SourcesPanel extends HTMLElement {
     this.client.call("program.take", { source: id }).catch((e) => errorToast(e, "Take"));
   }
 
+  /**
+   * The scenes panel, when one is on the page and its core has a scene server.
+   *
+   * Asked for through the DOM rather than imported, because importing it would
+   * pull the scene panel and its protocol kit into every page that never opens
+   * one. A core with no scene server leaves `supported` false and this answers
+   * null, which is what sends the number keys back to the tray.
+   */
+  scenesPanel() {
+    const node = document.querySelector("gmx-scenes");
+    if (!node || !node.scenes || !node.scenes.supported) return null;
+    return node.scenes.scenes().length ? node : null;
+  }
+
+  /**
+   * Number key n, which 05 section 3a says is the nth scene.
+   *
+   * Scenes are what an operator cuts between once there are any, so 1 to 9
+   * count the scene tiles. A collection with no scenes in it, or a core with no
+   * scene server at all, falls back to counting the inputs, which is what these
+   * keys did before scenes existed.
+   */
+  takeSlot(n) {
+    const slot = Math.max(1, n || 1);
+    const panel = this.scenesPanel();
+    if (panel) {
+      const scene = panel.scenes.scenes()[slot - 1];
+      if (scene) panel.activate(scene.id);
+      return;
+    }
+    const id = this.order()[slot - 1];
+    if (id) this.activate(id);
+  }
+
   async openDrawer(id) {
     const source = this.client.store.source(id);
     if (!source) return;
@@ -514,13 +548,10 @@ class SourcesPanel extends HTMLElement {
       { id: "tray.open", title: "Open settings", group: "Sources", key: "Enter", enabled: () => selected().length === 1, run: () => this.openDrawer(selected()[0]) },
       {
         id: "tray.take-slot",
-        title: "Put slot 1 to 9 on air",
+        title: "Put scene 1 to 9 on air, or input 1 to 9 when there are no scenes",
         group: "Programme",
         key: "1 to 9",
-        run: (n) => {
-          const id = this.order()[(n || 1) - 1];
-          if (id) this.activate(id);
-        },
+        run: (n) => this.takeSlot(n),
       },
       { id: "tray.copy", title: "Copy", group: "Sources", key: "Ctrl+C", enabled: () => selected().length > 0, run: () => this.copy(selected()) },
       { id: "tray.cut", title: "Cut", group: "Sources", key: "Ctrl+X", enabled: () => selected().length > 0, run: () => this.copy(selected(), true) },
