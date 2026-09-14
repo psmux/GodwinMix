@@ -34,11 +34,15 @@ const STOP_GRACE: Duration = Duration::from_secs(5);
 /// Past this, the log is rolled over. One previous file is kept.
 const LOG_MAX_BYTES: u64 = 4 * 1024 * 1024;
 
-/// The daemon this app started.
+/// The mixer on this computer, as this app knows it: one it started, or one
+/// it started in an earlier run and has found again.
 pub struct Local {
     pub target: Target,
     pub log: PathBuf,
-    child: CommandChild,
+    /// `None` for a mixer adopted from an earlier run of the app. It can
+    /// still be asked to stop over the API; it cannot be killed, because this
+    /// process is not its parent.
+    child: Option<CommandChild>,
     stopped: Arc<AtomicBool>,
 }
 
@@ -47,11 +51,20 @@ impl Local {
         !self.stopped.load(Ordering::Relaxed)
     }
 
-    /// The daemon's process id. Printed by `--headless-check` and worth
-    /// having when someone has to look at the process list on a machine that
-    /// is misbehaving.
-    pub fn pid(&self) -> u32 {
-        self.child.pid()
+    /// The daemon's process id, for `--headless-check` and for anyone who has
+    /// to look at the process list on a machine that is misbehaving.
+    pub fn pid(&self) -> Option<u32> {
+        self.child.as_ref().map(|c| c.pid())
+    }
+}
+
+/// The mixer on this computer: the one left over from an earlier run of this
+/// app if there is one, else a new one. This is the way in; `start` and
+/// `adopt_existing` are the two halves of it.
+pub async fn ensure(app: &AppHandle) -> Result<Local, String> {
+    match adopt_existing(app).await {
+        Some(found) => Ok(found),
+        None => start(app).await,
     }
 }
 
@@ -85,15 +98,39 @@ pub async fn start(app: &AppHandle) -> Result<Local, String> {
     let (rx, child) = command.spawn().map_err(|e| format!("the mixer would not start: {e}"))?;
     let stopped = Arc::new(AtomicBool::new(false));
     record(rx, log.clone(), stopped.clone());
-    let local = Local { target, log, child, stopped };
+    let local = Local { target, log, child: Some(child), stopped };
 
     match wait_until_answering(app, &local).await {
-        Ok(()) => Ok(local),
+        Ok(()) => {
+            crate::settings::remember_local_port(app, port);
+            Ok(local)
+        }
         Err(why) => {
-            let _ = local.child.kill();
+            if let Some(child) = local.child {
+                let _ = child.kill();
+            }
             Err(why)
         }
     }
+}
+
+/// A mixer this app started in an earlier run and never stopped, because the
+/// shell was killed or crashed.
+///
+/// The daemon outliving the window is the right way round: a broadcast does
+/// not end because someone force quit a window. What must not happen is a
+/// second mixer starting beside the first and taking the same camera and the
+/// same encoder, so the port of the last one is written down and tried first.
+/// It has to answer, and answer with this machine's token, or it is not ours
+/// and a new one is started.
+pub async fn adopt_existing(app: &AppHandle) -> Option<Local> {
+    let port = crate::settings::last_local_port(app)?;
+    let token = crate::settings::local_token(app).ok()?;
+    let target = Target::new(format!("http://127.0.0.1:{port}"), token);
+    let http = app.state::<crate::Shell>().http.clone();
+    core_link::info(&http, &target, "this computer").await.ok()?;
+    eprintln!("[desktop] found the mixer from an earlier run on {}", target.base);
+    Some(Local { target, log: log_file(app).ok()?, child: None, stopped: Arc::new(AtomicBool::new(false)) })
 }
 
 /// Stop the mixer this app started: ask over the API first, so it closes its
@@ -105,17 +142,20 @@ pub async fn stop(app: &AppHandle, local: Local) {
             eprintln!("[desktop] {e}");
         }
     }
-    let deadline = Instant::now() + STOP_GRACE;
-    while Instant::now() < deadline && local.is_running() {
-        tokio::time::sleep(Duration::from_millis(100)).await;
+    if let Some(child) = local.child {
+        let deadline = Instant::now() + STOP_GRACE;
+        while Instant::now() < deadline && !local.stopped.load(Ordering::Relaxed) {
+            tokio::time::sleep(Duration::from_millis(100)).await;
+        }
+        if !local.stopped.load(Ordering::Relaxed) {
+            eprintln!("[desktop] the mixer did not stop when asked; killing it");
+        }
+        // Unconditionally: a kill on a process that has already gone is a
+        // no-op, and the app must not leave while its own daemon still holds
+        // the encoder and the port.
+        let _ = child.kill();
     }
-    if local.is_running() {
-        eprintln!("[desktop] the mixer did not stop when asked; killing it");
-    }
-    // Unconditionally: a kill on a process that has already gone is a no-op,
-    // and the one thing that must not happen is the app exiting while its own
-    // daemon still holds the encoder and the port.
-    let _ = local.child.kill();
+    crate::settings::forget_local_port(app);
 }
 
 /// Poll until the daemon answers, it dies, or the clock runs out.

@@ -17,6 +17,7 @@ use tauri::{AppHandle, Manager};
 pub const CONFIG_FILE: &str = "godwinmix.toml";
 const TOKEN_FILE: &str = "core-token";
 const CONNECTION_FILE: &str = "connection.json";
+const LOCAL_PORT_FILE: &str = "local-core.port";
 
 /// The example config, read at compile time rather than shipped as a bundle
 /// resource: it is 10 kB, it can then never go missing from an installation,
@@ -147,6 +148,28 @@ fn random_token() -> io::Result<String> {
         let _ = write!(s, "{b:02x}");
         s
     }))
+}
+
+/// Write down the port the local mixer was given, so that a shell which was
+/// killed, or crashed, finds the daemon it started still running and goes
+/// back to it instead of starting a second one to fight it for the encoder.
+pub fn remember_local_port(app: &AppHandle, port: u16) {
+    if let Ok(dir) = data_dir(app) {
+        let _ = fs::write(dir.join(LOCAL_PORT_FILE), port.to_string());
+    }
+}
+
+/// The port the last local mixer was given, if there was one.
+pub fn last_local_port(app: &AppHandle) -> Option<u16> {
+    let text = fs::read_to_string(data_dir(app).ok()?.join(LOCAL_PORT_FILE)).ok()?;
+    text.trim().parse().ok()
+}
+
+/// Forget it, once that mixer has been stopped.
+pub fn forget_local_port(app: &AppHandle) {
+    if let Ok(dir) = data_dir(app) {
+        let _ = fs::remove_file(dir.join(LOCAL_PORT_FILE));
+    }
 }
 
 /// Load what was remembered. `None` on a first run, and on a file that no
