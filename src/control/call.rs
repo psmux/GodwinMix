@@ -119,18 +119,21 @@ pub async fn dispatch(
     }
 
     let envelope = CallEnvelope::read(&params);
-    if def.destructive && token.confirm == ConfirmPolicy::Required {
-        match &envelope.confirm {
-            None => return Err(app.confirmations.require(method, token)),
-            Some(confirm) => app.confirmations.redeem(confirm, method, token)?,
-        }
-    }
-    let dry_run = envelope.dry_run && def.destructive;
     if envelope.dry_run && !def.destructive {
         return Err(RpcError::invalid_params(format!(
             "{method} is not destructive, so dry_run has nothing to describe. \
              Call it without dry_run."
         )));
+    }
+    let dry_run = envelope.dry_run && def.destructive;
+    // A dry run changes nothing, so there is nothing to confirm. Asking for a
+    // confirm token before answering "here is what would happen" would make
+    // the safer call the more awkward one.
+    if def.destructive && !dry_run && token.confirm == ConfirmPolicy::Required {
+        match &envelope.confirm {
+            None => return Err(app.confirmations.require(method, token)),
+            Some(confirm) => app.confirmations.redeem(confirm, method, token)?,
+        }
     }
 
     // A replay is looked up before the work and stored after it, so two

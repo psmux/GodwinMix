@@ -135,17 +135,19 @@ pub struct Subscription {
 impl Subscription {
     /// Does this client want `event/<name>`?
     ///
-    /// The ext gated events are checked first: a client that asked for
-    /// `"*"` still gets no meters unless it asked for `ext.meters`, because
-    /// the whole point of the table is that nothing expensive runs by accident.
+    /// An expensive stream is governed by its `ext` key alone. Asking for
+    /// `ext.meters` is asking for meters, and the attach written out in 05
+    /// section 2 does exactly that without naming `meters` among its event
+    /// patterns; making a client say it twice would be a trap. The patterns
+    /// govern everything the core publishes anyway, and a client that asks for
+    /// none of the ext keys costs the core nothing, which is the point of the
+    /// table.
     pub fn wants(&self, name: &str) -> bool {
         match name {
-            "meters" => self.ext.meters && self.matches(name),
-            "tally" => self.ext.tally && self.matches(name),
-            "source.position" => self.ext.positions && self.matches(name),
-            "multiview.layout" | "multiview.frame" => {
-                self.ext.wants_multiview() && self.matches(name)
-            }
+            "meters" => self.ext.meters,
+            "tally" => self.ext.tally,
+            "source.position" => self.ext.positions,
+            "multiview.layout" | "multiview.frame" => self.ext.wants_multiview(),
             // The stream's own bookkeeping is never filtered out: a client
             // that missed a flush would never render.
             "snapshot" | "flush" | "resync" => true,
@@ -393,20 +395,36 @@ mod tests {
         assert!(everything.wants("snapshot"));
         assert!(everything.wants("resync"));
 
-        let meters_only = Subscription {
-            patterns: vec!["meters".into()],
-            ext: Ext { meters: true, ..Ext::default() },
-        };
-        assert!(meters_only.wants("meters"));
-        assert!(!meters_only.wants("program.took"));
-
-        // Asking for the ext without the pattern is still no: both have to say
-        // yes, which is what lets a Stream Deck take tally and nothing else.
-        let ext_but_not_pattern = Subscription {
+        // A Stream Deck: tally and nothing else. It never names `tally` among
+        // its patterns, because asking for the ext key is asking for the
+        // stream.
+        let deck = Subscription {
             patterns: vec!["program.*".into()],
-            ext: Ext { meters: true, ..Ext::default() },
+            ext: Ext { tally: true, ..Ext::default() },
         };
-        assert!(!ext_but_not_pattern.wants("meters"));
+        assert!(deck.wants("tally"));
+        assert!(deck.wants("program.took"));
+        assert!(!deck.wants("meters"));
+        assert!(!deck.wants("source.state"));
+
+        // The attach written out in 05 section 2, which names no ext key among
+        // its patterns and must still get its meters.
+        let ui = Subscription {
+            patterns: vec![
+                "program.*".into(),
+                "source.*".into(),
+                "output.*".into(),
+                "alert".into(),
+            ],
+            ext: Ext { meters: true, tally: true, ..Ext::default() },
+        };
+        assert!(ui.wants("meters"), "the attach in 05 section 2 has to get its meters");
+        assert!(ui.wants("tally"));
+        assert!(ui.wants("program.took"));
+        assert!(!ui.wants("multiview.frame"));
+        // `source.*` matches the position event's name, and it still takes the
+        // ext key to turn that stream on.
+        assert!(!ui.wants("source.position"));
     }
 
     #[test]
