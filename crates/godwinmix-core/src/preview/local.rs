@@ -48,9 +48,22 @@ impl Target {
     }
 }
 
-/// Whether this build can serve a local raw preview at all.
+/// Whether this platform could serve a local raw preview at all.
+///
+/// A `cfg` and nothing else, so it can be asked before GStreamer is
+/// initialised. `godwinmix --info` runs on a machine that may have no
+/// GStreamer at all, exactly as `--api-info` does, and must not ask the
+/// registry anything.
+pub fn supported_platform() -> bool {
+    cfg!(unix)
+}
+
+/// Whether this core can serve one right now: the platform, and the element.
+///
+/// Needs an initialised GStreamer, so it is asked from the mixer and from a
+/// request, never from an early exit flag.
 pub fn supported() -> bool {
-    cfg!(unix) && crate::probe::exists("unixfdsink")
+    supported_platform() && crate::probe::exists("unixfdsink")
 }
 
 /// Why it cannot, when it cannot. The message names the state and the next
@@ -211,6 +224,12 @@ mod tests {
         let p = socket_path(dir, &Target::Source("cam1".into()));
         assert_eq!(p, std::path::Path::new("/run/gmx/preview/cam1.sock"));
         assert!(p.starts_with(socket_dir(dir)));
+    }
+
+    #[test]
+    fn the_platform_check_asks_gstreamer_nothing() {
+        // The point of it: `--info` runs before gst::init and must not panic.
+        assert_eq!(supported_platform(), cfg!(unix));
     }
 
     #[test]

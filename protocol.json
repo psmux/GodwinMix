@@ -422,6 +422,17 @@
           "description": "`event/source.position` for seekable sources.",
           "type": "boolean"
         },
+        "preview": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PreviewExt"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The preview scene, composited in the multiview pipeline at mosaic size,\nor `\"full\"` for a full resolution preview compositor built while\nsubscribed. See 11 section 3."
+        },
         "tally": {
           "description": "`event/tally`.",
           "type": "boolean"
@@ -1142,6 +1153,43 @@
         "closed"
       ],
       "type": "object"
+    },
+    "PreviewExt": {
+      "anyOf": [
+        {
+          "description": "`\"full\"`: a full resolution preview compositor, built while subscribed\nand torn down after.",
+          "type": "string"
+        },
+        {
+          "description": "`\"preview\": false`.",
+          "type": "boolean"
+        },
+        {
+          "description": "Thumbnails at mosaic size, which is what a designer drawing handles\nwants and costs about 1.7 percent of a programme composite.",
+          "properties": {
+            "fps": {
+              "default": null,
+              "format": "uint32",
+              "minimum": 0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "width": {
+              "default": null,
+              "format": "uint32",
+              "minimum": 0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            }
+          },
+          "type": "object"
+        }
+      ],
+      "description": "`ext.preview`. Either `\"full\"`, `false`, or an object."
     },
     "PreviewOpenRequest": {
       "description": "`preview.open {target}`.",

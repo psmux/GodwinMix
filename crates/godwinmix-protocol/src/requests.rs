@@ -266,12 +266,51 @@ pub struct Ext {
     /// `event/source.position` for seekable sources.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub positions: bool,
-    /// Keys this build does not implement yet (`thumb`, `preview`,
-    /// `telemetry`, `agent`). Kept rather than refused so that a client
-    /// written against the full table still connects, and so the core can say
-    /// in the subscribe result which keys it ignored.
+    /// The preview scene, composited in the multiview pipeline at mosaic size,
+    /// or `"full"` for a full resolution preview compositor built while
+    /// subscribed. See 11 section 3.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub preview: Option<PreviewExt>,
+    /// Keys this build does not implement yet (`thumb`, `telemetry`, `agent`).
+    /// Kept rather than refused so that a client written against the full
+    /// table still connects, and so the core can say in the subscribe result
+    /// which keys it ignored.
     #[serde(flatten, default, skip_serializing_if = "Map::is_empty")]
     pub other: Map<String, Value>,
+}
+
+/// `ext.preview`. Either `"full"`, `false`, or an object.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(untagged)]
+pub enum PreviewExt {
+    /// `"full"`: a full resolution preview compositor, built while subscribed
+    /// and torn down after.
+    Full(String),
+    /// `"preview": false`.
+    Off(bool),
+    /// Thumbnails at mosaic size, which is what a designer drawing handles
+    /// wants and costs about 1.7 percent of a programme composite.
+    On {
+        #[serde(default)]
+        fps: Option<u32>,
+        #[serde(default)]
+        width: Option<u32>,
+    },
+}
+
+impl PreviewExt {
+    pub fn wanted(&self) -> bool {
+        match self {
+            Self::Off(false) => false,
+            Self::Full(s) => s == "full",
+            _ => true,
+        }
+    }
+
+    /// Whether this asks for the expensive full resolution compositor.
+    pub fn is_full(&self) -> bool {
+        matches!(self, Self::Full(s) if s == "full")
+    }
 }
 
 /// `ext.multiview`. Accepts `false` to mean off, or an object.
@@ -299,6 +338,20 @@ impl MultiviewExt {
 impl Ext {
     pub fn wants_multiview(&self) -> bool {
         self.multiview.as_ref().is_some_and(|m| m.wanted())
+    }
+
+    /// Whether this client wants the preview scene composited for it.
+    ///
+    /// The preview lives in the multiview pipeline, so asking for it is also
+    /// asking for the mosaic: a client that asks for preview alone gets the
+    /// mosaic built underneath it and does not have to know that.
+    pub fn wants_preview(&self) -> bool {
+        self.preview.as_ref().is_some_and(|p| p.wanted())
+    }
+
+    /// Whether the full resolution preview compositor was asked for.
+    pub fn wants_full_preview(&self) -> bool {
+        self.preview.as_ref().is_some_and(|p| p.is_full())
     }
 
     /// Keys in `ext` this build does not act on, so `core.subscribe` can say
