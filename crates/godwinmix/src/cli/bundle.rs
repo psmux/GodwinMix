@@ -5,128 +5,14 @@
 //! The point is that the person reporting a fault does not have to be told
 //! what to collect, and nothing they collect leaks their stream key.
 //!
-//! The zip writer is here rather than from a crate. A store only zip, no
-//! compression, is a local header, the bytes, and a central directory: about a
-//! hundred lines with the CRC. Every zip tool on every platform reads it, and
-//! `zip` crates pull in a compressor, a time crate and often an encryption
-//! backend for a file that is mostly already compressed logs.
+//! The zip is written by `godwinmix_core::zip`, a store only writer with a
+//! reader beside it. It started here and moved when a collection export wanted
+//! the same hundred lines; the reasoning is unchanged, and it is in that
+//! module's head.
 
 use anyhow::{Context, Result};
+use godwinmix_core::zip::{crc32, Zip};
 use std::path::PathBuf;
-
-// --- a store only zip --------------------------------------------------------
-
-/// A zip archive built in memory, stored not deflated.
-pub struct Zip {
-    out: Vec<u8>,
-    entries: Vec<Entry>,
-}
-
-struct Entry {
-    name: String,
-    crc: u32,
-    size: u32,
-    offset: u32,
-}
-
-impl Default for Zip {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-impl Zip {
-    pub fn new() -> Self {
-        Self { out: Vec::new(), entries: Vec::new() }
-    }
-
-    /// Add one file. `name` is the path inside the archive, forward slashes,
-    /// as the zip format requires on every platform including Windows.
-    ///
-    /// A name already in the archive is refused and the first one stands.
-    /// `unzip` asks the operator what to do about a duplicate, and a support
-    /// bundle is a thing people unpack in a script.
-    pub fn add(&mut self, name: &str, data: &[u8]) -> bool {
-        let name = name.replace('\\', "/");
-        if self.entries.iter().any(|e| e.name == name) {
-            return false;
-        }
-        let crc = crc32(data);
-        let offset = self.out.len() as u32;
-        self.out.extend_from_slice(&0x0403_4b50u32.to_le_bytes()); // local header
-        self.out.extend_from_slice(&20u16.to_le_bytes()); // version needed
-        self.out.extend_from_slice(&0u16.to_le_bytes()); // flags
-        self.out.extend_from_slice(&0u16.to_le_bytes()); // method: stored
-        self.out.extend_from_slice(&0u16.to_le_bytes()); // mod time
-        self.out.extend_from_slice(&0x21u16.to_le_bytes()); // mod date: 1980-01-01
-        self.out.extend_from_slice(&crc.to_le_bytes());
-        self.out.extend_from_slice(&(data.len() as u32).to_le_bytes());
-        self.out.extend_from_slice(&(data.len() as u32).to_le_bytes());
-        self.out.extend_from_slice(&(name.len() as u16).to_le_bytes());
-        self.out.extend_from_slice(&0u16.to_le_bytes()); // extra length
-        self.out.extend_from_slice(name.as_bytes());
-        self.out.extend_from_slice(data);
-        self.entries.push(Entry { name, crc, size: data.len() as u32, offset });
-        true
-    }
-
-    /// The finished archive.
-    pub fn finish(mut self) -> Vec<u8> {
-        let directory_at = self.out.len() as u32;
-        for e in &self.entries {
-            self.out.extend_from_slice(&0x0201_4b50u32.to_le_bytes()); // central header
-            self.out.extend_from_slice(&20u16.to_le_bytes()); // version made by
-            self.out.extend_from_slice(&20u16.to_le_bytes()); // version needed
-            self.out.extend_from_slice(&0u16.to_le_bytes()); // flags
-            self.out.extend_from_slice(&0u16.to_le_bytes()); // method: stored
-            self.out.extend_from_slice(&0u16.to_le_bytes()); // mod time
-            self.out.extend_from_slice(&0x21u16.to_le_bytes()); // mod date
-            self.out.extend_from_slice(&e.crc.to_le_bytes());
-            self.out.extend_from_slice(&e.size.to_le_bytes());
-            self.out.extend_from_slice(&e.size.to_le_bytes());
-            self.out.extend_from_slice(&(e.name.len() as u16).to_le_bytes());
-            self.out.extend_from_slice(&0u16.to_le_bytes()); // extra
-            self.out.extend_from_slice(&0u16.to_le_bytes()); // comment
-            self.out.extend_from_slice(&0u16.to_le_bytes()); // disk number
-            self.out.extend_from_slice(&0u16.to_le_bytes()); // internal attrs
-            self.out.extend_from_slice(&0u32.to_le_bytes()); // external attrs
-            self.out.extend_from_slice(&e.offset.to_le_bytes());
-            self.out.extend_from_slice(e.name.as_bytes());
-        }
-        let directory_size = self.out.len() as u32 - directory_at;
-        let count = self.entries.len() as u16;
-        self.out.extend_from_slice(&0x0605_4b50u32.to_le_bytes()); // end of directory
-        self.out.extend_from_slice(&0u16.to_le_bytes()); // this disk
-        self.out.extend_from_slice(&0u16.to_le_bytes()); // directory's disk
-        self.out.extend_from_slice(&count.to_le_bytes());
-        self.out.extend_from_slice(&count.to_le_bytes());
-        self.out.extend_from_slice(&directory_size.to_le_bytes());
-        self.out.extend_from_slice(&directory_at.to_le_bytes());
-        self.out.extend_from_slice(&0u16.to_le_bytes()); // comment length
-        self.out
-    }
-}
-
-/// CRC-32, the one zip uses. The table is built on first use rather than
-/// written out as 256 constants nobody can check by eye.
-fn crc32(data: &[u8]) -> u32 {
-    static TABLE: std::sync::LazyLock<[u32; 256]> = std::sync::LazyLock::new(|| {
-        let mut table = [0u32; 256];
-        for (i, entry) in table.iter_mut().enumerate() {
-            let mut c = i as u32;
-            for _ in 0..8 {
-                c = if c & 1 != 0 { 0xEDB8_8320 ^ (c >> 1) } else { c >> 1 };
-            }
-            *entry = c;
-        }
-        table
-    });
-    let mut crc = 0xFFFF_FFFFu32;
-    for b in data {
-        crc = TABLE[((crc ^ *b as u32) & 0xFF) as usize] ^ (crc >> 8);
-    }
-    crc ^ 0xFFFF_FFFF
-}
 
 // --- redaction ---------------------------------------------------------------
 
