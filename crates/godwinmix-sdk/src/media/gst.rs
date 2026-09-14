@@ -9,6 +9,8 @@
 //! Everything here is optional. Without the feature the crate has no native
 //! dependency and the container transport still works.
 
+// Only the fd transports need these, and they are Unix only.
+#[cfg(unix)]
 use std::sync::Mutex;
 
 use gstreamer as gst;
@@ -16,7 +18,9 @@ use gstreamer::prelude::*;
 use gstreamer_app::AppSrc;
 
 use crate::media::{MediaWriter, Streams, VideoFormat};
-use crate::wire::{Canvas, Transport};
+use crate::wire::Canvas;
+#[cfg(unix)]
+use crate::wire::Transport;
 
 /// What can go wrong building or feeding a GStreamer pipeline.
 #[derive(Debug)]
@@ -378,13 +382,15 @@ mod tests {
     #[cfg(unix)]
     #[test]
     fn an_fd_transport_with_no_address_says_what_to_do_instead() {
-        let err = FdTransportWriter::new(
+        let err = match FdTransportWriter::new(
             Transport::Shm,
             "",
             Canvas::new(64, 64, 30),
             Streams::video_only(VideoFormat::I420),
-        )
-        .unwrap_err();
+        ) {
+            Ok(_) => panic!("an empty socket path must not open a transport"),
+            Err(e) => e,
+        };
         assert!(err.to_string().contains("container"), "{err}");
     }
 }

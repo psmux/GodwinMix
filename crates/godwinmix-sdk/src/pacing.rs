@@ -78,7 +78,7 @@ impl Frame {
     }
 
     pub fn as_mut_slice(&mut self) -> &mut [u8] {
-        self.buffer.as_mut().map(|v| v.as_mut_slice()).unwrap_or(&mut [])
+        self.buffer.as_deref_mut().unwrap_or(&mut [])
     }
 
     pub fn len(&self) -> usize {
@@ -166,6 +166,10 @@ impl Pacer {
     ///
     /// The first call returns 0 without sleeping, so the first frame leaves at
     /// once and the core prerolls.
+    ///
+    /// Named `next` because that is what it is, not because it is an iterator:
+    /// a producer that has to stop cannot do it from inside a `for` loop.
+    #[allow(clippy::should_implement_trait)]
     pub fn next(&mut self) -> u64 {
         let pts = self.pts_ns();
         let deadline = Duration::from_nanos(pts);

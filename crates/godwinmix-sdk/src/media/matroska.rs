@@ -526,7 +526,7 @@ mod tests {
             while *at < bytes.len() {
                 let id = read_id(bytes, at);
                 let size = read_size_field(bytes, at);
-                let known = size.unwrap_or(u64::MAX as u64);
+                let known = size.unwrap_or(u64::MAX);
                 match id.as_slice() {
                     ID_SEGMENT => continue, // unknown size: its children follow
                     ID_CLUSTER => {

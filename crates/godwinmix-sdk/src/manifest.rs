@@ -879,7 +879,7 @@ impl Manifest {
             }
             if !t.user_invocable && !t.model_invocable {
                 out.push(problem(
-                    format!("{at}"),
+                    at.to_string(),
                     "neither a person nor a model may call this tool, so nothing can.",
                 ));
             }
