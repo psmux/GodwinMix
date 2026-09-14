@@ -104,6 +104,7 @@ pub fn apply_into(
     let items = resolve_items(&source.items, &resolved, &scope, ratio, scene_id)?;
     Ok(Scene {
         id: scene_id,
+        order: None,
         name: name.unwrap_or(&source.name).to_string(),
         items,
         color: source.color.clone(),

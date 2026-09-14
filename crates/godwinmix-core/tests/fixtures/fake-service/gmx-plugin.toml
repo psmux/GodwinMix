@@ -1,0 +1,35 @@
+# A plugin with no media at all: one service and one device, in shell.
+#
+# It exists so the supervisor can be tested against a real process rather than
+# a mock: a real handshake, real JSON lines on stderr, a real `tool.call`, a
+# real `discover`, and a real `event` notification that has to become a source.
+[plugin]
+name = "fakeservice"
+version = "0.1.0"
+api = 1
+description = "A service and a device in shell, for the supervisor's own tests."
+license = "Apache-2.0"
+platforms = ["linux-x86_64", "linux-aarch64", "macos-aarch64", "macos-x86_64"]
+placements = ["sidecar"]
+process = "singleton"
+
+[run]
+shell = "run.sh"
+
+[[provides]]
+kind = "service"
+id = "service"
+capabilities = ["health"]
+settings = "settings.json"
+
+[[provides]]
+kind = "device"
+id = "discovery"
+capabilities = ["health"]
+settings = "settings.json"
+discovery = { kind = "poll", interval_secs = 1 }
+
+[[tools]]
+name = "echo"
+description = "Answer with whatever it was given, so a test can prove a tool call reached a plugin and came back. Example: tool.call {name: \"fakeservice/echo\", arguments: {say: \"hello\"}}."
+input = "echo.json"

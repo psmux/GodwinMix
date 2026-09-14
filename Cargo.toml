@@ -40,6 +40,10 @@ gstreamer-video = "0.24"
 gstreamer-audio = "0.24"
 gstreamer-app = "0.24"
 gstreamer-pbutils = "0.24"
+# libgstcontroller: the interpolation control sources transitions bind to a
+# compositor pad with, sampled by the aggregator per output frame rather than
+# written by a thread. Same version family as the rest of the bindings.
+gstreamer-controller = "0.24"
 glib = "0.21"
 
 tokio = "1"

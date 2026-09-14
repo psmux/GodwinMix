@@ -68,25 +68,43 @@ pub fn registry() -> &'static [OutputProvide] {
     REGISTRY
 }
 
+/// The output a `type` names: a built in first, then a loaded plugin's.
+///
+/// Built in first so a plugin can never shadow an output that ships with the
+/// core, which is the same order `source::by_type` uses and for the same
+/// reason: an operator's `rtmp` must mean the core's rtmp whatever they have
+/// installed.
 pub fn by_type(type_id: &str) -> Option<&'static OutputProvide> {
-    registry().iter().find(|p| p.manifest.is(type_id))
+    registry()
+        .iter()
+        .find(|p| p.manifest.is(type_id))
+        .or_else(|| super::loader::output_provide(type_id))
 }
 
 pub fn resolve(uri: &str) -> Option<&'static OutputProvide> {
-    registry()
+    let built_in = registry()
         .iter()
         .filter_map(|p| (p.claims)(uri).map(|rank| (rank, p)))
         .max_by_key(|(rank, _)| *rank)
-        .map(|(_, p)| p)
+        .map(|(_, p)| p);
+    built_in.or_else(|| super::loader::output_for_uri(uri))
 }
 
 pub fn available() -> Vec<String> {
-    registry().iter().map(|p| p.manifest.provide_id()).collect()
+    registry()
+        .iter()
+        .map(|p| p.manifest.provide_id())
+        .chain(super::loader::output_provides().into_iter().map(|p| p.manifest.provide_id()))
+        .collect()
 }
 
 /// Every output kind this build carries, with what it is and what it claims.
 pub fn described() -> Vec<super::KindInfo> {
-    registry().iter().map(|p| p.manifest.describe()).collect()
+    registry()
+        .iter()
+        .map(|p| p.manifest.describe())
+        .chain(super::loader::output_provides().into_iter().map(|p| p.manifest.describe()))
+        .collect()
 }
 
 /// The output implementation a config entry names, whether it wrote a `type`

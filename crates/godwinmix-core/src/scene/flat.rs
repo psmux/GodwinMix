@@ -117,10 +117,32 @@ pub enum FlatContent {
 }
 
 impl Collection {
+    /// Give every scene and item a stored order key, and fix any that are out
+    /// of order.
+    ///
+    /// The point of a stored key is that inserting an item changes one record
+    /// on the wire instead of renumbering every sibling. That only holds if
+    /// the keys are there, so this fills in whatever is missing: an item
+    /// inserted between two others takes a key between theirs, an item
+    /// appended takes one after the last, and a group whose keys have run out
+    /// of room between them is respread, which is the one case where several
+    /// records change at once and is rare by construction (`order::between`
+    /// splits a gap sixty two ways each time).
+    ///
+    /// Called by the scene server after every edit, before the diff, so the
+    /// patch a client receives is the change it made and nothing else.
+    pub fn renumber_order(&mut self) {
+        renumber(&mut self.scenes.iter_mut().map(|s| &mut s.order).collect::<Vec<_>>());
+        for scene in &mut self.scenes {
+            renumber_items(&mut scene.items);
+        }
+    }
+
     /// The document as records.
     pub fn to_flat(&self) -> FlatDocument {
         let mut records = Vec::new();
-        for (scene, order) in self.scenes.iter().zip(order::spread(self.scenes.len())) {
+        let keys = keys_of(&self.scenes.iter().map(|s| s.order.as_deref()).collect::<Vec<_>>());
+        for (scene, order) in self.scenes.iter().zip(keys) {
             records.push(Record {
                 id: scene.id,
                 parent: None,
@@ -143,9 +165,80 @@ impl Collection {
     }
 }
 
+/// The order keys for one group of siblings.
+///
+/// The stored ones when every sibling has one and they are in order, which is
+/// the ordinary case after `renumber_order` has run. Otherwise a fresh spread,
+/// because a group where the keys disagree with the array would otherwise be
+/// read back in a different order than it was written, and the array is what
+/// the document means.
+fn keys_of(stored: &[Option<&str>]) -> Vec<String> {
+    let usable = stored.iter().all(Option::is_some)
+        && stored.windows(2).all(|pair| match pair {
+            [Some(a), Some(b)] => a < b,
+            _ => true,
+        });
+    match usable {
+        true => stored.iter().map(|k| k.unwrap_or_default().to_string()).collect(),
+        false => order::spread(stored.len()),
+    }
+}
+
+/// Fill in and repair one group's keys in place.
+fn renumber(keys: &mut [&mut Option<String>]) {
+    let current: Vec<Option<&str>> = keys.iter().map(|k| k.as_deref()).collect();
+    if keys_of(&current) == current.iter().map(|k| k.unwrap_or_default().to_string()).collect::<Vec<_>>()
+        && current.iter().all(Option::is_some)
+    {
+        return;
+    }
+    // Anything already in order and present stays; the rest is given a key
+    // between the last good one and the next.
+    let mut last: Option<String> = None;
+    let mut fixed: Vec<Option<String>> = Vec::with_capacity(keys.len());
+    let mut respread = false;
+    for (i, key) in current.iter().enumerate() {
+        let next = current[i + 1..].iter().flatten().find(|k| Some(**k) > last.as_deref());
+        let keep = key.filter(|k| last.as_deref().is_none_or(|l| l < *k));
+        match keep {
+            Some(k) => {
+                last = Some(k.to_string());
+                fixed.push(Some(k.to_string()));
+            }
+            None => match order::between(last.as_deref(), next.copied()) {
+                Some(made) => {
+                    last = Some(made.clone());
+                    fixed.push(Some(made));
+                }
+                None => {
+                    respread = true;
+                    break;
+                }
+            },
+        }
+    }
+    let fixed = match respread {
+        true => order::spread(keys.len()).into_iter().map(Some).collect(),
+        false => fixed,
+    };
+    for (slot, value) in keys.iter_mut().zip(fixed) {
+        **slot = value;
+    }
+}
+
+fn renumber_items(items: &mut [Item]) {
+    renumber(&mut items.iter_mut().map(|i| &mut i.order).collect::<Vec<_>>());
+    for item in items.iter_mut() {
+        if let Content::Children { children } = &mut item.content {
+            renumber_items(children);
+        }
+    }
+}
+
 /// Write one level of items as records, then recurse into the groups.
 fn push_items(items: &[Item], parent: Id, out: &mut Vec<Record>) {
-    for (item, order) in items.iter().zip(order::spread(items.len())) {
+    let keys = keys_of(&items.iter().map(|i| i.order.as_deref()).collect::<Vec<_>>());
+    for (item, order) in items.iter().zip(keys) {
         out.push(Record {
             id: item.id,
             parent: Some(parent),
@@ -232,6 +325,7 @@ impl FlatDocument {
             let mut depth = 0;
             scenes.push(Scene {
                 id: record.id,
+                order: Some(record.order.clone()),
                 name: name.clone(),
                 color: color.clone(),
                 items: build_items(record.id, &children, &mut depth, &mut seen)?,
@@ -300,6 +394,7 @@ fn build_items(
         seen.insert(record.id);
         items.push(Item {
             id: record.id,
+            order: Some(record.order.clone()),
             name: props.name.clone(),
             content,
             transform: props.transform,
@@ -349,11 +444,79 @@ mod tests {
         doc
     }
 
+    /// The round trip keeps everything, including where each sibling sits.
+    ///
+    /// `renumber_order` first because that is what the scene server does after
+    /// every edit: a document that has never been through one has no order
+    /// keys, `to_flat` works them out from the array, and reading it back
+    /// stores them. Renumbering makes the two sides the same document rather
+    /// than one with the keys written down and one without.
     #[test]
     fn tree_to_flat_to_tree_is_lossless() {
-        let doc = sample();
+        let mut doc = sample();
+        doc.renumber_order();
         let flat = doc.to_flat();
         assert_eq!(flat.to_tree().unwrap(), doc);
+    }
+
+    /// The point of storing the key: adding a sibling changes one record.
+    ///
+    /// Before, the keys were a function of how many siblings there were, so
+    /// inserting an item at the front renumbered the lot and a client mirroring
+    /// the document had to redraw every one of them.
+    #[test]
+    fn inserting_a_sibling_changes_one_order_key_and_no_other() {
+        let mut doc = sample();
+        doc.renumber_order();
+        let before: Vec<(Id, String)> =
+            doc.to_flat().records.iter().map(|r| (r.id, r.order.clone())).collect();
+
+        // At the front, which is the worst case: every later sibling moves up
+        // an index and would have been renumbered by a spread.
+        let fresh = Item::new(Content::Source { source: "cam9".into() });
+        let fresh_id = fresh.id;
+        doc.scenes[0].items.insert(0, fresh);
+        doc.renumber_order();
+        let after: Vec<(Id, String)> =
+            doc.to_flat().records.iter().map(|r| (r.id, r.order.clone())).collect();
+
+        let changed: Vec<Id> = after
+            .iter()
+            .filter(|(id, key)| {
+                before.iter().any(|(was, had)| was == id && had != key)
+            })
+            .map(|(id, _)| *id)
+            .collect();
+        assert!(changed.is_empty(), "inserting one item renumbered {changed:?}");
+        let new_key = after.iter().find(|(id, _)| *id == fresh_id).expect("the new item").1.clone();
+        let next = before
+            .iter()
+            .find(|(id, _)| doc.scenes[0].items.get(1).is_some_and(|i| i.id == *id))
+            .map(|(_, k)| k.clone())
+            .expect("the item it went in front of");
+        assert!(new_key < next, "the new key {new_key} must sort before {next}");
+    }
+
+    /// And moving one moves one. A drag is one record on the wire.
+    #[test]
+    fn reordering_an_item_changes_only_that_item() {
+        let mut doc = sample();
+        doc.renumber_order();
+        let before: Vec<(Id, String)> =
+            doc.to_flat().records.iter().map(|r| (r.id, r.order.clone())).collect();
+        let moved = doc.scenes[0].items[0].id;
+        let target = doc.scenes[0].items.last().expect("a last item").id;
+        super::super::server::ops::reorder(&mut doc, 0, moved, None, Some(target))
+            .expect("moving an item to the end");
+        doc.renumber_order();
+        let after: Vec<(Id, String)> =
+            doc.to_flat().records.iter().map(|r| (r.id, r.order.clone())).collect();
+        let changed: Vec<Id> = after
+            .iter()
+            .filter(|(id, key)| before.iter().any(|(was, had)| was == id && had != key))
+            .map(|(id, _)| *id)
+            .collect();
+        assert_eq!(changed, vec![moved], "a drag must write one record, not the group");
     }
 
     #[test]
@@ -368,7 +531,8 @@ mod tests {
     #[test]
     fn every_built_in_layout_survives_the_round_trip() {
         for name in layout::NAMES {
-            let doc = layout::builtin(name).unwrap();
+            let mut doc = layout::builtin(name).unwrap();
+            doc.renumber_order();
             let back = doc.to_flat().to_tree().unwrap();
             assert_eq!(back, doc, "layout {name} did not survive the projection");
         }
@@ -424,7 +588,8 @@ mod tests {
 
     #[test]
     fn record_order_and_not_array_position_decides_the_stack() {
-        let doc = sample();
+        let mut doc = sample();
+        doc.renumber_order();
         let mut flat = doc.to_flat();
         flat.records.reverse();
         assert_eq!(flat.to_tree().unwrap(), doc, "shuffling the records changed the tree");

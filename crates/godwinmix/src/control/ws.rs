@@ -76,6 +76,9 @@ struct Connection {
     /// `event/tally` carries `preview` and whether the layout says the preview
     /// is empty.
     wants_preview: bool,
+    /// What keeps the preview compositor up while this client wants one.
+    /// Dropped with the connection, which is what takes it away again.
+    preview: Option<godwinmix_core::multiview::PreviewSubscription>,
     /// `ext.telemetry` and `ext.agent`. Holding this is what keeps the
     /// telemetry probes measuring. See `control/push.rs`.
     push: crate::control::push::Push,
@@ -98,6 +101,7 @@ pub async fn serve_rpc(socket: WebSocket, ctx: Ctx, token: Token) {
         frame_no: 0,
         wants_mosaic: None,
         wants_preview: false,
+        preview: None,
         push: crate::control::push::Push::none(),
     };
     // Holding this is what keeps the mosaic up, and dropping it is what takes
@@ -105,6 +109,12 @@ pub async fn serve_rpc(socket: WebSocket, ctx: Ctx, token: Token) {
     // `ext.multiview` never builds one. See `multiview.rs`.
     let mut mosaic: Option<MultiviewSubscription> = None;
     let mut asked: Option<MultiviewRequest> = None;
+    // The scene document's own change stream. Taken for every connection,
+    // whether or not it has subscribed yet: the channel is a broadcast and a
+    // receiver that nobody reads from costs one slot, while starting it later
+    // would mean missing the patches raised between subscribing and the next
+    // poll. Nothing is written to a client that did not ask for `scene.*`.
+    let mut patches = conn.ctx.app.scenes.subscribe();
 
     loop {
         tokio::select! {
@@ -149,6 +159,33 @@ pub async fn serve_rpc(socket: WebSocket, ctx: Ctx, token: Token) {
                         break;
                     }
                 }
+                Err(broadcast::error::RecvError::Lagged(n)) => {
+                    if conn.on_lag(n).await.is_err() {
+                        break;
+                    }
+                }
+                Err(broadcast::error::RecvError::Closed) => break,
+            },
+            patch = patches.recv() => match patch {
+                Ok(patch) => {
+                    if conn.send_patch(&patch).await.is_err() {
+                        break;
+                    }
+                    // A transaction commits as one patch, but a burst of
+                    // separate edits (a drag, a multi select align) arrives as
+                    // several. Draining and flushing once paints them as one
+                    // update, which is the rule every other batch follows.
+                    while let Ok(more) = patches.try_recv() {
+                        if conn.send_patch(&more).await.is_err() {
+                            return;
+                        }
+                    }
+                    if conn.flush().await.is_err() {
+                        break;
+                    }
+                }
+                // A client that has fallen this far behind the document cannot
+                // patch its way back, so it is told to fetch it again.
                 Err(broadcast::error::RecvError::Lagged(n)) => {
                     if conn.on_lag(n).await.is_err() {
                         break;
@@ -280,12 +317,28 @@ impl Connection {
         // that wants only the preview does not have to know that.
         let wants_multiview = request.ext.wants_multiview() || request.ext.wants_preview();
         self.wants_preview = request.ext.wants_preview();
-        if request.ext.wants_full_preview() {
-            warn!(
-                "a client asked for ext.preview = \"full\"; this build composites the preview \
-                 at mosaic size and does not build a full resolution compositor yet"
-            );
-        }
+        // The preview compositor is built by holding a subscription, exactly
+        // as the mosaic is, and taken away when this connection drops it. The
+        // armed scene is pushed first so the first frame is the right picture.
+        self.preview = match self.wants_preview {
+            true => {
+                crate::control::push_preview(&self.ctx.app);
+                let (fps, width) = match &request.ext.preview {
+                    Some(godwinmix_protocol::PreviewExt::On { fps, width }) => {
+                        (fps.unwrap_or(0) as i32, width.unwrap_or(0) as i32)
+                    }
+                    _ => (0, 0),
+                };
+                Some(self.ctx.app.multiview.subscribe_preview(
+                    godwinmix_core::multiview::PreviewRequest {
+                        fps,
+                        width,
+                        full: request.ext.wants_full_preview(),
+                    },
+                ))
+            }
+            false => None,
+        };
         // What the mosaic is asked to run at. Zero on either means "whatever
         // is configured", which is what the clamp in multiview.rs reads it as.
         self.wants_mosaic = match (&request.ext.multiview, wants_multiview) {
@@ -425,6 +478,21 @@ impl Connection {
             .collect();
         sources.dedup();
         sources
+    }
+
+    /// One change to the scene document, as `event/scene.patch`.
+    ///
+    /// Sent to a client that asked for `scene.*`, and to the client that made
+    /// the change as well: it carries `source_client`, so the one that made it
+    /// suppresses its own echo, and `client_seq`, so a drag it has already
+    /// drawn past is discarded rather than snapping the handle backwards.
+    async fn send_patch(&mut self, patch: &godwinmix_core::scene::server::Patch) -> Result<(), ()> {
+        if !self.sub.as_ref().is_some_and(|s| s.wants("scene.patch")) {
+            return Ok(());
+        }
+        let value = serde_json::to_value(patch).map_err(|_| ())?;
+        self.seq = self.seq.saturating_add(1);
+        self.send(rpc::notification("event/scene.patch", value)).await
     }
 
     /// Keep enough of the state to derive tally without asking the mixer.

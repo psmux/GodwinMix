@@ -7,9 +7,9 @@
 //! arithmetic; nothing is reimplemented here.
 
 use crate::caps::CanvasCaps;
-use crate::mixer::slots::{Placement, PlacementAudio, Sizing};
+use crate::mixer::slots::{ItemFilter, Placement, PlacementAudio, Sizing};
 use crate::scene::document::{
-    Align, Audio, Collection, Content, Fit, Item, Override, Scene,
+    Align, Audio, Collection, Content, Filter, Fit, Item, Override, Scene, Transform,
 };
 use crate::scene::geometry;
 use crate::scene::id::Id;
@@ -92,26 +92,124 @@ fn apply_overrides(items: &mut [Item], overrides: &std::collections::BTreeMap<Id
 /// with nothing behind it would be a black rectangle over the picture.
 pub fn placements(doc: &Collection, scene: &Scene, canvas: &CanvasCaps) -> Vec<Placement> {
     let resolved = resolve(doc, scene);
-    geometry::flatten(&resolved, &doc.canvas)
-        .into_iter()
-        .filter_map(|p| {
-            let Content::Source { source } = &p.item.content else { return None };
-            Some(Placement {
-                source: source.clone(),
-                xpos: p.rect.x.round() as i32,
-                ypos: p.rect.y.round() as i32,
-                width: p.rect.w.round() as i32,
-                height: p.rect.h.round() as i32,
-                alpha: p.opacity.clamp(0.0, 1.0),
-                crop: (p.item.crop.left, p.item.crop.top, p.item.crop.right, p.item.crop.bottom),
-                rotation: p.transform.rotation,
-                sizing: sizing(p.transform.fit),
-                align: align(p.transform.align),
-                audio: audio(p.item.audio),
-            })
-        })
-        .map(|p| clamp(p, canvas))
-        .collect()
+    let mut out = Vec::new();
+    // The ordinary path, and the only one a scene with no filtered group ever
+    // takes: flatten the tree and turn each leaf into a placement.
+    if !has_filtered_group(&resolved) {
+        for p in geometry::flatten(&resolved, &doc.canvas) {
+            if let Some(placement) = leaf(&p) {
+                out.push(clamp(placement, canvas));
+            }
+        }
+        return out;
+    }
+    walk(&resolved, &Transform::default(), 1.0, doc, canvas, &mut out);
+    out
+}
+
+/// Is there a group here that carries a filter?
+///
+/// Asked once, before anything else, because the answer is no for every scene
+/// anybody has built and the cheap path is worth keeping cheap.
+fn has_filtered_group(items: &[Item]) -> bool {
+    items.iter().any(|item| match &item.content {
+        Content::Children { children } => {
+            (item.visible && item.filters.iter().any(|f| f.enabled)) || has_filtered_group(children)
+        }
+        _ => false,
+    })
+}
+
+/// Flatten, stopping at a group that carries a filter.
+///
+/// A filtered group cannot be flattened: the filter is over the group as one
+/// picture, and three items flattened are three pictures. So it becomes one
+/// placement carrying its children, and the slot pool composites it on its own
+/// (`mixer::group`, the expensive path).
+fn walk(
+    items: &[Item],
+    parent: &Transform,
+    opacity: f64,
+    doc: &Collection,
+    canvas: &CanvasCaps,
+    out: &mut Vec<Placement>,
+) {
+    for item in items {
+        if !item.visible {
+            continue;
+        }
+        let transform = geometry::compose(parent, &item.transform);
+        let alpha = opacity * item.opacity;
+        match &item.content {
+            Content::Children { children } if item.filters.iter().any(|f| f.enabled) => {
+                // The children at their canvas coordinates, because the sub
+                // compositor's surface is the canvas: the group's transform
+                // and opacity are already in them, and what the programme
+                // compositor then draws is the whole surface.
+                let synthetic = Item { transform, opacity: alpha, ..item.clone() };
+                let mut kids = Vec::new();
+                for p in geometry::flatten(std::slice::from_ref(&synthetic), &doc.canvas) {
+                    if let Some(child) = leaf(&p) {
+                        kids.push(clamp(child, canvas));
+                    }
+                }
+                if kids.is_empty() {
+                    continue;
+                }
+                out.push(Placement {
+                    source: format!("group:{}", item.id),
+                    item: Some(item.id),
+                    filters: filters(&item.filters),
+                    group: kids,
+                    xpos: 0,
+                    ypos: 0,
+                    width: canvas.width,
+                    height: canvas.height,
+                    alpha: 1.0,
+                    crop: (0.0, 0.0, 0.0, 0.0),
+                    rotation: 0.0,
+                    sizing: Sizing::Fill,
+                    align: (0.5, 0.5),
+                    audio: PlacementAudio::Never,
+                });
+            }
+            Content::Children { children } => walk(children, &transform, alpha, doc, canvas, out),
+            _ => {
+                let synthetic = Item { transform, opacity: alpha, ..item.clone() };
+                for p in geometry::flatten(std::slice::from_ref(&synthetic), &doc.canvas) {
+                    if let Some(placement) = leaf(&p) {
+                        out.push(clamp(placement, canvas));
+                    }
+                }
+            }
+        }
+    }
+}
+
+/// One flattened leaf as a placement, or `None` for an item that draws no
+/// source.
+///
+/// An item whose content is not a source (a graphic, or a reference that could
+/// not be resolved) is skipped: the graphics host is Phase 5 and a placement
+/// with nothing behind it would be a black rectangle over the picture.
+fn leaf(p: &geometry::Placement<'_>) -> Option<Placement> {
+    let Content::Source { source } = &p.item.content else { return None };
+    Some(Placement {
+        source: source.clone(),
+        item: Some(p.item.id),
+        filters: filters(&p.item.filters),
+        group: Vec::new(),
+        xpos: p.rect.x.round() as i32,
+        ypos: p.rect.y.round() as i32,
+        width: p.rect.w.round() as i32,
+        height: p.rect.h.round() as i32,
+        alpha: p.opacity.clamp(0.0, 1.0),
+        crop: (p.item.crop.left, p.item.crop.top, p.item.crop.right, p.item.crop.bottom),
+        rotation: p.transform.rotation,
+        sizing: sizing(p.transform.fit),
+        align: align(p.transform.align),
+        audio: audio(p.item.audio),
+    })
 }
 
 /// `fit` as the compositor pad spells it.
@@ -126,6 +224,31 @@ pub fn sizing(fit: Fit) -> Sizing {
         Fit::None | Fit::Stretch => Sizing::Fill,
         Fit::Contain | Fit::Max => Sizing::Contain,
         Fit::Cover | Fit::FitWidth | Fit::FitHeight => Sizing::Cover,
+    }
+}
+
+/// The item's filters as the slot chain needs them.
+///
+/// A disabled filter is not a filter with a flag: it is simply not in the
+/// chain, so turning one off costs one pad block and then nothing at all. The
+/// params are JSON on the document and a toml table in the pipeline, which is
+/// the one place the two spellings meet; a value toml cannot hold (a null, a
+/// nested array of tables) is dropped and the filter's own defaults stand.
+fn filters(list: &[Filter]) -> Vec<ItemFilter> {
+    list.iter()
+        .filter(|f| f.enabled)
+        .map(|f| ItemFilter {
+            type_id: f.kind.clone(),
+            name: f.name.clone(),
+            params: params(&f.params),
+        })
+        .collect()
+}
+
+fn params(value: &serde_json::Value) -> crate::config::Params {
+    match toml::Value::try_from(value) {
+        Ok(toml::Value::Table(table)) => table,
+        _ => Default::default(),
     }
 }
 
@@ -258,6 +381,70 @@ mod tests {
         assert_eq!(p[0].source, "cam2");
         assert_eq!((p[0].xpos, p[0].ypos), (1010, 20), "the reference's own transform composes");
         assert_eq!(p[0].alpha, 0.5, "the override was not applied");
+    }
+
+    /// A group with a filter cannot be flattened, so it comes out as one
+    /// placement carrying its children and the slot pool composites it on its
+    /// own. Without a filter the same group flattens as it always did.
+    #[test]
+    fn a_group_with_a_filter_stays_a_group_and_one_without_is_flattened() {
+        let mut a = source("cam1");
+        a.transform.position = Vec2::new(0.0, 0.0);
+        a.transform.frame = Some(Frame::new(960.0, 1080.0));
+        let mut b = source("cam2");
+        b.transform.position = Vec2::new(960.0, 0.0);
+        b.transform.frame = Some(Frame::new(960.0, 1080.0));
+        let mut group = Item::new(Content::Children { children: vec![a, b] });
+        group.name = Some("pair".into());
+
+        let doc = doc_with(vec![group.clone()]);
+        let flat = placements(&doc, &doc.scenes[0], &canvas());
+        assert_eq!(flat.len(), 2, "a group with no filter is flattened as it always was");
+        assert!(flat.iter().all(|p| p.group.is_empty()));
+
+        group.filters = vec![crate::scene::document::Filter {
+            kind: "chroma/filter".into(),
+            name: Some("over the pair".into()),
+            enabled: true,
+            params: serde_json::json!({}),
+        }];
+        let doc = doc_with(vec![group.clone()]);
+        let kept = placements(&doc, &doc.scenes[0], &canvas());
+        assert_eq!(kept.len(), 1, "a filtered group is one placement, not two");
+        assert_eq!(kept[0].group.len(), 2, "carrying its two children");
+        assert_eq!(kept[0].filters.len(), 1);
+        // The surface is the canvas and the children sit on it where they
+        // would have sat, so the filter sees what an operator sees.
+        assert_eq!((kept[0].xpos, kept[0].ypos), (0, 0));
+        assert_eq!((kept[0].width, kept[0].height), (1920, 1080));
+        assert_eq!(kept[0].group[0].xpos, 0);
+        assert_eq!(kept[0].group[1].xpos, 960);
+
+        // And a disabled filter is no filter: back to the cheap path.
+        group.filters[0].enabled = false;
+        let doc = doc_with(vec![group]);
+        assert_eq!(placements(&doc, &doc.scenes[0], &canvas()).len(), 2);
+    }
+
+    /// Moving a filtered group moves its children on the surface, the same way
+    /// moving any group moves its children on the canvas.
+    #[test]
+    fn moving_a_filtered_group_moves_its_children() {
+        let mut a = source("cam1");
+        a.transform.frame = Some(Frame::new(480.0, 270.0));
+        let mut group = Item::new(Content::Children { children: vec![a] });
+        group.filters = vec![crate::scene::document::Filter {
+            kind: "chroma/filter".into(),
+            name: None,
+            enabled: true,
+            params: serde_json::json!({}),
+        }];
+        let mut doc = doc_with(vec![group]);
+        let before = placements(&doc, &doc.scenes[0], &canvas());
+        doc.scenes[0].items[0].transform.position = Vec2::new(100.0, 50.0);
+        let after = placements(&doc, &doc.scenes[0], &canvas());
+        assert_eq!(after[0].group[0].xpos - before[0].group[0].xpos, 100);
+        assert_eq!(after[0].group[0].ypos - before[0].group[0].ypos, 50);
     }
 
     #[test]

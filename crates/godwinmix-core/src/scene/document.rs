@@ -115,6 +115,13 @@ impl Canvas {
 #[serde(deny_unknown_fields)]
 pub struct Scene {
     pub id: Id,
+    /// Where this scene sits among its siblings, as a sort key rather than an
+    /// array index. Stored so that inserting a scene changes one key on the
+    /// wire instead of renumbering every other one; assigned by
+    /// `Collection::renumber_order` when it is missing, so a document written
+    /// by hand or by an older build needs nothing.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub order: Option<String>,
     pub name: String,
     /// Bottom of the stack first, the way the compositor takes them.
     pub items: Vec<Item>,
@@ -127,7 +134,7 @@ pub struct Scene {
 impl Scene {
     /// An empty scene with a fresh id.
     pub fn new(name: impl Into<String>) -> Scene {
-        Scene { id: Id::new(), name: name.into(), items: Vec::new(), color: None }
+        Scene { id: Id::new(), order: None, name: name.into(), items: Vec::new(), color: None }
     }
 
     /// Every item in the scene, parents before children.
@@ -152,6 +159,10 @@ impl Scene {
 #[serde(deny_unknown_fields)]
 pub struct Item {
     pub id: Id,
+    /// Where this item sits among its siblings. See `Scene::order`: the same
+    /// key, for the same reason, and what makes a drag one record on the wire.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub order: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub name: Option<String>,
     pub content: Content,
@@ -195,6 +206,7 @@ impl Item {
     pub fn new(content: Content) -> Item {
         Item {
             id: Id::new(),
+            order: None,
             name: None,
             content,
             transform: Transform::default(),

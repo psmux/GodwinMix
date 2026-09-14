@@ -97,9 +97,21 @@ def render(model):
     return "\n".join(out).rstrip() + "\n"
 
 
+
+def _is_object(schema):
+    kinds = schema.get("type")
+    is_object = kinds == "object" or (isinstance(kinds, list) and "object" in kinds)
+    return bool(is_object and schema.get("properties"))
+
+
 def _types(model):
+    # Classes first, aliases last. Annotations inside a class body are lazy
+    # (`from __future__ import annotations`), but an alias such as
+    # `Transition = Union[str, TransitionRequest]` is evaluated when the
+    # module loads, so every class it might name has to exist by then.
     out = []
-    for name, schema in model.types.items():
+    ordered = sorted(model.types.items(), key=lambda kv: 0 if _is_object(kv[1]) else 1)
+    for name, schema in ordered:
         kinds = schema.get("type")
         is_object = kinds == "object" or (isinstance(kinds, list) and "object" in kinds)
         props = schema.get("properties") or {}

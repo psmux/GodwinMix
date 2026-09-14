@@ -216,6 +216,7 @@ async fn apply(
     draft: Option<&str>,
     over: Option<u64>,
     easing: Option<&str>,
+    seq: Option<u64>,
     f: impl FnOnce(&mut Collection, usize) -> anyhow::Result<()>,
 ) -> Result<Value, RpcError> {
     if let Some(draft) = draft {
@@ -225,13 +226,23 @@ async fn apply(
         return body(view);
     }
     let outcome = server(call)
-        .edit_scene(client(call).as_deref(), scene, f)
+        .edit_scene_at(client(call).as_deref(), seq, scene, f)
         .map_err(|e| scene_error(call, e))?;
     // A duration only means anything on a scene that is on air: there is
     // nothing to ramp on pads nobody is drawing.
-    if let (Some(ms), Some(view)) = (over.filter(|ms| *ms > 0), outcome.scene.as_ref()) {
-        super::edit::ramp_if_on_air(call, view, ms, easing).await;
+    match (over.filter(|ms| *ms > 0), outcome.scene.as_ref()) {
+        (Some(ms), Some(view)) => super::edit::ramp_if_on_air(call, view, ms, easing).await,
+        // Everything else that changed a scene on air is pushed as a cut. A
+        // filter going on or off an item, a source swapped under one, an item
+        // hidden: the pads are already drawing these items and there is
+        // nothing to ease, but the pipeline has to hear about it or the change
+        // would sit in the document until the next take.
+        (None, Some(view)) => super::edit::reapply_if_on_air(call, view).await,
+        _ => {}
     }
+    // The preview draws the armed scene, so an edit to it has to reach the
+    // preview compositor as well as the programme.
+    super::edit::push_preview(call);
     answered(outcome)
 }
 
@@ -257,7 +268,7 @@ async fn add(call: Call, params: Value) -> Result<Value, RpcError> {
         })?),
         None => None,
     };
-    apply(&call, &req.scene, req.draft.as_deref(), None, None, move |doc, i| {
+    apply(&call, &req.scene, req.draft.as_deref(), None, None, None, move |doc, i| {
         let mut item = Item::new(content.clone());
         item.name = Some(find::free_name(
             &doc.scenes[i],
@@ -292,7 +303,7 @@ async fn remove(call: Call, params: Value) -> Result<Value, RpcError> {
             vec![format!("take {:?} off the scene {:?}", req.item, view.name)],
         ));
     }
-    apply(&call, &req.scene, req.draft.as_deref(), None, None, move |doc, i| {
+    apply(&call, &req.scene, req.draft.as_deref(), None, None, None, move |doc, i| {
         let id = find::item_id_in(&doc.scenes[i], &req.item)?;
         ops::take_item(&mut doc.scenes[i].items, id);
         Ok(())
@@ -303,8 +314,8 @@ async fn remove(call: Call, params: Value) -> Result<Value, RpcError> {
 async fn set(call: Call, params: Value) -> Result<Value, RpcError> {
     let req: SetItemRequest = call.params(&params)?;
     let props = req.props.clone();
-    let (over, easing) = (req.duration_ms, req.easing.clone());
-    apply(&call, &req.scene, req.draft.as_deref(), over, easing.as_deref(), move |doc, i| {
+    let (over, easing, seq) = (req.duration_ms, req.easing.clone(), req.seq);
+    apply(&call, &req.scene, req.draft.as_deref(), over, easing.as_deref(), seq, move |doc, i| {
         let id = find::item_id_in(&doc.scenes[i], &req.item)?;
         let item = ops::item_mut(&mut doc.scenes[i].items, id)
             .ok_or_else(|| anyhow::anyhow!("the item went away while it was being changed"))?;
@@ -350,8 +361,8 @@ fn merge_props(item: &mut Item, props: &serde_json::Map<String, Value>) -> anyho
 async fn arrange(call: Call, params: Value, verb: &str) -> Result<Value, RpcError> {
     let req: ItemsRequest = call.params(&params)?;
     let verb = verb.to_string();
-    let (over, easing) = (req.duration_ms, req.easing.clone());
-    apply(&call, &req.scene, req.draft.as_deref(), over, easing.as_deref(), move |doc, i| {
+    let (over, easing, seq) = (req.duration_ms, req.easing.clone(), req.seq);
+    apply(&call, &req.scene, req.draft.as_deref(), over, easing.as_deref(), seq, move |doc, i| {
         let ids = ops::ids(&doc.scenes[i], &req.items)?;
         match verb.as_str() {
             "align" => {
@@ -378,7 +389,7 @@ async fn arrange(call: Call, params: Value, verb: &str) -> Result<Value, RpcErro
 
 async fn ungroup(call: Call, params: Value) -> Result<Value, RpcError> {
     let req: ItemRequest = call.params(&params)?;
-    apply(&call, &req.scene, req.draft.as_deref(), None, None, move |doc, i| {
+    apply(&call, &req.scene, req.draft.as_deref(), None, None, None, move |doc, i| {
         let id = find::item_id_in(&doc.scenes[i], &req.item)?;
         ops::ungroup(doc, i, id).map(|_| ())
     })
@@ -387,7 +398,8 @@ async fn ungroup(call: Call, params: Value) -> Result<Value, RpcError> {
 
 async fn reorder(call: Call, params: Value) -> Result<Value, RpcError> {
     let req: ReorderRequest = call.params(&params)?;
-    apply(&call, &req.scene, req.draft.as_deref(), None, None, move |doc, i| {
+    let seq = req.seq;
+    apply(&call, &req.scene, req.draft.as_deref(), None, None, seq, move |doc, i| {
         let id = find::item_id_in(&doc.scenes[i], &req.item)?;
         let before = req
             .before
@@ -437,7 +449,7 @@ async fn transfer(call: Call, params: Value, keep: bool) -> Result<Value, RpcErr
 
 async fn bind(call: Call, params: Value) -> Result<Value, RpcError> {
     let req: BindRequest = call.params(&params)?;
-    apply(&call, &req.scene, req.draft.as_deref(), None, None, move |doc, i| {
+    apply(&call, &req.scene, req.draft.as_deref(), None, None, None, move |doc, i| {
         let id = find::item_id_in(&doc.scenes[i], &req.item)?;
         let item = ops::item_mut(&mut doc.scenes[i].items, id)
             .ok_or_else(|| anyhow::anyhow!("the item went away while it was being bound"))?;
@@ -464,7 +476,7 @@ async fn filter_add(call: Call, params: Value) -> Result<Value, RpcError> {
             ),
         ));
     }
-    apply(&call, &req.scene, req.draft.as_deref(), None, None, move |doc, i| {
+    apply(&call, &req.scene, req.draft.as_deref(), None, None, None, move |doc, i| {
         let id = find::item_id_in(&doc.scenes[i], &req.item)?;
         let item = ops::item_mut(&mut doc.scenes[i].items, id)
             .ok_or_else(|| anyhow::anyhow!("the item went away"))?;
@@ -481,7 +493,7 @@ async fn filter_add(call: Call, params: Value) -> Result<Value, RpcError> {
 
 async fn filter_set(call: Call, params: Value) -> Result<Value, RpcError> {
     let req: ItemFilterRequest = call.params(&params)?;
-    apply(&call, &req.scene, req.draft.as_deref(), None, None, move |doc, i| {
+    apply(&call, &req.scene, req.draft.as_deref(), None, None, None, move |doc, i| {
         let id = find::item_id_in(&doc.scenes[i], &req.item)?;
         let item = ops::item_mut(&mut doc.scenes[i].items, id)
             .ok_or_else(|| anyhow::anyhow!("the item went away"))?;
@@ -504,7 +516,7 @@ async fn filter_set(call: Call, params: Value) -> Result<Value, RpcError> {
 
 async fn filter_remove(call: Call, params: Value) -> Result<Value, RpcError> {
     let req: ItemFilterRequest = call.params(&params)?;
-    apply(&call, &req.scene, req.draft.as_deref(), None, None, move |doc, i| {
+    apply(&call, &req.scene, req.draft.as_deref(), None, None, None, move |doc, i| {
         let id = find::item_id_in(&doc.scenes[i], &req.item)?;
         let item = ops::item_mut(&mut doc.scenes[i].items, id)
             .ok_or_else(|| anyhow::anyhow!("the item went away"))?;

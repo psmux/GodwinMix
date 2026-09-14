@@ -69,9 +69,13 @@ impl State {
         }
         match self {
             State::Starting => false,
+            // `render` is legal here as well as in `running` because a
+            // transition never starts: it has no media, so its instance stays
+            // in `ready` for its whole life and is asked for curves from
+            // there. The core's own table says the same.
             State::Ready | State::Stopped => matches!(
                 method,
-                "configure" | "start" | "health" | "discover" | "tool.call"
+                "configure" | "start" | "health" | "discover" | "render" | "tool.call"
             ),
             State::Running | State::Stalled | State::Degraded => matches!(
                 method,
@@ -99,6 +103,7 @@ impl State {
                 "start",
                 "health",
                 "discover",
+                "render",
                 "tool.call",
                 "shutdown",
             ],

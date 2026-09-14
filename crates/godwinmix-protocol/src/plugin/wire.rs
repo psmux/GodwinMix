@@ -550,10 +550,16 @@ impl InstanceState {
         match self {
             Self::Starting => false,
             Self::Ready | Self::Stopped => {
+                // `render` is here as well as in `running` because a
+                // transition never starts: it has no media to start, so its
+                // instance sits in `ready` for its whole life and is asked for
+                // curves from there. A source that is asked to render before
+                // it starts is asking for something that does not exist, and
+                // gets `-32601` from the plugin rather than `-32001` from the
+                // core, which is the right half of the contract to answer it.
                 matches!(
                     method,
-                    "configure" | "start" | "health" | "discover" | "tool.call" | "hook"
-                        | "shutdown"
+                    "configure" | "start" | "health" | "discover" | "render" | "tool.call" | "hook" | "shutdown"
                 )
             }
             Self::Running | Self::Stalled | Self::Degraded | Self::OverBudget => matches!(

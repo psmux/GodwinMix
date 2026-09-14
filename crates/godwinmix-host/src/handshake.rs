@@ -49,6 +49,24 @@ pub fn check_api(api: u32, level: u32, compatible: u32) -> anyhow::Result<()> {
 /// gets the container and, when a plugin declared nothing else, an error that
 /// names it.
 pub fn negotiate_transport(declared: &[Transport]) -> anyhow::Result<Transport> {
+    negotiate_transport_for(declared, true)
+}
+
+/// The same, for a provide that may carry no media at all.
+///
+/// A `service`, a `device` and a `transition` have no media contract: they are
+/// control plane only, and the manifest validator does not ask them for a
+/// transport. So one that declares none is recorded as `container`, which is
+/// the transport whose media address is empty, and no socket is ever made.
+/// Anything that does carry media must still declare one, and the error says
+/// which to pick.
+pub fn negotiate_transport_for(
+    declared: &[Transport],
+    carries_media: bool,
+) -> anyhow::Result<Transport> {
+    if declared.is_empty() && !carries_media {
+        return Ok(Transport::Container);
+    }
     anyhow::ensure!(
         !declared.is_empty(),
         "the plugin declared no transports. Every source declares at least one; 'container' \
@@ -83,6 +101,18 @@ pub fn negotiate(
     compatible: u32,
     media_for: impl FnOnce(Transport) -> anyhow::Result<String>,
 ) -> anyhow::Result<Negotiated> {
+    negotiate_for(hello, manifest, level, compatible, true, media_for)
+}
+
+/// The same, told whether this provide carries media at all.
+pub fn negotiate_for(
+    hello: &Initialize,
+    manifest: Option<&Manifest>,
+    level: u32,
+    compatible: u32,
+    carries_media: bool,
+    media_for: impl FnOnce(Transport) -> anyhow::Result<String>,
+) -> anyhow::Result<Negotiated> {
     check_api(hello.api, level, compatible)?;
     if let Some(manifest) = manifest {
         anyhow::ensure!(
@@ -93,7 +123,7 @@ pub fn negotiate(
             manifest.plugin.name
         );
     }
-    let transport = negotiate_transport(&hello.transports)?;
+    let transport = negotiate_transport_for(&hello.transports, carries_media)?;
     let media = match transport {
         Transport::Container => String::new(),
         other => media_for(other)?,

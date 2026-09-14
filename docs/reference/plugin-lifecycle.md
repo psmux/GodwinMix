@@ -9,6 +9,22 @@ The protocol itself is in [plugin-protocol.md](plugin-protocol.md) and the
 manifest in [plugin-manifest.md](plugin-manifest.md). This page is about the
 process.
 
+## Two shapes of instance
+
+| Shape | Kinds | How many | Who starts it |
+|---|---|---|---|
+| per instance | `source`, `output`, `filter` | one per `source.add`, `output.add`, `filter.add` | the operator, through a command |
+| singleton | `service`, `device`, `transition` | one per plugin, named `<plugin>-<provide>` | the core, at startup and on `plugin.add` |
+
+A singleton has no media contract: it opens no socket, starts no pipeline and
+is never asked to `start`. There is one mDNS browser per plugin, not one per
+camera; one OSC bridge, not one per message; one wipe, not one per take. The
+supervisor owns them, on a thread of its own, and holds them to the same
+lifecycle, the same restart backoff and the same budgets as a source.
+
+A singleton that declares no `transports` is right rather than broken: the
+handshake asks for one only from a provide that carries media.
+
 ## The states
 
 ```
@@ -33,6 +49,10 @@ process.
 `configure` never changes the state. `shutdown` is legal from every state and
 leads to the process exiting.
 
+A singleton never leaves `ready`, because `start` belongs to media and it has
+none. That is why `render` is legal in `ready` as well as in `running`: a
+transition is asked for its curves from the only state it is ever in.
+
 There is one more value `event/plugin.state` can carry, `over-budget`. It is not
 a state in the diagram: it is a report about a running instance, and what
 happens next is the `on_over_budget` policy below.
@@ -42,7 +62,7 @@ happens next is the `on_over_budget` policy below.
 | State | The core may call | The plugin may send |
 |---|---|---|
 | `starting` | nothing; it is waiting for `initialize` | `initialize` |
-| `ready` | `configure`, `start`, `health`, `discover`, `tool.call`, `shutdown` | `log`, `event`, core methods over `GMX_RPC` |
+| `ready` | `configure`, `start`, `health`, `discover`, `render`, `tool.call`, `shutdown` | `log`, `event`, core methods over `GMX_RPC` |
 | `running` | `configure`, `stop`, `health`, `seek`, `position`, `keyframe`, `audio.set`, `render`, `tool.call`, `shutdown` | `log`, `event`, `media.report`, `health.changed` |
 | `stalled`, `degraded` | as `running` | as `running` |
 | `stopped` | `configure`, `start`, `health`, `shutdown` | `log` |
@@ -54,6 +74,96 @@ reading.
 
 `configure` before `start` is legal and is how the first `params` arrive after
 the handshake when they change before a source goes live.
+
+## Services, devices and transitions
+
+### A service
+
+Control plane only. It gets `GMX_RPC`, the WebSocket URL of the core's own
+`/rpc`, and a token scoped to itself, and calls core methods like any other
+client. An AI director, a scheduler, a tally sender and an OSC bridge are all
+this kind, and none of them needs a frame.
+
+Its `[[tools]]` are reachable over `tool.call`:
+
+```bash
+gmx call tool.call '{"name": "director/pick_shot", "arguments": {"hint": "wide"}}'
+```
+
+The name is `<plugin>/<tool>`, or the bare tool name when only one plugin has
+it, or `<plugin>/<provide>/<tool>` when a plugin has two instances that both
+answer and you mean a particular one. Tools are declared once per plugin, so
+the service takes the call by default.
+
+### A device
+
+Finds things the core could add as sources, and says when they arrive and
+leave. Two ways, and a device may use either or both:
+
+* **Polled.** `device.discover` fans out over every device and merges what they
+  answer, each candidate's `params` ready for `source.add`. Devices share the
+  timeout, which is capped at 4.5 seconds so the call stays inside the five
+  second ceiling every method is held to.
+* **Pushed.** The plugin raises an `event` when something turns up, and the
+  core adds a source for it without anybody asking:
+
+```json
+{"jsonrpc": "2.0", "method": "event", "params": {
+  "name": "source.appeared",
+  "params": {"id": "guest", "type": "ingest/rtmp", "name": "live/guest",
+             "params": {"uri": "rtmp://127.0.0.1:1936/live/guest"}}}}
+```
+
+and, when it goes:
+
+```json
+{"jsonrpc": "2.0", "method": "event", "params": {
+  "name": "source.gone", "params": {"id": "guest"}}}
+```
+
+A plugin that names its event after itself (`ingest.publisher`) and says which
+half it means in an `action` field (`connected`, `left`) is read the same way,
+because that is the shape an event stream takes when one name carries a whole
+lifecycle.
+
+The `id` is the device's own, if it gives one, so its tools can find what it
+asked for; otherwise the core makes a slug of the name and avoids collisions
+with a numeric suffix, exactly as `source.add` does for a person. Only a source
+a device added can be taken away by one: an operator's own camera is not a
+device's to remove.
+
+The core drains what a plugin says four times a second. Measured with the test
+fixture, a publisher arriving became a live source in **303 ms**, against the
+five seconds the roadmap asks for.
+
+### A transition
+
+Asked for its curves once per frame of a take, before the take starts. See
+[transitions](transitions.md) for the `render` contract and what the core does
+with the answers.
+
+## Reloading
+
+`plugin.reload` reads the plugin's directory again and then swaps its running
+instances, one at a time:
+
+1. The new instance is built from the fresh launch plan **before** the old one
+   is stopped, so a plugin whose new version will not even launch never takes
+   the old one down.
+2. The old one is stopped and gone.
+3. The new one starts and hands shakes.
+4. If it will not, the previous version's launch plan is built again and
+   started, and the call answers `-32001` naming the instance that failed and
+   saying the previous one is running. A bad reload is a no change, not an
+   outage.
+
+One at a time so that a plugin with a service and a device keeps the other one
+answering while the first is replaced. The picture is covered throughout: a
+singleton draws nothing, and a source belonging to the same plugin keeps its
+slot and its last frame under the mixer's own freeze frame.
+
+`configure` answering `{applied: false, restart_required: true}` is the
+documented reason to call it; error `-32012` says so by name.
 
 ## Starting up
 
@@ -199,7 +309,15 @@ in a container, it also reaps orphans once a second so that a plugin that leaks
 children cannot fill the process table.
 
 After a stop: no child processes, no open descriptors, no sockets, no temporary
-directories. There is a test that counts each of those before and after.
+directories. There is a test that counts each of those before and after, for a
+source and for a singleton.
+
+The singleton half is worth spelling out because it was the half that leaked. A
+per instance id is whatever the operator called it and a singleton's is
+`<plugin>-<provide>`, which does not begin with the plugin's name, so a removal
+that pruned the registry by name prefix left the singleton's pid and its budget
+watch behind. `plugin.remove` now stops every instance before the directory
+goes and prunes by the rows themselves.
 
 ## Budgets
 

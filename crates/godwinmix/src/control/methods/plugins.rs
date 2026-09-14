@@ -13,7 +13,7 @@
 //! not change the tools an agent is shown, or the prompt cache is thrown away
 //! on every install.
 
-use super::{body, handler};
+use super::{any_object, body, handler};
 use crate::control::call::Call;
 use godwinmix_core::plugin::loader;
 use godwinmix_protocol::error::{ErrorCode, RpcError};
@@ -21,7 +21,7 @@ use godwinmix_protocol::method::{schema_of, MethodDef, Registry, Tier};
 use godwinmix_protocol::scope::Scope;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
-use serde_json::{Map, Value};
+use serde_json::{json, Map, Value};
 
 pub fn register(reg: &mut Registry<Call>) {
     reg.register(
@@ -175,6 +175,39 @@ pub fn register(reg: &mut Registry<Call>) {
 
     reg.register(
         MethodDef::new(
+            "tool.call",
+            Scope::Operate,
+            "Call one of a plugin's tools, in MCP's shape. The name is `<plugin>/<tool>`, or \
+             the bare tool name when only one plugin has it.",
+            handler(tool_call),
+        )
+        .params(schema_of::<ToolCallRequest>)
+        .result(any_object)
+        .not_idempotent()
+        .rest_at("POST", "/api/v1/tool/call"),
+    );
+
+    reg.register(
+        MethodDef::new(
+            "device.discover",
+            Scope::Operate,
+            "Ask every device plugin what it can see: cameras, NDI senders, publishers. Each \
+             candidate's params are ready for source.add.",
+            handler(discover),
+        )
+        .params(schema_of::<DiscoverRequest>)
+        .result(any_object)
+        .tool(
+            "discover_sources",
+            Tier::Search,
+            "Ask every device plugin what it can see right now. Each candidate comes back \
+             with a type and params ready to hand to `add_source`, so nobody types an \
+             address.",
+        ),
+    );
+
+    reg.register(
+        MethodDef::new(
             "plugin.settings.get",
             Scope::Read,
             "A plugin's settings as they stand, with its schema beside them.",
@@ -195,6 +228,25 @@ pub fn register(reg: &mut Registry<Call>) {
         .params(schema_of::<SetSettingsRequest>)
         .result(schema_of::<PluginSettings>),
     );
+}
+
+/// `tool.call`.
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+pub struct ToolCallRequest {
+    /// `<plugin>/<tool>`, or the bare tool name when only one plugin has it.
+    pub name: String,
+    /// The tool's own arguments, as its input schema describes them.
+    #[serde(default)]
+    pub arguments: Value,
+}
+
+/// `device.discover`.
+#[derive(Debug, Clone, Default, Serialize, Deserialize, JsonSchema)]
+pub struct DiscoverRequest {
+    /// How long to look, shared between the devices. Two seconds by default,
+    /// four and a half at most, because no method blocks for five.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub timeout_ms: Option<u64>,
 }
 
 /// Anything that names one plugin.
@@ -508,6 +560,7 @@ async fn add(call: Call, params: Value) -> Result<Value, RpcError> {
     let spec = req.source.clone();
     let opts = options(&call);
     let hooks = call.app.hooks.clone();
+    let supervisor = call.app.plugins.clone();
     Ok(super::tasks::spawn_task(
         &call.app.tasks,
         "plugin.add",
@@ -520,7 +573,25 @@ async fn add(call: Call, params: Value) -> Result<Value, RpcError> {
             // The hook call site: take on whatever the new plugin asked for,
             // and tell everyone else it arrived.
             plugin_arrived(&hooks, &installed);
-            serde_json::to_value(record(&installed)).map_err(|e| e.to_string())
+            // A service, a device or a transition is one instance per plugin
+            // and starts with the core, so a plugin installed while the core
+            // is running starts now rather than at the next restart. Anything
+            // already running is left alone.
+            let failures = tokio::task::spawn_blocking(move || supervisor.start_all())
+                .await
+                .unwrap_or_default();
+            let mut answer =
+                serde_json::to_value(record(&installed)).map_err(|e| e.to_string())?;
+            if let (Some(map), false) = (answer.as_object_mut(), failures.is_empty()) {
+                map.insert(
+                    "problems".into(),
+                    json!(failures
+                        .iter()
+                        .map(|(provide, why)| format!("{provide}: {why}"))
+                        .collect::<Vec<_>>()),
+                );
+            }
+            Ok(answer)
         },
     ))
 }
@@ -649,6 +720,15 @@ async fn remove(call: Call, params: Value) -> Result<Value, RpcError> {
             )],
         ));
     }
+    // Every process this plugin has running stops before its directory goes,
+    // or `plugin.add` then `plugin.remove` would leave a process holding a
+    // deleted binary. The leak test counts exactly that.
+    let supervisor = call.app.plugins.clone();
+    let name = req.id.clone();
+    let _ = tokio::task::spawn_blocking(move || {
+        supervisor.stop_plugin(&name, "the plugin was removed")
+    })
+    .await;
     let gone = loader::uninstall(&req.id)
         .map_err(|e| RpcError::new(ErrorCode::NotInState, format!("{e:#}")))?;
     // The hook call site: everything it registered goes with it, then the
@@ -677,6 +757,21 @@ async fn set_enabled(call: Call, params: Value, on: bool) -> Result<Value, RpcEr
     find(&req.id)?;
     let installed = loader::set_enabled(&req.id, on)
         .ok_or_else(|| RpcError::not_found("plugin", &req.id, &[]))?;
+    // Enabling starts this plugin's singletons; disabling stops them and lets
+    // go of anything a device of its added. Sources are the operator's and are
+    // left where they are either way: disabling a plugin is not a reason to
+    // cut a camera somebody put on air.
+    let supervisor = call.app.plugins.clone();
+    let name = req.id.clone();
+    let _ = tokio::task::spawn_blocking(move || match on {
+        true => {
+            supervisor.start_all();
+        }
+        false => {
+            supervisor.stop_plugin(&name, "the plugin was disabled");
+        }
+    })
+    .await;
     body(record(&installed))
 }
 
@@ -697,7 +792,76 @@ async fn reload(call: Call, params: Value) -> Result<Value, RpcError> {
         ));
     }
     loader::insert(fresh.clone());
-    body(record(&fresh))
+    // Now swap what is running. One instance at a time, each new one built
+    // before the old one is stopped, and a handshake that fails puts the
+    // previous instance back rather than leaving a hole. A source belonging to
+    // this plugin keeps its slot and its last frame throughout, because the
+    // mixer's freeze frame covers a source being rebuilt.
+    let plugin = req.id.clone();
+    let supervisor = call.app.plugins.clone();
+    let swapped = tokio::task::spawn_blocking(move || supervisor.reload(&plugin))
+        .await
+        .map_err(|e| {
+            RpcError::new(ErrorCode::InternalError, format!("the reload could not be run: {e}"))
+        })?;
+    if let Some((instance, why)) = swapped.failed.first() {
+        return Err(RpcError::new(
+            ErrorCode::NotInState,
+            format!(
+                "{} was read again, but `{instance}` would not start on the new version, so \
+                 the previous one is running: {why}. Fix the plugin and call plugin.reload \
+                 again; nothing was left stopped.",
+                req.id
+            ),
+        )
+        .with("instance", instance.clone())
+        .with("swapped", json!(swapped.swapped))
+        .with("retryable", true));
+    }
+    let mut answer = serde_json::to_value(record(&fresh)).map_err(|e| {
+        RpcError::new(ErrorCode::InternalError, format!("encoding the plugin record: {e}"))
+    })?;
+    if let Some(map) = answer.as_object_mut() {
+        map.insert("reloaded".into(), json!(swapped.swapped));
+    }
+    body(answer)
+}
+
+async fn tool_call(call: Call, params: Value) -> Result<Value, RpcError> {
+    let req: ToolCallRequest = call.params(&params)?;
+    let name = req.name.trim().to_string();
+    if name.is_empty() {
+        return Err(RpcError::invalid_params(
+            "tool.call takes the name of a tool, as `<plugin>/<tool>` or, when only one \
+             plugin has it, the bare tool name. `plugin.describe` lists what each plugin \
+             offers and `search_tools` finds one by what it does."
+                .to_string(),
+        ));
+    }
+    // 03 section 6 gives a plugin's own token the scope `plugin:<name>`, so a
+    // plugin may call its own tools and nobody else's. The `Token` type this
+    // build carries has read, operate and admin and no per plugin scope, so
+    // the method is registered under `operate` and a plugin's token reaches
+    // any tool. Narrowing that is one variant on `Scope` and one check here.
+    let supervisor = call.app.plugins.clone();
+    let arguments = req.arguments.clone();
+    let answered = tokio::task::spawn_blocking(move || supervisor.tool_call(&name, arguments))
+        .await
+        .map_err(|e| RpcError::new(ErrorCode::InternalError, format!("the tool call panicked: {e}")))?;
+    match answered {
+        Ok(value) => body(value),
+        Err(e) => Err(RpcError::new(ErrorCode::NotFound, format!("{e:#}"))),
+    }
+}
+
+async fn discover(call: Call, params: Value) -> Result<Value, RpcError> {
+    let req: DiscoverRequest = call.params(&params)?;
+    let within = std::time::Duration::from_millis(req.timeout_ms.unwrap_or(2_000).min(4_500));
+    let supervisor = call.app.plugins.clone();
+    let found = tokio::task::spawn_blocking(move || supervisor.discover(within))
+        .await
+        .map_err(|e| RpcError::new(ErrorCode::InternalError, format!("discovery panicked: {e}")))?;
+    body(json!({ "candidates": found }))
 }
 
 async fn settings_get(call: Call, params: Value) -> Result<Value, RpcError> {

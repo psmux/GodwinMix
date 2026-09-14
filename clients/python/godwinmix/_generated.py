@@ -115,14 +115,8 @@ class AddSourceRequest(TypedDict, total=False):
     uri: str
     # Stream URL, file path, or with kind "web" the address of a page.
 
-# `ext.agent`. `true` takes the default thresholds; an object moves them.
-AgentExt = Union[bool, Dict[str, Any]]
-
 class AgentStateRequest(TypedDict, total=False):
     response_format: ResponseFormat
-
-# The nine alignment keywords, used to place content inside its frame.
-Align = Literal['top-left', 'top-center', 'top-right', 'center-left', 'center', 'center-right', 'bottom-left', 'bottom-center', 'bottom-right']
 
 class ApplyLayoutRequest(TypedDict, total=False):
     """`scene.apply_layout`."""
@@ -162,9 +156,6 @@ class ApplyResult(TypedDict, total=False):
     plan: Any
     # The whole plan, as JSON. The same object `preset.list` rows point at.
 
-# Whether the item's source is heard. A source is audible when any live item of it says so, which is OBS's behaviour and changes no pad topology.
-Audio = Literal['follow', 'always', 'never']
-
 class AudioSetParams(TypedDict, total=False):
     """`source.audio.set` takes an id as well as the levels: the id comes off the path on REST and out of the params on `/rpc`, and both land in one object."""
 
@@ -197,9 +188,6 @@ class BindRequest(TypedDict, total=False):
     # A geometry path such as `frame.w` or `position.x`.
     scene: str
 
-# OBS's blend enum, so an import carries across unchanged.
-Blend = Literal['normal', 'add', 'screen', 'multiply', 'lighten', 'darken', 'subtract']
-
 class Canvas(TypedDict, total=False):
     """The output raster. One per collection in this release; 11 section 1 leaves room for several."""
 
@@ -222,8 +210,6 @@ class CellAssignment(TypedDict, total=False):
     w: int
     x: int
     y: int
-
-ConversionPhase = Literal['running', 'done', 'failed']
 
 class ConversionState(TypedDict, total=False):
     """One conversion, in flight or remembered after it finished."""
@@ -270,6 +256,12 @@ class Crop(TypedDict, total=False):
     left: float
     right: float
     top: float
+
+class DiscoverRequest(TypedDict, total=False):
+    """`device.discover`."""
+
+    timeout_ms: Optional[int]
+    # How long to look, shared between the devices. Two seconds by default, four and a half at most, because no method blocks for five.
 
 class DraftRecord(TypedDict, total=False):
     """`scene.edit.begin`."""
@@ -367,12 +359,6 @@ class Finding(TypedDict, total=False):
     # The scene it is in, when it is about one.
     severity: Severity
 
-# How content fills its frame. SVG's vocabulary, which replaces OBS's seven bounds types and maps onto `sizing-policy` on a `glvideomixer` pad.
-Fit = Literal['none', 'contain', 'cover', 'stretch', 'fit-width', 'fit-height', 'max']
-
-# Content on the wire. The same four shapes as the tree, except that a group names no children: they are records whose parent is the group.
-FlatContent = Dict[str, Any]
-
 class Flush(TypedDict, total=False):
     """`event/flush`: the end of a batch. A client renders here and not before."""
 
@@ -445,9 +431,6 @@ class HistoryStep(TypedDict, total=False):
     redo: int
     undo: int
     # How many steps are still on each stack, so a UI greys out a button.
-
-# A UUID in the hyphenated form. Minted ids are version 7 (time ordered); ids derived from a layout are version 8.
-Id = str
 
 class IdRequest(TypedDict, total=False):
     """An id on its own: `source.get`, `source.remove`, `output.remove`, `output.reconnect`, `media.remove`."""
@@ -534,6 +517,8 @@ class ItemsRequest(TypedDict, total=False):
     name: Optional[str]
     # `group`: what to call the group.
     scene: str
+    seq: Optional[int]
+    # A client's own sequence number, echoed on the patch. See `SetItemRequest::seq`.
     to: Optional[str]
     # `match_size`: the item to match.
 
@@ -683,9 +668,6 @@ class MoveItemRequest(TypedDict, total=False):
     to_scene: str
     # The scene it is going to.
 
-# `ext.multiview`. Accepts `false` to mean off, or an object.
-MultiviewExt = Union[bool, Dict[str, Any]]
-
 class MultiviewLayout(TypedDict, total=False):
     """`event/multiview.layout`: how to read the binary frames that follow."""
 
@@ -711,8 +693,6 @@ class NameRequest(TypedDict, total=False):
 
     name: str
     # File name as it appears in the media listing. The REST layer puts it in the path, where the transform rule calls it `id`, so both spellings are read.
-
-OutputState = Literal['connecting', 'live', 'reconnecting', 'failed']
 
 class OutputStatus(TypedDict, total=False):
     id: str
@@ -741,6 +721,8 @@ class Patch(TypedDict, total=False):
     """What changed in one transaction."""
 
     added: List[Record]
+    client_seq: Optional[int]
+    # The client's own sequence number, echoed back. A drag cannot wait for a round trip, so the client kit draws the move itself and reconciles when the echo arrives. Without this it cannot tell an echo of the move it has already drawn past from a correction, and the handle rubber bands backwards under the cursor. Every geometry command carries a `seq`; this is that number coming back.
     label: Optional[str]
     # What the client called this change, for a label in an undo menu.
     removed: List[Id]
@@ -855,9 +837,6 @@ class PreviewClosed(TypedDict, total=False):
     closed: bool
     target: str
 
-# `ext.preview`. Either `"full"`, `false`, or an object.
-PreviewExt = Union[str, bool, Dict[str, Any]]
-
 class PreviewFrameRequest(TypedDict, total=False):
     """`scene.preview.frame`."""
 
@@ -924,8 +903,8 @@ class ReorderRequest(TypedDict, total=False):
     draft: Optional[str]
     item: str
     scene: str
-
-ResponseFormat = Literal['concise', 'detailed']
+    seq: Optional[int]
+    # A client's own sequence number, echoed on the patch.
 
 class Resync(TypedDict, total=False):
     """`event/resync`: the client fell behind and the stream has a hole in it."""
@@ -1061,11 +1040,6 @@ class SetSourceMetaRequest(TypedDict, total=False):
     name: Optional[str]
     source: str
 
-# How much the reader should care.
-Severity = Literal['error', 'warning', 'info']
-
-Severity2 = Union[Literal['info', 'warning', 'error'], Literal['critical']]
-
 class Snapshot(TypedDict, total=False):
     """`event/snapshot`: the full state, and where in the stream it sits."""
 
@@ -1099,8 +1073,6 @@ class SourcePositionState(TypedDict, total=False):
     duration_ms: Optional[int]
     # Absent while the demuxer has not worked the duration out yet.
     position_ms: int
-
-SourceState = Literal['connecting', 'live', 'stalled', 'failed']
 
 class SourceStatus(TypedDict, total=False):
     audio_idle_ms: Optional[int]
@@ -1167,8 +1139,8 @@ class TakeRequest(TypedDict, total=False):
     # The scene to take, by name or by id. `source` wins when both are given; with neither, the armed scene goes on air.
     source: Optional[str]
     # Id of the source to put on air.
-    transition: Optional[str]
-    # `cut` in this build.
+    transition: Union[Transition, None]
+    # "fade", or {type, duration_ms, params}. Absent is a cut.
 
 class Tally(TypedDict, total=False):
     """`event/tally`."""
@@ -1179,8 +1151,6 @@ class Tally(TypedDict, total=False):
 class TaskRequest(TypedDict, total=False):
     task_id: str
     # The id a long running method answered with. Spelled `id` on the REST route, where it is in the path, and `task_id` everywhere else, which is what 03 section 6 calls it.
-
-TaskState = Literal['running', 'completed', 'failed', 'cancelled']
 
 class TaskView(TypedDict, total=False):
     """What `task.get` answers with."""
@@ -1199,9 +1169,6 @@ class TaskView(TypedDict, total=False):
     state: TaskState
     task_id: str
 
-# `ext.telemetry`. Accepts `false` to mean off, `true` for the default rate, or an object naming it.
-TelemetryExt = Union[bool, Dict[str, Any]]
-
 class TokenInfo(TypedDict, total=False):
     """What the calling token is allowed to do, echoed back so a surface can grey out what it cannot reach instead of discovering it at the first refusal."""
 
@@ -1212,6 +1179,14 @@ class TokenInfo(TypedDict, total=False):
     # MCP tool profile this token is meant for: "standard" or "minimal".
     rehearsal: bool
     scopes: List[str]
+
+class ToolCallRequest(TypedDict, total=False):
+    """`tool.call`."""
+
+    arguments: Any
+    # The tool's own arguments, as its input schema describes them.
+    name: str
+    # `<plugin>/<tool>`, or the bare tool name when only one plugin has it.
 
 class Transform(TypedDict, total=False):
     """Where an item sits and how it is sized."""
@@ -1227,6 +1202,16 @@ class Transform(TypedDict, total=False):
     rotation: float
     # Degrees, clockwise, about the anchor.
     scale: Vec2
+
+class TransitionRequest(TypedDict, total=False):
+    """How a take gets there. See docs/reference/transitions.md."""
+
+    duration_ms: Optional[int]
+    # How long it takes. 0 is a cut.
+    params: Dict[str, Any]
+    # A stinger takes clip, cut_at_ms, luma.
+    type: str
+    # cut, fade, move, stinger, or a plugin name.
 
 class UiDefaults(TypedDict, total=False):
     """What a surface starts with: the layout, the theme and the gallery mode. Chosen by a preset (`preset.apply`), carried in `core.info` and pushed as `event/ui.changed`. None of it changes what the core does. It exists so the first page a volunteer sees is the one their preset chose rather than the one the last person to use this browser chose. 05 section 3b is where the four gallery modes are defined."""
@@ -1276,6 +1261,19 @@ class ProgramTookEvent(TypedDict, total=False):
     scene: Optional[str]
     source: Optional[str]
     transition: str
+    transition_id: int
+
+class ScenePatchEvent(TypedDict, total=False):
+    added: List[Dict[str, Any]]
+    client_seq: Optional[int]
+    # The client's own sequence number, from the `seq` on the command, so a drag discards echoes of moves it has already drawn past.
+    label: Optional[str]
+    removed: List[str]
+    scope: Literal['document']
+    seq: int
+    source_client: Optional[str]
+    # Who asked for the change, so a client suppresses the echo of its own edits.
+    updated: List[Dict[str, Any]]
 
 class PreviewChangedEvent(TypedDict, total=False):
     scene: Optional[str]
@@ -1332,6 +1330,54 @@ class TelemetryEvent(TypedDict, total=False):
     ts: int
     # milliseconds since the Unix epoch
 
+# `ext.agent`. `true` takes the default thresholds; an object moves them.
+AgentExt = Union[bool, Dict[str, Any]]
+
+# The nine alignment keywords, used to place content inside its frame.
+Align = Literal['top-left', 'top-center', 'top-right', 'center-left', 'center', 'center-right', 'bottom-left', 'bottom-center', 'bottom-right']
+
+# Whether the item's source is heard. A source is audible when any live item of it says so, which is OBS's behaviour and changes no pad topology.
+Audio = Literal['follow', 'always', 'never']
+
+# OBS's blend enum, so an import carries across unchanged.
+Blend = Literal['normal', 'add', 'screen', 'multiply', 'lighten', 'darken', 'subtract']
+
+ConversionPhase = Literal['running', 'done', 'failed']
+
+# How content fills its frame. SVG's vocabulary, which replaces OBS's seven bounds types and maps onto `sizing-policy` on a `glvideomixer` pad.
+Fit = Literal['none', 'contain', 'cover', 'stretch', 'fit-width', 'fit-height', 'max']
+
+# Content on the wire. The same four shapes as the tree, except that a group names no children: they are records whose parent is the group.
+FlatContent = Dict[str, Any]
+
+# A UUID in the hyphenated form. Minted ids are version 7 (time ordered); ids derived from a layout are version 8.
+Id = str
+
+# `ext.multiview`. Accepts `false` to mean off, or an object.
+MultiviewExt = Union[bool, Dict[str, Any]]
+
+OutputState = Literal['connecting', 'live', 'reconnecting', 'failed']
+
+# `ext.preview`. Either `"full"`, `false`, or an object.
+PreviewExt = Union[str, bool, Dict[str, Any]]
+
+ResponseFormat = Literal['concise', 'detailed']
+
+# How much the reader should care.
+Severity = Literal['error', 'warning', 'info']
+
+Severity2 = Union[Literal['info', 'warning', 'error'], Literal['critical']]
+
+SourceState = Literal['connecting', 'live', 'stalled', 'failed']
+
+TaskState = Literal['running', 'completed', 'failed', 'cancelled']
+
+# `ext.telemetry`. Accepts `false` to mean off, `true` for the default rate, or an object naming it.
+TelemetryExt = Union[bool, Dict[str, Any]]
+
+# A name, or an object.
+Transition = Union[str, TransitionRequest]
+
 METHODS = (
     {"name": "adbreak.end", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/adbreak/end"), "summary": 'Cut a running ad short, or disarm one that is scheduled.'},
     {"name": "adbreak.start", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/adbreak/start"), "summary": 'Interrupt the programme with a clip, then rejoin live when it ends.'},
@@ -1345,6 +1391,7 @@ METHODS = (
     {"name": "core.startup_report", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/core/startup_report"), "summary": 'How long each stage of the start took, and what was over the 250 ms mark.'},
     {"name": "core.status", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/core/status"), "summary": 'The full state: programme, every source, every output, the multiview grid, the encoder backend and any ad break.'},
     {"name": "core.subscribe", "scope": "read", "mutating": False, "destructive": False, "rest": None, "summary": 'Subscribe to the event stream. WebSocket only: the core answers event/snapshot then deltas, ending every batch with event/flush.'},
+    {"name": "device.discover", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/device/discover"), "summary": "Ask every device plugin what it can see: cameras, NDI senders, publishers. Each candidate's params are ready for source.add."},
     {"name": "filter.add", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/filters"), "summary": 'Hang a filter on one source or on the programme, live.'},
     {"name": "filter.list", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/filters"), "summary": 'Every filter in place, with what it is and where it sits.'},
     {"name": "filter.remove", "scope": "operate", "mutating": True, "destructive": True, "rest": ("DELETE", "/api/v1/filters/{id}"), "summary": 'Take a filter out of the pipeline.'},
@@ -1445,11 +1492,13 @@ METHODS = (
     {"name": "task.cancel", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/task/cancel"), "summary": 'Ask a piece of long running work to stop. Cooperative: the answer says the request landed, not that the work has stopped yet.'},
     {"name": "task.get", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/task"), "summary": 'How a piece of long running work is getting on, and its answer once it has one.'},
     {"name": "task.list", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/task/list"), "summary": 'Every background job this core knows about, newest first.'},
+    {"name": "tool.call", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/tool/call"), "summary": "Call one of a plugin's tools, in MCP's shape. The name is `<plugin>/<tool>`, or the bare tool name when only one plugin has it."},
 )
 
 EVENT_NAMES = (
     "snapshot",
     "program.took",
+    "scene.patch",
     "preview.changed",
     "source.state",
     "source.position",
@@ -1475,7 +1524,7 @@ EXT_KEYS = {
     "tally": {"value": 'true', "implemented": True},
     "positions": {"value": 'true', "implemented": True},
     "thumb": {"value": '{fps}', "implemented": False},
-    "preview": {"value": '{fps, width} or "full"', "implemented": False},
+    "preview": {"value": '{fps, width} or "full"', "implemented": True},
     "telemetry": {"value": '{hz: 1..10}', "implemented": False},
     "agent": {"value": 'true or thresholds', "implemented": False},
 }
@@ -1600,6 +1649,17 @@ class GeneratedMethods:
         if ext is not None:
             params["ext"] = ext
         return await self._call("core.subscribe", params)
+
+    async def device_discover(
+        self,
+        *,
+        timeout_ms: Optional[int] = None,
+    ) -> Dict[str, Any]:
+        """Ask every device plugin what it can see: cameras, NDI senders, publishers. Each candidate's params are ready for source.add."""
+        params: Dict[str, Any] = {}
+        if timeout_ms is not None:
+            params["timeout_ms"] = timeout_ms
+        return await self._call("device.discover", params)
 
     async def filter_add(
         self,
@@ -2044,7 +2104,7 @@ class GeneratedMethods:
         at_running_time_ms: Optional[int] = None,
         scene: Optional[str] = None,
         source: Optional[str] = None,
-        transition: Optional[str] = None,
+        transition: Optional[Union[Transition, None]] = None,
     ) -> ProgramState:
         """Put a scene or a source on programme. The cut is instant and the outgoing stream is not disturbed."""
         params: Dict[str, Any] = {}
@@ -2232,6 +2292,7 @@ class GeneratedMethods:
         easing: Optional[str] = None,
         edge: Optional[str] = None,
         name: Optional[str] = None,
+        seq: Optional[int] = None,
         to: Optional[str] = None,
     ) -> Dict[str, Any]:
         """Line items up on an edge: left, right, top, bottom, center-x or center-y."""
@@ -2252,6 +2313,8 @@ class GeneratedMethods:
             params["edge"] = edge
         if name is not None:
             params["name"] = name
+        if seq is not None:
+            params["seq"] = seq
         if to is not None:
             params["to"] = to
         return await self._call("scene.item.align", params)
@@ -2268,6 +2331,7 @@ class GeneratedMethods:
         easing: Optional[str] = None,
         edge: Optional[str] = None,
         name: Optional[str] = None,
+        seq: Optional[int] = None,
         to: Optional[str] = None,
     ) -> Dict[str, Any]:
         """Lay items out in a grid of `cols` columns."""
@@ -2288,6 +2352,8 @@ class GeneratedMethods:
             params["edge"] = edge
         if name is not None:
             params["name"] = name
+        if seq is not None:
+            params["seq"] = seq
         if to is not None:
             params["to"] = to
         return await self._call("scene.item.arrange_grid", params)
@@ -2336,6 +2402,7 @@ class GeneratedMethods:
         easing: Optional[str] = None,
         edge: Optional[str] = None,
         name: Optional[str] = None,
+        seq: Optional[int] = None,
         to: Optional[str] = None,
     ) -> Dict[str, Any]:
         """Put items over the whole canvas, filling it and letting the overflow go."""
@@ -2356,6 +2423,8 @@ class GeneratedMethods:
             params["edge"] = edge
         if name is not None:
             params["name"] = name
+        if seq is not None:
+            params["seq"] = seq
         if to is not None:
             params["to"] = to
         return await self._call("scene.item.cover_canvas", params)
@@ -2372,6 +2441,7 @@ class GeneratedMethods:
         easing: Optional[str] = None,
         edge: Optional[str] = None,
         name: Optional[str] = None,
+        seq: Optional[int] = None,
         to: Optional[str] = None,
     ) -> Dict[str, Any]:
         """Space items evenly between the two on the ends, horizontally or vertically."""
@@ -2392,6 +2462,8 @@ class GeneratedMethods:
             params["edge"] = edge
         if name is not None:
             params["name"] = name
+        if seq is not None:
+            params["seq"] = seq
         if to is not None:
             params["to"] = to
         return await self._call("scene.item.distribute", params)
@@ -2477,6 +2549,7 @@ class GeneratedMethods:
         easing: Optional[str] = None,
         edge: Optional[str] = None,
         name: Optional[str] = None,
+        seq: Optional[int] = None,
         to: Optional[str] = None,
     ) -> Dict[str, Any]:
         """Put items over the whole canvas, keeping their aspect ratio inside it."""
@@ -2497,6 +2570,8 @@ class GeneratedMethods:
             params["edge"] = edge
         if name is not None:
             params["name"] = name
+        if seq is not None:
+            params["seq"] = seq
         if to is not None:
             params["to"] = to
         return await self._call("scene.item.fit_to_canvas", params)
@@ -2513,6 +2588,7 @@ class GeneratedMethods:
         easing: Optional[str] = None,
         edge: Optional[str] = None,
         name: Optional[str] = None,
+        seq: Optional[int] = None,
         to: Optional[str] = None,
     ) -> Dict[str, Any]:
         """Put items into a group. The picture does not change."""
@@ -2533,6 +2609,8 @@ class GeneratedMethods:
             params["edge"] = edge
         if name is not None:
             params["name"] = name
+        if seq is not None:
+            params["seq"] = seq
         if to is not None:
             params["to"] = to
         return await self._call("scene.item.group", params)
@@ -2549,6 +2627,7 @@ class GeneratedMethods:
         easing: Optional[str] = None,
         edge: Optional[str] = None,
         name: Optional[str] = None,
+        seq: Optional[int] = None,
         to: Optional[str] = None,
     ) -> Dict[str, Any]:
         """Make items the same size as another one."""
@@ -2569,6 +2648,8 @@ class GeneratedMethods:
             params["edge"] = edge
         if name is not None:
             params["name"] = name
+        if seq is not None:
+            params["seq"] = seq
         if to is not None:
             params["to"] = to
         return await self._call("scene.item.match_size", params)
@@ -2609,6 +2690,7 @@ class GeneratedMethods:
         after: Optional[str] = None,
         before: Optional[str] = None,
         draft: Optional[str] = None,
+        seq: Optional[int] = None,
     ) -> Dict[str, Any]:
         """Move an item up or down the stack, between two named neighbours."""
         params: Dict[str, Any] = {}
@@ -2620,6 +2702,8 @@ class GeneratedMethods:
             params["before"] = before
         if draft is not None:
             params["draft"] = draft
+        if seq is not None:
+            params["seq"] = seq
         return await self._call("scene.item.reorder", params)
 
     async def scene_item_set(
@@ -2970,3 +3054,16 @@ class GeneratedMethods:
         """Every background job this core knows about, newest first."""
         params: Dict[str, Any] = {}
         return await self._call("task.list", params)
+
+    async def tool_call(
+        self,
+        name: str,
+        *,
+        arguments: Any = None,
+    ) -> Dict[str, Any]:
+        """Call one of a plugin's tools, in MCP's shape. The name is `<plugin>/<tool>`, or the bare tool name when only one plugin has it."""
+        params: Dict[str, Any] = {}
+        params["name"] = name
+        if arguments is not None:
+            params["arguments"] = arguments
+        return await self._call("tool.call", params)

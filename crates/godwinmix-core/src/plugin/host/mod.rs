@@ -43,6 +43,43 @@ use anyhow::{Context, Result};
 /// function pointer, the same shape a built in kind's is, because the thing it
 /// needs to tell one plugin from another is already on the request: the config
 /// carries the `type`, and the loader knows the rest.
+/// Build a sidecar output for a loaded `output` provide.
+///
+/// The output half of `make_source`, and it exists for the same reason: a
+/// plugin's provide has to be reachable by the same lookup a built in kind is,
+/// or an installed plugin is a directory nobody can use. `output.add` with a
+/// `type` of `whip/output` lands here.
+pub fn make_output(
+    type_id: &str,
+    cfg: &crate::config::OutputConfig,
+    canvas: &crate::caps::CanvasCaps,
+) -> Result<Box<dyn crate::plugin::output::Output>> {
+    let instance = cfg.id.clone();
+    let launched = crate::plugin::loader::launch_for(
+        type_id,
+        &instance,
+        crate::plugin::loader::mint_token(type_id, &instance),
+        crate::plugin::loader::rpc_url(),
+    )?;
+    let manifest = crate::plugin::loader::provide_manifest(type_id)
+        .with_context(|| format!("`{type_id}` is not a loaded provide"))?;
+    anyhow::ensure!(
+        manifest.kind == crate::plugin::ProvideKind::Output,
+        "`{type_id}` is a {} and cannot be an output. `output.add` takes an output provide;          `plugin.describe` says what each plugin offers.",
+        manifest.kind.as_str()
+    );
+    let spec = SidecarSpec {
+        plugin: launched.plugin,
+        provide: launched.provide,
+        manifest: *manifest,
+        launch: launched.launch,
+        ctx: launched.ctx,
+        canvas: canvas.clone(),
+        runtime: crate::plugin::loader::runtime_dir(),
+    };
+    Ok(Box::new(SidecarOutput::new(spec)))
+}
+
 pub fn make_source(req: SourceRequest<'_>) -> Result<Box<dyn Source>> {
     let type_id = match req.cfg.type_id.as_deref().filter(|t| !t.trim().is_empty()) {
         Some(t) => t.trim().to_string(),

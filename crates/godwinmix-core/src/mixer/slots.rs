@@ -47,7 +47,10 @@
 
 use crate::caps::CanvasCaps;
 use crate::gstutil::{self, make};
+use crate::mixer::transition::Leg;
 use crate::plugin::branch::ProgrammeBranch;
+use crate::plugin::filter::{FilterSide, FilterSlot, FilterSpec, Insertion};
+use crate::scene::id::Id;
 use crate::state::SourceId;
 use anyhow::{Context, Result};
 use gstreamer as gst;
@@ -126,6 +129,32 @@ impl Sizing {
     }
 }
 
+/// One filter an item carries, as the slot chain needs it.
+///
+/// The document holds these as JSON on the item; `scene::server::compose`
+/// turns them into this on the way here, so nothing in the pipeline reads a
+/// `serde_json::Value` and nothing in the document knows what a GStreamer
+/// element is.
+#[derive(Debug, Clone, PartialEq)]
+pub struct ItemFilter {
+    /// A filter provide id, `chroma/filter`.
+    pub type_id: String,
+    /// The operator's name for it, when they gave one.
+    pub name: Option<String>,
+    pub params: crate::config::Params,
+}
+
+impl ItemFilter {
+    /// What decides whether the chain has to be rebuilt.
+    ///
+    /// Type and parameters, in that order. Two filters of the same type with
+    /// the same parameters are the same filter however they are named, so
+    /// renaming one in the designer does not take a pad block on air.
+    fn shape(&self) -> (&str, &crate::config::Params) {
+        (&self.type_id, &self.params)
+    }
+}
+
 /// What a scene wants drawn in one slot.
 ///
 /// Plain numbers in canvas pixels, worked out from the document by
@@ -134,6 +163,19 @@ impl Sizing {
 #[derive(Debug, Clone, PartialEq)]
 pub struct Placement {
     pub source: SourceId,
+    /// The scene item this placement came from, when it came from a document.
+    /// What a `move` transition matches on across two scenes, and what keeps a
+    /// re-apply on the same pad it was already drawn on.
+    pub item: Option<Id>,
+    /// Filters over this item alone, innermost first. They live on the slot
+    /// chain, above the compositor pad, so the same camera can be keyed in one
+    /// item and clean in another.
+    pub filters: Vec<ItemFilter>,
+    /// The children this placement composites, for a group that carries a
+    /// filter and therefore cannot be flattened. Empty for every ordinary
+    /// item, which is every item that is not a filtered group. See
+    /// `mixer::group`: this is the expensive path and is built on demand.
+    pub group: Vec<Placement>,
     pub xpos: i32,
     pub ypos: i32,
     pub width: i32,
@@ -156,6 +198,9 @@ impl Placement {
     pub fn full_canvas(source: SourceId, canvas: &CanvasCaps) -> Placement {
         Placement {
             source,
+            item: None,
+            filters: Vec::new(),
+            group: Vec::new(),
             xpos: 0,
             ypos: 0,
             width: canvas.width,
@@ -235,6 +280,18 @@ impl PadState {
     }
 }
 
+/// How an apply leaves the pads it wrote.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Write {
+    /// Straight to where the scene wants them. What a take has always been.
+    Cut,
+    /// Left where they were, for a caller that is going to ease them over.
+    Hold,
+    /// At the target, but invisible, for a scene arriving beside the one on
+    /// air while a transition brings it up.
+    Enter,
+}
+
 /// One slot on its way from where it was to where a scene wants it.
 #[derive(Debug, Clone)]
 pub struct Ramp {
@@ -263,11 +320,36 @@ pub struct Slot {
     /// The one slot a source keeps whatever the scene says, so its picture is
     /// always at the compositor and a take of it never waits for a frame.
     home: bool,
+    /// The scene item this slot drew last. A re-apply prefers the slot that
+    /// already has the item, so a transition that put the incoming scene on
+    /// fresh pads does not shuffle it back onto the old ones afterwards and
+    /// flash.
+    drawn: Option<Id>,
+    /// The per item filters on this slot's chain, in order, between the flip
+    /// and the compositor pad. Rebuilt only when the item asks for a different
+    /// chain; an apply that changes nothing takes no pad block.
+    filters: Vec<FilterSlot>,
+    /// What those filters were built from, for the comparison that decides
+    /// whether to touch the graph at all.
+    filter_shape: Vec<ItemFilter>,
 }
 
-struct Bound {
-    source: SourceId,
-    tee_pad: gst::Pad,
+/// What a slot's chain is fed from.
+enum Bound {
+    /// A source's programme tee, which is every ordinary item.
+    Source { source: SourceId, tee_pad: gst::Pad },
+    /// A group composited on its own, because a filter over it cannot be
+    /// expressed by flattening. See `mixer::group`.
+    Group { item: Id, sub: Box<super::group::SubCompositor> },
+}
+
+impl Bound {
+    fn source(&self) -> Option<&SourceId> {
+        match self {
+            Bound::Source { source, .. } => Some(source),
+            Bound::Group { .. } => None,
+        }
+    }
 }
 
 impl Slot {
@@ -279,26 +361,41 @@ impl Slot {
     /// True when this slot already carries that source's picture, so binding
     /// it costs nothing.
     fn holds(&self, source: &SourceId) -> bool {
-        self.bound.as_ref().is_some_and(|b| &b.source == source)
+        self.bound.as_ref().and_then(Bound::source).is_some_and(|s| s == source)
+    }
+
+    /// True when this slot is already compositing that group.
+    fn holds_group(&self, item: Option<Id>) -> bool {
+        matches!((&self.bound, item), (Some(Bound::Group { item: have, .. }), Some(want)) if *have == want)
     }
 
     pub fn source(&self) -> Option<&SourceId> {
-        self.bound.as_ref().map(|b| &b.source)
+        self.bound.as_ref().and_then(Bound::source)
+    }
+
+    /// The sources a group slot is compositing, or the one source an ordinary
+    /// slot is bound to.
+    pub fn sources(&self) -> Vec<SourceId> {
+        match &self.bound {
+            Some(Bound::Group { sub, .. }) => sub.sources(),
+            Some(Bound::Source { source, .. }) => vec![source.clone()],
+            None => Vec::new(),
+        }
     }
 
     /// Everything a placement decides, written straight onto the pad and the
     /// two elements above it. Nothing here allocates and nothing blocks.
-    fn draw(&self, p: &Placement, z: u32, hold: bool) -> Ramp {
+    fn draw(&self, p: &Placement, z: u32, write: Write) -> Ramp {
         let from = PadState::read(&self.pad);
         let to = PadState::of(p);
         set_u32(&self.pad, "zorder", z);
-        // `hold` keeps the pad where it is and hands the move to the ramp. The
+        // `Hold` keeps the pad where it is and hands the move to the ramp. The
         // z order, the crop, the flip and the sizing policy are steps whatever
         // happens: there is no halfway between two crops worth drawing.
-        if hold {
-            from.write(&self.pad);
-        } else {
-            to.write(&self.pad);
+        match write {
+            Write::Cut => to.write(&self.pad),
+            Write::Hold => from.write(&self.pad),
+            Write::Enter => PadState { alpha: 0.0, ..to }.write(&self.pad),
         }
         set_sizing(&self.pad, p.sizing);
         for (name, v) in [("xalign", p.align.0), ("yalign", p.align.1)] {
@@ -309,6 +406,26 @@ impl Slot {
         self.set_crop(p);
         self.set_rotation(p.rotation);
         Ramp { pad: self.pad.clone(), from, to }
+    }
+
+    /// The pad's state right now, for a transition that has to ramp from it.
+    pub fn state(&self) -> PadState {
+        PadState::read(&self.pad)
+    }
+
+    pub fn pad(&self) -> &gst::Pad {
+        &self.pad
+    }
+
+    /// The item this slot is drawing, when a document named one.
+    pub fn item(&self) -> Option<Id> {
+        self.drawn
+    }
+
+    /// True when this slot is on the canvas: a pad at alpha 0 is skipped
+    /// before conversion, so this is what the compositor is paying for.
+    pub fn showing(&self) -> bool {
+        self.pad.property::<f64>("alpha") > 0.0
     }
 
     /// Hide this slot without unbinding it, which is what makes the next take
@@ -386,16 +503,31 @@ pub struct SlotPool {
     program: gst::Pipeline,
     vmix: gst::Element,
     slots: Vec<Slot>,
+    canvas: CanvasCaps,
     /// Bumped every time a slot has to be relinked, so the cost of a scene is
     /// visible in the log and in a test rather than guessed at.
     misses: u64,
+    /// Slots held for the scene going out during a transition. They are not
+    /// available for binding and are not hidden by an apply, because both
+    /// scenes are on the canvas until the transition ends.
+    crossing: Vec<usize>,
 }
 
 impl SlotPool {
     /// Build the pool into a pipeline that is not running yet.
-    pub fn build(program: &gst::Pipeline, vmix: &gst::Element) -> Result<SlotPool> {
-        let mut pool =
-            SlotPool { program: program.clone(), vmix: vmix.clone(), slots: Vec::new(), misses: 0 };
+    pub fn build(
+        program: &gst::Pipeline,
+        vmix: &gst::Element,
+        canvas: &CanvasCaps,
+    ) -> Result<SlotPool> {
+        let mut pool = SlotPool {
+            program: program.clone(),
+            vmix: vmix.clone(),
+            slots: Vec::new(),
+            canvas: canvas.clone(),
+            misses: 0,
+            crossing: Vec::new(),
+        };
         for _ in 0..INITIAL_SLOTS {
             pool.grow()?;
         }
@@ -466,6 +598,9 @@ impl SlotPool {
             bound: None,
             retired: false,
             home: false,
+            drawn: None,
+            filters: Vec::new(),
+            filter_shape: Vec::new(),
         });
         Ok(self.slots.last_mut().expect("just pushed"))
     }
@@ -503,7 +638,7 @@ impl SlotPool {
         placements: &[Placement],
         branches: &[(&'a SourceId, &'a ProgrammeBranch)],
     ) -> Result<Applied> {
-        self.apply_move(placements, branches, false)
+        self.apply_move(placements, branches, Write::Cut)
     }
 
     /// The same, with every slot left where it was so a caller can ease it
@@ -513,14 +648,90 @@ impl SlotPool {
         placements: &[Placement],
         branches: &[(&'a SourceId, &'a ProgrammeBranch)],
     ) -> Result<Applied> {
-        self.apply_move(placements, branches, true)
+        self.apply_move(placements, branches, Write::Hold)
+    }
+
+    /// Put a scene on the canvas beside the one that is already there.
+    ///
+    /// Slot pressure doubles for the length of a transition, because both
+    /// scenes are drawn at once: the outgoing slots are held out of the pool
+    /// and the incoming scene is bound to different ones, growing the pool if
+    /// it has to. Every incoming pad arrives at alpha 0 and stays there until
+    /// a curve raises it, so the frame between binding and the first sync is
+    /// never the wrong picture.
+    ///
+    /// The caller must finish with [`SlotPool::end_transition`] whatever
+    /// happens, or the outgoing scene never leaves.
+    pub fn begin_transition<'a>(
+        &mut self,
+        placements: &[Placement],
+        branches: &[(&'a SourceId, &'a ProgrammeBranch)],
+    ) -> Result<Crossed> {
+        let out: Vec<Leg> = self
+            .slots
+            .iter()
+            .filter(|s| !s.retired && s.showing())
+            .map(|s| {
+                let from = s.state();
+                Leg {
+                    pad: s.pad.clone(),
+                    item: s.drawn,
+                    source: s.source().cloned().unwrap_or_default(),
+                    from,
+                    to: PadState { alpha: 0.0, ..from },
+                }
+            })
+            .collect();
+        self.crossing = self
+            .slots
+            .iter()
+            .filter(|s| !s.retired && s.showing())
+            .map(|s| s.index)
+            .collect();
+        let applied = match self.apply_move(placements, branches, Write::Enter) {
+            Ok(applied) => applied,
+            Err(e) => {
+                // A crossing that could not be bound leaves the scene on air
+                // exactly as it was. The held slots go back first, or nothing
+                // would ever hide them again.
+                self.crossing.clear();
+                return Err(e);
+            }
+        };
+        let incoming = applied
+            .slots
+            .iter()
+            .zip(placements.iter().filter(|p| branches.iter().any(|(id, _)| *id == &p.source)))
+            .map(|(index, p)| Leg {
+                pad: self.slots[*index].pad.clone(),
+                item: p.item,
+                source: p.source.clone(),
+                from: PadState { alpha: 0.0, ..PadState::of(p) },
+                to: PadState::of(p),
+            })
+            .collect();
+        Ok(Crossed { out, incoming, applied })
+    }
+
+    /// Let go of the slots the outgoing scene was held on.
+    ///
+    /// The next apply hides whatever nobody claimed, which is the same
+    /// declarative path a take has always taken, so there is no separate
+    /// teardown to get wrong.
+    pub fn end_transition(&mut self) {
+        self.crossing.clear();
+    }
+
+    /// True while both scenes are on the canvas.
+    pub fn crossing(&self) -> bool {
+        !self.crossing.is_empty()
     }
 
     fn apply_move<'a>(
         &mut self,
         placements: &[Placement],
         branches: &[(&'a SourceId, &'a ProgrammeBranch)],
-        hold: bool,
+        write: Write,
     ) -> Result<Applied> {
         let mut claimed: Vec<usize> = Vec::with_capacity(placements.len());
         let mut ramps: Vec<Ramp> = Vec::with_capacity(placements.len());
@@ -528,13 +739,36 @@ impl SlotPool {
         let mut drawn = 0usize;
 
         for (i, p) in placements.iter().enumerate() {
+            // A group carrying a filter is composited on its own, so it is
+            // bound to a sub compositor rather than to one source's tee. See
+            // `mixer::group`: the expensive path, taken only when a scene asks
+            // for it.
+            if !p.group.is_empty() {
+                let index = match self.pick_group(p.item, &claimed) {
+                    Some(index) => index,
+                    None => self.free_slot(&p.source, &claimed)?,
+                };
+                if let Err(e) = self.bind_group(index, p, branches) {
+                    warn!(?e, "a filtered group could not be composited; it was left out");
+                    continue;
+                }
+                self.slots[index].open();
+                if let Err(e) = self.sync_filters(index, &p.filters) {
+                    warn!(slot = index, ?e, "a group's filter could not go on");
+                }
+                ramps.push(self.slots[index].draw(p, Z_LIVE + i as u32, write));
+                self.slots[index].drawn = p.item;
+                claimed.push(index);
+                drawn += 1;
+                continue;
+            }
             let Some((_, branch)) = branches.iter().find(|(id, _)| *id == &p.source) else {
                 if !missing.contains(&p.source) {
                     missing.push(p.source.clone());
                 }
                 continue;
             };
-            let index = match self.pick(&p.source, &claimed) {
+            let index = match self.pick(&p.source, p.item, &claimed) {
                 Some(index) => index,
                 None => {
                     let index = self.free_slot(&p.source, &claimed)?;
@@ -543,25 +777,75 @@ impl SlotPool {
                 }
             };
             self.slots[index].open();
-            ramps.push(self.slots[index].draw(p, Z_LIVE + i as u32, hold));
+            if let Err(e) = self.sync_filters(index, &p.filters) {
+                // The picture is still on air with whatever chain it had. A
+                // filter that will not build is a refused change, not a black
+                // frame, and the message names the item's own filter.
+                warn!(slot = index, source = %p.source, ?e, "a scene item's filter could not go on");
+            }
+            ramps.push(self.slots[index].draw(p, Z_LIVE + i as u32, write));
+            self.slots[index].drawn = p.item;
             claimed.push(index);
             drawn += 1;
         }
 
+        let held = self.crossing.clone();
         for slot in &self.slots {
-            if !slot.retired && !claimed.contains(&slot.index) {
+            if !slot.retired && !claimed.contains(&slot.index) && !held.contains(&slot.index) {
                 slot.hide();
             }
+        }
+        // A binding to a source is kept whatever the scene says, because it is
+        // free and because keeping it is what makes the next take a property
+        // write. A sub compositor is neither: it is a compositor, a queue and
+        // a chain per child, so a group nobody is drawing gives them all back.
+        let stale: Vec<usize> = self
+            .slots
+            .iter()
+            .filter(|s| !s.retired && !claimed.contains(&s.index) && !held.contains(&s.index))
+            .filter(|s| matches!(s.bound, Some(Bound::Group { .. })))
+            .map(|s| s.index)
+            .collect();
+        for index in stale {
+            self.unbind(index);
         }
         Ok(Applied { drawn, missing, slots: claimed, ramps })
     }
 
     /// A slot that already holds this source and has not been claimed yet.
-    fn pick(&self, source: &SourceId, claimed: &[usize]) -> Option<usize> {
+    ///
+    /// The slot that drew this very item wins, when the document named one.
+    /// Without that rule a re-apply after a transition would find the source
+    /// on the pad the outgoing scene used and move the picture back onto it,
+    /// which is a frame of the wrong thing for no reason.
+    fn pick(&self, source: &SourceId, item: Option<Id>, claimed: &[usize]) -> Option<usize> {
+        let free = |s: &&Slot| self.usable(s.index) && !claimed.contains(&s.index);
+        if item.is_some() {
+            let same = self
+                .slots
+                .iter()
+                .find(|s| free(s) && s.holds(source) && s.drawn == item)
+                .map(|s| s.index);
+            if same.is_some() {
+                return same;
+            }
+        }
+        self.slots.iter().find(|s| free(s) && s.holds(source)).map(|s| s.index)
+    }
+
+    /// The slot already compositing this group, so a group whose children only
+    /// moved costs property writes and nothing else.
+    fn pick_group(&self, item: Option<Id>, claimed: &[usize]) -> Option<usize> {
         self.slots
             .iter()
-            .find(|s| s.free() && s.holds(source) && !claimed.contains(&s.index))
+            .find(|s| self.usable(s.index) && !claimed.contains(&s.index) && s.holds_group(item))
             .map(|s| s.index)
+    }
+
+    /// True when a slot can be handed to a placement: not held with a freeze
+    /// frame, and not drawing the scene a transition is taking off the canvas.
+    fn usable(&self, index: usize) -> bool {
+        self.slots.get(index).is_some_and(|s| s.free()) && !self.crossing.contains(&index)
     }
 
     /// A slot to relink, preferring one bound to nothing, then one whose
@@ -570,7 +854,7 @@ impl SlotPool {
         let empty = self
             .slots
             .iter()
-            .find(|s| s.free() && s.bound.is_none() && !claimed.contains(&s.index))
+            .find(|s| self.usable(s.index) && s.bound.is_none() && !claimed.contains(&s.index))
             .map(|s| s.index);
         if let Some(index) = empty {
             return Ok(index);
@@ -578,13 +862,79 @@ impl SlotPool {
         let reusable = self
             .slots
             .iter()
-            .find(|s| s.free() && !s.holds(source) && !claimed.contains(&s.index))
+            .find(|s| self.usable(s.index) && !s.holds(source) && !claimed.contains(&s.index))
             .map(|s| s.index);
         if let Some(index) = reusable {
             return Ok(index);
         }
         info!(slots = self.slots.len(), "the scene wants more places than the pool has; growing it");
         Ok(self.grow()?.index)
+    }
+
+    /// Put this item's filters on this slot's chain and take off what it no
+    /// longer wants.
+    ///
+    /// The comparison comes first and is the whole point: a scene reapplied
+    /// twice a second by the visibility tick must not take a pad block twice a
+    /// second. Only a chain that is actually different is built.
+    fn sync_filters(&mut self, index: usize, want: &[ItemFilter]) -> Result<()> {
+        let same = self.slots[index].filter_shape.len() == want.len()
+            && self
+                .slots[index]
+                .filter_shape
+                .iter()
+                .zip(want)
+                .all(|(have, want)| have.shape() == want.shape());
+        if same {
+            return Ok(());
+        }
+        self.clear_filters(index);
+        let live = self.program.current_state() == gst::State::Playing;
+        let canvas = self.canvas.clone();
+        for (n, f) in want.iter().enumerate() {
+            let upstream = match self.slots[index].filters.last() {
+                Some(last) => last.bin.clone(),
+                None => self.slots[index].flip.clone(),
+            };
+            let spec = FilterSpec {
+                id: format!("slot-{index}-filter-{n}"),
+                type_id: f.type_id.clone(),
+                side: FilterSide::SceneItem,
+                params: f.params.clone(),
+            };
+            let built = crate::plugin::filter::make(&f.type_id).and_then(|filter| {
+                let pad = self.slots[index].pad.clone();
+                let at = Insertion::before_pad(&self.program, &upstream, &pad);
+                crate::plugin::filter::insert(at, spec, filter, &canvas, live)
+            });
+            match built {
+                Ok(slot) => self.slots[index].filters.push(slot),
+                Err(e) => {
+                    // Half a chain is worse than none: what is there comes off
+                    // again so the picture is the clean one it was before.
+                    self.clear_filters(index);
+                    return Err(e);
+                }
+            }
+        }
+        self.slots[index].filter_shape = want.to_vec();
+        Ok(())
+    }
+
+    /// Take every filter off a slot's chain, newest first.
+    ///
+    /// Newest first because each insert put itself between the one below it
+    /// and the pad, so only the top one's recorded neighbours are still the
+    /// ones it actually sits between.
+    fn clear_filters(&mut self, index: usize) {
+        let filters = std::mem::take(&mut self.slots[index].filters);
+        self.slots[index].filter_shape.clear();
+        for f in filters.into_iter().rev() {
+            let id = f.spec.id.clone();
+            if let Err(e) = f.remove() {
+                warn!(filter = %id, ?e, "could not take a scene item's filter off its slot");
+            }
+        }
     }
 
     /// Link a slot to a source's tee. The one place in the whole apply path
@@ -634,23 +984,87 @@ impl SlotPool {
         for el in &self.slots[index].elements {
             el.sync_state_with_parent().ok();
         }
-        self.slots[index].bound = Some(Bound { source: branch.id.clone(), tee_pad });
+        self.slots[index].bound =
+            Some(Bound::Source { source: branch.id.clone(), tee_pad });
         debug!(slot = index, source = %branch.id, "slot bound");
         Ok(())
+    }
+
+    /// Bind a slot to a group composited on its own.
+    ///
+    /// The one path that adds elements to a running programme on purpose, and
+    /// the reason it is worth it: a filter over a group cannot be expressed by
+    /// flattening, so either the group gets its own compositor or a blur over
+    /// three items is three blurs. Built only for a group that carries a
+    /// filter, and taken down the moment it does not. See `mixer::group`.
+    fn bind_group<'a>(
+        &mut self,
+        index: usize,
+        p: &Placement,
+        branches: &[(&'a SourceId, &'a ProgrammeBranch)],
+    ) -> Result<()> {
+        let item = p.item.context("a group placement with no item id cannot be bound")?;
+        if !self.slots[index].holds_group(p.item) {
+            self.unbind(index);
+            let mut sub = super::group::SubCompositor::build(
+                &self.program,
+                &self.canvas,
+                &format!("{index}"),
+            )?;
+            let sink = self.slots[index]
+                .gate
+                .static_pad("sink")
+                .context("a slot's valve has no sink pad")?;
+            let src = sub
+                .output()
+                .static_pad("src")
+                .context("a sub compositor has no src pad")?;
+            self.slots[index].hide();
+            if let Err(e) = src.link(&sink) {
+                sub.teardown();
+                return Err(e.into());
+            }
+            for el in &self.slots[index].elements {
+                el.sync_state_with_parent().ok();
+            }
+            self.slots[index].bound = Some(Bound::Group { item, sub: Box::new(sub) });
+            self.misses += 1;
+            info!(slot = index, "a group carrying a filter is being composited on its own");
+        }
+        let Some(Bound::Group { sub, .. }) = self.slots[index].bound.as_mut() else {
+            anyhow::bail!("the slot did not take the group")
+        };
+        sub.apply(&p.group, branches)
     }
 
     /// Take a slot off whatever it was showing. The tee pad goes back so a
     /// source that is removed does not leave one behind.
     fn unbind(&mut self, index: usize) {
+        // A filter chain belongs to the item that asked for it, not to the
+        // slot, so a slot going to a different source loses it here rather
+        // than carrying a chroma key onto the next camera.
+        self.clear_filters(index);
         let Some(bound) = self.slots[index].bound.take() else { return };
         let slot = &mut self.slots[index];
         slot.home = false;
+        slot.drawn = None;
         slot.hide();
-        if let Some(sink) = slot.gate.static_pad("sink") {
-            let _ = bound.tee_pad.unlink(&sink);
-        }
-        if let Some(tee) = bound.tee_pad.parent_element() {
-            tee.release_request_pad(&bound.tee_pad);
+        let sink = slot.gate.static_pad("sink");
+        match bound {
+            Bound::Source { tee_pad, .. } => {
+                if let Some(sink) = sink {
+                    let _ = tee_pad.unlink(&sink);
+                }
+                if let Some(tee) = tee_pad.parent_element() {
+                    tee.release_request_pad(&tee_pad);
+                }
+            }
+            Bound::Group { mut sub, .. } => {
+                if let (Some(sink), Some(src)) = (sink, sub.output().static_pad("src")) {
+                    let _ = src.unlink(&sink);
+                }
+                sub.teardown();
+            }
         }
     }
 
@@ -704,6 +1118,40 @@ impl SlotPool {
         }
     }
 
+    /// What is on one slot's chain right now, by filter id. For the status,
+    /// for `gmx dot`, and for the test that proves a per item filter is in the
+    /// pipeline rather than only in the document.
+    pub fn filters_on(&self, index: usize) -> Vec<String> {
+        self.slots
+            .get(index)
+            .map(|s| s.filters.iter().map(|f| f.spec.type_id.clone()).collect())
+            .unwrap_or_default()
+    }
+
+    /// Every per item filter in the pool, as `(slot, type)`.
+    pub fn item_filters(&self) -> Vec<(usize, String)> {
+        self.slots
+            .iter()
+            .flat_map(|s| s.filters.iter().map(move |f| (s.index, f.spec.type_id.clone())))
+            .collect()
+    }
+
+    /// The sources whose pads a transition is driving on this property right
+    /// now. What a test reads to prove a curve reached the pad rather than
+    /// being dropped on the way.
+    pub fn driven_by_a_transition(&self, property: &str) -> Vec<SourceId> {
+        self.slots
+            .iter()
+            .filter(|s| driven(&s.pad, property))
+            .map(|s| s.source().cloned().unwrap_or_default())
+            .collect()
+    }
+
+    /// The compositor itself, for a probe that has to read its output.
+    pub fn compositor(&self) -> &gst::Element {
+        &self.vmix
+    }
+
     /// Every slot, for the mixer's status and for a test.
     pub fn slots(&self) -> &[Slot] {
         &self.slots
@@ -711,7 +1159,21 @@ impl SlotPool {
 
     /// The slots a source is drawn in right now.
     pub fn slots_of(&self, source: &SourceId) -> Vec<usize> {
-        self.slots.iter().filter(|s| s.holds(source)).map(|s| s.index).collect()
+        self.slots
+            .iter()
+            .filter(|s| s.holds(source) || s.sources().iter().any(|id| id == source))
+            .map(|s| s.index)
+            .collect()
+    }
+
+    /// Every group being composited on its own, as `(slot, children)`. What
+    /// the status and `gmx dot` read, and what a test counts.
+    pub fn sub_compositors(&self) -> Vec<(usize, Vec<SourceId>)> {
+        self.slots
+            .iter()
+            .filter(|s| matches!(s.bound, Some(Bound::Group { .. })))
+            .map(|s| (s.index, s.sources()))
+            .collect()
     }
 
     /// How many slots are visible. What the compositor is actually paying for.
@@ -736,6 +1198,20 @@ impl SlotPool {
     }
 }
 
+/// Both scenes on the canvas: what a transition drives.
+///
+/// Plain pads and pad states. What happens to them is [`crate::mixer::transition`]'s
+/// decision, not this module's, which is why a wipe written in Python lands on
+/// the same frame a built in fade does.
+pub struct Crossed {
+    /// Pads drawing the scene that is going away.
+    pub out: Vec<Leg>,
+    /// Pads drawing the scene arriving, at alpha 0 until a curve raises them.
+    pub incoming: Vec<Leg>,
+    /// What the apply itself did, for the log and the missing source list.
+    pub applied: Applied,
+}
+
 /// What one apply did, for the log, the status and the tests.
 #[derive(Debug, Clone, Default)]
 pub struct Applied {
@@ -748,6 +1224,48 @@ pub struct Applied {
     /// Where each claimed slot was and where the scene wants it. Empty on the
     /// ordinary path, where the pad is already where it is going.
     pub ramps: Vec<Ramp>,
+}
+
+/// Everything a placement decides, onto a pad that is not a slot's.
+///
+/// The sub compositor's children want exactly what a slot wants, and the
+/// arithmetic is the same arithmetic, so it lives here once rather than in two
+/// places that could drift.
+pub(crate) fn write_pad(
+    pad: &gst::Pad,
+    p: &Placement,
+    canvas: &CanvasCaps,
+    crop: &gst::Element,
+    flip: &gst::Element,
+) {
+    PadState::of(p).write(pad);
+    set_sizing(pad, p.sizing);
+    for (name, v) in [("xalign", p.align.0), ("yalign", p.align.1)] {
+        if pad.has_property(name) {
+            set_f64(pad, name, v.clamp(0.0, 1.0));
+        }
+    }
+    // The child's own size is the canvas, because every input is normalised to
+    // the canvas contract before it reaches the programme pipeline.
+    let px = |f: f64, of: i32| (f.clamp(0.0, 0.95) * of as f64).round() as i32;
+    for (name, value, of) in [
+        ("left", p.crop.0, canvas.width),
+        ("top", p.crop.1, canvas.height),
+        ("right", p.crop.2, canvas.width),
+        ("bottom", p.crop.3, canvas.height),
+    ] {
+        set_i32_on(crop, name, px(value, of));
+    }
+    let quarters = (p.rotation.rem_euclid(360.0) / 90.0).round() as i64 % 4;
+    flip.set_property_from_str(
+        "method",
+        match quarters {
+            1 => "clockwise",
+            2 => "rotate-180",
+            3 => "counterclockwise",
+            _ => "none",
+        },
+    );
 }
 
 /// Write `sizing-policy`, if this pad has it and has a value it understands.
@@ -779,6 +1297,18 @@ fn frame_size(caps: &gst::Caps) -> Option<(i32, i32)> {
     Some((s.get("width").ok()?, s.get("height").ok()?))
 }
 
+/// Whether a transition owns this property of this pad right now.
+///
+/// A control binding is a function of the frame's running time, so a property
+/// written by hand under one is undone on the next sync anyway. What it also
+/// does is put one wrong frame on air, and the supervisor's visibility tick
+/// runs twice a second whatever else is happening. So every write here asks
+/// first, and the tick stops stamping on a live transition without knowing
+/// that transitions exist.
+fn driven(pad: &gst::Pad, name: &str) -> bool {
+    pad.control_binding(name).is_some()
+}
+
 /// Property writes that do not fight the element over its own type.
 ///
 /// A compositor pad's `width` is an int, its `alpha` a double and its `zorder`
@@ -786,19 +1316,19 @@ fn frame_size(caps: &gst::Caps) -> Option<(i32, i32)> {
 /// than failing. Writing them through these three is how the wrong one becomes
 /// a compile error.
 fn set_i32(pad: &gst::Pad, name: &str, v: i32) {
-    if pad.property::<i32>(name) != v {
+    if pad.property::<i32>(name) != v && !driven(pad, name) {
         pad.set_property(name, v);
     }
 }
 
 fn set_u32(pad: &gst::Pad, name: &str, v: u32) {
-    if pad.property::<u32>(name) != v {
+    if pad.property::<u32>(name) != v && !driven(pad, name) {
         pad.set_property(name, v);
     }
 }
 
 fn set_f64(pad: &gst::Pad, name: &str, v: f64) {
-    if (pad.property::<f64>(name) - v).abs() > f64::EPSILON {
+    if (pad.property::<f64>(name) - v).abs() > f64::EPSILON && !driven(pad, name) {
         pad.set_property(name, v);
     }
 }

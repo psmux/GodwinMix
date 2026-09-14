@@ -7,6 +7,7 @@ use godwinmix_protocol::requests::*;
 use godwinmix_protocol::scope::Scope;
 use crate::control::call::Call;
 use godwinmix_core::hooks;
+use godwinmix_core::mixer::transition::TransitionSpec;
 use godwinmix_core::mixer::Command;
 use serde_json::{json, Value};
 
@@ -131,9 +132,7 @@ async fn state(call: &Call) -> Result<ProgramState, RpcError> {
 /// everything built on it has to keep working.
 async fn take(call: Call, params: Value) -> Result<Value, RpcError> {
     let req: TakeRequest = call.params(&params)?;
-    req.check_transition().map_err(|e| {
-        RpcError::invalid_params(e).with("transitions", json!(godwinmix_protocol::requests::TRANSITIONS))
-    })?;
+    let transition = resolve_transition(&call, &req)?;
 
     // A name that is wrong is answered before a safety rule is consulted: a
     // caller who typed the wrong id needs to hear that, not how long the hold
@@ -144,7 +143,14 @@ async fn take(call: Call, params: Value) -> Result<Value, RpcError> {
             return Err(RpcError::not_found("source", &id, &ids));
         }
         call.app.safety.check(&call.token).map_err(|r| call.safety_error(r))?;
-        return cut(&call, Some(id), req.at_running_time_ms).await;
+        // A bare source id is shorthand for a one item full canvas scene, so
+        // a transition onto one is a scene take with one placement. The mixer
+        // reports it as the source either way, which is what keeps the tally,
+        // the history and `program.revert` reading as they always did.
+        let Some(spec) = transition else {
+            return cut(&call, Some(id), req.at_running_time_ms).await;
+        };
+        return take_one_item(&call, &id, req.at_running_time_ms, spec).await;
     }
 
     // A scene by name, or the armed one when nothing was named.
@@ -158,7 +164,88 @@ async fn take(call: Call, params: Value) -> Result<Value, RpcError> {
         call.app.safety.check(&call.token).map_err(|r| call.safety_error(r))?;
         return cut(&call, None, req.at_running_time_ms).await;
     };
-    take_scene(&call, &which, req.at_running_time_ms).await
+    take_scene(&call, &which, req.at_running_time_ms, transition).await
+}
+
+/// What the caller asked for, as the mixer has it, or an error naming what
+/// this core can do instead.
+///
+/// A name the collection stores wins over a built in one, so a collection that
+/// calls its house dissolve "fade" gets its own duration rather than the
+/// default. A transition plugin's name is accepted once the supervisor has it
+/// running.
+fn resolve_transition(
+    call: &Call,
+    req: &TakeRequest,
+) -> Result<Option<TransitionSpec>, RpcError> {
+    let Some(asked) = &req.transition else { return Ok(None) };
+    let named = call.app.scenes.transition(&asked.type_id());
+    if let Some(stored) = named {
+        // The collection's own settings, with anything the call named on top,
+        // so a house dissolve can be asked for at a different length once
+        // without being redefined.
+        let mut params = stored.params.as_object().cloned().unwrap_or_default();
+        if let Some(asked) = asked.full() {
+            params.extend(asked.params.clone());
+        }
+        let request = godwinmix_protocol::requests::Transition::Full(TransitionRequest {
+            type_id: stored.kind.clone(),
+            duration_ms: Some(match asked.full().and_then(|r| r.duration_ms) {
+                Some(ms) => ms,
+                None => stored.duration_ms as u64,
+            }),
+            params,
+        });
+        let spec = TransitionSpec::from(&request);
+        return Ok(Some(spec).filter(|s| !s.is_cut()));
+    }
+    let extra = call.app.transition_names();
+    req.check_transition(&extra).map_err(|e| {
+        let mut names: Vec<String> =
+            godwinmix_protocol::requests::TRANSITIONS.iter().map(|s| s.to_string()).collect();
+        names.extend(call.app.scenes.transition_names());
+        names.extend(extra);
+        RpcError::invalid_params(e).with("transitions", json!(names))
+    })?;
+    Ok(Some(TransitionSpec::from(asked)).filter(|s| !s.is_cut()))
+}
+
+/// A source taken with a transition: one full canvas item, and the same path
+/// every scene take goes down.
+async fn take_one_item(
+    call: &Call,
+    source: &str,
+    at_running_time_ms: Option<u64>,
+    transition: TransitionSpec,
+) -> Result<Value, RpcError> {
+    let canvas = call.app.scenes.canvas();
+    let caps = godwinmix_core::caps::CanvasCaps::new(&godwinmix_core::config::Canvas {
+        width: canvas.width as i32,
+        height: canvas.height as i32,
+        fps: canvas.fps as i32,
+        ..Default::default()
+    });
+    let scene = godwinmix_core::mixer::ProgramScene {
+        name: source.to_string(),
+        placements: vec![godwinmix_core::mixer::slots::Placement::full_canvas(
+            source.to_string(),
+            &caps,
+        )],
+    };
+    call.app.history.expect(&call.token.id);
+    call.app
+        .mixer
+        .request(|ack| Command::TakeScene {
+            scene: Box::new(scene.clone()),
+            at_running_time_ms,
+            duration_ms: None,
+            transition: Some(transition.clone()),
+            ack: Some(ack),
+        })
+        .await
+        .map_err(|e| call.mixer_error(e))?;
+    call.app.safety.record(&call.token.id);
+    body(state(call).await?)
 }
 
 /// Put a whole scene on air.
@@ -166,6 +253,7 @@ async fn take_scene(
     call: &Call,
     which: &str,
     at_running_time_ms: Option<u64>,
+    transition: Option<TransitionSpec>,
 ) -> Result<Value, RpcError> {
     // A draft of this scene taken off air is written back now, which is what
     // "applied on the next take" means.
@@ -210,9 +298,11 @@ async fn take_scene(
         .request(|ack| Command::TakeScene {
             scene: Box::new(godwinmix_core::mixer::ProgramScene { name: name.clone(), placements }),
             at_running_time_ms,
-            // A take is a cut. A duration belongs to a geometry command on a
-            // scene that is already on air, not to putting one there.
+            // A take with no transition is a cut. A `duration_ms` here would
+            // mean something else: it is the geometry ramp a reshape of the
+            // scene already on air asks for, and a take is not that.
             duration_ms: None,
+            transition: transition.clone(),
             ack: Some(ack),
         })
         .await

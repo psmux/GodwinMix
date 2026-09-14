@@ -261,6 +261,22 @@ pub struct BackendInfo {
     pub hardware_accelerated: bool,
 }
 
+/// A take that was a cut, which is what a take was before transitions.
+/// Shorthand for the five field variant, for callers and tests that have
+/// nothing to say about a transition.
+impl Event {
+    pub fn took_cut(source: Option<SourceId>, scene: Option<String>, at_running_time_ms: u64) -> Event {
+        Event::Took {
+            source,
+            scene,
+            at_running_time_ms,
+            transition: None,
+            duration_ms: 0,
+            transition_id: 0,
+        }
+    }
+}
+
 /// Pushed to every connected UI as it happens.
 ///
 /// The `type` tag is the legacy `/ws` name. `/rpc` sends the same payload
@@ -280,6 +296,19 @@ pub enum Event {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         scene: Option<String>,
         at_running_time_ms: u64,
+        /// How the change was made: `cut`, `fade`, `move`, `stinger` or a
+        /// transition plugin's name. Absent on a take from a client written
+        /// before transitions, which is a cut.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        transition: Option<String>,
+        /// How long the transition takes. 0 for a cut.
+        #[serde(default)]
+        duration_ms: u64,
+        /// The take's own number, which is also the id of the transition it
+        /// started. A client watching two takes in quick succession tells them
+        /// apart by this rather than by timing.
+        #[serde(default)]
+        transition_id: u64,
     },
     /// The armed scene changed, or was cleared. Nothing is composited for a
     /// preview until a client asks for one, so this costs a message.

@@ -90,6 +90,13 @@ impl Core {
                 scenes: godwinmix_core::scene::server::SceneServer::in_memory(
                     godwinmix_core::caps::CanvasCaps::new(&cfg.canvas),
                 ),
+                // No plugins are installed in a live test, so the supervisor
+                // has nothing to run; it is here because the control plane
+                // asks it what transitions exist.
+                plugins: godwinmix_core::plugin::supervisor::Supervisor::new(
+                    godwinmix_core::caps::CanvasCaps::new(&cfg.canvas),
+                    Default::default(),
+                ),
             },
             rehearsal,
         );

@@ -171,6 +171,20 @@ keyed in all of them.
 
 `filter` names one by its name, its type, or its position in the chain from 0.
 
+A filter reaches the pipeline as soon as it is written: on a scene that is on
+air the change is pushed straight away, so the picture keys when the call
+answers rather than at the next take. It sits on that item's own slot chain,
+between the flip and the compositor pad, which is what lets the same camera be
+keyed in one item and clean in another. The insert is under a pad block on that
+slot's own queue, so the programme loses at most one frame of that item and
+nothing downstream notices. A chain that has not actually changed is not
+rebuilt, so the supervisor reapplying the scene twice a second costs nothing.
+
+A filter on a **group** is the expensive path: the group cannot be flattened,
+because the filter is over it as one picture, so it gets a compositor of its
+own, built on demand and taken apart when the filter goes. See
+[how a scene reaches the compositor](../explanation/how-a-scene-reaches-the-compositor.md).
+
 ## Layouts and parameters
 
 | Method | What it does |
@@ -232,13 +246,32 @@ canvas. `name: null` takes them out of the one they are in.
 
 `source` is shorthand for a one item full canvas scene and is taken exactly as
 it always was. With neither `scene` nor `source`, the armed scene goes on air.
-`transition` is `cut` in this build; anything else is refused with `-32602` and
-the list of what exists.
 
-`scene.preview.frame` needs a mosaic running, because the preview picture is
-composited in the multiview pipeline from the per source thumbnails. With none
-up it says so and names the next step rather than building a pipeline for one
-still.
+`transition` is a name or an object:
+
+```json
+{"method": "program.take",
+ "params": {"scene": "three up",
+            "transition": {"type": "fade", "duration_ms": 300}}}
+```
+
+`cut`, `fade`, `move` and `stinger` are built in, a collection's own named
+transitions resolve first, and a `transition` plugin adds its own name. A name
+nobody knows is `-32602` with `data.transitions` listing every one this core
+would have taken. A bare name takes 300 ms; `duration_ms: 0` is a cut whatever
+the type says. The full contract is in
+[transitions](transitions.md).
+
+`scene.preview.frame` composites the armed scene and hands back one frame of
+it, base64 JPEG under `image` (the field is `image` because it carries a media
+type beside it, not a format name). Asking for it is what builds the preview:
+the compositor is up for the length of the call and gone after, unless
+something else is watching. `layout` comes back beside the picture, so a client
+drawing handles has the geometry without recomputing it.
+
+`scene.preview.set` arms a scene and costs one message: nothing is composited
+for a preview until a client asks for one with `ext.preview`, opens
+`/mjpeg/preview`, or calls `scene.preview.frame`.
 
 ## Editing off air
 
@@ -292,16 +325,30 @@ into one step.
 
 ## Patches
 
-Clients mirror the document off `event/scene.patch` rather than refetching it:
+Clients mirror the document off `event/scene.patch` rather than refetching it.
+Subscribe to `scene.*` and they arrive on `/rpc`:
 
 ```json
-{"seq": 91, "source_client": "designer-1", "scope": "document",
+{"seq": 91, "source_client": "designer-1", "client_seq": 77, "scope": "document",
  "added": [], "updated": [{"before": {…}, "after": {…}}], "removed": []}
 ```
 
 One per transaction, ended by `event/flush`. Suppress the echo of your own edits
 by `source_client`, ignore record kinds and trailing fields you do not know, and
 you can be several versions behind without breaking.
+
+`client_seq` is the `seq` you put on the command coming back. A drag cannot
+wait for a round trip, so the kit draws the move itself and reconciles when the
+echo lands; without the number it cannot tell an echo of a move it has already
+drawn past from a correction, and the handle rubber bands backwards under the
+cursor. `scene.item.set`, the geometry operations and `scene.item.reorder` all
+carry it.
+
+A patch names one record per thing that changed. Inserting an item at the front
+of a scene changes that item's order key and nobody else's, because the key is
+stored on the document rather than worked out from the array: `order::between`
+splits the gap between its neighbours, and only a gap that has run out makes a
+group renumber.
 
 ## Errors
 
@@ -310,7 +357,7 @@ Every refusal names the state and the next step (03 section 6).
 | Code | When |
 |---|---|
 | -32004 | no scene, item, source or draft by that name; the message lists the ones that exist |
-| -32602 | the params were wrong for the method, or a transition this build does not have |
+| -32602 | the params were wrong for the method, or a transition this core does not have (`data.transitions` lists the ones it does) |
 | -32001 | not in a state that allows it: no transaction open, nothing to undo, no scene armed |
 | -32003 | a safety rule refused the take; `data.retry_after_ms` says how long |
 

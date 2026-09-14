@@ -53,6 +53,15 @@ pub struct Patch {
     /// What the client called this change, for a label in an undo menu.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub label: Option<String>,
+    /// The client's own sequence number, echoed back.
+    ///
+    /// A drag cannot wait for a round trip, so the client kit draws the move
+    /// itself and reconciles when the echo arrives. Without this it cannot
+    /// tell an echo of the move it has already drawn past from a correction,
+    /// and the handle rubber bands backwards under the cursor. Every geometry
+    /// command carries a `seq`; this is that number coming back.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub client_seq: Option<u64>,
 }
 
 impl Patch {
@@ -77,6 +86,10 @@ impl Patch {
             removed: self.added.iter().map(|r| r.id).collect(),
             removed_records: self.added.clone(),
             label: self.label.clone(),
+            // An undo is the core's own change, not a replay of whatever the
+            // client was predicting, so it carries no client sequence number:
+            // the kit applies it rather than reconciling against it.
+            client_seq: None,
         }
     }
 
