@@ -223,7 +223,7 @@ fn sixel(image: &Image) -> String {
         ));
     }
     let mut indexed = vec![0u8; image.width * image.height];
-    for (i, px) in image.rgb.chunks_exact(3).enumerate() {
+    for (i, px) in image.rgb.as_chunks::<3>().0.iter().enumerate() {
         indexed[i] = cube_index(px[0], px[1], px[2]);
     }
     for band in 0..image.height.div_ceil(6) {

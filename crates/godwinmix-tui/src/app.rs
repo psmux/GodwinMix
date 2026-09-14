@@ -425,10 +425,12 @@ impl App {
                 self.dirty = outcome == Outcome::Render;
                 if outcome == Outcome::Resync {
                     let dropped = params.get("dropped").and_then(Value::as_u64).unwrap_or(0);
-                    self.complain(format!(
+                    let said = format!(
                         "the mixer says this client fell behind and {dropped} events were dropped. Subscribing again."
-                    ));
+                    );
+                    self.complain(said.clone());
                     self.store.reset();
+                    self.store.note("warning", said);
                     return Some(Command::Resubscribe);
                 }
                 self.clamp();
