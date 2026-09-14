@@ -1207,7 +1207,8 @@ pub async fn serve(bind: &str, state: AppState) -> Result<()> {
 }
 
 /// What `/metrics`, `log.set` and the pipeline introspection routes need.
-/// Everything else about them lives in `src/observe/`.
+/// Everything else about them lives in `crate::observe` and in
+/// `godwinmix_core::observe`.
 fn observe_state(state: &AppState) -> crate::observe::ObserveState {
     crate::observe::ObserveState {
         mixer: Some(state.mixer.clone()),

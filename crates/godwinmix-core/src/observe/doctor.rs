@@ -171,7 +171,7 @@ fn gstreamer_version() -> Check {
 
 /// Every element the catalogue needs, named individually when missing.
 fn elements() -> Vec<Check> {
-    // When `src/catalogue/` exists this becomes:
+    // When the catalogue answers for this, it becomes:
     //     let required = crate::catalogue::doctor_lines();
     // and the constants above go away. The shape of a line does not change.
     let missing_required: Vec<_> = REQUIRED

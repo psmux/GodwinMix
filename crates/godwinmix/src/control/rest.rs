@@ -238,7 +238,7 @@ async fn generic(State(ctx): State<Ctx>, request: Request) -> Response {
         Err(f) => return unauthorised(f.message(), &trace_id),
     };
     // Inside the task local, so every log line this call produces carries the
-    // same id the caller is holding. See `src/observe/trace.rs`.
+    // same id the caller is holding. See ``godwinmix_core::observe::trace``.
     match godwinmix_core::observe::with_trace_id(
         id,
         dispatch(

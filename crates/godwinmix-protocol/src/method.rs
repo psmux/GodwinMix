@@ -331,7 +331,7 @@ mod tests {
         assert_eq!(at("agent.state"), "GET /api/v1/agent/state");
         assert_eq!(at("adbreak.start"), "POST /api/v1/adbreak/start");
         // The observability methods. A read is a GET, changing a log level is
-        // not, and both sit where `src/observe/routes.rs` already answers.
+        // not, and both sit where ``observe::routes` in the `godwinmix` crate` already answers.
         assert_eq!(at("log.set"), "POST /api/v1/log/set");
         assert_eq!(at("log.gst"), "POST /api/v1/log/gst");
         assert_eq!(at("log.levels"), "GET /api/v1/log/levels");

@@ -126,7 +126,7 @@ fn every_route_is_in_the_protocol() {
             assert!(
                 known.contains(&path),
                 "the router serves {path} and protocol.json does not mention it. Add it to \
-                 the method table, or to LEGACY_ROUTES / WELL_KNOWN in src/api/protocol.rs."
+                 the method table, or to LEGACY_ROUTES / WELL_KNOWN in godwinmix-protocol's protocol.rs."
             );
             checked += 1;
         }
