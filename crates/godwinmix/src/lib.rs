@@ -409,6 +409,16 @@ fn local_info(config: &std::path::Path) -> String {
 }
 
 
+/// Register the WebAssembly host with the core, when this build carries one.
+///
+/// Idempotent: the core keeps the first runner it is given. Public because a
+/// test that builds a core in process has to call it too, and because a
+/// program embedding `godwinmix` as a library gets the same one line.
+pub fn install_wasm_host() {
+    #[cfg(feature = "wasm")]
+    godwinmix_wasm::install();
+}
+
 pub async fn run() -> Result<()> {
     let args = Args::parse();
 
@@ -416,8 +426,7 @@ pub async fn run() -> Result<()> {
     // supervisor because `gmx plugin test`, `gmx plugin new` and `gmx doctor`
     // all want to know whether this build carries a WebAssembly host, and
     // none of them starts a mixer.
-    #[cfg(feature = "wasm")]
-    godwinmix_wasm::install();
+    install_wasm_host();
 
     core_observe::introspect::begin();
     // Every log line goes to stderr, which keeps stdout clean for the things

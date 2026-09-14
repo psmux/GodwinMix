@@ -25,3 +25,9 @@ tracing = { workspace = true }
 parking_lot = { workspace = true }
 wasmtime = { workspace = true }
 wasmtime-wasi = { workspace = true }
+
+[dev-dependencies]
+# The frame interval test builds a real mixer and takes over a real transition.
+gstreamer = { workspace = true }
+toml = { workspace = true }
+tokio = { workspace = true, features = ["rt-multi-thread", "macros", "time"] }

@@ -1,0 +1,6 @@
+{"config":"/tmp/min-hold/godwinmix.toml","kind":"start","runtime_dir":"/tmp/min-hold/.godwinmix","seq":0,"ts":"2026-09-15T09:00:00.000Z","version":"0.2.0"}
+{"idempotency_key":null,"kind":"command","method":"source.add","params":{"id":"cam1","uri":"test://smpte"},"seq":1,"token_id":"default","trace_id":null,"ts":"2026-09-15T09:00:00.100Z"}
+{"idempotency_key":null,"kind":"command","method":"source.add","params":{"id":"cam2","uri":"test://ball"},"seq":2,"token_id":"default","trace_id":null,"ts":"2026-09-15T09:00:00.200Z"}
+{"idempotency_key":null,"kind":"command","method":"program.take","params":{"source":"cam1"},"seq":3,"token_id":"default","trace_id":null,"ts":"2026-09-15T09:00:02.000Z"}
+{"idempotency_key":null,"kind":"command","method":"program.take","params":{"source":"cam2"},"seq":4,"token_id":"default","trace_id":null,"ts":"2026-09-15T09:00:04.000Z"}
+{"idempotency_key":null,"kind":"command","method":"program.take","params":{"source":"cam2"},"seq":5,"token_id":"default","trace_id":null,"ts":"2026-09-15T09:00:11.000Z"}

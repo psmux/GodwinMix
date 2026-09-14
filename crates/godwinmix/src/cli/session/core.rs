@@ -29,10 +29,25 @@ pub struct TestCore {
     snapshots: Arc<Tracker>,
     registry: Registry<call::Call>,
     thread: Option<std::thread::JoinHandle<()>>,
+    /// Plugins this core installed, taken out again when it goes. The loader's
+    /// registry is process wide, so a replay that left one behind would change
+    /// the next replay in the same process.
+    installed: Vec<String>,
+    plugins: Arc<godwinmix_core::plugin::supervisor::Supervisor>,
 }
 
 impl TestCore {
     pub async fn start() -> Result<TestCore> {
+        TestCore::start_with(&[]).await
+    }
+
+    /// The same core with some plugins installed first.
+    ///
+    /// Installed before the control plane is built, because that is when hooks
+    /// are read off every enabled plugin's manifest. A session replayed twice,
+    /// once with a plugin and once without, is how the plugin's effect is
+    /// measured: the difference is in the deltas, not in a log line.
+    pub async fn start_with(plugins: &[std::path::PathBuf]) -> Result<TestCore> {
         gstreamer::init().context("initialising GStreamer for the replay")?;
         let mut cfg: Config = toml::from_str("").expect("an empty config is every default");
         cfg.canvas.width = 1280;
@@ -44,6 +59,19 @@ impl TestCore {
         // difference in the log rather than in the code under test.
         cfg.safety.min_hold_ms = 0;
         cfg.safety.flash_guard = false;
+
+        let mut installed = Vec::new();
+        for dir in plugins {
+            let dir = dir
+                .canonicalize()
+                .with_context(|| format!("there is no plugin at {}", dir.display()))?;
+            let read = godwinmix_core::plugin::loader::read(&dir, &Default::default());
+            if let Some(problem) = &read.problem {
+                anyhow::bail!("{} will not load: {problem}", dir.display());
+            }
+            installed.push(read.name().to_string());
+            godwinmix_core::plugin::loader::insert(read);
+        }
 
         let (mut mix, handle, cmd_rx, mut bus_rx) =
             Mixer::build(cfg.clone()).context("building the test core")?;
@@ -74,6 +102,10 @@ impl TestCore {
         let scenes = godwinmix_core::scene::server::SceneServer::in_memory(
             godwinmix_core::caps::CanvasCaps::new(&cfg.canvas),
         );
+        let supervisor = godwinmix_core::plugin::supervisor::Supervisor::new(
+            godwinmix_core::caps::CanvasCaps::new(&cfg.canvas),
+            Default::default(),
+        );
         let app = AppState::new(
             &cfg,
             Engine {
@@ -87,15 +119,25 @@ impl TestCore {
                 quit: Arc::new(tokio::sync::Notify::new()),
                 // A test core runs no plugin singletons; the supervisor is
                 // here because the control plane asks it what transitions exist.
-                plugins: godwinmix_core::plugin::supervisor::Supervisor::new(
-                    godwinmix_core::caps::CanvasCaps::new(&cfg.canvas),
-                    Default::default(),
-                ),
+                plugins: supervisor.clone(),
             },
             false,
         );
-        let core =
-            TestCore { app, snapshots, registry: methods::registry(), thread: Some(thread) };
+        // Started after the control plane, because a singleton that raises an
+        // event wants somewhere to put it. Failures are reported and not
+        // fatal: a replay with a plugin that will not start is a replay
+        // without it, and the report says which.
+        for (provide, why) in supervisor.start_all() {
+            tracing::warn!(%provide, %why, "a plugin would not start for the replay");
+        }
+        let core = TestCore {
+            app,
+            snapshots,
+            registry: methods::registry(),
+            thread: Some(thread),
+            installed,
+            plugins: supervisor,
+        };
         crate::control::spawn_background(core.app.clone());
         Ok(core)
     }
@@ -136,6 +178,13 @@ impl TestCore {
 
 impl Drop for TestCore {
     fn drop(&mut self) {
+        // The plugins first, so a component is shut down while there is still
+        // a core for it to log through, and so the process wide loader
+        // registry is as it was before this replay.
+        for name in std::mem::take(&mut self.installed) {
+            self.plugins.stop_plugin(&name, "the replay is over");
+            godwinmix_core::plugin::loader::remove(&name);
+        }
         let _ = self.app.mixer.send(mixer::Command::Shutdown);
         if let Some(thread) = self.thread.take() {
             let _ = thread.join();

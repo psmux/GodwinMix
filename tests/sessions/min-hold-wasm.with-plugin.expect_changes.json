@@ -1,0 +1,32 @@
+{
+  "changes": [
+    {
+      "what": "source",
+      "id": "cam1",
+      "to": "connecting"
+    },
+    {
+      "what": "source",
+      "id": "cam1",
+      "to": "live"
+    },
+    {
+      "what": "source",
+      "id": "cam2",
+      "to": "connecting"
+    },
+    {
+      "what": "program",
+      "to": "cam1"
+    },
+    {
+      "what": "source",
+      "id": "cam2",
+      "to": "live"
+    },
+    {
+      "what": "program",
+      "to": "cam2"
+    }
+  ]
+}
