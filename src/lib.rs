@@ -25,6 +25,7 @@ pub mod mixer;
 pub mod multiview;
 pub mod output;
 pub mod probe;
+pub mod scene;
 pub mod snapshot;
 pub mod state;
 
@@ -78,6 +79,17 @@ enum Command {
         #[command(subcommand)]
         cmd: ctl::Ctl,
     },
+    /// Read a scene collection from another mixer.
+    Import {
+        #[command(subcommand)]
+        cmd: scene::cli::Import,
+    },
+    /// Work with scene documents: validate, resolve a layout, convert between
+    /// the nested document and the flat record store.
+    Scene {
+        #[command(subcommand)]
+        cmd: scene::cli::Scene,
+    },
     /// Expose a running mixer to AI agents as Model Context Protocol tools.
     ///
     /// Speaks MCP over stdio: JSON-RPC requests one per line on stdin,
@@ -121,6 +133,8 @@ pub async fn run() -> Result<()> {
             let token = token.or_else(|| config::env_var("TOKEN"));
             return mcp::run(&url, token).await;
         }
+        Some(Command::Import { cmd }) => return scene::cli::run_import(cmd),
+        Some(Command::Scene { cmd }) => return scene::cli::run_scene(cmd),
         None => {}
     }
 

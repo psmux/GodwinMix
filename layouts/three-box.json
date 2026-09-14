@@ -1,0 +1,155 @@
+{
+  "schemaVersion": 1,
+  "id": "0199b000-0000-701b-8000-de5157ed001b",
+  "name": "three-box",
+  "canvas": {
+    "width": 1920,
+    "height": 1080,
+    "fps": 30
+  },
+  "params": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "required": [
+      "a"
+    ],
+    "properties": {
+      "a": {
+        "type": "string",
+        "default": "",
+        "title": "Left source",
+        "x-gmx-kind": "source"
+      },
+      "b": {
+        "type": "string",
+        "default": "",
+        "title": "Middle source",
+        "x-gmx-kind": "source"
+      },
+      "c": {
+        "type": "string",
+        "default": "",
+        "title": "Right source",
+        "x-gmx-kind": "source"
+      },
+      "gap": {
+        "type": "number",
+        "default": 0.02,
+        "minimum": 0.0,
+        "maximum": 0.1,
+        "title": "Gap",
+        "description": "Space between the boxes, as a fraction of the canvas."
+      }
+    }
+  },
+  "scenes": [
+    {
+      "id": "0199b000-0000-701c-8000-de5157ed001c",
+      "name": "Three boxes, side by side",
+      "items": [
+        {
+          "id": "0199b000-0000-7018-8000-de5157ed0018",
+          "name": "left",
+          "content": {
+            "source": "{{a}}"
+          },
+          "transform": {
+            "position": {
+              "x": 0,
+              "y": 0
+            },
+            "rotation": 0,
+            "scale": {
+              "x": 1,
+              "y": 1
+            },
+            "anchor": {
+              "x": 0,
+              "y": 0
+            },
+            "frame": {
+              "w": 0,
+              "h": 0
+            },
+            "fit": "cover",
+            "align": "center"
+          },
+          "bind": {
+            "position.x": "gap*W",
+            "position.y": "gap*H",
+            "frame.w": "(W - 4*gap*W)/3",
+            "frame.h": "H - 2*gap*H"
+          }
+        },
+        {
+          "id": "0199b000-0000-7019-8000-de5157ed0019",
+          "name": "middle",
+          "content": {
+            "source": "{{b}}"
+          },
+          "transform": {
+            "position": {
+              "x": 0,
+              "y": 0
+            },
+            "rotation": 0,
+            "scale": {
+              "x": 1,
+              "y": 1
+            },
+            "anchor": {
+              "x": 0,
+              "y": 0
+            },
+            "frame": {
+              "w": 0,
+              "h": 0
+            },
+            "fit": "cover",
+            "align": "center"
+          },
+          "bind": {
+            "position.x": "gap*W + ((W - 4*gap*W)/3 + gap*W)",
+            "position.y": "gap*H",
+            "frame.w": "(W - 4*gap*W)/3",
+            "frame.h": "H - 2*gap*H"
+          }
+        },
+        {
+          "id": "0199b000-0000-701a-8000-de5157ed001a",
+          "name": "right",
+          "content": {
+            "source": "{{c}}"
+          },
+          "transform": {
+            "position": {
+              "x": 0,
+              "y": 0
+            },
+            "rotation": 0,
+            "scale": {
+              "x": 1,
+              "y": 1
+            },
+            "anchor": {
+              "x": 0,
+              "y": 0
+            },
+            "frame": {
+              "w": 0,
+              "h": 0
+            },
+            "fit": "cover",
+            "align": "center"
+          },
+          "bind": {
+            "position.x": "gap*W + 2*((W - 4*gap*W)/3 + gap*W)",
+            "position.y": "gap*H",
+            "frame.w": "(W - 4*gap*W)/3",
+            "frame.h": "H - 2*gap*H"
+          }
+        }
+      ]
+    }
+  ]
+}

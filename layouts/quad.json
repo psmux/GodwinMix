@@ -1,0 +1,195 @@
+{
+  "schemaVersion": 1,
+  "id": "0199b000-0000-7021-8000-de5157ed0021",
+  "name": "quad",
+  "canvas": {
+    "width": 1920,
+    "height": 1080,
+    "fps": 30
+  },
+  "params": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "required": [
+      "a"
+    ],
+    "properties": {
+      "a": {
+        "type": "string",
+        "default": "",
+        "title": "Top left",
+        "x-gmx-kind": "source"
+      },
+      "b": {
+        "type": "string",
+        "default": "",
+        "title": "Top right",
+        "x-gmx-kind": "source"
+      },
+      "c": {
+        "type": "string",
+        "default": "",
+        "title": "Bottom left",
+        "x-gmx-kind": "source"
+      },
+      "d": {
+        "type": "string",
+        "default": "",
+        "title": "Bottom right",
+        "x-gmx-kind": "source"
+      },
+      "gap": {
+        "type": "number",
+        "default": 0.02,
+        "minimum": 0.0,
+        "maximum": 0.1,
+        "title": "Gap",
+        "description": "Space between the boxes, as a fraction of the canvas."
+      }
+    }
+  },
+  "scenes": [
+    {
+      "id": "0199b000-0000-7022-8000-de5157ed0022",
+      "name": "Four boxes",
+      "items": [
+        {
+          "id": "0199b000-0000-701d-8000-de5157ed001d",
+          "name": "top left",
+          "content": {
+            "source": "{{a}}"
+          },
+          "transform": {
+            "position": {
+              "x": 0,
+              "y": 0
+            },
+            "rotation": 0,
+            "scale": {
+              "x": 1,
+              "y": 1
+            },
+            "anchor": {
+              "x": 0,
+              "y": 0
+            },
+            "frame": {
+              "w": 0,
+              "h": 0
+            },
+            "fit": "cover",
+            "align": "center"
+          },
+          "bind": {
+            "position.x": "gap*W",
+            "position.y": "gap*H",
+            "frame.w": "(W - 3*gap*W)/2",
+            "frame.h": "(H - 3*gap*H)/2"
+          }
+        },
+        {
+          "id": "0199b000-0000-701e-8000-de5157ed001e",
+          "name": "top right",
+          "content": {
+            "source": "{{b}}"
+          },
+          "transform": {
+            "position": {
+              "x": 0,
+              "y": 0
+            },
+            "rotation": 0,
+            "scale": {
+              "x": 1,
+              "y": 1
+            },
+            "anchor": {
+              "x": 0,
+              "y": 0
+            },
+            "frame": {
+              "w": 0,
+              "h": 0
+            },
+            "fit": "cover",
+            "align": "center"
+          },
+          "bind": {
+            "position.x": "gap*W + (W - 3*gap*W)/2 + gap*W",
+            "position.y": "gap*H",
+            "frame.w": "(W - 3*gap*W)/2",
+            "frame.h": "(H - 3*gap*H)/2"
+          }
+        },
+        {
+          "id": "0199b000-0000-701f-8000-de5157ed001f",
+          "name": "bottom left",
+          "content": {
+            "source": "{{c}}"
+          },
+          "transform": {
+            "position": {
+              "x": 0,
+              "y": 0
+            },
+            "rotation": 0,
+            "scale": {
+              "x": 1,
+              "y": 1
+            },
+            "anchor": {
+              "x": 0,
+              "y": 0
+            },
+            "frame": {
+              "w": 0,
+              "h": 0
+            },
+            "fit": "cover",
+            "align": "center"
+          },
+          "bind": {
+            "position.x": "gap*W",
+            "position.y": "gap*H + (H - 3*gap*H)/2 + gap*H",
+            "frame.w": "(W - 3*gap*W)/2",
+            "frame.h": "(H - 3*gap*H)/2"
+          }
+        },
+        {
+          "id": "0199b000-0000-7020-8000-de5157ed0020",
+          "name": "bottom right",
+          "content": {
+            "source": "{{d}}"
+          },
+          "transform": {
+            "position": {
+              "x": 0,
+              "y": 0
+            },
+            "rotation": 0,
+            "scale": {
+              "x": 1,
+              "y": 1
+            },
+            "anchor": {
+              "x": 0,
+              "y": 0
+            },
+            "frame": {
+              "w": 0,
+              "h": 0
+            },
+            "fit": "cover",
+            "align": "center"
+          },
+          "bind": {
+            "position.x": "gap*W + (W - 3*gap*W)/2 + gap*W",
+            "position.y": "gap*H + (H - 3*gap*H)/2 + gap*H",
+            "frame.w": "(W - 3*gap*W)/2",
+            "frame.h": "(H - 3*gap*H)/2"
+          }
+        }
+      ]
+    }
+  ]
+}
