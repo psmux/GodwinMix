@@ -23,6 +23,7 @@
 
 pub mod compose;
 pub mod find;
+pub mod graphics;
 pub mod ops;
 pub mod patch;
 pub mod store;

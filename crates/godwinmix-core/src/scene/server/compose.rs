@@ -189,13 +189,23 @@ fn walk(
 /// One flattened leaf as a placement, or `None` for an item that draws no
 /// source.
 ///
-/// An item whose content is not a source (a graphic, or a reference that could
-/// not be resolved) is skipped: the graphics host is Phase 5 and a placement
+/// A graphic draws one: it resolves to the source instance the graphics host
+/// renders its page into (`server::graphics`), so nothing downstream of here
+/// knows a graphic from a camera. Until that source exists the mixer simply
+/// does not draw the placement, because `current_placements` keeps only the
+/// ones whose source is live, which is what makes adding the graphic and
+/// starting its page two separate steps that can happen in either order.
+///
+/// A reference that could not be resolved still draws nothing: a placement
 /// with nothing behind it would be a black rectangle over the picture.
 fn leaf(p: &geometry::Placement<'_>) -> Option<Placement> {
-    let Content::Source { source } = &p.item.content else { return None };
+    let source = match &p.item.content {
+        Content::Source { source } => source.clone(),
+        Content::Graphic { graphic, .. } => super::graphics::source_id(graphic, &p.item.id),
+        _ => return None,
+    };
     Some(Placement {
-        source: source.clone(),
+        source,
         item: Some(p.item.id),
         filters: filters(&p.item.filters),
         group: Vec::new(),
@@ -448,13 +458,18 @@ mod tests {
     }
 
     #[test]
-    fn a_graphic_is_skipped_rather_than_drawn_as_a_black_box() {
-        let doc = doc_with(vec![
-            source("cam1"),
-            Item::new(Content::Graphic { graphic: "ograf/lower-third".into(), params: Default::default() }),
-        ]);
+    fn a_graphic_resolves_to_the_source_its_page_is_rendered_into() {
+        let graphic =
+            Item::new(Content::Graphic { graphic: "ograf/lower-third".into(), params: Default::default() });
+        let id = graphic.id;
+        let doc = doc_with(vec![source("cam1"), graphic]);
         let p = placements(&doc, &doc.scenes[0], &canvas());
-        assert_eq!(p.len(), 1, "a graphic with no host must not become a rectangle");
+        assert_eq!(p.len(), 2, "a graphic is placed like any other item");
+        assert_eq!(p[1].source, super::super::graphics::source_id("ograf/lower-third", &id));
+        assert_eq!(p[1].item, Some(id), "a transition matches it by item, as it does a camera");
+        // Nothing here starts that source. `Mixer::current_placements` draws
+        // only what is live, so a graphic whose page is not up yet is absent
+        // from the canvas rather than black on it.
     }
 
     #[test]
