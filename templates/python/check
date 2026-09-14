@@ -1,0 +1,58 @@
+#!/bin/sh
+# Everything that can be checked without a core, in under thirty seconds.
+#
+#   ./check          run all of it
+#   ./check --quick  skip the failing test you have not written yet
+#
+# What the core's own harness adds on top (`gmx plugin test .`): real caps at
+# the media end, ninety percent of the expected frames in three seconds, a kill
+# mid stream with a restart, and the footprint this plugin costs.
+
+set -eu
+
+cd "$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
+python=${GMX_PYTHON:-python3}
+quick=${1:-}
+failed=0
+
+step() {
+    printf '%-34s' "$1"
+    shift
+    if output=$("$@" 2>&1); then
+        echo "ok"
+    else
+        echo "FAILED"
+        echo "$output" | sed 's/^/    /'
+        failed=1
+    fi
+}
+
+echo "checking {{name}} with $($python --version 2>&1)"
+
+# 1. It parses, and nothing is obviously unused or undefined.
+step "compile" "$python" -m compileall -q main.py tests
+if "$python" -c "import pyflakes" 2>/dev/null; then
+    step "pyflakes" "$python" -m pyflakes main.py tests
+else
+    printf '%-34s%s\n' "pyflakes" "skipped (pip install pyflakes)"
+fi
+
+# 2. The manifest. `gmx plugin test .` runs the full validator.
+step "gmx-plugin.toml" "$python" tests/check_manifest.py
+
+# 3. The protocol, replayed from a recording with no core running.
+step "offline transcript" "$python" tests/replay.py tests/transcript.jsonl
+
+# 4. Your own test. It fails until you write it.
+if [ "$quick" = "--quick" ]; then
+    printf '%-34s%s\n' "your picture" "skipped (--quick)"
+else
+    step "your picture" "$python" tests/test_picture.py
+fi
+
+if [ "$failed" -eq 0 ]; then
+    echo "all checks passed"
+else
+    echo "something failed. Fix it, then run ./check again."
+fi
+exit "$failed"
