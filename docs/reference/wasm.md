@@ -119,6 +119,21 @@ not carry its debt forward. The handshake gets the default allowance rather
 than the per call one, so a tight `wasm_fuel` means short hooks and not a
 plugin that will not load.
 
+### A trap costs the instance, not the plugin
+
+A component that traps, by any of those routes, cannot be entered again:
+wasmtime marks the instance unusable and every later call would answer
+`cannot enter component instance`. That is a useless thing for an operator to
+read and it would leave a transition silently broken for the rest of a show.
+
+So a trap ends the instance. The worker drops the store and stops, the
+instance reads `failed`, and the supervisor builds a fresh one from the same
+file on its next pass, a quarter of a second later, under the same backoff a
+crashing process gets. A call in between says so and says what happens next.
+
+A plugin that answers with an `error` record has not trapped. That is an
+ordinary value, the instance is perfectly well, and the next call works.
+
 ## Where a component runs
 
 On a worker thread of its own, one per instance, owning one wasmtime `Store`.

@@ -97,6 +97,10 @@ struct Component {
     kind: ProvideKind,
     plugin: String,
     provide: String,
+    /// The same backoff a process gets, for a component that keeps trapping.
+    backoff: Backoff,
+    /// The moment before which the next build must not happen.
+    not_before: Option<Instant>,
     /// An `Arc` so a caller clones it out and drops the table lock before the
     /// call. A component call can take its whole deadline and the table is
     /// read by `tool.call`, by `plugin.list` and by every take.
@@ -490,6 +494,7 @@ impl Supervisor {
             }
         }
         self.sample_components();
+        self.restart_spent_components();
         self.restart_the_dead();
     }
 
@@ -908,6 +913,8 @@ impl Supervisor {
                 kind: manifest.kind,
                 plugin: manifest.plugin.to_string(),
                 provide: provide.to_string(),
+                backoff: Backoff::new(),
+                not_before: None,
                 instance: running,
             },
         );
@@ -1032,6 +1039,56 @@ impl Supervisor {
         for (name, plugin, provide, instance) in rows {
             loader::set_hosted(&name, &plugin, &provide, instance.memory_bytes());
             loader::set_state(&name, instance.state().as_str());
+        }
+    }
+
+    /// Build a fresh component for every one that trapped.
+    ///
+    /// A component that traps cannot be entered again: wasmtime marks the
+    /// instance unusable and every later call answers "cannot enter component
+    /// instance", which tells an operator nothing. So a trap costs the
+    /// instance and not the plugin: the store is dropped, a new one is built
+    /// from the same file, and the next call works. Under the same backoff a
+    /// process gets, because a component that traps on its handshake would
+    /// otherwise be rebuilt four times a second forever.
+    fn restart_spent_components(&self) {
+        let spent: Vec<(String, String)> = {
+            let inner = self.inner.lock();
+            inner
+                .components
+                .iter()
+                .filter(|(_, c)| c.instance.state() == InstanceState::Failed)
+                .filter(|(_, c)| c.not_before.is_none_or(|at| Instant::now() >= at))
+                .map(|(name, c)| (name.clone(), c.provide.clone()))
+                .collect()
+        };
+        for (name, provide) in spent {
+            let wait = {
+                let mut inner = self.inner.lock();
+                let Some(entry) = inner.components.get_mut(&name) else { continue };
+                let wait = entry.backoff.next_wait();
+                entry.not_before = Some(Instant::now() + wait);
+                wait
+            };
+            if wait > Duration::ZERO {
+                warn!(instance = %name, wait_secs = wait.as_secs(), "waiting before building a component again");
+                continue;
+            }
+            let plugin = {
+                let mut inner = self.inner.lock();
+                match inner.components.remove(&name) {
+                    Some(gone) => {
+                        gone.instance.shutdown("it trapped and is being built again");
+                        gone.plugin
+                    }
+                    None => continue,
+                }
+            };
+            crate::plugin::wasm::retire(&plugin);
+            match self.start(&provide) {
+                Ok(()) => info!(instance = %name, "a component was built again after a trap"),
+                Err(e) => warn!(instance = %name, ?e, "building a component again did not work"),
+            }
         }
     }
 

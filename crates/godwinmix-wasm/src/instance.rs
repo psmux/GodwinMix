@@ -34,7 +34,7 @@ use godwinmix_core::plugin::wasm::{Grant, Instance as CoreInstance, Spec};
 use godwinmix_protocol::plugin::wire::InstanceState;
 use parking_lot::Mutex;
 use serde_json::Value;
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::mpsc;
 use std::sync::Arc;
 use std::time::Duration;
@@ -62,6 +62,9 @@ pub struct Component {
     hooks: Vec<String>,
     memory: Arc<AtomicU64>,
     deadline: Duration,
+    /// Set when the component trapped. A trapped instance cannot be entered
+    /// again, so it reads `failed` and the supervisor builds a fresh one.
+    spent: Arc<AtomicBool>,
 }
 
 impl Component {
@@ -74,13 +77,15 @@ impl Component {
         let (jobs, inbox) = mpsc::channel::<Job>();
         let (ready_tx, ready_rx) = mpsc::channel::<Result<Handshake>>();
         let memory = Arc::new(AtomicU64::new(0));
+        let spent = Arc::new(AtomicBool::new(false));
         let name = spec.instance.clone();
         let plugin = spec.plugin.clone();
         let deadline = spec.grant.deadline;
         let watched = memory.clone();
+        let marked = spent.clone();
         std::thread::Builder::new()
             .name(format!("wasm-{name}"))
-            .spawn(move || super::worker::run(spec, inbox, ready_tx, watched))
+            .spawn(move || super::worker::run(spec, inbox, ready_tx, watched, marked))
             .with_context(|| format!("starting the worker thread for `{name}`"))?;
         // Compiling a component takes as long as it takes; the handshake after
         // it is held to the instance's own deadline by the worker.
@@ -103,10 +108,18 @@ impl Component {
             hooks: ready.hooks,
             memory,
             deadline,
+            spent,
         }))
     }
 
     fn send(&self, method: &str, params: Value, within: Duration) -> Result<Value> {
+        if self.spent.load(Ordering::Relaxed) {
+            anyhow::bail!(
+                "`{}` trapped on an earlier call and cannot be entered again. The supervisor \
+                 builds a fresh one within a quarter of a second; `{method}` will work then.",
+                self.instance
+            );
+        }
         let (reply, answer) = mpsc::channel();
         let job = Job::Call { method: method.to_string(), params, within, reply };
         {
@@ -174,6 +187,9 @@ impl CoreInstance for Component {
     }
 
     fn state(&self) -> InstanceState {
+        if self.spent.load(Ordering::Relaxed) {
+            return InstanceState::Failed;
+        }
         *self.state.lock()
     }
 
