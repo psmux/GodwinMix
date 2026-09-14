@@ -4273,6 +4273,10 @@ impl Mixer {
 
     pub fn shutdown(&mut self) {
         info!("shutting down mixer");
+        // A transition on the canvas goes first, or its scheduled end would
+        // fire at a mixer that has taken its pads away and its bindings would
+        // outlive the pool that holds them.
+        self.settle_transition();
         for p in [self.pending_take.take(), self.pending_ad_end.take()].into_iter().flatten() {
             p.unschedule();
         }

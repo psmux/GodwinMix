@@ -230,9 +230,17 @@ impl Tracker {
     /// quiet spell has to wait for the mosaic to be built and to produce a
     /// frame, which is why this is not simply `latest`.
     pub async fn latest_wanted(self: &Arc<Self>, wait: Duration) -> Option<Latest> {
-        self.want();
         let deadline = Instant::now() + wait;
         loop {
+            // Said again on every turn, not once at the top. `[snapshot]
+            // idle_secs` is how long the follower keeps going with nobody
+            // asking, and on a loaded machine the mosaic can take longer than
+            // that to build and produce its first frame: the follower then
+            // gave up while the one caller that wanted a frame was still
+            // waiting for it, and the wait ran out against a tracker that had
+            // stopped following. Wanting something for ten seconds is wanting
+            // it at the end of the ten seconds.
+            self.want();
             if let Some(l) = self.latest() {
                 return Some(l);
             }
@@ -911,11 +919,14 @@ mod tests {
         assert_eq!(mv.live_pipelines(), 0, "a mosaic before anybody asked");
         assert!(tracker.latest().is_none());
 
-        // Ten rather than four. What is being checked is that asking builds
-        // the mosaic and that it goes away again, not how long a machine takes
-        // to build one: this runs beside every other test binary in the
-        // workspace, and four seconds for a pipeline to reach PLAYING and
-        // encode a JPEG is a measurement of the build machine's load.
+        // Ten rather than four. On its own this takes 2.1 seconds; beside the
+        // rest of the suite, with two dozen other pipelines going to PLAYING
+        // on the same eight cores, four was a measurement of the build
+        // machine's load. Ten is enough now that `latest_wanted` keeps saying
+        // it wants one for the whole wait rather than once at the start: the
+        // failure this used to show, about one run in six on a loaded machine,
+        // was the follower giving up after `idle_secs` while the caller was
+        // still waiting.
         let latest = tracker
             .latest_wanted(Duration::from_secs(10))
             .await
