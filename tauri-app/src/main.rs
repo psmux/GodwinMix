@@ -171,6 +171,53 @@ async fn wind_down(app: &AppHandle, stop_core: bool) -> i32 {
     }
 }
 
+/// Prove the GStreamer inside the app is the one that gets loaded.
+///
+/// `None` when this build carries no runtime, which is how a developer build
+/// and the Linux .deb are meant to work: they use the GStreamer on the
+/// machine and there is nothing here to check. `Some(0)` when the bundled
+/// runtime answered for every element the mixer cannot run without, out of
+/// files inside the bundle. `Some(1)` when it did not.
+///
+/// The four elements are the ones a mix and a stream cannot be built without:
+/// the compositor is the canvas, a software H.264 encoder is what a machine
+/// with no GPU uses, and `rtmp2sink` and `srtsink` are the two ways the
+/// programme leaves the building.
+fn bundled_runtime_check(app: &AppHandle) -> Option<i32> {
+    let root = sidecar::bundled_gstreamer(app)?;
+    println!("bundled GStreamer in {}", root.display());
+
+    let mut failed = false;
+    for element in ["compositor", "rtmp2sink", "srtsink"] {
+        match sidecar::inspect_element(app, element) {
+            Ok(file) => println!("  {element} from {}", file.display()),
+            Err(why) => {
+                println!("FAIL {why}");
+                failed = true;
+            }
+        }
+    }
+    // The catalogue carries two software H.264 entries and either one is
+    // enough. openh264 is the one with a licence that can be redistributed;
+    // x264 is the one most runtimes ship.
+    let software = ["openh264enc", "x264enc"]
+        .into_iter()
+        .find_map(|e| sidecar::inspect_element(app, e).ok().map(|f| (e, f)));
+    match software {
+        Some((element, file)) => println!("  {element} from {}", file.display()),
+        None => {
+            println!("FAIL neither openh264enc nor x264enc is in the bundled runtime");
+            failed = true;
+        }
+    }
+    if failed {
+        println!("the bundled runtime is not usable; rebuild it with dev/bundle-gstreamer.sh");
+        return Some(1);
+    }
+    println!("the bundled runtime answered for every element, and none came from a system install");
+    Some(0)
+}
+
 /// `--headless-check`: the acceptance test for the sidecar, runnable on a
 /// machine with no one at the keyboard and in CI.
 ///
@@ -182,6 +229,12 @@ async fn headless_check(app: &AppHandle) -> i32 {
     let logs = settings::log_dir(app).map(|d| d.display().to_string()).unwrap_or_default();
     println!("config and token in {data}");
     println!("logs in {logs}");
+
+    if let Some(code) = bundled_runtime_check(app) {
+        if code != 0 {
+            return code;
+        }
+    }
 
     let local = match sidecar::ensure(app).await {
         Ok(local) => local,
