@@ -345,34 +345,79 @@ impl Sidecar {
     /// The order is 03 section 7's. Every step is allowed to fail: a plugin
     /// that has already crashed is stopped by the last one, which is the whole
     /// reason the last one exists.
+    /// Stop the plugin, on a thread of its own.
+    ///
+    /// The waiting is the reason it is not done here. `stop` is given two
+    /// seconds to answer and the process is then given
+    /// `SHUTDOWN_GRACE_SECS` to leave on its own, and the caller is very often
+    /// the mixer's own loop: removing a source during a show reaches this from
+    /// there. Ten seconds of the mixer loop is ten seconds of nothing else
+    /// being answered, which is principle one, so the polite part happens
+    /// somewhere else and this returns at once.
+    ///
+    /// What does happen here is the state change, because everything that asks
+    /// what this instance is doing must be told "stopped" the moment the
+    /// decision is made rather than when the process gets round to agreeing.
     pub fn shutdown(&mut self, reason: &str) {
         let instance = self.shared.instance.clone();
-        if self.life.may_call("stop") {
-            if let Err(e) = self.call_within("stop", json!({}), Duration::from_secs(2)) {
-                debug!(%instance, ?e, "the plugin did not answer `stop`");
-            }
-        }
-        if self.life.may_call("shutdown") {
-            let _ = self.shared.channel.notify("shutdown", json!({ "reason": reason }));
-        }
-        let deadline = Instant::now() + Duration::from_secs(SHUTDOWN_GRACE_SECS);
-        while Instant::now() < deadline {
-            if !self.running() {
-                break;
-            }
-            std::thread::sleep(Duration::from_millis(50));
-        }
-        self.shared.channel.abandon(reason);
-        if let Some(mut reader) = self.stderr.take() {
-            reader.stop();
-        }
-        // Letting go of the child is what signals the group, waits, insists,
-        // reaps and sweeps up. See `ExecChild`.
-        self.child.take();
+        let may_stop = self.life.may_call("stop");
+        let may_shutdown = self.life.may_call("shutdown");
+        let caller = self.caller();
+        let shared = self.shared.clone();
+        let child = self.child.take();
+        let stderr = self.stderr.take();
         self.stdout.take();
         self.stdout_held.take();
         self.life.to(InstanceState::Stopped, Some(reason.to_string()));
-        info!(%instance, %reason, "stopped a plugin process");
+        let reason = reason.to_string();
+
+        let work = move || {
+            if may_stop {
+                if let Err(e) = caller.call_within("stop", json!({}), Duration::from_secs(2)) {
+                    debug!(%instance, ?e, "the plugin did not answer `stop`");
+                }
+            }
+            if may_shutdown {
+                let _ = shared.channel.notify("shutdown", json!({ "reason": &reason }));
+            }
+            let mut child = child;
+            let deadline = Instant::now() + Duration::from_secs(SHUTDOWN_GRACE_SECS);
+            while Instant::now() < deadline {
+                let gone = match child.as_mut() {
+                    None => true,
+                    Some(held) => held.finished(),
+                };
+                if gone {
+                    break;
+                }
+                std::thread::sleep(Duration::from_millis(50));
+            }
+            shared.channel.abandon(&reason);
+            if let Some(mut reader) = stderr {
+                reader.stop();
+            }
+            // Letting go of the child is what signals the group, waits,
+            // insists, reaps and sweeps up. See `ExecChild`.
+            drop(child);
+            info!(%instance, %reason, "stopped a plugin process");
+        };
+
+        // Handed over rather than moved, so a machine too short of threads to
+        // take it still stops the plugin, here, instead of leaking it.
+        let held = Arc::new(Mutex::new(Some(work)));
+        let mine = held.clone();
+        let started = std::thread::Builder::new()
+            .name(format!("plugin-stop-{}", self.shared.instance))
+            .spawn(move || {
+                if let Some(work) = mine.lock().take() {
+                    work();
+                }
+            });
+        if started.is_err() {
+            if let Some(work) = held.lock().take() {
+                work();
+            }
+        }
     }
 
     /// Is the process still there? One non blocking wait on the child we own.
