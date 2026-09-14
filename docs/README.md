@@ -32,6 +32,8 @@ Start here if you have never run it.
 * [Run the smoke test](how-to/smoke-test.md)
 * [Embed the engine in your own program](how-to/embed-the-engine.md)
 * [Write a source plugin in Rust](how-to/write-a-source-plugin.md)
+* [Install a plugin](how-to/install-a-plugin.md)
+* [Test a plugin](how-to/test-a-plugin.md)
 
 ## Reference
 
@@ -44,6 +46,7 @@ Start here if you have never run it.
 * [The generated protocol reference](reference/protocol.md)
 * [The plugin manifest](reference/plugin-manifest.md)
 * [The plugin protocol](reference/plugin-protocol.md)
+* [The plugin lifecycle](reference/plugin-lifecycle.md)
 
 ## Explanation
 

@@ -235,8 +235,14 @@ enum Command {
 /// failure, so CI and `gmx plugin test` can both read the exit code.
 fn run_test_core() -> Result<()> {
     println!("godwinmix test core: 1280x720x30, no outputs, no multiview");
+    // Every plugin installed on this machine is checked alongside the built in
+    // kinds, because the whole point of the harness is that a plugin is held
+    // to the contract the core holds itself to.
+    plugin::loader::load_all(&Default::default());
     let mut failures = 0usize;
-    for outcome in plugin::harness::check_offline_kinds() {
+    let plugins = plugin::harness::check_loaded_plugins(false);
+    let built_in = plugin::harness::check_offline_kinds();
+    for outcome in built_in.into_iter().chain(plugins) {
         match outcome {
             Ok(report) => {
                 println!("\n{}", report.type_id);
@@ -255,9 +261,12 @@ fn run_test_core() -> Result<()> {
     }
     println!();
     if failures > 0 {
-        anyhow::bail!("{failures} of the built in kinds failed the harness");
+        anyhow::bail!("{failures} kind(s) failed the harness");
     }
-    println!("every built in kind that runs without a network is conformant");
+    println!(
+        "every built in kind that runs without a network, and every plugin installed, \
+         is conformant"
+    );
     Ok(())
 }
 
@@ -401,6 +410,27 @@ pub async fn run() -> Result<()> {
     let cfg_media = cfg.media.clone();
     // Where the web UI and any plugin panels are read from.
     ui::configure(cfg.control.ui_dir.as_deref(), cfg.control.plugins_dir.as_deref());
+    // The same directory the panels are served from is the one plugins are
+    // installed into, so `<plugins_dir>/<name>/<version>/ui/` is both the
+    // plugin and its panel and nothing has to be copied anywhere.
+    {
+        let stage = core_observe::introspect::stage("plugins");
+        if let Some(dir) = cfg.control.plugins_dir.as_deref() {
+            plugin::loader::set_dir(std::path::PathBuf::from(dir));
+        }
+        for installed in plugin::loader::load_all(&cfg.plugins) {
+            match &installed.problem {
+                Some(problem) => warn!(plugin = installed.name(), "{problem}"),
+                None => info!(
+                    plugin = installed.name(),
+                    version = installed.version(),
+                    provides = installed.provides.len(),
+                    "plugin loaded"
+                ),
+            }
+        }
+        drop(stage);
+    }
     // Kept for the control plane, which reads the canvas, the snapshot limits,
     // the feature list and the token table off it once at startup.
     let cfg_for_control = cfg.clone();
@@ -421,7 +451,13 @@ pub async fn run() -> Result<()> {
         startup_report: args.startup_report,
     };
     match core_observe::start(&handle, &observe_options) {
-        Ok(dir) => info!(runtime_dir = %dir.display(), "logs and the session log are here"),
+        Ok(dir) => {
+            info!(runtime_dir = %dir.display(), "logs and the session log are here");
+            // Where a plugin instance's sockets and FIFOs go. Under the runtime
+            // directory so that `plugin.add` then `plugin.remove` leaves
+            // nothing behind anywhere else.
+            plugin::loader::set_runtime_dir(dir);
+        }
         Err(e) => warn!(?e, "no runtime directory, so logs stay on stderr only"),
     }
 

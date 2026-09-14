@@ -102,7 +102,12 @@ set; two is an error, and so is none.
 | `node` | path | `node <entry>` | finds `node >= 20`, runs `npm ci --omit=dev` |
 | `shell` | path | `sh <entry>` on Unix | marks it executable |
 
-`gmx plugin add` does not exist yet; the right hand column is what it will do.
+The right hand column is what `gmx plugin add` does when it installs the plugin.
+Signature checking is the one part of it that is not built: a plugin installed
+from a local path is trusted because you gave the path, and installing from an
+index with a signature arrives with the index. See
+[install a plugin](../how-to/install-a-plugin.md) and
+[the lifecycle](plugin-lifecycle.md).
 
 `[run]` is required when `placements` names `sidecar` or `node`. A plugin that
 only ever runs `in-process` needs none.
