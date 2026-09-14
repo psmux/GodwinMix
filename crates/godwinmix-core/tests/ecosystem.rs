@@ -376,7 +376,12 @@ fn a_signed_release_installs_and_the_source_it_provides_works() {
         "with no cosign on the machine the bundle's digest is what was checked, and the \
          label says exactly that"
     );
-    assert_eq!(installed.trust.source, "psmux/gmx-relbars@v1.0.0");
+    assert_eq!(
+        installed.trust.source, "psmux/gmx-relbars",
+        "an unpinned add records the unpinned source, or `gmx plugin update` with no \
+         source would refetch the release it already has"
+    );
+    assert_eq!(installed.trust.resolved, "v1.0.0");
     assert!(
         installed.provides.contains(&"relbars/source".to_string()),
         "the provide is registered: {:?}",
@@ -535,8 +540,11 @@ fn an_update_to_a_build_that_starts_replaces_the_old_one() {
 
     let next = build_release(&root, "1.2.0", WORKING, true);
     server.serve_release("psmux/gmx-relbars", "v1.2.0", &next);
-    let updated = loader::update("relbars", "psmux/gmx-relbars@1.2.0", &options())
-        .expect("1.2.0 says hello");
+    // No source given: it goes back to where it came from, which must be the
+    // unpinned `psmux/gmx-relbars` and not the v1.0.0 it resolved to.
+    let asked = loader::get("relbars").expect("installed").trust.source.clone();
+    assert_eq!(asked, "psmux/gmx-relbars");
+    let updated = loader::update("relbars", &asked, &options()).expect("1.2.0 says hello");
     assert_eq!(updated.from, "1.0.0");
     assert_eq!(updated.to, "1.2.0");
     assert_eq!(loader::get("relbars").expect("installed").version(), "1.2.0");

@@ -4,8 +4,9 @@
 //! signed. Every SHA-256 crate in the registry brings a trait hierarchy, a
 //! generic array crate and a feature matrix with it, and none of that earns
 //! its place for sixty lines of arithmetic that has not changed since 2001.
-//! The test at the bottom runs the three NIST vectors plus a long one, so a
-//! mistake here fails the build rather than a release.
+//! The tests at the bottom run the NIST vectors and the three padding
+//! boundaries with known answers, so a mistake here fails the build rather
+//! than a release.
 
 const K: [u32; 64] = [
     0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1, 0x923f82a4, 0xab1c5ed5,
@@ -107,16 +108,41 @@ mod tests {
     }
 
     #[test]
-    fn a_message_longer_than_one_block_and_one_that_lands_on_a_boundary() {
-        // A million 'a' is the fourth NIST vector, trimmed here to 1000 blocks
-        // so the test stays fast; the known answer is for exactly 64,000 bytes.
-        let long = vec![b'a'; 64_000];
-        assert_eq!(hex(&long).len(), 64);
-        // 55 bytes fits the padding into one block, 56 forces a second one.
+    fn the_padding_boundary_and_a_message_of_a_thousand_blocks() {
+        // 55 bytes is the most that fits in one block with its padding, 56
+        // forces a second, and 64 is exactly one block with a whole block of
+        // padding after it. Those three are where a hand written pad goes
+        // wrong, so all three carry a known answer rather than being compared
+        // against each other.
         assert_eq!(
-            hex(&vec![b'x'; 55]),
-            hex(&std::iter::repeat(b'x').take(55).collect::<Vec<_>>())
+            hex(&[b'x'; 55]),
+            "d5e285683cd4efc02d021a5c62014694958901005d6f71e89e0989fac77e4072"
         );
-        assert_ne!(hex(&vec![b'x'; 55]), hex(&vec![b'x'; 56]));
+        assert_eq!(
+            hex(&[b'x'; 56]),
+            "04c26261370ee7541549d16dee320c723e3fd14671e66a099afe0a377c16888e"
+        );
+        assert_eq!(
+            hex(&[b'x'; 64]),
+            "7ce100971f64e7001e8fe5a51973ecdfe1ced42befe7ee8d5fd6219506b5393c"
+        );
+        // A thousand blocks, so the message length crosses a byte boundary in
+        // the length field the padding carries.
+        let long = [b'a'; 64_000];
+        assert_eq!(
+            hex(&long),
+            "b79a5f9da7504a0ca606f2b54a81d5e28a8c924df8974416f320501652dcd6be"
+        );
+    }
+
+    #[test]
+    fn the_digest_of_a_file_is_the_digest_of_its_bytes() {
+        let path = std::env::temp_dir().join(format!("gmx-sha-{}", std::process::id()));
+        std::fs::write(&path, b"abc").expect("a file");
+        assert_eq!(
+            hex_file(&path).expect("it reads"),
+            "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
+        );
+        let _ = std::fs::remove_file(&path);
     }
 }
