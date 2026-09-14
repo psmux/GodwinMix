@@ -2023,7 +2023,7 @@ A client declares which expensive streams it wants. The core does no work for a 
 | `tally` | `true` | event/tally | yes |
 | `positions` | `true` | event/source.position | yes |
 | `thumb` | `{fps}` | per source thumbnails from a node | not yet |
-| `preview` | `{fps, width} or "full"` | the preview scene | not yet |
+| `preview` | `{fps, width} or "full"` | the armed scene, composited in the multiview pipeline from the per source thumbnails and published to /mjpeg/preview, scene.preview.frame and its own cell on the mosaic. "full" composites it at the canvas's own size while a client is subscribed, so a designer's handles land on real coordinates | yes |
 | `telemetry` | `{hz: 1..10}` | event/telemetry | not yet |
 | `agent` | `true or thresholds` | event/agent.state with a snapshot URL | not yet |
 

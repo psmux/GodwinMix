@@ -1566,7 +1566,7 @@ export const EXT_KEYS: Readonly<Record<string, { value: string; implemented: boo
   "tally": { value: "true", implemented: true },
   "positions": { value: "true", implemented: true },
   "thumb": { value: "{fps}", implemented: false },
-  "preview": { value: "{fps, width} or \"full\"", implemented: false },
+  "preview": { value: "{fps, width} or \"full\"", implemented: true },
   "telemetry": { value: "{hz: 1..10}", implemented: false },
   "agent": { value: "true or thresholds", implemented: false },
 };

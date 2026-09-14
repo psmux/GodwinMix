@@ -30,6 +30,11 @@ pub enum PreviewDemand {
     /// Open a local raw preview socket, or join one that exists.
     OpenLocal { target: String, reply: oneshot::Sender<Result<String, String>> },
     CloseLocal { target: String },
+    /// What the armed scene is, in canvas pixels, for the preview compositor
+    /// to draw. Sent when a scene is armed or disarmed and when a client
+    /// subscribes with `ext.preview`; the mixer holds it whether or not a
+    /// preview exists, so arming one before anybody is watching costs a `Vec`.
+    Scene { cells: Vec<crate::multiview::preview::Cell> },
 }
 
 impl std::fmt::Debug for PreviewDemand {
@@ -41,6 +46,7 @@ impl std::fmt::Debug for PreviewDemand {
             Self::CloseAudio { key } => write!(f, "CloseAudio({key})"),
             Self::OpenLocal { target, .. } => write!(f, "OpenLocal({target})"),
             Self::CloseLocal { target } => write!(f, "CloseLocal({target})"),
+            Self::Scene { cells } => write!(f, "Scene({} items)", cells.len()),
         }
     }
 }
@@ -130,6 +136,18 @@ impl PreviewHandle {
     /// hold.
     pub fn count(&self, kind: &str) -> ClientGuard {
         self.clients.open(kind)
+    }
+
+    /// Tell the mixer what the armed scene is.
+    ///
+    /// Not a request and not awaited: the caller has the document in hand and
+    /// the mixer is the only thread that may touch a pipeline, so this is a
+    /// one way message. A core with no mixer drops it, which is right: there
+    /// is nothing to draw it on.
+    pub fn set_scene(&self, cells: Vec<crate::multiview::preview::Cell>) {
+        if let Some(sink) = &self.demand {
+            sink(PreviewDemand::Scene { cells });
+        }
     }
 }
 

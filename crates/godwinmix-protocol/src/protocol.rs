@@ -335,7 +335,15 @@ pub fn ext_table() -> Vec<(&'static str, &'static str, &'static str, bool)> {
         ("tally", "true", "event/tally", true),
         ("positions", "true", "event/source.position", true),
         ("thumb", "{fps}", "per source thumbnails from a node", false),
-        ("preview", "{fps, width} or \"full\"", "the preview scene", false),
+        (
+            "preview",
+            "{fps, width} or \"full\"",
+            "the armed scene, composited in the multiview pipeline from the per source \
+             thumbnails and published to /mjpeg/preview, scene.preview.frame and its own \
+             cell on the mosaic. \"full\" composites it at the canvas's own size while a \
+             client is subscribed, so a designer's handles land on real coordinates",
+            true,
+        ),
         ("telemetry", "{hz: 1..10}", "event/telemetry", false),
         ("agent", "true or thresholds", "event/agent.state with a snapshot URL", false),
     ]
@@ -747,12 +755,14 @@ mod tests {
     fn the_published_ext_table_matches_what_the_subscription_struct_reads() {
         let implemented: Vec<&str> =
             ext_table().into_iter().filter(|(_, _, _, yes)| *yes).map(|(k, _, _, _)| k).collect();
-        assert_eq!(implemented, vec!["multiview", "meters", "tally", "positions"]);
+        assert_eq!(implemented, vec!["multiview", "meters", "tally", "positions", "preview"]);
         // And every implemented key is one `Ext` has a field for.
         let ext: requests::Ext = serde_json::from_value(json!({
-            "multiview": false, "meters": true, "tally": true, "positions": true
+            "multiview": false, "meters": true, "tally": true, "positions": true,
+            "preview": {"fps": 8, "width": 480}
         }))
         .unwrap();
         assert!(ext.unsupported().is_empty(), "a published key landed in `other`");
+        assert!(ext.wants_preview(), "the preview key has to turn the preview on");
     }
 }

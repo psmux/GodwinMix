@@ -76,6 +76,9 @@ struct Connection {
     /// `event/tally` carries `preview` and whether the layout says the preview
     /// is empty.
     wants_preview: bool,
+    /// What keeps the preview compositor up while this client wants one.
+    /// Dropped with the connection, which is what takes it away again.
+    preview: Option<godwinmix_core::multiview::PreviewSubscription>,
     /// `ext.telemetry` and `ext.agent`. Holding this is what keeps the
     /// telemetry probes measuring. See `control/push.rs`.
     push: crate::control::push::Push,
@@ -98,6 +101,7 @@ pub async fn serve_rpc(socket: WebSocket, ctx: Ctx, token: Token) {
         frame_no: 0,
         wants_mosaic: None,
         wants_preview: false,
+        preview: None,
         push: crate::control::push::Push::none(),
     };
     // Holding this is what keeps the mosaic up, and dropping it is what takes
@@ -280,12 +284,28 @@ impl Connection {
         // that wants only the preview does not have to know that.
         let wants_multiview = request.ext.wants_multiview() || request.ext.wants_preview();
         self.wants_preview = request.ext.wants_preview();
-        if request.ext.wants_full_preview() {
-            warn!(
-                "a client asked for ext.preview = \"full\"; this build composites the preview \
-                 at mosaic size and does not build a full resolution compositor yet"
-            );
-        }
+        // The preview compositor is built by holding a subscription, exactly
+        // as the mosaic is, and taken away when this connection drops it. The
+        // armed scene is pushed first so the first frame is the right picture.
+        self.preview = match self.wants_preview {
+            true => {
+                crate::control::push_preview(&self.ctx.app);
+                let (fps, width) = match &request.ext.preview {
+                    Some(godwinmix_protocol::PreviewExt::On { fps, width }) => {
+                        (fps.unwrap_or(0) as i32, width.unwrap_or(0) as i32)
+                    }
+                    _ => (0, 0),
+                };
+                Some(self.ctx.app.multiview.subscribe_preview(
+                    godwinmix_core::multiview::PreviewRequest {
+                        fps,
+                        width,
+                        full: request.ext.wants_full_preview(),
+                    },
+                ))
+            }
+            false => None,
+        };
         // What the mosaic is asked to run at. Zero on either means "whatever
         // is configured", which is what the clamp in multiview.rs reads it as.
         self.wants_mosaic = match (&request.ext.multiview, wants_multiview) {

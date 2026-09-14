@@ -22,7 +22,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::sync::Arc;
 
-mod edit;
+pub(crate) mod edit;
 mod items;
 mod layout;
 mod requests;
