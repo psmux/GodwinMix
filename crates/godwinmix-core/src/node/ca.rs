@@ -125,7 +125,7 @@ impl NodeCa {
             rcgen::ExtendedKeyUsagePurpose::ClientAuth,
             rcgen::ExtendedKeyUsagePurpose::ServerAuth,
         ];
-        params.not_after = days_from_now(NODE_CERT_DAYS);
+        set_validity(&mut params, NODE_CERT_DAYS);
         self.sign(params, identity)
     }
 
@@ -155,7 +155,7 @@ impl NodeCa {
         params.key_usages =
             vec![KeyUsagePurpose::DigitalSignature, KeyUsagePurpose::KeyEncipherment];
         params.extended_key_usages = vec![rcgen::ExtendedKeyUsagePurpose::ServerAuth];
-        params.not_after = days_from_now(NODE_CERT_DAYS);
+        set_validity(&mut params, NODE_CERT_DAYS);
         self.sign(params, identity)
     }
 
@@ -283,22 +283,23 @@ fn root_params() -> Result<CertificateParams> {
     // Ten years. The root outlives the machine it is on, and reissuing it
     // means every node enrols again, which is the one thing an operator should
     // not have to do on a schedule.
-    params.not_after = days_from_now(3650);
+    set_validity(&mut params, 3650);
     Ok(params)
 }
 
-/// A calendar date `days` from today, which is the only shape rcgen takes.
+/// Expire a certificate `days` from today.
 ///
-/// Doing the civil calendar here rather than taking the `time` crate as a
-/// direct dependency: this is the only date arithmetic in the engine and it is
-/// fifteen lines of Howard Hinnant's `civil_from_days`.
-fn days_from_now(days: u64) -> time::OffsetDateTime {
+/// Set through the parameters rather than returned, because naming rcgen's
+/// date type would mean taking the `time` crate as a direct dependency for one
+/// field. The civil calendar underneath is fifteen lines of Howard Hinnant's
+/// `civil_from_days` and it is the only date arithmetic in the engine.
+fn set_validity(params: &mut CertificateParams, days: u64) {
     let now = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map(|d| d.as_secs())
         .unwrap_or(0);
     let (y, m, d) = civil_from_days((now / 86_400 + days) as i64);
-    rcgen::date_time_ymd(y, m, d)
+    params.not_after = rcgen::date_time_ymd(y, m, d);
 }
 
 /// Days since 1970-01-01 to a year, month and day.

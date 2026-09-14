@@ -53,6 +53,7 @@ pub mod input;
 pub mod media;
 pub mod mixer;
 pub mod multiview;
+pub mod node;
 pub mod observe;
 pub mod output;
 pub mod plugin;
