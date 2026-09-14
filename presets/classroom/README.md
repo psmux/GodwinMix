@@ -1,38 +1,29 @@
 # The classroom preset
 
-A lesson recorded and streamed: one camera, the teacher's screen beside it, a local recording and one destination.
+A lesson recorded and streamed: a camera on the teacher, the screen beside it, the slides from a file, going to a recorder and to one address.
 
 ## What it gives you
 
-The teacher on camera with their screen beside them, recorded to this machine and streamed to the school's server at the same time. It runs on the laptop already in the room.
+Three inputs, two destinations and three scenes, on a 720p25 canvas that runs on the laptop already in the room. Tiles start as stills, refreshed when you click one, which is what a laptop on battery wants.
+
+The camera and the screen start as test patterns, so the lesson can be recorded before the room's hardware is sorted out. `gmx plugin add camera` and `gmx plugin add screen` replace them: change `type` and put the device into `params`.
 
 ## What you need
 
-A webcam, the screen you are already presenting on, and somewhere to record to. The camera and screen plugins are installed for you.
+A machine in the room, and somewhere to send to. Most schools run mediamtx on the same machine, which is what the two `[[outputs]]` addresses point at.
 
 ## Three steps
 
-1. `gmx preset apply classroom`.
-2. Check `godwinmix.toml`: the camera line says `/dev/video0` on Linux; on a Mac or a Windows machine run `gmx ctl device list` and paste the name it prints. Set the recording folder to somewhere with room on it.
-3. `gmx`, then http://localhost:8080. Press `Split` when you are showing something on screen and `Teacher` when you are not.
+1. `gmx preset apply classroom`. It writes `godwinmix.toml`, the scenes and the layout.
+2. Change the two `[[outputs]]` addresses to your school's recorder and stream, or leave them pointing at a local mediamtx.
+3. `gmx`. Open http://localhost:8080 and press Teacher to start the lesson.
 
 ## When it does not work
 
-**The camera is in use.** Usually something else has it open. Close the video call software and press the camera tile again.
+**Both destinations say reconnecting.** Nothing is listening at `rtmp://127.0.0.1:1935`. Start mediamtx, or change the addresses to a server that is running.
 
-**The screen share is black.** Usually on macOS and Windows the screen plugin asks for a permission the first time. Grant it in the system settings and restart `gmx`.
+**The recording has no sound.** Check the meter on the tile and the fader behind its gear.
 
-**The recording file is tiny.** Usually the disk filled up, or the lesson stopped before the file was closed. `gmx ctl output stop recording` closes it cleanly; pulling the power does not.
+**The slides tile is black.** It is looking for `media/lesson.mp4`. Drop the file onto the page and change the `slides` source's `uri` to the name it lands under.
 
-
-## What is in this directory
-
-| File | What it is |
-|---|---|
-| `gmx-plugin.toml` | the manifest: the plugins this preset needs, and where its config, layout and scenes are |
-| `config/godwinmix.toml` | the mixer's configuration, with every line you have to change near the top |
-| `config/layout.json` | which panels go in which slot of the web UI |
-| `scenes/` | the scene documents this preset uses, one file each |
-| `README.md` | this page |
-
-Copy this whole directory to make your own. `presets/README.md` says how.
+**The picture is too soft on a projector.** Raise `video_bitrate_kbps` in `[program]`, or raise the canvas to 1920x1080 before the first lesson. The canvas cannot change once the mixer is running.

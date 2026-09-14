@@ -20,3 +20,13 @@ layout = "config/layout.json"
 surface = "web"
 theme = "broadcast"
 scenes = "scenes"
+theme_css = "theme.css"
+gallery = "live"
+
+# The three things the person does next. The welcome panel in the web UI
+# shows these in this order, and the README repeats them.
+steps = [
+  "Put your SRT contribution address and passphrase into the [[sources]] blocks.",
+  "Put the SRT destination and the tally controller's address into the config.",
+  "Run `gmx`, open http://localhost:8080, and check `gmx doctor` before the first feed.",
+]

@@ -1,5 +1,10 @@
 # The classroom preset: a camera on the teacher, the teacher's screen beside
 # it, recorded to this machine and streamed to one address.
+#
+# The camera and the screen are placeholders you can put on air today: they
+# show a test pattern, so the lesson can be recorded while the room's hardware
+# is sorted out. `gmx plugin add camera` and `gmx plugin add screen` replace
+# them; change `type` and put the device in `params`, and nothing else moves.
 
 [canvas]
 width = 1280
@@ -24,6 +29,15 @@ fps = 5
 jpeg_quality = 55
 include_program = true
 
+# The tiles start as stills on this preset, refreshed when the teacher clicks
+# one. A laptop on battery keeps its cores for the encoder that way.
+[snapshot]
+enabled = true
+default_width = 320
+min_interval_secs = 3
+max_width = 1280
+idle_secs = 15
+
 [media]
 dir = "media"
 
@@ -37,21 +51,31 @@ encode = "auto"
 [[sources]]
 id = "teacher"
 name = "Teacher"
-type = "camera/source"
-uri = "camera:///dev/video0"
-params = { device = "/dev/video0", width = 1280, height = 720 }
+type = "test/source"
+uri = "test://smpte"
+params = { uri = "test://smpte" }
 
 [[sources]]
 id = "screen"
 name = "Screen"
-type = "screen/source"
-uri = "screen://0"
-params = { monitor = "0" }
+type = "test/source"
+uri = "test://snow"
+params = { uri = "test://snow" }
 
+# The lesson's own slides or video, played from the media directory.
+[[sources]]
+id = "slides"
+name = "Slides"
+type = "file/source"
+uri = "media/lesson.mp4"
+params = { uri = "media/lesson.mp4" }
+
+# The recording. Any RTMP server on this machine will do; mediamtx writing to
+# disk is what most schools end up with. Change this to your own address.
 [[outputs]]
 id = "recording"
-type = "file-record/output"
-uri = "file:///var/lib/godwinmix/recordings/lesson.mkv"
+type = "rtmp/output"
+uri = "rtmp://127.0.0.1:1935/record/lesson"
 policy = "own"
 queue_secs = 2.0
 

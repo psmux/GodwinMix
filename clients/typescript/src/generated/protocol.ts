@@ -57,6 +57,22 @@ export interface AddSourceRequest {
   [key: string]: unknown;
 }
 
+export interface ApplyRequest {
+  dry_run?: boolean;
+  force?: boolean;
+  keep_sources?: boolean;
+  name: string;
+}
+
+/** What `preset.apply` answers with. */
+export interface ApplyResult {
+  applied?: unknown;
+  dry_run: boolean;
+  live: string[];
+  needs_restart: string[];
+  plan: unknown;
+}
+
 /**
  * `source.audio.set` takes an id as well as the levels: the id comes off the
  * path on REST and out of the params on `/rpc`, and both land in one object.
@@ -113,6 +129,7 @@ export interface CoreInfo {
   limits: Limits;
   rehearsal: boolean;
   token?: TokenInfo | null;
+  ui?: UiDefaults | null;
   version: string;
 }
 
@@ -334,6 +351,11 @@ export interface Resync {
   from_seq: number;
 }
 
+export interface SaveRequest {
+  name: string;
+  out?: string | null;
+}
+
 /** `source.seek`. */
 export interface SeekParams {
   id: string;
@@ -465,6 +487,22 @@ export interface TokenInfo {
   scopes: string[];
 }
 
+/**
+ * What a surface starts with: the layout, the theme and the gallery mode.
+ *
+ * Chosen by a preset (`preset.apply`), carried in `core.info` and pushed as
+ * `event/ui.changed`. None of it changes what the core does. It exists so the
+ * first page a volunteer sees is the one their preset chose rather than the
+ * one the last person to use this browser chose. 05 section 3b is where the
+ * four gallery modes are defined.
+ */
+export interface UiDefaults {
+  gallery?: string | null;
+  layout?: Record<string, unknown>;
+  preset?: string | null;
+  theme?: string | null;
+}
+
 export interface ProgramTookEvent {
   at_running_time_ms?: number;
   duration_ms?: number;
@@ -493,6 +531,10 @@ export interface OutputStateEvent {
 
 export interface AdbreakChangedEvent {
   ad?: AdStatus | null;
+}
+
+export interface UiChangedEvent {
+  ui?: UiDefaults;
 }
 
 export interface MediaChangedEvent {
@@ -540,6 +582,9 @@ export interface MethodParams {
   "pipeline.latency": PipelineRequest;
   "pipeline.list": Record<string, never>;
   "pipeline.queues": PipelineRequest;
+  "preset.apply": ApplyRequest;
+  "preset.list": Record<string, never>;
+  "preset.save": SaveRequest;
   "program.get": Record<string, never>;
   "program.golive": GoLiveRequest;
   "program.history": HistoryRequest;
@@ -589,6 +634,9 @@ export interface MethodResults {
   "pipeline.latency": Record<string, unknown>;
   "pipeline.list": Record<string, unknown>;
   "pipeline.queues": Record<string, unknown>;
+  "preset.apply": ApplyResult;
+  "preset.list": Record<string, unknown>;
+  "preset.save": Record<string, unknown>;
   "program.get": ProgramState;
   "program.golive": GoLiveResult;
   "program.history": TakeRecord[];
@@ -613,6 +661,7 @@ export interface EventPayloads {
   "source.position": SourcePositionEvent;
   "output.state": OutputStateEvent;
   "adbreak.changed": AdbreakChangedEvent;
+  "ui.changed": UiChangedEvent;
   "media.changed": MediaChangedEvent;
   "meters": Meters;
   "tally": Tally;
@@ -669,6 +718,9 @@ export const METHODS: readonly MethodInfo[] = [
   { name: "pipeline.latency", summary: "How much delay one pipeline is carrying, and which stage put it there.", scope: "read", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/pipeline/latency" } },
   { name: "pipeline.list", summary: "Every pipeline running right now, by the name the other pipeline methods accept.", scope: "read", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/pipeline/list" } },
   { name: "pipeline.queues", summary: "Every queue in one pipeline with how full it is, fullest first. A queue that stays full is where the trouble is.", scope: "read", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/pipeline/queues" } },
+  { name: "preset.apply", summary: "Put a preset on this core: its config, its scenes, its layout, its theme and its gallery mode. Pass dry_run to get the plan and write nothing.", scope: "admin", mutating: true, destructive: true, rest: { method: "POST", path: "/api/v1/preset/apply" } },
+  { name: "preset.list", summary: "Every preset this core can apply: the six built in, plus anything installed beside the binary or under ~/.godwinmix/presets.", scope: "read", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/preset/list" } },
+  { name: "preset.save", summary: "Turn this core's working setup into a preset directory somebody else can apply. Stream keys and the control token are replaced with placeholders.", scope: "admin", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/preset/save" } },
   { name: "program.get", summary: "What is on air, the programme running time, and what revert would go back to.", scope: "read", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/program" } },
   { name: "program.golive", summary: "One call to put a web page on air: add the page, add the destination, and take the page as soon as it renders.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/program/golive" } },
   { name: "program.history", summary: "The last hundred takes, newest first, with the token that asked for each.", scope: "read", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/program/history" } },
@@ -702,6 +754,7 @@ export const EVENT_NAMES: readonly EventName[] = [
   "source.position",
   "output.state",
   "adbreak.changed",
+  "ui.changed",
   "media.changed",
   "meters",
   "tally",
@@ -888,6 +941,21 @@ export class GeneratedMethods {
   /** Every queue in one pipeline with how full it is, fullest first. A queue that stays full is where the trouble is. */
   pipelineQueues(params: PipelineRequest = {}): Promise<Record<string, unknown>> {
     return this._call("pipeline.queues", params as unknown as Record<string, unknown>) as Promise<Record<string, unknown>>;
+  }
+
+  /** Put a preset on this core: its config, its scenes, its layout, its theme and its gallery mode. Pass dry_run to get the plan and write nothing. */
+  presetApply(params: ApplyRequest): Promise<ApplyResult> {
+    return this._call("preset.apply", params as unknown as Record<string, unknown>) as Promise<ApplyResult>;
+  }
+
+  /** Every preset this core can apply: the six built in, plus anything installed beside the binary or under ~/.godwinmix/presets. */
+  presetList(): Promise<Record<string, unknown>> {
+    return this._call("preset.list", {}) as Promise<Record<string, unknown>>;
+  }
+
+  /** Turn this core's working setup into a preset directory somebody else can apply. Stream keys and the control token are replaced with placeholders. */
+  presetSave(params: SaveRequest): Promise<Record<string, unknown>> {
+    return this._call("preset.save", params as unknown as Record<string, unknown>) as Promise<Record<string, unknown>>;
   }
 
   /** What is on air, the programme running time, and what revert would go back to. */

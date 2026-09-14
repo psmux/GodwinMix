@@ -17,6 +17,9 @@ Start here if you have never run it.
 * [Your first stream in five minutes, with Docker](tutorials/first-stream-docker.md)
 * [Your first stream with the desktop app](tutorials/first-stream-desktop.md)
 * [Your first plugin](tutorials/your-first-plugin.md)
+* [Your first stream with a preset](tutorials/first-stream-with-a-preset.md), the
+  church path from install to on air
+* [Your first plugin](tutorials/your-first-plugin.md) (planned; the page says what is missing)
 
 ## How to
 
@@ -28,6 +31,9 @@ Start here if you have never run it.
 * [Run the terminal UI](how-to/terminal-ui.md)
 * [Add a theme](how-to/add-a-theme.md) (planned)
 * [Write a preset](how-to/write-a-preset.md) (planned)
+* [Add a theme](how-to/add-a-theme.md)
+* [Make a preset](how-to/make-a-preset.md)
+* [Make a custom build](how-to/custom-build.md)
 * [Upgrade from LiveboxMix](how-to/upgrade-from-liveboxmix.md)
 * [Write a UI of your own](how-to/write-a-ui.md)
 * [Run the smoke test](how-to/smoke-test.md)
@@ -40,6 +46,7 @@ Start here if you have never run it.
 * [The command line](reference/cli.md)
 * [The keyboard](reference/keyboard.md)
 * [Configuration, every key](reference/configuration.md)
+* [Presets, every manifest key and the merge rules](reference/presets.md)
 * [Sources](reference/sources.md)
 * [Web page sources](reference/web-page-sources.md)
 * [The generated protocol reference](reference/protocol.md)

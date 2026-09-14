@@ -1,0 +1,25 @@
+/* neon: the esports preset's own theme. Near black with a cyan accent, which is
+   what sits behind a match graphic without arguing with it. The live red is
+   unchanged: every theme in this project keeps red for "on air". */
+
+:root {
+  --bg: #05070d;
+  --panel: #0c1018;
+  --panel2: #11161f;
+  --raise: #1a212d;
+  --overlay: rgba(2, 3, 7, 0.78);
+  --line: #232c3b;
+  --line-soft: #161c26;
+  --text: #e6f1ff;
+  --dim: #7f8fa6;
+  --faint: #4f5c70;
+  --on-accent: #05070d;
+  --live: #ff2a36;
+  --bad: #ff5f6d;
+  --ok: #24e39b;
+  --warn: #ffc23d;
+  --accent: #21d4fd;
+  --select: #21d4fd;
+  --select-fill: rgba(33, 212, 253, 0.18);
+  --shadow: 0 10px 34px rgba(0, 0, 0, 0.65);
+}

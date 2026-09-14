@@ -70,12 +70,41 @@ Faults use `--bad`, and `--bad` has to be visibly duller.
 * `system.css`, which follows the operating system by redefining only the light
   palette inside `@media (prefers-color-scheme: light)`.
 
-## How a preset picks one
+## A theme inside a preset
 
-A preset ships its theme the way a plugin ships a panel: a CSS file under the
-package's `ui/` directory, served at `/plugins/<name>/ui/`, named in the
-manifest. Installing the preset adds it to the list and makes it the default.
-The operator can still pick another in Settings, and once they do, their choice
-wins: a preset chooses where someone starts, never what they are stuck with.
+A theme is a product the same way a preset is, and the quickest way to ship one
+is inside a preset. Put `theme.css` beside the manifest and name it:
 
-See `ui/themes/CONTRIBUTING.md` for the paragraph version of that.
+```toml
+[provides.preset]
+theme = "calm"                     # the id, and what Settings shows
+theme_css = "theme.css"            # the file, relative to the preset root
+```
+
+That is the whole of it. `gmx preset apply` writes the name into the `[ui]`
+section, `core.info` carries it, and the page loads the stylesheet from
+`/presets/<name>/theme.css`, which the core serves out of the preset it was
+applied from. No rebuild, no entry in `ui/themes/`, and no line in
+`shell/theme.js`.
+
+Four of the six official presets do this: `calm` in `church` (warm, low
+contrast between panels, for a screen seen from a few metres away), `daylight`
+in `classroom` (a light room with a projector on), `neon` in `esports` and
+`broadcast` in `broadcast`. Each is about twenty five lines of custom
+properties. Copy one:
+
+```sh
+cp presets/church/theme.css presets/my-church/theme.css
+```
+
+A preset whose `theme` is not one of the four built in ones and which ships no
+`theme_css` is refused by the loader, with the names it could have used. That is
+deliberate: a preset that applies cleanly and then renders unstyled is worse
+than one that will not apply.
+
+The operator still wins. A preset chooses where somebody starts; the moment they
+pick another theme in Settings, their choice is what loads. Applying a different
+preset is a deliberate act and does move it.
+
+See `ui/themes/CONTRIBUTING.md` for the paragraph version of that, and
+[the presets reference](../reference/presets.md) for the rest of the manifest.

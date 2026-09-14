@@ -23,16 +23,3 @@ A server you can reach over SSH, one destination to publish to, and an MCP clien
 **The page is blank on air.** Usually it loaded before the data did. The standby source is there for this: the agent takes it while the page settles.
 
 **The stream stops overnight.** Usually look at the alerts in the session log rather than guessing: `gmx support-bundle` collects the log, the config and every pipeline's state into one file.
-
-
-## What is in this directory
-
-| File | What it is |
-|---|---|
-| `gmx-plugin.toml` | the manifest: the plugins this preset needs, and where its config, layout and scenes are |
-| `config/godwinmix.toml` | the mixer's configuration, with every line you have to change near the top |
-| `config/layout.json` | which panels go in which slot of the web UI |
-| `scenes/` | the scene documents this preset uses, one file each |
-| `README.md` | this page |
-
-Copy this whole directory to make your own. `presets/README.md` says how.
