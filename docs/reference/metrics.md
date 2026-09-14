@@ -25,6 +25,7 @@ against a running show does not break when the box restarts.
 |---|---|---|---|
 | `gmx_programme_frames_total` | counter | | Frames leaving the programme mixer. |
 | `gmx_programme_frame_interval_ms` | histogram | | Wall clock gap between two programme frames. |
+| `gmx_programme_frame_stall_ms` | gauge | | Worst average frame interval over any sixty consecutive frames. |
 
 Buckets: 8, 16, 20, 25, 33, 40, 50, 66, 100, 250, 1000 ms. They straddle the
 periods of 25, 30, 50 and 60 frames a second, so "frames are landing late" is
@@ -34,6 +35,34 @@ Measured by a pad probe on the raw video tee, which every programme frame
 passes exactly once before the encoder and the multiview split apart. The probe
 does two relaxed atomic adds and allocates nothing: it runs on the compositor's
 streaming thread, where nothing may block.
+
+### Which of the two to alert on
+
+`gmx_programme_frame_stall_ms`, and it is worth knowing why the obvious one is
+the wrong one.
+
+A programme frame arrives when the compositor's aggregator finishes waiting on
+the pipeline clock and pushes. That wait is a timed condition variable on a
+general purpose operating system, which promises to wake no earlier than asked
+and promises nothing about how much later. At 30 fps the period is 33.3 ms and
+the acceptance bar is 34, so the raw interval leaves the scheduler 0.7 ms of
+slack. Nothing offers that. Traced for forty seconds on an idle mixer with two
+test sources, on a fourteen core machine carrying a load average of ten, a
+third of all intervals land between 34 and 43 ms while the mean stays at
+exactly 33.3. The aggregator is not late. It is jittery, and the frames it
+hands over carry the right timestamps and arrive at the right average rate.
+
+`gmx_programme_frame_stall_ms` is the same measurement averaged over sixty
+consecutive frames, which is two seconds at 30 fps. A wake up 8 ms late
+followed by one 8 ms early averages to nothing. A programme that really stopped
+owes that time and every later frame in the window carries it, so a stall
+longer than about 73 ms still fails the 34 ms bar. Alert on this one, and use
+the histogram to look at how the intervals are spread when something does go
+wrong.
+
+```promql
+gmx_programme_frame_stall_ms > 34
+```
 
 This is the metric to put on a dashboard first. If the programme is dropping
 frames, this shows it before anybody watching does.
