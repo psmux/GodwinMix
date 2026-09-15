@@ -33,9 +33,9 @@ use std::time::{Duration, Instant};
 
 /// A receiver that waits `delay` before answering `answer`.
 ///
-/// One thread, one connection at a time, for as many requests as are asked
-/// for. It is deliberately not an HTTP library: the test is about timing, and
-/// 40 lines of socket is easier to reason about than a server's own scheduler.
+/// Each connection has its own thread so an idle keepalive connection cannot
+/// prevent another hook from reaching the receiver. The HTTP parsing stays
+/// small because these tests measure the hook round trip.
 struct Receiver {
     url: String,
     seen: Arc<std::sync::atomic::AtomicU64>,
@@ -52,7 +52,7 @@ impl Receiver {
         let stop = Arc::new(std::sync::atomic::AtomicBool::new(false));
         let counted = seen.clone();
         let stopping = stop.clone();
-        let thread = std::thread::spawn(move || {
+        let thread = std::thread::spawn(move || std::thread::scope(|scope| {
             while !stopping.load(std::sync::atomic::Ordering::Relaxed) {
                 let Ok((stream, _)) = listener.accept() else {
                     // A hundred microseconds, not two milliseconds. This loop
@@ -71,9 +71,11 @@ impl Receiver {
                 // mixer open a fresh TCP connection per take, and that cost
                 // sits inside the millisecond the acceptance line allows.
                 stream.set_read_timeout(Some(Duration::from_millis(100))).ok();
-                serve(&stream, &stopping, &counted, delay, answer);
+                let stopping = stopping.clone();
+                let counted = counted.clone();
+                scope.spawn(move || serve(&stream, &stopping, &counted, delay, answer));
             }
-        });
+        }));
         Receiver { url, seen, stop, thread: Some(thread) }
     }
 
