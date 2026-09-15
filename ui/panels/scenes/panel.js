@@ -374,7 +374,7 @@ class ScenesPanel extends HTMLElement {
   async addSources(scene, sources) {
     if (!sources.length) return;
     try {
-      for (const source of sources) await this.scenes.itemAdd(scene, { type: "source", source });
+      for (const source of sources) await this.scenes.itemAdd(scene, { source });
       this.scenes.undo.record(sources.length === 1 ? "Added an input to a scene" : `Added ${sources.length} inputs to a scene`, { offer: true });
       await this.scenes.reread([scene]);
     } catch (e) {
