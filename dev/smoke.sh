@@ -509,7 +509,6 @@ if [[ "$BEFORE" == "$AFTER" ]]; then ok; else bad "$BEFORE sources became $AFTER
 
 step "a core starts from what the preset wrote"
 PPORT="$(python3 -c 'import socket;s=socket.socket();s.bind(("127.0.0.1",0));print(s.getsockname()[1]);s.close()')"
-NODE_PORT="$(python3 -c 'import socket;s=socket.socket();s.bind(("127.0.0.1",0));print(s.getsockname()[1]);s.close()')"
 python3 - "$PWORK/godwinmix.toml" "$PPORT" <<'PYEOF'
 import re, sys
 path, port = sys.argv[1], sys.argv[2]
@@ -726,7 +725,6 @@ elif ! command -v gst-launch-1.0 >/dev/null 2>&1 \
     printf 'skipped (this build of GStreamer cannot publish RTMP)\n'
 else
     RTMP_PORT="$(python3 -c 'import socket;s=socket.socket();s.bind(("127.0.0.1",0));print(s.getsockname()[1]);s.close()')"
-NODE_PORT="$(python3 -c 'import socket;s=socket.socket();s.bind(("127.0.0.1",0));print(s.getsockname()[1]);s.close()')"
     GODWINMIX_URL="$BASE" GODWINMIX_TOKEN="$TOKEN" "$GMX" plugin add "$INGEST" \
         >"$WORK/ingest-add.log" 2>&1 || true
     # Through the REST layer rather than `gmx ctl source add`, because the port
