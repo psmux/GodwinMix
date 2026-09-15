@@ -441,15 +441,24 @@ round_plugin() {
         || note "plugin.remove" "round $ROUND: $(tail -1 "$WORK/plugin.log")"
 }
 
+# One row, or a refusal to write one.
+#
+# A sample taken from a core that has gone is four zeros, and four zeros pass
+# every bar in this script: no growth, no stall. So a row is written only when
+# the process is still there to be measured, and the caller stops the run when
+# it is not. A scrape that did not answer is written as -1 rather than 0 for
+# the same reason: the verdict counts those and leaves them out of the worst,
+# instead of reading a mixer too busy to answer as a mixer keeping up.
 sample() {
     local elapsed="$1"
     local stall rss fds threads
     stall="$(stall_ms)"
     rss="$(rss_kb "$CORE_PID")"
+    [[ -z "$rss" || "$rss" == "0" ]] && return 1
     fds="$(fd_count "$CORE_PID")"
     threads="$(thread_count "$CORE_PID")"
     printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
-        "$ROUND" "$elapsed" "${stall:-0}" "${rss:-0}" "${fds:-0}" "${threads:-0}" \
+        "$ROUND" "$elapsed" "${stall:--1}" "$rss" "${fds:-0}" "${threads:-0}" \
         "$ROUND_MS" "$SOURCES_MS" "$TAKE_MS" "$STREAMS_MS" "$PLUGIN_MS" \
         >>"$SAMPLES"
 }
@@ -484,7 +493,22 @@ while :; do
     PLUGIN_MS=$((T4 - T3))
     ROUND_MS=$((T4 - T0))
     ELAPSED=$(( $(date +%s) - START ))
-    sample "$ELAPSED"
+    # Liveness before the sample, not after it: a core that has gone must stop
+    # the run rather than contribute a row of zeros to the verdict.
+    if ! kill -0 "$CORE_PID" 2>/dev/null; then
+        echo
+        bad "the core died at round $ROUND, $ELAPSED s in. The last of its log:"
+        tail -20 "$LOG" >&2
+        KEEP=1
+        break
+    fi
+    if ! sample "$ELAPSED"; then
+        echo
+        bad "the core stopped answering at round $ROUND, $ELAPSED s in. The last of its log:"
+        tail -20 "$LOG" >&2
+        KEEP=1
+        break
+    fi
     read -r _ _ S R F T _ _ _ _ _ < <(tail -1 "$SAMPLES")
     # A line every half minute rather than every round. A round takes as long
     # as it takes (a plugin install and a mosaic are both slower than the five
@@ -495,13 +519,6 @@ while :; do
             "$ROUND" "${ELAPSED}s" "$S" \
             "$(awk -v k="$R" 'BEGIN { printf "%.1f", k / 1024 }')" "$F" "$T"
         NEXT_LINE=$((ELAPSED + 30))
-    fi
-    if ! kill -0 "$CORE_PID" 2>/dev/null; then
-        echo
-        bad "the core died at round $ROUND, $ELAPSED s in. The last of its log:"
-        tail -20 "$LOG" >&2
-        KEEP=1
-        break
     fi
     NEXT=$((START + ROUND * PERIOD))
     NOW="$(date +%s)"
@@ -551,8 +568,15 @@ if not rows:
 # Everything after it is compared against that one, not against round one.
 warm = next((r for r in rows if r["elapsed_s"] >= warmup), rows[0])
 last = rows[-1]
-worst_stall = max(r["stall_ms"] for r in rows)
-worst_row = next(r for r in rows if r["stall_ms"] == worst_stall)
+# A scrape that did not answer is -1 and is left out of the worst rather than
+# read as a mixer that never stalled.
+scraped = [r for r in rows if r["stall_ms"] >= 0]
+missed = len(rows) - len(scraped)
+if not scraped:
+    print("no scrape of /metrics answered, so there is no stall reading to judge.")
+    sys.exit(1)
+worst_stall = max(r["stall_ms"] for r in scraped)
+worst_row = next(r for r in scraped if r["stall_ms"] == worst_stall)
 peak_rss = max(r["rss_kb"] for r in rows)
 peak_fds = max(r["fds"] for r in rows)
 peak_threads = max(r["threads"] for r in rows)
@@ -566,8 +590,8 @@ thread_growth = last["threads"] - warm["threads"]
 checks = [
     {
         "name": "programme stall",
-        "warm": f'{warm["stall_ms"]:.1f}',
-        "last": f'{last["stall_ms"]:.1f}',
+        "warm": f'{warm["stall_ms"]:.1f}' if warm["stall_ms"] >= 0 else "-",
+        "last": f'{scraped[-1]["stall_ms"]:.1f}',
         "worst": f"{worst_stall:.1f}",
         "bar": f"at most {stall_bar:.0f} ms",
         "ok": worst_stall <= stall_bar,
@@ -617,6 +641,10 @@ print(f'{len(rows)} rounds over {last["elapsed_s"]} s, asked for one every {peri
       f'Warm up sample at {warm["elapsed_s"]} s.')
 print(f'A round took {sum(rounds_ms) / len(rounds_ms) / 1000:.1f} s on average and '
       f'{slowest["round_ms"] / 1000:.1f} s at its worst, on round {slowest["round"]}.')
+if missed:
+    print(f'{missed} of {len(rows)} scrapes of /metrics did not answer inside 10 s and '
+          f"are not in the stall column. A mixer too busy to answer is a finding of its "
+          f"own, and it is not a mixer that never stalled.")
 print()
 head = f'{"Phase":<12}{"first":>10}{"median":>10}{"worst":>10}{"last":>10}   (seconds)'
 print(head)
@@ -652,6 +680,7 @@ out = {
     "warm_up_sample": warm,
     "last_sample": last,
     "worst_stall_ms": worst_stall,
+    "scrapes_missed": missed,
     "round_ms_mean": round(sum(rounds_ms) / len(rounds_ms)),
     "round_ms_worst": slowest["round_ms"],
     "phase_ms": {

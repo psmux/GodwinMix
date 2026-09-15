@@ -49,8 +49,20 @@ fn built() -> Option<PathBuf> {
     Some(at)
 }
 
+/// One test at a time in this file.
+///
+/// Both of these drive the global plugin loader: they set its directory, its
+/// runtime directory and install and uninstall `wipe` under the same name.
+/// Run together they take each other's plugin away mid test, which the
+/// supervisor now notices and refuses rather than quietly starting two.
+fn exclusive() -> std::sync::MutexGuard<'static, ()> {
+    static ONE_AT_A_TIME: std::sync::Mutex<()> = std::sync::Mutex::new(());
+    ONE_AT_A_TIME.lock().unwrap_or_else(|e| e.into_inner())
+}
+
 #[test]
 fn the_wipe_plugin_passes_the_transition_checks() {
+    let _lock = exclusive();
     let manifest = harness::check_manifest(&root());
     assert!(manifest.passed, "{}: {}", manifest.name, manifest.detail);
 
@@ -83,6 +95,7 @@ fn the_wipe_plugin_passes_the_transition_checks() {
 /// control bindings rather than being dropped.
 #[test]
 fn a_take_naming_a_plugin_transition_drives_the_pads() {
+    let _lock = exclusive();
     let Some(_binary) = built() else {
         println!("gmx-wipe is not built, so the end to end take was skipped");
         return;
