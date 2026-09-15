@@ -106,12 +106,22 @@ pub fn register(reg: &mut Registry<Call>) {
         MethodDef::new(
             "scene.params.set",
             Scope::Operate,
-            "Set the collection's parameter values. A `{{name}}` in a string property \
-             follows them.",
+            "Set the collection's parameter values, declaring any that are new. A \
+             `{{name}}` in any string property of any item follows them, so one call \
+             changes every lower third that uses it.",
             handler(params_set),
         )
         .params(schema_of::<ParamsRequest>)
-        .result(any_object),
+        .result(any_object)
+        .tool(
+            "set_scene_params",
+            Tier::Search,
+            "Set the whole collection's named parameters: {values: {speaker: \"Ada \
+             Lovelace\"}}. Anything on any scene written as {{speaker}}, a graphic's \
+             field among them, follows it, so this is how you change a name once and \
+             have every strap that uses it change. A parameter that does not exist yet \
+             is made, typed from the value you give.",
+        ),
     );
 
     reg.register(
@@ -219,28 +229,68 @@ async fn params_set(call: Call, params: Value) -> Result<Value, RpcError> {
     let req: ParamsRequest = call.params(&params)?;
     let (value, _) = server(&call)
         .edit(client(&call).as_deref(), |doc| {
+            if !doc.params.is_object() {
+                doc.params = godwinmix_core::scene::document::empty_params();
+            }
             let properties = doc
                 .params
-                .get_mut("properties")
-                .and_then(|p| p.as_object_mut())
-                .ok_or_else(|| anyhow::anyhow!("this collection declares no parameters"))?;
-            for (key, value) in &req.values {
-                let known: Vec<String> = properties.keys().cloned().collect();
-                let schema = properties.get_mut(key).ok_or_else(|| {
+                .as_object_mut()
+                .and_then(|p| {
+                    p.entry("properties")
+                        .or_insert_with(|| Value::Object(Default::default()))
+                        .as_object_mut()
+                })
+                .ok_or_else(|| {
                     anyhow::anyhow!(
-                        "this collection has no parameter {key:?}. It has: {}",
-                        known.join(", ")
+                        "this collection's `params` is not a JSON Schema object. \
+                         scene.params.get shows what is there."
                     )
                 })?;
-                schema
-                    .as_object_mut()
-                    .ok_or_else(|| anyhow::anyhow!("the parameter {key:?} is not an object"))?
-                    .insert("default".into(), value.clone());
+            for (key, value) in &req.values {
+                match properties.get_mut(key) {
+                    Some(schema) => {
+                        schema
+                            .as_object_mut()
+                            .ok_or_else(|| {
+                                anyhow::anyhow!("the parameter {key:?} is not an object")
+                            })?
+                            .insert("default".into(), value.clone());
+                    }
+                    // A parameter nobody declared is declared here, typed from
+                    // the value. Refusing it meant there was no way to make one
+                    // at all: nothing else writes into `params`, and a designer
+                    // that wants a `{{speaker}}` has to start somewhere. The
+                    // type is inferred rather than asked for because an
+                    // operator setting a name should not have to say "string".
+                    None => {
+                        properties.insert(
+                            key.clone(),
+                            serde_json::json!({
+                                "type": json_type(value),
+                                "title": key,
+                                "default": value,
+                            }),
+                        );
+                    }
+                }
             }
             Ok(doc.params.clone())
         })
         .map_err(|e| scene_error(&call, e))?;
     Ok(value)
+}
+
+/// The JSON Schema type word for a value, for a parameter being declared by
+/// the first thing put in it.
+fn json_type(value: &Value) -> &'static str {
+    match value {
+        Value::Bool(_) => "boolean",
+        Value::Number(n) if n.is_i64() || n.is_u64() => "integer",
+        Value::Number(_) => "number",
+        Value::Array(_) => "array",
+        Value::Object(_) => "object",
+        _ => "string",
+    }
 }
 
 async fn source_set(call: Call, params: Value) -> Result<Value, RpcError> {

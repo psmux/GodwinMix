@@ -194,6 +194,29 @@ pub type Align = String;
 /// The values api_level 1 knows for [`Align`].
 pub const ALIGN_VALUES: &[&str] = &["top-left", "top-center", "top-right", "center-left", "center", "center-right", "bottom-left", "bottom-center", "bottom-right"];
 
+/// `scene.apply_graphic`.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct ApplyGraphicRequest {
+    /// Answer with a still of the armed scene as well as the records.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub frame: Option<bool>,
+    /// The graphic to fill, `ograf/lower-third`.
+    pub graphic: String,
+    /// Which placement, by the name you gave the item or by its id. Left out,
+    /// every placement of this graphic is filled.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub item: Option<String>,
+    /// Bring it on after filling it in.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub play: Option<bool>,
+    /// Take it off.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub stop: Option<bool>,
+    /// The fields, by name. `scene.item.schema` says which there are.
+    pub values: BTreeMap<String, Value>,
+}
+
 /// `scene.apply_layout`.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
@@ -246,6 +269,18 @@ pub struct ApplyResult {
     pub needs_restart: Vec<String>,
     /// The whole plan, as JSON. The same object `preset.list` rows point at.
     pub plan: Value,
+}
+
+/// A file the collection carries with it.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct Asset {
+    /// Relative to the collection root, always.
+    pub path: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub sha256: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub size: Option<u64>,
 }
 
 /// Whether the item's source is heard. A source is audible when any live item
@@ -307,6 +342,42 @@ pub struct BindRequest {
 pub type Blend = String;
 /// The values api_level 1 knows for [`Blend`].
 pub const BLEND_VALUES: &[&str] = &["normal", "add", "screen", "multiply", "lighten", "darken", "subtract"];
+
+/// What an importer is told before it reads the document.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct Bundle {
+    /// Every file carried, by the path inside the bundle.
+    pub assets: Vec<BundleAsset>,
+    /// The envelope version. See [`BUNDLE_VERSION`].
+    pub bundle_version: u32,
+    pub canvas: Canvas,
+    /// The collection's own stable id, repeated here so a listing can be read
+    /// without unpacking the document.
+    pub id: Id,
+    pub name: String,
+    /// Every plugin this collection needs, with the version range that will
+    /// do. An importer that has none of them still gets the geometry.
+    pub requires: Vec<Requirement>,
+    /// What could not be carried, one line each, so a partial export is
+    /// visible rather than silent.
+    pub skipped: Vec<String>,
+    /// The build that wrote it, for a bug report.
+    pub written_by: String,
+}
+
+/// One file carried in the bundle.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct BundleAsset {
+    /// The asset id in the document.
+    pub id: Id,
+    /// Relative to the bundle root, forward slashes. Never absolute: see the
+    /// head of this module.
+    pub path: String,
+    pub sha256: String,
+    pub size: u64,
+}
 
 /// The output raster. One per collection in this release; 11 section 1 leaves
 /// room for several.
@@ -465,14 +536,20 @@ pub struct EditBeginRequest {
     pub scene: String,
 }
 
+/// `scene.export`.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct ExportRequest {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub collection: Option<String>,
-    /// `json` in this build. `zip`, with the assets, is Phase 5.
+    /// `json` for the document alone, `zip` for a bundle with its assets, or
+    /// `dir` for the same bundle unpacked.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub format: Option<String>,
+    /// Where to write it, on the machine the mixer is running on. Required for
+    /// `dir`. For `zip`, leaving it out hands the bytes back as base64.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub path: Option<String>,
 }
 
 /// The `ext` table from 03 section 6.
@@ -557,6 +634,17 @@ pub struct FilterRecord {
 #[serde(default)]
 pub struct FilterRemoved {
     pub removed: String,
+}
+
+/// A source filter that had to be copied onto each placement.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct FilterReport {
+    pub filter: String,
+    pub obs_type: String,
+    /// The items it was copied onto, by their path in the document.
+    pub placements: Vec<String>,
+    pub source: String,
 }
 
 /// One thing the validator found.
@@ -658,6 +746,30 @@ pub struct GoLiveResult {
     pub state: SourceState,
 }
 
+/// `scene.graphic.list`.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct GraphicListing {
+    pub graphics: Vec<GraphicType>,
+}
+
+/// One graphic this core can place, as the catalogue has it.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct GraphicType {
+    /// The `[provides.designer]` block, when the plugin wrote one: the icon
+    /// for the add gallery, the UI schema, the default frame and the gizmos.
+    pub designer: Value,
+    /// The OGraf manifest's path inside the plugin, so a client can fetch it.
+    pub manifest: String,
+    pub ograf: Ograf,
+    pub plugin: String,
+    pub provide: String,
+    /// The plugin qualified id an item's `content.graphic` names,
+    /// `ograf/lower-third`.
+    pub type_id: String,
+}
+
 /// `source.group`.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
@@ -667,6 +779,35 @@ pub struct GroupSourcesRequest {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub name: Option<String>,
     pub sources: Vec<String>,
+}
+
+/// Everything in the document that is not a scene or an item: the name, the
+/// canvas, the collection's parameters, the transitions it carries, the assets
+/// and the source labels.
+///
+/// It is not a record and it has no id, so it cannot be diffed the way the
+/// tree is. It is carried whole, because it is small and because the
+/// alternative is that a command touching only the header produces an empty
+/// patch and is thrown away by `edit`, which is exactly what used to happen to
+/// `scene.params.set`, `source.set` and `source.group`: all three answered with
+/// the change and none of them kept it.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct Header {
+    pub assets: BTreeMap<String, Value>,
+    pub canvas: Canvas,
+    pub name: String,
+    pub params: Value,
+    pub sources: BTreeMap<String, Value>,
+    pub transitions: Vec<Transition2>,
+}
+
+/// The header as it was and as it is.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct HeaderChange {
+    pub after: Header,
+    pub before: Header,
 }
 
 /// `program.history`.
@@ -710,13 +851,55 @@ pub struct ImportObsRequest {
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct ImportReport {
+    /// The `[[sources]]` block to paste into a config, so the sources the
+    /// scenes draw can be added in one edit rather than one call each.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub config_toml: Option<String>,
+    /// OBS attaches a filter to a source, so a camera keyed in one scene is
+    /// keyed in all of them. Here filters belong to the item, so a source
+    /// filter is copied onto each placement and each copy is named here. This
+    /// is the one thing an import changes the meaning of, so it is reported
+    /// rather than left for somebody to find on air.
+    pub filters_duplicated: Vec<FilterReport>,
     pub items: i64,
     /// The scenes that were added, by the names they ended up with.
     pub scenes: Vec<String>,
     /// What could not be brought across, and why, one line each.
     pub skipped: Vec<String>,
+    /// Every OBS source and what became of it: carried across, needing a
+    /// plugin that is not installed, or skipped with the reason.
+    pub source_report: Vec<SourceReport>,
     /// The sources the collection needs, which have to be added separately.
     pub sources: Vec<String>,
+}
+
+/// `scene.import`.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct ImportRequest {
+    /// The bundle: a `.zip` or the directory it unpacks to, as a path on the
+    /// machine the core is running on.
+    pub path: String,
+}
+
+/// What `scene.import` answers with.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct ImportedReport {
+    /// Where the assets were written.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub assets_at: Option<String>,
+    /// What the bundle said about itself.
+    pub bundle: Bundle,
+    pub items: i64,
+    /// Plugins the collection needs that this core has not got. The scenes
+    /// still came across; those items will draw nothing until it does.
+    pub missing_plugins: Vec<String>,
+    /// Assets that did not come across, with the items that draw them. Empty
+    /// when everything landed.
+    pub relink: Vec<Relink>,
+    /// The scenes that were added, by the names they ended up with.
+    pub scenes: Vec<String>,
 }
 
 /// One running instance and its cost.
@@ -786,6 +969,16 @@ pub struct ItemRequest {
     /// The item's name or its id.
     pub item: String,
     pub scene: String,
+}
+
+/// `scene.item.schema`.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct ItemSchemaRequest {
+    /// The item type: a graphic id like `ograf/lower-third`, or a plugin
+    /// provide like `camera/source`.
+    #[serde(rename = "type")]
+    pub r#type: String,
 }
 
 /// `scene.item.align`, `distribute`, `fit_to_canvas`, `cover_canvas`,
@@ -1095,6 +1288,42 @@ pub struct NameRequest {
     pub name: String,
 }
 
+/// The OGraf manifest, in the subset this host reads.
+///
+/// Everything else the file carries is kept in `rest` and passed on: OGraf is
+/// an EBU specification that will grow, and a key this build has not heard of
+/// is a key a newer client may want. Dropping it here would make the core the
+/// thing that has to be upgraded first.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct Ograf {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+    /// The graphic's own id, as the OGraf file gives it.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub id: Option<String>,
+    /// The module the web component is in, relative to the manifest.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub main: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+    /// The JSON Schema of the graphic's own data. What the inspector renders
+    /// and what `scene.apply_graphic` fills by name.
+    pub schema: Value,
+    /// How many steps `playAction` walks through. One means in and out.
+    #[serde(rename = "stepCount")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub step_count: Option<u32>,
+    #[serde(rename = "supportsNonRealTime")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub supports_non_real_time: Option<bool>,
+    #[serde(rename = "supportsRealTime")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub supports_real_time: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub version: Option<String>,
+}
+
 pub type OutputState = String;
 /// The values api_level 1 knows for [`OutputState`].
 pub const OUTPUT_STATE_VALUES: &[&str] = &["connecting", "live", "reconnecting", "failed"];
@@ -1152,6 +1381,10 @@ pub struct Patch {
     /// command carries a `seq`; this is that number coming back.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub client_seq: Option<u64>,
+    /// The collection's own properties, when they changed. Absent for the
+    /// ordinary case, which is every command that moves an item.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub header: Option<HeaderChange>,
     /// What the client called this change, for a label in an undo menu.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub label: Option<String>,
@@ -1397,6 +1630,20 @@ pub struct Record {
     pub parent: Option<Id>,
 }
 
+/// One asset an import could not put back.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct Relink {
+    pub asset: Id,
+    /// The items that draw it, by scene and item name, so the person fixing
+    /// it knows what will be blank until they do.
+    pub items: Vec<String>,
+    /// The path the document asks for.
+    pub path: String,
+    /// Why it could not be used: missing, or a hash that does not match.
+    pub reason: String,
+}
+
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct RenameSceneRequest {
@@ -1424,6 +1671,20 @@ pub struct ReorderRequest {
     /// A client's own sequence number, echoed on the patch.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub seq: Option<u64>,
+}
+
+/// One plugin the collection needs.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct Requirement {
+    /// The plugin name, `ograf`.
+    pub plugin: String,
+    /// The provide ids used, `ograf/lower-third`, so a reader can see what the
+    /// collection actually asks the plugin for.
+    pub provides: Vec<String>,
+    /// A semver range, `^0.2.0`, or `*` when the exporter had no version to
+    /// name because the plugin was not installed where the export ran.
+    pub versions: String,
 }
 
 pub type ResponseFormat = String;
@@ -1675,6 +1936,22 @@ pub struct SourceAudioState {
     pub page: Option<f64>,
 }
 
+/// A source's name, colour and tray folder, as this collection has them.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct SourceMeta {
+    /// Free text so a client can use whatever it draws with. Absent means the
+    /// client picks one by kind.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub color: Option<String>,
+    /// A tray folder: a tag on the source, purely for finding things. Not a
+    /// scene group, which is a thing on the canvas.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub group: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+}
+
 /// Where a seekable source has got to, which is what the seek endpoint answers
 /// with.
 ///
@@ -1689,6 +1966,17 @@ pub struct SourcePositionState {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub duration_ms: Option<u64>,
     pub position_ms: u64,
+}
+
+/// One line of the report: an OBS source and what happened to it.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct SourceReport {
+    pub obs_name: String,
+    /// The OBS plugin type, for example `ffmpeg_source`.
+    pub obs_type: String,
+    /// How many items in the collection use it.
+    pub placements: i64,
 }
 
 pub type SourceState = String;
@@ -1908,6 +2196,18 @@ pub struct Transform {
 
 /// A name, or an object.
 pub type Transition = Value;
+
+/// A named transition between two scenes.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct Transition2 {
+    pub duration_ms: u32,
+    pub id: Id,
+    pub name: String,
+    pub params: Value,
+    #[serde(rename = "type")]
+    pub r#type: String,
+}
 
 /// How a take gets there. See docs/reference/transitions.md.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
@@ -2143,7 +2443,7 @@ pub struct MethodInfo {
     pub rest: Option<(&'static str, &'static str)>,
 }
 
-pub const METHODS: [MethodInfo; 114] = [
+pub const METHODS: [MethodInfo; 118] = [
     MethodInfo { name: "adbreak.end", summary: "Cut a running ad short, or disarm one that is scheduled.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/adbreak/end")) },
     MethodInfo { name: "adbreak.start", summary: "Interrupt the programme with a clip, then rejoin live when it ends.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/adbreak/start")) },
     MethodInfo { name: "agent.state", summary: "The compact document written for agents: the programme, each source's state and a motion score saying how much its picture is changing.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/agent/state")) },
@@ -2201,15 +2501,18 @@ pub const METHODS: [MethodInfo; 114] = [
     MethodInfo { name: "program.revert", summary: "Take back to the shot before this one.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/program/revert")) },
     MethodInfo { name: "program.take", summary: "Put a scene or a source on programme. The cut is instant and the outgoing stream is not disturbed.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/program/take")) },
     MethodInfo { name: "scene.add", summary: "Make an empty scene, or one built from a set of sources.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/scenes")) },
+    MethodInfo { name: "scene.apply_graphic", summary: "Fill a graphic that is on a scene, by field name, and optionally play it on or take it off. Answers with the records and, if asked, a still.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/scenes/apply_graphic")) },
     MethodInfo { name: "scene.apply_layout", summary: "Apply a layout, making a scene or reshaping one that exists. Applying onto an existing scene keeps the item ids, so the change is a ramp and not a cut.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/scenes/apply_layout")) },
     MethodInfo { name: "scene.create_from", summary: "A scene from a set of sources, laid out by the built in layout for that count (full, two-box, three-box, quad, then a grid) or by a named one.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/scenes/create_from")) },
     MethodInfo { name: "scene.duplicate", summary: "A copy of a scene with new ids throughout, so editing the copy cannot touch the original.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/scenes/{id}/duplicate")) },
     MethodInfo { name: "scene.edit.apply", summary: "Write a draft back into the live document.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/scenes/edit/apply")) },
     MethodInfo { name: "scene.edit.begin", summary: "Take a working copy of a scene. Editing is off air by default: the draft is written back on the next take of that scene, or when you apply it.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/scenes/edit/begin")) },
     MethodInfo { name: "scene.edit.discard", summary: "Throw a draft away. The live document is untouched.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/scenes/edit/discard")) },
-    MethodInfo { name: "scene.export", summary: "The whole collection as JSON. The zip bundle with assets is Phase 5.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/scenes/export")) },
+    MethodInfo { name: "scene.export", summary: "The whole collection: as JSON, or as a zip bundle carrying its assets with a hash each, which is what you send somebody.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/scenes/export")) },
     MethodInfo { name: "scene.get", summary: "One scene: its records and where every item actually lands on the canvas.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/scenes/{id}")) },
+    MethodInfo { name: "scene.graphic.list", summary: "Every graphic template this core can place, with what each one takes.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/scenes/graphic/list")) },
     MethodInfo { name: "scene.history.mark", summary: "Group the changes that follow into one undo step, until the next mark. This is what makes a drag of forty moves one Ctrl+Z.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/scenes/history/mark")) },
+    MethodInfo { name: "scene.import", summary: "Read a collection bundle, a zip or the directory it unpacks to, and add its scenes to this one. Answers with a relink report for any asset that did not come across.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/scenes/import")) },
     MethodInfo { name: "scene.import.obs", summary: "Read an OBS Studio scene collection and add its scenes to this one.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/scenes/import/obs")) },
     MethodInfo { name: "scene.item.add", summary: "Put something on a scene's canvas. With no transform it lands in the next free cell, so a drop never needs a dialog.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/scenes/item/add")) },
     MethodInfo { name: "scene.item.align", summary: "Line items up on an edge: left, right, top, bottom, center-x or center-y.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/scenes/item/align")) },
@@ -2227,6 +2530,7 @@ pub const METHODS: [MethodInfo; 114] = [
     MethodInfo { name: "scene.item.move", summary: "Move an item to another scene, keeping its transform and filters.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/scenes/item/move")) },
     MethodInfo { name: "scene.item.remove", summary: "Take an item off a scene.", scope: "operate", mutating: true, destructive: true, rest: Some(("POST", "/api/v1/scenes/item/remove")) },
     MethodInfo { name: "scene.item.reorder", summary: "Move an item up or down the stack, between two named neighbours.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/scenes/item/reorder")) },
+    MethodInfo { name: "scene.item.schema", summary: "What one item type takes: a graphic's OGraf schema, or a source or filter plugin's settings schema. The same JSON Schema every client renders an inspector from.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/scenes/item/schema")) },
     MethodInfo { name: "scene.item.set", summary: "Assign an item's properties. Only the keys named move; the rest are left alone, so calling it twice with the same body changes nothing the second time.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/scenes/item/set")) },
     MethodInfo { name: "scene.item.ungroup", summary: "Take a group apart, leaving every child exactly where it looked.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/scenes/item/ungroup")) },
     MethodInfo { name: "scene.layout.copy", summary: "Read one scene's geometry, to paste onto another.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/scenes/layout/copy")) },
@@ -2234,7 +2538,7 @@ pub const METHODS: [MethodInfo; 114] = [
     MethodInfo { name: "scene.layout.paste", summary: "Put one scene's geometry onto another's items, matched by name first and slot order second. Items that match nothing are left alone.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/scenes/layout/paste")) },
     MethodInfo { name: "scene.list", summary: "Every scene in the collection, with how many items it has, the sources it draws and whether it is armed.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/scenes")) },
     MethodInfo { name: "scene.params.get", summary: "The collection's typed parameters, readable without their values, so a client discovers what is fillable before filling it.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/scenes/params/get")) },
-    MethodInfo { name: "scene.params.set", summary: "Set the collection's parameter values. A `{{name}}` in a string property follows them.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/scenes/params/set")) },
+    MethodInfo { name: "scene.params.set", summary: "Set the collection's parameter values, declaring any that are new. A `{{name}}` in any string property of any item follows them, so one call changes every lower third that uses it.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/scenes/params/set")) },
     MethodInfo { name: "scene.preview.frame", summary: "A still of the armed scene as base64 JPEG, the floor every client has.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/scenes/preview/frame")) },
     MethodInfo { name: "scene.preview.set", summary: "Arm a scene. The armed scene is the preview, and program.take with no argument takes it.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/scenes/preview/set")) },
     MethodInfo { name: "scene.redo", summary: "Put back what undo took away.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/scenes/redo")) },
@@ -2746,6 +3050,11 @@ impl Client {
         self.call("scene.add", params).await
     }
 
+    /// Fill a graphic that is on a scene, by field name, and optionally play it on or take it off. Answers with the records and, if asked, a still.
+    pub async fn scene_apply_graphic(&self, params: &ApplyGraphicRequest) -> Result<BTreeMap<String, Value>> {
+        self.call("scene.apply_graphic", params).await
+    }
+
     /// Apply a layout, making a scene or reshaping one that exists. Applying onto an existing scene keeps the item ids, so the change is a ramp and not a cut.
     pub async fn scene_apply_layout(&self, params: &ApplyLayoutRequest) -> Result<BTreeMap<String, Value>> {
         self.call("scene.apply_layout", params).await
@@ -2776,7 +3085,7 @@ impl Client {
         self.call("scene.edit.discard", params).await
     }
 
-    /// The whole collection as JSON. The zip bundle with assets is Phase 5.
+    /// The whole collection: as JSON, or as a zip bundle carrying its assets with a hash each, which is what you send somebody.
     pub async fn scene_export(&self, params: &ExportRequest) -> Result<BTreeMap<String, Value>> {
         self.call("scene.export", params).await
     }
@@ -2786,9 +3095,19 @@ impl Client {
         self.call("scene.get", params).await
     }
 
+    /// Every graphic template this core can place, with what each one takes.
+    pub async fn scene_graphic_list(&self) -> Result<GraphicListing> {
+        self.call("scene.graphic.list", &serde_json::json!({})).await
+    }
+
     /// Group the changes that follow into one undo step, until the next mark. This is what makes a drag of forty moves one Ctrl+Z.
     pub async fn scene_history_mark(&self, params: &MarkRequest) -> Result<BTreeMap<String, Value>> {
         self.call("scene.history.mark", params).await
+    }
+
+    /// Read a collection bundle, a zip or the directory it unpacks to, and add its scenes to this one. Answers with a relink report for any asset that did not come across.
+    pub async fn scene_import(&self, params: &ImportRequest) -> Result<ImportedReport> {
+        self.call("scene.import", params).await
     }
 
     /// Read an OBS Studio scene collection and add its scenes to this one.
@@ -2876,6 +3195,11 @@ impl Client {
         self.call("scene.item.reorder", params).await
     }
 
+    /// What one item type takes: a graphic's OGraf schema, or a source or filter plugin's settings schema. The same JSON Schema every client renders an inspector from.
+    pub async fn scene_item_schema(&self, params: &ItemSchemaRequest) -> Result<BTreeMap<String, Value>> {
+        self.call("scene.item.schema", params).await
+    }
+
     /// Assign an item's properties. Only the keys named move; the rest are left alone, so calling it twice with the same body changes nothing the second time.
     pub async fn scene_item_set(&self, params: &SetItemRequest) -> Result<BTreeMap<String, Value>> {
         self.call("scene.item.set", params).await
@@ -2911,7 +3235,7 @@ impl Client {
         self.call("scene.params.get", &serde_json::json!({})).await
     }
 
-    /// Set the collection's parameter values. A `{{name}}` in a string property follows them.
+    /// Set the collection's parameter values, declaring any that are new. A `{{name}}` in any string property of any item follows them, so one call changes every lower third that uses it.
     pub async fn scene_params_set(&self, params: &ParamsRequest) -> Result<BTreeMap<String, Value>> {
         self.call("scene.params.set", params).await
     }
