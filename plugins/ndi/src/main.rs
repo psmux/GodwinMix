@@ -312,8 +312,9 @@ fn shared_call(provide: &str, method: &str, _params: Value) -> Result<Value, Rpc
 /// Refuse early and clearly when either half of NDI is missing.
 fn check_ready_for_ndi(needed: &[&str]) -> Result<(), RpcError> {
     gmx_netkit::init().map_err(internal)?;
-    gmx_netkit::elements::require(needed).map_err(internal)?;
+    // The runtime is a prerequisite for the GStreamer elements as well.
     library::find().map_err(internal)?;
+    gmx_netkit::elements::require(needed).map_err(internal)?;
     Ok(())
 }
 

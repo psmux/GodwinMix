@@ -114,7 +114,7 @@ jobs:
       # the Windows job: a regression in a platform arm fails this, not a
       # user's first launch. Deliberately the whole workspace.
       - name: The tests pass on this platform
-        run: cargo test --release --locked --workspace
+        run: cargo test --release --locked --workspace --no-fail-fast
 
       - name: What the codec probe picks here
         shell: bash
