@@ -90,7 +90,7 @@ registry with room for one runner (`plugin::wasm`); this crate is the runner,
 and the binary registers it behind its `wasm` feature. A build without the
 feature never links wasmtime, the registry is empty, and a `wasm` placement is
 refused with a message naming the flag. The feature is off by default because
-it adds 11.4 MiB to a release binary; see
+it adds 11.9 MB to a release binary; see
 [plugins as WebAssembly components](../reference/wasm.md).
 
 This crate carries a `rust-version` of its own, 1.86, because wasmtime 36 asks
