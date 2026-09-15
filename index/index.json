@@ -148,8 +148,7 @@
       "badge": "https://psmux.github.io/godwinmix-plugins/badges/titler.json",
       "official": true,
       "maintainers": [
-        "psmux",
-        "GodwinMix"
+        "psmux"
       ],
       "evals": "tests/evals",
       "docs_reviewed": "2026-07-30",

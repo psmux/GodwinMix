@@ -5,7 +5,7 @@
 #
 #   dev/mixer-integration.sh [stream.mkv] [ctl-url]
 set -e
-export PATH="/home/dev/.cargo/bin:/opt/homebrew/bin:/usr/bin:/bin"
+export PATH="$HOME/.cargo/bin:/opt/homebrew/bin:/usr/bin:/bin"
 STREAM="$(cd "$(dirname "${1:-$(dirname "$0")/out/stream.mkv}")" && pwd)/$(basename "${1:-stream.mkv}")"
 URL="${2:-http://127.0.0.1:8080}"
 LB="$(dirname "$0")/../../target/release/godwinmix"

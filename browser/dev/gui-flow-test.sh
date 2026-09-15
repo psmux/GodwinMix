@@ -1,7 +1,7 @@
 #!/bin/bash
 # The operator's flow, driven through the API exactly as the UI drives it:
 # paste plain URLs, add, click tiles. The programme is recorded throughout.
-export PATH="/home/dev/.cargo/bin:/opt/homebrew/bin:/usr/bin:/bin"; export DOCKER_HOST=unix://$HOME/.colima/default/docker.sock
+export PATH="$HOME/.cargo/bin:/opt/homebrew/bin:/usr/bin:/bin"; export DOCKER_HOST=unix://$HOME/.colima/default/docker.sock
 cd "$(dirname "$0")/../.."; LB=target/release/godwinmix; OUT=browser/dev/out; API=http://127.0.0.1:8080
 have() { $LB ctl source list | awk '{print $1}' | grep -qx "$1"; }
 add() { have "$2" && { echo "  $2 already there"; return; }; printf "  add %-16s -> HTTP %s\n" "$2" "$(curl -s -o /dev/null -w '%{http_code}' -X POST $API/api/sources -H 'content-type: application/json' -d "$1")"; }

@@ -2,13 +2,9 @@
 
 ## Reporting a problem
 
-Mail **maintainers@example.invalid** with what you found and how to reproduce it. Do
-not open a public issue.
-
-If you would rather not use mail, open a
-[private security advisory](https://github.com/psmux/GodwinMix/security/advisories/new)
-on GitHub, which reaches the same person and keeps the report private until
-there is a fix.
+Open a [private security advisory](https://github.com/psmux/GodwinMix/security/advisories/new)
+with what you found and how to reproduce it. Do not open a public issue.
+The report stays private while the maintainers investigate.
 
 What to include, in whatever detail you have:
 
@@ -25,7 +21,7 @@ What to include, in whatever detail you have:
 | Within 7 days | An assessment: whether it is a vulnerability, how bad, and a rough date |
 | On release | A fix, a GitHub advisory, and credit to you by whatever name you choose, unless you would rather not be named |
 
-If 48 hours pass with nothing, assume the mail was missed and say so again. That
+If 48 hours pass with nothing, follow up on the private report and say so again. That
 is not rudeness, it is the correct response.
 
 Please give a reasonable amount of time before disclosing publicly. There is no

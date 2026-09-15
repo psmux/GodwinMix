@@ -10,7 +10,7 @@ contact_links:
     about: Tutorials, how-to pages, the reference and the explanations. Start at docs/README.md.
   - name: Security problem
     url: https://github.com/psmux/GodwinMix/security/advisories/new
-    about: Do not open a public issue. Report it privately here, or mail maintainers@example.invalid.
+    about: Do not open a public issue. Report it privately here.
   - name: Friction on the developer path
     url: https://github.com/psmux/GodwinMix/blob/main/docs/friction-log.md
     about: Got stuck for ten minutes on something that should have taken one? That goes in the friction log.
