@@ -21,6 +21,7 @@ pub mod cli;
 pub mod control;
 pub mod ctl;
 pub mod mcp;
+pub mod nodes;
 pub mod mcp_http;
 pub mod observe;
 pub mod ui;
@@ -263,6 +264,32 @@ enum Command {
         cmd: cli::plugin::Plugin,
     },
 
+    /// Nodes: this machine hosting plugins for a core, or the core's view of
+    /// the machines that do.
+    ///
+    /// With `--core`, this is the daemon: the same binary in its second mode,
+    /// enrolling once with a one time token, keeping one mutually
+    /// authenticated socket to the core, slaving its clock to the core's, and
+    /// hosting whatever the core asks it to. It mixes nothing and serves
+    /// nothing.
+    ///
+    /// With a subcommand (`token`, `list`, `get`, `remove`, `discover`) it is
+    /// a client of the running core, like every other `gmx` subcommand. See
+    /// docs/how-to/add-a-node.md.
+    Node {
+        /// Address of the mixer's control server, for the subcommands
+        /// [default: http://127.0.0.1:8080].
+        #[arg(long, env = "GODWINMIX_URL")]
+        url: Option<String>,
+        /// Bearer token, when the mixer has one configured.
+        #[arg(long, env = "GODWINMIX_TOKEN", hide_env_values = true)]
+        token: Option<String>,
+        #[command(flatten)]
+        daemon: cli::node::Daemon,
+        #[command(subcommand)]
+        cmd: Option<cli::node::Node>,
+    },
+
     /// Start a whole UI against the running mixer. See `src/cli/ui.rs`.
     ///
     /// `gmx ui tui` runs the terminal UI; `gmx ui list` shows every surface
@@ -490,6 +517,15 @@ pub async fn run() -> Result<()> {
             gstreamer::init().context("initialising GStreamer")?;
             return cli::build::run(args);
         }
+        Some(Command::Node { url, token, daemon, cmd }) => match cmd {
+            Some(cmd) => {
+                let url =
+                    url.or_else(|| config::env_var("URL")).unwrap_or_else(|| DEFAULT_URL.into());
+                let token = token.or_else(|| config::env_var("TOKEN"));
+                return cli::node::run(&url, token.as_deref(), cmd).await;
+            }
+            None => return cli::node::serve(daemon).await,
+        },
         Some(Command::Agent(args)) => return cli::agent::run(args.cmd).await,
         Some(Command::Skill(args)) => return cli::skill::run(args.cmd),
         Some(Command::Session(args)) => {
@@ -573,6 +609,16 @@ pub async fn run() -> Result<()> {
     }
     if args.rehearsal {
         info!("rehearsal core: output.add is refused and only rehearsal tokens are accepted");
+    }
+    // Every plugin instance gets its own token in `GMX_TOKEN`, scoped to the
+    // plugin it belongs to. Without this the loader has nothing to mint with
+    // and hands out an empty string, which is right for an embedded core with
+    // no control server and wrong for this one.
+    {
+        let minting = tokens.clone();
+        plugin::loader::set_token_minter(Box::new(move |plugin, instance| {
+            minting.mint_for_plugin(plugin, instance, None)
+        }));
     }
     let cfg_media = cfg.media.clone();
     // Where the web UI and any plugin panels are read from.
@@ -699,6 +745,26 @@ pub async fn run() -> Result<()> {
         mix.start().context("starting mixer")?;
     }
 
+    // The node bridge, if the config asked for one. After `mix.start()`,
+    // because a node follows the programme clock and there is no clock until
+    // the pipeline is up; before the mixer thread takes ownership, because
+    // this is the last moment the pipeline can be asked for it.
+    {
+        let _stage = core_observe::introspect::stage("nodes");
+        let runtime_dir = core_observe::runtime_dir(&config_path);
+        let canvas = mix.canvas().clone();
+        let clock = mix.program_clock();
+        if let Err(e) =
+            nodes::start(&cfg_for_control, &handle, clock, &canvas, runtime_dir).await
+        {
+            // A node bridge that will not start is not a reason to take the
+            // programme off the air. The sources placed on a node will go to
+            // the slate and say why, which is the same thing that happens when
+            // a node is unplugged.
+            warn!(error = %format!("{e:#}"), "the node bridge did not start; sources placed on a node will not run");
+        }
+    }
+
     let multiview = mix.multiview_handle();
     let preview = mix.preview_handle();
     let encoder = mix.encoder_handle();
@@ -726,6 +792,9 @@ pub async fn run() -> Result<()> {
         library.cfg().probe_timeout_secs,
     ));
     let quit = Arc::new(tokio::sync::Notify::new());
+    // Desired state against what each node reports, four times a second. It
+    // does nothing at all on a core with no nodes.
+    nodes::spawn_reconciler(handle.clone(), quit.clone());
     // The scene collection, beside the runtime store. A store that will not
     // parse is a hard failure: somebody's show is in it.
     let scenes = godwinmix_core::scene::server::SceneServer::open(

@@ -20,6 +20,9 @@ toml = { workspace = true }
 # runtime of their own; neither pulls in a media stack or a server.
 tracing = { workspace = true }
 parking_lot = { workspace = true }
+# Thirty-two random bytes for a plugin's own token. Already in the tree under
+# rustls; nothing new is compiled for it.
+getrandom = { workspace = true }
 # `sync` only: a Notify so two requests racing on one idempotency key do not
 # both run the work. No runtime, no media stack, no system library; a client
 # library depending on this still installs with one cargo add.

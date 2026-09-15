@@ -132,6 +132,35 @@ on_operator_silence = { after_secs = 120, action = "alert" }
 # http = "http://127.0.0.1:8787/policy"
 # timeout_ms = 19
 
+# Other machines hosting plugins for this one. Nothing here and the core makes
+# no certificate authority, opens no port and puts no clock on the network.
+#
+# `gmx node token --name studio-b` on this machine prints the one command to
+# run on the other. See docs/how-to/add-a-node.md.
+#
+# [nodes]
+# listen = "0.0.0.0:8443"
+# # Every name a node might dial this core by. They go in the core's own
+# # certificate, and a name that is not in it fails the TLS handshake.
+# server_names = ["mixer.local", "10.0.0.1"]
+# # `net` is the GstNetTimeProvider every node slaves to. `ptp` wants a wired
+# # LAN, a card that will timestamp, and the gst-ptp-helper.
+# clock = "net"
+# clock_port = 8447
+# # Nodes this core expects. One that has never dialled in shows as `expected`,
+# # which is different from one that connected and went.
+# "studio-b" = { address = "10.0.0.21:8443" }
+# "graphics-pc" = { address = "10.0.0.22:8443", clock = "ptp", transport = "rtp" }
+#
+# Then on a source:
+#
+# [[sources]]
+# id = "cam1"
+# type = "ndi/source"
+# place = "node:studio-b"     # core, in-process, sidecar, or node:<name>
+# transport = "srt"           # rtp, srt or whip. Only read for a node
+# latency_ms = 150            # the budget, answered on the LATENCY query
+
 # Running a command line as a source is arbitrary code execution for anyone who
 # can reach the control port. Off unless you turn it on deliberately.
 [security]
