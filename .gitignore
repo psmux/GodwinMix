@@ -63,3 +63,6 @@ examples/*/target/
 # rebuilds it from source.
 !plugins/*/plugin.wasm
 !examples/*/plugin.wasm
+
+# Runtime crash reports can contain private machine paths and settings.
+**/crashes/

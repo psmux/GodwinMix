@@ -4,7 +4,7 @@
 # frame rate, A/V offset of the page's flash and beep pattern, and levels.
 #   browser/dev/mixer-web.sh [page] [ctl-url]      page: sync | video-webm | page
 set -e
-export PATH="/home/dev/.cargo/bin:/opt/homebrew/bin:/usr/bin:/bin"
+export PATH="$HOME/.cargo/bin:/opt/homebrew/bin:/usr/bin:/bin"
 PAGE="${1:-sync}"; URL="${2:-http://127.0.0.1:8080}"
 D="$(cd "$(dirname "$0")" && pwd)"; LB="$D/../../target/release/godwinmix"; OUT="$D/out"
 "$LB" ctl --url "$URL" source remove web1 >/dev/null 2>&1 || true

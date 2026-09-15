@@ -260,5 +260,6 @@ minds; the check is the same either way.
 
 ## Security
 
-Do not open a public issue for a security problem. Mail maintainers@example.invalid
+Do not open a public issue for a security problem. Open a
+[private security advisory](https://github.com/psmux/GodwinMix/security/advisories/new)
 with what you found and how to reproduce it.
