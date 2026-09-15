@@ -173,13 +173,14 @@ wasmtime is a compiler. Measured on `macos-aarch64`, release profile,
 
 | Build | Bytes | |
 |---|---|---|
-| `cargo build --release` | 18,403,824 | 17.6 MiB |
-| `cargo build --release --features wasm` | 30,383,712 | 29.0 MiB |
-| the difference | 11,979,888 | 11.4 MiB |
+| `cargo build --release` | 18,542,992 | 17.7 MiB, 18.5 MB |
+| `cargo build --release --features wasm` | 30,436,800 | 29.0 MiB, 30.4 MB |
+| the difference | 11,893,808 | 11.3 MiB, 11.9 MB |
 
 09 section 4 item 4 gives a feature 4 MB before it has to be opt in, and the
-whole binary 30 MB on `linux-aarch64`. This costs 11.4 MiB and takes the binary
-to 30.4 MB, so `wasm` is **off by default**. A build that wants it says so:
+whole binary 30 MB on `linux-aarch64`. This costs 11.9 MB and takes the binary
+to 30.4 MB, over both, so `wasm` is **off by default**. A build that wants it
+says so:
 
 ```
 cargo build --release --features wasm

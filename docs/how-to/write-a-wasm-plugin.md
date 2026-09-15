@@ -17,7 +17,7 @@ That is the whole toolchain. `wasm32-wasip2` emits a component at link time, so
 there is no `cargo component` and no `wasm-tools` to install.
 
 Your core has to carry the WebAssembly host, which is off by default because it
-adds 11.4 MiB to the binary:
+adds 11.9 MB to the binary:
 
 ```
 cargo build --release --features wasm

@@ -61,7 +61,7 @@ base64 = { workspace = true }
 [features]
 default = []
 # Run `service` and `transition` plugins as WebAssembly components inside the
-# core (tier W). Off by default: it adds 11.4 MiB to a release binary on
+# core (tier W). Off by default: it adds 11.9 MB to a release binary on
 # macos-aarch64 and takes the whole binary to 30.4 MB, and 09 section 4 item 4
 # gives a feature 4 MB and the binary 30 MB. `gmx doctor` says whether a build
 # carries it, on the `wasm host` line.
