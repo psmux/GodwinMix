@@ -219,6 +219,7 @@ export class Client {
     switch (name) {
       case "snapshot":
         s.snapshot(params.state, params.seq);
+        if (params.state.multiview) this.sheet.setLayout(params.state.multiview);
         break;
       case "flush":
         s.patch({ seq: params.seq ?? s.state.seq });

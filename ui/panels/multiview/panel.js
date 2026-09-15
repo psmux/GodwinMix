@@ -42,8 +42,10 @@ class ProgramPanel extends HTMLElement {
 
     this.takeBtn = el("button.btn.primary", { text: "Take", hidden: true, onclick: () => this.take(0) });
     this.autoBtn = el("button.btn", { text: "Auto", hidden: true, onclick: () => this.take(500) });
+    this.streamState = el("span.sm.dim", { text: "Waiting for preview frames", role: "status" });
     this.bar = el("div.row.pad", {}, [
       el("span.sm.dim.grow", { text: "What your audience is seeing" }),
+      this.streamState,
       this.takeBtn,
       this.autoBtn,
     ]);
@@ -53,6 +55,10 @@ class ProgramPanel extends HTMLElement {
     this.offs = [
       this.client.onRender((s) => this.render(s)),
       on(document, "visibilitychange", () => this.retune()),
+      this.client.on("frame", () => {
+        this.lastFrameAt = Date.now();
+        this.streamState.textContent = "Preview live";
+      }),
       onSettingsChanged(() => this.applyMode()),
       register({
         id: "program.take-armed",
@@ -63,6 +69,12 @@ class ProgramPanel extends HTMLElement {
       }),
     ];
 
+    this.frameTimer = setInterval(() => {
+      if (!this.want) this.streamState.textContent = "Preview paused while hidden";
+      else if (!this.lastFrameAt || Date.now() - this.lastFrameAt > 2000) {
+        this.streamState.textContent = "Waiting for preview frames";
+      }
+    }, 1000);
     this.ro = new ResizeObserver(() => this.retune());
     this.ro.observe(this);
     this.io = new IntersectionObserver((entries) => {
@@ -77,6 +89,7 @@ class ProgramPanel extends HTMLElement {
   }
 
   disconnectedCallback() {
+    clearInterval(this.frameTimer);
     for (const off of this.offs || []) off();
     this.offs = [];
     if (this.ro) this.ro.disconnect();

@@ -1678,6 +1678,51 @@ mod tests {
         tokio::task::spawn_blocking(move || thread.join()).await.unwrap().unwrap();
     }
 
+    /// Resizing must keep real programme pixels, not merely send black JPEGs.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn programme_return_survives_mosaic_resizes() {
+        init();
+        let mut cfg = mixer_cfg(MultiviewConfig {
+            width: 320, height: 180, fps: 8, linger_secs: 0,
+            ..Default::default()
+        });
+        cfg.sources = vec![test_source()];
+        let (mut mix, handle, cmd_rx, _bus_rx) = crate::mixer::Mixer::build(cfg).unwrap();
+        mix.start().unwrap();
+        let mv = mix.multiview_handle();
+        let thread = crate::mixer::spawn(mix, cmd_rx, handle.clone());
+        handle.send(crate::mixer::Command::Take {
+            source: Some("cam1".into()), at_running_time_ms: None, ack: None,
+        }).unwrap();
+        let mut held = None;
+        for width in [320, 640, 960, 320] {
+            let mut next = mv.subscribe(MultiviewRequest { fps: 8, width });
+            drop(held.take());
+            let visible = async {
+                loop {
+                    let bytes = next.recv().await.unwrap();
+                    let img = crate::snapshot::decode_jpeg(&bytes).unwrap();
+                    if img.width() != width as u32 { continue; }
+                    // The programme is cell zero, at the left of a two cell row.
+                    let colourful = img.enumerate_pixels().filter(|(x, _, p)| {
+                        *x < img.width() / 2 && p.0.iter().max().unwrap() - p.0.iter().min().unwrap() > 80
+                    }).count();
+                    if colourful > (img.width() * img.height() / 10) as usize { break; }
+                }
+            };
+            let result = tokio::time::timeout(Duration::from_secs(6), visible).await;
+            if result.is_err() {
+                handle.send(crate::mixer::Command::Shutdown).unwrap();
+                tokio::task::spawn_blocking(move || thread.join()).await.unwrap().unwrap();
+                panic!("programme return stayed black at width {width}");
+            }
+            held = Some(next);
+        }
+        drop(held);
+        handle.send(crate::mixer::Command::Shutdown).unwrap();
+        tokio::task::spawn_blocking(move || thread.join()).await.unwrap().unwrap();
+    }
+
     #[tokio::test]
     async fn a_request_is_clamped_and_keeps_the_configured_aspect() {
         let h = handle();

@@ -1196,7 +1196,9 @@ impl Mixer {
         let pgm_video_proxy = make("proxysink", "pgm-v-proxy")?;
         let mut rchain: Vec<gst::Element> = vec![gstutil::queue_preview("pgm-v-q")?];
         rchain.extend(download_bridge(gfx, "pgm-v")?);
-        rchain.push(make("videorate", "pgm-v-rate")?);
+        let return_rate = make("videorate", "pgm-v-rate")?;
+        crate::probe::set_bool(&return_rate, "skip-to-first", true);
+        rchain.push(return_rate);
         rchain.push(make("videoscale", "pgm-v-scale")?);
         rchain.push(gstutil::capsfilter(
             "pgm-v-caps",
@@ -4282,6 +4284,7 @@ impl Mixer {
     /// detach is an unlink and a pad release, and the mosaic pipeline has
     /// nothing pushing into it by the time it is dropped.
     fn drop_mosaic(&mut self) {
+        self.detach_programme_return();
         for slot in &self.sources {
             slot.input.detach_thumb_end();
         }

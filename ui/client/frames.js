@@ -59,6 +59,7 @@ export class SheetPainter {
   /** Register a canvas to be painted with one cell. Returns a release function. */
   attach(canvas, cellIndex) {
     this.targets.set(canvas, cellIndex);
+    this._paint();
     return () => this.targets.delete(canvas);
   }
 
