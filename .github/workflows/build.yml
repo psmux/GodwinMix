@@ -81,7 +81,7 @@ jobs:
       # appears in the committed schema runs here, so a schema change without a
       # regenerated protocol.json fails this job on every platform.
       - name: Test
-        run: cargo test --release --locked --workspace
+        run: cargo test --release --locked --workspace --no-fail-fast
 
       # `cargo add godwinmix-core` has to give somebody the engine inside their
       # own program, so the example that shows it is built here. The test that
@@ -195,7 +195,7 @@ jobs:
           # rasteriser is what a five year old laptop without drivers gets too.
           LIBGL_ALWAYS_SOFTWARE: 1
           GST_GL_DISABLED: 1
-        run: cargo test --locked --workspace
+        run: cargo test --locked --workspace --no-fail-fast
 
       - name: What the probe picked
         run: |

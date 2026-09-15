@@ -33,6 +33,26 @@ COPY . .
 RUN cargo build --release --locked -p godwinmix --bins \
     && strip target/release/godwinmix target/release/gmx
 
+# The browser runs outside the mixer. Debian's WPE fallback can crash inside
+# the mixer process, so the default image ships the existing CEF sidecar.
+FROM builder AS browser-builder
+ARG WITH_CEF=1
+ENV CEF_PATH=/cef
+RUN mkdir -p /browser-runtime \
+    && if [ "$WITH_CEF" = "1" ]; then \
+         apt-get update && apt-get install -y --no-install-recommends \
+           cmake ninja-build libx11-dev libgtk-3-dev && \
+         cargo build --manifest-path browser/Cargo.toml --release --locked --bin godwinmix-browser && \
+         cp browser/target/release/godwinmix-browser /browser-runtime/ && \
+         find browser/target/release -maxdepth 1 -type f \
+           \( -name '*.so*' -o -name '*.pak' -o -name '*.dat' -o -name '*.bin' \
+              -o -name '*icd.json' -o -name 'chrome-sandbox' \) \
+           -exec cp {} /browser-runtime/ \; && \
+         cp -r browser/target/release/locales /browser-runtime/ && \
+         find /cef -name LICENSE.txt -exec cp {} /browser-runtime/CEF-LICENSE.txt \; && \
+         find /cef -name CREDITS.html -exec cp {} /browser-runtime/CEF-CREDITS.html \; ; \
+       fi
+
 # ---------------------------------------------------------------- runtime ---
 FROM debian:trixie-slim AS runtime
 
@@ -44,9 +64,9 @@ FROM debian:trixie-slim AS runtime
 ARG WITH_X264=1
 # gstreamer1.0-wpe renders a web page through wpesrc, which is how a `web+`
 # source works when no browser sidecar is installed next to the binary.
-# It pulls in WebKit and costs about 120 MB. --build-arg WITH_WPE=0 drops it
-# and the image loses web page sources.
-ARG WITH_WPE=1
+# It is an optional fallback for images built without CEF.
+ARG WITH_WPE=0
+ARG WITH_CEF=1
 
 ENV DEBIAN_FRONTEND=noninteractive
 
@@ -69,6 +89,14 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
       gstreamer1.0-tools \
       ca-certificates \
       curl \
+    && if [ "$WITH_CEF" = "1" ]; then \
+         apt-get install -y --no-install-recommends \
+           libnss3 libnspr4 libatk1.0-0t64 libatk-bridge2.0-0t64 \
+           libdrm2 libxkbcommon0 libxcomposite1 libxdamage1 libxfixes3 \
+           libxrandr2 libgbm1 libasound2t64 libcups2t64 libgtk-3-0t64 \
+           xvfb xauth xfonts-base libgl1-mesa-dri libegl1 libgles2 \
+           fonts-dejavu-core fonts-liberation ; \
+       fi \
     && if [ "$WITH_WPE" = "1" ]; then \
          apt-get install -y --no-install-recommends \
            gstreamer1.0-wpe gstreamer1.0-gl gstreamer1.0-x \
@@ -92,6 +120,11 @@ RUN useradd --system --uid 10001 --user-group --no-create-home --shell /usr/sbin
     && mkdir -p /etc/godwinmix /var/lib/godwinmix/media /var/lib/godwinmix/run \
     && chown -R godwinmix:godwinmix /etc/godwinmix /var/lib/godwinmix
 
+COPY --from=browser-builder /browser-runtime/ /opt/godwinmix/browser/
+RUN if [ -f /opt/godwinmix/browser/godwinmix-browser ]; then \
+      ln -s /opt/godwinmix/browser/godwinmix-browser /usr/local/bin/godwinmix-browser ; \
+    fi
+
 COPY --from=builder /src/target/release/godwinmix /usr/local/bin/godwinmix
 COPY --from=builder /src/target/release/gmx /usr/local/bin/gmx
 COPY godwinmix.example.toml /usr/share/godwinmix/godwinmix.example.toml
@@ -105,6 +138,7 @@ RUN chmod +x /usr/local/bin/gmx-entrypoint
 ENV DISPLAY=:99 \
     XDG_RUNTIME_DIR=/tmp/xdg \
     LIBGL_ALWAYS_SOFTWARE=1 \
+    XDG_CACHE_HOME=/var/lib/godwinmix/cache \
     GODWINMIX_CONFIG=/etc/godwinmix/godwinmix.toml
 
 # The control server and the UI. One port, as the mixer has always been.

@@ -12,12 +12,8 @@ name: quickstart
 # server. The image build is reported separately, because a person following
 # the quickstart pulls a published image rather than compiling one.
 #
-# Known fragility, stated rather than hidden: the page is rendered by wpesrc
-# (WPE WebKit), because the CEF sidecar is a gigabyte and is moving to its own
-# repository. wpesrc in a GPU-less container has a history of dying inside
-# WPEBackend-fdo on Debian trixie (deploy/docker/README.md). If this job fails
-# in the browser rather than in the mixer, that is the cause, and the fix is in
-# the image rather than in the workflow.
+# The default image includes the CEF sidecar. Web rendering runs outside the
+# mixer process because the WPE fallback can crash inside Debian's GL stack.
 
 on:
   push:

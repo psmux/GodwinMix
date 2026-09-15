@@ -71,10 +71,11 @@ docker run --rm ghcr.io/psmux/godwinmix ctl --url https://mixer.example.com --to
 | Argument | Default | What it does |
 |---|---|---|
 | `WITH_X264` | `1` | Installs `gstreamer1.0-plugins-ugly` and keeps only `libgstx264.so` out of it. `x264enc` is the only software H.264 encoder the mixer's probe knows, so an image built with `0` needs a hardware encoder (VA or NVENC) and refuses to start without one. Build with `0` where that package's licensing is a problem. |
-| `WITH_WPE` | `1` | Installs `gstreamer1.0-wpe` and the X and Mesa pieces it needs, so a `web+` source renders through WPE WebKit with no sidecar. Costs about 120 MB. `0` drops it, and web page sources with it. |
+| `WITH_CEF` | `1` | Builds and ships the Chromium browser sidecar and its runtime. Web pages run outside the mixer process. |
+| `WITH_WPE` | `0` | Installs `gstreamer1.0-wpe` and the X and Mesa pieces it needs, so a `web+` source renders through WPE WebKit with no sidecar. Costs about 120 MB. Used only when no CEF sidecar is installed. |
 
 ```sh
-docker build -f deploy/docker/Dockerfile --build-arg WITH_WPE=0 -t godwinmix:slim .
+docker build -f deploy/docker/Dockerfile --build-arg WITH_CEF=0 --build-arg WITH_WPE=0 -t godwinmix:slim .
 ```
 
 What is deliberately not in the image: `gstreamer1.0-plugins-ugly` as a whole
@@ -118,7 +119,7 @@ day and none of them are obvious.
   WPEBackend-fdo's Wayland dispatch. That is a packaging problem between
   WPEBackend-fdo and wpewebkit rather than a configuration one. When a `web+`
   source fails in this image with the browser process gone, that is what
-  happened, and the CEF sidecar is the way round it.
+  happened. The default image now ships the CEF sidecar to avoid that path.
 * `chrome-sandbox` from a CEF distribution must be root owned and setuid, which
   is why installing the sidecar is a step of its own and not a `COPY`.
 
