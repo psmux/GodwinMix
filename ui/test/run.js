@@ -5,7 +5,7 @@
 import { Selection, overlaps, rectFrom } from "../shell/selection.js";
 import { dbToPos, FLOOR } from "../shell/meter.js";
 import { posToGain, gainToPos, gainLabel, UNITY } from "../shell/fader.js";
-import { parseFrame, sheetWidthFor, HEADER_BYTES } from "../client/frames.js";
+import { parseFrame, sheetWidthFor, HEADER_BYTES, SheetPainter } from "../client/frames.js";
 import { Store } from "../client/store.js";
 import { SchemaForm } from "../client/schema-form.js";
 import { Client } from "../client/index.js";
@@ -201,6 +201,28 @@ test("the sheet width asked for is the tile's real pixels, never more", () => {
   // Never below the floor or above the ceiling the protocol allows.
   eq(sheetWidthFor(40, 1, 1), 320);
   eq(sheetWidthFor(1000, 4, 2), 1920);
+});
+
+test("reattaching a visible canvas restores the latest picture immediately", () => {
+  const painter = new SheetPainter();
+  const bitmap = document.createElement("canvas");
+  bitmap.width = 2; bitmap.height = 2;
+  const brush = bitmap.getContext("2d");
+  brush.fillStyle = "#ff0000"; brush.fillRect(0, 0, 2, 2);
+  painter.bitmap = bitmap;
+  painter.setLayout({ cells: [{ index: 0, x: 0, y: 0, w: 2, h: 2 }] });
+  const target = document.createElement("canvas");
+  target.width = 2; target.height = 2;
+  const detach = painter.attach(target, 0);
+  eq([...target.getContext("2d").getImageData(0, 0, 1, 1).data], [255, 0, 0, 255]);
+  detach(); painter.destroy();
+});
+
+test("a snapshot restores the frame layout without a separate layout event", () => {
+  const client = new Client({ name: "test" }, new Store());
+  const multiview = { width: 640, height: 360, cells: [{ index: 0, x: 0, y: 0, w: 640, h: 360 }] };
+  client.handleEvent("snapshot", { state: { multiview }, seq: 1 });
+  eq(client.sheet.layout, multiview);
 });
 
 // ---------------------------------------------------------------- store

@@ -31,7 +31,8 @@ export function buildTile(source, deps) {
   const gear = el("button.gear", { text: "⚙", title: "Settings", "aria-label": "Settings", "data-nodrag": "" });
   const bar = el("div.bar", {}, [dot, name, gear]);
 
-  node.append(pic, still, kindbox, slot, strip, bar);
+  const playback = el("div.playback", { text: source.seekable ? "Clip" : "Continuous live source" });
+  node.append(pic, still, kindbox, slot, strip, bar, playback);
 
   // ----------------------------------------------------------- the strip
 
