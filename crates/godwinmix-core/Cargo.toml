@@ -20,9 +20,11 @@ gstreamer-audio = { workspace = true }
 gstreamer-app = { workspace = true }
 gstreamer-pbutils = { workspace = true }
 gstreamer-controller = { workspace = true }
+# The net clock: a time provider on the core, a client clock on a node.
+gstreamer-net = { workspace = true }
 glib = { workspace = true }
 
-tokio = { workspace = true, features = ["rt-multi-thread", "macros", "sync", "signal", "time", "io-std", "io-util", "fs"] }
+tokio = { workspace = true, features = ["rt-multi-thread", "macros", "sync", "signal", "time", "io-std", "io-util", "fs", "net", "process"] }
 
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
@@ -40,6 +42,16 @@ shell-words = { workspace = true }
 libc = { workspace = true }
 image = { workspace = true }
 getrandom = { workspace = true }
+
+# The node bridge: one WebSocket per node, mutual TLS, certificates the core
+# issues itself, and AES-GCM for secrets at rest. See `node/`.
+tokio-tungstenite = { workspace = true }
+futures-util = { workspace = true, features = ["sink", "std"] }
+rustls = { workspace = true }
+tokio-rustls = { workspace = true }
+rustls-pki-types = { workspace = true }
+rcgen = { workspace = true }
+ring = { workspace = true }
 
 [dev-dependencies]
 # Paused time, so the multiview linger tests assert on two seconds without

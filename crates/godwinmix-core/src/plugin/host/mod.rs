@@ -20,6 +20,7 @@
 //! reaches the mixer through `Source`, `Output` and `Filter`, which is the
 //! same door `rtmp/source` uses.
 
+pub mod bridged;
 pub mod filter;
 pub mod output;
 pub mod process;
@@ -27,6 +28,7 @@ pub mod service;
 pub mod source;
 pub mod transport;
 
+pub use bridged::{BridgedSource, BridgedSpec, LinkSource};
 pub use filter::SidecarFilter;
 pub use output::SidecarOutput;
 pub use process::{Notice, Sidecar};
@@ -89,6 +91,13 @@ pub fn make_source(req: SourceRequest<'_>) -> Result<Box<dyn Source>> {
                 format!("nothing installed opens `{}`; write `type` to say what it is", req.cfg.uri)
             })?,
     };
+    // The one fork between placements, and the reason there is only one: a
+    // node hosted instance is not a process this core starts, so it never
+    // reaches `launch_for`. Everything after this line is the local path,
+    // unchanged.
+    if let Some(node) = req.cfg.placement().node() {
+        return bridged::make(req, &type_id, node);
+    }
     let instance = req.cfg.id.clone();
     let launched = crate::plugin::loader::launch_for(
         &type_id,

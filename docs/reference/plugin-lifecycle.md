@@ -9,6 +9,28 @@ The protocol itself is in [plugin-protocol.md](plugin-protocol.md) and the
 manifest in [plugin-manifest.md](plugin-manifest.md). This page is about the
 process.
 
+## Where an instance runs
+
+The same lifecycle in all three places. `place` in the config decides which:
+
+| `place` | Where the process is | How the core talks to it | Media |
+|---|---|---|---|
+| `core` | nowhere; it is compiled in | a Rust function call | direct pad link |
+| `in-process` | nowhere; a custom build compiled it in | a Rust function call | direct pad link |
+| `sidecar` | this machine | stdin and stderr | unixfd, shm, or a container on a pipe |
+| `node:<name>` | another machine | that node's WebSocket, tagged with `instance` | RTP, SRT or WHIP, with a declared latency budget |
+
+A node runs the identical host: the same spawn, the same handshake, the same
+states below, the same restart backoff, the same budgets. The plugin is told
+`tier = "sidecar"` at the handshake whichever machine it is on, because from
+where it is standing that is the truth, and because a plugin that behaved
+differently on a node would break the guarantee the placements exist for.
+
+The core refuses a placement the plugin's manifest did not declare, with error
+`-32005` and `data.placements` listing what it did. See
+[nodes.md](nodes.md) and
+[One plugin, three placements](../explanation/one-plugin-three-placements.md).
+
 ## Two shapes of instance
 
 | Shape | Kinds | How many | Who starts it |

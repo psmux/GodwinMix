@@ -110,6 +110,32 @@ and this is how you catch it.
 process to measure. The names are reserved so a dashboard written now keeps
 working.
 
+## Nodes
+
+Labelled `node`, which is the name it enrolled under. Present only on a core
+that has a `[nodes]` table; nothing runs unless asked.
+
+| Metric | Type | What it is |
+|---|---|---|
+| `gmx_node_clock_offset_ms` | gauge | How far that node's clock sits from the programme clock. |
+| `gmx_node_heartbeat_age_ms` | gauge | Milliseconds since its last heartbeat. |
+
+The offset arrives on every heartbeat, measured by the node's own
+`GstNetClientClock` against the machine's clock. On a wired LAN it settles
+under a millisecond. One that climbs and stays climbing is a clock that has
+stopped following, and every source on that machine is drifting out of lip
+sync with the rest of the programme.
+
+The heartbeat age is the one to alert on. Above 3000 ms the core has given up
+on the node: its sources hold the freeze frame, then the slate after the 45
+second hold, and an alert names the machine. A useful rule:
+
+```
+gmx_node_heartbeat_age_ms > 3000
+```
+
+which fires about a second before anybody watching sees anything.
+
 ## When each is sampled
 
 Nothing runs unless asked (principle two), so the numbers reach the registry by
@@ -120,6 +146,9 @@ three different routes:
 * Source, output and take metrics come off the state event broadcast, which
   already exists. One task subscribes to it, folds each event into the registry
   and writes the session log. Nothing else in the mixer knows metrics exist.
+* Node clock offsets are written when a heartbeat arrives; node heartbeat ages
+  are refreshed on the reconciler's tick, four times a second, so a node that
+  has gone quiet shows a climbing age rather than a stale zero.
 * The status gauges, the mosaic subscriber count and each source's queue depth
   are read at scrape time. A
   mixer nobody is scraping does no work for them at all.

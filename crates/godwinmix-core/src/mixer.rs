@@ -3907,6 +3907,16 @@ impl Mixer {
         &self.program
     }
 
+    /// The programme clock, for the net time provider every node slaves to.
+    ///
+    /// The one thing a node needs from the mixer and the only reason this is
+    /// public. A running time only means something if both machines agree what
+    /// it is, so the core publishes this clock with a `GstNetTimeProvider` and
+    /// each node runs a `GstNetClientClock` against it. See `node::clock`.
+    pub fn program_clock(&self) -> Option<gst::Clock> {
+        self.program.clock()
+    }
+
     /// Put the programme's return branch on the raw tee, because something is
     /// now going to read it.
     ///
@@ -4687,6 +4697,7 @@ mod tests {
     fn building_outside_a_runtime_fails_with_a_clear_message() {
         let _ = gst::init();
         let err = Mixer::build(crate::config::Config {
+            nodes: Default::default(),
             canvas: Default::default(),
             program: Default::default(),
             multiview: Default::default(),
@@ -4718,6 +4729,7 @@ mod tests {
 
     fn programme_config(graphics: crate::config::Accel) -> crate::config::Config {
         let mut cfg = crate::config::Config {
+            nodes: Default::default(),
             canvas: crate::config::Canvas {
                 width: 320,
                 height: 180,

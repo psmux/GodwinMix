@@ -213,6 +213,7 @@ fn the_table_matches_the_scopes_in_the_protocol_document() {
             "core.shutdown",
             "filter.remove",
             "media.remove",
+            "node.remove",
             "output.remove",
             "plugin.add",
             "plugin.remove",
@@ -438,6 +439,8 @@ fn a_read_only_token_is_refused_before_the_handler_runs() {
         profile: Profile::Standard,
         agent: false,
         safety: None,
+        plugin: None,
+        node: None,
     };
     let reg = methods::registry();
     assert!(reader.has(reg.get("source.list").unwrap().scope));
@@ -489,6 +492,8 @@ fn the_legacy_paths_carry_the_scope_of_the_method_they_alias() {
         profile: Profile::Standard,
         agent: false,
         safety: None,
+        plugin: None,
+        node: None,
     };
     for (http, path) in [
         (Method::POST, "/api/take"),
@@ -523,6 +528,8 @@ fn a_confirm_required_token_cannot_destroy_anything_through_the_deprecated_door(
         profile: Profile::Standard,
         agent: true,
         safety: None,
+        plugin: None,
+        node: None,
     };
     let easy = Token { confirm: ConfirmPolicy::None, ..careful.clone() };
 

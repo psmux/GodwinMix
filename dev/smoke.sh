@@ -36,6 +36,10 @@ bad() {
 }
 
 cleanup() {
+    if [[ -n "${NODE_PID:-}" ]] && kill -0 "$NODE_PID" 2>/dev/null; then
+        kill "$NODE_PID" 2>/dev/null
+        wait "$NODE_PID" 2>/dev/null
+    fi
     if [[ -n "$CORE_PID" ]] && kill -0 "$CORE_PID" 2>/dev/null; then
         kill "$CORE_PID" 2>/dev/null
         wait "$CORE_PID" 2>/dev/null
@@ -51,6 +55,7 @@ trap cleanup EXIT
 # --- the core ---------------------------------------------------------------
 
 PORT="$(python3 -c 'import socket;s=socket.socket();s.bind(("127.0.0.1",0));print(s.getsockname()[1]);s.close()')"
+NODE_PORT="$(python3 -c 'import socket;s=socket.socket();s.bind(("127.0.0.1",0));print(s.getsockname()[1]);s.close()')"
 BASE="http://127.0.0.1:$PORT"
 AUTH=(-H "Authorization: Bearer $TOKEN")
 
@@ -70,7 +75,7 @@ GMX="$REPO/target/debug/gmx"
 # a core that starts clean and is driven entirely through the API.
 step "config from --example-config"
 "$REPO/target/debug/godwinmix" --example-config >"$WORK/example.toml" 2>/dev/null
-python3 - "$WORK/example.toml" "$WORK/godwinmix.toml" "$PORT" "$TOKEN" <<'PY'
+python3 - "$WORK/example.toml" "$WORK/godwinmix.toml" "$PORT" "$TOKEN" "$NODE_PORT" <<'PY'
 import os, re, sys
 src, dst, port, token = sys.argv[1:5]
 text = open(src).read()
@@ -105,6 +110,15 @@ text = re.sub(
     r'(?m)^# plugins_dir = .*$',
     'plugins_dir = "%s/plugins"' % os.path.dirname(dst),
     text,
+)
+# The node bridge, on its own free port. Everything about it is commented out
+# in the example config because nothing runs unless asked; the smoke test asks.
+node_port = sys.argv[5]
+text += (
+    "\n[nodes]\n"
+    f'listen = "127.0.0.1:{node_port}"\n'
+    'server_names = ["127.0.0.1", "localhost"]\n'
+    "clock_port = 0\n"
 )
 open(dst, "w").write(text)
 PY
@@ -869,6 +883,89 @@ else
     fi
 fi
 
+# --- a node in a child process ----------------------------------------------
+#
+# The same binary in its second mode, on this machine, talking to the core over
+# the loopback with real mutual TLS. Everything a real node does except being
+# on another computer: enrol with a one time token, dial in, follow the clock,
+# host a source and send its media back over SRT.
+
+step "gmx node list says the bridge is up"
+NODE_LIST="$(GODWINMIX_URL="$BASE" GODWINMIX_TOKEN="$TOKEN" "$GMX" node list 2>&1)"
+if grep -q "no nodes yet" <<<"$NODE_LIST"; then ok; else bad "$NODE_LIST"; fi
+
+step "gmx node token mints a one time enrolment token"
+NODE_TOKEN="$(GODWINMIX_URL="$BASE" GODWINMIX_TOKEN="$TOKEN" "$GMX" node token --name smoke-node \
+    2>>"$WORK/node.log" | awk '/^  [0-9a-f]+\.[0-9a-f]+$/ { print $1; exit }')"
+if [[ -n "$NODE_TOKEN" ]]; then ok; else bad "no token: $(tail -3 "$WORK/node.log")"; fi
+
+NODE_PID=""
+if [[ -n "$NODE_TOKEN" ]]; then
+    step "godwinmix node enrols and joins"
+    GODWINMIX_HOME="$WORK/node-home" "$REPO/target/debug/godwinmix" node \
+        --core "127.0.0.1:$NODE_PORT" --name smoke-node --enrol-token "$NODE_TOKEN" \
+        --media-host 127.0.0.1 >"$WORK/node-daemon.log" 2>&1 &
+    NODE_PID=$!
+    JOINED=no
+    for _ in $(seq 1 60); do
+        sleep 0.5
+        if GODWINMIX_URL="$BASE" GODWINMIX_TOKEN="$TOKEN" "$GMX" node list 2>/dev/null \
+            | grep -q "smoke-node *online"; then
+            JOINED=yes
+            break
+        fi
+    done
+    if [[ "$JOINED" == yes ]]; then ok; else bad "$(tail -5 "$WORK/node-daemon.log")"; fi
+
+    step "node.get reports a synced clock"
+    if GODWINMIX_URL="$BASE" GODWINMIX_TOKEN="$TOKEN" "$GMX" node get smoke-node 2>/dev/null \
+        | grep -q '"clock_synced": true'; then
+        ok
+    else
+        bad "$(GODWINMIX_URL="$BASE" GODWINMIX_TOKEN="$TOKEN" "$GMX" node get smoke-node 2>&1 | head -20)"
+    fi
+
+    step "a source placed on the node goes live"
+    curl -fsS -X POST "$BASE/api/v1/sources" "${AUTH[@]}" -H 'content-type: application/json' \
+        -d '{"id":"remote","uri":"test://smpte","place":"node:smoke-node","transport":"srt","latency_ms":120}' \
+        >"$WORK/node-source.log" 2>&1 || true
+    LIVE=no
+    for _ in $(seq 1 40); do
+        sleep 0.5
+        if curl -fsS "$BASE/api/v1/sources/remote" "${AUTH[@]}" 2>/dev/null | grep -q '"live"'; then
+            LIVE=yes
+            break
+        fi
+    done
+    if [[ "$LIVE" == yes ]]; then ok; else bad "$(cat "$WORK/node-source.log"; tail -5 "$WORK/node-daemon.log")"; fi
+
+    step "the node's heartbeat is on /metrics"
+    if curl -fsS "$BASE/metrics" "${AUTH[@]}" 2>/dev/null \
+        | grep -qE 'gmx_node_heartbeat_age_ms\{node="smoke-node"\}'; then
+        ok
+    else
+        bad "no gmx_node_heartbeat_age_ms for smoke-node"
+    fi
+
+    step "an enrolment token works only once"
+    SECOND="$(GODWINMIX_HOME="$WORK/node-home-2" "$REPO/target/debug/godwinmix" node \
+        --core "127.0.0.1:$NODE_PORT" --name smoke-node --enrol-token "$NODE_TOKEN" \
+        --enrol-only 2>&1 || true)"
+    if grep -qi "already used" <<<"$SECOND"; then ok; else bad "$SECOND"; fi
+
+    step "the source comes off and the node is removed"
+    curl -fsS -X DELETE "$BASE/api/v1/sources/remote" "${AUTH[@]}" >/dev/null 2>&1 || true
+    kill "$NODE_PID" 2>/dev/null || true
+    wait "$NODE_PID" 2>/dev/null || true
+    NODE_PID=""
+    if GODWINMIX_URL="$BASE" GODWINMIX_TOKEN="$TOKEN" "$GMX" node remove smoke-node 2>&1 \
+        | grep -q '"removed": true'; then
+        ok
+    else
+        bad "node.remove did not report the removal"
+    fi
+fi
+
 step "gmx mcp lists 12 tools on standard"
 COUNT="$(python3 "$REPO/dev/smoke_mcp.py" "$GMX" "$BASE" "$TOKEN" standard 2>>"$WORK/mcp.log")"
 if [[ "$COUNT" == "12" ]]; then ok; else bad "standard listed ${COUNT:-nothing}, wanted 12"; fi
@@ -899,7 +996,7 @@ else
 fi
 
 step "nothing was left running"
-LEFT="$(pgrep -f "godwinmix-browser|godwinmix --config $WORK" 2>/dev/null | wc -l | tr -d ' ')"
+LEFT="$(pgrep -f "godwinmix-browser|godwinmix --config $WORK|godwinmix node --core" 2>/dev/null | wc -l | tr -d ' ')"
 if [[ "$LEFT" == "0" ]]; then ok; else bad "$LEFT stray process(es)"; fi
 
 echo

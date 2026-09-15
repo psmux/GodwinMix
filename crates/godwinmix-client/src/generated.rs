@@ -484,12 +484,27 @@ pub struct Crop {
     pub top: f64,
 }
 
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct DiscoverAnswer {
+    pub found: Vec<Found>,
+}
+
 /// `device.discover`.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct DiscoverRequest {
     /// How long to look, shared between the devices. Two seconds by default,
     /// four and a half at most, because no method blocks for five.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub timeout_ms: Option<u64>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct DiscoverRequest2 {
+    /// How long to listen. Capped at 4.5 seconds, so the call stays inside the
+    /// five second ceiling every method is held to.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub timeout_ms: Option<u64>,
 }
@@ -534,6 +549,21 @@ pub struct EditBeginRequest {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub live: Option<bool>,
     pub scene: String,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct EnrolRequest {
+    /// Where the node is, for the record. The node always dials the core, so
+    /// this is what `node.list` shows before it has.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub address: Option<String>,
+    /// What the node will call itself. A slug: it goes in `place` and in the
+    /// node's certificate.
+    pub name: String,
+    /// How long the token is good for. Default one hour.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub ttl_secs: Option<u64>,
 }
 
 /// `scene.export`.
@@ -681,6 +711,20 @@ pub type FlatContent = Value;
 pub struct Flush {
     /// The sequence number of the last event in the batch.
     pub seq: u64,
+}
+
+/// One thing found on the network.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct Found {
+    /// `host:port`, ready to hand to `godwinmix node --core`.
+    pub address: String,
+    /// The bridge version it speaks.
+    pub api: u32,
+    /// The instance name, which is the node's name.
+    pub name: String,
+    /// `node` or `core`.
+    pub role: String,
 }
 
 /// The rectangle an item is fitted into.
@@ -1286,6 +1330,70 @@ pub struct NameRequest {
     /// in the path, where the transform rule calls it `id`, so both spellings
     /// are read.
     pub name: String,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct NodeInstance {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub detail: Option<String>,
+    pub instance: String,
+    pub latency_ms: u32,
+    pub state: String,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct NodeListing {
+    /// Whether this core is listening for nodes at all.
+    pub listening: bool,
+    pub nodes: Vec<NodeView>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct NodeName {
+    /// The node's name, as it was enrolled.
+    pub id: String,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct NodePlugin {
+    pub name: String,
+    pub provides: Vec<String>,
+    pub version: String,
+}
+
+/// What `node.get` reports about one node, and what `node.list` reports about
+/// all of them.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct NodeView {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub address: Option<String>,
+    pub clock_jitter_ms: f64,
+    pub clock_offset_ms: f64,
+    pub clock_synced: bool,
+    /// Milliseconds since the last heartbeat. The same number
+    /// `gmx_node_heartbeat_age_ms` carries.
+    pub heartbeat_age_ms: u64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub identity: Option<String>,
+    /// The instances it is hosting right now.
+    pub instances: Vec<NodeInstance>,
+    pub name: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub platform: Option<String>,
+    /// The plugins this node has, name and version.
+    pub plugins: Vec<NodePlugin>,
+    /// The provide ids this node can run, `<plugin>/<provide>`.
+    pub provides: Vec<String>,
+    /// `online`, `offline`, or `expected` for a node listed in the config that
+    /// has never dialled in.
+    pub state: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub version: Option<String>,
 }
 
 /// The OGraf manifest, in the subset this host reads.
@@ -2443,7 +2551,7 @@ pub struct MethodInfo {
     pub rest: Option<(&'static str, &'static str)>,
 }
 
-pub const METHODS: [MethodInfo; 118] = [
+pub const METHODS: [MethodInfo; 123] = [
     MethodInfo { name: "adbreak.end", summary: "Cut a running ad short, or disarm one that is scheduled.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/adbreak/end")) },
     MethodInfo { name: "adbreak.start", summary: "Interrupt the programme with a clip, then rejoin live when it ends.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/adbreak/start")) },
     MethodInfo { name: "agent.state", summary: "The compact document written for agents: the programme, each source's state and a motion score saying how much its picture is changing.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/agent/state")) },
@@ -2468,6 +2576,11 @@ pub const METHODS: [MethodInfo; 118] = [
     MethodInfo { name: "media.list", summary: "The clips in the library, with durations and whether each has audio.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/media")) },
     MethodInfo { name: "media.remove", summary: "Delete a library file and its converted copy. Refused while it is a live source.", scope: "operate", mutating: true, destructive: true, rest: Some(("DELETE", "/api/v1/media/{id}")) },
     MethodInfo { name: "media.upload", summary: "Stream a file into the library. HTTP only: the body is the file.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/media/upload")) },
+    MethodInfo { name: "node.discover", summary: "Look for nodes on the local network over mDNS. A network without multicast finds nothing and the [nodes] table in the config is the way there.", scope: "read", mutating: false, destructive: false, rest: Some(("POST", "/api/v1/nodes/{id}/discover")) },
+    MethodInfo { name: "node.enrol", summary: "Mint a one time enrolment token for a node. The answer carries the command to run on the other machine. The token is good for one enrolment and expires.", scope: "admin", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/nodes/{id}/enrol")) },
+    MethodInfo { name: "node.get", summary: "One node: its clock offset, how long since its last heartbeat, the plugins it has, and the instances it is hosting.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/nodes/{id}")) },
+    MethodInfo { name: "node.list", summary: "Every node this core knows about: the ones connected now, the ones that have gone quiet, and the ones the config expects that have never dialled in.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/nodes")) },
+    MethodInfo { name: "node.remove", summary: "Forget a node. Its bridge is closed, every token minted for a plugin on it is revoked, and its certificate stops working. Sources placed on it go to the slate until they are moved or the node enrols again.", scope: "admin", mutating: true, destructive: true, rest: Some(("DELETE", "/api/v1/nodes/{id}")) },
     MethodInfo { name: "output.add", summary: "Send the programme to another destination. The encoder is shared, so adding one costs nothing on air.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/outputs")) },
     MethodInfo { name: "output.get", summary: "One destination.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/outputs/{id}")) },
     MethodInfo { name: "output.list", summary: "Every destination, with its state, reconnect count and how much is buffered.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/outputs")) },
@@ -2883,6 +2996,31 @@ impl Client {
     /// Stream a file into the library. HTTP only: the body is the file.
     pub async fn media_upload(&self) -> Result<BTreeMap<String, Value>> {
         self.call("media.upload", &serde_json::json!({})).await
+    }
+
+    /// Look for nodes on the local network over mDNS. A network without multicast finds nothing and the [nodes] table in the config is the way there.
+    pub async fn node_discover(&self, params: &DiscoverRequest2) -> Result<DiscoverAnswer> {
+        self.call("node.discover", params).await
+    }
+
+    /// Mint a one time enrolment token for a node. The answer carries the command to run on the other machine. The token is good for one enrolment and expires.
+    pub async fn node_enrol(&self, params: &EnrolRequest) -> Result<BTreeMap<String, Value>> {
+        self.call("node.enrol", params).await
+    }
+
+    /// One node: its clock offset, how long since its last heartbeat, the plugins it has, and the instances it is hosting.
+    pub async fn node_get(&self, params: &NodeName) -> Result<NodeView> {
+        self.call("node.get", params).await
+    }
+
+    /// Every node this core knows about: the ones connected now, the ones that have gone quiet, and the ones the config expects that have never dialled in.
+    pub async fn node_list(&self) -> Result<NodeListing> {
+        self.call("node.list", &serde_json::json!({})).await
+    }
+
+    /// Forget a node. Its bridge is closed, every token minted for a plugin on it is revoked, and its certificate stops working. Sources placed on it go to the slate until they are moved or the node enrols again.
+    pub async fn node_remove(&self, params: &NodeName) -> Result<BTreeMap<String, Value>> {
+        self.call("node.remove", params).await
     }
 
     /// Send the programme to another destination. The encoder is shared, so adding one costs nothing on air.

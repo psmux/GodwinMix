@@ -198,6 +198,10 @@ async fn add(call: Call, params: Value) -> Result<Value, RpcError> {
     let cfg = godwinmix_core::config::FilterConfig {
         id: req.id.clone(),
         type_id: req.type_id.clone(),
+        // A filter added over RPC takes the placement the plugin defaults to.
+        // `place` on a filter is written in the config; moving one at runtime
+        // is `filter.set`, not `filter.add`.
+        place: None,
         attach: godwinmix_core::config::FilterAttach {
             source: req.source.clone(),
             side,

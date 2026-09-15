@@ -291,6 +291,39 @@ pub fn answer_latency_here(element: &gst::Element) -> Result<()> {
     Ok(())
 }
 
+/// Declare a fixed latency budget at this element's src pad.
+///
+/// The other half of `answer_latency_here`. That one says "the join adds
+/// nothing", which is true of a proxy between two pipelines on one machine.
+/// A source that arrived over a network has a real figure: the jitter buffer
+/// or the SRT latency it was configured with. Declaring it means every sink
+/// downstream delays by the same amount, which is what keeps two remote
+/// cameras and a local file in lip sync. Without it the receiver's buffering
+/// is invisible and the local file runs early by exactly that much.
+///
+/// 04 section 4: one budget per remote source, answered on LATENCY.
+pub fn declare_latency(element: &gst::Element, ms: u32) -> Result<()> {
+    let pad = element
+        .static_pad("src")
+        .with_context(|| format!("{} has no src pad to declare a latency on", element.name()))?;
+    let budget = gst::ClockTime::from_mseconds(ms as u64);
+    pad.add_probe(gst::PadProbeType::QUERY_UPSTREAM, move |_pad, info| {
+        let Some(query) = info.query_mut() else {
+            return gst::PadProbeReturn::Ok;
+        };
+        let gst::QueryViewMut::Latency(latency) = query.view_mut() else {
+            return gst::PadProbeReturn::Ok;
+        };
+        // Live, because a remote camera is; the budget as the minimum, so
+        // everything downstream waits for it; no ceiling, because the budget
+        // is the answer and not a range to negotiate within.
+        latency.set(true, budget, gst::ClockTime::NONE);
+        gst::PadProbeReturn::Handled
+    })
+    .context("installing the latency budget on a remote source")?;
+    Ok(())
+}
+
 /// Answer this element's downstream negotiation queries at its own src pad
 /// instead of letting them travel, and answer the caps one with `caps`.
 ///

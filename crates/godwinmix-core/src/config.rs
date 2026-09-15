@@ -56,6 +56,9 @@ pub struct Config {
     /// `[plugins.ndi]` to the plugin called `ndi` and nothing else sees it.
     #[serde(default)]
     pub plugins: PluginsTable,
+    /// The nodes this core expects, and how it listens for them.
+    #[serde(default)]
+    pub nodes: NodesTable,
     /// Several credentials, each with its own scopes. The single
     /// `[control] token` still works and still carries everything; this is
     /// for a show that wants an agent's token to be able to take and not to
@@ -221,6 +224,11 @@ pub struct FilterConfig {
     pub id: String,
     #[serde(rename = "type")]
     pub type_id: String,
+    /// Where this filter runs. Remote filters are permitted and discouraged: a
+    /// round trip adds two encodes, two decodes and two network latencies to
+    /// the source it filters. See docs/reference/nodes.md.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub place: Option<crate::node::Place>,
     #[serde(default)]
     pub attach: FilterAttach,
     #[serde(default)]
@@ -928,10 +936,159 @@ pub struct SourceConfig {
     /// after a restart returns the source to the level it had.
     #[serde(default)]
     pub muted: bool,
+    /// Where this source runs: `core`, `in-process`, `sidecar` or
+    /// `node:<name>`. Absent means the placement the plugin defaults to, which
+    /// for a built in kind is `core` and for anything else is `sidecar`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub place: Option<crate::node::Place>,
+    /// How a remote source's media reaches the core: `rtp`, `srt` or `whip`.
+    /// Only meaningful with a `node:` placement.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub transport: Option<crate::node::BridgeTransport>,
+    /// The latency budget for this source, in milliseconds, answered on the
+    /// LATENCY query. Declared at ingress, which is what keeps two remote
+    /// cameras in lip sync. Absent takes the transport's default.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub latency_ms: Option<u32>,
     /// Every key the core does not know. They reach the source's kind through
     /// `effective_params` rather than being dropped on the floor.
     #[serde(flatten, default)]
     pub extra: std::collections::BTreeMap<String, toml::Value>,
+}
+
+/// `[nodes]`: the machines this core hosts plugins on, and how it listens.
+///
+/// The node names sit directly in the table, which is what 04 section 7
+/// writes, so a config reads:
+///
+/// ```toml
+/// [nodes]
+/// listen = "0.0.0.0:8443"
+/// "cam-room"    = { address = "10.0.0.21:8443" }
+/// "graphics-pc" = { address = "10.0.0.22:8443", clock = "ptp" }
+/// ```
+///
+/// `listen`, `clock_port`, `clock`, `server_names` and `advertise` are the
+/// settings; every other key is a node. A node called `listen` would be a
+/// problem and is not a name anybody picks.
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct NodesTable {
+    /// Where the node bridge listens. Empty turns it off, which is the default
+    /// for a core nobody has enrolled a node with.
+    #[serde(default)]
+    pub listen: String,
+    /// The UDP port the programme clock is offered on.
+    #[serde(default = "default_clock_port")]
+    pub clock_port: i32,
+    /// `net` or `ptp`, offered to every node that does not override it.
+    #[serde(default = "default_clock_kind")]
+    pub clock: String,
+    /// Every name a node might dial this core by, so the core's own
+    /// certificate covers it. `localhost`, `127.0.0.1` and this machine's
+    /// hostname are always included.
+    #[serde(default)]
+    pub server_names: Vec<String>,
+    /// Advertise the core over mDNS as `_godwinmix._tcp`.
+    #[serde(default)]
+    pub advertise: bool,
+    /// Every other key: one node each.
+    #[serde(flatten, default)]
+    pub list: std::collections::BTreeMap<String, NodeEntry>,
+}
+
+impl Default for NodesTable {
+    fn default() -> Self {
+        Self {
+            listen: String::new(),
+            clock_port: default_clock_port(),
+            clock: default_clock_kind(),
+            server_names: Vec::new(),
+            advertise: false,
+            list: Default::default(),
+        }
+    }
+}
+
+impl NodesTable {
+    /// Whether this core should start a node bridge at all. Nothing runs
+    /// unless asked: a core with no `listen` and no nodes listed opens no
+    /// port, makes no certificate authority and starts no clock provider.
+    pub fn wanted(&self) -> bool {
+        !self.listen.trim().is_empty() || !self.list.is_empty()
+    }
+
+    /// The address to bind, with the default filled in.
+    pub fn bind(&self) -> String {
+        match self.listen.trim() {
+            "" => format!("0.0.0.0:{}", crate::node::server::DEFAULT_PORT),
+            given => given.to_string(),
+        }
+    }
+
+    /// Every name the core's own certificate must carry.
+    pub fn names(&self) -> Vec<String> {
+        let mut names = vec!["localhost".to_string(), "127.0.0.1".to_string(), "::1".to_string()];
+        if let Ok(host) = std::env::var("HOSTNAME") {
+            names.push(host);
+        }
+        if let Some(host) = hostname() {
+            names.push(host.clone());
+            names.push(format!("{host}.local"));
+        }
+        names.extend(self.server_names.iter().cloned());
+        // The address half of every listed node is where that node is, not
+        // where the core is, so it is deliberately not added here.
+        names.sort();
+        names.dedup();
+        names
+    }
+}
+
+/// One node in `[nodes]`.
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
+pub struct NodeEntry {
+    /// Where the node is. Used to show an expected node that has not dialled
+    /// in yet; the node always makes the connection, never the core.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub address: Option<String>,
+    /// `net` or `ptp` for this node in particular.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub clock: Option<String>,
+    /// The transport every source on this node uses unless the source says
+    /// otherwise.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub transport: Option<crate::node::BridgeTransport>,
+}
+
+fn default_clock_port() -> i32 {
+    crate::node::clock::DEFAULT_CLOCK_PORT
+}
+
+fn default_clock_kind() -> String {
+    "net".into()
+}
+
+/// This machine's name, for the certificate's subject alternative names.
+///
+/// `gethostname` rather than a crate: it is one libc call on Unix and one
+/// environment variable on Windows, and getting it wrong only costs a name on
+/// a certificate.
+fn hostname() -> Option<String> {
+    #[cfg(unix)]
+    {
+        let mut buf = [0i8; 256];
+        // SAFETY: the buffer is ours and the length is its real length.
+        let ok = unsafe { libc::gethostname(buf.as_mut_ptr(), buf.len() - 1) } == 0;
+        if !ok {
+            return None;
+        }
+        let bytes: Vec<u8> = buf.iter().take_while(|b| **b != 0).map(|b| *b as u8).collect();
+        return String::from_utf8(bytes).ok().filter(|s| !s.is_empty());
+    }
+    #[cfg(not(unix))]
+    {
+        std::env::var("COMPUTERNAME").ok().filter(|s| !s.is_empty())
+    }
 }
 
 fn default_stall_timeout() -> f64 {
@@ -973,8 +1130,36 @@ impl SourceConfig {
             superimpose: Superimpose::default(),
             gain: crate::state::unity_gain(),
             muted: false,
+            place: None,
+            transport: None,
+            latency_ms: None,
             extra: Default::default(),
         }
+    }
+
+    /// Where this source runs, with the default filled in.
+    ///
+    /// A built in kind is `core` and everything else is `sidecar`, which is
+    /// what the placement table in 03 section 3 says and what an operator who
+    /// wrote no `place` at all gets.
+    pub fn placement(&self) -> crate::node::Place {
+        if let Some(place) = &self.place {
+            return place.clone();
+        }
+        let built_in = self
+            .type_id
+            .as_deref()
+            .is_some_and(|id| crate::plugin::source::registry().iter().any(|p| p.manifest.is(id)));
+        if built_in || self.type_id.is_none() {
+            crate::node::Place::Core
+        } else {
+            crate::node::Place::Sidecar
+        }
+    }
+
+    /// The transport a remote source uses, with the default filled in.
+    pub fn bridge_transport(&self) -> crate::node::BridgeTransport {
+        self.transport.unwrap_or_default()
     }
 
     /// The params the kind actually receives: what was written in `params`,
@@ -1100,6 +1285,12 @@ pub struct OutputConfig {
     /// makes a short network hiccup invisible to the viewer.
     #[serde(default = "default_queue_secs")]
     pub queue_secs: f64,
+    /// Where this output runs. A remote output is cheap: the core already has
+    /// encoded programme on the tee, so the node receives it and runs only mux
+    /// plus sink. The outage buffer stays on the core's side of the boundary,
+    /// so a slow remote destination cannot apply backpressure to the encoder.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub place: Option<crate::node::Place>,
     /// Every key the core does not know, handed to the output's kind.
     #[serde(flatten, default)]
     pub extra: std::collections::BTreeMap<String, toml::Value>,
@@ -1124,6 +1315,7 @@ impl OutputConfig {
             policy: OutputPolicy::default(),
             reconnect: None,
             queue_secs: default_queue_secs(),
+            place: None,
             extra: Default::default(),
         }
     }
@@ -1312,6 +1504,11 @@ impl Config {
                 profile: t.profile,
                 agent: t.agent,
                 safety: t.safety,
+                // A token written in the config belongs to a person or a
+                // surface, never to a plugin: a plugin's token is minted at
+                // launch and lives for the life of the instance.
+                plugin: None,
+                node: None,
             })
             .collect();
         if let Some(secret) = self.token() {
@@ -1700,6 +1897,11 @@ sidecar = \"/opt/b\"\n").unwrap();
 
     #[test]
     fn a_source_can_be_written_as_a_type_and_params_with_no_uri_field() {
+        // Validating this one asks `test/source` what patterns its element
+        // takes, which is a registry lookup. Every other test in this module
+        // validates a config that never reaches an element, so this is the one
+        // that needs the registry up.
+        gstreamer::init().unwrap();
         let cfg: Config = toml::from_str(
             r#"
             [[sources]]
@@ -1781,6 +1983,7 @@ sidecar = \"/opt/b\"\n").unwrap();
     #[test]
     fn odd_canvas_is_rejected() {
         let mut cfg = Config {
+            nodes: Default::default(),
             canvas: Canvas { width: 1921, height: 1080, fps: 30, sample_rate: 48000, channels: 2 },
             program: Default::default(),
             multiview: Default::default(),
@@ -1805,5 +2008,91 @@ sidecar = \"/opt/b\"\n").unwrap();
         assert!(cfg.validate().is_err());
         cfg.canvas.width = 1920;
         assert!(cfg.validate().is_ok());
+    }
+}
+
+#[cfg(test)]
+mod place_tests {
+    use super::*;
+    use crate::node::{BridgeTransport, Place};
+
+    #[test]
+    fn a_source_reads_its_placement_out_of_the_config() {
+        let cfg: Config = toml::from_str(
+            r#"
+[[sources]]
+id = "cam1"
+type = "ndi/source"
+place = "node:cam-room"
+transport = "srt"
+latency_ms = 150
+params = { name = "CAM 1" }
+"#,
+        )
+        .unwrap();
+        let source = &cfg.sources[0];
+        assert_eq!(source.place, Some(Place::Node("cam-room".into())));
+        assert_eq!(source.bridge_transport(), BridgeTransport::Srt);
+        assert_eq!(source.latency_ms, Some(150));
+        assert_eq!(source.placement().declared(), "node");
+    }
+
+    #[test]
+    fn a_source_with_no_place_keeps_the_default_it_always_had() {
+        let cfg: Config =
+            toml::from_str("[[sources]]\nid = \"clip\"\nuri = \"file:///x.mp4\"\n").unwrap();
+        assert_eq!(cfg.sources[0].placement(), Place::Core);
+        let cfg: Config =
+            toml::from_str("[[sources]]\nid = \"cam\"\ntype = \"ndi/source\"\n").unwrap();
+        assert_eq!(cfg.sources[0].placement(), Place::Sidecar);
+    }
+
+    #[test]
+    fn a_place_nobody_recognises_is_refused_with_the_ones_that_work() {
+        let e = toml::from_str::<Config>(
+            "[[sources]]\nid = \"cam\"\ntype = \"a/b\"\nplace = \"somewhere\"\n",
+        )
+        .unwrap_err()
+        .to_string();
+        assert!(e.contains("node:<name>"), "the refusal must list what works: {e}");
+    }
+
+    #[test]
+    fn the_nodes_table_holds_settings_and_nodes_side_by_side() {
+        let cfg: Config = toml::from_str(
+            r#"
+[nodes]
+listen = "0.0.0.0:8443"
+clock = "ptp"
+server_names = ["core.example"]
+"cam-room" = { address = "10.0.0.21:8443" }
+"graphics-pc" = { address = "10.0.0.22:8443", clock = "ptp", transport = "rtp" }
+"#,
+        )
+        .unwrap();
+        assert_eq!(cfg.nodes.bind(), "0.0.0.0:8443");
+        assert_eq!(cfg.nodes.clock, "ptp");
+        assert_eq!(cfg.nodes.list.len(), 2, "two nodes, got {:?}", cfg.nodes.list.keys());
+        assert_eq!(cfg.nodes.list["cam-room"].address.as_deref(), Some("10.0.0.21:8443"));
+        assert_eq!(cfg.nodes.list["graphics-pc"].transport, Some(BridgeTransport::Rtp));
+        assert!(cfg.nodes.names().contains(&"core.example".to_string()));
+        assert!(cfg.nodes.names().contains(&"localhost".to_string()));
+        assert!(cfg.nodes.wanted());
+    }
+
+    #[test]
+    fn a_core_with_no_nodes_opens_no_port() {
+        let cfg: Config = toml::from_str("").unwrap();
+        assert!(!cfg.nodes.wanted(), "nothing runs unless asked");
+    }
+
+    #[test]
+    fn a_placement_survives_being_written_back_out() {
+        let cfg: Config = toml::from_str(
+            "[[sources]]\nid = \"cam\"\ntype = \"a/b\"\nplace = \"node:studio-b\"\n",
+        )
+        .unwrap();
+        let back = toml::to_string(&cfg).unwrap();
+        assert!(back.contains("place = \"node:studio-b\""), "written back as: {back}");
     }
 }
