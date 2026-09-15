@@ -150,9 +150,17 @@ lifecycle.
 
 The `id` is the device's own, if it gives one, so its tools can find what it
 asked for; otherwise the core makes a slug of the name and avoids collisions
-with a numeric suffix, exactly as `source.add` does for a person. Only a source
-a device added can be taken away by one: an operator's own camera is not a
-device's to remove.
+with a numeric suffix, exactly as `source.add` does for a person. The id is
+reserved the moment the core decides on it and given back if the mixer will not
+take the source, so two devices finding the same camera at the same moment
+cannot be handed the same name, and a candidate the pipeline cannot build does
+not leave a name reserved for ever.
+
+Only a source a device added can be taken away by that same device. An
+operator's own camera is not a device's to remove, and neither is another
+plugin's: `source.remove` over the plugin channel is refused unless the
+instance asking is the one the core recorded as the owner, and the refusal says
+who does own it.
 
 The core drains what a plugin says four times a second. Measured with the test
 fixture, a publisher arriving became a live source in **303 ms**, against the
@@ -325,10 +333,35 @@ that.
 `stop`, then `shutdown`, then the process group is killed after eight seconds.
 Every step is allowed to fail; the last one exists because the others can.
 
+All of that happens on a thread of its own and `plugin.remove` answers straight
+away. The caller is very often the mixer's own loop, because removing a source
+during a show reaches this from there, and ten seconds of the mixer loop is ten
+seconds of the mixer answering nothing. The instance is marked `stopped` the
+moment the decision is made, so `plugin.list` and `plugin.stats` tell you the
+truth immediately; the process behind it may take another few seconds to agree.
+A test that wants to see the pid go has to wait for it.
+
 The kill is to the process group, not to the process, because a plugin that
 started a helper leaves it orphaned otherwise. When the core is PID 1, as it is
 in a container, it also reaps orphans once a second so that a plugin that leaks
 children cannot fill the process table.
+
+Nothing is signalled once the child's status has been collected. A pid that has
+been waited on is free for the kernel to hand to somebody else, and a signal
+sent to the group named by a recycled pid goes to a stranger: a full
+`cargo test --workspace` once ended at exit 143, SIGTERM reaching cargo itself,
+because a health poll collected a plugin's status and the teardown signalled its
+pid a moment later. Every signal now asks first whether the pid is still an
+uncollected child of this process.
+
+## Dying without saying so
+
+A plugin that is killed says nothing on its way out. The supervisor asks the
+operating system once a second whether each singleton's process is still there,
+rather than trusting the last thing the plugin said about itself, marks it
+`failed` when it is gone, answers every call still waiting on it, and starts it
+again under the backoff. Before that a service taken by the OOM killer stayed
+`ready` for the life of the mixer.
 
 After a stop: no child processes, no open descriptors, no sockets, no temporary
 directories. There is a test that counts each of those before and after, for a

@@ -207,8 +207,14 @@ file.
 `/metrics` is Prometheus text format, unauthenticated by default because that
 is how a Prometheus server scrapes. See `docs/reference/metrics.md` for the
 list. The one to put on a dashboard first is
-`gmx_programme_frame_interval_ms`: if the programme is dropping frames, that
-histogram shows it before anybody watching does.
+`gmx_programme_frame_stall_ms`: it is the worst average frame interval over any
+sixty consecutive frames, and it goes over 34 when the programme has really
+stopped for a moment rather than when a thread woke up late.
+`gmx_programme_frame_interval_ms`, the histogram of raw gaps, is what to look
+at next: it says how the intervals were spread. Do not alert on the histogram.
+On an idle mixer a third of the raw gaps sit over 34 ms and the mean is exactly
+one frame, which is the scheduler and not the mixer. `docs/reference/metrics.md`
+has the measurements.
 
 ## 8. `--startup-report`: this box takes too long to come up
 

@@ -120,9 +120,25 @@ async fn guard(api: &Api, i_am_sure: bool) -> Result<()> {
     )
 }
 
+/// A pid the core reported that is safe to aim a signal at.
+///
+/// Zero is the caller's own process group and one is init, and `libc::kill`
+/// takes both without complaint. A core that answers with either is a core
+/// with a bug, and the right response to it is an error and not a dead shell.
+fn a_real_pid(pid: Option<u32>) -> Result<u32> {
+    let pid = pid.context("no pid")?;
+    anyhow::ensure!(
+        pid > 1,
+        "the core reported pid {pid} for this instance, which is not a process this command \
+         may signal (0 is our own process group, 1 is init). Read `plugin.list` to see what \
+         the core thinks is running."
+    );
+    Ok(pid)
+}
+
 #[cfg(unix)]
 fn kill(pid: Option<u32>) -> Result<()> {
-    let pid = pid.context("no pid")?;
+    let pid = a_real_pid(pid)?;
     // SIGKILL, not SIGTERM: the point is the case where a plugin has no chance
     // to tidy up, which is what a segfault and an OOM both look like.
     let sent = unsafe { libc::kill(pid as i32, libc::SIGKILL) };
@@ -132,7 +148,7 @@ fn kill(pid: Option<u32>) -> Result<()> {
 
 #[cfg(unix)]
 fn stall(pid: Option<u32>, secs: u64) -> Result<()> {
-    let pid = pid.context("no pid")?;
+    let pid = a_real_pid(pid)?;
     // SIGSTOP leaves the process alive and unable to produce, which is a
     // stalled camera and not a crashed plugin. SIGCONT afterwards, always,
     // even if the wait is interrupted: a stopped process nobody resumes is a
@@ -147,7 +163,7 @@ fn stall(pid: Option<u32>, secs: u64) -> Result<()> {
 
 #[cfg(not(unix))]
 fn kill(pid: Option<u32>) -> Result<()> {
-    let pid = pid.context("no pid")?;
+    let pid = a_real_pid(pid)?;
     let status = std::process::Command::new("taskkill")
         .args(["/F", "/PID", &pid.to_string()])
         .status()

@@ -277,6 +277,10 @@ fn is_trap(e: &anyhow::Error) -> bool {
 
 /// Answer jobs until the channel closes, a shutdown arrives, or the component
 /// traps and cannot be entered again.
+// Eight arguments: this is the worker's whole environment, handed over once at
+// spawn. A struct would be built at one call site and unpacked at one, which
+// is the same eight names twice.
+#[allow(clippy::too_many_arguments)]
 fn serve(
     name: &str,
     store: &mut Store<Ctx>,

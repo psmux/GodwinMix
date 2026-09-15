@@ -77,8 +77,10 @@ them to pass. They run in a few seconds and they are expected to be green on
 Linux, macOS and Windows before you open a pull request. The GitHub Actions
 workflow in `.github/workflows/build.yml` builds and tests on all three.
 
-Also run `cargo clippy --workspace --all-targets` and do not add a warning that
-was not there before. A handful are outstanding and they are noted as such.
+Also run `cargo clippy --workspace --all-targets`. The count is zero and CI
+runs it with `-D warnings`, so a new one fails the build. If you disagree with
+a lint, add an `#[allow]` with a comment saying why rather than leaving a
+warning in the log for the next person to scroll past.
 
 The tree is not `cargo fmt` clean and running it would reformat most of the
 repository, so do not. Match the style of the file you are editing: wider lines

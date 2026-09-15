@@ -25,6 +25,17 @@ Add the community index once and names start working:
     gmx marketplace add psmux/godwinmix-plugins
     gmx plugin search ndi
 
+A directory works from a clean checkout, with nothing built first:
+
+    gmx plugin add ./plugins/camera
+
+If the binary the manifest names is not in the directory, the install runs the
+manifest's `[build]` command where the directory is, waits for it, and then
+installs what it produced. A build that fails stops the install and prints the
+command, the exit status and what the build said. The second install of the
+same directory is quick, because the binary is there by then and nothing
+rebuilds. See [the manifest reference](../reference/plugin-manifest.md).
+
 For a release, the asset for your platform is chosen by the platform triple in
 its name, its signature is checked against the bytes that arrived, and its
 `api` level is checked against what this core speaks. Only then is anything

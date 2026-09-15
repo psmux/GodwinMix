@@ -16,6 +16,7 @@ fallback is in each case, and which upstream bugs the code is working around.
 * [The bundled GStreamer](#the-bundled-gstreamer)
 * [Process control](#process-control)
 * [Everything else that is gated](#everything-else-that-is-gated)
+* [Tests that only run on Unix](#tests-that-only-run-on-unix)
 * [Known upstream bugs](#known-upstream-bugs)
 * [How this is kept honest](#how-this-is-kept-honest)
 
@@ -34,6 +35,12 @@ build breaks on a machine the author does not own.
 Use /mjpeg/program, which costs one JPEG encode per frame and works
 everywhere" is a sentence somebody can act on. Every refusal in the tree is
 written that way, and where one is not, that is a bug.
+
+The rule is about shipped code. A **test** may be gated with no twin, and a
+number are: they run `sh`, or they count descriptors in `/proc/self/fd`. Those
+are listed in [Tests that only run on Unix](#tests-that-only-run-on-unix), so
+the gate is a decision somebody wrote down rather than one somebody has to
+infer from a missing arm.
 
 ## The media contract: unixfd against the pipe
 
@@ -236,8 +243,16 @@ A complete list, so nobody has to grep for it.
 | `convert.rs`, thread priority | `setpriority` on Linux | no-op | the Linux per thread nice does not exist elsewhere |
 | `plugin/loader.rs` and `cli/plugin.rs`, the executable bit | `PermissionsExt` | no-op | NTFS has no executable bit to carry |
 | `godwinmix-tui/src/term.rs`, terminal picture support | asks the terminal and reads the raw reply | environment variables and `--picture` | reading a raw reply needs a tty in raw mode |
-| `godwinmix-sdk`, `media/gst.rs` | `unixfdsink` and `shmsink` writers | an `Unsupported` error naming `container` | the whole file is `cfg(unix)` and behind a default off feature |
+| `godwinmix-sdk`, `media/gst.rs` | `unixfdsink` and `shmsink` writers | an `Unsupported` error naming `container` | the writers are `cfg(unix)` and behind the default off `gst` feature; `media/mod.rs` carries the `cfg(not(all(unix, feature = "gst")))` arm that refuses by name |
 | `tauri-app/settings.rs`, the token file | `chmod 0600` | no-op | a shared Windows machine is a shared machine |
+| `input.rs`, `reap_orphans_if_init` | waits on every orphan when this process is PID 1 | an empty function | PID 1 in a container is a Unix idea; the Windows build has no orphan reaper to be |
+| `input.rs`, `drain_stderr` | `poll` with a 200 ms timeout, so the stop flag is looked at | a blocking `read` | there is no `poll` on a pipe handle from `std`; the thread still ends, because killing the child closes the pipe, but it ends in the other order |
+| `plugin/host/process.rs`, a plugin's stdout | the pipe's `OwnedFd`, handed to `fdsrc` | `ExecStdout::Pipe`, read by a thread into `appsrc` | the same split as an exec source, for the same reason: a Windows pipe is a HANDLE and the C runtime's descriptor table is per DLL |
+| `mixer.rs`, the `local_previews` map | a map of open preview sockets, and `open_local_preview` builds one | the field does not exist and `open_local_preview` returns `unsupported_message()` | there is nothing to hold when there is no socket to open |
+| `godwinmix-host/src/sources/mod.rs`, `copy_mode` | `PermissionsExt`, keeping the executable bit through a move | no-op | the third copy of this pair, beside `plugin/loader.rs` and `cli/plugin.rs` |
+| `plugins/capture-common/src/fifo.rs`, the programme FIFO | `open` with `O_NONBLOCK`, then the flag cleared | a refusal naming `rtmp/output` and `srt/output` | the plugin side of the sidecar output gap above; the core refuses first, and this says the same thing if a build ever reaches it |
+| `plugins/capture-common/src/space.rs`, free disk | `statvfs` | `GetDiskFreeSpaceExW` | both real; the same two calls as the core's doctor, repeated because a plugin links the SDK and not the engine |
+| `control/hooks/command.rs`, the hook test scripts | `PermissionsExt` to make the script runnable | skipped, `#[cfg_attr(windows, ignore)]` | the scripts are `sh`; what the hook does with a child process is covered by the tests that are not gated |
 
 Shell plugins (`gmx plugin new --lang shell`) are refused at launch on Windows
 because they need `sh`. The Rust, Python, Go and Node templates all work.
@@ -259,6 +274,32 @@ rather than on the mixer's, both worked around in `dev/build-wasm.sh` and in
 the template's `check`: a second rust first on `PATH` with no wasm std, and
 rustup's `rust-lld` looking for `libLLVM.dylib` one directory from where it is.
 Neither affects a checkout that only runs the committed `.wasm`.
+Two gates are `target_os` rather than `unix`, because the split is narrower
+than the platform family. `convert.rs`'s `nice_this_thread` is Linux only,
+because per thread nice is a Linux idea, and everywhere else it is a no-op.
+`bench.rs`'s `rss_bytes` has four arms: `/proc/self/statm` on Linux, one `ps`
+per sample on macOS, `getrusage`'s peak on another Unix, and a PowerShell
+`Get-Process` on Windows.
+
+## Tests that only run on Unix
+
+A test can be gated where a shipped code path cannot, and a number of them
+are. Every one is gated for the same reason: it runs a shell script, or it
+counts open file descriptors through `/proc/self/fd` or `/dev/fd`. Neither has
+a Windows equivalent worth writing, and the thing under test is not the shell.
+
+| Where | What is gated | What covers Windows instead |
+|---|---|---|
+| `crates/godwinmix-core/tests/sidecar.rs`, `ecosystem.rs`, `supervisor.rs`, `transition_plugin.rs` | the whole file, with `#![cfg(unix)]` | the plugin each one drives is a shell script, and `transition_plugin.rs` starts `plugins/wipe` through the same supervisor. `plugins/wipe`'s own unit tests are not gated and run on Windows; what does not run there is the supervisor driving a real process end to end |
+| `input.rs`, the descriptor leak tests | `open_fds`, and the four tests that use it or `sh` | the leak they guard is in code with a `cfg(not(unix))` twin, and that twin is compiled and run on the Windows runner |
+| `plugin/harness.rs`, `an_exec_source_passes_the_same_checks` | the exec kind's conformance check | the doc comment says why: the pipe transport is the same on Windows but the command line is not portable, so the check would be testing the shell |
+| `godwinmix-host/src/launch.rs`, `offline.rs`, `probe.rs` | seven tests that spawn `sh` | the plans, parsers and deadlines they exercise are covered by the tests beside them that spawn nothing |
+| `plugins/director/src/llm.rs` | three tests that run a script from disk | the failure path, a command that does not exist, is tested without a shell and runs everywhere |
+
+The Windows job runs `cargo test --release --locked --workspace`, so
+everything not gated runs there, including every `#[cfg(not(unix))]` arm in
+the table above. A gate is a decision to test a path on the platforms where it
+means something, not a decision to leave it untested.
 
 ## Known upstream bugs
 
@@ -300,17 +341,33 @@ platform arm that stopped compiling:
 rustup target add x86_64-pc-windows-msvc
 cargo check --target x86_64-pc-windows-msvc -p godwinmix-protocol
 cargo check --target x86_64-pc-windows-msvc -p godwinmix-client
+cargo check --target x86_64-pc-windows-msvc -p godwinmix-sdk --no-default-features
 ```
 
-Both of those pass today. `godwinmix-tui` gets further than it looks: its own
-Rust compiles, and the check stops in `ring`'s C build, which wants the MSVC
-headers a Mac does not have. Anything that links GStreamer needs the real
-runner, which is what the Windows job is for.
+Those three pass from a Mac today. The SDK's `gst` feature is off by default,
+so `--no-default-features` and a plain check are the same thing; asking for it
+explicitly is a way of saying the crate has to keep compiling with no native
+dependency at all.
 
-And the refusals are tested as refusals. `handshake.rs` and `transport.rs`
-both carry `#[cfg(not(unix))]` tests that assert the Windows error message
-names `container`, so a refusal that stops naming the way forward fails CI on
-the Windows runner rather than reaching somebody's first launch.
+`godwinmix-tui` and `godwinmix-host` cannot be checked this way from a Mac or
+a Linux box, and the reason is not their code. Both depend on `rustls` with
+the `ring` provider, `ring` builds C, and cross compiling that C to
+`x86_64-pc-windows-msvc` wants the MSVC headers (`assert.h` is the first one
+it misses). The check stops in `ring`'s build script before either crate's own
+Rust is looked at, so a green run here would prove nothing about them and a
+red one proves nothing either. They are covered on the Windows runner, which
+has the headers.
+
+Use `rustup`'s cargo for this and not a package manager's. A Homebrew `cargo`
+finds a Homebrew `rustc` that has no Windows standard library, and the error
+it gives, `can't find crate for std`, reads like a missing target rather than
+like the wrong toolchain.
+
+And the refusals are tested as refusals. `plugin/host/transport.rs` and
+`godwinmix-sdk/src/media/mod.rs` both carry tests gated to the platform that
+cannot do the thing, asserting the error message names `container`, so a
+refusal that stops naming the way forward fails CI on the Windows runner
+rather than reaching somebody's first launch.
 
 ## See also
 

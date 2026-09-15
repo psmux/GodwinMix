@@ -111,6 +111,19 @@ struct Inner {
     instances: BTreeMap<String, Instance>,
     /// Tier W singletons by instance name, `min-hold-hold`.
     components: BTreeMap<String, Component>,
+    /// Which attempt each instance name is on.
+    ///
+    /// Bumped when a start begins and again when the instance is taken away,
+    /// and read when a start finishes. Starting a plugin is a process spawn
+    /// and a handshake, and none of that may happen with the table locked, so
+    /// there is a window in which a second start or a `plugin.remove` can
+    /// arrive. A start that comes back to find the number changed throws its
+    /// process away rather than inserting a singleton nobody asked for over
+    /// one somebody did.
+    generation: BTreeMap<String, u64>,
+    /// Instance names with a start in flight. One at a time per name: two
+    /// processes for one singleton is exactly what this prevents.
+    starting: std::collections::BTreeSet<String>,
     /// Sources added because a device said they appeared, with the instance
     /// that said so. Only these are taken away again: a device may not remove
     /// a camera an operator added by hand.
@@ -119,7 +132,9 @@ struct Inner {
 
 /// Everything that is not a source, kept running.
 pub struct Supervisor {
-    inner: Mutex<Inner>,
+    /// An `Arc` so that a correction can be made from a thread that does not
+    /// hold the supervisor: see `adopt`.
+    inner: Arc<Mutex<Inner>>,
     canvas: CanvasCaps,
     /// `[plugins.<name>]` from the operator's config, by plugin name.
     settings: Mutex<BTreeMap<String, Params>>,
@@ -130,11 +145,13 @@ pub struct Supervisor {
 impl Supervisor {
     pub fn new(canvas: CanvasCaps, settings: BTreeMap<String, Params>) -> Arc<Supervisor> {
         Arc::new(Supervisor {
-            inner: Mutex::new(Inner {
+            inner: Arc::new(Mutex::new(Inner {
                 instances: BTreeMap::new(),
                 components: BTreeMap::new(),
                 adopted: BTreeMap::new(),
-            }),
+                generation: BTreeMap::new(),
+                starting: std::collections::BTreeSet::new(),
+            })),
             canvas,
             settings: Mutex::new(settings),
             mixer: Mutex::new(None),
@@ -195,9 +212,6 @@ impl Supervisor {
             );
         }
         let instance = format!("{}-{}", manifest.plugin, manifest.id);
-        if self.inner.lock().instances.get(&instance).is_some_and(Instance::running) {
-            return Ok(());
-        }
         // Tier W: the plugin runs inside this process rather than beside it.
         // Decided by the manifest and the operator's `place`, never here.
         if let Some(installed) = loader::get(manifest.plugin) {
@@ -205,6 +219,34 @@ impl Supervisor {
                 return self.start_component(provide, manifest, &installed, &instance);
             }
         }
+        let mine = {
+            let mut inner = self.inner.lock();
+            if inner.instances.get(&instance).is_some_and(Instance::running) {
+                return Ok(());
+            }
+            if inner.starting.contains(&instance) {
+                // Somebody is already starting this one and the spawn is not
+                // done. Answering yes is right: `start` means "make sure it is
+                // running", and it is being made sure of.
+                return Ok(());
+            }
+            inner.starting.insert(instance.clone());
+            let at = inner.generation.entry(instance.clone()).or_insert(0);
+            *at += 1;
+            *at
+        };
+        let started = self.start_now(provide, manifest, &instance);
+        self.settle_start(&instance, mine, started)
+    }
+
+    /// The part of a start that happens with nothing locked: a process spawn
+    /// and a handshake.
+    fn start_now(
+        &self,
+        provide: &str,
+        manifest: &'static crate::plugin::Manifest,
+        instance: &str,
+    ) -> Result<Instance> {
         let params = self.params_for(manifest.plugin);
         let child = self.build(provide, manifest)?;
         let mut entry = Instance {
@@ -218,8 +260,28 @@ impl Supervisor {
         entry.child.start(&self.canvas, &params).with_context(|| {
             format!("starting the {} `{instance}`", manifest.kind.as_str())
         })?;
-        info!(%instance, kind = manifest.kind.as_str(), "plugin singleton started");
-        self.inner.lock().instances.insert(instance, entry);
+        Ok(entry)
+    }
+
+    /// Put a started instance in the table, unless the world moved underneath
+    /// it. Clears the in flight marker whatever happened.
+    fn settle_start(&self, instance: &str, mine: u64, started: Result<Instance>) -> Result<()> {
+        let mut inner = self.inner.lock();
+        inner.starting.remove(instance);
+        let current = inner.generation.get(instance).copied().unwrap_or_default();
+        let mut entry = started?;
+        if current != mine {
+            // Removed, or superseded by a newer start, while this one was
+            // spawning. Its process goes rather than landing on top of
+            // whatever the newer decision was.
+            drop(inner);
+            entry.child.stop("it was removed or restarted while it was starting");
+            debug!(%instance, mine, current, "a start was overtaken and threw its process away");
+            return Ok(());
+        }
+        let kind = entry.kind.as_str();
+        info!(%instance, kind, "plugin singleton started");
+        inner.instances.insert(instance.to_string(), entry);
         Ok(())
     }
 
@@ -264,6 +326,19 @@ impl Supervisor {
                 .filter(|(_, i)| i.plugin == plugin)
                 .map(|(k, _)| k.clone())
                 .collect();
+            // The generation moves whether or not there is an instance to
+            // take: a start already in flight for one of these names must not
+            // land after the removal. `starting` names them even when
+            // `instances` does not.
+            let in_flight: Vec<String> = inner
+                .starting
+                .iter()
+                .filter(|name| name.starts_with(&format!("{plugin}-")))
+                .cloned()
+                .collect();
+            for name in names.iter().chain(in_flight.iter()) {
+                *inner.generation.entry(name.clone()).or_insert(0) += 1;
+            }
             names
                 .into_iter()
                 .filter_map(|k| inner.instances.remove(&k).map(|i| (k, i)))
@@ -307,7 +382,7 @@ impl Supervisor {
                 .collect()
         };
         for id in sources {
-            self.remove_source(&id);
+            self.remove_source(instance, &id);
         }
     }
 
@@ -380,17 +455,29 @@ impl Supervisor {
         }
         if let Some(provide) = provide {
             let instance = format!("{}-{provide}", plugin.clone().unwrap_or_default());
-            let inner = self.inner.lock();
-            let entry = inner.instances.get(&instance).with_context(|| {
-                format!(
-                    "no instance called `{instance}`. Running now: {}",
-                    inner.instances.keys().cloned().collect::<Vec<_>>().join(", ")
-                )
-            })?;
-            return entry
-                .child
-                .call("tool.call", json!({ "name": tool, "arguments": arguments }));
+            // The handle comes out from under the lock, as in `render`: a tool
+            // call has the protocol's five second ceiling, and holding the
+            // instance table for five seconds holds up every take that samples
+            // a transition plugin.
+            let caller = {
+                let inner = self.inner.lock();
+                let entry = inner.instances.get(&instance).with_context(|| {
+                    format!(
+                        "no instance called `{instance}`. Running now: {}",
+                        inner.instances.keys().cloned().collect::<Vec<_>>().join(", ")
+                    )
+                })?;
+                entry.child.caller().with_context(|| {
+                    format!("`{instance}` is not running, so `{tool}` has nowhere to go")
+                })?
+            };
+            return caller.call_within(
+                "tool.call",
+                json!({ "name": tool, "arguments": arguments }),
+                crate::plugin::host::process::CALL_TIMEOUT,
+            );
         }
+        let chosen = {
         let inner = self.inner.lock();
         // `[[tools]]` are declared once per plugin, not per provide, so every
         // one of a plugin's instances answers to the same list. The service is
@@ -412,7 +499,9 @@ impl Supervisor {
             }
         }
         match found.as_slice() {
-            [one] => one.child.call("tool.call", json!({ "name": tool, "arguments": arguments })),
+            [one] => one.child.caller().with_context(|| {
+                format!("`{}` is not running, so `{tool}` has nowhere to go", one.plugin)
+            })?,
             [] => {
                 let known = self.tool_names_locked(&inner);
                 anyhow::bail!(
@@ -427,6 +516,12 @@ impl Supervisor {
                 many.iter().map(|i| i.plugin.as_str()).collect::<Vec<_>>().join(", ")
             ),
         }
+        };
+        chosen.call_within(
+            "tool.call",
+            json!({ "name": tool, "arguments": arguments }),
+            crate::plugin::host::process::CALL_TIMEOUT,
+        )
     }
 
     /// Which plugin contributed the tool called `name`.
@@ -507,8 +602,28 @@ impl Supervisor {
         }
     }
 
-    /// One pass: notices, requests, restarts.
+    /// One pass: deaths, notices, requests, restarts.
     pub fn pump(&self) {
+        // Who has gone without saying so. A plugin that is killed says nothing
+        // on its way out, and the lifecycle everything else reads is a cache of
+        // what the plugin last told us, so a dead service stayed `ready` for
+        // the life of the mixer and was never restarted. One non blocking wait
+        // per instance per pass is what it costs to notice.
+        let died: Vec<String> = {
+            let mut inner = self.inner.lock();
+            inner
+                .instances
+                .iter_mut()
+                .filter_map(|(name, i)| i.child.notice_death().then(|| name.clone()))
+                .collect()
+        };
+        for instance in died {
+            // `notice_death` has already moved the lifecycle to failed and
+            // written `failed` into the registry, which is what `plugin.list`
+            // and `plugin.stats` read. `restart_the_dead` below picks it up on
+            // this same pass, under the backoff.
+            warn!(%instance, "a plugin process is gone; it will be started again");
+        }
         let work: Vec<(String, ProvideKind, Vec<crate::plugin::host::Notice>)> = {
             let inner = self.inner.lock();
             inner
@@ -575,8 +690,7 @@ impl Supervisor {
             match named_id(params).or_else(|| {
                 params.get("name").and_then(Value::as_str).map(slug)
             }) {
-                Some(id) if self.inner.lock().adopted.contains_key(&id) => self.remove_source(&id),
-                Some(id) => debug!(%instance, %id, "a device let go of a source it did not add"),
+                Some(id) => self.remove_source(instance, &id),
                 None => warn!(%instance, %name, "a device said something left but not what"),
             }
             return;
@@ -619,21 +733,75 @@ impl Supervisor {
             warn!(%instance, %id, "a device found a source but this core has no mixer to put it on");
             return;
         };
-        match mixer.send(Command::AddSource(Box::new(cfg), None)) {
-            Ok(()) => {
-                self.inner.lock().adopted.insert(id.clone(), instance.to_string());
-                info!(%instance, %id, name = %candidate.name, "a device added a source");
-            }
-            Err(e) => warn!(%instance, %id, ?e, "the mixer would not take a device's source"),
+        // Reserved before the command is sent and given back if the mixer
+        // will not have it. Recording it after `send` returned `Ok` recorded
+        // that the command reached a queue, which is not the same as the mixer
+        // accepting it: a candidate with a duplicate id or an address the
+        // pipeline cannot build left the supervisor believing it owned a
+        // source that does not exist, and `free_id` skipped that name for the
+        // life of the core.
+        let (ack, told) = tokio::sync::oneshot::channel();
+        self.inner.lock().adopted.insert(id.clone(), instance.to_string());
+        if let Err(e) = mixer.send(Command::AddSource(Box::new(cfg), Some(ack))) {
+            self.inner.lock().adopted.remove(&id);
+            warn!(%instance, %id, ?e, "the mixer would not take a device's source");
+            return;
+        }
+        // On a thread of its own, because building a source is a pipeline and
+        // the caller here is the supervisor's pump.
+        let table = self.inner.clone();
+        let (who, what, called) = (instance.to_string(), id.clone(), candidate.name.clone());
+        let watching = std::thread::Builder::new()
+            .name(format!("adopt-{id}"))
+            .spawn(move || match told.blocking_recv() {
+                Ok(Ok(())) => info!(instance = %who, id = %what, name = %called, "a device added a source"),
+                answer => {
+                    table.lock().adopted.remove(&what);
+                    warn!(
+                        instance = %who, id = %what, ?answer,
+                        "the mixer would not take a device's source"
+                    );
+                }
+            });
+        if watching.is_err() {
+            warn!(%instance, %id, "no thread to wait for the mixer's answer; the source was sent anyway");
         }
     }
 
-    fn remove_source(&self, id: &str) {
-        self.inner.lock().adopted.remove(id);
+    /// Take away a source a device put on, at that same device's asking.
+    ///
+    /// The ownership check is the point. `adopted` records which instance
+    /// added which source so that a device may not remove a camera an operator
+    /// added by hand; without checking it here, any device plugin could remove
+    /// any adopted source, including one another plugin owns.
+    fn remove_source(&self, instance: &str, id: &str) {
+        {
+            let mut inner = self.inner.lock();
+            match inner.adopted.get(id) {
+                Some(owner) if owner == instance => {}
+                Some(owner) => {
+                    warn!(
+                        %instance, %id, %owner,
+                        "a device asked to remove a source another plugin added; refused"
+                    );
+                    return;
+                }
+                None => {
+                    warn!(
+                        %instance, %id,
+                        "a device asked to remove a source it did not add; a source an \
+                         operator added is removed with source.remove, not over the plugin \
+                         channel"
+                    );
+                    return;
+                }
+            }
+            inner.adopted.remove(id);
+        }
         let Some(mixer) = self.mixer.lock().clone() else { return };
         match mixer.send(Command::RemoveSource(id.to_string(), None)) {
-            Ok(()) => info!(%id, "a device let go of a source"),
-            Err(e) => warn!(%id, ?e, "the mixer would not let go of a device's source"),
+            Ok(()) => info!(%instance, %id, "a device let go of a source"),
+            Err(e) => warn!(%instance, %id, ?e, "the mixer would not let go of a device's source"),
         }
     }
 
@@ -674,7 +842,7 @@ impl Supervisor {
             "source.remove" => {
                 match params.get("id").and_then(Value::as_str) {
                     Some(id) => {
-                        self.remove_source(&slug(id));
+                        self.remove_source(instance, &slug(id));
                         Ok(json!({"removed": true}))
                     }
                     None => Err("source.remove takes an id".to_string()),
@@ -1212,22 +1380,32 @@ impl transition::Renderer for Supervisor {
         if let Some(component) = self.component_of(plugin, ProvideKind::Transition) {
             return component.call_within("render", params, RENDER_DEADLINE);
         }
-        let inner = self.inner.lock();
-        let entry = inner
-            .instances
-            .values()
-            .find(|i| i.kind == ProvideKind::Transition && i.plugin == plugin)
-            .with_context(|| {
-                format!(
-                    "no transition plugin called `{plugin}` is running. Installed and \
-                     enabled transitions: {}",
-                    match self.transition_names_locked(&inner).join(", ") {
-                        s if s.is_empty() => "none".to_string(),
-                        s => s,
-                    }
-                )
-            })?;
-        entry.child.call_within("render", params, RENDER_DEADLINE)
+        // The handle comes out from under the lock and the call happens
+        // without it. A take samples its transition on the mixer loop, and the
+        // instance table is also held by tools, by discovery and by every
+        // other plugin's calls: holding it here put one take behind whatever
+        // an unrelated plugin happened to be doing.
+        let caller = {
+            let inner = self.inner.lock();
+            let entry = inner
+                .instances
+                .values()
+                .find(|i| i.kind == ProvideKind::Transition && i.plugin == plugin)
+                .with_context(|| {
+                    format!(
+                        "no transition plugin called `{plugin}` is running. Installed and \
+                         enabled transitions: {}",
+                        match self.transition_names_locked(&inner).join(", ") {
+                            s if s.is_empty() => "none".to_string(),
+                            s => s,
+                        }
+                    )
+                })?;
+            entry.child.caller().with_context(|| {
+                format!("the transition plugin `{plugin}` is not running, so `render` has nowhere to go")
+            })?
+        };
+        caller.call_within("render", params, RENDER_DEADLINE)
     }
 }
 

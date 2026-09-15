@@ -157,6 +157,10 @@ mod tests {
         assert!(parse_hello("{\"jsonrpc\":\"2.0\",\"method\":\"initialized\"}").is_none());
     }
 
+    /// The three probe tests below are Unix only: each needs a process that
+    /// says a chosen thing on stderr and then behaves in a chosen way, and
+    /// `sh -c` is the shortest honest way to get one. The parsing half,
+    /// which is where the bugs are, is tested above without a process.
     #[cfg(unix)]
     #[test]
     fn a_plugin_that_says_hello_passes_the_probe() {

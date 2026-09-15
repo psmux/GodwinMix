@@ -77,6 +77,21 @@ pub const Z_LIVE: u32 = 1000;
 
 /// How long to wait for a slot's tee pad to reach an idle point on a cache
 /// miss. The figure the filters and the proxy swaps already use.
+///
+/// Five seconds looks far too long for something that happens on the mixer
+/// loop, and it was tried at half a second. That made everything worse, which
+/// is worth recording here so nobody tries it again. A bind that gives up
+/// leaves the slot unbound; the visibility tick reapplies the whole scene
+/// twice a second; the next apply tries the same bind again. A short deadline
+/// turns one slow pad into half a second of the mixer loop every half second,
+/// for ever. Measured over fourteen add and remove cycles against a running
+/// programme, removing one `videotestsrc` went from a worst case of 300 ms at
+/// five seconds to a worst case of 5.4 s at half a second, and in a soak it
+/// ran away to 74 s.
+///
+/// The right fix is not a shorter deadline. It is to prepare and retire a
+/// branch off the mixer loop and keep only the relink inside the blocked
+/// interval, which is a larger change than a constant.
 const BLOCK_TIMEOUT: Duration = Duration::from_secs(5);
 
 /// Whether the source behind a placement is heard.
@@ -1274,13 +1289,26 @@ pub(crate) fn write_pad(
 /// carry, so the nick is looked up first: a `compositor` built before
 /// `keep-aspect-ratio-with-crop` existed gets the next best thing rather than
 /// taking the mixer thread down mid take.
+///
+/// The value the pad already has is read before anything is written, and this
+/// one is worth a comment. `compositor` marks its pad's video converter dirty
+/// whenever `sizing-policy` is set, whatever it is set to, and rebuilds the
+/// converter on the next aggregation. The visibility tick reapplies the whole
+/// scene twice a second, so an unconditional write here threw away and rebuilt
+/// a converter per pad twice a second and put the programme's frame interval
+/// over 34 ms on an idle mixer. Comparing first is the difference between a
+/// late frame every half second and none.
 fn set_sizing(pad: &gst::Pad, sizing: Sizing) {
     let Some(pspec) = pad.find_property("sizing-policy") else { return };
     let class = glib::EnumClass::with_type(pspec.value_type());
+    let held = pad.property_value("sizing-policy");
+    let now = glib::EnumValue::from_value(&held).map(|(_, v)| v.nick().to_string());
     for nick in sizing.nicks() {
         let known = class.as_ref().and_then(|c| c.value_by_nick(nick)).is_some();
         if known {
-            pad.set_property_from_str("sizing-policy", nick);
+            if now.as_deref() != Some(*nick) {
+                pad.set_property_from_str("sizing-policy", nick);
+            }
             return;
         }
     }

@@ -210,7 +210,7 @@ pub(crate) async fn place(
 ) -> Result<String, RpcError> {
     let source = graphics::source_id(graphic, item);
     let base = host_base(call).await?;
-    if !call.source_ids().await.contains(&source) {
+    if !call.source_ids().await?.contains(&source) {
         let uri = graphics::page_url(&base, graphic, item);
         let name = doc
             .scenes

@@ -1083,7 +1083,7 @@ fn hostname() -> Option<String> {
             return None;
         }
         let bytes: Vec<u8> = buf.iter().take_while(|b| **b != 0).map(|b| *b as u8).collect();
-        return String::from_utf8(bytes).ok().filter(|s| !s.is_empty());
+        String::from_utf8(bytes).ok().filter(|s| !s.is_empty())
     }
     #[cfg(not(unix))]
     {
