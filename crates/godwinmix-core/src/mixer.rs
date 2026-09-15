@@ -2476,6 +2476,14 @@ impl Mixer {
         // leaving a scene half applied underneath.
         self.program_scene = None;
         self.take_generation.fetch_add(1, Ordering::SeqCst);
+        // Whatever the last take was doing, it is over, exactly as
+        // `take_scene_over` says it. Without this a cut on top of a running
+        // transition wrote nothing at all: every geometry and alpha write in
+        // the apply path asks `driven` first and leaves a pad alone while a
+        // control binding owns it, so the old transition kept ramping while
+        // the API answered with the new source. Settling first leaves each pad
+        // where that transition's curves ended and hands the pads back.
+        self.settle_transition();
         self.apply_visibility(true);
 
         let at = self.running_time().unwrap_or(gst::ClockTime::ZERO);
@@ -4727,7 +4735,7 @@ mod tests {
         );
     }
 
-    fn programme_config(graphics: crate::config::Accel) -> crate::config::Config {
+    pub(super) fn programme_config(graphics: crate::config::Accel) -> crate::config::Config {
         let mut cfg = crate::config::Config {
             nodes: Default::default(),
             canvas: crate::config::Canvas {
@@ -5837,6 +5845,51 @@ mod tests {
              eight; it is {}",
             mix.pool.len()
         );
+        mix.shutdown();
+    }
+
+    /// A bare source take on top of a running transition is a cut, not a
+    /// suggestion.
+    ///
+    /// Every geometry and alpha write in the apply path asks whether a control
+    /// binding owns the pad first, and leaves it alone when one does, because
+    /// a transition's curve is a function of running time and a value written
+    /// by hand under one is undone on the next sync anyway. So a cut on top of
+    /// a live transition wrote nothing at all: the old transition went on
+    /// ramping while `program.take` answered with the new source.
+    /// `take_scene_over` always settled first. `take` did not.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn a_cut_on_top_of_a_running_transition_settles_it_first() {
+        let mut mix = with_sources(&["cam1", "cam2"]).await;
+        let canvas = mix.canvas.clone();
+        mix.take_scene(scene("a", vec![Placement::full_canvas("cam1".into(), &canvas)]), None)
+            .expect("the first scene");
+        mix.take_scene_over(
+            scene("b", vec![Placement::full_canvas("cam2".into(), &canvas)]),
+            None,
+            None,
+            Some(transition::TransitionSpec {
+                kind: transition::Kind::Fade,
+                duration_ms: 2_000,
+            }),
+        )
+        .expect("a long crossfade");
+        assert!(mix.transition_window().is_some(), "the transition is running");
+        assert!(
+            mix.pool.slots().iter().any(|s| s.pad().control_binding("alpha").is_some()),
+            "a fade drives alpha through a control binding"
+        );
+
+        // The operator changes their mind halfway through.
+        mix.take(Some("cam1".to_string()), None).expect("the cut");
+
+        assert!(mix.transition_window().is_none(), "the cut settled the transition");
+        assert!(
+            mix.pool.slots().iter().all(|s| s.pad().control_binding("alpha").is_none()),
+            "no pad may still be driven by a transition the cut replaced"
+        );
+        assert_eq!(mix.program_source.as_deref(), Some("cam1"));
+        assert_eq!(mix.pool.visible(), 1, "one item on the canvas after a cut");
         mix.shutdown();
     }
 

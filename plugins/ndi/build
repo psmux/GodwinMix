@@ -6,9 +6,9 @@
 # plugin directory and skips anything named `target`, so the binary has to be
 # somewhere else by the time the core looks for it. That is what this does.
 #
-#   ./build        build and stage bin/gmx-camera
+#   ./build        build and stage bin/gmx-ndi
 #
-# `gmx plugin add ./plugins/camera` runs this for you when bin/gmx-camera is not
+# `gmx plugin add ./plugins/ndi` runs this for you when bin/gmx-ndi is not
 # there yet, through the manifest's [build] section. Run it by hand when you
 # want the build without the install.
 
@@ -18,8 +18,8 @@ cd "$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
 : "${CARGO_TARGET_DIR:=$(cd ../.. && pwd)/target}"
 export CARGO_TARGET_DIR
 
-cargo build --release -p gmx-camera
+cargo build --release -p gmx-ndi
 mkdir -p bin
-cp "$CARGO_TARGET_DIR/release/gmx-camera" bin/gmx-camera
-chmod +x bin/gmx-camera
-echo "staged bin/gmx-camera from $CARGO_TARGET_DIR/release"
+cp "$CARGO_TARGET_DIR/release/gmx-ndi" bin/gmx-ndi
+chmod +x bin/gmx-ndi
+echo "staged bin/gmx-ndi from $CARGO_TARGET_DIR/release"

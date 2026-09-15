@@ -32,6 +32,10 @@ annotations = { readOnlyHint = true, destructiveHint = false, idempotentHint = t
 user_invocable = true
 model_invocable = true
 
+# `gmx plugin add ./plugins/director` runs this when bin/gmx-director is not there.
+# The command runs in the directory you named, not in the installed copy:
+# this plugin is a workspace member and its dependencies are path
+# dependencies two levels up, so the copy is not a tree cargo can build.
 [build]
-command = "cargo build --release -p gmx-director"
+command = "sh build"
 output = "bin/gmx-director"

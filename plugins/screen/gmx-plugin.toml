@@ -13,6 +13,10 @@ process = "per-instance"
 [run]
 bin = { "linux-x86_64" = "bin/gmx-screen", "linux-aarch64" = "bin/gmx-screen", "macos-aarch64" = "bin/gmx-screen", "macos-x86_64" = "bin/gmx-screen", "windows-x86_64" = "bin/gmx-screen.exe" }
 
+# `gmx plugin add ./plugins/screen` runs this when bin/gmx-screen is not there.
+# The command runs in the directory you named, not in the installed copy:
+# this plugin is a workspace member and its dependencies are path
+# dependencies two levels up, so the copy is not a tree cargo can build.
 [build]
 command = "sh build"
 output = "bin/gmx-screen"

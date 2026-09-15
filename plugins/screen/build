@@ -4,11 +4,13 @@
 # This plugin is a member of the repository's cargo workspace, so its build
 # output lands in the workspace target directory. `gmx plugin add` copies the
 # plugin directory and skips anything named `target`, so the binary has to be
-# somewhere else by the time you install it. That is what this does.
+# somewhere else by the time the core looks for it. That is what this does.
 #
 #   ./build        build and stage bin/gmx-screen
 #
-# Run it before `gmx plugin add ./plugins/camera`.
+# `gmx plugin add ./plugins/screen` runs this for you when bin/gmx-screen is not
+# there yet, through the manifest's [build] section. Run it by hand when you
+# want the build without the install.
 
 set -eu
 cd "$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"

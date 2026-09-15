@@ -50,6 +50,8 @@ Start here if you have never run it.
 * [Upgrade from LiveboxMix](how-to/upgrade-from-liveboxmix.md)
 * [Write a UI of your own](how-to/write-a-ui.md)
 * [Run the smoke test](how-to/smoke-test.md)
+* [Run the soak test](how-to/soak-test.md), the same things over and over for
+  an hour, watching memory, descriptors and threads
 * [Embed the engine in your own program](how-to/embed-the-engine.md)
 * [Write a WASM plugin: a sandboxed service or transition, no media](how-to/write-a-wasm-plugin.md)
 * [Write a source plugin in Rust](how-to/write-a-source-plugin.md)

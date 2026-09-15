@@ -11,6 +11,10 @@
 //! seconds with no configuration.* The fixture stands in for the publisher;
 //! what is measured is the core's half.
 
+// Unix only, and the whole file rather than each test: the plugin these drive
+// is a shell script. Windows compiles and runs every ungated test in the
+// workspace on its own CI runner, and the platform arms this file would
+// exercise are listed in docs/explanation/cross-platform.md.
 #![cfg(unix)]
 
 use godwinmix_core::caps::CanvasCaps;
@@ -83,6 +87,22 @@ where
 }
 
 /// Descriptors held by this process, for the leak count.
+/// Wait for a process to go, and say what was supposed to have taken it.
+///
+/// A plugin is stopped on a thread of its own, so "it is gone" is a thing that
+/// becomes true rather than a thing that is true when the call returns. The
+/// deadline is the shutdown grace plus the kill grace plus slack.
+fn wait_until_gone(pid: u32, after: &str) {
+    let began = std::time::Instant::now();
+    while began.elapsed() < std::time::Duration::from_secs(30) {
+        if unsafe { libc::kill(pid as i32, 0) } != 0 {
+            return;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(50));
+    }
+    panic!("the plugin's process {pid} was still running {:?} after {after}", began.elapsed());
+}
+
 fn descriptors() -> usize {
     let dir = if cfg!(target_os = "macos") { "/dev/fd" } else { "/proc/self/fd" };
     std::fs::read_dir(dir).map(|d| d.count()).unwrap_or(0)
@@ -119,6 +139,58 @@ fn a_service_and_a_device_are_started_as_one_instance_each() {
         stats.iter().any(|s| s.instance == "fakeservice-service" && s.pid.is_some()),
         "a running singleton must carry a pid in plugin.stats"
     );
+
+    supervisor.shutdown();
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+/// A service that is killed comes back.
+///
+/// The supervisor read a cached lifecycle to decide whether an instance was
+/// alive, and a plugin that is killed says nothing on its way out. So a
+/// service killed by the OOM killer, by a crash or by `gmx chaos` stayed
+/// `ready` for the life of the mixer: the restart never ran, and every call
+/// into it sat there until its own deadline.
+#[test]
+fn a_service_that_is_killed_is_noticed_and_started_again() {
+    let _lock = exclusive();
+    let dir = install("revive");
+    let supervisor = Supervisor::new(canvas(), settings(None));
+    supervisor.start_all();
+    let before = loader::stats()
+        .into_iter()
+        .find(|s| s.instance == "fakeservice-service")
+        .and_then(|s| s.pid)
+        .expect("the service is running and says so");
+
+    unsafe {
+        libc::kill(before as i32, libc::SIGKILL);
+    }
+    // No `wait_until_gone` here, and the reason is the whole point of the fix
+    // underneath: a killed child that nobody has waited on is a zombie, its
+    // pid is still allocated, and `kill -0` still answers yes. Asking the
+    // operating system whether the pid exists is not the same question as
+    // asking whether the plugin is running, which is why the supervisor now
+    // asks its own `Child` rather than a cached lifecycle.
+    //
+    // The pump runs on its own thread once `spawn_pump` is called; these tests
+    // drive it by hand so that the wait here is the test's and not a timer's.
+    let began = std::time::Instant::now();
+    let mut after = None;
+    while began.elapsed() < std::time::Duration::from_secs(30) {
+        supervisor.pump();
+        let now = loader::stats()
+            .into_iter()
+            .find(|s| s.instance == "fakeservice-service")
+            .and_then(|s| s.pid);
+        if let Some(pid) = now.filter(|pid| *pid != before) {
+            after = Some(pid);
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(50));
+    }
+    let after = after.expect("the killed service was never started again");
+    assert!(unsafe { libc::kill(after as i32, 0) } == 0, "the replacement {after} is not running");
 
     supervisor.shutdown();
     let _ = std::fs::remove_dir_all(dir);
@@ -278,9 +350,12 @@ fn a_service_leaves_nothing_behind_when_the_plugin_is_removed() {
     );
 
     // No processes. `kill -0` answers whether the pid is still ours to signal.
+    // Waited for rather than asserted on the spot: stopping a plugin gives it
+    // `stop`, then `shutdown`, then the grace period before the signal, and
+    // all of that happens on a thread of its own so that removing a source
+    // during a show does not hold the mixer loop for ten seconds.
     for pid in pids {
-        let alive = unsafe { libc::kill(pid as i32, 0) } == 0;
-        assert!(!alive, "the plugin's process {pid} is still running after plugin.remove");
+        wait_until_gone(pid, "plugin.remove");
     }
 
     // And no descriptors. The same slack the source leak test allows, because
@@ -314,8 +389,7 @@ fn a_reload_swaps_the_instances_and_rolls_back_when_the_new_one_will_not_start()
         "a reload that swapped nothing: {first:?} then {second:?}"
     );
     for pid in &first {
-        let alive = unsafe { libc::kill(*pid as i32, 0) } == 0;
-        assert!(!alive, "the previous instance {pid} was left running by the swap");
+        wait_until_gone(*pid, "the swap");
     }
 
     // Now break the plugin and reload again. The new instance cannot hand

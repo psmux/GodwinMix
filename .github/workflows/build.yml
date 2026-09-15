@@ -266,10 +266,12 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev \
             libgstreamer-plugins-bad1.0-dev
-      # Not -D warnings: a handful are outstanding and are noted as such in
-      # CONTRIBUTING.md. This job exists so the count is visible in the log and
-      # a reviewer can see a new one arrive.
-      - run: cargo clippy --workspace --all-targets --locked
+      # `-D warnings` since the hardening pass: the five that had sat in
+      # convert.rs, input.rs, media.rs and output.rs since the start are fixed,
+      # and the count is zero. Keep it there. A lint worth disagreeing with
+      # gets an `#[allow]` with a comment saying why, not a warning left in the
+      # log for the next person to scroll past.
+      - run: cargo clippy --workspace --all-targets --locked -- -D warnings
 
   # The published client libraries are generated from protocol.json. A method
   # added to the core without regenerating them fails here, in the language

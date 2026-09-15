@@ -900,6 +900,11 @@ fn place(fetched: &godwinmix_host::sources::Fetched, opts: &InstallOptions) -> R
     }
     copy_tree(source, &target)?;
     fetched.trust.write(&target).ok();
+    if let Err(e) = build_if_missing(&manifest, source, &target) {
+        // Do not leave half an install behind for the next scan to find.
+        let _ = std::fs::remove_dir_all(&target);
+        return Err(e);
+    }
     prepare(&manifest, &target)?;
     let installed = read(&target, &BTreeMap::new());
     if let Some(problem) = &installed.problem {
@@ -917,6 +922,117 @@ fn place(fetched: &godwinmix_host::sources::Fetched, opts: &InstallOptions) -> R
     );
     Ok(installed)
 }
+
+/// The binary this manifest names for this machine, relative to the plugin
+/// root. `None` when the plugin runs something other than a binary, or when it
+/// ships no binary for this platform.
+fn declared_bin(manifest: &PluginManifest) -> Option<String> {
+    manifest.run.as_ref()?.bin.get(launch::this_platform()).cloned()
+}
+
+/// Run the manifest's `[build]` command when the binary it declares did not
+/// come across with the copy.
+///
+/// The copy skips `target`, so a plugin whose binary is still in its build
+/// tree arrives without one, and until now that was a plugin that installed
+/// cleanly and then failed at the first `source.add`. A git source has already
+/// built by the time it reaches here (godwinmix_host::sources::git), so what
+/// this catches in practice is the path install: `gmx plugin add
+/// ./plugins/camera` on a checkout where nothing has built the camera yet.
+///
+/// The command runs in the directory the operator named rather than in the
+/// installed copy, and that is deliberate. A first party plugin is a member of
+/// this repository's cargo workspace and its dependencies are path
+/// dependencies two directories up, so the copy under the plugins directory is
+/// not a tree cargo can build. The source tree is where the plugin's build
+/// system lives. What comes back into the copy afterwards is the one file
+/// `[build] output` names.
+///
+/// A missing binary with no `[build]` section is left alone. The launch plan
+/// already names that file and says to reinstall, and adding a second refusal
+/// here would only move the same message earlier for plugins that were fine.
+fn build_if_missing(manifest: &PluginManifest, source: &Path, target: &Path) -> Result<()> {
+    let Some(rel) = declared_bin(manifest) else { return Ok(()) };
+    if target.join(&rel).exists() {
+        return Ok(());
+    }
+    let Some(build) = manifest.build.as_ref() else { return Ok(()) };
+    let name = &manifest.plugin.name;
+    info!(plugin = %name, "building: {} (in {})", build.command, source.display());
+    let (shell, flag) = if cfg!(windows) { ("cmd", "/C") } else { ("sh", "-c") };
+    let out = std::process::Command::new(shell)
+        .arg(flag)
+        .arg(&build.command)
+        .current_dir(source)
+        .output()
+        .with_context(|| {
+            format!(
+                "`{name}` declares run.bin.{} = \"{rel}\", that file is not in the plugin \
+                 directory, and its [build] command could not be started with `{shell}`:\n\n  \
+                 {}\n\nBuild it yourself in {} and add the plugin again.",
+                launch::this_platform(),
+                build.command,
+                source.display()
+            )
+        })?;
+    if !out.status.success() {
+        anyhow::bail!(
+            "building `{name}` failed. `{}` in {} exited {}.\n\n{}\n\nFix the build, or build \
+             it yourself and point [run] bin at what it produced.",
+            build.command,
+            source.display(),
+            out.status.code().map(|c| c.to_string()).unwrap_or_else(|| "on a signal".into()),
+            tail(&out, 12),
+        );
+    }
+    let produced = source.join(&build.output);
+    anyhow::ensure!(
+        produced.is_file(),
+        "building `{name}` ran `{}` in {} and it reported success, but [build] output names \
+         `{}` and there is no file there.\n\n{}\n\nFix `output` in gmx-plugin.toml, or fix the \
+         command so that it puts the binary where `output` says.",
+        build.command,
+        source.display(),
+        build.output,
+        tail(&out, 12),
+    );
+    let landed = target.join(&rel);
+    if let Some(parent) = landed.parent() {
+        std::fs::create_dir_all(parent)
+            .with_context(|| format!("making {}", parent.display()))?;
+    }
+    std::fs::copy(&produced, &landed).with_context(|| {
+        format!("copying {} to {}", produced.display(), landed.display())
+    })?;
+    copy_mode(&produced, &landed);
+    make_executable(&landed);
+    info!(plugin = %name, at = %landed.display(), "built the plugin's binary");
+    Ok(())
+}
+
+/// The last `lines` lines of what a build printed, stderr after stdout,
+/// because a cargo failure ends on stderr and a make failure often does not.
+fn tail(out: &std::process::Output, lines: usize) -> String {
+    let mut text = String::from_utf8_lossy(&out.stdout).into_owned();
+    text.push_str(&String::from_utf8_lossy(&out.stderr));
+    let kept: Vec<&str> =
+        text.lines().rev().filter(|l| !l.trim().is_empty()).take(lines).collect();
+    kept.into_iter().rev().collect::<Vec<_>>().join("\n")
+}
+
+/// A build output that arrives without its executable bit starts with
+/// "permission denied" and nothing saying why.
+#[cfg(unix)]
+fn make_executable(path: &Path) {
+    use std::os::unix::fs::PermissionsExt;
+    if let Ok(meta) = std::fs::metadata(path) {
+        let mode = meta.permissions().mode() | 0o111;
+        let _ = std::fs::set_permissions(path, std::fs::Permissions::from_mode(mode));
+    }
+}
+
+#[cfg(not(unix))]
+fn make_executable(_path: &Path) {}
 
 /// Run the runtime preparation the manifest implies: a venv for a Python
 /// plugin, `npm install` for a Node one.
@@ -1601,6 +1717,93 @@ settings = "settings.json"
         assert_eq!(found.manifest.tier, Tier::Sidecar);
         assert!(source_for_uri("rtmp://host/app").is_none(), "it claims only its own scheme");
         clear();
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    /// A manifest that wants a binary at `bin/thing` on this machine, with the
+    /// `[build]` command given. Written as text so that the test reads the way
+    /// the file an author writes does.
+    fn buildable(command: &str, output: &str) -> PluginManifest {
+        let here = launch::this_platform();
+        PluginManifest::parse(&format!(
+            "[plugin]\nname = \"thing\"\nversion = \"0.1.0\"\napi = 1\n\
+             [run]\nbin = {{ \"{here}\" = \"bin/thing\" }}\n\
+             [build]\ncommand = \"{command}\"\noutput = \"{output}\"\n"
+        ))
+        .expect("the manifest parses")
+    }
+
+    /// Two directories: the one the operator named, and the copy the install
+    /// made of it. The copy has no binary, which is the whole case.
+    fn source_and_copy(tag: &str) -> (PathBuf, PathBuf, PathBuf) {
+        let root = temp(tag);
+        let (source, target) = (root.join("src"), root.join("installed"));
+        std::fs::create_dir_all(&source).expect("a source directory");
+        std::fs::create_dir_all(&target).expect("an installed copy");
+        (root, source, target)
+    }
+
+    #[test]
+    fn a_missing_binary_is_built_and_lands_in_the_installed_copy() {
+        let (root, source, target) = source_and_copy("build-ok");
+        let manifest = buildable("mkdir -p bin && echo hi > bin/thing", "bin/thing");
+        build_if_missing(&manifest, &source, &target).expect("the build runs and the file lands");
+        let landed = target.join("bin").join("thing");
+        assert!(landed.is_file(), "the binary was not copied into the installed copy");
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let mode = std::fs::metadata(&landed).expect("it is there").permissions().mode();
+            assert!(mode & 0o111 != 0, "it arrived without its executable bit: {mode:o}");
+        }
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn a_binary_that_came_with_the_copy_is_not_rebuilt() {
+        let (root, source, target) = source_and_copy("build-skip");
+        std::fs::create_dir_all(target.join("bin")).expect("a bin directory");
+        std::fs::write(target.join("bin").join("thing"), "already here").expect("a binary");
+        // A command that would fail loudly if anything ran it.
+        let manifest = buildable("exit 7", "bin/thing");
+        build_if_missing(&manifest, &source, &target).expect("nothing should have run");
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn a_failed_build_names_the_command_the_directory_and_what_it_printed() {
+        let (root, source, target) = source_and_copy("build-fail");
+        let manifest = buildable("echo no such crate 1>&2; exit 101", "bin/thing");
+        let err = build_if_missing(&manifest, &source, &target).expect_err("the build fails");
+        let text = format!("{err}");
+        assert!(text.contains("echo no such crate"), "{text}");
+        assert!(text.contains(&source.display().to_string()), "{text}");
+        assert!(text.contains("101"), "{text}");
+        assert!(text.contains("no such crate"), "{text}");
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn a_build_that_produced_nothing_names_the_output_it_promised() {
+        let (root, source, target) = source_and_copy("build-nothing");
+        let manifest = buildable("true", "bin/thing");
+        let err = build_if_missing(&manifest, &source, &target).expect_err("nothing was built");
+        let text = format!("{err}");
+        assert!(text.contains("bin/thing"), "{text}");
+        assert!(text.contains("output"), "{text}");
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn a_plugin_with_no_build_section_is_left_alone() {
+        let (root, source, target) = source_and_copy("build-none");
+        let here = launch::this_platform();
+        let manifest = PluginManifest::parse(&format!(
+            "[plugin]\nname = \"thing\"\nversion = \"0.1.0\"\napi = 1\n\
+             [run]\nbin = {{ \"{here}\" = \"bin/thing\" }}\n"
+        ))
+        .expect("the manifest parses");
+        build_if_missing(&manifest, &source, &target).expect("there is nothing to run");
         let _ = std::fs::remove_dir_all(&root);
     }
 

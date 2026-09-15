@@ -155,7 +155,7 @@ async fn apply_layout(call: Call, params: Value) -> Result<Value, RpcError> {
     let values: layout::Values = req.values.clone().into_iter().collect();
     // Every source slot has to name a source this mixer has, or the layout
     // resolves into a scene that draws nothing.
-    let known = call.source_ids().await;
+    let known = call.source_ids().await?;
     for slot in ops::slot_names(&preset) {
         if let Some(Value::String(source)) = req.values.get(&slot) {
             if !known.contains(source) {
@@ -295,7 +295,7 @@ fn json_type(value: &Value) -> &'static str {
 
 async fn source_set(call: Call, params: Value) -> Result<Value, RpcError> {
     let req: SetSourceMetaRequest = call.params(&params)?;
-    let known = call.source_ids().await;
+    let known = call.source_ids().await?;
     if !known.contains(&req.source) {
         return Err(RpcError::not_found("source", &req.source, &known));
     }
@@ -316,7 +316,7 @@ async fn source_set(call: Call, params: Value) -> Result<Value, RpcError> {
 
 async fn source_group(call: Call, params: Value) -> Result<Value, RpcError> {
     let req: GroupSourcesRequest = call.params(&params)?;
-    let known = call.source_ids().await;
+    let known = call.source_ids().await?;
     if let Some(missing) = req.sources.iter().find(|s| !known.contains(s)) {
         return Err(RpcError::not_found("source", missing, &known));
     }

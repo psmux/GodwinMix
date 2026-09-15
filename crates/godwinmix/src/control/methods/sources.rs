@@ -226,7 +226,7 @@ async fn set_audio(call: Call, params: Value) -> Result<Value, RpcError> {
     match outcome {
         AudioOutcome::Set(state) => body(state),
         AudioOutcome::NoSuchSource => {
-            Err(RpcError::not_found("source", &req.id, &call.source_ids().await))
+            Err(RpcError::not_found("source", &req.id, &call.source_ids().await?))
         }
         AudioOutcome::NotSuperimposed => Err(RpcError::not_in_state(format!(
             "source {} is not superimposed, so its sounds arrive already mixed and there is \
@@ -248,7 +248,7 @@ async fn seek(call: Call, params: Value) -> Result<Value, RpcError> {
     match outcome {
         SeekOutcome::Moved(at) => body(at),
         SeekOutcome::NoSuchSource => {
-            Err(RpcError::not_found("source", &req.id, &call.source_ids().await))
+            Err(RpcError::not_found("source", &req.id, &call.source_ids().await?))
         }
         SeekOutcome::NotSeekable => Err(RpcError::not_in_state(format!(
             "source {} cannot be scrubbed: a live feed has no position to move to, it is \
@@ -323,7 +323,7 @@ async fn set(call: Call, params: Value) -> Result<Value, RpcError> {
     let req: SetSourceRequest = call.params(&params)?;
     let configs = call.app.mixer.configs().await.map_err(|e| call.mixer_error(e))?;
     let Some(current) = configs.sources.iter().find(|s| s.id == req.id).cloned() else {
-        return Err(RpcError::not_found("source", &req.id, &call.source_ids().await));
+        return Err(RpcError::not_found("source", &req.id, &call.source_ids().await?));
     };
 
     let mut wanted = current.clone();

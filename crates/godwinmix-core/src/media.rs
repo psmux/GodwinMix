@@ -153,7 +153,7 @@ impl MediaLibrary {
                 error = Some(format!("{e:#}"));
             }
         }
-        items.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
+        items.sort_by_key(|a| a.name.to_lowercase());
 
         // Fold a `clip.web.mp4` onto `clip.<ext>` as its converted copy, rather
         // than listing it as its own file. `converted_stem` strips `.web.mp4`;

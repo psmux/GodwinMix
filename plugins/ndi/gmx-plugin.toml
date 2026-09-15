@@ -68,6 +68,10 @@ annotations = { readOnlyHint = true, destructiveHint = false, idempotentHint = t
 user_invocable = true
 model_invocable = true
 
+# `gmx plugin add ./plugins/ndi` runs this when bin/gmx-ndi is not there.
+# The command runs in the directory you named, not in the installed copy:
+# this plugin is a workspace member and its dependencies are path
+# dependencies two levels up, so the copy is not a tree cargo can build.
 [build]
-command = "cargo build --release -p gmx-ndi"
+command = "sh build"
 output = "bin/gmx-ndi"

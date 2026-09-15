@@ -54,5 +54,5 @@ user_invocable = true
 model_invocable = true
 
 [build]
-command = "cargo build --release -p gmx-ograf"
+command = "sh build"
 output = "bin/gmx-ograf"

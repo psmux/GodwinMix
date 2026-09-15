@@ -98,6 +98,8 @@ the web UI has a pointer, a tray and a scene composer and this has a keyboard.
 
 | Chord | The web UI |
 |---|---|
+| `1` to `9` | take the nth scene, or the nth input when there are no scenes |
+| `0` | cut to the slate |
 | `Ctrl+K` | the command palette |
 | `Ctrl+N` | add an input |
 | `Ctrl+F` | filter the tray |
@@ -107,3 +109,30 @@ the web UI has a pointer, a tray and a scene composer and this has a keyboard.
 
 That table is a summary. `ui/shell/keymap.js` is the map itself, and it wins
 where the two disagree.
+
+### What a number counts in the web UI
+
+A slot is a scene tile, counted down the scenes panel in the order it shows
+them, which is what 05 section 3a asks for. Scenes are what an operator cuts
+between once the show has any, so the numbers follow them.
+
+Three cases send a number back to the tray instead, where it counts the input
+tiles as it did before scenes existed:
+
+* there is no scenes panel on the page,
+* the core has no scene server, so `scene.list` answers `-32601`,
+* the collection is there but has no scenes in it yet.
+
+A number past the end of whichever list is in force does nothing. It does not
+fall through to the other list, because an operator who presses `7` expecting
+the seventh scene should get silence rather than the seventh camera.
+
+In producer mode the number arms rather than takes, the same as a tap on the
+tile. Both go through the panel's own activate, so there is one rule about
+arming and it lives with the tiles.
+
+`0` sends `program.take {}`, named neither a source nor a scene. With nothing
+armed that is the slate. The one exception is a scene that is armed: the core
+takes the armed scene when nothing is named, which is what `program.take` has
+meant since before scenes and is not this key's to change. Clear the arming
+first if `0` has to be black.

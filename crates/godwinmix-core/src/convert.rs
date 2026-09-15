@@ -141,7 +141,10 @@ pub fn moov_first(path: &Path) -> Option<bool> {
         match kind.as_str() {
             "ftyp" => saw_iso = true,
             "moov" => return Some(true),
-            "mdat" => return Some(saw_iso.then_some(false)?),
+            // Media data before `moov`: an ISO file that needs its index moved
+            // to the front. A `mdat` in something that never said it was ISO
+            // is not this format's business at all, which is the `None`.
+            "mdat" => return saw_iso.then_some(false),
             _ => {}
         }
         if box_len < header {

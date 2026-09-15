@@ -11,6 +11,10 @@
 //! than failing where those are missing, because a check that cannot run is
 //! not a check that passed.
 
+// Unix only, and the whole file rather than each test: the plugin these drive
+// is a shell script. Windows compiles and runs every ungated test in the
+// workspace on its own CI runner, and the platform arms this file would
+// exercise are listed in docs/explanation/cross-platform.md.
 #![cfg(unix)]
 
 use godwinmix_core::config::SourceConfig;

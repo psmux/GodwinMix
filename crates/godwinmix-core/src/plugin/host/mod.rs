@@ -31,7 +31,7 @@ pub mod transport;
 pub use bridged::{BridgedSource, BridgedSpec, LinkSource};
 pub use filter::SidecarFilter;
 pub use output::SidecarOutput;
-pub use process::{Notice, Sidecar};
+pub use process::{Caller, Notice, Sidecar};
 pub use service::{SidecarDevice, SidecarService};
 pub use source::{SidecarSource, SidecarSpec};
 pub use transport::MediaDir;
