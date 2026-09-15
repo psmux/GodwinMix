@@ -294,7 +294,7 @@ jobs:
       # will name the cases that moved.
       - run: node dev/kit-fixtures.mjs --check
       - run: cd clients/typescript && npm test
-      - run: cd clients/python && python3 -m unittest -q
+      - run: cd clients/python && python3 -m unittest discover -s tests -q
       - run: bash examples/test-zero-dep.sh
       # The two host specific integrations. Both run with nothing installed:
       # they import the client by path and carry their own copy of the fake

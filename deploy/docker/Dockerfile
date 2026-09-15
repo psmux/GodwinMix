@@ -27,36 +27,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 WORKDIR /src
 
-# Manifests first, then a throwaway main per crate, so the dependency build is
-# cached and only the mixer itself is recompiled when the source changes.
-# Every target a manifest names has to exist for `cargo build` to accept it,
-# which is four library roots and the two binaries.
-COPY Cargo.toml Cargo.lock ./
-COPY crates/godwinmix-protocol/Cargo.toml crates/godwinmix-protocol/
-COPY crates/godwinmix-core/Cargo.toml crates/godwinmix-core/
-COPY crates/godwinmix-host/Cargo.toml crates/godwinmix-host/
-COPY crates/godwinmix/Cargo.toml crates/godwinmix/
-RUN mkdir -p crates/godwinmix-protocol/src crates/godwinmix-core/src \
-        crates/godwinmix-host/src crates/godwinmix/src/bin \
-    && touch crates/godwinmix-protocol/src/lib.rs \
-        crates/godwinmix-core/src/lib.rs \
-        crates/godwinmix-host/src/lib.rs \
-        crates/godwinmix/src/lib.rs \
-    && echo 'fn main() {}' > crates/godwinmix/src/main.rs \
-    && echo 'fn main() {}' > crates/godwinmix/src/bin/gmx.rs \
-    && cargo build --release --locked \
-    && find crates -name '*.rs' -delete
-
-# The real source, and the data the crates embed with `include_str!`:
-# `codecs.toml` and the example config for the engine, `layouts/` for the
-# scene module, `ui/` for the web UI the binary serves. They stay at the
-# repository root, which is where every document says they live.
-COPY crates ./crates
-COPY codecs.toml godwinmix.example.toml ./
-COPY layouts ./layouts
-COPY ui ./ui
-RUN find crates -name '*.rs' -exec touch {} + \
-    && cargo build --release --locked --bins \
+# Copy the complete workspace, including plugin manifests and embedded assets.
+# .dockerignore excludes local build output and private runtime files.
+COPY . .
+RUN cargo build --release --locked -p godwinmix --bins \
     && strip target/release/godwinmix target/release/gmx
 
 # ---------------------------------------------------------------- runtime ---
