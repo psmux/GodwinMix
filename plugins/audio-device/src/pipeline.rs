@@ -214,7 +214,17 @@ mod tests {
     /// The regression that cost an afternoon: forcing the driver's buffer
     /// size made this five buffers in three seconds instead of three hundred.
     #[test]
+    #[ignore = "requires a working audio input; run explicitly on a capture machine"]
     fn the_samples_actually_flow_from_whatever_this_machine_has() {
+        assert_samples_flow(&Settings::default());
+    }
+
+    #[test]
+    fn test_tone_samples_flow_without_an_audio_device() {
+        assert_samples_flow(&Settings::from(&json!({"element": "audiotestsrc"})));
+    }
+
+    fn assert_samples_flow(settings: &Settings) {
         use godwinmix_capture_common::{capture, Capture};
         godwinmix_capture_common::init().unwrap();
         let description = format!(
@@ -222,9 +232,7 @@ mod tests {
             chain()
         );
         let pipeline = capture::build(&description).expect("it parses");
-        let Ok(source) = open(&Settings::default()) else {
-            return; // no sound input on this machine, so nothing to measure
-        };
+        let source = open(settings).expect("the configured audio source exists");
         attach(&pipeline, &source).expect("it links");
         let capture = Capture::start(pipeline, Some("gmx-audio-queue"), None).expect("it plays");
         std::thread::sleep(std::time::Duration::from_millis(2_000));

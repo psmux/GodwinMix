@@ -1,0 +1,6 @@
+# Start with no network sources or destinations. Add them through the API.
+[control]
+bind = "0.0.0.0:8080"
+
+[media]
+dir = "/var/lib/godwinmix/media"

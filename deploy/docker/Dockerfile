@@ -95,6 +95,7 @@ RUN useradd --system --uid 10001 --user-group --no-create-home --shell /usr/sbin
 COPY --from=builder /src/target/release/godwinmix /usr/local/bin/godwinmix
 COPY --from=builder /src/target/release/gmx /usr/local/bin/gmx
 COPY godwinmix.example.toml /usr/share/godwinmix/godwinmix.example.toml
+COPY deploy/docker/default.toml /usr/share/godwinmix/default.toml
 COPY deploy/docker/entrypoint.sh /usr/local/bin/gmx-entrypoint
 
 RUN chmod +x /usr/local/bin/gmx-entrypoint
