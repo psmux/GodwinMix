@@ -108,13 +108,19 @@ jobs:
       # ------------------------------------------------------- 1. it starts --
 
       - name: Build the mixer
-        run: cargo build --release --locked --bins
+        run: cargo build --release --locked -p godwinmix --bins
 
       # Every cfg(windows) arm is compiled and run here, which is the point of
       # the Windows job: a regression in a platform arm fails this, not a
       # user's first launch. Deliberately the whole workspace.
       - name: The tests pass on this platform
-        run: cargo test --release --locked --workspace --no-fail-fast
+        shell: bash
+        run: |
+          if [ "${{ runner.os }}" = "Linux" ]; then
+            xvfb-run -a cargo test --profile ci --locked --workspace --no-fail-fast
+          else
+            cargo test --profile ci --locked --workspace --no-fail-fast
+          fi
 
       - name: What the codec probe picks here
         shell: bash

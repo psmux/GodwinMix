@@ -20,6 +20,8 @@ Start here if you have never run it.
 * [Your first stream with a preset](tutorials/first-stream-with-a-preset.md), the
   church path from install to on air
 * [Your first plugin](tutorials/your-first-plugin.md) (planned; the page says what is missing)
+* [Your first stream, from the web page](tutorials/first-stream-web.md)
+
 
 ## How to
 
@@ -69,6 +71,19 @@ Start here if you have never run it.
 * [Record to a file](how-to/record-to-a-file.md)
 * [Run your own code when something happens](how-to/hooks.md)
 * [Turn a bug into a test](how-to/turn-a-bug-into-a-test.md)
+* [Add a built in source kind](how-to/add-a-built-in-source-kind.md)
+* [How to add or override a codec entry](how-to/add-a-codec-entry.md)
+* [Control the mixer](how-to/control-the-mixer.md)
+* [Debug a show](how-to/debug-a-show.md)
+* [The desktop app](how-to/desktop-app.md)
+* [Import your scenes from OBS](how-to/import-from-obs.md)
+* [Make a graphic](how-to/make-a-graphic.md)
+* [Use the mixer controls](how-to/preview-monitor.md)
+* [Run on a Raspberry Pi](how-to/run-on-a-raspberry-pi.md)
+* [Share a collection](how-to/share-a-collection.md)
+* [Use the mixer from an AI agent](how-to/use-with-an-ai-agent.md)
+* [Write a panel](how-to/write-a-panel.md)
+
 
 ## Reference
 
@@ -101,6 +116,11 @@ Start here if you have never run it.
 * [The client libraries](reference/clients.md)
 * [Hooks](reference/hooks.md)
 * [The session log](reference/session-log.md)
+* [Reference: the shipped codec catalogue](reference/codecs.md)
+* [Graphics](reference/graphics.md)
+* [Metrics](reference/metrics.md)
+* [Preview monitor status](reference/preview-monitor.md)
+
 
 ## Explanation
 
@@ -116,6 +136,9 @@ Start here if you have never run it.
 * [Cross platform: what is gated where, and why](explanation/cross-platform.md)
 * [Trust and signing](explanation/trust-and-signing.md)
 * [Why the evals grade the world](explanation/evals.md)
+* [Footprint](explanation/footprint.md)
+* [How a source works](explanation/how-a-source-works.md)
+
 
 ## For AI agents
 

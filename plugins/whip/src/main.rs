@@ -293,6 +293,11 @@ mod tests {
 
     #[test]
     fn an_output_with_no_endpoint_yet_comes_up_and_refuses_to_start() {
+        gmx_netkit::init().unwrap();
+        if gmx_netkit::elements::require(output::NEEDED).is_err() {
+            eprintln!("skipping: this GStreamer installation has no WHIP output elements");
+            return;
+        }
         let mut plugin = an_output();
         plugin
             .initialize(&ready(json!({})), Reporter::for_test())

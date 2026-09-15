@@ -65,6 +65,7 @@ impl Receiver {
                     continue;
                 };
                 stream.set_nonblocking(false).ok();
+                stream.set_nodelay(true).expect("disable buffering on the timing receiver");
                 // Kept open for as many requests as the client sends down it,
                 // which is what a real receiver does and what the hook client
                 // asks for. A connection closed after every answer made the

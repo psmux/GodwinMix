@@ -145,12 +145,18 @@ jobs:
 
           # 5. Measured by something that shares no code with the mixer: read
           #    the programme back off the RTMP server and count frames.
-          ffprobe -v error -rw_timeout 30000000 \
-            -select_streams v:0 -show_entries stream=codec_name,width,height,avg_frame_rate,nb_read_frames \
-            -count_frames -read_intervals '%+#60' -of json \
-            "rtmp://127.0.0.1:1935/live/program" > probe.json
-          frames=$(jq -r '.streams[0].nb_read_frames // 0' probe.json)
-          [ "${frames:-0}" -ge 30 ] || { echo "only $frames frames arrived at the RTMP server"; cat probe.json; exit 1; }
+          frames=0
+          while [ "$(( $(date +%s) - start ))" -lt "$BUDGET_SECS" ]; do
+            if ffprobe -v error -rw_timeout 10000000 \
+              -select_streams v:0 -show_entries stream=codec_name,width,height,avg_frame_rate,nb_read_frames \
+              -count_frames -read_intervals '%+#60' -of json \
+              "rtmp://127.0.0.1:1935/live/program" > probe.json 2> probe-error.log; then
+              frames=$(jq -r '.streams[0].nb_read_frames // 0' probe.json)
+              [ "$frames" -ge 30 ] && break
+            fi
+            sleep 1
+          done
+          [ "$frames" -ge 30 ] || { cat probe-error.log; cat probe.json; exit 1; }
           step "programme decoding at the RTMP server, $frames frames read"
 
           echo "ELAPSED=$(( $(date +%s) - start ))" >> "$GITHUB_ENV"

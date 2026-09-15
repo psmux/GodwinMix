@@ -4831,6 +4831,14 @@ mod tests {
     #[tokio::test]
     async fn the_gl_graphics_entry_runs_a_programme_when_it_is_pinned() {
         let _ = gst::init();
+        if std::env::var_os("GST_GL_DISABLED").is_some()
+            || (cfg!(target_os = "linux")
+                && std::env::var_os("DISPLAY").is_none()
+                && std::env::var_os("WAYLAND_DISPLAY").is_none())
+        {
+            eprintln!("skipping: GL is disabled or no display server is available");
+            return;
+        }
         if !crate::probe::exists("glvideomixer") || !crate::probe::exists("gldownload") {
             return;
         }
@@ -5345,39 +5353,34 @@ mod tests {
         let before = mix.pool.slots().iter().map(|s| s.pad.property::<i32>("width")).max();
         gaps.largest.store(0, Ordering::Relaxed);
 
-        // The same scene, a bigger inset, over 300 ms.
-        mix.take_scene_over(scene("pip", big.clone()), None, Some(300), None)
-            .expect("the animated change");
-
-        // Halfway through, the inset must be between the two sizes: a cut
-        // would already be at the target.
-        tokio::time::sleep(Duration::from_millis(150)).await;
+        // Observe the compositor's frames instead of sampling properties from
+        // a wall clock timer, which can run ahead of media on a busy runner.
         let target = big.iter().map(|p| p.width).min().expect("two items");
         let start = small.iter().map(|p| p.width).min().expect("two items");
-        let midway = mix
-            .pool
-            .slots()
-            .iter()
-            .filter(|s| s.pad.property::<f64>("alpha") > 0.0)
-            .map(|s| s.pad.property::<i32>("width"))
-            .min()
-            .expect("something is on air");
-        assert!(
-            midway > start && midway < target,
-            "the inset was at {midway} halfway through a move from {start} to {target}: that is a cut, not a ramp"
-        );
-
-        // And it arrives.
-        tokio::time::sleep(Duration::from_millis(400)).await;
-        let landed = mix
-            .pool
-            .slots()
-            .iter()
-            .filter(|s| s.pad.property::<f64>("alpha") > 0.0)
-            .map(|s| s.pad.property::<i32>("width"))
-            .min()
-            .expect("something is on air");
-        assert_eq!(landed, target, "the ramp did not finish where the scene says");
+        let widths = Arc::new(Mutex::new(Vec::new()));
+        let observed = widths.clone();
+        let pads: Vec<_> = mix.pool.slots().iter().map(|s| s.pad.clone()).collect();
+        let output = mix.pool.compositor().static_pad("src").unwrap();
+        let probe = output.add_probe(gst::PadProbeType::BUFFER, move |_, _| {
+            if let Some(width) = pads.iter()
+                .filter(|pad| pad.property::<f64>("alpha") > 0.0)
+                .map(|pad| pad.property::<i32>("width"))
+                .min()
+            {
+                observed.lock().push(width);
+            }
+            gst::PadProbeReturn::Ok
+        }).unwrap();
+        mix.take_scene_over(scene("pip", big.clone()), None, Some(300), None)
+            .expect("the animated change");
+        gaps.wait_for(30).await;
+        output.remove_probe(probe);
+        {
+            let widths = widths.lock();
+            assert!(widths.iter().any(|width| *width > start && *width < target),
+                "the inset never passed between {start} and {target}: {widths:?}");
+            assert_eq!(widths.last(), Some(&target), "the ramp did not reach its target");
+        }
 
         gaps.wait_for(5).await;
         let largest = gaps.largest.load(Ordering::Relaxed);

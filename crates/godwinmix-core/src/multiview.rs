@@ -1700,7 +1700,11 @@ mod tests {
             drop(held.take());
             let visible = async {
                 loop {
-                    let bytes = next.recv().await.unwrap();
+                    let bytes = match next.recv().await {
+                        Ok(bytes) => bytes,
+                        Err(broadcast::error::RecvError::Lagged(_)) => continue,
+                        Err(err) => panic!("the mosaic subscription closed: {err}"),
+                    };
                     let img = crate::snapshot::decode_jpeg(&bytes).unwrap();
                     if img.width() != width as u32 { continue; }
                     // The programme is cell zero, at the left of a two cell row.
