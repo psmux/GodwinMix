@@ -301,6 +301,7 @@ mod tests {
             api: 1,
             platform: "linux-x86_64".into(),
             plugins: Vec::new(),
+            schemas: Default::default(),
             media_host: "10.0.0.21".into(),
         };
         nodes.joined_without_link(&hello, "10.0.0.21:9000".into());
