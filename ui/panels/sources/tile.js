@@ -66,7 +66,7 @@ export function buildTile(source, deps) {
   };
   mute.onclick = (e) => {
     e.stopPropagation();
-    deps.onMute(source.id, !source.muted);
+    deps.onMute(source.id, !mute.classList.contains("on"));
   };
   deps.audio.bindFader(fader, source.id, "gain");
   if (lane) deps.scrub.bind(lane, source.id);
@@ -119,6 +119,7 @@ export function syncTile(tile, source, view) {
   tile.gv.textContent = gainLabel(gain);
   tile.gv.classList.toggle("muted", !!source.muted);
   tile.mute.classList.toggle("on", !!source.muted);
+  tile.mute.setAttribute("aria-pressed", String(!!source.muted));
   tile.mute.title = source.muted ? "Unmute" : "Mute";
 
   tile.strip.hidden = !view.showStrip;

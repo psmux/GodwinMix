@@ -70,7 +70,7 @@ class ScenesPanel extends HTMLElement {
       style: { minHeight: "96px" },
     });
     this.hint = el("div.dim.sm.pad", {
-      text: "Drag two or three inputs here to make a scene. Tap a scene to put it on air, double tap to open the composer.",
+      text: "Scenes arrange sources from the shared Sources library. Drag sources onto a scene to add them. Double click a scene to edit its layout. Outputs send the programme and are shared by every scene.",
       style: { maxWidth: "56ch" },
     });
     this.append(this.bar, this.grid, this.hint);
@@ -114,7 +114,7 @@ class ScenesPanel extends HTMLElement {
   render() {
     const list = this.scenes.scenes();
     this.count.textContent = list.length ? String(list.length) : "";
-    this.hint.hidden = list.length > 0;
+    this.hint.hidden = false;
     if (!this.scenes.supported) {
       this.hint.hidden = false;
       this.hint.textContent =

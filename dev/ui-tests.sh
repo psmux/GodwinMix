@@ -90,6 +90,7 @@ token = "$TOKEN"
 # The harness takes several times in as many seconds, which is what the
 # shipped hold exists to refuse. The hold has its own tests.
 min_hold_ms = 0
+flash_guard = false
 TOML
 
 echo "starting a core on $BASE"

@@ -57,7 +57,7 @@ export class GmxShell extends HTMLElement {
         if (this.mounted.has(id)) continue;
         const made = registry.instantiate(id, client, {});
         if (!made) continue;
-        host.appendChild(made.node);
+        host.appendChild(panelSection(id, made.node));
         this.mounted.set(id, made);
       }
     }
@@ -68,7 +68,7 @@ export class GmxShell extends HTMLElement {
       const slot = spec.slots.find((s) => this.slots[s]) || "sidebar";
       const made = registry.instantiate(spec.id, client, {});
       if (!made) continue;
-      this.slots[slot].appendChild(made.node);
+      this.slots[slot].appendChild(panelSection(spec.id, made.node));
       this.mounted.set(spec.id, made);
       this.layout = layout.place(this.layout, slot, spec.id);
     }
@@ -81,6 +81,25 @@ export class GmxShell extends HTMLElement {
     made.destroy();
     this.mounted.delete(id);
   }
+}
+
+/** Keep each control group separate from the programme monitor. */
+export function panelSection(id, node) {
+  const titles = { "core/sources": "Sources", "core/scenes": "Scenes", "core/outputs": "Outputs", "core/media": "Media", "core/alerts": "Alerts" };
+  if (!titles[id]) return node;
+  const key = "gmx.section." + id;
+  let open = id === "core/sources" || id === "core/scenes";
+  try {
+    const saved = localStorage.getItem(key);
+    if (saved !== null) open = saved === "open";
+  } catch { /* Keep the default when storage is unavailable. */ }
+  const section = el("details.panel-section", { open, "data-panel": id }, [
+    el("summary", { text: titles[id] }), node,
+  ]);
+  section.addEventListener("toggle", () => {
+    try { localStorage.setItem(key, section.open ? "open" : "closed"); } catch { /* Optional preference. */ }
+  });
+  return section;
 }
 
 customElements.define("gmx-shell", GmxShell);

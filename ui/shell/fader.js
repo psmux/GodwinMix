@@ -126,7 +126,7 @@ export class AudioGestures {
   }
 
   _post(sourceId, channel, value) {
-    const params = { source: sourceId };
+    const params = { id: sourceId };
     if (channel === "gain") params.gain = posToGain(value);
     else if (channel === "page") params.page = value;
     else if (channel.startsWith("media:")) {
@@ -142,7 +142,7 @@ export class AudioGestures {
   }
 
   setMuted(sourceId, muted) {
-    return this.client.call("source.audio.set", { source: sourceId, muted });
+    return this.client.call("source.audio.set", { id: sourceId, muted });
   }
 }
 
@@ -198,7 +198,7 @@ export class ScrubGestures {
 
   async _post(sourceId, ms) {
     try {
-      const answer = await this.client.call("source.seek", { source: sourceId, position_ms: ms });
+      const answer = await this.client.call("source.seek", { id: sourceId, position_ms: ms });
       if (answer && Number.isFinite(answer.position_ms)) {
         this.positions.set(sourceId, { pos: answer.position_ms, dur: answer.duration_ms, t: performance.now() });
         // The answer is the mixer agreeing, not the pipeline having arrived, so

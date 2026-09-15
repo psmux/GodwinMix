@@ -802,6 +802,19 @@ pub async fn run() -> Result<()> {
         godwinmix_core::caps::CanvasCaps::new(&cfg_for_control.canvas),
     )
     .context("opening the scene collection")?;
+    if scenes.list().is_empty() {
+        let sources: Vec<String> = cfg_for_control.sources.iter().map(|source| source.id.clone()).collect();
+        scenes.edit(None, |doc| {
+            let scene = if sources.is_empty() {
+                godwinmix_core::scene::Scene::new("Default scene")
+            } else {
+                godwinmix_core::scene::server::ops::create_from(doc, &sources, None, Some("Default scene"))?
+            };
+            doc.scenes.push(scene);
+            Ok(())
+        }).context("creating the default scene")?;
+    }
+
     // Every plugin that is not a source: the services, the devices and the
     // transitions, each one instance per plugin, started now and kept up by
     // its own pump thread. A device that finds a publisher adds a source

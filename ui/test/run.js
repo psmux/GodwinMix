@@ -4,7 +4,7 @@
 
 import { Selection, overlaps, rectFrom } from "../shell/selection.js";
 import { dbToPos, FLOOR } from "../shell/meter.js";
-import { posToGain, gainToPos, gainLabel, UNITY } from "../shell/fader.js";
+import { posToGain, gainToPos, gainLabel, UNITY, AudioGestures, ScrubGestures } from "../shell/fader.js";
 import { parseFrame, sheetWidthFor, HEADER_BYTES, SheetPainter } from "../client/frames.js";
 import { Store } from "../client/store.js";
 import { SchemaForm } from "../client/schema-form.js";
@@ -19,7 +19,8 @@ import * as layout from "../shell/layout.js";
 import { ART } from "../panels/welcome/tiles.js";
 import { WelcomePanel } from "../panels/welcome/panel.js";
 import { connect } from "../client/index.js";
-import { shell } from "../shell/shell.js";
+import { shell, panelSection } from "../shell/shell.js";
+import { buildTile, syncTile } from "../panels/sources/tile.js";
 import { SceneMirror } from "../kits/protocol/mirror.js";
 import { Prediction, mergeProps } from "../kits/protocol/predict.js";
 import { gizmosFor, handlesFor, applyDrag } from "../kits/canvas/gizmos.js";
@@ -171,6 +172,48 @@ test("the gain label reads the way an operator expects", () => {
   eq(gainLabel(1), "0.0");
   eq(gainLabel(2)[0], "+");
   ok(gainLabel(0.5).startsWith("-"));
+});
+
+test("audio controls and seeking send the API source id", () => {
+  const calls = [];
+  const client = { call: (method, params) => { calls.push({ method, params }); return Promise.resolve({}); } };
+  const audio = new AudioGestures(client);
+  audio.setMuted("cam1", true);
+  audio._post("cam1", "gain", UNITY);
+  const scrub = new ScrubGestures(client);
+  scrub._post("cam1", 500);
+  eq(calls.map((call) => call.params.id), ["cam1", "cam1", "cam1"]);
+  ok(calls.every((call) => !("source" in call.params)));
+});
+
+test("saved layouts keep control panels outside the monitor", () => {
+  const old = { main: ["core/program", "core/sources"], footer: ["core/outputs", "core/media"] };
+  const migrated = layout.place(old, "main", "core/scenes");
+  eq(migrated.monitor, ["core/program"]);
+  ok(!migrated.main.includes("core/program"));
+  ok(migrated.main.includes("core/outputs") && migrated.main.includes("core/media"));
+});
+
+test("the mute button toggles the latest source state", () => {
+  const muted = [];
+  const source = { id: "cam1", uri: "test://smpte", muted: false, gain: 1 };
+  const tile = buildTile(source, { audio: { bindFader() {} }, scrub: {}, onMute: (id, value) => muted.push(value) });
+  syncTile(tile, source, {});
+  tile.mute.click();
+  syncTile(tile, { ...source, muted: true }, {});
+  tile.mute.click();
+  eq(muted, [true, false]);
+});
+
+test("control sections collapse without destroying their panels", () => {
+  const panel = document.createElement("div");
+  const section = panelSection("core/sources", panel);
+  eq(section.tagName, "DETAILS");
+  eq(section.querySelector("summary").textContent, "Sources");
+  section.open = false;
+  ok(section.contains(panel));
+  section.open = true;
+  ok(section.contains(panel));
 });
 
 // ---------------------------------------------------------------- frames
@@ -961,6 +1004,17 @@ async function liveSuite() {
   }
   await waitFor(() => sources.every((id) => client.store.source(id)), 5000, "both test sources");
 
+  const audio = new AudioGestures(client);
+  await audio.setMuted("t-bars", true);
+  await waitFor(() => client.store.source("t-bars").muted, 3000, "mute status");
+  await audio.setMuted("t-bars", false);
+  await waitFor(() => !client.store.source("t-bars").muted, 3000, "unmute status");
+  test("mute and unmute work against the real API", () => ok(!client.store.source("t-bars").muted));
+  await client.call("program.take", { source: "t-bars" });
+  const switchAt = performance.now();
+  await client.call("program.take", { source: "t-ball" });
+  test("the manual mixer accepts an immediate source switch", () => ok(performance.now() - switchAt < 1000));
+
   window.godwinmixPanels = window.godwinmixPanels || [];
   const { default: ScenesPanel } = await import("../panels/scenes/panel.js");
   const panel = new ScenesPanel();
@@ -1143,7 +1197,7 @@ async function liveSuite() {
   for (const id of panel.scenes.scenes().filter((s) => s.name.includes(renamed.slice(0, 6))).map((s) => s.id)) {
     await client.call("scene.remove", { scene: id }).catch(() => {});
   }
-  for (const id of made) await client.call("source.remove", { source: id }).catch(() => {});
+  for (const id of made) await client.call("source.remove", { id }).catch(() => {});
   panel.remove();
   client.close();
 }

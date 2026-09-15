@@ -112,6 +112,7 @@ class SourcesPanel extends HTMLElement {
     if (this.ro) this.ro.disconnect();
     dropViews("tile:");
     this.release();
+    if (this.positionWant) this.positionWant.release();
   }
 
   // ---------------------------------------------------------------- data
@@ -223,6 +224,12 @@ class SourcesPanel extends HTMLElement {
    */
   retune() {
     const s = this.client.state;
+    const positions = this.visible && !document.hidden && s.sources.some((source) => source.seekable);
+    if (positions && !this.positionWant) this.positionWant = this.client.want("positions", true);
+    else if (!positions && this.positionWant) {
+      this.positionWant.release();
+      this.positionWant = null;
+    }
     const live = [...this.tiles.entries()].filter(([id]) => this.mode(id) === "live");
     const wanted = this.visible && !document.hidden && live.length > 0 && s.multiview && s.multiview.enabled;
     if (!wanted) {
@@ -348,7 +355,7 @@ class SourcesPanel extends HTMLElement {
       text: "Apply",
       onclick: async () => {
         try {
-          await this.client.call("source.set", Object.assign({ source: id }, form.read()));
+          await this.client.call("source.set", Object.assign({ id }, form.read()));
           toast({ text: "Saved." });
         } catch (e) {
           if (e.code === -32601) {
@@ -411,7 +418,7 @@ class SourcesPanel extends HTMLElement {
   async setColour(ids, colour) {
     for (const id of ids) {
       try {
-        await this.client.call("source.set", { source: id, color: colour });
+        await this.client.call("source.set", { id, color: colour });
       } catch (e) {
         if (e.code !== -32601) {
           errorToast(e, "Colour");
@@ -443,11 +450,11 @@ class SourcesPanel extends HTMLElement {
         return;
       }
       try {
-        await this.client.call("source.set", { source: id, name: after });
+        await this.client.call("source.set", { id, name: after });
         shell.undo.push({
           label: `Renamed to ${after}`,
-          undo: () => this.client.call("source.set", { source: id, name: before }),
-          redo: () => this.client.call("source.set", { source: id, name: after }),
+          undo: () => this.client.call("source.set", { id, name: before }),
+          redo: () => this.client.call("source.set", { id, name: after }),
         });
       } catch (e) {
         if (e.code !== -32601) {
@@ -498,7 +505,7 @@ class SourcesPanel extends HTMLElement {
     const removed = ids.map((id) => this.client.store.source(id)).filter(Boolean);
     for (const id of ids) {
       try {
-        await this.client.call("source.remove", { source: id });
+        await this.client.call("source.remove", { id });
       } catch (e) {
         errorToast(e, "Remove");
         return;
@@ -513,7 +520,7 @@ class SourcesPanel extends HTMLElement {
       label: ids.length === 1 ? `Removed ${ids[0]}` : `Removed ${ids.length} sources`,
       undo: restore,
       redo: async () => {
-        for (const id of ids) await this.client.call("source.remove", { source: id });
+        for (const id of ids) await this.client.call("source.remove", { id });
       },
       offer: true,
     });
