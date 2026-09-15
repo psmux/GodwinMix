@@ -120,3 +120,9 @@ ring = "0.17"
 opt-level = 3
 lto = "fat"
 codegen-units = 1
+
+# Optimized tests without repeating the shipping binary's whole-program link.
+[profile.ci]
+inherits = "release"
+lto = false
+codegen-units = 16

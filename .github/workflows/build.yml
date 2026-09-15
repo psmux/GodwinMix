@@ -48,7 +48,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev \
             libgstreamer-plugins-bad1.0-dev gstreamer1.0-plugins-base gstreamer1.0-plugins-good \
-            gstreamer1.0-plugins-bad gstreamer1.0-plugins-ugly gstreamer1.0-libav gstreamer1.0-tools
+            gstreamer1.0-plugins-bad gstreamer1.0-plugins-ugly gstreamer1.0-libav gstreamer1.0-tools xvfb libgl1-mesa-dri
 
       - name: GStreamer (macOS)
         if: runner.os == 'macOS'
@@ -74,14 +74,20 @@ jobs:
           "$gst\bin" | Out-File -FilePath $env:GITHUB_PATH -Append
 
       - name: Build
-        run: cargo build --release --locked
+        run: cargo build --release --locked -p godwinmix --bins
 
       # The tests build real GStreamer pipelines. They are the drift check for
       # protocol.json as well: the test that asserts every route in control.rs
       # appears in the committed schema runs here, so a schema change without a
       # regenerated protocol.json fails this job on every platform.
       - name: Test
-        run: cargo test --release --locked --workspace --no-fail-fast
+        shell: bash
+        run: |
+          if [ "${{ runner.os }}" = "Linux" ]; then
+            xvfb-run -a cargo test --profile ci --locked --workspace --no-fail-fast
+          else
+            cargo test --profile ci --locked --workspace --no-fail-fast
+          fi
 
       # `cargo add godwinmix-core` has to give somebody the engine inside their
       # own program, so the example that shows it is built here. The test that
@@ -187,7 +193,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev \
             libgstreamer-plugins-bad1.0-dev gstreamer1.0-plugins-base gstreamer1.0-plugins-good \
-            gstreamer1.0-plugins-bad gstreamer1.0-plugins-ugly gstreamer1.0-libav gstreamer1.0-tools
+            gstreamer1.0-plugins-bad gstreamer1.0-plugins-ugly gstreamer1.0-libav gstreamer1.0-tools xvfb libgl1-mesa-dri
 
       - name: Test
         env:
@@ -239,7 +245,7 @@ jobs:
               apt-get install -y --no-install-recommends \
                 libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev \
                 libgstreamer-plugins-bad1.0-dev pkg-config
-              cargo build --release --locked --bins
+              cargo build --release --locked -p godwinmix --bins
               ls -la target/release/godwinmix target/release/gmx
             '
 

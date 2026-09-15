@@ -331,8 +331,9 @@ mod tests {
     }
 
     /// A command on disk rather than a quoted one liner: the point of the test
-    /// is what `consult` does with a child process, and a shell in the middle
-    /// only adds its own quoting rules to the thing under test.
+    /// is what `consult` does with a child process. Invoke the interpreter
+    /// explicitly so parallel process creation cannot race an executable write
+    /// on Linux and report ETXTBSY.
     #[cfg(unix)]
     fn script(name: &str, body: &str) -> std::path::PathBuf {
         use std::os::unix::fs::PermissionsExt;
@@ -351,7 +352,7 @@ mod tests {
             "answers",
             "cat >/dev/null\nprintf '%s' '{\"take\":\"cam2\",\"reason\":\"ok\"}'",
         );
-        let settings = Settings::from_value(&json!({ "llm": path.to_string_lossy() }));
+        let settings = Settings::from_value(&json!({ "llm": format!("/bin/sh {}", path.display()) }));
         let decision = consult(&settings, "ignored").await.unwrap();
         assert_eq!(decision.take.as_deref(), Some("cam2"));
         assert_eq!(decision.reason, "ok");
@@ -363,7 +364,7 @@ mod tests {
     async fn a_command_that_never_answers_times_out_rather_than_stopping_the_show() {
         let path = script("slow", "sleep 30");
         let settings = Settings::from_value(&json!({
-            "llm": path.to_string_lossy(),
+            "llm": format!("/bin/sh {}", path.display()),
             "llm_timeout_ms": 500
         }));
         assert_eq!(consult(&settings, "x").await, Err(Trouble::TimedOut(500)));
@@ -383,7 +384,7 @@ mod tests {
             "stdin",
             "grep -q MARKER && printf '%s' '{\"take\":null,\"reason\":\"saw it\"}'",
         );
-        let settings = Settings::from_value(&json!({ "llm": path.to_string_lossy() }));
+        let settings = Settings::from_value(&json!({ "llm": format!("/bin/sh {}", path.display()) }));
         let decision = consult(&settings, "MARKER\n").await.unwrap();
         assert_eq!(decision.take, None);
         assert_eq!(decision.reason, "saw it");
