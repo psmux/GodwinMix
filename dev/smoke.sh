@@ -805,7 +805,7 @@ if [[ -n "$NODE_TOKEN" ]]; then
 
     step "a source placed on the node goes live"
     curl -fsS -X POST "$BASE/api/v1/sources" "${AUTH[@]}" -H 'content-type: application/json' \
-        -d '{"id":"remote","type":"test/source","place":"node:smoke-node","transport":"srt","latency_ms":120}' \
+        -d '{"id":"remote","uri":"test://smpte","place":"node:smoke-node","transport":"srt","latency_ms":120}' \
         >"$WORK/node-source.log" 2>&1 || true
     LIVE=no
     for _ in $(seq 1 40); do
