@@ -246,6 +246,7 @@ const COLLECTION_LEVEL: &[&str] = &[
     "scene.history",
     "scene.edit",
     "scene.layout",
+    "scene.graphic",
     "scene.params",
     "scene.preview",
     "scene.import",
@@ -254,6 +255,7 @@ const COLLECTION_LEVEL: &[&str] = &[
     "scene.redo",
     "scene.create_from",
     "scene.apply_layout",
+    "scene.apply_graphic",
     "scene.validate",
     "scene.export",
 ];
@@ -291,7 +293,12 @@ pub fn rest_transform(method: &str) -> Option<Rest> {
         if collection_level(method) {
             // No `{id}`: there is no member to name. A read that answers a
             // question is a GET so a browser reaches it; the rest are POSTs.
-            let http = if matches!(verb, "get" | "list" | "copy" | "frame" | "export" | "validate") {
+            let http = if matches!(
+                verb,
+                // `schema` answers what an item type takes and changes
+                // nothing, so an inspector fetches it like any other read.
+                "get" | "list" | "copy" | "frame" | "export" | "validate" | "schema"
+            ) {
                 "GET"
             } else {
                 "POST"

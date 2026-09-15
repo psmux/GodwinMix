@@ -291,6 +291,128 @@ else
     ok
 fi
 
+# --- collections, graphics and the OBS importer -----------------------------
+#
+# A collection is what you send somebody: the scenes, the assets hashed, and
+# what plugins they need. A graphic is an OGraf template placed like any other
+# item. The OBS importer is the adoption lever, so the full fixture goes over
+# RPC into this live core and the report has to name the filters it had to
+# duplicate per placement.
+
+step "gmx ctl scene export writes a bundle with its manifest"
+"$GMX" ctl scene export "$WORK/show.zip" >"$WORK/scene-export.log" 2>&1
+if [ -s "$WORK/show.zip" ] && grep -q "wrote" "$WORK/scene-export.log"; then
+    ok
+else
+    bad "$(tr '\n' '; ' <"$WORK/scene-export.log")"
+fi
+
+step "scene import reads it back and adds its scenes"
+"$GMX" ctl scene import "$WORK/show.zip" >"$WORK/scene-import.log" 2>&1
+if grep -q "smoke two" "$WORK/scene-import.log"; then
+    ok
+else
+    bad "$(tr '\n' '; ' <"$WORK/scene-import.log")"
+fi
+
+step "scene.import.obs lands the full fixture with its filter report"
+OBS="$(curl -fsS -X POST "$BASE/api/v1/scenes/import/obs" "${AUTH[@]}" \
+    -H 'content-type: application/json' \
+    -d "{\"path\": \"$REPO/tests/fixtures/obs/full.json\"}" 2>&1)"
+if python3 -c "
+import json, sys
+d = json.load(sys.stdin)
+assert d.get('scenes'), d
+assert d.get('items', 0) > 0, d
+# Every OBS source is accounted for, carried across or skipped with a reason.
+assert d.get('source_report'), 'no per source report'
+# OBS attaches a filter to a source; here it belongs to the item, so each one
+# is copied per placement and each copy is named. That is the acceptance line.
+dup = d.get('filters_duplicated', [])
+assert dup, 'no filters_duplicated in the report'
+assert all(f.get('placements') for f in dup), dup
+" <<<"$OBS"; then
+    ok
+else
+    bad "scene.import.obs answered: $OBS"
+fi
+
+step "gmx plugin add installs the graphics host"
+if GODWINMIX_URL="$BASE" GODWINMIX_TOKEN="$TOKEN" "$GMX" plugin add "$REPO/plugins/ograf" \
+        >"$WORK/ograf-add.log" 2>&1 \
+    && grep -q "ograf/lower-third" "$WORK/ograf-add.log"; then
+    sleep 2
+    ok
+else
+    bad "$(tr '\n' '; ' <"$WORK/ograf-add.log")"
+fi
+
+step "gmx ctl graphic list finds the lower third and its fields"
+GRAPHICS="$("$GMX" ctl graphic list 2>&1)"
+if grep -q "ograf/lower-third" <<<"$GRAPHICS" && grep -q "name" <<<"$GRAPHICS"; then
+    ok
+else
+    bad "$(tr '\n' '; ' <<<"$GRAPHICS")"
+fi
+
+step "scene.item.schema answers the graphic's OGraf schema"
+SCHEMA="$(curl -fsS "$BASE/api/v1/scenes/item/schema?type=ograf/lower-third" "${AUTH[@]}" 2>&1)"
+if python3 -c "
+import json, sys
+d = json.load(sys.stdin)
+assert d.get('kind') == 'graphic', d
+assert sorted(d['schema']['properties']) == ['colour', 'name', 'side', 'title'], d
+assert d.get('step_count') == 1, d
+" <<<"$SCHEMA"; then
+    ok
+else
+    bad "scene.item.schema answered: $SCHEMA"
+fi
+
+step "a graphic is placed and filled in by field name"
+# On a scene of its own: a browser source cannot be rendered on every machine
+# (see docs/reference/web-page-sources.md), and a scene drawing one that is
+# missing is refused by `take`, which the steps below are on.
+"$GMX" ctl scene new "smoke graphic" bars >"$WORK/graphic-scene.log" 2>&1
+"$GMX" ctl scene add "smoke graphic" --graphic ograf/lower-third --name "speaker strap" \
+    >"$WORK/graphic-add.log" 2>&1
+APPLIED="$("$GMX" ctl graphic apply ograf/lower-third --set name="Ada Lovelace" \
+    --set title=Analyst 2>&1)"
+if grep -q "speaker strap" <<<"$APPLIED" && grep -q "Ada Lovelace" <<<"$APPLIED"; then
+    ok
+else
+    bad "$(tr '\n' '; ' <<<"$APPLIED")"
+fi
+
+step "a {{speaker}} binding follows scene.params.set"
+curl -fsS -X POST "$BASE/api/v1/scenes/item/set" "${AUTH[@]}" \
+    -H 'content-type: application/json' \
+    -d '{"scene": "smoke graphic", "item": "speaker strap", "props": {"content": {"graphic": "ograf/lower-third", "params": {"name": "{{speaker}}"}}}}' \
+    >/dev/null 2>&1
+curl -fsS -X POST "$BASE/api/v1/scenes/params/set" "${AUTH[@]}" \
+    -H 'content-type: application/json' \
+    -d '{"values": {"speaker": "Grace Hopper"}}' >/dev/null 2>&1
+BOUND="$(curl -fsS -X POST "$BASE/api/v1/scenes/apply_graphic" "${AUTH[@]}" \
+    -H 'content-type: application/json' \
+    -d '{"graphic": "ograf/lower-third", "values": {}}' 2>&1)"
+if python3 -c "
+import json, sys
+d = json.load(sys.stdin)
+assert d['values']['name'] == 'Grace Hopper', d
+" <<<"$BOUND"; then
+    ok
+else
+    bad "apply_graphic answered: $BOUND"
+fi
+
+step "gmx plugin remove takes the graphics host away again"
+if GODWINMIX_URL="$BASE" GODWINMIX_TOKEN="$TOKEN" "$GMX" plugin remove ograf \
+        >"$WORK/ograf-remove.log" 2>&1; then
+    ok
+else
+    bad "$(tr '\n' '; ' <"$WORK/ograf-remove.log")"
+fi
+
 step "gmx ctl take --scene puts the scene on air"
 "$GMX" ctl take --scene "smoke two" >"$WORK/scene-take.log" 2>&1
 if grep -q "smoke two" "$WORK/scene-take.log"; then

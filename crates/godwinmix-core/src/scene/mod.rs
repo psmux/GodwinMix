@@ -7,6 +7,7 @@
 //!
 //! 11 section 2 is the specification these types follow, key for key.
 
+pub mod collection;
 pub mod document;
 pub mod expr;
 pub mod flat;

@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "OGraf graphics host",
+  "description": "The host serves each graphic as a page on the loopback. Nothing here reaches the network.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "port": {
+      "type": "integer",
+      "title": "Port",
+      "description": "The port on 127.0.0.1 to ask for. 0 takes any free one, which is what to use when two mixers share a machine. If the port asked for is taken, a free one is used and the log says which.",
+      "minimum": 0,
+      "maximum": 65535,
+      "default": 7841,
+      "examples": [7841, 0]
+    }
+  }
+}

@@ -22,6 +22,7 @@ use reqwest::header::{HeaderMap, HeaderValue, AUTHORIZATION};
 use serde::de::DeserializeOwned;
 use serde::Serialize;
 use serde_json::{json, Value};
+use std::path::PathBuf;
 
 #[derive(Subcommand, Debug)]
 pub enum Ctl {
@@ -72,6 +73,9 @@ pub enum Ctl {
     /// Build and drive scenes on a running mixer.
     #[command(subcommand)]
     Scene(SceneCmd),
+    /// Graphics: what templates there are, and putting words in one.
+    #[command(subcommand)]
+    Graphic(GraphicCmd),
     /// Interrupt the programme with a clip, then rejoin live.
     Ad {
         /// Path or URI of the clip.
@@ -172,8 +176,13 @@ pub enum SceneCmd {
     /// Put something on a scene.
     Add {
         scene: String,
-        /// A source id.
-        source: String,
+        /// A source id. Leave it out and give --graphic instead.
+        #[arg(required_unless_present = "graphic")]
+        source: Option<String>,
+        /// A graphic template id, `ograf/lower-third`. `gmx ctl graphic list`
+        /// says which this mixer has.
+        #[arg(long)]
+        graphic: Option<String>,
         /// What to call the item. Defaults to the source's id.
         #[arg(long)]
         name: Option<String>,
@@ -248,6 +257,17 @@ pub enum SceneCmd {
         #[arg(long)]
         dry_run: bool,
     },
+    /// Write the whole collection out, with its assets, as a zip or a folder.
+    Export {
+        /// Where to write it. A path ending .zip writes a zip; anything else
+        /// writes a folder.
+        path: PathBuf,
+    },
+    /// Read a collection bundle and add its scenes to this mixer.
+    Import {
+        /// The .zip that `scene export` wrote, or the folder it unpacks to.
+        path: PathBuf,
+    },
     /// Copy one scene's geometry onto another's items, matched by name.
     CopyLayout {
         from: String,
@@ -255,6 +275,36 @@ pub enum SceneCmd {
         /// "name" or "order".
         #[arg(long, default_value = "name")]
         r#match: String,
+    },
+}
+
+/// `gmx ctl graphic ...`
+#[derive(Subcommand, Debug)]
+pub enum GraphicCmd {
+    /// Every graphic template this mixer has, with what each one takes.
+    List,
+    /// The fields one graphic takes, as JSON Schema.
+    Schema {
+        /// A graphic id, `ograf/lower-third`.
+        graphic: String,
+    },
+    /// Put words into a graphic that is on a scene, by field name.
+    Apply {
+        /// A graphic id, `ograf/lower-third`.
+        graphic: String,
+        /// A field and its value: --set name="Ada Lovelace". Repeatable.
+        #[arg(long = "set", value_name = "FIELD=VALUE")]
+        set: Vec<String>,
+        /// Which placement, by the name you gave the item. Left out, every
+        /// placement of this graphic is filled.
+        #[arg(long)]
+        item: Option<String>,
+        /// Bring it on after filling it in.
+        #[arg(long)]
+        play: bool,
+        /// Take it off.
+        #[arg(long)]
+        stop: bool,
     },
 }
 
@@ -327,6 +377,7 @@ pub async fn run(base: &str, token: Option<&str>, cmd: Ctl) -> Result<()> {
         Ctl::Source(cmd) => source(api, cmd).await?,
         Ctl::Output(cmd) => output(api, cmd).await?,
         Ctl::Scene(cmd) => scene(api, cmd).await?,
+        Ctl::Graphic(cmd) => graphic(api, cmd).await?,
         Ctl::Ad { uri, at, return_to } => {
             let req = AdBreakRequest { uri: uri.clone(), at_running_time_ms: at, return_to };
             let _: Value = api.call("adbreak.start", None, &req).await?;
@@ -690,6 +741,81 @@ fn refusal_message(text: &str, status: reqwest::StatusCode) -> String {
 // scene server does, and an error it sends already names the next step.
 // ---------------------------------------------------------------------------
 
+/// `gmx ctl graphic ...`: the three calls graphics need, on the command line.
+async fn graphic(api: &Api, cmd: GraphicCmd) -> Result<()> {
+    match cmd {
+        GraphicCmd::List => {
+            let listing: Value = api.get("scene.graphic.list", None, &[]).await?;
+            let graphics = listing["graphics"].as_array().cloned().unwrap_or_default();
+            if graphics.is_empty() {
+                println!(
+                    "no graphics. Install one with `gmx plugin add <name>`, or write one \
+                     with `gmx plugin new --kind graphic <name>`."
+                );
+            }
+            for g in &graphics {
+                let fields: Vec<&str> = g["ograf"]["schema"]["properties"]
+                    .as_object()
+                    .into_iter()
+                    .flatten()
+                    .map(|(k, _)| k.as_str())
+                    .collect();
+                println!(
+                    "{:<28} {:<24} {} step(s)  {}",
+                    g["type_id"].as_str().unwrap_or("?"),
+                    g["ograf"]["name"].as_str().unwrap_or(""),
+                    g["ograf"]["stepCount"].as_u64().unwrap_or(1),
+                    fields.join(", ")
+                );
+            }
+        }
+        GraphicCmd::Schema { graphic } => {
+            let answer: Value =
+                api.get("scene.item.schema", None, &[("type", graphic)]).await?;
+            println!("{}", serde_json::to_string_pretty(&answer["schema"])?);
+        }
+        GraphicCmd::Apply { graphic, set, item, play, stop } => {
+            let mut values = serde_json::Map::new();
+            for pair in &set {
+                let (key, value) = pair.split_once('=').with_context(|| {
+                    format!("--set takes FIELD=VALUE, not {pair:?}")
+                })?;
+                // A value that is JSON is taken as JSON, so a number stays a
+                // number and a boolean stays a boolean. Anything else is text,
+                // which is what a name is.
+                let parsed =
+                    serde_json::from_str(value).unwrap_or_else(|_| Value::from(value));
+                values.insert(key.to_string(), parsed);
+            }
+            let answer: Value = api
+                .call(
+                    "scene.apply_graphic",
+                    None,
+                    &json!({
+                        "graphic": graphic,
+                        "values": values,
+                        "item": item,
+                        "play": play,
+                        "stop": stop,
+                    }),
+                )
+                .await?;
+            let names: Vec<&str> =
+                answer["names"].as_array().into_iter().flatten().filter_map(Value::as_str).collect();
+            println!(
+                "{} on {}{}",
+                answer["graphic"].as_str().unwrap_or(&graphic),
+                if names.is_empty() { "nothing".to_string() } else { names.join(", ") },
+                if play { ", playing" } else if stop { ", off" } else { "" }
+            );
+            for (key, value) in answer["values"].as_object().into_iter().flatten() {
+                println!("  {key:<16} {value}");
+            }
+        }
+    }
+    Ok(())
+}
+
 async fn scene(api: &Api, cmd: SceneCmd) -> Result<()> {
     match cmd {
         SceneCmd::List => {
@@ -722,15 +848,73 @@ async fn scene(api: &Api, cmd: SceneCmd) -> Result<()> {
                 .await?;
             print_scene(&view);
         }
-        SceneCmd::Add { scene, source, name } => {
+        SceneCmd::Add { scene, source, graphic, name } => {
+            let content = match (&graphic, &source) {
+                (Some(g), _) => json!({ "graphic": g }),
+                (None, Some(s)) => json!({ "source": s }),
+                (None, None) => bail!("give a source id, or --graphic <id>"),
+            };
             let view: Value = api
                 .call(
                     "scene.item.add",
                     None,
-                    &json!({ "scene": scene, "content": { "source": source }, "name": name }),
+                    &json!({ "scene": scene, "content": content, "name": name }),
                 )
                 .await?;
             print_scene(&view);
+        }
+        SceneCmd::Export { path } => {
+            let zip = path.extension().is_some_and(|e| e.eq_ignore_ascii_case("zip"));
+            let answer: Value = api
+                .call(
+                    "scene.export",
+                    None,
+                    &json!({
+                        "format": if zip { "zip" } else { "dir" },
+                        "path": path.display().to_string(),
+                    }),
+                )
+                .await?;
+            let bundle = &answer["bundle"];
+            println!(
+                "wrote {} ({} asset(s), {} plugin(s) needed)",
+                answer["path"].as_str().unwrap_or(&path.display().to_string()),
+                bundle["assets"].as_array().map(Vec::len).unwrap_or(0),
+                bundle["requires"].as_array().map(Vec::len).unwrap_or(0)
+            );
+            for line in bundle["skipped"].as_array().into_iter().flatten() {
+                println!("  skipped {}", line.as_str().unwrap_or("?"));
+            }
+        }
+        SceneCmd::Import { path } => {
+            let report: Value = api
+                .call("scene.import", None, &json!({ "path": path.display().to_string() }))
+                .await?;
+            let scenes: Vec<&str> =
+                report["scenes"].as_array().into_iter().flatten().filter_map(Value::as_str).collect();
+            println!(
+                "added {} scene(s), {} item(s): {}",
+                scenes.len(),
+                report["items"].as_u64().unwrap_or(0),
+                scenes.join(", ")
+            );
+            for line in report["missing_plugins"].as_array().into_iter().flatten() {
+                println!("  needs a plugin that is not installed: {}", line.as_str().unwrap_or("?"));
+            }
+            for entry in report["relink"].as_array().into_iter().flatten() {
+                println!(
+                    "  relink {}: {} (used by {})",
+                    entry["path"].as_str().unwrap_or("?"),
+                    entry["reason"].as_str().unwrap_or("?"),
+                    entry["items"]
+                        .as_array()
+                        .into_iter()
+                        .flatten()
+                        .filter_map(Value::as_str)
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                );
+            }
         }
         SceneCmd::Set { scene, item, at, size, opacity, duration } => {
             let mut transform = serde_json::Map::new();

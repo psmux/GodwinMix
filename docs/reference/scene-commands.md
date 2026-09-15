@@ -46,7 +46,8 @@ draws its handles without recomputing anything.
 | `scene.rename {scene, name?, color?}` | rename, recolour, or both |
 | `scene.duplicate {scene, name?}` | a copy with new ids throughout |
 | `scene.validate {scene?}` | what to fix before saying it is done |
-| `scene.export {format}` | the whole collection as JSON |
+| `scene.export {format, path?}` | the whole collection: `json`, or `zip` or `dir` with its assets |
+| `scene.import {path}` | read a collection bundle and add its scenes, with a relink report |
 | `scene.import.obs {path}` | read an OBS collection and add its scenes |
 
 ```json
@@ -194,7 +195,7 @@ own, built on demand and taken apart when the filter goes. See
 | `scene.layout.copy {scene}` | read one scene's geometry |
 | `scene.layout.paste {scene, layout, match?}` | put it on another's items |
 | `scene.params.get` | the collection's typed parameters |
-| `scene.params.set {values}` | set their values |
+| `scene.params.set {values}` | set their values, declaring any that are new |
 
 ```json
 {"method": "scene.apply_layout",
@@ -202,6 +203,64 @@ own, built on demand and taken apart when the filter goes. See
             "values": {"a": "cam-wide", "b": "guest"},
             "scene": "three up", "duration_ms": 300}}
 ```
+
+A `{{name}}` in any string property of any item follows the collection's
+parameters, a graphic's fields among them, so one `scene.params.set` changes
+every strap that uses it. A parameter that is not declared yet is declared by
+the first value put in it, typed from that value.
+
+## Graphics
+
+An OGraf template placed like any other item. See
+[graphics](graphics.md) for the format and
+[make a graphic](../how-to/make-a-graphic.md) for writing one.
+
+| Method | What it does |
+|---|---|
+| `scene.graphic.list` | every graphic this core can place, with what each takes |
+| `scene.item.schema {type}` | the fields one item type takes, as JSON Schema |
+| `scene.apply_graphic {graphic, values, item?, play?, stop?, frame?}` | fill it by field name, and play it on or take it off |
+
+```json
+{"method": "scene.item.schema", "params": {"type": "ograf/lower-third"}}
+{"method": "scene.apply_graphic",
+ "params": {"graphic": "ograf/lower-third",
+            "values": {"name": "Ada Lovelace", "title": "Analyst"},
+            "play": true}}
+```
+
+Fields are addressed by name and never by position. A name the schema has not
+got is refused with the names that would have worked, because the caller is
+often a model and a silent no op teaches it nothing. With two of the same
+graphic on the canvas, `item` says which by the name you gave it; with none, an
+error says how to put one there.
+
+`scene.item.schema` answers for every item type, not only a graphic: give it a
+source or filter provide and it answers that plugin's settings schema, so a
+client has one call for the inspector whatever the item is.
+
+`frame: true` answers with a still of the armed scene beside the records, so an
+agent checks its own work without a second call.
+
+## Sharing a collection
+
+| Method | What it does |
+|---|---|
+| `scene.export {format: "json"}` | the scene document alone |
+| `scene.export {format: "zip", path?}` | a bundle carrying the assets, hashed; base64 with no path |
+| `scene.export {format: "dir", path}` | the same bundle, unpacked |
+| `scene.import {path}` | read one back, with a relink report |
+
+```json
+{"method": "scene.export", "params": {"format": "zip", "path": "/tmp/show.zip"}}
+{"method": "scene.import", "params": {"path": "/tmp/show.zip"}}
+```
+
+An import answers with the scenes it added by the names they ended up with, the
+plugins the bundle needs that this core has not got, and a relink entry for
+every asset that did not come across naming the file and the items that draw
+it. The scenes come in either way: a partial import succeeds visibly. See
+[share a collection](../how-to/share-a-collection.md).
 
 Applying onto a scene that already exists keeps its item ids, so the item that
 was the inset is the item that becomes full screen and the change is a property

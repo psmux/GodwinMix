@@ -101,6 +101,16 @@ export interface AgentStateRequest {
 /** The nine alignment keywords, used to place content inside its frame. */
 export type Align = "top-left" | "top-center" | "top-right" | "center-left" | "center" | "center-right" | "bottom-left" | "bottom-center" | "bottom-right";
 
+/** `scene.apply_graphic`. */
+export interface ApplyGraphicRequest {
+  frame?: boolean;
+  graphic: string;
+  item?: string | null;
+  play?: boolean;
+  stop?: boolean;
+  values?: Record<string, unknown>;
+}
+
 /** `scene.apply_layout`. */
 export interface ApplyLayoutRequest {
   duration_ms?: number | null;
@@ -125,6 +135,13 @@ export interface ApplyResult {
   live: string[];
   needs_restart: string[];
   plan: unknown;
+}
+
+/** A file the collection carries with it. */
+export interface Asset {
+  path: string;
+  sha256?: string | null;
+  size?: number | null;
 }
 
 /**
@@ -164,6 +181,26 @@ export interface BindRequest {
 
 /** OBS's blend enum, so an import carries across unchanged. */
 export type Blend = "normal" | "add" | "screen" | "multiply" | "lighten" | "darken" | "subtract";
+
+/** What an importer is told before it reads the document. */
+export interface Bundle {
+  assets: BundleAsset[];
+  bundle_version: number;
+  canvas: Canvas;
+  id: Id;
+  name: string;
+  requires: Requirement[];
+  skipped?: string[];
+  written_by: string;
+}
+
+/** One file carried in the bundle. */
+export interface BundleAsset {
+  id: Id;
+  path: string;
+  sha256: string;
+  size: number;
+}
 
 /**
  * The output raster. One per collection in this release; 11 section 1 leaves
@@ -262,9 +299,11 @@ export interface EditBeginRequest {
   scene: string;
 }
 
+/** `scene.export`. */
 export interface ExportRequest {
   collection?: string | null;
   format?: string | null;
+  path?: string | null;
 }
 
 /**
@@ -311,6 +350,14 @@ export interface FilterRecord {
 
 export interface FilterRemoved {
   removed: string;
+}
+
+/** A source filter that had to be copied onto each placement. */
+export interface FilterReport {
+  filter: string;
+  obs_type: string;
+  placements: string[];
+  source: string;
 }
 
 /** One thing the validator found. */
@@ -388,10 +435,52 @@ export interface GoLiveResult {
   state: SourceState;
 }
 
+/** `scene.graphic.list`. */
+export interface GraphicListing {
+  graphics: GraphicType[];
+}
+
+/** One graphic this core can place, as the catalogue has it. */
+export interface GraphicType {
+  designer?: unknown;
+  manifest: string;
+  ograf: Ograf;
+  plugin: string;
+  provide: string;
+  type_id: string;
+}
+
 /** `source.group`. */
 export interface GroupSourcesRequest {
   name?: string | null;
   sources: string[];
+}
+
+/**
+ * Everything in the document that is not a scene or an item: the name, the
+ * canvas, the collection's parameters, the transitions it carries, the assets
+ * and the source labels.
+ *
+ * It is not a record and it has no id, so it cannot be diffed the way the
+ * tree is. It is carried whole, because it is small and because the
+ * alternative is that a command touching only the header produces an empty
+ * patch and is thrown away by `edit`, which is exactly what used to happen to
+ * `scene.params.set`, `source.set` and `source.group`: all three answered with
+ * the change and none of them kept it.
+ */
+export interface Header {
+  assets?: Record<string, unknown>;
+  canvas: Canvas;
+  name: string;
+  params: unknown;
+  sources?: Record<string, unknown>;
+  transitions?: Transition2[];
+}
+
+/** The header as it was and as it is. */
+export interface HeaderChange {
+  after: Header;
+  before: Header;
 }
 
 /** `program.history`. */
@@ -422,10 +511,28 @@ export interface ImportObsRequest {
 }
 
 export interface ImportReport {
+  config_toml?: string | null;
+  filters_duplicated?: FilterReport[];
   items: number;
   scenes: string[];
   skipped: string[];
+  source_report?: SourceReport[];
   sources: string[];
+}
+
+/** `scene.import`. */
+export interface ImportRequest {
+  path: string;
+}
+
+/** What `scene.import` answers with. */
+export interface ImportedReport {
+  assets_at?: string | null;
+  bundle: Bundle;
+  items: number;
+  missing_plugins?: string[];
+  relink?: Relink[];
+  scenes: string[];
 }
 
 /** One running instance and its cost. */
@@ -475,6 +582,11 @@ export interface ItemRequest {
   draft?: string | null;
   item: string;
   scene: string;
+}
+
+/** `scene.item.schema`. */
+export interface ItemSchemaRequest {
+  type: string;
 }
 
 /**
@@ -650,6 +762,26 @@ export interface NameRequest {
   name: string;
 }
 
+/**
+ * The OGraf manifest, in the subset this host reads.
+ *
+ * Everything else the file carries is kept in `rest` and passed on: OGraf is
+ * an EBU specification that will grow, and a key this build has not heard of
+ * is a key a newer client may want. Dropping it here would make the core the
+ * thing that has to be upgraded first.
+ */
+export interface Ograf {
+  description?: string | null;
+  id?: string;
+  main?: string;
+  name?: string;
+  schema?: unknown;
+  stepCount?: number;
+  supportsNonRealTime?: boolean;
+  supportsRealTime?: boolean;
+  version?: string | null;
+}
+
 export type OutputState = "connecting" | "live" | "reconnecting" | "failed";
 
 export interface OutputStatus {
@@ -680,6 +812,7 @@ export interface ParamsRequest {
 export interface Patch {
   added?: ProtocolRecord[];
   client_seq?: number | null;
+  header?: HeaderChange | null;
   label?: string | null;
   removed?: Id[];
   scope: string;
@@ -834,6 +967,14 @@ export interface ProtocolRecord {
 }
 export type { ProtocolRecord as Record };
 
+/** One asset an import could not put back. */
+export interface Relink {
+  asset: Id;
+  items: string[];
+  path: string;
+  reason: string;
+}
+
 export interface RenameSceneRequest {
   color?: string | null;
   name?: string | null;
@@ -848,6 +989,13 @@ export interface ReorderRequest {
   item: string;
   scene: string;
   seq?: number | null;
+}
+
+/** One plugin the collection needs. */
+export interface Requirement {
+  plugin: string;
+  provides: string[];
+  versions: string;
 }
 
 export type ResponseFormat = "concise" | "detailed";
@@ -1000,6 +1148,13 @@ export interface SourceAudioState {
   page?: number | null;
 }
 
+/** A source's name, colour and tray folder, as this collection has them. */
+export interface SourceMeta {
+  color?: string | null;
+  group?: string | null;
+  name?: string | null;
+}
+
 /**
  * Where a seekable source has got to, which is what the seek endpoint answers
  * with.
@@ -1012,6 +1167,13 @@ export interface SourceAudioState {
 export interface SourcePositionState {
   duration_ms?: number | null;
   position_ms: number;
+}
+
+/** One line of the report: an OBS source and what happened to it. */
+export interface SourceReport {
+  obs_name: string;
+  obs_type: string;
+  placements: number;
 }
 
 export type SourceState = "connecting" | "live" | "stalled" | "failed";
@@ -1129,6 +1291,15 @@ export interface Transform {
 
 /** A name, or an object. */
 export type Transition = string | TransitionRequest;
+
+/** A named transition between two scenes. */
+export interface Transition2 {
+  duration_ms: number;
+  id: Id;
+  name: string;
+  params?: unknown;
+  type: string;
+}
 
 /** How a take gets there. See docs/reference/transitions.md. */
 export interface TransitionRequest {
@@ -1320,6 +1491,7 @@ export interface MethodParams {
   "program.revert": Record<string, never>;
   "program.take": TakeRequest;
   "scene.add": AddSceneRequest;
+  "scene.apply_graphic": ApplyGraphicRequest;
   "scene.apply_layout": ApplyLayoutRequest;
   "scene.create_from": CreateFromRequest;
   "scene.duplicate": DuplicateSceneRequest;
@@ -1328,7 +1500,9 @@ export interface MethodParams {
   "scene.edit.discard": DraftRequest;
   "scene.export": ExportRequest;
   "scene.get": SceneRequest;
+  "scene.graphic.list": Record<string, never>;
   "scene.history.mark": MarkRequest;
+  "scene.import": ImportRequest;
   "scene.import.obs": ImportObsRequest;
   "scene.item.add": AddItemRequest;
   "scene.item.align": ItemsRequest;
@@ -1346,6 +1520,7 @@ export interface MethodParams {
   "scene.item.move": MoveItemRequest;
   "scene.item.remove": ItemRequest;
   "scene.item.reorder": ReorderRequest;
+  "scene.item.schema": ItemSchemaRequest;
   "scene.item.set": SetItemRequest;
   "scene.item.ungroup": ItemRequest;
   "scene.layout.copy": SceneRequest;
@@ -1438,6 +1613,7 @@ export interface MethodResults {
   "program.revert": ProgramState;
   "program.take": ProgramState;
   "scene.add": SceneView;
+  "scene.apply_graphic": Record<string, unknown>;
   "scene.apply_layout": Record<string, unknown>;
   "scene.create_from": SceneView;
   "scene.duplicate": SceneView;
@@ -1446,7 +1622,9 @@ export interface MethodResults {
   "scene.edit.discard": Record<string, unknown>;
   "scene.export": Record<string, unknown>;
   "scene.get": SceneView;
+  "scene.graphic.list": GraphicListing;
   "scene.history.mark": Record<string, unknown>;
+  "scene.import": ImportedReport;
   "scene.import.obs": ImportReport;
   "scene.item.add": Record<string, unknown>;
   "scene.item.align": Record<string, unknown>;
@@ -1464,6 +1642,7 @@ export interface MethodResults {
   "scene.item.move": Record<string, unknown>;
   "scene.item.remove": Record<string, unknown>;
   "scene.item.reorder": Record<string, unknown>;
+  "scene.item.schema": Record<string, unknown>;
   "scene.item.set": Record<string, unknown>;
   "scene.item.ungroup": Record<string, unknown>;
   "scene.layout.copy": Layout;
@@ -1593,15 +1772,18 @@ export const METHODS: readonly MethodInfo[] = [
   { name: "program.revert", summary: "Take back to the shot before this one.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/program/revert" } },
   { name: "program.take", summary: "Put a scene or a source on programme. The cut is instant and the outgoing stream is not disturbed.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/program/take" } },
   { name: "scene.add", summary: "Make an empty scene, or one built from a set of sources.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/scenes" } },
+  { name: "scene.apply_graphic", summary: "Fill a graphic that is on a scene, by field name, and optionally play it on or take it off. Answers with the records and, if asked, a still.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/scenes/apply_graphic" } },
   { name: "scene.apply_layout", summary: "Apply a layout, making a scene or reshaping one that exists. Applying onto an existing scene keeps the item ids, so the change is a ramp and not a cut.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/scenes/apply_layout" } },
   { name: "scene.create_from", summary: "A scene from a set of sources, laid out by the built in layout for that count (full, two-box, three-box, quad, then a grid) or by a named one.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/scenes/create_from" } },
   { name: "scene.duplicate", summary: "A copy of a scene with new ids throughout, so editing the copy cannot touch the original.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/scenes/{id}/duplicate" } },
   { name: "scene.edit.apply", summary: "Write a draft back into the live document.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/scenes/edit/apply" } },
   { name: "scene.edit.begin", summary: "Take a working copy of a scene. Editing is off air by default: the draft is written back on the next take of that scene, or when you apply it.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/scenes/edit/begin" } },
   { name: "scene.edit.discard", summary: "Throw a draft away. The live document is untouched.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/scenes/edit/discard" } },
-  { name: "scene.export", summary: "The whole collection as JSON. The zip bundle with assets is Phase 5.", scope: "read", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/scenes/export" } },
+  { name: "scene.export", summary: "The whole collection: as JSON, or as a zip bundle carrying its assets with a hash each, which is what you send somebody.", scope: "read", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/scenes/export" } },
   { name: "scene.get", summary: "One scene: its records and where every item actually lands on the canvas.", scope: "read", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/scenes/{id}" } },
+  { name: "scene.graphic.list", summary: "Every graphic template this core can place, with what each one takes.", scope: "read", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/scenes/graphic/list" } },
   { name: "scene.history.mark", summary: "Group the changes that follow into one undo step, until the next mark. This is what makes a drag of forty moves one Ctrl+Z.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/scenes/history/mark" } },
+  { name: "scene.import", summary: "Read a collection bundle, a zip or the directory it unpacks to, and add its scenes to this one. Answers with a relink report for any asset that did not come across.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/scenes/import" } },
   { name: "scene.import.obs", summary: "Read an OBS Studio scene collection and add its scenes to this one.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/scenes/import/obs" } },
   { name: "scene.item.add", summary: "Put something on a scene's canvas. With no transform it lands in the next free cell, so a drop never needs a dialog.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/scenes/item/add" } },
   { name: "scene.item.align", summary: "Line items up on an edge: left, right, top, bottom, center-x or center-y.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/scenes/item/align" } },
@@ -1619,6 +1801,7 @@ export const METHODS: readonly MethodInfo[] = [
   { name: "scene.item.move", summary: "Move an item to another scene, keeping its transform and filters.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/scenes/item/move" } },
   { name: "scene.item.remove", summary: "Take an item off a scene.", scope: "operate", mutating: true, destructive: true, rest: { method: "POST", path: "/api/v1/scenes/item/remove" } },
   { name: "scene.item.reorder", summary: "Move an item up or down the stack, between two named neighbours.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/scenes/item/reorder" } },
+  { name: "scene.item.schema", summary: "What one item type takes: a graphic's OGraf schema, or a source or filter plugin's settings schema. The same JSON Schema every client renders an inspector from.", scope: "read", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/scenes/item/schema" } },
   { name: "scene.item.set", summary: "Assign an item's properties. Only the keys named move; the rest are left alone, so calling it twice with the same body changes nothing the second time.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/scenes/item/set" } },
   { name: "scene.item.ungroup", summary: "Take a group apart, leaving every child exactly where it looked.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/scenes/item/ungroup" } },
   { name: "scene.layout.copy", summary: "Read one scene's geometry, to paste onto another.", scope: "read", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/scenes/layout/copy" } },
@@ -1626,7 +1809,7 @@ export const METHODS: readonly MethodInfo[] = [
   { name: "scene.layout.paste", summary: "Put one scene's geometry onto another's items, matched by name first and slot order second. Items that match nothing are left alone.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/scenes/layout/paste" } },
   { name: "scene.list", summary: "Every scene in the collection, with how many items it has, the sources it draws and whether it is armed.", scope: "read", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/scenes" } },
   { name: "scene.params.get", summary: "The collection's typed parameters, readable without their values, so a client discovers what is fillable before filling it.", scope: "read", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/scenes/params/get" } },
-  { name: "scene.params.set", summary: "Set the collection's parameter values. A `{{name}}` in a string property follows them.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/scenes/params/set" } },
+  { name: "scene.params.set", summary: "Set the collection's parameter values, declaring any that are new. A `{{name}}` in any string property of any item follows them, so one call changes every lower third that uses it.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/scenes/params/set" } },
   { name: "scene.preview.frame", summary: "A still of the armed scene as base64 JPEG, the floor every client has.", scope: "read", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/scenes/preview/frame" } },
   { name: "scene.preview.set", summary: "Arm a scene. The armed scene is the preview, and program.take with no argument takes it.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/scenes/preview/set" } },
   { name: "scene.redo", summary: "Put back what undo took away.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/scenes/redo" } },
@@ -1985,6 +2168,11 @@ export class GeneratedMethods {
     return this._call("scene.add", params as unknown as Record<string, unknown>) as Promise<SceneView>;
   }
 
+  /** Fill a graphic that is on a scene, by field name, and optionally play it on or take it off. Answers with the records and, if asked, a still. */
+  sceneApplyGraphic(params: ApplyGraphicRequest): Promise<Record<string, unknown>> {
+    return this._call("scene.apply_graphic", params as unknown as Record<string, unknown>) as Promise<Record<string, unknown>>;
+  }
+
   /** Apply a layout, making a scene or reshaping one that exists. Applying onto an existing scene keeps the item ids, so the change is a ramp and not a cut. */
   sceneApplyLayout(params: ApplyLayoutRequest): Promise<Record<string, unknown>> {
     return this._call("scene.apply_layout", params as unknown as Record<string, unknown>) as Promise<Record<string, unknown>>;
@@ -2015,7 +2203,7 @@ export class GeneratedMethods {
     return this._call("scene.edit.discard", params as unknown as Record<string, unknown>) as Promise<Record<string, unknown>>;
   }
 
-  /** The whole collection as JSON. The zip bundle with assets is Phase 5. */
+  /** The whole collection: as JSON, or as a zip bundle carrying its assets with a hash each, which is what you send somebody. */
   sceneExport(params: ExportRequest = {}): Promise<Record<string, unknown>> {
     return this._call("scene.export", params as unknown as Record<string, unknown>) as Promise<Record<string, unknown>>;
   }
@@ -2025,9 +2213,19 @@ export class GeneratedMethods {
     return this._call("scene.get", params as unknown as Record<string, unknown>) as Promise<SceneView>;
   }
 
+  /** Every graphic template this core can place, with what each one takes. */
+  sceneGraphicList(): Promise<GraphicListing> {
+    return this._call("scene.graphic.list", {}) as Promise<GraphicListing>;
+  }
+
   /** Group the changes that follow into one undo step, until the next mark. This is what makes a drag of forty moves one Ctrl+Z. */
   sceneHistoryMark(params: MarkRequest = {}): Promise<Record<string, unknown>> {
     return this._call("scene.history.mark", params as unknown as Record<string, unknown>) as Promise<Record<string, unknown>>;
+  }
+
+  /** Read a collection bundle, a zip or the directory it unpacks to, and add its scenes to this one. Answers with a relink report for any asset that did not come across. */
+  sceneImport(params: ImportRequest): Promise<ImportedReport> {
+    return this._call("scene.import", params as unknown as Record<string, unknown>) as Promise<ImportedReport>;
   }
 
   /** Read an OBS Studio scene collection and add its scenes to this one. */
@@ -2115,6 +2313,11 @@ export class GeneratedMethods {
     return this._call("scene.item.reorder", params as unknown as Record<string, unknown>) as Promise<Record<string, unknown>>;
   }
 
+  /** What one item type takes: a graphic's OGraf schema, or a source or filter plugin's settings schema. The same JSON Schema every client renders an inspector from. */
+  sceneItemSchema(params: ItemSchemaRequest): Promise<Record<string, unknown>> {
+    return this._call("scene.item.schema", params as unknown as Record<string, unknown>) as Promise<Record<string, unknown>>;
+  }
+
   /** Assign an item's properties. Only the keys named move; the rest are left alone, so calling it twice with the same body changes nothing the second time. */
   sceneItemSet(params: SetItemRequest): Promise<Record<string, unknown>> {
     return this._call("scene.item.set", params as unknown as Record<string, unknown>) as Promise<Record<string, unknown>>;
@@ -2150,7 +2353,7 @@ export class GeneratedMethods {
     return this._call("scene.params.get", {}) as Promise<Record<string, unknown>>;
   }
 
-  /** Set the collection's parameter values. A `{{name}}` in a string property follows them. */
+  /** Set the collection's parameter values, declaring any that are new. A `{{name}}` in any string property of any item follows them, so one call changes every lower third that uses it. */
   sceneParamsSet(params: ParamsRequest = {}): Promise<Record<string, unknown>> {
     return this._call("scene.params.set", params as unknown as Record<string, unknown>) as Promise<Record<string, unknown>>;
   }
