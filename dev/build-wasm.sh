@@ -20,6 +20,9 @@ set -eu
 root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 crates="plugins/min-hold examples/wasm-ease"
 
+# Keep personal checkout and dependency paths out of distributed components.
+export RUSTFLAGS="${RUSTFLAGS:-} --remap-path-prefix=$HOME=/build/home --remap-path-prefix=$root=/build/godwinmix"
+
 if command -v rustup >/dev/null 2>&1; then
     RUSTC=$(rustup which --toolchain stable rustc)
     CARGO=$(rustup which --toolchain stable cargo)

@@ -66,3 +66,7 @@ examples/*/target/
 
 # Runtime crash reports can contain private machine paths and settings.
 **/crashes/
+
+# Python bytecode embeds the local source filename.
+**/__pycache__/
+*.pyc
