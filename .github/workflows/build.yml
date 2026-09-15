@@ -137,6 +137,15 @@ jobs:
         run: |
           sudo apt-get install -y libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev patchelf libssl-dev
 
+      - name: Stage the mixer for the desktop app
+        shell: bash
+        run: |
+          triple=$(rustc -vV | sed -n 's/^host: //p')
+          suffix=""
+          [ "${{ runner.os }}" = "Windows" ] && suffix=".exe"
+          mkdir -p tauri-app/binaries
+          cp "target/release/godwinmix${suffix}" "tauri-app/binaries/godwinmix-${triple}${suffix}"
+
       - name: Desktop app
         working-directory: tauri-app
         run: cargo build --release --locked
