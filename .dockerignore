@@ -1,0 +1,15 @@
+.git
+**/target
+**/node_modules
+**/__pycache__
+**/*.pyc
+**/crashes
+**/.DS_Store
+.env
+.env.*
+.omc
+browser/dev/out*
+browser/dev/rt-ctx
+dev/harness/logs
+dev/harness/bin
+**/*.runtime.toml
