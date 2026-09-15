@@ -167,6 +167,32 @@
       ]
     },
     {
+      "name": "ograf",
+      "source": "./plugins/ograf",
+      "description": "An OGraf graphics host: serves a graphic template as a page and drives load, update, play and stop",
+      "tier": "gold",
+      "kinds": [
+        "graphic",
+        "service"
+      ],
+      "license": "Apache-2.0",
+      "repository": "https://github.com/psmux/godwinmix/tree/main/plugins/ograf",
+      "versions": [
+        {
+          "version": "0.2.0",
+          "api": 1,
+          "platforms": [
+            "linux-x86_64",
+            "linux-aarch64",
+            "macos-aarch64",
+            "macos-x86_64",
+            "windows-x86_64"
+          ],
+          "signed": true
+        }
+      ]
+    },
+    {
       "name": "osc",
       "source": "./plugins/osc",
       "description": "OSC in and out: take, fader and mute from any control surface, tally and programme back out",
