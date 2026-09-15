@@ -512,6 +512,15 @@ fn test_offline(dir: &Path, provide: Option<&str>) -> Result<()> {
     let manifest =
         godwinmix_protocol::plugin::manifest::Manifest::load(dir.join("gmx-plugin.toml"))
             .map_err(|e| anyhow::anyhow!("{e}"))?;
+    // Tier W has no process to spawn and no pipe to write on, so the same
+    // transcript is replayed through the component in this process.
+    if godwinmix_core::plugin::wasm::runs_as_wasm(&manifest) {
+        println!("offline replay of {}", transcript_path.display());
+        println!("  the component, in this process, with no core\n");
+        let said = godwinmix_core::plugin::wasmcheck::replay(dir, &manifest, &transcript)?;
+        println!("{said}");
+        return Ok(());
+    }
     let provide = provide
         .map(str::to_string)
         .or_else(|| manifest.provides.first().map(|p| p.id.clone()))
@@ -549,6 +558,7 @@ fn test_offline(dir: &Path, provide: Option<&str>) -> Result<()> {
 ///
 /// Every `{{key}}` a template can carry is here, so a template that grows one
 /// fails to substitute rather than shipping the braces to an author.
+#[derive(Clone)]
 pub struct Fields {
     pub name: String,
     pub kind: String,
@@ -603,6 +613,26 @@ fn whoami() -> String {
 
 /// `gmx plugin new`. Copies `templates/<lang>/` and fills its placeholders.
 fn new_plugin(lang: &str, out: &Path, fields: &Fields) -> Result<()> {
+    // A media kind cannot run as a component, so `--lang wasm` with the
+    // default kind means a service rather than an error the person did not
+    // ask for. A media kind they typed on purpose is still refused, and the
+    // message names the placement that does carry media.
+    let mut fields = fields.clone();
+    if lang == "wasm" {
+        let kinds = godwinmix_protocol::plugin::manifest::WASM_KINDS;
+        if fields.kind == "source" {
+            fields.kind = "service".into();
+            println!("--lang wasm: a component carries no media, so this is a service");
+        }
+        anyhow::ensure!(
+            kinds.contains(&fields.kind.as_str()),
+            "a `{}` carries media and a WebAssembly component never does. Tier W runs {} \
+             only. For a media plugin use `--lang rust` and the `sidecar` placement.",
+            fields.kind,
+            kinds.join(", ")
+        );
+    }
+    let fields = &fields;
     anyhow::ensure!(
         godwinmix_protocol::plugin::manifest::is_slug(&fields.name),
         "`{}` is not a slug. Use lower case letters, digits and hyphens, starting with \
@@ -616,7 +646,7 @@ fn new_plugin(lang: &str, out: &Path, fields: &Fields) -> Result<()> {
         fields.kind,
         kinds.join(", ")
     );
-    const LANGS: &[&str] = &["rust", "python", "node", "go", "shell"];
+    const LANGS: &[&str] = &["rust", "python", "node", "go", "shell", "wasm"];
     anyhow::ensure!(
         LANGS.contains(&lang),
         "`{lang}` has no template. Known: {}.",
@@ -632,9 +662,30 @@ fn new_plugin(lang: &str, out: &Path, fields: &Fields) -> Result<()> {
     println!("wrote {written} file(s) to {}", out.display());
     println!("\nNext:");
     println!("  cd {}", out.display());
+    if lang == "wasm" {
+        // A component has to be built before anything can load it, and the
+        // template's own script is the one line that does it.
+        println!("  ./check");
+    }
     println!("  gmx plugin test . --quick");
     println!("  gmx plugin add .");
-    println!("  gmx source add {} --type {}/{}", fields.name, fields.name, fields.kind);
+    // What to do with it once it is installed, which is not the same sentence
+    // for every kind: only a source is added by `source.add`.
+    match fields.kind.as_str() {
+        "source" => {
+            println!("  gmx source add {} --type {}/{}", fields.name, fields.name, fields.kind)
+        }
+        "output" => {
+            println!("  gmx output add {} --type {}/{}", fields.name, fields.name, fields.kind)
+        }
+        "transition" => println!(
+            "  gmx ctl program.take '{{\"scene\": \"...\", \"transition\": {{\"type\": \"{}\"}}}}'",
+            fields.name
+        ),
+        // A service, a device and the surface kinds are started by the core
+        // rather than added: installing one is the whole of it.
+        _ => println!("  it starts with the core; `gmx plugin list` says when it is ready"),
+    }
     Ok(())
 }
 

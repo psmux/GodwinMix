@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "{{name}}",
+  "type": "object",
+  "properties": {
+    "example_ms": {
+      "type": "integer",
+      "title": "An example setting",
+      "description": "Replace this with your own. Every surface (web, terminal, agent) renders this schema and nothing else, so what you write here is the settings UI.",
+      "minimum": 0,
+      "default": 1000,
+      "x-gmx-unit": "ms",
+      "examples": [1000, 250]
+    }
+  },
+  "additionalProperties": false
+}

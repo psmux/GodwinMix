@@ -1,0 +1,83 @@
+#!/bin/sh
+# Everything that can be checked without a core, in under thirty seconds.
+#
+#   ./check          build the component and replay the transcript
+#   ./check --quick  skip the failing test you have not written yet
+#
+# What `gmx plugin test .` adds on top: the manifest through the core's own
+# validator, the handshake against the real host, every example in the settings
+# schema put through `configure`, and every hook driven once.
+set -eu
+
+cd "$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
+quick=${1:-}
+failed=0
+
+step() {
+    printf '%-34s' "$1"
+    shift
+    if output=$("$@" 2>&1); then
+        echo "ok"
+    else
+        echo "FAILED"
+        echo "$output" | sed 's/^/    /'
+        failed=1
+    fi
+}
+
+echo "checking {{name}} with $(cargo --version)"
+
+# On a machine with rustup beside another rust (Homebrew's, a distribution's),
+# the other one is often first on PATH and has no wasm std. Prefer rustup's.
+if command -v rustup >/dev/null 2>&1; then
+    RUSTC=$(rustup which --toolchain stable rustc)
+    CARGO=$(rustup which --toolchain stable cargo)
+    lib=$(dirname "$(dirname "$RUSTC")")/lib
+    [ -f "$lib/libLLVM.dylib" ] && export DYLD_FALLBACK_LIBRARY_PATH="$lib"
+    export RUSTC
+else
+    CARGO=cargo
+fi
+
+"$RUSTC" --print target-list 2>/dev/null | grep -qx wasm32-wasip2 || {
+    echo "this rust has no wasm32-wasip2 target. Run: rustup target add wasm32-wasip2" >&2
+    exit 1
+}
+
+if "$CARGO" fmt --version >/dev/null 2>&1; then
+    step "cargo fmt" "$CARGO" fmt -- --check
+else
+    printf '%-34s%s\n' "cargo fmt" "skipped (rustup component add rustfmt)"
+fi
+
+step "cargo build (wasm32-wasip2)" "$CARGO" build --release --target wasm32-wasip2 --quiet
+
+# The component has to sit beside the manifest, because `[run] wasm` names it
+# there and `gmx plugin add` copies the directory.
+built=$(ls target/wasm32-wasip2/release/*.wasm 2>/dev/null | head -1)
+if [ -n "$built" ]; then
+    cp "$built" plugin.wasm
+    printf '%-34s%s\n' "plugin.wasm" "$(wc -c < plugin.wasm | tr -d ' ') bytes"
+else
+    echo "no component came out of the build" >&2
+    failed=1
+fi
+
+# The protocol, replayed from a recording with no core running.
+if command -v gmx >/dev/null 2>&1; then
+    step "offline transcript" gmx plugin test --offline .
+    if [ "$quick" != "--quick" ]; then
+        step "gmx plugin test" gmx plugin test .
+    else
+        printf '%-34s%s\n' "gmx plugin test" "skipped (--quick)"
+    fi
+else
+    printf '%-34s%s\n' "offline transcript" "skipped (gmx is not on PATH)"
+fi
+
+if [ "$failed" -eq 0 ]; then
+    echo "all checks passed"
+else
+    echo "something failed. Fix it, then run ./check again."
+fi
+exit "$failed"

@@ -119,7 +119,28 @@ pub fn run(config_path: &Path) -> Vec<Check> {
     checks.push(runtime_dir_writable(&dir));
     checks.push(disk_space(&dir));
     checks.push(machine_class());
+    checks.push(wasm_host());
     checks
+}
+
+/// Whether this build can run a tier W plugin.
+///
+/// A warning rather than a failure when it cannot, because a mixer with no
+/// WebAssembly host runs a show perfectly well: the placement is for plugin
+/// logic, never for media. It becomes an operator's problem only when a
+/// plugin whose only placement is `wasm` is installed, and that refusal names
+/// the flag too.
+fn wasm_host() -> Check {
+    match crate::plugin::wasm::describe() {
+        Some(what) => Check::new("wasm host", Verdict::Ok, what),
+        None => Check::new(
+            "wasm host",
+            Verdict::Warn,
+            "this build carries none, so a plugin with placements = [\"wasm\"] will not \
+             start. Rebuild with `cargo build --release --features wasm` if you need one."
+                .to_string(),
+        ),
+    }
 }
 
 /// Exit code for a set of checks: 1 when anything failed, 0 otherwise. A

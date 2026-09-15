@@ -1,0 +1,11 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "window_ms": { "type": "integer", "description": "The window in force now." },
+    "remaining_ms": { "type": "integer", "description": "How long until a take is allowed. 0 means now." },
+    "refused": { "type": "integer", "description": "How many takes this instance has refused since it started." }
+  },
+  "required": ["window_ms", "remaining_ms", "refused"],
+  "additionalProperties": false
+}

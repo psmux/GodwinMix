@@ -64,7 +64,7 @@ One JSON file in `evals/cases/`. The file name is the id.
 | Key | |
 |---|---|
 | `instruction` | One sentence, as a person would say it at a desk. |
-| `tags` | `take`, `abstain`, `parameterised`, `interruption`, `sources`, `audio`, `adbreak`, `safety`, `scenes`, `pending`. The report groups by the first four. |
+| `tags` | `take`, `abstain`, `parameterised`, `interruption`, `sources`, `audio`, `adbreak`, `safety`, `scenes`, `plugin`, `wasm`, `pending`. The report groups by the first four. |
 | `initial.sources` | Added and waited for before the mark. Use `test://smpte`, `test://ball`, `test://snow`. |
 | `initial.program` | Taken before the mark. |
 | `initial.program_twice` | A second take, so `program.revert` has somewhere to go. |
@@ -74,6 +74,7 @@ One JSON file in `evals/cases/`. The file name is the id.
 | `initial.mute` | Start that source muted. |
 | `initial.adbreak` | Roll a break before the mark. |
 | `initial.config` | Extra TOML appended to the config. |
+| `initial.plugins` | Plugin names under `plugins/` to stage into this run's own plugins directory and load. Copied rather than pointed at, so an eval never writes into the working tree, and checked before the mark: a case whose plugin did not load says so rather than quietly measuring a core without it. A plugin whose only placement is `wasm` needs a binary built with `--features wasm`. |
 | `interrupt` | `{ "after_ms": 300, "instruction": "..." }`. |
 | `settle_ms` | How long to wait after the instruction. Default 1200. Raise it for anything armed for later. |
 | `expect_changes` | The state deltas. Empty for an abstain case. |

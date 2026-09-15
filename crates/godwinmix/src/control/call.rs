@@ -79,6 +79,16 @@ impl Call {
     pub fn mixer_error(&self, e: anyhow::Error) -> RpcError {
         // A full command queue is a state, not a failure, and the one thing a
         // caller needs from it is how long to wait.
+        // A media kind asked to run where no media goes. -32005 with the
+        // placements that do carry it, so a caller fixes the config rather
+        // than guessing.
+        if let Some(refused) = e.downcast_ref::<godwinmix_core::plugin::wasm::MediaRefused>() {
+            return RpcError::new(ErrorCode::Placement, refused.to_string())
+                .with("placements", serde_json::json!(refused.placements))
+                .with("type", refused.type_id.clone())
+                .with("kind", refused.kind.clone())
+                .with("retryable", false);
+        }
         if let Some(busy) = e.downcast_ref::<godwinmix_core::mixer::Busy>() {
             return RpcError::not_in_state(busy.to_string())
                 .with("method", self.method)

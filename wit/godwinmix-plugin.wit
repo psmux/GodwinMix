@@ -1,0 +1,235 @@
+// The `godwinmix:plugin` world: tier W, a plugin as a WebAssembly component.
+//
+// Every method here has a twin in the JSON-RPC protocol a stdio plugin speaks
+// (03 section 6). A tier W plugin is the same plugin with a different door, so
+// the parameters and results that carry structure carry it as a JSON string,
+// byte for byte what the stdio plugin would have written on its line. Nothing
+// is reshaped on the way in. `docs/reference/wasm.md` has the method by method
+// table.
+//
+// Media never crosses this boundary. There is no frame, no buffer and no pad
+// here on purpose: see `docs/explanation/why-wasm-is-not-on-the-frame-path.md`.
+
+package godwinmix:plugin@1.0.0;
+
+/// The records both halves of the world share.
+interface types {
+    /// The canvas the core is mixing on, as the handshake reports it.
+    record canvas {
+        width: u32,
+        height: u32,
+        /// Frame rate as a fraction, 30/1 or 30000/1001.
+        fps-n: u32,
+        fps-d: u32,
+    }
+
+    /// What the host granted this instance, decided by the manifest and by the
+    /// operator's config, never by the plugin. A plugin reads it and adapts;
+    /// asking for something not granted is refused at the call, not here.
+    record capabilities {
+        /// `core-call` is answered at all.
+        core-call: bool,
+        /// `program.take` is inside `core-call`'s allow list. Read methods are
+        /// always inside it when `core-call` is true.
+        take: bool,
+        /// `event` reaches the core's event stream.
+        events: bool,
+        /// WASI preopens exist. False unless the manifest declared
+        /// `wasi = ["filesystem"]` and the operator allowed the plugin.
+        filesystem: bool,
+        /// WASI sockets exist, under the same two conditions.
+        network: bool,
+        /// Fuel for one call, 0 when the host meters by deadline alone.
+        fuel-per-call: u64,
+        /// Wall clock budget for one call, in milliseconds.
+        deadline-ms: u32,
+        /// The memory ceiling, from `[plugins.<name>] max_rss_mb`.
+        max-memory-mb: u32,
+    }
+
+    /// The handshake, field for field the stdio `initialize` result.
+    record hello {
+        core: string,
+        core-version: string,
+        api-level: u32,
+        api-compatible: u32,
+        canvas: canvas,
+        /// The instance id, `min-hold-hold` for a singleton.
+        instance: string,
+        /// The provide id, `min-hold/hold`.
+        provide: string,
+        /// The validated `params` object as JSON.
+        params-json: string,
+        granted: capabilities,
+    }
+
+    /// What a plugin answers `initialize` with, the stdio `initialize` params
+    /// seen from the other side.
+    record ready {
+        plugin: string,
+        version: string,
+        api: u32,
+        /// Tool names this instance answers on `tool-call`, unprefixed.
+        tools: list<string>,
+        /// Hook names this instance wants, `take.before` and the rest of 03
+        /// section 8. The host only calls `hook` for names in this list.
+        hooks: list<string>,
+        latency-ms: option<u32>,
+    }
+
+    enum health-state {
+        ok,
+        degraded,
+        failing,
+    }
+
+    /// Named `health-report` and not `health` so the record and the
+    /// `health` function of the service interface do not collide.
+    record health-report {
+        state: health-state,
+        detail: option<string>,
+        latency-ms: option<u32>,
+    }
+
+    /// The answer to `configure`: applied, or a restart is needed and why.
+    record configured {
+        applied: bool,
+        restart-required: bool,
+        reason: option<string>,
+    }
+
+    /// The one error shape. `code` is a protocol code from 03 section 6:
+    /// -32001 wrong state, -32002 refused by scope, -32004 not found, and so
+    /// on. `data-json` is the `data` object, when there is one.
+    record error {
+        code: s32,
+        message: string,
+        data-json: option<string>,
+    }
+
+    enum log-level {
+        trace,
+        debug,
+        info,
+        warn,
+        error,
+    }
+}
+
+/// What a plugin may call back. Everything else a plugin might want is behind
+/// `core-call`, which is a narrow door and says so.
+interface host {
+    use types.{log-level, error};
+
+    /// A line in the core's log, tagged with the instance. The twin of the
+    /// stdio `log` notification.
+    log: func(level: log-level, message: string);
+
+    /// Raise `event/<name>` on the core's event stream, params as JSON. The
+    /// twin of the stdio `event` notification. Dropped with a debug line when
+    /// `capabilities.events` is false.
+    event: func(name: string, params-json: string);
+
+    /// Call the core. Read methods (`core.info`, `program.get`,
+    /// `program.history`, `source.list`, `source.get`, `scene.list`,
+    /// `scene.get`, `plugin.list`, `agent.state`, `codec.list`, `tool.list`)
+    /// and `program.take` when `capabilities.take` is true. Anything else is
+    /// -32002 with the allow list in the message, so a plugin learns the
+    /// boundary from the error rather than from a hang.
+    core-call: func(method: string, params-json: string) -> result<string, error>;
+
+    /// Milliseconds since the unix epoch, the core's clock. A plugin that
+    /// wants a monotonic reading uses `running-time-ns`.
+    now-ms: func() -> u64;
+
+    /// The pipeline's running time in nanoseconds, 0 before it runs. This is
+    /// the clock a take is scheduled on, so a plugin reasoning about when a
+    /// take landed uses this one and not `now-ms`.
+    running-time-ns: func() -> u64;
+}
+
+/// The `service` kind: control plane only, no media, a singleton named after
+/// its provide. Mirrors the stdio methods of 03 section 6 for a service.
+interface service {
+    use types.{hello, ready, health-report, configured, error};
+
+    /// The handshake. Answering with an error fails the instance and the
+    /// message reaches `event/plugin.state`.
+    initialize: func(hello: hello) -> result<ready, error>;
+
+    /// The full validated params object as JSON, never a diff.
+    configure: func(params-json: string) -> result<configured, error>;
+
+    health: func() -> health-report;
+
+    /// One of the plugin's `[[tools]]`, in MCP's shape. `arguments-json` is
+    /// the arguments object; the result is the MCP result object
+    /// (`{content, structuredContent?, isError?}`) as JSON.
+    tool-call: func(name: string, arguments-json: string) -> result<string, error>;
+
+    /// One of 03 section 8's hooks. `payload-json` is the hook's payload;
+    /// the result is the hook's answer, `{}` for a hook that only observes
+    /// and `{"allow": false, "reason": "..."}` for a `take.before` that
+    /// refuses. A hook that exceeds its deadline is skipped and the core
+    /// emits `event/hook.blocked`, exactly as the http mode does.
+    hook: func(name: string, payload-json: string) -> result<string, error>;
+
+    /// The core is going away. The instance is dropped after this returns.
+    shutdown: func(reason: string);
+}
+
+/// The `transition` kind: the logic of a wipe, never its pixels.
+interface transition {
+    use types.{hello, ready, health-report, configured, error};
+
+    /// What `render` answers with.
+    ///
+    /// `pads` is `{"pads": {"<pad id>": {"alpha": .., "xpos": .., ...}}}`,
+    /// the same object the stdio `render` returns, for this one sample.
+    ///
+    /// `curve` is `{"curve": {...}}`: the whole transition described once,
+    /// which the core binds to the compositor pads as a control source. A
+    /// plugin that answers `curve` is asked once per take and never again,
+    /// which is the answer that costs the frame path nothing at all.
+    variant answer {
+        pads(string),
+        curve(string),
+    }
+
+    initialize: func(hello: hello) -> result<ready, error>;
+
+    /// `request-json` is `{"from": [..], "to": [..], "progress": 0.0..1.0,
+    /// "running_time_ns": ..., "duration_ms": ...}`, the stdio `render`
+    /// params unchanged.
+    render: func(request-json: string) -> result<answer, error>;
+
+    /// The same three every kind answers (03 section 6): a transition is
+    /// configured, asked how it is, and told when the core is going away,
+    /// exactly as a service is.
+    configure: func(params-json: string) -> result<configured, error>;
+
+    health: func() -> health-report;
+
+    shutdown: func(reason: string);
+}
+
+/// A plugin that provides a `service` (and therefore tools and hooks).
+world service-plugin {
+    import host;
+    export service;
+}
+
+/// A plugin that provides a `transition`.
+world transition-plugin {
+    import host;
+    export transition;
+}
+
+/// A plugin that provides both. The host instantiates it under whichever of
+/// the two narrow worlds the manifest's provide asked for, so exporting both
+/// is a convenience for an author with one component and two provides.
+world plugin {
+    import host;
+    export service;
+    export transition;
+}

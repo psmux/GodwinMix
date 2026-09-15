@@ -32,9 +32,10 @@ breaks `gmx plugin new`, so add it here first.
 | `{{author}}` | the author line for the manifest and the package file | `A Person` |
 | `{{license}}` | an SPDX licence id | `MIT` |
 | `{{year}}` | the current year, for a licence header | `2026` |
+| `{{kind}}` | the provide kind from `--kind`. Used by the wasm template, where it names the provide, its skill directory and its id | `service` |
 | `{{sdk}}` | the Rust template only: the `godwinmix-sdk` dependency, a version once the crate is published and a path to the copy beside the `gmx` binary until then | `{ path = "/usr/lib/gmx/sdk" }` |
 
-Placeholders appear in file contents only, never in file or directory names.
+Placeholders are substituted in file and directory names as well as in contents.
 
 ## Testing the templates
 
@@ -73,3 +74,12 @@ than failed, because Go is not installed everywhere and neither is cargo.
 
 The details are in [docs/reference/plugin-protocol.md](../docs/reference/plugin-protocol.md)
 and [docs/reference/plugin-manifest.md](../docs/reference/plugin-manifest.md).
+
+## wasm
+
+`gmx plugin new <name> --lang wasm` writes a tier W plugin: a WebAssembly
+component that runs inside the core, sandboxed, with no media. Its `check`
+script builds for `wasm32-wasip2` and copies the component to `plugin.wasm`,
+which is the file `[run] wasm` names. `--kind` defaults to `service` there,
+because a component carries no media and a `source` at that placement is
+refused with -32005.

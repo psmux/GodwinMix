@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Ease",
+  "type": "object",
+  "properties": {
+    "points": {
+      "type": "integer",
+      "title": "Curve points",
+      "description": "How many points describe the curve. The core interpolates linearly between them, so more than about 32 buys nothing a viewer can see.",
+      "minimum": 2,
+      "maximum": 256,
+      "default": 32,
+      "examples": [32, 8]
+    }
+  },
+  "additionalProperties": false
+}

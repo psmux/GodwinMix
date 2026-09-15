@@ -87,8 +87,30 @@ impl Instance {
     }
 }
 
+/// One tier W singleton: a component running inside this process.
+///
+/// Held apart from the process instances rather than inside them, because
+/// almost nothing the supervisor does to a process applies: there is no pid to
+/// sample, no pipe to drain, no exit to notice and no backoff to serve. What
+/// is left is the call, and the call is the same call.
+struct Component {
+    kind: ProvideKind,
+    plugin: String,
+    provide: String,
+    /// The same backoff a process gets, for a component that keeps trapping.
+    backoff: Backoff,
+    /// The moment before which the next build must not happen.
+    not_before: Option<Instant>,
+    /// An `Arc` so a caller clones it out and drops the table lock before the
+    /// call. A component call can take its whole deadline and the table is
+    /// read by `tool.call`, by `plugin.list` and by every take.
+    instance: Arc<dyn crate::plugin::wasm::Instance>,
+}
+
 struct Inner {
     instances: BTreeMap<String, Instance>,
+    /// Tier W singletons by instance name, `min-hold-hold`.
+    components: BTreeMap<String, Component>,
     /// Sources added because a device said they appeared, with the instance
     /// that said so. Only these are taken away again: a device may not remove
     /// a camera an operator added by hand.
@@ -108,7 +130,11 @@ pub struct Supervisor {
 impl Supervisor {
     pub fn new(canvas: CanvasCaps, settings: BTreeMap<String, Params>) -> Arc<Supervisor> {
         Arc::new(Supervisor {
-            inner: Mutex::new(Inner { instances: BTreeMap::new(), adopted: BTreeMap::new() }),
+            inner: Mutex::new(Inner {
+                instances: BTreeMap::new(),
+                components: BTreeMap::new(),
+                adopted: BTreeMap::new(),
+            }),
             canvas,
             settings: Mutex::new(settings),
             mixer: Mutex::new(None),
@@ -172,6 +198,13 @@ impl Supervisor {
         if self.inner.lock().instances.get(&instance).is_some_and(Instance::running) {
             return Ok(());
         }
+        // Tier W: the plugin runs inside this process rather than beside it.
+        // Decided by the manifest and the operator's `place`, never here.
+        if let Some(installed) = loader::get(manifest.plugin) {
+            if crate::plugin::wasm::runs_as_wasm(&installed.manifest) {
+                return self.start_component(provide, manifest, &installed, &instance);
+            }
+        }
         let params = self.params_for(manifest.plugin);
         let child = self.build(provide, manifest)?;
         let mut entry = Instance {
@@ -222,6 +255,7 @@ impl Supervisor {
 
     /// Stop every singleton of one plugin and forget what they adopted.
     pub fn stop_plugin(&self, plugin: &str, reason: &str) -> usize {
+        let components = self.stop_components(plugin, reason);
         let taken: Vec<(String, Instance)> = {
             let mut inner = self.inner.lock();
             let names: Vec<String> = inner
@@ -241,7 +275,7 @@ impl Supervisor {
             self.disown(&name);
             debug!(instance = %name, reason, "plugin singleton stopped");
         }
-        stopped
+        stopped + components
     }
 
     /// Everything, at shutdown.
@@ -251,6 +285,7 @@ impl Supervisor {
             let inner = self.inner.lock();
             let mut names: Vec<String> =
                 inner.instances.values().map(|i| i.plugin.clone()).collect();
+            names.extend(inner.components.values().map(|c| c.plugin.clone()));
             names.sort();
             names.dedup();
             names
@@ -280,7 +315,8 @@ impl Supervisor {
 
     /// Every singleton, as `(instance, plugin, provide, state)`.
     pub fn instances(&self) -> Vec<(String, String, String, String)> {
-        self.inner
+        let mut rows: Vec<(String, String, String, String)> = self
+            .inner
             .lock()
             .instances
             .iter()
@@ -292,18 +328,26 @@ impl Supervisor {
                     i.child.instance_state().as_str().to_string(),
                 )
             })
-            .collect()
+            .collect();
+        rows.extend(self.component_rows());
+        rows.sort();
+        rows
     }
 
     /// The transitions a plugin has added to the built in four.
     pub fn transition_names(&self) -> Vec<String> {
-        self.inner
+        let mut names: Vec<String> = self
+            .inner
             .lock()
             .instances
             .values()
             .filter(|i| i.kind == ProvideKind::Transition)
             .map(|i| i.plugin.clone())
-            .collect()
+            .collect();
+        names.extend(self.component_transition_names());
+        names.sort();
+        names.dedup();
+        names
     }
 
     /// Call one of a plugin's `[[tools]]`, in MCP's shape.
@@ -329,6 +373,11 @@ impl Supervisor {
                 )
             }
         };
+        // A component answers the same `tool.call` a process does, so it is
+        // looked at first and by the same name.
+        if let Some(component) = self.component_with_tool(plugin.as_deref(), &tool) {
+            return component.call("tool.call", json!({ "name": tool, "arguments": arguments }));
+        }
         if let Some(provide) = provide {
             let instance = format!("{}-{provide}", plugin.clone().unwrap_or_default());
             let inner = self.inner.lock();
@@ -444,6 +493,8 @@ impl Supervisor {
                 self.absorb(&instance, kind, notice);
             }
         }
+        self.sample_components();
+        self.restart_spent_components();
         self.restart_the_dead();
     }
 
@@ -695,6 +746,7 @@ impl Supervisor {
                 .collect()
         };
         let mut report = Reloaded::default();
+        self.reload_components(plugin, &mut report);
         for name in names {
             let provide = {
                 let inner = self.inner.lock();
@@ -799,6 +851,322 @@ impl Supervisor {
     }
 }
 
+// ---------------------------------------------------------------------------
+// Tier W
+// ---------------------------------------------------------------------------
+
+/// Everything the `wasm` placement adds to the supervisor.
+///
+/// It is all here rather than threaded through the process path because the
+/// two have almost nothing in common below the call: a component has no pid,
+/// no pipe and no exit code, so the pump has nothing to pump and the backoff
+/// has nothing to back off from. What they share is that `tool.call`, `hook`
+/// and `render` mean the same thing at both placements, and those three are
+/// the only places the rest of the core has to know both exist.
+impl Supervisor {
+    /// Bring a component up as a singleton, the way a process singleton is.
+    fn start_component(
+        &self,
+        provide: &str,
+        manifest: &'static crate::plugin::Manifest,
+        installed: &loader::Installed,
+        instance: &str,
+    ) -> Result<()> {
+        use crate::plugin::wasm;
+        if self.inner.lock().components.contains_key(instance) {
+            return Ok(());
+        }
+        let file = installed
+            .manifest
+            .run
+            .as_ref()
+            .and_then(|r| r.wasm.as_ref())
+            .context("the manifest declares the `wasm` placement but [run] wasm names no file")?;
+        let component = installed.root.join(file);
+        anyhow::ensure!(
+            component.is_file(),
+            "`{}` names `{file}` as its component and there is no such file under `{}`. \
+             Build it with `cargo build --release --target wasm32-wasip2` and copy the \
+             `.wasm` into the plugin directory.",
+            manifest.plugin,
+            installed.root.display()
+        );
+        let spec = wasm::Spec {
+            plugin: manifest.plugin.to_string(),
+            provide: manifest.id.to_string(),
+            instance: instance.to_string(),
+            kind: manifest.kind,
+            component,
+            root: installed.root.clone(),
+            canvas: self.canvas.clone(),
+            params: params_value(&self.params_for(manifest.plugin)),
+            grant: self.grant_for(installed),
+        };
+        let running = wasm::start(spec)
+            .with_context(|| format!("starting the component `{instance}`"))?;
+        loader::set_hosted(instance, manifest.plugin, provide, running.memory_bytes());
+        loader::set_state(instance, "ready");
+        wasm::publish(manifest.plugin, running.clone());
+        self.inner.lock().components.insert(
+            instance.to_string(),
+            Component {
+                kind: manifest.kind,
+                plugin: manifest.plugin.to_string(),
+                provide: provide.to_string(),
+                backoff: Backoff::new(),
+                not_before: None,
+                instance: running,
+            },
+        );
+        info!(%instance, kind = manifest.kind.as_str(), "plugin component started");
+        Ok(())
+    }
+
+    /// What this instance is allowed to do.
+    ///
+    /// The manifest asks and the operator allows; neither alone is enough for
+    /// WASI. The memory ceiling is `[plugins.<name>] max_rss_mb`, the same key
+    /// a process is held to, so an operator sets one number per plugin
+    /// whichever placement it runs at.
+    fn grant_for(&self, installed: &loader::Installed) -> crate::plugin::wasm::Grant {
+        use crate::plugin::wasm::{wasi_allowed, Grant, DEFAULT_DEADLINE, DEFAULT_FUEL};
+        let asks = &installed.manifest.plugin.wasi;
+        let allowed = wasi_allowed(installed.name());
+        let wants = |what: &str| allowed && asks.iter().any(|a| a == what);
+        // `wasm_fuel` and `wasm_deadline_ms` are the two limits an operator can
+        // move. Both are ceilings: lowering one makes a slow component fail
+        // sooner, and neither can make it run longer than the caller waits.
+        let settings = self.params_for(installed.name());
+        let number = |key: &str| settings.get(key).and_then(toml::Value::as_integer);
+        Grant {
+            fuel_per_call: number("wasm_fuel").map(|v| v.max(0) as u64).unwrap_or(DEFAULT_FUEL),
+            deadline: number("wasm_deadline_ms")
+                .map(|v| Duration::from_millis(v.clamp(1, 5_000) as u64))
+                .unwrap_or(DEFAULT_DEADLINE),
+            filesystem: wants("filesystem"),
+            network: wants("network"),
+            // A service that enforces a policy on takes has to be able to see
+            // the programme, and a director has to be able to change it. The
+            // narrow list is inside the host function; this only says whether
+            // `program.take` is in it, and it follows the hooks the plugin
+            // asked for: a plugin that never sees a take does not get to make
+            // one.
+            take: installed.manifest.hooks.keys().any(|h| h.starts_with("take.")),
+            max_memory_mb: installed.budget.max_rss_mb.unwrap_or(64).min(u32::MAX as u64) as u32,
+            ..Grant::default()
+        }
+    }
+
+    /// The component of one plugin, cloned out with no lock held.
+    ///
+    /// Every caller must go through this. A component call runs to its
+    /// deadline, and a lock held across one would stall `plugin.list` and
+    /// every other take behind an unrelated plugin.
+    fn component_of(
+        &self,
+        plugin: &str,
+        kind: ProvideKind,
+    ) -> Option<Arc<dyn crate::plugin::wasm::Instance>> {
+        let inner = self.inner.lock();
+        inner
+            .components
+            .values()
+            .find(|c| c.kind == kind && c.plugin == plugin)
+            .map(|c| c.instance.clone())
+    }
+
+    /// The component that answers one tool, cloned out the same way.
+    fn component_with_tool(
+        &self,
+        plugin: Option<&str>,
+        tool: &str,
+    ) -> Option<Arc<dyn crate::plugin::wasm::Instance>> {
+        let inner = self.inner.lock();
+        inner
+            .components
+            .values()
+            .find(|c| {
+                plugin.is_none_or(|p| c.plugin == p) && c.instance.tools().iter().any(|t| t == tool)
+            })
+            .map(|c| c.instance.clone())
+    }
+
+    /// Every component, in the shape `instances()` uses.
+    fn component_rows(&self) -> Vec<(String, String, String, String)> {
+        let taken: Vec<(String, ComponentRow)> = {
+            let inner = self.inner.lock();
+            inner
+                .components
+                .iter()
+                .map(|(name, c)| {
+                    (
+                        name.clone(),
+                        ComponentRow {
+                            plugin: c.plugin.clone(),
+                            provide: c.provide.clone(),
+                            instance: c.instance.clone(),
+                        },
+                    )
+                })
+                .collect()
+        };
+        // `state()` is on the component, so it is read after the lock is
+        // dropped like everything else that crosses the boundary.
+        taken
+            .into_iter()
+            .map(|(name, c)| {
+                (name, c.plugin, c.provide, c.instance.state().as_str().to_string())
+            })
+            .collect()
+    }
+
+    /// What each component costs, once a pass, for `plugin.list`.
+    ///
+    /// Read out from under the lock like every other component call: asking a
+    /// component its memory is cheap, but nothing in here holds the table over
+    /// a call into one.
+    fn sample_components(&self) {
+        let rows: Vec<(String, String, String, Arc<dyn crate::plugin::wasm::Instance>)> = {
+            let inner = self.inner.lock();
+            inner
+                .components
+                .iter()
+                .map(|(name, c)| {
+                    (name.clone(), c.plugin.clone(), c.provide.clone(), c.instance.clone())
+                })
+                .collect()
+        };
+        for (name, plugin, provide, instance) in rows {
+            loader::set_hosted(&name, &plugin, &provide, instance.memory_bytes());
+            loader::set_state(&name, instance.state().as_str());
+        }
+    }
+
+    /// Build a fresh component for every one that trapped.
+    ///
+    /// A component that traps cannot be entered again: wasmtime marks the
+    /// instance unusable and every later call answers "cannot enter component
+    /// instance", which tells an operator nothing. So a trap costs the
+    /// instance and not the plugin: the store is dropped, a new one is built
+    /// from the same file, and the next call works. Under the same backoff a
+    /// process gets, because a component that traps on its handshake would
+    /// otherwise be rebuilt four times a second forever.
+    fn restart_spent_components(&self) {
+        let spent: Vec<(String, String)> = {
+            let inner = self.inner.lock();
+            inner
+                .components
+                .iter()
+                .filter(|(_, c)| c.instance.state() == InstanceState::Failed)
+                .filter(|(_, c)| c.not_before.is_none_or(|at| Instant::now() >= at))
+                .map(|(name, c)| (name.clone(), c.provide.clone()))
+                .collect()
+        };
+        for (name, provide) in spent {
+            let wait = {
+                let mut inner = self.inner.lock();
+                let Some(entry) = inner.components.get_mut(&name) else { continue };
+                let wait = entry.backoff.next_wait();
+                entry.not_before = Some(Instant::now() + wait);
+                wait
+            };
+            if wait > Duration::ZERO {
+                warn!(instance = %name, wait_secs = wait.as_secs(), "waiting before building a component again");
+                continue;
+            }
+            let plugin = {
+                let mut inner = self.inner.lock();
+                match inner.components.remove(&name) {
+                    Some(gone) => {
+                        gone.instance.shutdown("it trapped and is being built again");
+                        gone.plugin
+                    }
+                    None => continue,
+                }
+            };
+            crate::plugin::wasm::retire(&plugin);
+            match self.start(&provide) {
+                Ok(()) => info!(instance = %name, "a component was built again after a trap"),
+                Err(e) => warn!(instance = %name, ?e, "building a component again did not work"),
+            }
+        }
+    }
+
+    /// Plugin names with a transition component up.
+    fn component_transition_names(&self) -> Vec<String> {
+        let inner = self.inner.lock();
+        inner
+            .components
+            .values()
+            .filter(|c| c.kind == ProvideKind::Transition)
+            .map(|c| c.plugin.clone())
+            .collect()
+    }
+
+    /// Take one plugin's components down. The counterpart of `stop_plugin`.
+    fn stop_components(&self, plugin: &str, reason: &str) -> usize {
+        let taken: Vec<(String, Component)> = {
+            let mut inner = self.inner.lock();
+            let names: Vec<String> = inner
+                .components
+                .iter()
+                .filter(|(_, c)| c.plugin == plugin)
+                .map(|(k, _)| k.clone())
+                .collect();
+            names.into_iter().filter_map(|k| inner.components.remove(&k).map(|c| (k, c))).collect()
+        };
+        let stopped = taken.len();
+        for (name, component) in taken {
+            component.instance.shutdown(reason);
+            loader::set_state(&name, "stopped");
+            loader::forget(&name);
+            debug!(instance = %name, reason, "plugin component stopped");
+        }
+        if stopped > 0 {
+            crate::plugin::wasm::retire(plugin);
+        }
+        stopped
+    }
+
+    /// Recompile and swap one plugin's components. Hot reload for tier W is
+    /// stopping the old store and building a new one from the file on disk,
+    /// which is the whole of it: there is no process to outlive the swap.
+    fn reload_components(&self, plugin: &str, report: &mut Reloaded) {
+        let provides: Vec<(String, String)> = {
+            let inner = self.inner.lock();
+            inner
+                .components
+                .iter()
+                .filter(|(_, c)| c.plugin == plugin)
+                .map(|(name, c)| (name.clone(), c.provide.clone()))
+                .collect()
+        };
+        if provides.is_empty() {
+            return;
+        }
+        self.stop_components(plugin, "plugin.reload");
+        for (name, provide) in provides {
+            match self.start(&provide) {
+                Ok(()) => report.swapped.push(name),
+                Err(e) => report.failed.push((name, format!("{e:#}"))),
+            }
+        }
+    }
+}
+
+/// The three fields `component_rows` carries out from under the lock, so the
+/// component's own `state()` is read with nothing held.
+struct ComponentRow {
+    plugin: String,
+    provide: String,
+    instance: Arc<dyn crate::plugin::wasm::Instance>,
+}
+
+/// `[plugins.<name>]` as the JSON a plugin's `params` is.
+fn params_value(params: &Params) -> Value {
+    serde_json::to_value(params).unwrap_or(Value::Null)
+}
+
 /// What one `plugin.reload` did.
 #[derive(Debug, Clone, Default)]
 pub struct Reloaded {
@@ -809,6 +1177,12 @@ pub struct Reloaded {
 impl transition::Renderer for Supervisor {
     fn render(&self, plugin: &str, request: &transition::RenderRequest) -> Result<Value> {
         let params = serde_json::to_value(request).context("encoding a render request")?;
+        // Tier W first, and with the table lock dropped before the call: a
+        // component runs to its own fuel or deadline, and nothing else in the
+        // supervisor may wait behind it.
+        if let Some(component) = self.component_of(plugin, ProvideKind::Transition) {
+            return component.call_within("render", params, RENDER_DEADLINE);
+        }
         let inner = self.inner.lock();
         let entry = inner
             .instances

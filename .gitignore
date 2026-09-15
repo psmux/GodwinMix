@@ -54,3 +54,12 @@ clients/**/__pycache__/
 # the binary has to sit beside the manifest rather than in the workspace target
 # directory. dev/harness/stage-plugins.sh puts it there.
 plugins/*/bin/
+plugins/*/target/
+examples/*/target/
+
+# A tier W plugin's component is committed rather than staged. It is the same
+# bytes on every platform, it is 100 KB, and a checkout with no wasm toolchain
+# still runs the replay test and the eval that need it. dev/build-wasm.sh
+# rebuilds it from source.
+!plugins/*/plugin.wasm
+!examples/*/plugin.wasm

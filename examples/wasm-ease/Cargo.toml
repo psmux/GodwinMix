@@ -1,0 +1,25 @@
+# A transition curve, as a WebAssembly component. Outside the main workspace
+# for the same reason min-hold is: it is built for wasm32-wasip2 only.
+[package]
+name = "gmx-wasm-ease"
+version = "0.2.0"
+edition = "2021"
+rust-version = "1.85"
+license = "Apache-2.0"
+publish = false
+description = "An ease in and out crossfade, answered once as a curve"
+
+[workspace]
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+godwinmix-sdk-wasm = { path = "../../crates/godwinmix-sdk-wasm" }
+serde_json = "1"
+
+[profile.release]
+opt-level = "s"
+lto = true
+strip = true
+codegen-units = 1

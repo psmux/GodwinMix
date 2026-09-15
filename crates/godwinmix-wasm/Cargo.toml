@@ -1,0 +1,33 @@
+# The tier W host: a plugin as a WebAssembly component, run inside the core.
+#
+# Separate from `godwinmix-core` because wasmtime is a large dependency and the
+# engine must not carry it. The binary crate takes this on behind its `wasm`
+# feature and registers the runner with the core at startup; with the feature
+# off the core has an empty registry and says so.
+[package]
+name = "godwinmix-wasm"
+version.workspace = true
+edition.workspace = true
+# Above the workspace floor of 1.82, and only for this crate: wasmtime 36 is
+# the LTS line and it asks for 1.86. The rest of the workspace still builds on
+# 1.82.
+rust-version = "1.86"
+license.workspace = true
+repository.workspace = true
+description = "The WebAssembly component host for GodwinMix tier W plugins"
+
+[dependencies]
+godwinmix-core = { workspace = true }
+godwinmix-protocol = { workspace = true }
+anyhow = { workspace = true }
+serde_json = { workspace = true }
+tracing = { workspace = true }
+parking_lot = { workspace = true }
+wasmtime = { workspace = true }
+wasmtime-wasi = { workspace = true }
+
+[dev-dependencies]
+# The frame interval test builds a real mixer and takes over a real transition.
+gstreamer = { workspace = true }
+toml = { workspace = true }
+tokio = { workspace = true, features = ["rt-multi-thread", "macros", "time"] }

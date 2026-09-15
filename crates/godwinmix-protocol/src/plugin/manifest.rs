@@ -52,6 +52,12 @@ pub struct PluginMeta {
     pub placements: Vec<String>,
     #[serde(default = "default_process")]
     pub process: String,
+    /// What a `wasm` placement asks WASI for: `filesystem`, `network`, or
+    /// neither. Declaring it is half the grant; the operator's
+    /// `[plugins] allow_wasi` is the other half, and without both the
+    /// component gets a store with no preopens and no sockets.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub wasi: Vec<String>,
 }
 
 fn default_process() -> String {
@@ -70,10 +76,16 @@ pub struct Run {
     pub node: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub shell: Option<String>,
+    /// The component file for the `wasm` placement, relative to the plugin
+    /// root. Not a process runtime and not counted as one: a plugin may ship
+    /// a binary for `sidecar` and a component for `wasm` in the same manifest.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub wasm: Option<String>,
 }
 
 impl Run {
-    /// How many runtime keys are set. Exactly one is required.
+    /// How many process runtime keys are set. Exactly one is required by a
+    /// plugin that runs as a process. `wasm` is not one of them.
     pub fn keys_set(&self) -> usize {
         usize::from(!self.bin.is_empty())
             + usize::from(self.python.is_some())
@@ -286,7 +298,16 @@ pub const PLATFORMS: &[&str] = &[
 ];
 
 /// Where a plugin says it can run.
-pub const PLACEMENTS: &[&str] = &["in-process", "sidecar", "node"];
+pub const PLACEMENTS: &[&str] = &["in-process", "sidecar", "node", "wasm"];
+
+/// What a `wasm` placement may ask WASI for. Neither is granted unless the
+/// manifest names it here and the operator lists the plugin under
+/// `[plugins] allow_wasi`.
+pub const WASI_GRANTS: &[&str] = &["filesystem", "network"];
+
+/// The kinds a `wasm` placement can carry. Media never crosses the component
+/// boundary, so a source, an output, a filter and an encoder are not on it.
+pub const WASM_KINDS: &[&str] = &["service", "transition", "panel"];
 
 /// The hooks of 03 section 8.
 pub const HOOKS: &[&str] = &[
@@ -467,6 +488,43 @@ impl Manifest {
                 ));
             }
         }
+        for (i, grant) in p.wasi.iter().enumerate() {
+            if !WASI_GRANTS.contains(&grant.as_str()) {
+                out.push(problem(
+                    format!("plugin.wasi[{i}]"),
+                    format!(
+                        "'{grant}' is not a WASI grant. Known: {}. Both are refused unless the \
+                         operator also lists this plugin under `[plugins] allow_wasi`.",
+                        WASI_GRANTS.join(", ")
+                    ),
+                ));
+            }
+        }
+        if !p.wasi.is_empty() && !p.placements.iter().any(|pl| pl == "wasm") {
+            out.push(problem(
+                "plugin.wasi",
+                "wasi is only read at the `wasm` placement, and this plugin does not declare \
+                 one. Drop it, or add 'wasm' to placements.",
+            ));
+        }
+        // A plugin whose only placement is `wasm` and which provides media has
+        // no way to run at all: the component boundary carries no frames.
+        if p.placements.as_slice() == ["wasm"] {
+            for (i, provide) in self.provides.iter().enumerate() {
+                if !WASM_KINDS.contains(&provide.kind.as_str()) && KINDS.contains(&provide.kind.as_str()) {
+                    out.push(problem(
+                        format!("provides[{i}].kind"),
+                        format!(
+                            "'wasm' is the only placement and a {} carries media, which never \
+                             crosses a component boundary. Tier W runs {} only; add 'sidecar' \
+                             to placements for the media provides.",
+                            provide.kind,
+                            WASM_KINDS.join(", ")
+                        ),
+                    ));
+                }
+            }
+        }
         if p.process != "per-instance" && p.process != "singleton" {
             out.push(problem(
                 "plugin.process",
@@ -485,6 +543,7 @@ impl Manifest {
             .placements
             .iter()
             .any(|p| p == "sidecar" || p == "node");
+        let needs_component = self.plugin.placements.iter().any(|p| p == "wasm");
         match &self.run {
             None => {
                 if needs_process {
@@ -494,18 +553,50 @@ impl Manifest {
                          the process: one of bin, python, node or shell.",
                     ));
                 }
+                if needs_component {
+                    out.push(problem(
+                        "run",
+                        "placements name 'wasm', so [run] wasm must name the component file.",
+                    ));
+                }
             }
             Some(run) => {
-                match run.keys_set() {
-                    0 => out.push(problem(
+                match (run.keys_set(), needs_process, run.wasm.is_some()) {
+                    // A plugin that is only ever a component names no runtime.
+                    (0, false, true) => {}
+                    (0, _, _) => out.push(problem(
                         "run",
-                        "[run] is empty. Set exactly one of bin, python, node or shell.",
+                        "[run] is empty. Set exactly one of bin, python, node or shell, or \
+                         set wasm for a plugin that only runs as a component.",
                     )),
-                    1 => {}
-                    n => out.push(problem(
+                    (1, _, _) => {}
+                    (n, _, _) => out.push(problem(
                         "run",
                         format!("{n} runtime keys are set; exactly one wins, so set one."),
                     )),
+                }
+                if needs_component && run.wasm.is_none() {
+                    out.push(problem(
+                        "run.wasm",
+                        "placements name 'wasm', so [run] wasm must name the component file.",
+                    ));
+                }
+                if let Some(path) = &run.wasm {
+                    if !needs_component {
+                        out.push(problem(
+                            "run.wasm",
+                            "[run] wasm names a component but placements does not name 'wasm', \
+                             so nothing would ever load it.",
+                        ));
+                    }
+                    if !path.ends_with(".wasm") {
+                        out.push(problem(
+                            "run.wasm",
+                            "a component file ends in .wasm. Build it for wasm32-wasip2, which \
+                             produces a component rather than a module.",
+                        ));
+                    }
+                    check_relative(out, "run.wasm", path, root);
                 }
                 for (plat, path) in &run.bin {
                     if !PLATFORMS.contains(&plat.as_str()) {

@@ -136,7 +136,8 @@ UI and an agent use.
 
 | Command | Does |
 |---|---|
-| `gmx plugin new <name> --kind source --lang rust\|python\|node\|go\|shell` | write a plugin from a template, with every placeholder filled in |
+| `gmx plugin new <name> --kind source --lang rust\|python\|node\|go\|shell\|wasm` | write a plugin from a template, with every placeholder filled in |
+| `gmx plugin new <name> --lang wasm` | a tier W plugin: a WebAssembly component, sandboxed, no media. `--kind` defaults to `service` there, and a media kind is refused |
 | `gmx plugin test <dir> [--quick] [--offline]` | run the conformance harness; `--quick` skips the two slow checks, `--offline` replays a transcript with no core |
 | `gmx plugin add <source>` | install, while live, from any of the seven source forms below |
 | `gmx plugin search [<term>] [--json]` | find a plugin in the marketplaces this mixer knows |
@@ -236,6 +237,7 @@ what turn it from a file into an artefact; the format is in
 | `gmx session replay <file> --against test-core --source-fixture cam1.mkv` | with one media file standing in for every source |
 | `gmx session replay <file> --against test-core --fast` | as fast as it will go, rather than at the recorded timing |
 | `gmx session replay <file> --against test-core --write-expectations` | print the deltas it produced, as an `expect_changes.json` |
+| `gmx session replay <file> --with-plugin ./my-plugin` | install a plugin into the test core first. Run it twice, with and without, and the difference is what the plugin does |
 | `gmx session diff <a> <b>` | what changed between two runs |
 
 `replay` and `diff` exit non zero when a state delta differs, which is what

@@ -242,6 +242,24 @@ A complete list, so nobody has to grep for it.
 Shell plugins (`gmx plugin new --lang shell`) are refused at launch on Windows
 because they need `sh`. The Rust, Python, Go and Node templates all work.
 
+## The WebAssembly host
+
+Nothing in `godwinmix-wasm` or in `plugin/wasm.rs` is gated. There is no
+`cfg(unix)` in either, no path built by hand, and no process to start: a
+component is a file read into memory and a thread. wasmtime supports
+`x86_64-pc-windows-msvc`, `aarch64-apple-darwin` and both Linux targets as tier
+one platforms, and the component model with it.
+
+A component itself is the same bytes everywhere, which is the one thing at this
+placement that is simpler than a process. A tier W plugin's manifest lists
+every platform and ships no binary for any of them.
+
+The build of `wasm32-wasip2` components has two traps on a developer's machine
+rather than on the mixer's, both worked around in `dev/build-wasm.sh` and in
+the template's `check`: a second rust first on `PATH` with no wasm std, and
+rustup's `rust-lld` looking for `libLLVM.dylib` one directory from where it is.
+Neither affects a checkout that only runs the committed `.wasm`.
+
 ## Known upstream bugs
 
 These are GStreamer issues, not GodwinMix ones, and the code works around each

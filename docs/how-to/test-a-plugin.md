@@ -204,3 +204,31 @@ has GStreamer:
 * [Install a plugin](install-a-plugin.md).
 * [The plugin lifecycle](../reference/plugin-lifecycle.md).
 * [Debug a show](debug-a-show.md), for when the problem is not the plugin.
+
+## A WebAssembly plugin
+
+A tier W plugin has no process, so the checks that are about one are not run.
+What is left runs in this process against the real wasmtime host: the manifest,
+the load and the handshake, every example in the settings schema through
+`configure`, and the contract of whichever kind it is.
+
+```
+gmx plugin test plugins/min-hold
+```
+
+```
+  ok   manifest               min-hold v0.2.0: 1 provide(s), 1 tool(s), every path and schema in place
+  ok   component              loaded and hand shook in 1767 ms; tools: hold_state; hooks: take.before, take.after
+  ok   media                  a service provide at the `wasm` placement carries no media, so checks 2, 3 and 6 do not apply
+  ok   configure              4 settings examples were taken
+  ok   service                health is ok; 2 hooks answered: take.before, take.after
+```
+
+`--offline` works the same way and replays the same transcript file, through
+the component rather than down a pipe. `initialize` does not appear in a
+component's transcript: a component hand shakes when it is loaded, and the
+replay does that before the first line.
+
+Both need a core built with `--features wasm`. `gmx doctor` says whether yours
+is, on the `wasm host` line. See
+[write a WASM plugin](write-a-wasm-plugin.md).

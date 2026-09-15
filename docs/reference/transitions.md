@@ -271,6 +271,15 @@ scenes:
 cargo test -p godwinmix-core -- --ignored --nocapture a_crossfade_between
 ```
 
+## A transition as a WebAssembly component
+
+A transition plugin can run inside the core as a sandboxed component instead of
+as a process (tier W). It answers the same `render`, with the same two answers,
+and the same rule applies: it is sampled before the window opens and never
+during it. `examples/wasm-ease` is twenty lines and answers once with a curve.
+See [plugins as WebAssembly components](wasm.md) and
+[why WASM is not on the frame path](../explanation/why-wasm-is-not-on-the-frame-path.md).
+
 ## See also
 
 * [change scene with a transition](../how-to/transitions.md)
