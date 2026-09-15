@@ -329,34 +329,45 @@ pub fn make(
             names => names,
         }
     );
-    // The manifest comes off the node's hello, so it is the plugin that will
-    // actually run rather than whatever this machine happens to have installed
-    // under the same name.
-    let plugin = crate::plugin::remote::plugin_manifest(type_id, Some(node)).or_else(|| {
-        crate::plugin::loader::get(type_id.split('/').next().unwrap_or(type_id))
-            .map(|p| p.manifest)
-    });
-    let plugin = plugin.with_context(|| {
-        format!(
-            "`{node}` does not have `{type_id}`. It has: {}",
-            match crate::plugin::remote::on_node(node)
-                .iter()
-                .map(|p| p.plugin.name.clone())
-                .collect::<Vec<_>>()
-                .join(", ")
-            {
-                names if names.is_empty() => "nothing it has told us about".to_string(),
-                names => names,
-            }
-        )
-    })?;
-    crate::node::check_placement(
-        type_id,
-        &crate::node::Place::Node(node.to_string()),
-        &plugin.plugin.placements,
-    )?;
+    // A kind compiled into the binary is on the node too, because a node is the
+    // same binary: no manifest to consult and no placement to refuse. Only a
+    // plugin has a manifest that can say no.
+    let built_in = crate::plugin::source::registry().iter().any(|p| p.manifest.is(type_id));
+    if !built_in {
+        // The manifest comes off the node's hello, so it is the plugin that
+        // will actually run rather than whatever this machine happens to have
+        // installed under the same name.
+        let plugin = crate::plugin::remote::plugin_manifest(type_id, Some(node))
+            .or_else(|| {
+                crate::plugin::loader::get(type_id.split('/').next().unwrap_or(type_id))
+                    .map(|p| p.manifest)
+            })
+            .with_context(|| {
+                format!(
+                    "`{node}` does not have `{type_id}`. It has: {}",
+                    match crate::plugin::remote::on_node(node)
+                        .iter()
+                        .map(|p| p.plugin.name.clone())
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                    {
+                        names if names.is_empty() =>
+                            "nothing it has told us about".to_string(),
+                        names => names,
+                    }
+                )
+            })?;
+        crate::node::check_placement(
+            type_id,
+            &crate::node::Place::Node(node.to_string()),
+            &plugin.plugin.placements,
+        )?;
+    }
     let manifest = crate::plugin::remote::manifest(type_id)
         .or_else(|| crate::plugin::loader::provide_manifest(type_id))
+        .or_else(|| {
+            crate::plugin::source::registry().iter().find(|p| p.manifest.is(type_id)).map(|p| &p.manifest)
+        })
         .with_context(|| format!("`{type_id}` has no manifest on `{node}` or here"))?;
     let plan = runtime.plan(
         node,
