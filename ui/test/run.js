@@ -1031,6 +1031,14 @@ async function liveSuite() {
     return;
   }
 
+  const addCheck = await panel.scenes.add("Add source check");
+  await panel.addSources(addCheck.id, [sources[0]]);
+  const addedView = await client.call("scene.get", { scene: addCheck.id });
+  test("dropping a source into an existing scene uses the content schema", () => {
+    eq(addedView.records.filter((record) => record.kind === "item").length, 1);
+  });
+  await panel.scenes.remove(addCheck.id);
+
   const before = panel.scenes.scenes().length;
 
   // --- two tiles dragged onto empty space make a two box scene --------------
