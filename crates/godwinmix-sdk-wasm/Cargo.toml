@@ -1,0 +1,22 @@
+# The guest side of tier W: what an author writes a WebAssembly plugin against.
+#
+# Outside the main workspace on purpose. This crate and the plugins that use it
+# are built for `wasm32-wasip2` and only for it: the generated bindings are
+# wasm imports and exports, and there is nothing for a host target to link
+# them to. `cargo build --release --target wasm32-wasip2` inside this directory
+# is the whole build, and it produces a component with no extra tool.
+[package]
+name = "godwinmix-sdk-wasm"
+version = "0.2.0"
+edition = "2021"
+rust-version = "1.85"
+license = "Apache-2.0"
+repository = "https://github.com/psmux/godwinmix"
+description = "Write a GodwinMix plugin as a WebAssembly component"
+
+[workspace]
+
+[dependencies]
+wit-bindgen = "0.61"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"

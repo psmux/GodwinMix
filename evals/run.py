@@ -26,6 +26,7 @@ import json
 import os
 import pathlib
 import re
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -34,6 +35,17 @@ import urllib.error
 import urllib.request
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
+
+
+def read_version(manifest):
+    """The version out of a gmx-plugin.toml, without a TOML parser.
+
+    Same reason tools/marketplace.py does it this way: Python 3.11 has
+    tomllib and 3.9 does not, and this runs on whatever CI has.
+    """
+    text = manifest.read_text(encoding="utf-8").split("[[provides]]", 1)[0]
+    found = re.search(r'^version\s*=\s*"([^"]+)"', text, re.M)
+    return found.group(1) if found else "installed"
 CASES = pathlib.Path(__file__).resolve().parent / "cases"
 RESULTS = pathlib.Path(__file__).resolve().parent / "results"
 sys.path.insert(0, str(ROOT / "clients" / "python"))
@@ -95,6 +107,7 @@ channels = 2
 [control]
 bind = "127.0.0.1:{port}"
 token = "{token}"
+{plugins_dir}
 
 [multiview]
 enabled = false
@@ -121,13 +134,17 @@ class Core:
     def __enter__(self):
         config = self.dir / "godwinmix.toml"
         initial = self.case.get("initial", {})
+        extra = initial.get("config", "")
+        wanted = initial.get("plugins", [])
+        plugins_dir = self.install_plugins(wanted) if wanted else ""
         config.write_text(
             CONFIG.format(
                 port=self.port,
                 token=self.token,
                 min_hold_ms=initial.get("min_hold_ms", 0),
+                plugins_dir=plugins_dir,
             )
-            + initial.get("config", "")
+            + extra
         )
         self.process = subprocess.Popen(
             [str(find_binary("godwinmix")), "--config", str(config)],
@@ -226,6 +243,43 @@ class Core:
 
     # -- the state a case starts in ------------------------------------
 
+    def install_plugins(self, names):
+        """Stage the named plugins into this run's own plugins directory.
+
+        Copied rather than pointed at, because the loader expects
+        `<dir>/<name>/<version>/` and the repository keeps a plugin at
+        `plugins/<name>/`. A copy also means an eval cannot write into the
+        working tree.
+        """
+        root = ROOT / "plugins"
+        target = self.dir / "plugins"
+        for name in names:
+            source = root / name
+            if not (source / "gmx-plugin.toml").is_file():
+                raise SystemExit(f"there is no plugin at {source}")
+            version = read_version(source / "gmx-plugin.toml")
+            shutil.copytree(source, target / name / version)
+        return f'plugins_dir = "{target}"'
+
+    def check_plugins(self, names):
+        """Every plugin the case asked for is loaded and has no problem."""
+        loaded = {p["name"]: p for p in self.get("plugins").get("plugins", [])}
+        for name in names:
+            plugin = loaded.get(name)
+            if plugin is None:
+                raise SystemExit(
+                    f"the case wants the `{name}` plugin and the core did not load it. "
+                    f"Loaded: {', '.join(loaded) or 'none'}."
+                )
+            if plugin.get("problem"):
+                raise SystemExit(f"`{name}` did not load: {plugin['problem']}")
+            if not plugin.get("instances"):
+                raise SystemExit(
+                    f"`{name}` is installed and nothing is running it. A plugin whose only "
+                    f"placement is `wasm` needs a core built with `--features wasm`; "
+                    f"`gmx doctor` says whether this one is."
+                )
+
     def set_up(self):
         """The world as the case starts, before the instruction arrives.
 
@@ -233,6 +287,8 @@ class Core:
         case is judged on are only the ones the agent caused.
         """
         initial = self.case.get("initial", {})
+        if initial.get("plugins"):
+            self.check_plugins(initial["plugins"])
         for source in initial.get("sources", []):
             self.call("source.add", source)
         for source in initial.get("sources", []):

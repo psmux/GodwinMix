@@ -19,7 +19,17 @@ members = ["crates/*", "plugins/*"]
 default-members = ["crates/*", "plugins/*"]
 # Both have their own lockfiles and their own heavy dependency trees, and
 # neither is built by `cargo build` here.
-exclude = ["browser", "tauri-app"]
+# `browser` and `tauri-app` have their own lockfiles and their own heavy
+# dependency trees. The three tier W crates are excluded for a different
+# reason: they are built for `wasm32-wasip2` and have nothing to link against
+# on a host target. `docs/how-to/write-a-wasm-plugin.md` has the build line.
+exclude = [
+    "browser",
+    "tauri-app",
+    "crates/godwinmix-sdk-wasm",
+    "plugins/min-hold",
+    "examples/wasm-ease",
+]
 
 [workspace.package]
 version = "0.2.0"
@@ -79,6 +89,13 @@ base64 = "0.22"
 # format a 128 bit integer we already have to generate ourselves; getrandom is
 # already in the tree under rustls and costs nothing new to compile.
 getrandom = "0.3"
+
+# The tier W host, behind the binary's `wasm` feature. Kept at the 36 LTS line:
+# it asks for Rust 1.86 rather than the 1.95 the current release wants, and the
+# component model has not moved under it.
+wasmtime = { version = "36", default-features = false, features = ["cranelift", "component-model", "runtime", "std", "gc-drc"] }
+wasmtime-wasi = { version = "36", default-features = false }
+godwinmix-wasm = { path = "crates/godwinmix-wasm", version = "0.2.0" }
 
 [profile.release]
 opt-level = 3

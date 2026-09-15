@@ -1,0 +1,23 @@
+# The minimum hold, replayed through the component in this process: no core,
+# no sockets, no clock.
+#
+#   gmx plugin test --offline plugins/min-hold
+#
+# `core` lines are calls into the component; `plugin` lines are what it must
+# answer, matched as a subset of the real answer. "*" matches any value.
+#
+# `initialize` does not appear: a component hand shakes when it is loaded, not
+# over a pipe, so the replay does it before the first line here. The params it
+# hands over are empty, so the window is the default 8000 ms.
+{"core": {"jsonrpc": "2.0", "id": 1, "method": "health", "params": {}}}
+{"plugin": {"jsonrpc": "2.0", "id": 1, "result": {"state": "ok"}}}
+{"core": {"jsonrpc": "2.0", "id": 2, "method": "hook", "params": {"hook": "take.before", "payload": {"source": "cam1"}}}}
+{"plugin": {"jsonrpc": "2.0", "id": 2, "result": {"allow": true}}}
+{"core": {"jsonrpc": "2.0", "id": 3, "method": "hook", "params": {"hook": "take.before", "payload": {"source": "cam2"}}}}
+{"plugin": {"jsonrpc": "2.0", "id": 3, "result": {"allow": false, "reason": "*"}}}
+{"core": {"jsonrpc": "2.0", "id": 4, "method": "tool.call", "params": {"name": "hold_state", "arguments": {}}}}
+{"plugin": {"jsonrpc": "2.0", "id": 4, "result": {"structuredContent": {"window_ms": 8000, "refused": 1}}}}
+{"core": {"jsonrpc": "2.0", "id": 5, "method": "configure", "params": {"params": {"min_hold_ms": 0}}}}
+{"plugin": {"jsonrpc": "2.0", "id": 5, "result": {"applied": true}}}
+{"core": {"jsonrpc": "2.0", "id": 6, "method": "hook", "params": {"hook": "take.before", "payload": {"source": "cam3"}}}}
+{"plugin": {"jsonrpc": "2.0", "id": 6, "result": {"allow": true}}}

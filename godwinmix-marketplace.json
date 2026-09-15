@@ -140,6 +140,31 @@
       ]
     },
     {
+      "name": "min-hold",
+      "source": "./plugins/min-hold",
+      "description": "Refuse a take that comes too soon after the last one, with the time left in the reason",
+      "tier": "gold",
+      "kinds": [
+        "service"
+      ],
+      "license": "Apache-2.0",
+      "repository": "https://github.com/psmux/godwinmix/tree/main/plugins/min-hold",
+      "versions": [
+        {
+          "version": "0.2.0",
+          "api": 1,
+          "platforms": [
+            "linux-x86_64",
+            "linux-aarch64",
+            "macos-aarch64",
+            "macos-x86_64",
+            "windows-x86_64"
+          ],
+          "signed": true
+        }
+      ]
+    },
+    {
       "name": "ndi",
       "source": "./plugins/ndi",
       "description": "NDI sources and outputs, with mDNS discovery of every NDI sender on the network. The NDI runtime is loaded at run time and never linked, so the plugin builds and runs on a machine that has never had it and says where to get it.",

@@ -103,11 +103,16 @@ pub struct PluginsTable {
     /// whole of the developer path. An operator running unattended channels
     /// sets it false and then only a signed release installs.
     pub allow_unsigned: bool,
+    /// Which plugins may be given the WASI grants their manifest asks for at
+    /// the `wasm` placement. Empty by default, so a component gets no
+    /// filesystem and no sockets until an operator names it here. The manifest
+    /// declaring `wasi` is only half of it; this is the other half.
+    pub allow_wasi: Vec<String>,
 }
 
 impl Default for PluginsTable {
     fn default() -> Self {
-        Self { settings: Default::default(), allow_unsigned: true }
+        Self { settings: Default::default(), allow_unsigned: true, allow_wasi: Vec::new() }
     }
 }
 
@@ -120,7 +125,7 @@ impl std::ops::Deref for PluginsTable {
 
 /// The keys in `[plugins]` that are the core's rather than a plugin's. A
 /// plugin may not be called any of these.
-const PLUGIN_SWITCHES: &[&str] = &["allow_unsigned"];
+const PLUGIN_SWITCHES: &[&str] = &["allow_unsigned", "allow_wasi"];
 
 impl<'de> Deserialize<'de> for PluginsTable {
     fn deserialize<D: serde::Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
@@ -129,6 +134,16 @@ impl<'de> Deserialize<'de> for PluginsTable {
         for (key, value) in raw {
             match (key.as_str(), &value) {
                 ("allow_unsigned", toml::Value::Boolean(on)) => out.allow_unsigned = *on,
+                ("allow_wasi", toml::Value::Array(names)) => {
+                    out.allow_wasi =
+                        names.iter().filter_map(|n| n.as_str().map(str::to_string)).collect()
+                }
+                ("allow_wasi", _) => {
+                    return Err(serde::de::Error::custom(format!(
+                        "[plugins] allow_wasi is a list of plugin names, not {}",
+                        value.type_str()
+                    )))
+                }
                 (k, _) if PLUGIN_SWITCHES.contains(&k) => {
                     return Err(serde::de::Error::custom(format!(
                         "[plugins] {k} is a switch and wants a boolean, not {}",
@@ -161,6 +176,9 @@ impl Serialize for PluginsTable {
         // not grow a line nobody asked for.
         if !self.allow_unsigned {
             map.serialize_entry("allow_unsigned", &self.allow_unsigned)?;
+        }
+        if !self.allow_wasi.is_empty() {
+            map.serialize_entry("allow_wasi", &self.allow_wasi)?;
         }
         for (name, table) in &self.settings {
             map.serialize_entry(name, table)?;

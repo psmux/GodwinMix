@@ -1,6 +1,6 @@
 # The crate map
 
-GodwinMix is one repository, four crates and one binary. This page says what
+GodwinMix is one repository, six crates and one binary. This page says what
 belongs in each crate, what does not, and where a new module goes.
 
 The rule underneath all of it: a dependency points one way only, from the thing
@@ -16,8 +16,10 @@ that serves towards the thing that mixes, and from both towards the contract.
          godwinmix-protocol            the wire contract, no media stack
 ```
 
-`godwinmix-host` sits beside the engine and depends only on the protocol. It is
-empty today.
+`godwinmix-host` sits beside the engine and depends only on the protocol.
+`godwinmix-wasm` sits above the engine and is linked only when the binary's
+`wasm` feature is on; `godwinmix-sdk` and `godwinmix-sdk-wasm` are what a
+plugin author depends on and nothing in the core depends on either.
 
 ## godwinmix-protocol
 
@@ -74,6 +76,39 @@ transport, the transports themselves and the loader that starts, supervises,
 restarts and kills a sidecar. None of it is written yet; the crate exists so
 the layout is settled before the code arrives, and so the engine can be
 embedded without a plugin loader linked in. See its `README.md`.
+
+## godwinmix-wasm
+
+`crates/godwinmix-wasm/`
+
+The tier W host: wasmtime with the component model, one store per instance, a
+worker thread per instance, and the host functions a component may call back.
+It depends on the engine and the protocol; nothing depends on it.
+
+Optional on purpose. The engine holds the *shape* of a component instance and a
+registry with room for one runner (`plugin::wasm`); this crate is the runner,
+and the binary registers it behind its `wasm` feature. A build without the
+feature never links wasmtime, the registry is empty, and a `wasm` placement is
+refused with a message naming the flag. The feature is off by default because
+it adds 11.9 MB to a release binary; see
+[plugins as WebAssembly components](../reference/wasm.md).
+
+This crate carries a `rust-version` of its own, 1.86, because wasmtime 36 asks
+for it. The rest of the workspace still builds on 1.82.
+
+## godwinmix-sdk-wasm
+
+`crates/godwinmix-sdk-wasm/`
+
+The guest side: what an author writes a WebAssembly plugin against. A `Service`
+trait, a `Transition` trait, and one export macro each.
+
+Outside the workspace, and so are the two components that use it
+(`plugins/min-hold`, `examples/wasm-ease`). They are built for `wasm32-wasip2`
+and have nothing to link against on a host target, so they have lockfiles of
+their own and `dev/build-wasm.sh` builds them. The `.wasm` each produces is
+committed beside its manifest, so a checkout with no wasm toolchain still runs
+the tests and the replay that need it.
 
 ## godwinmix
 

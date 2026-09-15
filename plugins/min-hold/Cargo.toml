@@ -1,0 +1,28 @@
+# A minimum hold, as a WebAssembly component.
+#
+# Built for `wasm32-wasip2` and only for it, so it sits outside the main
+# workspace with a lockfile of its own. `dev/build-wasm.sh` builds it and
+# copies the component next to this file.
+[package]
+name = "gmx-min-hold"
+version = "0.2.0"
+edition = "2021"
+rust-version = "1.85"
+license = "Apache-2.0"
+publish = false
+description = "Refuse a take that comes too soon after the last one"
+
+[workspace]
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+godwinmix-sdk-wasm = { path = "../../crates/godwinmix-sdk-wasm" }
+serde_json = "1"
+
+[profile.release]
+opt-level = "s"
+lto = true
+strip = true
+codegen-units = 1

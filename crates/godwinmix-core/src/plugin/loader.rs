@@ -755,6 +755,10 @@ pub fn launch_for(
         let have: Vec<&str> = plugin.manifest.provides.iter().map(|p| p.id.as_str()).collect();
         format!("`{name}` has no provide called `{id}`. It provides: {}.", have.join(", "))
     })?;
+    // Media at the `wasm` placement, before anything is built. One check here
+    // covers `source.add`, `output.add` and `filter.add`, because all three
+    // reach a process through this function.
+    super::wasm::check_media(type_id, &decl.kind, &plugin.manifest)?;
     anyhow::ensure!(
         plugin.manifest.plugin.placements.iter().any(|p| p == "sidecar"),
         "the plugin `{name}` does not declare the `sidecar` placement. It declares: {}.",
@@ -1258,6 +1262,32 @@ pub fn set_pid(instance: &str, plugin: &str, provide: &str, pid: Option<u32>) {
             }
         }
     }
+}
+
+/// Record an instance that has no process: a tier W component.
+///
+/// The pid table is where `plugin.list` and the budget sampler find an
+/// instance, and a component has no pid to put in it. So the stats row is
+/// written directly, with the memory it is using rather than the memory a
+/// process would have. `plugin.list` shows it beside every other instance,
+/// which is the point: 09 section 4 item 6 says every plugin's cost sits next
+/// to its name, and a plugin that costs nothing to see is one nobody drops.
+pub fn set_hosted(instance: &str, plugin: &str, provide: &str, rss_bytes: u64) {
+    let mut reg = registry().write();
+    let entry = reg.stats.entry(instance.to_string()).or_default();
+    entry.plugin = plugin.to_string();
+    entry.provide = provide.to_string();
+    entry.instance = instance.to_string();
+    entry.pid = None;
+    entry.stats.rss_bytes = Some(rss_bytes);
+}
+
+/// Take an instance's row away. A process's row is cleared by `set_pid`; a
+/// component has no pid, so it says so here.
+pub fn forget(instance: &str) {
+    let mut reg = registry().write();
+    reg.stats.remove(instance);
+    reg.pids.remove(instance);
 }
 
 /// Record what an instance is doing, for `plugin.list`.

@@ -80,6 +80,11 @@ pub enum SessionCmd {
         /// This is how a new case in `tests/sessions/` gets its expectations.
         #[arg(long)]
         write_expectations: bool,
+        /// Install a plugin into the test core before replaying, by path.
+        /// Repeat it for several. This is how a session is replayed with and
+        /// without a plugin: run it twice and read the difference.
+        #[arg(long = "with-plugin", value_name = "DIR")]
+        with_plugins: Vec<PathBuf>,
     },
     /// What changed between two session logs.
     Diff {
@@ -111,7 +116,15 @@ pub async fn run(cmd: SessionCmd) -> Result<()> {
             println!("{}", lines.join("\n"));
             anyhow::bail!("{} state delta(s) differ", lines.len())
         }
-        SessionCmd::Replay { file, against, source_fixture, expect, fast, write_expectations } => {
+        SessionCmd::Replay {
+            file,
+            against,
+            source_fixture,
+            expect,
+            fast,
+            write_expectations,
+            with_plugins,
+        } => {
             anyhow::ensure!(
                 against == "test-core",
                 "`--against {against}` is not a thing to replay against. The only one is \
@@ -123,6 +136,7 @@ pub async fn run(cmd: SessionCmd) -> Result<()> {
                 fast,
                 expect: expect.clone(),
                 write_expectations,
+                with_plugins,
             };
             let outcome = replay(&file, &options).await?;
             if write_expectations {
@@ -238,6 +252,8 @@ pub struct Options {
     pub fast: bool,
     pub expect: Option<PathBuf>,
     pub write_expectations: bool,
+    /// Plugin directories installed into the test core before the replay.
+    pub with_plugins: Vec<PathBuf>,
 }
 
 /// What a replay found.
@@ -329,7 +345,7 @@ pub async fn replay(file: &Path, options: &Options) -> Result<Outcome> {
     );
 
     let started = std::time::Instant::now();
-    let core = core::TestCore::start().await?;
+    let core = core::TestCore::start_with(&options.with_plugins).await?;
     let collector = delta::Collector::start(core.watch());
     let mut issued = 0usize;
     let mut skipped = Vec::new();

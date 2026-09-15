@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Minimum hold",
+  "type": "object",
+  "properties": {
+    "min_hold_ms": {
+      "type": "integer",
+      "title": "Minimum hold",
+      "description": "How long a shot stays on air before another take is allowed. A take inside the window is refused and the reason says how long is left.",
+      "minimum": 0,
+      "maximum": 60000,
+      "default": 8000,
+      "x-gmx-unit": "ms",
+      "examples": [8000, 2000, 0]
+    }
+  },
+  "additionalProperties": false
+}
