@@ -23,7 +23,7 @@ if [ ! -f "$CONFIG" ]; then
   # what makes the five minute quickstart five minutes. Sources and outputs
   # are added over the API afterwards and saved beside this file.
   if [ -w "$(dirname "$CONFIG")" ]; then
-    cp /usr/share/godwinmix/godwinmix.example.toml "$CONFIG"
+    cp /usr/share/godwinmix/default.toml "$CONFIG"
     echo "godwinmix: no config at $CONFIG, wrote the shipped default there" >&2
   else
     echo "godwinmix: no config at $CONFIG and its directory is not writable." >&2

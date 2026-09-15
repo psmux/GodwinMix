@@ -109,14 +109,14 @@ jobs:
 
           api() {
             local method=$1 path=$2 body=${3:-}
+            local response
+            local args=(-sS --fail-with-body -X "$method" "http://127.0.0.1:8080$path"
+              -H "Authorization: Bearer $TOKEN")
             if [ -n "$body" ]; then
-              curl -sf -X "$method" "http://127.0.0.1:8080$path" \
-                -H "Authorization: Bearer $TOKEN" \
-                -H 'content-type: application/json' -d "$body"
-            else
-              curl -sf -X "$method" "http://127.0.0.1:8080$path" \
-                -H "Authorization: Bearer $TOKEN"
+              args+=(-H 'content-type: application/json' -d "$body")
             fi
+            response=$(curl "${args[@]}") || { printf '%s\n' "$response" >&2; return 1; }
+            printf '%s\n' "$response"
           }
 
           # 2. Wait for the control port. Cold start on a runner is a few
@@ -150,7 +150,7 @@ jobs:
           # 5. Measured by something that shares no code with the mixer: read
           #    the programme back off the RTMP server and count frames.
           ffprobe -v error -rw_timeout 30000000 \
-            -select_streams v:0 -show_entries stream=codec_name,width,height,avg_frame_rate \
+            -select_streams v:0 -show_entries stream=codec_name,width,height,avg_frame_rate,nb_read_frames \
             -count_frames -read_intervals '%+#60' -of json \
             "rtmp://127.0.0.1:1935/live/program" > probe.json
           frames=$(jq -r '.streams[0].nb_read_frames // 0' probe.json)
