@@ -374,46 +374,41 @@ note() {
     esac
 }
 
-# How many of this soak's own sources the mixer still has. One is the healthy
-# answer: each round removes the one the round before it added.
-outstanding() {
+# The soak's own sources that the mixer still has, oldest first. One is the
+# healthy answer: each round removes the one the round before it added. The
+# list is read rather than remembered, so a round that could not tell whether
+# its add landed still finds the source next time.
+mine() {
     curl -fsS --max-time 5 "$BASE/api/v1/sources" "${AUTH[@]}" 2>/dev/null \
-        | grep -o '"soak-[0-9]*"' | sort -u | wc -l | tr -d ' '
+        | grep -o '"soak-[0-9]\{1,\}"' | tr -d '"' | sort -t- -k2 -n -u
 }
 
-LAST_SOURCE=""
-BACKLOG=0
-
 round_sources() {
-    if [[ -n "$LAST_SOURCE" ]]; then
-        curl -fsS "${BUDGET[@]}" -X DELETE "$BASE/api/v1/sources/$LAST_SOURCE" \
+    local ids oldest left
+    ids="$(mine)"
+    left=0
+    [[ -n "$ids" ]] && left="$(printf '%s\n' "$ids" | wc -l | tr -d ' ')"
+    oldest="$(printf '%s\n' "$ids" | head -1)"
+    if [[ -n "$oldest" ]]; then
+        curl -fsS "${BUDGET[@]}" -X DELETE "$BASE/api/v1/sources/$oldest" \
             "${AUTH[@]}" >/dev/null 2>&1 \
-            || note "source.remove" "round $ROUND, no answer inside ${BUDGET[1]} s"
-        LAST_SOURCE=""
+            || note "source.remove" "round $ROUND, $oldest did not go inside ${BUDGET[1]} s"
     fi
     # Adding one a round while removals do not keep up turns a slow mixer into
     # an overloaded one, and then every other number in the run is measuring
     # the overload rather than the mixer. Past a small backlog the soak stops
-    # adding, keeps removing, and says so. The backlog is itself a finding.
-    local left
-    left="$(outstanding)"
-    if [[ "${left:-0}" -gt 3 ]]; then
-        BACKLOG=$((BACKLOG + 1))
+    # adding and keeps draining, oldest first, until the backlog clears. That
+    # it happened at all is itself a finding and is said once at the end.
+    if [[ "$left" -gt 3 ]]; then
         note "source backlog" \
-            "round $ROUND: ${left} of this soak's sources are still on the mixer, so \
-nothing was added this round. Removals are not keeping up with one add every ${PERIOD} s."
+            "round $ROUND: $left of this soak's sources were still on the mixer, so \
+nothing was added that round. Removals were not keeping up with one add every ${PERIOD} s."
         return
     fi
-    if curl -fsS "${BUDGET[@]}" -X POST "$BASE/api/v1/sources" "${AUTH[@]}" \
+    curl -fsS "${BUDGET[@]}" -X POST "$BASE/api/v1/sources" "${AUTH[@]}" \
         -H 'content-type: application/json' \
-        -d "{\"id\":\"soak-$ROUND\",\"uri\":\"test://smpte\"}" >/dev/null 2>&1; then
-        LAST_SOURCE="soak-$ROUND"
-    else
-        note "source.add" "round $ROUND, no answer inside ${BUDGET[1]} s"
-        # It may well have been made anyway, and `outstanding` counts it next
-        # round, so it is remembered rather than dropped on the floor.
-        LAST_SOURCE="soak-$ROUND"
-    fi
+        -d "{\"id\":\"soak-$ROUND\",\"uri\":\"test://smpte\"}" >/dev/null 2>&1 \
+        || note "source.add" "round $ROUND, no answer inside ${BUDGET[1]} s"
 }
 
 round_take() {

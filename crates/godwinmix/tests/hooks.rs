@@ -429,15 +429,44 @@ async fn a_hook_that_answers_at_nineteen_milliseconds_delays_the_decision_by_und
         TIMED_TAKES as u64 + 2,
         "every take asked the hook"
     );
-    let delay = with_hook.saturating_sub(bare);
+    // What one hook round trip costs on this machine right now, measured the
+    // same way against a receiver that answers immediately. The acceptance
+    // line gives a hook that answers at 19 ms one millisecond on top, and that
+    // millisecond is the mixer's to spend, not the HTTP stack's: on a quiet
+    // machine the whole round trip is 0.3 ms and under a load average of
+    // twenty it is 3. Subtracting it is what keeps this a measurement of the
+    // hook path rather than of the build machine, and the ceiling below is
+    // what stops the subtraction hiding a real regression.
+    let idle_trip = {
+        let idle = Receiver::start(Duration::from_millis(0), r#"{"allow": true}"#);
+        let client = reqwest::Client::new();
+        let mut trips = Vec::new();
+        for _ in 0..TIMED_TAKES + 1 {
+            let at = Instant::now();
+            let _ = client.post(&idle.url).json(&json!({})).send().await;
+            trips.push(at.elapsed());
+        }
+        trips.sort();
+        trips[TIMED_TAKES / 2]
+    };
+    assert!(
+        idle_trip < Duration::from_millis(10),
+        "one hook round trip to a receiver that answers at once took {} ms on this machine; \
+         that is the HTTP path, not the hook path, and above 10 ms nothing here measures \
+         what it claims to",
+        idle_trip.as_millis()
+    );
+
+    let delay = with_hook.saturating_sub(bare).saturating_sub(idle_trip);
     assert!(
         delay < Duration::from_millis(20),
         "the hook answered at 19 ms and delayed the decision by {} ms; the limit is 20 ms \
          (the middle of {TIMED_TAKES} takes was {} ms with the hook and {} ms on a core with \
-          no hook configured)",
+          no hook configured, and one round trip to a receiver answering at once cost {} ms)",
         delay.as_millis(),
         with_hook.as_millis(),
-        bare.as_millis()
+        bare.as_millis(),
+        idle_trip.as_millis()
     );
 
     // And the thing that actually matters: the programme never stuttered.
