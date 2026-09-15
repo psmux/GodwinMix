@@ -230,11 +230,11 @@ export class LegacyTransport {
         });
         return { pending: true };
       case "source.remove":
-        return this._http("DELETE", `/api/sources/${encodeURIComponent(p.source)}`);
+        return this._http("DELETE", `/api/sources/${encodeURIComponent(p.id ?? p.source)}`);
       case "source.audio.set":
-        return this._http("POST", `/api/sources/${encodeURIComponent(p.source)}/audio`, audioBody(p));
+        return this._http("POST", `/api/sources/${encodeURIComponent(p.id ?? p.source)}/audio`, audioBody(p));
       case "source.seek":
-        return this._http("POST", `/api/sources/${encodeURIComponent(p.source)}/seek`, {
+        return this._http("POST", `/api/sources/${encodeURIComponent(p.id ?? p.source)}/seek`, {
           position_ms: p.position_ms,
         });
       case "source.set":
@@ -250,9 +250,9 @@ export class LegacyTransport {
           queue_secs: p.queue_secs ?? 4.0,
         });
       case "output.remove":
-        return this._http("DELETE", `/api/outputs/${encodeURIComponent(p.output)}`);
+        return this._http("DELETE", `/api/outputs/${encodeURIComponent(p.id ?? p.output)}`);
       case "output.reconnect":
-        return this._http("POST", `/api/outputs/${encodeURIComponent(p.output)}/reconnect`);
+        return this._http("POST", `/api/outputs/${encodeURIComponent(p.id ?? p.output)}/reconnect`);
 
       case "media.list":
         return this._http("GET", "/api/media");

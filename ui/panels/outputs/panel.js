@@ -70,7 +70,7 @@ class OutputsPanel extends HTMLElement {
         text: "Reconnect",
         onclick: async () => {
           try {
-            await this.client.call("output.reconnect", { output: output.id });
+            await this.client.call("output.reconnect", { id: output.id });
             toast({ text: `Reconnecting ${output.id}.` });
           } catch (e) {
             errorToast(e, "Reconnect");
@@ -82,7 +82,7 @@ class OutputsPanel extends HTMLElement {
         onclick: async () => {
           if (settings().confirmRemove && !(await confirmModal(`Stop sending to "${output.id}"?`, "Stop"))) return;
           try {
-            await this.client.call("output.remove", { output: output.id });
+            await this.client.call("output.remove", { id: output.id });
           } catch (e) {
             errorToast(e, "Remove");
           }

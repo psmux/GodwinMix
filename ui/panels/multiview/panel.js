@@ -17,7 +17,7 @@ import { register } from "../../shell/commands.js";
 
 class ProgramPanel extends HTMLElement {
   static get panel() {
-    return { id: "core/program", title: "Programme", slots: ["main"], tag: "gmx-program" };
+    return { id: "core/program", title: "Programme", slots: ["monitor"], tag: "gmx-program" };
   }
 
   setClient(client) {

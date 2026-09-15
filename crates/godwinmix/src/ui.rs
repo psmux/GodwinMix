@@ -295,14 +295,9 @@ const CSP: &str = concat!(
     "object-src 'none'",
 );
 
-fn with_headers(kind: &'static str, body: Body, path: &str) -> Response {
-    let cache = if path.ends_with(".html") {
-        // The page names its modules by plain path, so a stale page would load
-        // stale modules. It is two kilobytes; revalidating it costs nothing.
-        "no-cache"
-    } else {
-        "public, max-age=300"
-    };
+fn with_headers(kind: &'static str, body: Body, _path: &str) -> Response {
+    // Modules have stable URLs. Revalidate every asset when a build changes.
+    let cache = "no-cache";
     (
         [
             (header::CONTENT_TYPE, HeaderValue::from_static(kind)),

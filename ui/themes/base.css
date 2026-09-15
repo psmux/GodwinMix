@@ -89,9 +89,9 @@ button { cursor: pointer; }
 
 gmx-shell {
   display: grid;
-  grid-template-rows: auto minmax(0, 1fr) auto auto;
+  grid-template-rows: auto auto minmax(0, 1fr) auto auto;
   grid-template-columns: 1fr auto;
-  grid-template-areas: "header header" "main sidebar" "strip strip" "footer footer";
+  grid-template-areas: "header header" "monitor sidebar" "main sidebar" "strip strip" "footer footer";
   height: 100%;
 }
 .slot-header { grid-area: header; border-bottom: var(--border) solid var(--line); background: var(--panel); }
@@ -109,7 +109,7 @@ gmx-shell {
 .slot-modal:empty { display: none; }
 
 @media (max-width: 760px) {
-  gmx-shell { grid-template-columns: 1fr; grid-template-areas: "header" "main" "strip" "footer"; }
+  gmx-shell { grid-template-columns: 1fr; grid-template-areas: "header" "monitor" "main" "strip" "footer"; }
   .slot-sidebar {
     position: fixed; right: 0; top: var(--header-h); bottom: 0; z-index: 30;
     width: min(340px, 92vw); box-shadow: var(--shadow);
@@ -435,3 +435,13 @@ gmx-program canvas, gmx-program img {
   height: min(34vh, 320px); object-fit: contain;
 }
 .tile .playback { padding: 3px 6px; font-size: var(--fs-sm); color: var(--dim); }
+
+.slot-monitor { grid-area: monitor; min-width: 0; overflow: hidden; border-bottom: 1px solid var(--line); }
+.slot-main { padding: var(--pad); }
+.panel-section { display: block; margin-bottom: 8px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--panel); }
+.panel-section > summary { cursor: pointer; padding: 10px; font-weight: 600; }
+.panel-section[open] > summary { border-bottom: 1px solid var(--line); }
+.panel-section > :not(summary) { display: block; }
+.panel-section:not([open]) > :not(summary) { display: none; }
+.panel-section > :not(summary) > .row.pad:first-child > strong:first-child { display: none; }
+gmx-program canvas, gmx-program img { height: min(32vh, 300px); }

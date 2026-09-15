@@ -7,14 +7,15 @@
 
 const KEY = "gmx.layout";
 
-export const SLOTS = ["header", "main", "sidebar", "strip", "footer", "modal"];
+export const SLOTS = ["header", "monitor", "main", "sidebar", "strip", "footer", "modal"];
 
 let fallback = {
   header: ["core/header"],
-  main: ["core/program", "core/sources", "core/scenes"],
+  monitor: ["core/program"],
+  main: ["core/sources", "core/scenes", "core/outputs", "core/media", "core/alerts"],
   sidebar: [],
   strip: [],
-  footer: ["core/outputs", "core/media", "core/alerts"],
+  footer: [],
   modal: [],
 };
 
@@ -60,6 +61,19 @@ function normalise(layout) {
   for (const slot of SLOTS) {
     const list = layout && Array.isArray(layout[slot]) ? layout[slot] : [];
     out[slot] = [...new Set(list.filter((x) => typeof x === "string"))];
+  }
+  // Upgrade saved layouts too: the monitor never shares a scroll container.
+  for (const slot of SLOTS) {
+    if (slot !== "monitor" && out[slot].includes("core/program")) {
+      out[slot] = out[slot].filter((id) => id !== "core/program");
+      if (!out.monitor.includes("core/program")) out.monitor.push("core/program");
+    }
+  }
+  for (const id of ["core/outputs", "core/media", "core/alerts"]) {
+    if (out.footer.includes(id)) {
+      out.footer = out.footer.filter((panel) => panel !== id);
+      if (!out.main.includes(id)) out.main.push(id);
+    }
   }
   return out;
 }
