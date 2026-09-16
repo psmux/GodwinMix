@@ -123,7 +123,7 @@ rm -f "$GST_REGISTRY"
 
 echo
 FAILED=0
-for element in compositor rtmp2sink srtsink; do
+for element in compositor videoflip videocrop videoscale audiomixer proxysink rtmp2sink srtsink; do
     printf '%-24s' "$element"
     if "$OUT/bin/gst-inspect-1.0" "$element" >/dev/null 2>&1; then
         echo ok
