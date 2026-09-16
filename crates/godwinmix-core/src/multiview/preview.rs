@@ -277,6 +277,18 @@ impl ScenePreview {
         Ok(self.slots.len() - 1)
     }
 
+    /// Give one slot back: the tile tee first, then the compositor, then the
+    /// queue between them.
+    ///
+    /// The order of the last two is the whole of it. Releasing a compositor's
+    /// sink pad flushes it, which wakes anything blocked pushing into it, and
+    /// a `queue` taken to NULL has to join its own streaming thread before it
+    /// can answer. That thread is inside the compositor's chain function
+    /// waiting for a frame the compositor has not taken yet, and it waits
+    /// until the pad is flushed. Done the other way round, a preview that has
+    /// not produced its first frame holds the mixer loop for ever, which is
+    /// what a Linux runner with no GPU and software conversion showed and a
+    /// Mac never did.
     fn unbind(&mut self, index: usize) {
         if index >= self.slots.len() {
             return;
@@ -286,9 +298,9 @@ impl ScenePreview {
             let _ = slot.tee_pad.unlink(&sink);
         }
         slot.tee.release_request_pad(&slot.tee_pad);
+        self.comp.release_request_pad(&slot.pad);
         let _ = slot.queue.set_state(gst::State::Null);
         let _ = self.pipeline.remove(&slot.queue);
-        self.comp.release_request_pad(&slot.pad);
         debug!(source = %slot.source, "a source left the preview");
     }
 

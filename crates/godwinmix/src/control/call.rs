@@ -96,6 +96,17 @@ impl Call {
                 .with("kind", refused.kind.clone())
                 .with("retryable", false);
         }
+        // A mixer thread that has not answered inside its deadline. The
+        // caller needs the name of the command holding the loop, not a
+        // generic failure: it is the one thing that says whether asking again
+        // will help.
+        if let Some(wedged) = e.downcast_ref::<godwinmix_core::mixer::Wedged>() {
+            return RpcError::not_in_state(wedged.to_string())
+                .with("method", self.method)
+                .with("command", wedged.command)
+                .with("held_ms", wedged.held_ms)
+                .with("retryable", true);
+        }
         if let Some(busy) = e.downcast_ref::<godwinmix_core::mixer::Busy>() {
             return RpcError::not_in_state(busy.to_string())
                 .with("method", self.method)

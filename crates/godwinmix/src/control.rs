@@ -36,7 +36,7 @@ use godwinmix_protocol::types::{CanvasInfo, Limits, MultiviewStatus};
 use godwinmix_protocol::{AddSourceRequest, GoLiveRequest, GoLiveResult, MultiviewLayout};
 use godwinmix_core::config::{Config, OutputConfig, SnapshotConfig, SourceConfig};
 use godwinmix_core::media::{MediaLibrary, MediaListing};
-use godwinmix_core::mixer::{AudioOutcome, Command, MixerHandle, SeekOutcome};
+use godwinmix_core::mixer::{AudioOutcome, Command, MixerHandle, SeekOutcome, Wedged};
 use godwinmix_core::multiview::MultiviewHandle;
 use godwinmix_core::snapshot::{self, Ask, Pick, Tracker};
 use godwinmix_core::state::{Event, MixerStatus, SourceState};
@@ -944,6 +944,17 @@ struct ApiError(anyhow::Error);
 impl IntoResponse for ApiError {
     fn into_response(self) -> Response {
         warn!(error = %self.0, "request failed");
+        // A mixer that has not answered is a state, not a bad request. 503
+        // with the name of the command holding the loop, so the UI banner can
+        // say what is wrong: `ui/boot.js` gates the whole page on this route
+        // and a request that never came back drew nothing at all.
+        if let Some(wedged) = self.0.downcast_ref::<Wedged>() {
+            return (
+                StatusCode::SERVICE_UNAVAILABLE,
+                Json(json!({ "error": wedged.to_string(), "data": wedged.data() })),
+            )
+                .into_response();
+        }
         (StatusCode::BAD_REQUEST, self.0.to_string()).into_response()
     }
 }

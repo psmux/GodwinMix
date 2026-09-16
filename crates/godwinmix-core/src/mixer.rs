@@ -145,6 +145,98 @@ impl std::fmt::Display for Busy {
 
 impl std::error::Error for Busy {}
 
+/// How long a caller waits for the mixer thread before it is told the loop is
+/// held.
+///
+/// Every method on `MixerHandle` that waits for an answer is bounded by it. A
+/// command loop stuck inside one GStreamer state change used to cost every
+/// later request the life of the process: `/api/status` and `/metrics` never
+/// answered, so the web UI gated on `/api/status` drew nothing and a CI job
+/// waited until it was killed. Five seconds is the ceiling the pad blocks in
+/// `mixer/slots.rs` already work to, so a request that waits longer than one
+/// of those is waiting on something that is not coming back.
+pub const REPLY_DEADLINE: Duration = Duration::from_secs(5);
+
+/// What a caller is told when the mixer thread does not answer in time.
+///
+/// Its own type, like `Busy`, so the control plane can answer 503 naming the
+/// command that holds the loop rather than turning a wedge into a generic
+/// failure. The name comes from `Running`, which the loop writes before it
+/// runs each command.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Wedged {
+    /// What this caller was waiting for, as `Mixer::label` spells it.
+    pub request: &'static str,
+    /// How long it waited, in milliseconds.
+    pub waited_ms: u64,
+    /// The command the loop is inside, when it had recorded one.
+    pub command: Option<&'static str>,
+    /// How long that command has been running, in milliseconds.
+    pub held_ms: Option<u64>,
+}
+
+impl std::fmt::Display for Wedged {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "the mixer has not answered in {} s", self.waited_ms / 1000)?;
+        match (self.command, self.held_ms) {
+            (Some(command), Some(held_ms)) => write!(
+                f,
+                "; the command loop is held by {command} since {held_ms} ms. The programme \
+                 is still on air, and this request was not cancelled: it runs when the loop \
+                 comes back. The log carries a mixer watchdog line naming the same command. \
+                 Ask again, and restart the core if it does not clear."
+            ),
+            _ => write!(
+                f,
+                "; the command loop is between commands, so the answer was lost rather \
+                 than held. Ask again."
+            ),
+        }
+    }
+}
+
+impl std::error::Error for Wedged {}
+
+impl Wedged {
+    /// The `data` object a caller can act on: what is holding the loop, for
+    /// how long, and whether asking again is worth anything.
+    pub fn data(&self) -> serde_json::Value {
+        serde_json::json!({
+            "request": self.request,
+            "waited_ms": self.waited_ms,
+            "command": self.command,
+            "held_ms": self.held_ms,
+            "retryable": true,
+        })
+    }
+}
+
+/// What the mixer loop is inside right now.
+///
+/// Written by the loop before it runs each command and cleared after, so a
+/// caller whose deadline passes can name what is holding the thread and the
+/// watchdog can log it. One `Mutex` rather than two atomics because the name
+/// and the start have to move together.
+#[derive(Debug, Default)]
+struct Running {
+    inside: Mutex<Option<(&'static str, Instant)>>,
+}
+
+impl Running {
+    fn begin(&self, command: &'static str) {
+        *self.inside.lock() = Some((command, Instant::now()));
+    }
+
+    fn finish(&self) {
+        *self.inside.lock() = None;
+    }
+
+    /// The command the loop is inside and when it started.
+    fn held(&self) -> Option<(&'static str, Instant)> {
+        *self.inside.lock()
+    }
+}
+
 /// One tick's worth of the mixer's own housekeeping, so two timers that fire
 /// while the mixer is busy do not both queue.
 ///
@@ -388,6 +480,8 @@ pub struct MixerHandle {
     tx: mpsc::Sender<Command>,
     events: EventBus,
     coalesced: Arc<Coalesced>,
+    /// What the mixer loop is inside, shared with the loop in `spawn`.
+    running: Arc<Running>,
 }
 
 impl MixerHandle {
@@ -431,16 +525,46 @@ impl MixerHandle {
     /// Send a command and wait for the mixer to accept or reject it.
     pub async fn request(&self, make: impl FnOnce(Ack) -> Command) -> Result<()> {
         let (tx, rx) = oneshot::channel();
-        self.send(make(tx))?;
-        rx.await
-            .map_err(|_| anyhow::anyhow!("mixer dropped the request"))?
-            .map_err(|e| anyhow::anyhow!(e))
+        self.ask(make(tx), rx).await?.map_err(|e| anyhow::anyhow!(e))
+    }
+
+    /// Send one command and wait for its reply, for at most `REPLY_DEADLINE`.
+    ///
+    /// The one place every waiting method goes through, so no caller can be
+    /// left on the mixer thread for ever. A deadline that passes is answered
+    /// with `Wedged`, naming the command the loop is inside.
+    async fn ask<T>(&self, cmd: Command, rx: oneshot::Receiver<T>) -> Result<T> {
+        let label = Mixer::label(&cmd);
+        self.send(cmd)?;
+        match tokio::time::timeout(REPLY_DEADLINE, rx).await {
+            Ok(Ok(answer)) => Ok(answer),
+            Ok(Err(_)) => Err(anyhow::anyhow!("the mixer dropped the {label} request")),
+            Err(_) => Err(self.wedged(label).into()),
+        }
+    }
+
+    /// The refusal for a deadline that passed, with whatever the loop was
+    /// inside at the moment it did.
+    fn wedged(&self, request: &'static str) -> Wedged {
+        let held = self.held_by();
+        Wedged {
+            request,
+            waited_ms: REPLY_DEADLINE.as_millis() as u64,
+            command: held.map(|(command, _)| command),
+            held_ms: held.map(|(_, since)| since.as_millis() as u64),
+        }
+    }
+
+    /// What the mixer loop is inside and how long it has been there, or `None`
+    /// when it is waiting for a command. For the watchdog, for a timeout that
+    /// has to name the wedge, and for anything reporting on the core.
+    pub fn held_by(&self) -> Option<(&'static str, Duration)> {
+        self.running.held().map(|(command, at)| (command, at.elapsed()))
     }
 
     pub async fn status(&self) -> Result<MixerStatus> {
         let (tx, rx) = oneshot::channel();
-        self.send(Command::Status(tx))?;
-        rx.await.map_err(|_| anyhow::anyhow!("mixer dropped the status request"))
+        self.ask(Command::Status(tx), rx).await
     }
 
     /// Move part of a source's audio and get back where it ended up. Like
@@ -456,8 +580,7 @@ impl MixerHandle {
         media: Vec<Option<f64>>,
     ) -> Result<AudioOutcome> {
         let (tx, rx) = oneshot::channel();
-        self.send(Command::SetAudio { source, gain, muted, page, media, reply: tx })?;
-        rx.await.map_err(|_| anyhow::anyhow!("mixer dropped the audio request"))
+        self.ask(Command::SetAudio { source, gain, muted, page, media, reply: tx }, rx).await
     }
 
     /// Move a source and get back where it actually landed. Waits on a value
@@ -465,8 +588,7 @@ impl MixerHandle {
     /// is not a failure the caller should see as a generic 400.
     pub async fn seek(&self, source: SourceId, position_ms: u64) -> Result<SeekOutcome> {
         let (tx, rx) = oneshot::channel();
-        self.send(Command::Seek { source, position_ms, reply: tx })?;
-        rx.await.map_err(|_| anyhow::anyhow!("mixer dropped the seek request"))
+        self.ask(Command::Seek { source, position_ms, reply: tx }, rx).await
     }
 
     /// Put a filter on a source or on the programme, live.
@@ -485,8 +607,7 @@ impl MixerHandle {
         params: crate::config::Params,
     ) -> Result<FilterOutcome> {
         let (tx, rx) = oneshot::channel();
-        self.send(Command::SetFilter { id, params, reply: tx })?;
-        rx.await.map_err(|_| anyhow::anyhow!("mixer dropped the filter request"))
+        self.ask(Command::SetFilter { id, params, reply: tx }, rx).await
     }
 
     /// Take a filter out. `filter.remove`.
@@ -497,14 +618,12 @@ impl MixerHandle {
     /// Every filter in place. `filter.list`.
     pub async fn filters(&self) -> Result<Vec<FilterStatus>> {
         let (tx, rx) = oneshot::channel();
-        self.send(Command::ListFilters(tx))?;
-        rx.await.map_err(|_| anyhow::anyhow!("mixer dropped the filter listing"))
+        self.ask(Command::ListFilters(tx), rx).await
     }
 
     pub async fn configs(&self) -> Result<RuntimeConfigs> {
         let (tx, rx) = oneshot::channel();
-        self.send(Command::Configs(tx))?;
-        rx.await.map_err(|_| anyhow::anyhow!("mixer dropped the configs request"))
+        self.ask(Command::Configs(tx), rx).await
     }
 
     pub fn subscribe(&self) -> broadcast::Receiver<Envelope> {
@@ -1117,8 +1236,12 @@ impl Mixer {
         let (tx, rx) = mpsc::channel(COMMAND_QUEUE);
         let (bus_tx, bus_rx) = mpsc::channel(BUS_QUEUE);
         let events = EventBus::new(256);
-        let handle =
-            MixerHandle { tx, events: events.clone(), coalesced: Arc::new(Coalesced::default()) };
+        let handle = MixerHandle {
+            tx,
+            events: events.clone(),
+            coalesced: Arc::new(Coalesced::default()),
+            running: Arc::new(Running::default()),
+        };
 
         let program = gst::Pipeline::with_name("program");
 
@@ -4496,6 +4619,34 @@ fn ramp_volumes(targets: Vec<(gst::Pad, f64)>, duration: Duration, generation: A
         .ok();
 }
 
+/// Say once, at error level, that the mixer loop has been inside one command
+/// for longer than any caller is prepared to wait.
+///
+/// On the supervisor's timer rather than on the mixer thread, because the
+/// mixer thread is the one that is stuck: nothing running there can report it.
+/// This is the line that names the wedge in a CI log, beside the 503 the
+/// waiting caller already got.
+///
+/// Answers whether it logged, so a test can drive it without reading the log.
+fn watchdog(handle: &MixerHandle, warned: &mut Option<Instant>) -> bool {
+    let Some((command, since)) = handle.running.held() else {
+        *warned = None;
+        return false;
+    };
+    let held = since.elapsed();
+    if held < REPLY_DEADLINE || *warned == Some(since) {
+        return false;
+    }
+    *warned = Some(since);
+    error!(
+        command,
+        held_ms = held.as_millis() as u64,
+        "the mixer command loop has been inside one command for longer than the reply \
+         deadline; every command behind it is waiting and status is answering 503"
+    );
+    true
+}
+
 /// Run the mixer on its own thread. GStreamer state changes block, so they
 /// must not run on a Tokio worker.
 pub fn spawn(
@@ -4506,8 +4657,13 @@ pub fn spawn(
     let ticker = handle.clone();
     tokio::spawn(async move {
         let mut interval = tokio::time::interval(TICK);
+        // The start of the command the watchdog last complained about, so a
+        // loop held for a minute is one log line rather than a hundred and
+        // twenty.
+        let mut warned: Option<Instant> = None;
         loop {
             interval.tick().await;
+            watchdog(&ticker, &mut warned);
             // Coalesced: a mixer held up by a slow state change comes back to
             // one tick, not to however many fired while it was busy.
             if let Err(e) = ticker.tick() {
@@ -4534,11 +4690,17 @@ pub fn spawn(
         }
     });
 
+    let running = handle.running.clone();
     std::thread::Builder::new()
         .name("mixer".into())
         .spawn(move || {
             while let Some(cmd) = rx.blocking_recv() {
                 let label = Mixer::label(&cmd);
+                // Written before the command runs and cleared after it, so a
+                // caller whose deadline passes and the watchdog above can both
+                // say what the loop is inside. One uncontended lock on a path
+                // that is about to do a GStreamer state change.
+                running.begin(label);
                 // A net under every command. The programme's encoder lives in
                 // GStreamer's own threads and a panic here does not stop it,
                 // but without this the mixer thread dies and every command
@@ -4552,6 +4714,7 @@ pub fn spawn(
                 // state is uncertain rather than pretending nothing happened.
                 let outcome =
                     std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| mixer.handle(cmd)));
+                running.finish();
                 match outcome {
                     Ok(Ok(true)) => {}
                     Ok(Ok(false)) => break,
@@ -6123,8 +6286,92 @@ mod tests {
             tx,
             events: EventBus::new(8),
             coalesced: Arc::new(Coalesced::default()),
+            running: Arc::new(Running::default()),
         };
         (handle, rx)
+    }
+
+    /// A handle whose mixer thread is inside a command and not coming back.
+    ///
+    /// What a wedged loop looks like from the outside: the command is recorded
+    /// the way `spawn`'s loop records it, and then nothing ever takes it off
+    /// the queue. The receiver is kept alive by the caller, so a send lands
+    /// and the reply never does, which is the wedge.
+    fn held_handle(command: &'static str) -> (MixerHandle, mpsc::Receiver<Command>) {
+        let (handle, rx) = parked_handle();
+        let running = handle.running.clone();
+        running.begin(command);
+        (handle, rx)
+    }
+
+    /// A mixer thread held inside one command used to cost every later caller
+    /// the life of the process: `/api/status` and `/metrics` never answered
+    /// and the UI drew nothing. Now the wait has a deadline and the refusal
+    /// names what is holding the loop.
+    #[tokio::test(start_paused = true)]
+    async fn a_held_mixer_answers_with_the_command_that_holds_it() {
+        let (handle, _rx) = held_handle("program.take");
+        let err = handle.status().await.expect_err("a held mixer must not answer with a status");
+        let wedged = err.downcast_ref::<Wedged>().expect("a held mixer answers with Wedged");
+        assert_eq!(wedged.request, "core.status");
+        assert_eq!(wedged.command, Some("program.take"));
+        assert!(wedged.held_ms.is_some(), "the refusal has to say how long");
+        let said = wedged.to_string();
+        assert!(said.contains("program.take"), "{said}");
+        assert!(said.contains("5 s"), "{said}");
+        // Rule 4: a `data` object a caller can act on.
+        assert_eq!(wedged.data()["command"], "program.take");
+        assert_eq!(wedged.data()["retryable"], true);
+    }
+
+    /// Every waiting method is held to the same deadline, not only status: a
+    /// filter listing that hung was as bad for the UI as a status that did.
+    #[tokio::test(start_paused = true)]
+    async fn every_waiting_method_has_the_same_deadline() {
+        let (handle, _rx) = held_handle("source.add");
+        for named in [
+            handle.filters().await.err().map(|e| named_wedge(&e)),
+            handle.configs().await.err().map(|e| named_wedge(&e)),
+            handle.seek("cam1".into(), 0).await.err().map(|e| named_wedge(&e)),
+            handle
+                .request(|ack| Command::RemoveSource("cam1".into(), Some(ack)))
+                .await
+                .err()
+                .map(|e| named_wedge(&e)),
+        ] {
+            assert_eq!(named, Some("source.add"));
+        }
+    }
+
+    /// The command a refusal blames, or `None` when it is not a wedge at all.
+    fn named_wedge(e: &anyhow::Error) -> &'static str {
+        e.downcast_ref::<Wedged>()
+            .unwrap_or_else(|| panic!("a held mixer must answer with Wedged, not {e:#}"))
+            .command
+            .expect("the loop had recorded a command")
+    }
+
+    /// The line that names the wedge in a CI log. Once per held command, so a
+    /// loop stuck for a minute is one line and not a hundred and twenty.
+    #[test]
+    fn the_watchdog_names_a_held_command_once() {
+        let (handle, _rx) = parked_handle();
+        let mut warned = None;
+        assert!(!watchdog(&handle, &mut warned), "an idle loop has nothing to say");
+
+        handle.running.begin("program.take");
+        assert!(!watchdog(&handle, &mut warned), "a command that has just started is not a wedge");
+
+        let started = Instant::now() - REPLY_DEADLINE - Duration::from_secs(1);
+        *handle.running.inside.lock() = Some(("program.take", started));
+        assert!(watchdog(&handle, &mut warned), "a loop held past the deadline is logged");
+        assert!(!watchdog(&handle, &mut warned), "and logged once, not on every tick");
+
+        // A second command held after the first cleared is its own wedge.
+        handle.running.finish();
+        assert!(!watchdog(&handle, &mut warned));
+        *handle.running.inside.lock() = Some(("source.add", started));
+        assert!(watchdog(&handle, &mut warned));
     }
 
     /// The command queue was unbounded, so a client in a loop grew it without
