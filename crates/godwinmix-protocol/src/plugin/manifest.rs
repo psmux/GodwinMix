@@ -1070,7 +1070,14 @@ fn check_relative(out: &mut Vec<Problem>, at: &str, path: &str, root: Option<&Pa
         return;
     }
     let p = Path::new(path);
-    if p.is_absolute() {
+    // A manifest is read on every platform, so what counts as absolute is not
+    // this machine's rule: `/etc/passwd` is not absolute to a Windows build
+    // of `Path`, and `C:\x` is not absolute to a Linux one. Refuse a leading
+    // separator of either kind and a drive letter as well as what `Path`
+    // itself says.
+    let leading_separator = path.starts_with('/') || path.starts_with('\\');
+    let drive = path.as_bytes().get(1) == Some(&b':');
+    if p.is_absolute() || p.has_root() || leading_separator || drive {
         out.push(problem(
             at,
             format!("'{path}' is absolute. Paths in a manifest are relative to the plugin root."),
@@ -1328,7 +1335,10 @@ settings = "s.json"
         let mut out = Vec::new();
         check_relative(&mut out, "a", "/etc/passwd", None);
         check_relative(&mut out, "b", "../../secrets.json", None);
-        assert_eq!(out.len(), 2, "{out:#?}");
+        // Refused on every platform, not only the one whose `Path` agrees.
+        check_relative(&mut out, "c", "C:\\Users\\x\\run.exe", None);
+        check_relative(&mut out, "d", "\\Windows\\x", None);
+        assert_eq!(out.len(), 4, "{out:#?}");
     }
 
     #[test]

@@ -149,7 +149,11 @@ fn read_all(pids: &[u32]) -> HashMap<u32, Sample> {
             continue;
         };
         let text = String::from_utf8_lossy(&result.stdout);
-        let Some(field) = text.split(',').nth(4) else { continue };
+        // The row is `"name","pid","session","session#","7,168 K"`: the
+        // memory column is last and carries a thousands separator inside its
+        // quotes, so splitting on the bare comma read `"7` and answered seven
+        // kilobytes for every process. Take the last quoted field instead.
+        let Some(field) = text.trim_end().rsplit("\",\"").next() else { continue };
         let digits: String = field.chars().filter(char::is_ascii_digit).collect();
         if let Ok(kb) = digits.parse::<u64>() {
             out.insert(*pid, Sample { cpu_percent: None, rss_bytes: Some(kb * 1024) });
