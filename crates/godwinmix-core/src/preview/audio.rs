@@ -222,20 +222,19 @@ impl AudioTap {
     fn attach(&mut self) -> Result<()> {
         let head = self.branch.first().context("an empty monitoring branch")?;
         let sink = head.static_pad("sink").context("the branch head has no sink pad")?;
-        // The branch is brought up before the tee sees it: a buffer pushed
-        // into a pad that is still flushing hands the tee a flushing return,
-        // and that can pause the programme's own source loop silently. Same
-        // order as `InputPipeline::attach_thumb_end`.
-        for el in self.branch.iter().rev() {
-            el.sync_state_with_parent().ok();
-        }
         let pad = self
             .tee
             .request_pad_simple("src_%u")
             .context("the raw audio tee refused a pad for monitoring")?;
-        if let Err(e) = pad.link(&sink) {
-            self.tee.release_request_pad(&pad);
-            return Err(anyhow::Error::from(e).context("linking the monitoring branch onto the audio tee"));
+        pad.link(&sink).context("linking the monitoring branch onto the audio tee")?;
+        // Linked first, then brought up from the far end. This branch ends in
+        // an appsink, a real sink that prerolls, and bringing one up inside a
+        // running pipeline before any buffer can reach it left the mixer's
+        // core suite crashing on two macOS runners in a row (elements of this
+        // branch disposed while PLAYING). The thumbnail and output feeds end
+        // in a proxysink, which does not preroll, and take the other order.
+        for el in self.branch.iter().rev() {
+            el.sync_state_with_parent().ok();
         }
         self.pad = Some(pad);
         Ok(())
