@@ -417,7 +417,12 @@ function Invoke-Smoke {
         if (($text -match '(?m)^token = ') -and ($text -match [regex]::Escape("127.0.0.1:$Port"))) {
             Ok
         } else {
-            Bad 'the config was not rewritten'
+            # Say what was there, so a failure on a machine nobody can sit at
+            # (a CI runner) carries its own diagnosis.
+            $example = Read-Text $exampleToml
+            $lines = @($text -split "`n" | Where-Object { $_ -match '^(#\s*)?(bind|token) = ' })
+            Bad ("the config was not rewritten: example {0} bytes, config {1} bytes, port {2}; " -f `
+                $example.Length, $text.Length, $Port) + ("lines: " + ($lines -join ' | '))
             $script:Fatal = $true
         }
     }
