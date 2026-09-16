@@ -1009,6 +1009,24 @@ impl Drop for Multiview {
 
 #[cfg(test)]
 mod tests {
+    /// The next frame a subscription delivers, inside `within`.
+    ///
+    /// The channel keeps the newest two frames and tells a reader that fell
+    /// behind so, by design; a test that was not scheduled for a quarter of a
+    /// second is such a reader and reads again rather than calling the
+    /// channel closed.
+    async fn next_frame(sub: &mut MultiviewSubscription, within: Duration) -> Arc<[u8]> {
+        let deadline = Instant::now() + within;
+        loop {
+            let left = deadline.saturating_duration_since(Instant::now());
+            match tokio::time::timeout(left, sub.recv()).await {
+                Ok(Ok(frame)) => return frame,
+                Ok(Err(broadcast::error::RecvError::Lagged(_))) => continue,
+                Ok(Err(broadcast::error::RecvError::Closed)) => panic!("the frame channel closed"),
+                Err(_) => panic!("no mosaic frame within {within:?} of subscribing"),
+            }
+        }
+    }
     use super::*;
 
     fn init() {
@@ -1412,10 +1430,7 @@ mod tests {
         assert_eq!(mv.live_pipelines(), 0, "a mosaic before anybody asked for one");
 
         let mut sub = mv.subscribe(MultiviewRequest::configured());
-        let frame = tokio::time::timeout(Duration::from_secs(2), sub.recv())
-            .await
-            .expect("no mosaic frame within two seconds of subscribing")
-            .expect("the frame channel closed");
+        let frame = next_frame(&mut sub, Duration::from_secs(2)).await;
         assert_eq!(&frame[..2], &[0xFF, 0xD8], "that is not a JPEG");
         assert_eq!(mv.live_pipelines(), 1);
         assert!(mv.is_built());
@@ -1475,7 +1490,7 @@ mod tests {
         // gap in one burst.
         tokio::time::sleep(Duration::from_secs(2)).await;
         let mut sub = mv.subscribe(MultiviewRequest::configured());
-        tokio::time::timeout(Duration::from_secs(3), sub.recv()).await.unwrap().unwrap();
+        next_frame(&mut sub, Duration::from_secs(3)).await;
         let started = Instant::now();
         let mut frames = 0u32;
         let mut instant = 0u32;
