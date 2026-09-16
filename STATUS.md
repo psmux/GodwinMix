@@ -28,9 +28,22 @@ the three client suites and `python3 clients/gen/generate.py --check`.
    loop until the 256 command queue fills: `crates/godwinmix-core/src/mixer.rs`
    around the supervisor tick, written up as Codex finding 12 with the
    measurement that a shorter `BLOCK_TIMEOUT` made removals seventeen times
-   worse (`crates/godwinmix-core/src/mixer/slots.rs:78`). Reproduce by running
+   worse (`crates/godwinmix-core/src/mixer/slots.rs:95`). Reproduce by running
    a core overnight with an output pointing at a closed port. This is the one
    defect that stops somebody using the product.
+
+   One wedge is found and fixed, on 2026-09-16, by a Linux runner: the
+   preview teardown took a tile's queue to NULL while its streaming thread
+   was parked inside the compositor's sink pad and released that pad
+   afterwards, so the join never returned. The pad is released first now,
+   in the preview and in the two mosaic paths with the same order. Whether
+   the overnight wedge with a reconnecting output is the same thing is not
+   known; the soak still needs running. What is new either way: every call
+   that waits on the mixer thread has a five second deadline and answers
+   with the command holding the loop and for how long, `/api/status` and
+   `/metrics` answer 503 with that instead of hanging, and a watchdog on the
+   supervisor's timer logs it once. A wedge is now a diagnosable error
+   rather than a silent hang.
 2. **CI ran for the first time on 2026-09-15** and found what had only ever
    been built on Apple silicon: a test helper not gated to Unix (Windows did
    not compile), `c_char` hardcoded as `i8` (aarch64 Linux did not compile),
