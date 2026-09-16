@@ -104,6 +104,16 @@ jobs:
             cargo test --profile ci --locked --workspace --no-fail-fast
           fi
 
+      # A timing test that fails dumps the pipelines it was watching to
+      # target/gst-dot; kept so the log is not the only evidence.
+      - name: Keep the pipeline graphs of a failed test
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gst-dot-${{ matrix.os }}
+          path: target/gst-dot/
+          if-no-files-found: ignore
+
       # `cargo add godwinmix-core` has to give somebody the engine inside their
       # own program, so the example that shows it is built here. The test that
       # runs it is in the line above; this catches a missing dependency rather
@@ -219,6 +229,14 @@ jobs:
           # A hosted runner, so the same timing slack as the mixer jobs.
           GODWINMIX_TIMING_SLACK: 3
         run: cargo test --locked --workspace --no-fail-fast
+
+      - name: Keep the pipeline graphs of a failed test
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gst-dot-software
+          path: target/gst-dot/
+          if-no-files-found: ignore
 
       - name: What the probe picked
         run: |

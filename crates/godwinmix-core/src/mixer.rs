@@ -3927,6 +3927,21 @@ impl Mixer {
         &self.program
     }
 
+    /// One source's own pipeline, for a caller that has to say what a stalled
+    /// source looked like from the inside.
+    ///
+    /// `observe::introspect` is how the control plane finds a pipeline by
+    /// name, and it is the wrong tool here: a test binary runs several mixers
+    /// at once and every one of them registers an `input-cam1`, so the name
+    /// answers with whichever registered last. A caller holding the mixer can
+    /// ask for the one it built. Nothing in the running mixer uses this.
+    pub fn source_pipeline(&self, id: &str) -> Option<gst::Pipeline> {
+        self.sources
+            .iter()
+            .find(|slot| slot.input.id == id)
+            .map(|slot| slot.input.taps().0)
+    }
+
     /// The programme clock, for the net time provider every node slaves to.
     ///
     /// The one thing a node needs from the mixer and the only reason this is

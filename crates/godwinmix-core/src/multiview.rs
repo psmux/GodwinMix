@@ -1554,6 +1554,168 @@ mod tests {
         crate::config::SourceConfig::bare("cam1", "test://smpte")
     }
 
+    // --- forensics for a source that stopped ----------------------------
+    //
+    // A stall that only happens on a hosted runner has to explain itself in
+    // the log it fails in, because nobody can reproduce it by hand. What
+    // follows is printed by the failing assertion below and by nothing else.
+
+    /// Where the Graphviz dumps go.
+    ///
+    /// `GST_DEBUG_DUMP_DOT_DIR` when the runner set one, otherwise a directory
+    /// beside the test binary, which is `target/<profile>/deps`, so the dumps
+    /// land inside the target directory CI already has in hand.
+    ///
+    /// The variable is deliberately not set from here. GStreamer reads it once
+    /// in `gst_init` and remembers it, so a test setting it afterwards changes
+    /// nothing, and `setenv` in a test binary running six hundred tests across
+    /// as many threads as the machine has is a real way to crash a run. The
+    /// dumps below are written by hand instead, which needs no variable at all.
+    fn dot_dir() -> std::path::PathBuf {
+        if let Some(dir) = std::env::var_os("GST_DEBUG_DUMP_DOT_DIR") {
+            if !dir.is_empty() {
+                return dir.into();
+            }
+        }
+        std::env::current_exe()
+            .ok()
+            // the binary, then `deps`, then the profile, then `target`
+            .and_then(|exe| exe.ancestors().nth(3).map(|t| t.join("gst-dot")))
+            .unwrap_or_else(std::env::temp_dir)
+    }
+
+    /// Write each pipeline out as Graphviz and answer where they went.
+    fn dump_dot(tag: &str, pipes: &[(String, gst::Pipeline)]) -> String {
+        let dir = dot_dir();
+        if let Err(e) = std::fs::create_dir_all(&dir) {
+            return format!("no graphs: {} could not be made ({e})", dir.display());
+        }
+        let mut written = Vec::new();
+        for (name, p) in pipes {
+            let path = dir.join(format!("{tag}-{name}.dot"));
+            let data = p.debug_to_dot_data(gst::DebugGraphDetails::ALL);
+            match std::fs::write(&path, data.as_str()) {
+                Ok(()) => written.push(path.display().to_string()),
+                Err(e) => written.push(format!("{} ({e})", path.display())),
+            }
+        }
+        format!("graphs: {}", written.join(", "))
+    }
+
+    /// One pad: who it is joined to, what it last answered, and every flag
+    /// that would explain a branch that stopped moving.
+    ///
+    /// GStreamer keeps no list of the probes on a pad, so "is a blocking probe
+    /// still there" is answered the only way it can be from outside: `blocked`
+    /// is a probe holding the pad, `blocking` is one holding it right now.
+    fn pad_report(pad: &gst::Pad) -> String {
+        let flags = pad.pad_flags();
+        let mut notes = Vec::new();
+        if !pad.is_active() {
+            notes.push("inactive");
+        }
+        if pad.is_blocked() {
+            notes.push("blocked by a probe");
+        }
+        if pad.is_blocking() {
+            notes.push("blocking now");
+        }
+        if flags.contains(gst::PadFlags::FLUSHING) {
+            notes.push("flushing");
+        }
+        if flags.contains(gst::PadFlags::EOS) {
+            notes.push("eos");
+        }
+        if !pad.is_linked() {
+            notes.push("not linked");
+        }
+        let peer = match pad.peer() {
+            Some(p) => {
+                let owner = p.parent_element().map(|e| e.name().to_string());
+                format!("{}.{}", owner.unwrap_or_else(|| "?".into()), p.name())
+            }
+            None => "nothing".to_string(),
+        };
+        format!(
+            "{} -> {peer}, last flow {:?}{}",
+            pad.name(),
+            pad.last_flow_result(),
+            if notes.is_empty() { String::new() } else { format!(", {}", notes.join(", ")) }
+        )
+    }
+
+    /// One element, its pads, its queue fill if it is a queue, and the
+    /// children of a bin, because a `proxysrc` holds the queue that fills when
+    /// the mosaic stops reading.
+    fn element_report(el: &gst::Element, indent: &str, out: &mut String) {
+        let (ret, current, pending) = el.state(gst::ClockTime::from_mseconds(200));
+        let factory = el.factory().map(|f| f.name().to_string()).unwrap_or_default();
+        out.push_str(&format!("{indent}{} ({factory}) {current:?}", el.name()));
+        if pending != gst::State::VoidPending {
+            out.push_str(&format!(" going to {pending:?}"));
+        }
+        if ret.is_err() {
+            out.push_str(" (the state could not be read)");
+        }
+        if factory.starts_with("queue") {
+            let buffers = el.property::<u32>("current-level-buffers");
+            let time = el.property::<u64>("current-level-time");
+            let leaky = el.property_value("leaky").serialize().map(|s| s.to_string());
+            out.push_str(&format!(
+                ", {buffers} buffers, {:.3}s, leaky {}",
+                time as f64 / 1e9,
+                leaky.unwrap_or_else(|_| "?".into())
+            ));
+        }
+        out.push('\n');
+        for pad in el.pads() {
+            out.push_str(&format!("{indent}    {}\n", pad_report(&pad)));
+        }
+        if let Some(bin) = el.downcast_ref::<gst::Bin>() {
+            for child in bin.children() {
+                element_report(&child, &format!("{indent}    "), out);
+            }
+        }
+    }
+
+    /// A whole pipeline, element by element.
+    fn pipeline_report(name: &str, p: &gst::Pipeline) -> String {
+        let (ret, current, pending) = p.state(gst::ClockTime::from_mseconds(200));
+        let mut out = format!("{name}: {current:?}");
+        if pending != gst::State::VoidPending {
+            out.push_str(&format!(" going to {pending:?}"));
+        }
+        if ret.is_err() {
+            out.push_str(" (the state could not be read)");
+        }
+        out.push('\n');
+        for el in p.children().iter().rev() {
+            element_report(el, "  ", &mut out);
+        }
+        out
+    }
+
+    /// Everything the next failure should carry: the source's own pipeline,
+    /// the programme, the mosaic if one is up, and a graph of each on disk.
+    fn forensics(round: usize, pipes: &[(String, gst::Pipeline)]) -> String {
+        let mut all: Vec<(String, gst::Pipeline)> = pipes.to_vec();
+        // The mosaic comes and goes, so it is looked up when it is wanted. The
+        // registry answers with whichever mixer registered last, which in a
+        // test binary running several at once may not be this one: it is here
+        // because a mosaic that is up at all is worth seeing, and the graph
+        // says which pipeline it is.
+        if let Some(mv) = crate::observe::introspect::pipeline("multiview") {
+            all.push(("multiview".to_string(), mv));
+        }
+        let mut out = format!("\n--- what the pipelines looked like on round {round} ---\n");
+        for (name, p) in &all {
+            out.push_str(&pipeline_report(name, p));
+        }
+        out.push_str(&dump_dot(&format!("stalled-round-{round}"), &all));
+        out.push('\n');
+        out
+    }
+
     /// Reported from live runs: a `test://` source went live and then stalled
     /// within about twenty seconds, repeatedly, whenever a client subscribed to
     /// the mosaic and left again.
@@ -1586,6 +1748,15 @@ mod tests {
     /// for the failure message, and what used to be a bare "stalled on round 8"
     /// now prints the series that led to it.
     ///
+    /// A failure carries its own evidence now, because this one only happens
+    /// on a hosted Linux runner and nobody can reproduce it by hand: the
+    /// series, then every element of the source's pipeline and of the
+    /// programme with its state, its pads, what each pad last answered a push
+    /// with, whether a probe still holds it, the fill of every queue, and a
+    /// Graphviz graph of each pipeline on disk with the assertion saying where
+    /// it went. A source killed by a flushing return reads `last flow
+    /// Err(Flushing)` on the pads between the tee and whatever swallowed it.
+    ///
     /// Widening `stall_timeout_secs` by `timing_slack()` was the other way to
     /// do this and is not what happens here. It would do nothing for the
     /// `linux, no GPU, software codecs` job, which is hosted and does not set
@@ -1605,6 +1776,19 @@ mod tests {
         let (mut mix, handle, cmd_rx, _bus_rx) = crate::mixer::Mixer::build(cfg).unwrap();
         mix.start().unwrap();
         let mv = mix.multiview_handle();
+        // Taken from the mixer while it is still in hand, because a failure
+        // below has to say what this source's own pipeline looked like and the
+        // mixer goes off to its thread on the next line. A pipeline is a
+        // reference: holding one costs nothing and keeps nothing alive past
+        // the shutdown at the end.
+        let pipes: Vec<(String, gst::Pipeline)> = [
+            ("input-cam1".to_string(), mix.source_pipeline("cam1")),
+            ("programme".to_string(), Some(mix.program_pipeline().clone())),
+        ]
+        .into_iter()
+        .filter_map(|(name, p)| p.map(|p| (name, p)))
+        .collect();
+        println!("graphs from this test go to {}", dot_dir().display());
         let thread = crate::mixer::spawn(mix, cmd_rx, handle.clone());
 
         // Let the source deliver a picture before anything is asked of it.
@@ -1630,6 +1814,7 @@ mod tests {
             mv: &MultiviewHandle,
             handle: &crate::mixer::MixerHandle,
             round: usize,
+            pipes: &[(String, gst::Pipeline)],
         ) -> (Option<crate::state::SourceState>, Option<u64>) {
             // Both deadlines are wall clock, so a machine that has declared
             // itself slow gets more of it. Neither is what is being measured:
@@ -1642,7 +1827,12 @@ mod tests {
             tokio::time::sleep(Duration::from_millis(120)).await;
             let status = tokio::time::timeout(budget, handle.status())
                 .await
-                .unwrap_or_else(|_| panic!("the mixer stopped answering on round {round}"))
+                .unwrap_or_else(|_| {
+                    panic!(
+                        "the mixer stopped answering on round {round}{}",
+                        forensics(round, pipes)
+                    )
+                })
                 .unwrap();
             let source = status.sources.first();
             (source.map(|s| s.state), source.and_then(|s| s.video_idle_ms))
@@ -1655,13 +1845,14 @@ mod tests {
         let mut seen: Vec<(usize, Option<crate::state::SourceState>, Option<u64>)> = Vec::new();
         let mut was_stalled = false;
         for round in 0..12 {
-            let (state, idle) = churn(&mv, &handle, round).await;
+            let (state, idle) = churn(&mv, &handle, round, &pipes).await;
             seen.push((round, state, idle));
             assert!(
                 !(was_stalled && state == stalled),
                 "the source was judged stalled on rounds {} and {round}, one after the other, \
-                 by a mosaic coming and going: {seen:?}",
-                round - 1
+                 by a mosaic coming and going: {seen:?}{}",
+                round - 1,
+                forensics(round, &pipes)
             );
             was_stalled = state == stalled;
         }
@@ -1669,12 +1860,13 @@ mod tests {
         // the mosaic is made to come and go once more rather than letting the
         // one reading the loop ends on go unjudged.
         if was_stalled {
-            let (state, idle) = churn(&mv, &handle, 12).await;
+            let (state, idle) = churn(&mv, &handle, 12, &pipes).await;
             seen.push((12, state, idle));
-            assert_ne!(
-                state, stalled,
+            assert!(
+                state != stalled,
                 "the source was judged stalled on the last round and on the one after it, \
-                 by a mosaic coming and going: {seen:?}"
+                 by a mosaic coming and going: {seen:?}{}",
+                forensics(12, &pipes)
             );
         }
 
