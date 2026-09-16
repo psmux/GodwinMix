@@ -446,6 +446,31 @@ pub fn install_wasm_host() {
     godwinmix_wasm::install();
 }
 
+/// The program, on a thread with room to run it.
+///
+/// Both binaries start here rather than with `#[tokio::main]`. That macro
+/// runs the whole program on the process's main thread, which Windows gives
+/// one megabyte of stack where Linux and macOS give eight, and a debug build
+/// of `run` is deep enough to overflow it before it has printed a line: the
+/// first Windows smoke test died in `--example-config` with a stack overflow.
+/// Sixty four megabytes is address space, not memory, until it is touched.
+pub fn main_with_room() -> anyhow::Result<()> {
+    const STACK: usize = 64 << 20;
+    let program = std::thread::Builder::new()
+        .name("godwinmix".into())
+        .stack_size(STACK)
+        .spawn(|| {
+            tokio::runtime::Builder::new_multi_thread()
+                .enable_all()
+                .thread_stack_size(STACK / 8)
+                .build()
+                .context("building the runtime")?
+                .block_on(run())
+        })
+        .context("starting the program's thread")?;
+    program.join().unwrap_or_else(|panic| std::panic::resume_unwind(panic))
+}
+
 pub async fn run() -> Result<()> {
     let args = Args::parse();
 
