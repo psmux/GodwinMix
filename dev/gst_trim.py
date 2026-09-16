@@ -74,6 +74,10 @@ PIPELINE = [
     "webrtcbin", "dtlssrtpenc",
     # the multiview mosaic, the snapshots and the meters
     "jpegenc", "jpegdec", "multipartmux", "videobox", "videocrop",
+    # the compositor slots (a flip per slot, a valve on the programme
+    # return), the meters' opus and the node bridge's rtp. `videoflip` was
+    # the one the first bundled app on a macOS runner could not find.
+    "videoflip", "valve", "opusenc", "rtpbin", "udpsink",
     # the sidecar media contract: a container on a pipe everywhere, unixfd
     # where the platform has it
     "proxysink", "proxysrc", "unixfdsink", "unixfdsrc", "appsrc", "appsink",

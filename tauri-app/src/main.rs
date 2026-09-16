@@ -188,7 +188,11 @@ fn bundled_runtime_check(app: &AppHandle) -> Option<i32> {
     println!("bundled GStreamer in {}", root.display());
 
     let mut failed = false;
-    for element in ["compositor", "rtmp2sink", "srtsink"] {
+    // The same list the trim script checks: the slots' flip and crop and
+    // the mix beside the two outputs, because a runtime that has the
+    // encoder and not `videoflip` builds no programme at all, which is what
+    // the first bundled app on a macOS runner found.
+    for element in ["compositor", "videoflip", "videocrop", "videoscale", "audiomixer", "proxysink", "rtmp2sink", "srtsink"] {
         match sidecar::inspect_element(app, element) {
             Ok(file) => println!("  {element} from {}", file.display()),
             Err(why) => {
