@@ -130,6 +130,10 @@ pub struct Busy {
     pub retry_after_ms: u64,
     /// How deep the queue is, so the message can say what was full.
     pub queue: usize,
+    /// The command the mixer thread is inside and for how long, when it is
+    /// inside one: a full queue is almost always a held loop, and the name
+    /// of what holds it is the diagnosis.
+    pub held_by: Option<(&'static str, Duration)>,
 }
 
 impl std::fmt::Display for Busy {
@@ -139,7 +143,16 @@ impl std::fmt::Display for Busy {
             "the mixer already has {} commands waiting and will not take another. \
              Nothing was changed. Try again in {} ms",
             self.queue, self.retry_after_ms
-        )
+        )?;
+        if let Some((command, since)) = self.held_by {
+            write!(
+                f,
+                ". The mixer thread has been inside `{command}` for {} ms; if that does not \
+                 end, the log carries a mixer watchdog line naming it",
+                since.as_millis()
+            )?;
+        }
+        Ok(())
     }
 }
 
@@ -496,8 +509,17 @@ impl MixerHandle {
             }
             Err(mpsc::error::TrySendError::Full(cmd)) => {
                 let label = Mixer::label(&cmd);
-                warn!(command = label, "the mixer queue is full; the command was refused");
-                Err(Busy { retry_after_ms: BUSY_RETRY_MS, queue: COMMAND_QUEUE }.into())
+                let held_by = self.held_by();
+                let (held, held_ms) = held_by
+                    .map(|(c, d)| (c, d.as_millis() as u64))
+                    .unwrap_or(("", 0));
+                warn!(
+                    command = label,
+                    held_by = held,
+                    held_ms,
+                    "the mixer queue is full; the command was refused"
+                );
+                Err(Busy { retry_after_ms: BUSY_RETRY_MS, queue: COMMAND_QUEUE, held_by }.into())
             }
         }
     }
