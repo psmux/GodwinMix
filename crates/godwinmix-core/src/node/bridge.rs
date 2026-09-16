@@ -43,6 +43,9 @@ pub fn refuse_all() -> Handler {
 }
 
 /// A live bridge.
+/// How long one frame may take to leave. See the pump.
+const SEND_DEADLINE: std::time::Duration = std::time::Duration::from_secs(5);
+
 pub struct Peer {
     out: mpsc::UnboundedSender<Message>,
     pending: Mutex<HashMap<i64, oneshot::Sender<Result<Value, FrameError>>>>,
@@ -83,8 +86,17 @@ impl Peer {
                     outgoing = out_rx.recv() => {
                         let Some(msg) = outgoing else { break "the peer was closed".to_string() };
                         let hanging_up = matches!(msg, Message::Close(_));
-                        if let Err(e) = sink.send(msg).await {
-                            break format!("the socket would not take a frame: {e}");
+                        // A write with a deadline: a socket that will not
+                        // take a frame in five seconds is a peer that has
+                        // gone, and a pump parked in its write is a node
+                        // whose departure nothing downstream ever hears of.
+                        match tokio::time::timeout(SEND_DEADLINE, sink.send(msg)).await {
+                            Ok(Ok(())) => {}
+                            Ok(Err(e)) => break format!("the socket would not take a frame: {e}"),
+                            Err(_) => break format!(
+                                "the socket took nothing for {} s",
+                                SEND_DEADLINE.as_secs()
+                            ),
                         }
                         if hanging_up {
                             // Our own close frame is out; this side does not
