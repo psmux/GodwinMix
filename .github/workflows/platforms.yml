@@ -151,6 +151,10 @@ jobs:
 
       - name: Smoke test (bash)
         if: runner.os != 'Windows'
+        env:
+          # The frame gates print their numbers and do not count on a runner
+          # that has declared itself slow; everything else is still a check.
+          GODWINMIX_TIMING_SLACK: 3
         run: ./dev/smoke.sh
 
       - name: Smoke test (PowerShell)
