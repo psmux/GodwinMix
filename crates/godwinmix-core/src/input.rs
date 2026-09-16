@@ -1772,6 +1772,19 @@ impl StderrReader {
     }
 }
 
+/// A source that is dropped without `stop` still takes its pipeline down.
+///
+/// The same reason `Mixer` has one: GStreamer disposes an element that is
+/// still in PLAYING with a critical warning and, with several pipelines in
+/// one process, sometimes with a segmentation fault. Every ordinary path
+/// calls `stop` first and this is a no op after it; this is for a mixer
+/// dropped on a panic or a test that never asked for a shutdown.
+impl Drop for InputPipeline {
+    fn drop(&mut self) {
+        let _ = self.pipeline.set_state(gst::State::Null);
+    }
+}
+
 impl Drop for StderrReader {
     fn drop(&mut self) {
         self.stop();

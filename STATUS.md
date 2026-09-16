@@ -47,7 +47,15 @@ the three client suites and `python3 clients/gen/generate.py --check`.
    good with nothing on the bus. The same order is now used for the output
    feeds and the audio tap. macOS is green end to end; Linux and Windows are
    one push from it as this is written. The release installers are unproven.
-3. **A core exited silently once during mosaic teardown**, unattributed.
+3. **A core exited silently once during mosaic teardown**, unattributed. One
+   cause is now known: a source pipeline dropped without `stop` was disposed
+   while PLAYING, which GStreamer answers with a critical and, with many
+   pipelines in one process, a segmentation fault. Seen locally when a test
+   failed an assertion and let its mixer go; `InputPipeline` now takes its
+   pipeline to NULL on drop, and eight runs of the core suite in a row were
+   clean after it. A second instance on a macOS runner disposed an audio
+   monitoring branch while PLAYING with no test failing first, and is not
+   yet explained.
 4. **Alpha graphics key to black**, because the graph is I420 throughout. The
    four edits needed are listed in `docs/reference/graphics.md`.
 5. **Smaller gaps**, each with its file and line in the git history: only
