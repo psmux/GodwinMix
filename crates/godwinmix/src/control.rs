@@ -1375,7 +1375,18 @@ fn spawn_history(app: AppState) {
                     _ => {}
                 },
                 Err(broadcast::error::RecvError::Closed) => return,
-                Err(broadcast::error::RecvError::Lagged(_)) => {}
+                // A lagged subscriber has lost events, and a lost `took` is a
+                // take missing from `program.history` and from what
+                // `program.revert` can go back to. Nothing here can get them
+                // again; saying how many went is what makes that visible
+                // instead of silent.
+                Err(broadcast::error::RecvError::Lagged(missed)) => {
+                    tracing::warn!(
+                        missed,
+                        "the take history fell behind the event bus and lost events; \
+                         program.revert may not see a take that was made"
+                    );
+                }
             }
         }
     });

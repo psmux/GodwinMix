@@ -220,8 +220,11 @@ mod tests {
     use super::*;
     use serde_json::json;
 
+    /// `usable` rather than `exists`: the Windows GStreamer installer
+    /// registers `srtsrc` and ships a `gstsrt.dll` that will not load, so the
+    /// registry says yes and the first `make` says no.
     fn has_srt() -> bool {
-        gmx_netkit::init().is_ok() && gmx_netkit::elements::exists("srtsrc")
+        gmx_netkit::init().is_ok() && gmx_netkit::elements::usable("srtsrc")
     }
 
     #[test]

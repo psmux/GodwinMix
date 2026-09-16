@@ -455,7 +455,13 @@ settings = "source.json"
         )
         .expect("a manifest");
         std::fs::create_dir_all(root.join("bin")).expect("a bin directory");
-        std::fs::write(root.join("bin").join("both"), b"#!/bin/sh\n").expect("a binary");
+        // The name the manifest declares for the platform this is running on.
+        // `launch::plan` checks that the file `run.bin.<platform>` names is
+        // there, and on Windows that name is `bin/both.exe`. Nothing runs it:
+        // the test asks whether the launcher planned, not whether the plugin
+        // started.
+        let binary = if cfg!(windows) { "both.exe" } else { "both" };
+        std::fs::write(root.join("bin").join(binary), b"#!/bin/sh\n").expect("a binary");
 
         let installed = super::super::loader::read(&root, &Default::default());
         assert!(installed.problem.is_none(), "the manifest is valid: {:?}", installed.problem);

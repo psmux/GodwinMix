@@ -31,8 +31,12 @@ jobs:
   mixer:
     name: mixer (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
-    # A hung test must not hold a runner for the six hours GitHub allows.
-    timeout-minutes: 45
+    # A hung test must not hold a runner for the six hours GitHub allows. 90
+    # rather than 45 because of what Windows costs: the GStreamer MSIs come
+    # down through chocolatey, a cold cargo cache builds the whole workspace
+    # with MSVC, and the test step alone measured 31 minutes on the first
+    # Windows run. `platforms.yml` has been at 90 for the same reason.
+    timeout-minutes: 90
     strategy:
       fail-fast: false
       matrix:
@@ -212,6 +216,8 @@ jobs:
           # rasteriser is what a five year old laptop without drivers gets too.
           LIBGL_ALWAYS_SOFTWARE: 1
           GST_GL_DISABLED: 1
+          # A hosted runner, so the same timing slack as the mixer jobs.
+          GODWINMIX_TIMING_SLACK: 3
         run: cargo test --locked --workspace --no-fail-fast
 
       - name: What the probe picked

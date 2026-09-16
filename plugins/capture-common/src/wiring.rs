@@ -82,6 +82,21 @@ impl Wiring {
                     .into(),
             );
         }
+        // A socket transport this platform cannot carry is refused here, with
+        // the name of the one that works, rather than three lines later as
+        // `no element "unixfdsink"` from the parser. Windows is the case: it
+        // has neither `unixfdsink` nor `shmsink`, and the core never asks for
+        // them there, so reaching this is a plugin or a manifest asking for
+        // something the machine has not got.
+        if !transport.available_here() {
+            return Err(format!(
+                "the '{}' transport needs Unix sockets and this is {}. Declare \
+                 transports = [\"container\"] in gmx-plugin.toml: a container on a pipe \
+                 works on every platform.",
+                transport.as_str(),
+                std::env::consts::OS
+            ));
+        }
         Ok(match transport {
             Transport::Container => self.container(),
             Transport::Unixfd => self.sockets("unixfdsink"),
@@ -221,6 +236,7 @@ mod tests {
         assert!(!d.contains("unixfdsink"), "{d}");
     }
 
+    #[cfg(unix)]
     #[test]
     fn a_socket_description_gives_each_stream_its_own_sink() {
         let w = Wiring {
@@ -231,6 +247,18 @@ mod tests {
         assert!(d.contains(&format!("unixfdsink name={VIDEO_SINK}")), "{d}");
         assert!(d.contains(&format!("unixfdsink name={AUDIO_SINK}")), "{d}");
         assert!(!d.contains("matroskamux"), "{d}");
+    }
+
+    /// The other half of the one above: where the sockets are not, the
+    /// description is refused and the refusal names the transport that works.
+    #[cfg(not(unix))]
+    #[test]
+    fn a_socket_transport_is_refused_where_the_sockets_are_not() {
+        let err = Wiring::video_only("videotestsrc")
+            .description(Transport::Unixfd)
+            .expect_err("no unix sockets here");
+        assert!(err.contains("container"), "{err}");
+        assert!(err.contains(std::env::consts::OS), "{err}");
     }
 
     #[test]
@@ -259,6 +287,10 @@ mod tests {
         bind(&pipeline, Transport::Container, "").expect("stdout needs no address");
     }
 
+    /// Unix only: the pipeline this builds ends at `unixfdsink`, which is a
+    /// Linux and macOS element. What Windows does with a socket transport is
+    /// `a_socket_transport_is_refused_where_the_sockets_are_not`, below.
+    #[cfg(unix)]
     #[test]
     fn binding_puts_the_address_on_the_sink_the_description_named() {
         gst::init().unwrap();
@@ -276,6 +308,7 @@ mod tests {
         );
     }
 
+    #[cfg(unix)]
     #[test]
     fn binding_clears_a_socket_a_dead_process_left_behind() {
         gst::init().unwrap();

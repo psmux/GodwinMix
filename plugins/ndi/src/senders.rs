@@ -84,9 +84,19 @@ pub fn list(timeout_ms: u64) -> Result<Vec<Sender>, String> {
     // Source/Network is the class the NDI device provider registers under. The
     // filter keeps a camera or a screen capture provider out of the answer.
     monitor.add_filter(Some("Source/Network"), None);
-    monitor
-        .start()
-        .map_err(|e| format!("the device monitor would not start: {e}"))?;
+    // The provider will not start without the NDI runtime behind it, and the
+    // failure it reports is the bare word "Failed to start". Say which of the
+    // two halves is missing: the plugin is here (checked above), so it is the
+    // runtime, and `library::missing` is the sentence that says where to get
+    // it.
+    monitor.start().map_err(|e| match crate::library::find() {
+        Err(no_runtime) => no_runtime,
+        Ok(_) => format!(
+            "the NDI device provider would not start ({e}), although the plugin and the \
+             runtime are both on this machine. Check that mDNS is not blocked here, then \
+             run `gst-device-monitor-1.0 Source/Network` to see what the provider reports."
+        ),
+    })?;
     // The provider needs a moment to hear the announcements; there is no event
     // that says "that is all of them", because on mDNS there never is.
     std::thread::sleep(std::time::Duration::from_millis(timeout_ms.clamp(100, 10_000)));

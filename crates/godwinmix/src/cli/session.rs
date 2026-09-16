@@ -488,13 +488,18 @@ fn stand_in_clip() -> Option<PathBuf> {
         if path.exists() {
             return Some(path);
         }
+        // The sink is named and its `location` is set afterwards, never
+        // written into the description. `gst_parse_launch` reads a backslash
+        // as an escape, so a Windows temporary directory embedded here comes
+        // out as C:UsersRUNNER~1... and the clip is written somewhere nobody
+        // then looks. `capture-common`'s wiring.rs takes the same care with
+        // socket paths for the same reason.
         let recipes = [
-            "videotestsrc num-buffers=60 pattern=smpte ! video/x-raw,width=320,height=180,framerate=30/1 !              videoconvert ! theoraenc ! matroskamux name=m ! filesink location={out}              audiotestsrc num-buffers=94 ! audioconvert ! vorbisenc ! m.",
-            "videotestsrc num-buffers=60 pattern=smpte ! video/x-raw,width=320,height=180,framerate=30/1 !              videoconvert ! jpegenc ! avimux ! filesink location={out}",
+            "videotestsrc num-buffers=60 pattern=smpte ! video/x-raw,width=320,height=180,framerate=30/1 !              videoconvert ! theoraenc ! matroskamux name=m ! filesink name=out              audiotestsrc num-buffers=94 ! audioconvert ! vorbisenc ! m.",
+            "videotestsrc num-buffers=60 pattern=smpte ! video/x-raw,width=320,height=180,framerate=30/1 !              videoconvert ! jpegenc ! avimux ! filesink name=out",
         ];
         for recipe in recipes {
-            let description = recipe.replace("{out}", &path.display().to_string());
-            if run_pipeline(&description).is_ok() && path.exists() {
+            if run_pipeline_writing(recipe, &path).is_ok() && path.exists() {
                 return Some(path);
             }
             let _ = std::fs::remove_file(&path);
@@ -507,10 +512,17 @@ fn stand_in_clip() -> Option<PathBuf> {
     .clone()
 }
 
-/// Run one `gst-launch` style description to completion.
-fn run_pipeline(description: &str) -> Result<()> {
+/// Run one `gst-launch` style description to completion, with the file it
+/// writes given to the sink named `out` as a property rather than as text in
+/// the description.
+fn run_pipeline_writing(description: &str, out: &Path) -> Result<()> {
     use gstreamer::prelude::*;
     let pipeline = gstreamer::parse::launch(description)?;
+    let bin = pipeline
+        .downcast_ref::<gstreamer::Bin>()
+        .context("the clip description did not parse to a bin")?;
+    let sink = bin.by_name("out").context("the clip description has no sink named out")?;
+    sink.set_property("location", out.to_string_lossy().to_string());
     pipeline.set_state(gstreamer::State::Playing)?;
     let bus = pipeline.bus().context("a pipeline with no bus")?;
     let outcome = bus.timed_pop_filtered(

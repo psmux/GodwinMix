@@ -1,7 +1,49 @@
-# Fixtures, layouts, presets and the published schema are compared and edited as
-# text by the tests, so they are LF on every platform. A CRLF checkout would
-# otherwise fail the OBS importer tests on Windows.
+# Every text file is LF in the index and LF in the working tree, on every
+# platform. Windows checkouts default to core.autocrlf=true, and a CRLF
+# checkout is not the same product: the UI is shipped with include_str!, so an
+# extra byte a line put the page a volunteer opens 3 kB over its 250 kB budget
+# on the first Windows CI run, and the fixtures the importer tests compare are
+# read as text too.
+* text=auto eol=lf
+
+# The ones named before the rule above existed, kept because they say why.
+# Fixtures, layouts, presets and the published schema are compared and edited
+# as text by the tests, so they are LF on every platform. A CRLF checkout
+# would otherwise fail the OBS importer tests on Windows.
 *.json text eol=lf
 *.toml text eol=lf
 *.md text eol=lf
 *.rs text eol=lf
+
+# The page and everything it loads. This is the set the budget test measures.
+*.js text eol=lf
+*.css text eol=lf
+*.html text eol=lf
+
+# Named rather than left to `text=auto`, so a file that happens to start with
+# printable bytes is never rewritten on its way through a Windows checkout.
+*.png binary
+*.ico binary
+*.icns binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.webp binary
+*.mp4 binary
+*.webm binary
+*.mkv binary
+*.mov binary
+*.wav binary
+*.mp3 binary
+*.wasm binary
+*.zip binary
+*.gz binary
+*.pdf binary
+*.ttf binary
+*.woff binary
+*.woff2 binary
+
+# A NUL byte in the middle of it (a separator in a cache key), which is why
+# git has always called this one binary. Said out loud so the `*.js` rule
+# above does not quietly start rewriting it.
+ui/shell/selection.js -text

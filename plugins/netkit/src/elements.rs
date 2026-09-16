@@ -95,6 +95,18 @@ pub fn exists(element: &str) -> bool {
     gstreamer::ElementFactory::find(element).is_some()
 }
 
+/// Can this build actually create the element, not merely list it?
+///
+/// [`exists`] asks the registry, and the registry answers yes for a factory
+/// whose plugin file is there but will not load. GStreamer's official Windows
+/// 1.28 installer ships `gstsrt.dll` in exactly that state: `srtsrc` is
+/// registered and every attempt to build one fails with "Failed to load
+/// element factory". A guard that has to be right asks this instead, and pays
+/// one element construction for the answer.
+pub fn usable(element: &str) -> bool {
+    gstreamer::ElementFactory::make(element).build().is_ok()
+}
+
 /// Every element in `wanted` that is not registered.
 pub fn missing(wanted: &[&str]) -> Vec<String> {
     wanted

@@ -619,13 +619,28 @@ pub fn probe_page_media(id: &SourceId, spec: &ExecSpec, timeout: Duration) -> Op
         }
     }
 
-    // The reader's thread and descriptor go first, so that the sidecar sees
-    // the far end of its stderr close and stops for that reason too; then the
-    // process itself, killed and waited for on a thread of its own so the
+    // On Unix the reader's thread and descriptor go first, so that the sidecar
+    // sees the far end of its stderr close and stops for that reason too; then
+    // the process itself, killed and waited for on a thread of its own so the
     // probe returns at once. The clip fetch below is what the caller is
     // waiting for and it does not need a dead browser.
-    reader.stop();
-    bury_child(child, spec.env.clone(), false);
+    //
+    // On Windows the order is the other way round, because there the reader is
+    // parked in a blocking read that only the child's death ends. Stopping it
+    // first is a join on a thread waiting for something nobody has done yet:
+    // that is what hung the first Windows CI run, at
+    // `the_probe_returns_on_the_first_usable_report`, for the whole 45 minute
+    // job. `drain_stderr` says the same thing in more words.
+    #[cfg(unix)]
+    {
+        reader.stop();
+        bury_child(child, spec.env.clone(), false);
+    }
+    #[cfg(not(unix))]
+    {
+        bury_child(child, spec.env.clone(), false);
+        reader.stop();
+    }
     // Fetch each clip once, and keep only what can actually be played. A video
     // whose address turns out to be dead (a 404 was the case that found this)
     // is left to the browser rather than built into a layer that fails and
@@ -1657,11 +1672,35 @@ impl StderrReader {
         Self { stop, join }
     }
 
-    /// End the thread and close the pipe. Blocks for up to one poll interval.
+    /// End the thread and close the pipe.
+    ///
+    /// On Unix the reader wakes on the flag within one poll interval, so this
+    /// joins and returns. On Windows there is no way to wake a blocking read
+    /// on a pipe handle: the thread ends when the last writer lets go, which
+    /// is why every caller there kills the child first. A grandchild that is
+    /// still holding the write end would otherwise keep this thread, and its
+    /// caller, waiting for good; after [`STOP_GRACE`] the thread is left to
+    /// end with that process instead. `drain_stderr` records why there is no
+    /// third option.
     pub(crate) fn stop(&mut self) {
         self.stop.store(true, Ordering::SeqCst);
-        if let Some(j) = self.join.take() {
-            let _ = j.join();
+        let Some(join) = self.join.take() else { return };
+        #[cfg(unix)]
+        let _ = join.join();
+        #[cfg(not(unix))]
+        {
+            let deadline = Instant::now() + STOP_GRACE;
+            while !join.is_finished() && Instant::now() < deadline {
+                std::thread::sleep(Duration::from_millis(20));
+            }
+            if join.is_finished() {
+                let _ = join.join();
+            } else {
+                warn!(
+                    "a sidecar's stderr is still held open by something the kill did not \
+                     reach, so its reader thread is left to end with that process"
+                );
+            }
         }
     }
 }
@@ -1675,7 +1714,15 @@ impl Drop for StderrReader {
 /// How long the reader parks between looks at the stop flag. Long enough that
 /// an idle child costs nothing measurable, short enough that stopping a source
 /// is not something an operator notices.
+#[cfg(unix)]
 const STDERR_POLL_MS: i32 = 200;
+
+/// How long [`StderrReader::stop`] waits on Windows for the pipe to close
+/// after the child has been killed, before leaving the thread to end on its
+/// own. Long enough for a process to die, short enough that a source that
+/// will not let go does not stop a show.
+#[cfg(not(unix))]
+const STOP_GRACE: Duration = Duration::from_secs(2);
 
 #[cfg(unix)]
 fn drain_stderr(
@@ -1930,12 +1977,28 @@ impl Drop for ExecChild {
         // let go of, and a grandchild holding the write end of stderr would
         // otherwise keep the reader thread alive for good. Two descriptors a
         // build, measured over thirty add and remove cycles on this machine.
-        if let Some(r) = self.stderr.as_mut() {
-            r.stop();
+        // The same order as `probe_page_media`, and for the same reason: on
+        // Unix the pipe is let go of first, on Windows the child is killed
+        // first because only that ends the reader's blocking read.
+        #[cfg(unix)]
+        {
+            if let Some(r) = self.stderr.as_mut() {
+                r.stop();
+            }
+            self.stdout.take();
+            if let Some(child) = self.child.take() {
+                bury_child(child, std::mem::take(&mut self.env), self.collected);
+            }
         }
-        self.stdout.take();
-        if let Some(child) = self.child.take() {
-            bury_child(child, std::mem::take(&mut self.env), self.collected);
+        #[cfg(not(unix))]
+        {
+            self.stdout.take();
+            if let Some(child) = self.child.take() {
+                bury_child(child, std::mem::take(&mut self.env), self.collected);
+            }
+            if let Some(r) = self.stderr.as_mut() {
+                r.stop();
+            }
         }
     }
 }

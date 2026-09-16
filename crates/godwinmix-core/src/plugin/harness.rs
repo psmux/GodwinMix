@@ -1144,17 +1144,24 @@ mod tests {
     /// Ten seconds of colour bars and a tone in Matroska, so the file check
     /// has something with both streams in it.
     fn write_clip(path: &std::path::Path) -> Result<()> {
-        let desc = format!(
-            "videotestsrc num-buffers=300 ! video/x-raw,width=640,height=360,framerate=30/1 \
+        // The sink is named and its `location` set below, not written into
+        // the description: `gst_parse_launch` reads a backslash as an escape,
+        // so a Windows temporary path put in here comes out mangled and the
+        // clip lands somewhere this function never looks.
+        let desc = "videotestsrc num-buffers=300 ! video/x-raw,width=640,height=360,framerate=30/1 \
              ! x264enc speed-preset=ultrafast tune=zerolatency ! queue ! mux. \
              audiotestsrc num-buffers=470 ! audioconvert ! avenc_aac ! queue ! mux. \
-             matroskamux name=mux ! filesink location={}",
-            path.to_string_lossy()
-        );
-        let pipeline = match gst::parse::launch(&desc) {
+             matroskamux name=mux ! filesink name=clip-out";
+        let pipeline = match gst::parse::launch(desc) {
             Ok(p) => p,
             Err(e) => anyhow::bail!("{e}"),
         };
+        let sink = pipeline
+            .downcast_ref::<gst::Bin>()
+            .context("the clip description did not parse to a bin")?
+            .by_name("clip-out")
+            .context("the clip description has no sink named clip-out")?;
+        sink.set_property("location", path.to_string_lossy().to_string());
         pipeline.set_state(gst::State::Playing)?;
         let bus = pipeline.bus().context("no bus on the clip writer")?;
         let msg = bus.timed_pop_filtered(
