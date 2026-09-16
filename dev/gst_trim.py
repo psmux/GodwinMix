@@ -168,8 +168,7 @@ def inspect(prefix: Path, plugins: Path, registry: Path, args: list[str]) -> str
     env["GST_PLUGIN_PATH"] = str(plugins)
     env["GST_PLUGIN_SYSTEM_PATH"] = str(plugins)
     env["GST_REGISTRY"] = str(registry)
-    scanner = which_in(prefix, "gst-plugin-scanner", ("libexec/gstreamer-1.0",
-                                                      "lib/gstreamer-1.0"))
+    scanner = which_in(prefix, "gst-plugin-scanner", SCANNER_DIRS)
     if scanner:
         env["GST_PLUGIN_SCANNER"] = str(scanner)
     libdir = prefix / "lib"
@@ -369,6 +368,18 @@ def warn(why: str) -> None:
     print(f"gst_trim: warning: {why}", file=sys.stderr)
 
 
+# Where a prefix keeps gst-plugin-scanner: libexec on the official packages
+# and Homebrew, lib on some builds, and Debian's multiarch directory on Ubuntu,
+# which is what a hosted Linux runner has and where the first trim there died.
+SCANNER_DIRS = (
+    "libexec/gstreamer-1.0",
+    "lib/gstreamer-1.0",
+    "lib/x86_64-linux-gnu/gstreamer1.0/gstreamer-1.0",
+    "lib/aarch64-linux-gnu/gstreamer1.0/gstreamer-1.0",
+    "lib/gstreamer1.0/gstreamer-1.0",
+)
+
+
 def which_in(prefix: Path, name: str, where: tuple[str, ...] = ("bin", "libexec")) -> Path | None:
     for rel in where:
         for candidate in (prefix / rel / name, prefix / rel / f"{name}.exe"):
@@ -565,8 +576,7 @@ def build(args: argparse.Namespace) -> int:
         copy(path, out / "lib" / "gstreamer-1.0" / path.name)
     seeds = [out / "lib" / "gstreamer-1.0" / p.name for p in files]
 
-    scanner = which_in(prefix, "gst-plugin-scanner",
-                       ("libexec/gstreamer-1.0", "lib/gstreamer-1.0"))
+    scanner = which_in(prefix, "gst-plugin-scanner", SCANNER_DIRS)
     if scanner is None:
         die("no gst-plugin-scanner in the source prefix; the registry could "
             "never be built")
