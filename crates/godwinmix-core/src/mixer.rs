@@ -2474,11 +2474,19 @@ impl Mixer {
         // tee leaves the pipeline, or they would be left holding a pad of an
         // element that is gone.
         self.pool.drop_source(id);
+        // The audio mixer's pad goes first. Releasing an aggregator pad
+        // flushes it, which is what lets a branch thread parked inside its
+        // chain function out; a queue taken to NULL before that joins a
+        // thread that never returns, and the mixer loop with it. A Linux
+        // runner spent seventeen seconds inside `source.restart` here. Each
+        // element is locked so the programme's own state walk cannot put it
+        // back up before it is removed.
+        self.amix.release_request_pad(&slot.branch.apad);
         for el in &slot.branch.elements {
+            el.set_locked_state(true);
             let _ = el.set_state(gst::State::Null);
             let _ = self.program.remove(el);
         }
-        self.amix.release_request_pad(&slot.branch.apad);
         // Everything this module keeps under the source's id goes with it. The
         // ids are reused: a director alternates two of them, one per match, so
         // a restart delay or a rebuild count left behind from the last source

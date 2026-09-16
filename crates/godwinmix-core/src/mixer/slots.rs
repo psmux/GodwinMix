@@ -1203,11 +1203,17 @@ impl SlotPool {
             self.unbind(index);
         }
         for slot in &self.slots {
+            // The compositor's pad first, which flushes it and frees a slot
+            // thread parked in its chain function; a queue taken to NULL
+            // before that joins a thread that never returns. Then each
+            // element locked, so the programme's own state walk cannot put it
+            // back up before it is removed.
+            self.vmix.release_request_pad(&slot.pad);
             for el in &slot.elements {
+                el.set_locked_state(true);
                 let _ = el.set_state(gst::State::Null);
                 let _ = self.program.remove(el);
             }
-            self.vmix.release_request_pad(&slot.pad);
         }
         self.slots.clear();
     }
