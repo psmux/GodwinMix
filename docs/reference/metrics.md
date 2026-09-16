@@ -185,6 +185,10 @@ three different routes:
 * The status gauges, the mosaic subscriber count and each source's queue depth
   are read at scrape time. A
   mixer nobody is scraping does no work for them at all.
+* That read waits five seconds for the mixer and no longer. A command loop
+  that is held answers the scrape with 503 and one line of plain text naming
+  the command holding it, because a scrape that hangs holds the connection
+  open and tells nobody anything.
 
 ## Reading one without Prometheus
 

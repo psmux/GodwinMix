@@ -812,11 +812,16 @@ impl Multiview {
         if let Some(preview) = self.preview.as_mut() {
             preview.drop_source(source);
         }
+        // The mosaic's pad goes back before the branch feeding it is taken to
+        // NULL, for the reason written out over `ScenePreview::unbind`: the
+        // release flushes the pad, and without that flush an element on its
+        // way to NULL waits for a streaming thread that is parked in the
+        // compositor's chain function.
+        self.compositor.release_request_pad(&tile.pad);
         for el in &tile.branch {
             let _ = el.set_state(gst::State::Null);
             let _ = self.pipeline.remove(el);
         }
-        self.compositor.release_request_pad(&tile.pad);
         self.relayout();
         Ok(())
     }
@@ -876,11 +881,13 @@ impl Multiview {
         if let Some(pad) = preview.tile_pad().cloned() {
             if let Some(pos) = self.tiles.iter().position(|t| t.pad == pad) {
                 let tile = self.tiles.remove(pos);
+                // Pad back first, branch down second. Same order and same
+                // reason as `remove_tile` above.
+                self.compositor.release_request_pad(&tile.pad);
                 for el in &tile.branch {
                     let _ = el.set_state(gst::State::Null);
                     let _ = self.pipeline.remove(el);
                 }
-                self.compositor.release_request_pad(&tile.pad);
             }
         }
         preview.teardown();
@@ -1949,6 +1956,64 @@ mod tests {
             worst_ms < 1_500,
             "a status call took {worst_ms} ms: the mixer thread is being held across a teardown"
         );
+
+        let _ = handle.send(crate::mixer::Command::Shutdown);
+        tokio::task::spawn_blocking(move || thread.join()).await.unwrap().unwrap();
+    }
+
+    /// The same, for the preview compositor.
+    ///
+    /// `fifty_mosaic_teardowns_never_wedge_the_mixer` covers a whole pipeline
+    /// coming and going. The preview is the other shape of the problem: it is
+    /// built into a pipeline that is already running, fed off the tile tees,
+    /// and taken down again with everything around it still pushing. The
+    /// Linux smoke wedged exactly there, on a run where the preview had not
+    /// produced its first frame before the client that asked for it left.
+    ///
+    /// So this asks for a preview, gives it up before a frame can arrive, and
+    /// insists the mixer is still answering. The scene is pushed first, so
+    /// each round binds real slots on the compositor and gives them back.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn forty_preview_teardowns_never_wedge_the_mixer() {
+        init();
+        let mut cfg = mixer_cfg(MultiviewConfig {
+            width: 320,
+            height: 180,
+            fps: 8,
+            linger_secs: 0,
+            ..Default::default()
+        });
+        cfg.sources = vec![test_source()];
+        let (mut mix, handle, cmd_rx, _bus_rx) = crate::mixer::Mixer::build(cfg).unwrap();
+        mix.start().unwrap();
+        let mv = mix.multiview_handle();
+        let preview = mix.preview_handle();
+        let canvas = mix.canvas().clone();
+        let thread = crate::mixer::spawn(mix, cmd_rx, handle.clone());
+        preview.set_scene(vec![preview::Cell {
+            source: "cam1".into(),
+            x: 0,
+            y: 0,
+            width: canvas.width,
+            height: canvas.height,
+            alpha: 1.0,
+        }]);
+
+        for round in 0..40u64 {
+            let sub = mv.subscribe_preview(PreviewRequest { fps: 8, width: 320, full: false });
+            // Deliberately shorter than a first frame takes on a slow runner:
+            // the teardown that wedged the mixer was the one that landed
+            // before the compositor had produced anything.
+            tokio::time::sleep(Duration::from_millis((round % 4) * 40)).await;
+            drop(sub);
+            tokio::time::sleep(Duration::from_millis(20)).await;
+            let alive = tokio::time::timeout(Duration::from_secs(5), handle.status()).await;
+            assert!(
+                matches!(alive, Ok(Ok(_))),
+                "the mixer stopped answering after preview teardown round {round}: {:?}",
+                alive.map(|r| r.map(|_| ()))
+            );
+        }
 
         let _ = handle.send(crate::mixer::Command::Shutdown);
         tokio::task::spawn_blocking(move || thread.join()).await.unwrap().unwrap();

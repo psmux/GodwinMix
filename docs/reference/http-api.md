@@ -39,6 +39,15 @@ A take is also subject to the rules in [safety.md](safety.md): a minimum hold,
 a rate limit and the ITU-R BT.1702-3 flash guard. A refusal is HTTP 429 with
 `-32003`, `data.rule` and `data.retry_after_ms`.
 
+Every route that asks the mixer something waits five seconds for it and no
+longer. A mixer whose command loop is held answers rather than hanging:
+`/api/status` and `/metrics` give 503 with the name of the command holding the
+loop and how long it has been there, and `/api/v1` gives `-32001` with
+`data.command`, `data.held_ms` and `data.retryable`. The same wedge writes one
+error line into the log naming that command, so a CI run or an operator can
+see which one it was. A page that loads while this is happening shows the
+warning instead of drawing nothing.
+
 With `[control] token` set (or `GODWINMIX_TOKEN` in the environment) every
 request carries `Authorization: Bearer <token>`. `GET` requests and the
 WebSocket also accept `?token=`, so an `<img>` tag can fetch a snapshot.

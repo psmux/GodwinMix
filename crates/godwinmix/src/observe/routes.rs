@@ -177,8 +177,22 @@ async fn scrape(State(state): State<ObserveState>) -> Response {
     // a mixer nobody is scraping does no work for metrics at all, which is
     // principle two.
     if let Some(mixer) = &state.mixer {
-        if let Ok(status) = mixer.status().await {
-            metrics::observe_status(&status);
+        match mixer.status().await {
+            Ok(status) => metrics::observe_status(&status),
+            Err(e) => {
+                // A scrape that hangs is worse than one that fails: Prometheus
+                // holds the connection open and an operator watching the
+                // dashboard sees nothing at all. 503 with the name of the
+                // command holding the mixer loop says which one it is.
+                if let Some(wedged) = e.downcast_ref::<godwinmix_core::mixer::Wedged>() {
+                    return (
+                        StatusCode::SERVICE_UNAVAILABLE,
+                        [(header::CONTENT_TYPE, "text/plain; charset=utf-8")],
+                        format!("{wedged}\n"),
+                    )
+                        .into_response();
+                }
+            }
         }
     }
     if let Some(mv) = &state.multiview {
