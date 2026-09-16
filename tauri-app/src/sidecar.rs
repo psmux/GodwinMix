@@ -160,6 +160,17 @@ pub async fn stop(app: &AppHandle, local: Local) {
     crate::settings::forget_local_port(app);
 }
 
+/// The last `lines` of a log, on their own lines, or nothing if it cannot be
+/// read.
+fn log_tail(path: &std::path::Path, lines: usize) -> String {
+    let Ok(text) = std::fs::read_to_string(path) else { return String::new() };
+    let kept: Vec<&str> = text.lines().rev().take(lines).collect::<Vec<_>>().into_iter().rev().collect();
+    if kept.is_empty() {
+        return String::new();
+    }
+    format!("\nThe last lines of it:\n{}", kept.join("\n"))
+}
+
 /// Poll until the daemon answers, it dies, or the clock runs out.
 async fn wait_until_answering(app: &AppHandle, local: &Local) -> Result<(), String> {
     let http = app.state::<crate::Shell>().http.clone();
@@ -167,9 +178,13 @@ async fn wait_until_answering(app: &AppHandle, local: &Local) -> Result<(), Stri
     let mut last = String::new();
     while Instant::now() < deadline {
         if !local.is_running() {
+            // The last lines of the log go into the message: a headless check
+            // on a CI runner has nowhere else to show them, and the person
+            // reading a dialog wants the reason before the file name.
             return Err(format!(
-                "The mixer started and stopped again. What it said is in {}.",
-                local.log.display()
+                "The mixer started and stopped again. What it said is in {}.{}",
+                local.log.display(),
+                log_tail(&local.log, 20)
             ));
         }
         match core_link::info(&http, &local.target, "the mixer on this computer").await {
