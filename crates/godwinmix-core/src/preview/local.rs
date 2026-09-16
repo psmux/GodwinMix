@@ -188,6 +188,10 @@ mod imp {
                 self.tee.release_request_pad(&pad);
             }
             for el in self.branch.iter().rev() {
+                // Locked first, so the bin's own state walk cannot put it
+                // back to PLAYING between NULL and the remove and dispose it
+                // running. See `Encoder::detach`.
+                el.set_locked_state(true);
                 let _ = el.set_state(gst::State::Null);
                 let _ = self.pipeline.remove(el);
             }

@@ -53,9 +53,12 @@ the three client suites and `python3 clients/gen/generate.py --check`.
    pipelines in one process, a segmentation fault. Seen locally when a test
    failed an assertion and let its mixer go; `InputPipeline` now takes its
    pipeline to NULL on drop, and eight runs of the core suite in a row were
-   clean after it. A second instance on a macOS runner disposed an audio
-   monitoring branch while PLAYING with no test failing first, and is not
-   yet explained.
+   clean after it. The second cause, seen on macOS runners as an audio
+   monitoring branch disposed while PLAYING with no test failing first, is
+   the bin's own state walk putting a freshly NULLed element back up before
+   it was removed; sixty of sixty runs under load reproduced it and zero
+   with the fix. Every branch teardown now locks the element's state before
+   NULL, the way `Encoder::detach` always did.
 4. **Alpha graphics key to black**, because the graph is I420 throughout. The
    four edits needed are listed in `docs/reference/graphics.md`.
 5. **Smaller gaps**, each with its file and line in the git history: only

@@ -252,10 +252,30 @@ impl AudioTap {
 }
 
 impl Drop for AudioTap {
-    /// Unlink, release the pad, then take the elements down and out. Nothing
-    /// blocks: an element on its way to NULL is never handed another buffer,
-    /// and the tee carries `allow-not-linked`.
+    /// Take the branch out of its parent's state machine, unlink it, then take
+    /// the elements down and out. Nothing blocks: an element on its way to
+    /// NULL is never handed another buffer, and the tee carries
+    /// `allow-not-linked`.
     fn drop(&mut self) {
+        // The lock goes on before anything else, and this is the part the
+        // crash hung on. A bin re-applies its own state to every child it
+        // still owns: when its child list changes under it, `GstBin` resyncs
+        // the iterator it is walking and starts the pass again, and when an
+        // async transition finishes it commits the new state over the whole
+        // list. This branch is what puts the programme into that async cycle
+        // in the first place, because it ends in an appsink that has to
+        // preroll. So an element set to NULL here and not yet removed can be
+        // put back to PLAYING by that pass, and is then removed and disposed
+        // in PLAYING with its pads still active and its streaming thread
+        // still running: "Trying to dispose element mon-q-..., but it is in
+        // PLAYING", and a segfault behind it.
+        //
+        // `set_locked_state` is the documented way out. It means state
+        // changes of the parent no longer touch this element, so the walk
+        // above skips it and NULL is the state it keeps.
+        for el in &self.branch {
+            el.set_locked_state(true);
+        }
         if let Some(pad) = self.pad.take() {
             if let Some(peer) = pad.peer() {
                 if let Err(e) = pad.unlink(&peer) {
@@ -265,8 +285,30 @@ impl Drop for AudioTap {
             self.tee.release_request_pad(&pad);
         }
         for el in self.branch.iter().rev() {
-            let _ = el.set_state(gst::State::Null);
-            let _ = self.pipeline.remove(el);
+            let outcome = el.set_state(gst::State::Null);
+            // Read back rather than trust the return. If this ever fails
+            // again the log names the element and the state it is stuck in,
+            // which is the one thing the CI runs did not say.
+            let (_, current, pending) = el.state(gst::ClockTime::ZERO);
+            if outcome.is_err() || current != gst::State::Null {
+                warn!(
+                    key = %self.key,
+                    element = %el.name(),
+                    ?outcome,
+                    ?current,
+                    ?pending,
+                    "an audio monitoring element did not reach NULL and will be disposed in \
+                     that state"
+                );
+            }
+            if let Err(e) = self.pipeline.remove(el) {
+                warn!(
+                    key = %self.key,
+                    element = %el.name(),
+                    ?e,
+                    "could not remove an audio monitoring element from its pipeline"
+                );
+            }
         }
         debug!(key = %self.key, "audio monitoring branch removed");
     }
@@ -440,6 +482,79 @@ mod tests {
         }
         assert_eq!(branches(&pipeline), 0, "the branch outlived its last client");
         assert_eq!(preview.clients().count("pcm"), 0);
+
+        let _ = handle.send(crate::mixer::Command::Shutdown);
+        tokio::task::spawn_blocking(move || thread.join()).await.unwrap().unwrap();
+    }
+
+    /// The elements of one branch, by the names `build` gives them, while the
+    /// branch is still there to be found.
+    fn branch_elements(pipeline: &gst::Pipeline, tag: &str) -> Vec<gst::Element> {
+        ["mon-q", "mon-conv", "mon-res", "mon-caps", "mon-sink"]
+            .iter()
+            .filter_map(|part| pipeline.by_name(&format!("{part}-{tag}")))
+            .collect()
+    }
+
+    /// Closing a monitoring branch has to leave every element of it at NULL.
+    ///
+    /// This is not a tidiness check. An element removed from a running
+    /// pipeline while it is still PLAYING is disposed with its pads active
+    /// and its streaming thread running, which costs the whole test binary a
+    /// segmentation fault rather than a failed assertion, and that is what
+    /// the macOS runners were hitting. Opening and closing the same shape
+    /// several times over is what gives the programme pipeline the async
+    /// cycles the race needs. The elements are held here so their state can
+    /// still be read after the mixer has let go of them.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn a_closed_branch_leaves_every_element_at_null() {
+        let _ = gst::init();
+        let (mut mix, handle, cmd_rx, _bus_rx) = crate::mixer::Mixer::build(mixer_cfg()).unwrap();
+        mix.start().unwrap();
+        let preview = mix.preview_handle();
+        let pipeline = mix.program_pipeline().clone();
+        let thread = crate::mixer::spawn(mix, cmd_rx, handle.clone());
+        let tag = sanitise(&AudioRequest::default().clamped().key("program"));
+
+        for round in 0..6 {
+            let (stream, _frames) = preview
+                .open_audio("program", AudioRequest::default())
+                .await
+                .unwrap_or_else(|e| panic!("round {round}: the mixer refused /pcm/program: {e}"));
+            let held = branch_elements(&pipeline, &tag);
+            assert_eq!(held.len(), 5, "round {round}: the branch was not built whole");
+
+            drop(stream);
+            // Waited for, not sampled. The mixer takes the branch down from
+            // the sink end, so the count above reaching zero only says the
+            // appsink has gone and the queue may still be on its way. A
+            // teardown that goes wrong leaves an element at PLAYING for good,
+            // so a bounded wait still catches it.
+            let settled = |held: &[gst::Element]| {
+                held.iter().all(|el| {
+                    el.parent().is_none() && el.state(gst::ClockTime::ZERO).1 == gst::State::Null
+                })
+            };
+            for _ in 0..100 {
+                if branches(&pipeline) == 0 && settled(&held) {
+                    break;
+                }
+                tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+            }
+            assert_eq!(branches(&pipeline), 0, "round {round}: the branch outlived its client");
+
+            for el in &held {
+                let (_, current, pending) = el.state(gst::ClockTime::ZERO);
+                assert_eq!(
+                    current,
+                    gst::State::Null,
+                    "round {round}: {} was left in {current:?} (pending {pending:?}) and would \
+                     be disposed in that state",
+                    el.name()
+                );
+                assert!(el.parent().is_none(), "round {round}: {} is still in a bin", el.name());
+            }
+        }
 
         let _ = handle.send(crate::mixer::Command::Shutdown);
         tokio::task::spawn_blocking(move || thread.join()).await.unwrap().unwrap();

@@ -931,6 +931,7 @@ impl InputPipeline {
             // Half a branch left hanging off a running pipeline is worse than
             // no branch, and the caller is about to report the failure.
             for el in branch {
+                el.set_locked_state(true);
                 let _ = el.set_state(gst::State::Null);
                 let _ = self.pipeline.remove(el);
             }
@@ -989,6 +990,9 @@ impl InputPipeline {
         }
         for part in ["vthumb-q", "trate", "tscale", "tcaps", "tproxy"] {
             if let Some(el) = self.pipeline.by_name(&format!("{}-{part}", self.id)) {
+                // Locked first, so the source's own state walk cannot put it
+                // back to PLAYING before the remove. See `Encoder::detach`.
+                el.set_locked_state(true);
                 let _ = el.set_state(gst::State::Null);
                 let _ = self.pipeline.remove(&el);
             }
