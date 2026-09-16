@@ -431,6 +431,9 @@ impl OutputSlot {
         ]
         .map(|(e, n)| (e.clone(), n))
         {
+            // Locked first, so the programme's own state walk cannot put it
+            // back to PLAYING before the remove. See `Encoder::detach`.
+            el.set_locked_state(true);
             let _ = el.set_state(gst::State::Null);
             if let Err(e) = program.remove(&el) {
                 warn!(output = %self.cfg.id, part = pad, ?e, "could not remove feed element");
@@ -438,6 +441,7 @@ impl OutputSlot {
         }
         for proxy in [&self.vproxy, &self.aproxy] {
             let el = proxy.lock().clone();
+            el.set_locked_state(true);
             let _ = el.set_state(gst::State::Null);
             let _ = program.remove(&el);
         }

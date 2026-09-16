@@ -819,6 +819,9 @@ impl Multiview {
         // compositor's chain function.
         self.compositor.release_request_pad(&tile.pad);
         for el in &tile.branch {
+            // Locked first, so the bin's own state walk cannot put it back
+            // to PLAYING before the remove. See `Encoder::detach`.
+            el.set_locked_state(true);
             let _ = el.set_state(gst::State::Null);
             let _ = self.pipeline.remove(el);
         }
@@ -885,6 +888,7 @@ impl Multiview {
                 // reason as `remove_tile` above.
                 self.compositor.release_request_pad(&tile.pad);
                 for el in &tile.branch {
+                    el.set_locked_state(true);
                     let _ = el.set_state(gst::State::Null);
                     let _ = self.pipeline.remove(el);
                 }

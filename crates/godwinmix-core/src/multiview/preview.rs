@@ -299,6 +299,9 @@ impl ScenePreview {
         }
         slot.tee.release_request_pad(&slot.tee_pad);
         self.comp.release_request_pad(&slot.pad);
+        // Locked first, so the bin's own state walk cannot put it back to
+        // PLAYING before the remove. See `Encoder::detach`.
+        slot.queue.set_locked_state(true);
         let _ = slot.queue.set_state(gst::State::Null);
         let _ = self.pipeline.remove(&slot.queue);
         debug!(source = %slot.source, "a source left the preview");
@@ -331,6 +334,7 @@ impl ScenePreview {
             self.unbind(self.slots.len() - 1);
         }
         for el in &self.chain {
+            el.set_locked_state(true);
             let _ = el.set_state(gst::State::Null);
             let _ = self.pipeline.remove(el);
         }
