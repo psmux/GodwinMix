@@ -403,6 +403,12 @@ function Invoke-Smoke {
             $script:Fatal = $true
             return
         }
+        if ($dumped.Code -ne 0 -or [string]::IsNullOrWhiteSpace($dumped.Out)) {
+            Bad ("--example-config exited {0} with {1} bytes on stdout; stderr: {2}" -f `
+                $dumped.Code, ([string]$dumped.Out).Length, ([string]$dumped.Err).Trim())
+            $script:Fatal = $true
+            return
+        }
 
         $rewriter = Join-Path $Work 'rewrite_config.py'
         [System.IO.File]::WriteAllText($rewriter, $RewriteConfigPy)
