@@ -16,7 +16,7 @@ use godwinmix::control::{call, hooks, methods, AppState};
 use godwinmix_core::config::{Config, SourceConfig};
 use godwinmix_core::hooks::HookConfig;
 use godwinmix_core::mixer::{self, Mixer};
-use godwinmix_core::plugin::harness::MAX_FRAME_INTERVAL;
+use godwinmix_core::plugin::harness::max_frame_interval;
 use godwinmix_core::snapshot::Tracker;
 use godwinmix_protocol::error::RpcError;
 use godwinmix_protocol::method::Registry;
@@ -475,12 +475,12 @@ async fn a_hook_that_answers_at_nineteen_milliseconds_delays_the_decision_by_und
     // And the thing that actually matters: the programme never stuttered.
     let stall = core.stall().await;
     assert!(
-        stall <= MAX_FRAME_INTERVAL,
+        stall <= max_frame_interval(),
         "the programme averaged {:.1} ms a frame over its worst sixty while a take.before \
          hook was answering; the limit is {} ms (the worst single gap was {:.1} ms, which \
          is the scheduler, not the mixer)",
         stall.as_secs_f64() * 1000.0,
-        MAX_FRAME_INTERVAL.as_millis(),
+        max_frame_interval().as_millis(),
         core.longest_frame_gap().as_secs_f64() * 1000.0
     );
 }
@@ -529,11 +529,11 @@ async fn a_hook_that_sleeps_past_its_timeout_is_skipped_and_hook_blocked_is_emit
 
     let stall = core.stall().await;
     assert!(
-        stall <= MAX_FRAME_INTERVAL,
+        stall <= max_frame_interval(),
         "the programme averaged {:.1} ms a frame over its worst sixty while a take.before \
          hook was wedged; the limit is {} ms (the worst single gap was {:.1} ms)",
         stall.as_secs_f64() * 1000.0,
-        MAX_FRAME_INTERVAL.as_millis(),
+        max_frame_interval().as_millis(),
         core.longest_frame_gap().as_secs_f64() * 1000.0
     );
 }
@@ -557,7 +557,7 @@ async fn a_hook_that_refuses_in_time_stops_the_take_and_says_why() {
 
     let stall = core.stall().await;
     assert!(
-        stall <= MAX_FRAME_INTERVAL,
+        stall <= max_frame_interval(),
         "the programme averaged {stall:?} a frame over its worst sixty while a take.before \
          hook was refusing"
     );
@@ -643,11 +643,11 @@ async fn a_plain_take_between_two_sources_never_makes_a_late_frame() {
     }
     let stall = core.stall().await;
     assert!(
-        stall <= MAX_FRAME_INTERVAL,
+        stall <= max_frame_interval(),
         "four plain takes between two sources left the programme averaging {:.1} ms a frame \
          over its worst sixty; the limit is {} ms (the worst single gap was {:.1} ms)",
         stall.as_secs_f64() * 1000.0,
-        MAX_FRAME_INTERVAL.as_millis(),
+        max_frame_interval().as_millis(),
         core.longest_frame_gap().as_secs_f64() * 1000.0
     );
 }
@@ -677,11 +677,11 @@ async fn a_plain_take_between_two_eight_item_scenes_never_makes_a_late_frame() {
     }
     let stall = core.stall().await;
     assert!(
-        stall <= MAX_FRAME_INTERVAL,
+        stall <= max_frame_interval(),
         "four takes between two eight item scenes left the programme averaging {:.1} ms a \
          frame over its worst sixty; the limit is {} ms (the worst single gap was {:.1} ms)",
         stall.as_secs_f64() * 1000.0,
-        MAX_FRAME_INTERVAL.as_millis(),
+        max_frame_interval().as_millis(),
         core.longest_frame_gap().as_secs_f64() * 1000.0
     );
 }

@@ -115,6 +115,12 @@ jobs:
       # user's first launch. Deliberately the whole workspace.
       - name: The tests pass on this platform
         shell: bash
+        env:
+          # The same as build.yml: software GL, no GStreamer GL path, and
+          # three times the timing budget on a shared runner.
+          LIBGL_ALWAYS_SOFTWARE: 1
+          GST_GL_DISABLED: 1
+          GODWINMIX_TIMING_SLACK: 3
         run: |
           if [ "${{ runner.os }}" = "Linux" ]; then
             xvfb-run -a cargo test --profile ci --locked --workspace --no-fail-fast

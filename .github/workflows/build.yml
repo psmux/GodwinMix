@@ -82,6 +82,17 @@ jobs:
       # regenerated protocol.json fails this job on every platform.
       - name: Test
         shell: bash
+        env:
+          # No GPU on a hosted runner: Mesa's software rasteriser, and no GL
+          # path in GStreamer, the same as the software only job below and
+          # nightly. With GL live under xvfb the timing tests fail on the
+          # cores the pipelines share.
+          LIBGL_ALWAYS_SOFTWARE: 1
+          GST_GL_DISABLED: 1
+          # A shared two core runner cannot hold a 34 ms frame interval even
+          # when the mixer is right. The tests print what they measured;
+          # nightly runs them with no slack.
+          GODWINMIX_TIMING_SLACK: 3
         run: |
           if [ "${{ runner.os }}" = "Linux" ]; then
             xvfb-run -a cargo test --profile ci --locked --workspace --no-fail-fast

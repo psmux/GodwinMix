@@ -126,6 +126,13 @@ gmx chaos stall cam1 --secs 12
 Freeze frame, rebuild, recovery, with the programme's frame interval never over
 34 ms. That is what the README claims and what `gmx chaos` measures.
 
+The tests that assert that number measure the wall clock, so they need a
+machine that can hold it. A shared CI runner cannot, even when the mixer is
+right. Such a machine sets `GODWINMIX_TIMING_SLACK` to a multiplier (the hosted
+workflows use `3`) and every timing test widens its budget by that much while
+still printing what it measured. Leave it unset on your own machine and in
+nightly; a budget that is always wide is not a check.
+
 ## 8. Commit it together
 
 The log, the expectations and the fix in one commit. Somebody reading `git log`

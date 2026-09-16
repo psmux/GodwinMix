@@ -113,7 +113,7 @@ impl Component {
     }
 
     fn send(&self, method: &str, params: Value, within: Duration) -> Result<Value> {
-        if self.spent.load(Ordering::Relaxed) {
+        if self.spent.load(Ordering::Acquire) {
             anyhow::bail!(
                 "`{}` trapped on an earlier call and cannot be entered again. The supervisor \
                  builds a fresh one within a quarter of a second; `{method}` will work then.",

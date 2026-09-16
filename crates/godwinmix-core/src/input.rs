@@ -2371,6 +2371,7 @@ mod tests {
     /// reach fails the test; a neighbour's descriptors go away when it
     /// finishes, and this waits for that instead of blaming the code under
     /// test for them.
+    #[cfg(unix)]
     fn fd_floor(target: usize, window: Duration) -> usize {
         let mut floor = usize::MAX;
         let start = std::time::Instant::now();

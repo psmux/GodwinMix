@@ -31,10 +31,15 @@ the three client suites and `python3 clients/gen/generate.py --check`.
    worse (`crates/godwinmix-core/src/mixer/slots.rs:78`). Reproduce by running
    a core overnight with an output pointing at a closed port. This is the one
    defect that stops somebody using the product.
-2. **CI has never run.** Every GitHub Actions job on `psmux/GodwinMix` is
-   refused with a billing message, so the Linux and Windows builds, the Docker
-   quickstart timing and the release installers are unproven on real runners.
-   The workflows themselves are written and parse.
+2. **CI ran for the first time on 2026-09-15** and found what had only ever
+   been built on Apple silicon: a test helper not gated to Unix (Windows did
+   not compile), `c_char` hardcoded as `i8` (aarch64 Linux did not compile),
+   a race in the WASM worker that marked an instance spent after answering,
+   and wall clock timing tests that a shared runner cannot hold. All four are
+   fixed on 2026-09-16; the hosted jobs set `GODWINMIX_TIMING_SLACK=3` and
+   nightly keeps the strict 34 ms. The Windows job has still not run a single
+   test to completion, so the `cfg(windows)` arms are the least proven code in
+   the tree until it goes green. The release installers are unproven.
 3. **A core exited silently once during mosaic teardown**, unattributed.
 4. **Alpha graphics key to black**, because the graph is I420 throughout. The
    four edits needed are listed in `docs/reference/graphics.md`.

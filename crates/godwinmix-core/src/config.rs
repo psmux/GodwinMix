@@ -1076,12 +1076,15 @@ fn default_clock_kind() -> String {
 fn hostname() -> Option<String> {
     #[cfg(unix)]
     {
-        let mut buf = [0i8; 256];
+        // `c_char` is `i8` on x86 and Apple silicon and `u8` on aarch64 Linux, so name the libc type
+        // rather than either.
+        let mut buf = [0 as libc::c_char; 256];
         // SAFETY: the buffer is ours and the length is its real length.
         let ok = unsafe { libc::gethostname(buf.as_mut_ptr(), buf.len() - 1) } == 0;
         if !ok {
             return None;
         }
+        #[allow(clippy::unnecessary_cast)] // a real cast on x86 and macOS, a no op on aarch64 Linux
         let bytes: Vec<u8> = buf.iter().take_while(|b| **b != 0).map(|b| *b as u8).collect();
         String::from_utf8(bytes).ok().filter(|s| !s.is_empty())
     }

@@ -319,6 +319,13 @@ fn serve(
                 let answer = dispatch(store, exports, &method, params);
                 memory.store(used(store), Ordering::Relaxed);
                 let trapped = answer.as_ref().err().is_some_and(is_trap);
+                if trapped {
+                    // Marked spent before the reply goes out: the caller can
+                    // send its next call the moment it has the answer, and it
+                    // must see the flag then, not queue a job onto a receiver
+                    // this thread is about to drop and wait out the deadline.
+                    spent.store(true, Ordering::Release);
+                }
                 let _ = reply.send(answer.with_context(|| format!("`{method}` on `{name}`")));
                 if trapped {
                     // A component that traps cannot be entered again: the next
@@ -328,7 +335,6 @@ fn serve(
                     // the supervisor builds a fresh one on its next pass. The
                     // store is dropped with the thread, which is the whole of
                     // the cleanup a component needs.
-                    spent.store(true, Ordering::Relaxed);
                     tracing::warn!(
                         instance = %name, %method,
                         "a component trapped and is spent; it will be started again"
