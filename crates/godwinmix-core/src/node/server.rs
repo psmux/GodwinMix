@@ -250,11 +250,13 @@ impl NodeServer {
         let (peer, pump) = Peer::start(ws, handler);
         *slot.lock() = Some(peer.clone());
         let why = pump.await;
-        self.nodes.left(&name, &why);
-        // Its plugins stop being offered the moment its socket goes. The
-        // interned manifests stay, because a source being torn down may still
-        // hold one.
+        // Its plugins stop being offered the moment its socket goes, and
+        // before the registry says it has gone: anyone who reads the node as
+        // offline must find nothing offered from it, and the other order left
+        // a gap a status reader on another thread could land in. The interned
+        // manifests stay, because a source being torn down may still hold one.
         crate::plugin::remote::forget(&name);
+        self.nodes.left(&name, &why);
         (self.watch)(NodeEvent::Left { node: name.clone(), why: why.clone() });
         Ok(())
     }
