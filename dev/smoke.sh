@@ -590,7 +590,15 @@ fi
 
 step "the armed scene is composited as a preview"
 "$GMX" ctl scene arm "smoke two" >/dev/null 2>&1
-FRAME="$(curl -fsS "$BASE/api/v1/scenes/preview/frame?width=320" "${AUTH[@]}" 2>&1)"
+# The answer to "no frame yet" is retryable and says to ask again, which a
+# client does and this does too: the preview compositor is built by the
+# first ask, and on a slow machine it is not always up within one wait.
+FRAME=""
+for _ in 1 2 3 4 5; do
+    FRAME="$(curl -fsS "$BASE/api/v1/scenes/preview/frame?width=320" "${AUTH[@]}" 2>&1)"
+    grep -q '"image"' <<<"$FRAME" && break
+    sleep 1
+done
 if grep -q '"image"' <<<"$FRAME" && grep -q '"layout"' <<<"$FRAME"; then
     ok
 else

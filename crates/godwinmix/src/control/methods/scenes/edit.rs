@@ -307,7 +307,16 @@ async fn still(call: &Call, req: &PreviewFrameRequest) -> Result<Value, RpcError
         width: req.width.unwrap_or(640) as i32,
         full: false,
     });
-    let jpeg = tokio::time::timeout(FRAME_WAIT, sub.recv()).await;
+    // The channel keeps the newest frames and tells a reader that fell
+    // behind so; a call that was not scheduled for a moment reads again
+    // rather than reporting no frame, until the deadline.
+    let deadline = tokio::time::Instant::now() + FRAME_WAIT;
+    let jpeg = loop {
+        match tokio::time::timeout_at(deadline, sub.recv()).await {
+            Ok(Err(tokio::sync::broadcast::error::RecvError::Lagged(_))) => continue,
+            other => break other,
+        }
+    };
     let Ok(Ok(jpeg)) = jpeg else {
         return Err(RpcError::new(
             ErrorCode::NotInState,
