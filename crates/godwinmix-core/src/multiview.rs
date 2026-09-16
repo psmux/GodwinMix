@@ -1564,6 +1564,33 @@ mod tests {
     /// programme branch beside it, which is where the liveness probe lives. The
     /// source looked dead and the supervisor restarted it. This subscribes and
     /// leaves repeatedly and insists the source stays live throughout.
+    ///
+    /// What "stays live" means here needs saying, because the obvious reading
+    /// of it is not testable on a shared machine. The liveness probe sits on
+    /// the programme `proxysink`, and `stall_timeout_secs` is two seconds, so
+    /// the source reads `Stalled` whenever two seconds of frames fail to reach
+    /// the mixer for any reason at all. On a hosted runner with two shared
+    /// cores, software Mesa and forty other pipelines in the same test binary,
+    /// that happens to a healthy `videotestsrc` now and again: this failed on
+    /// round 8 of 12 on one Linux runner and round 10 of 12 on another, while
+    /// passing every round on the same commit on macOS and on the developer's
+    /// machine. A single reading is therefore not evidence of the defect.
+    ///
+    /// Two readings in a row are. The defect holds the source's tee for as long
+    /// as the mosaic keeps coming and going, so the round after a stalled round
+    /// is stalled too, and the idle time climbs instead of returning to one
+    /// frame. A runner that did not schedule a thread for a moment gives one
+    /// stalled round and a healthy one behind it, because the next frame to
+    /// arrive puts the idle time back to about sixty milliseconds. So the
+    /// assertion is on the second reading, the idle time of every round is kept
+    /// for the failure message, and what used to be a bare "stalled on round 8"
+    /// now prints the series that led to it.
+    ///
+    /// Widening `stall_timeout_secs` by `timing_slack()` was the other way to
+    /// do this and is not what happens here. It would do nothing for the
+    /// `linux, no GPU, software codecs` job, which is hosted and does not set
+    /// `GODWINMIX_TIMING_SLACK`, and a timeout wider than the loop is long
+    /// would mean a source held for the whole run never reads `Stalled` at all.
     #[tokio::test(flavor = "multi_thread")]
     async fn a_subscriber_coming_and_going_never_stalls_a_source() {
         init();
@@ -1594,22 +1621,60 @@ mod tests {
             .await
             .expect("the source never went live");
 
-        for round in 0..12 {
+        /// One subscribe and leave, and what the source looked like afterwards.
+        ///
+        /// Answers `(state, video_idle_ms)`. The status read has a deadline of
+        /// its own, so a mixer thread that has wedged fails the test here
+        /// rather than hanging the suite.
+        async fn churn(
+            mv: &MultiviewHandle,
+            handle: &crate::mixer::MixerHandle,
+            round: usize,
+        ) -> (Option<crate::state::SourceState>, Option<u64>) {
+            // Both deadlines are wall clock, so a machine that has declared
+            // itself slow gets more of it. Neither is what is being measured:
+            // the first is how long a mosaic frame may take to arrive and the
+            // second is the answer to "is the mixer thread still there".
+            let budget = Duration::from_secs(2).mul_f64(crate::plugin::harness::timing_slack());
             let mut sub = mv.subscribe(MultiviewRequest::configured());
-            let _ = tokio::time::timeout(Duration::from_secs(2), sub.recv()).await;
+            let _ = tokio::time::timeout(budget, sub.recv()).await;
             drop(sub);
             tokio::time::sleep(Duration::from_millis(120)).await;
-            // Every status read has a deadline, so a mixer thread that has
-            // wedged fails this rather than hanging the suite.
-            let status = tokio::time::timeout(Duration::from_secs(2), handle.status())
+            let status = tokio::time::timeout(budget, handle.status())
                 .await
                 .unwrap_or_else(|_| panic!("the mixer stopped answering on round {round}"))
                 .unwrap();
-            let state = status.sources.first().map(|s| s.state);
+            let source = status.sources.first();
+            (source.map(|s| s.state), source.and_then(|s| s.video_idle_ms))
+        }
+
+        let stalled = Some(crate::state::SourceState::Stalled);
+        // `(round, state, video_idle_ms)` for every round, printed if this
+        // fails: a held tee shows the idle time climbing round after round, a
+        // runner that starved a thread shows one spike and a recovery.
+        let mut seen: Vec<(usize, Option<crate::state::SourceState>, Option<u64>)> = Vec::new();
+        let mut was_stalled = false;
+        for round in 0..12 {
+            let (state, idle) = churn(&mv, &handle, round).await;
+            seen.push((round, state, idle));
+            assert!(
+                !(was_stalled && state == stalled),
+                "the source was judged stalled on rounds {} and {round}, one after the other, \
+                 by a mosaic coming and going: {seen:?}",
+                round - 1
+            );
+            was_stalled = state == stalled;
+        }
+        // A stall on the last round has no round behind it to confirm it, so
+        // the mosaic is made to come and go once more rather than letting the
+        // one reading the loop ends on go unjudged.
+        if was_stalled {
+            let (state, idle) = churn(&mv, &handle, 12).await;
+            seen.push((12, state, idle));
             assert_ne!(
-                state,
-                Some(crate::state::SourceState::Stalled),
-                "the source was judged stalled on round {round} by a mosaic coming and going"
+                state, stalled,
+                "the source was judged stalled on the last round and on the one after it, \
+                 by a mosaic coming and going: {seen:?}"
             );
         }
 

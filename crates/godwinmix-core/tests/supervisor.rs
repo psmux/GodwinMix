@@ -71,7 +71,12 @@ fn settings(announce: Option<&str>) -> BTreeMap<String, godwinmix_core::config::
 }
 
 /// The same, for a condition that has to be awaited.
-async fn until_async<F, Fut>(what: &str, within: Duration, mut ready: F) -> Duration
+///
+/// `None` is the timeout, and it is returned rather than panicked on so that
+/// the caller can say what the core's view was at the moment it gave up. A
+/// bare "did not happen within 15000 ms" on a CI runner nobody can log into is
+/// not a diagnosis, and that is all this used to print.
+async fn until_async<F, Fut>(within: Duration, mut ready: F) -> Option<Duration>
 where
     F: FnMut() -> Fut,
     Fut: std::future::Future<Output = bool>,
@@ -79,11 +84,80 @@ where
     let start = Instant::now();
     while start.elapsed() < within {
         if ready().await {
-            return start.elapsed();
+            return Some(start.elapsed());
         }
         tokio::time::sleep(Duration::from_millis(25)).await;
     }
-    panic!("{what} did not happen within {} ms", within.as_millis());
+    None
+}
+
+/// Everything the core knows about why a source is or is not there.
+///
+/// Printed on a timeout: the failures `start_all` reported, what the plugin
+/// registry is pointing at, every singleton and its state, the rows
+/// `plugin.stats` would show, and the mixer's own source list.
+async fn diagnosis(
+    supervisor: &Supervisor,
+    handle: &godwinmix_core::mixer::MixerHandle,
+    failures: &[(String, String)],
+) -> String {
+    use std::fmt::Write as _;
+    let mut out = String::new();
+    let _ = writeln!(out, "start_all reported {} failure(s):", failures.len());
+    for (provide, why) in failures {
+        let _ = writeln!(out, "  {provide}: {why}");
+    }
+    let _ = writeln!(out, "the plugin directory is {}", loader::dir().display());
+    match loader::get("fakeservice") {
+        Some(installed) => {
+            let _ = writeln!(
+                out,
+                "fakeservice is registered at {} (enabled {}, problem {:?})",
+                installed.root.display(),
+                installed.enabled,
+                installed.problem
+            );
+            let entry = installed.root.join("run.sh");
+            let _ = writeln!(
+                out,
+                "  its run.sh is {}",
+                std::fs::read_to_string(&entry)
+                    .map(|text| format!("{:?}", text.lines().take(3).collect::<Vec<_>>()))
+                    .unwrap_or_else(|e| format!("unreadable: {e}"))
+            );
+        }
+        None => {
+            let _ = writeln!(out, "fakeservice is NOT in the registry any more");
+        }
+    }
+    let _ = writeln!(out, "supervisor instances (instance, plugin, provide, state):");
+    for row in supervisor.instances() {
+        let _ = writeln!(out, "  {row:?}");
+    }
+    let _ = writeln!(out, "plugin.stats rows:");
+    for row in loader::stats() {
+        let _ = writeln!(
+            out,
+            "  {} {} state={} pid={:?}",
+            row.plugin, row.instance, row.state, row.pid
+        );
+    }
+    match handle.status().await {
+        Ok(status) => {
+            let _ = writeln!(out, "the mixer holds {} source(s):", status.sources.len());
+            for source in &status.sources {
+                let _ = writeln!(
+                    out,
+                    "  {} state={:?} uri={} video_idle_ms={:?}",
+                    source.id, source.state, source.uri, source.video_idle_ms
+                );
+            }
+        }
+        Err(e) => {
+            let _ = writeln!(out, "the mixer would not answer a status request: {e:#}");
+        }
+    }
+    out
 }
 
 /// Descriptors held by this process, for the leak count.
@@ -246,16 +320,46 @@ fn discover_asks_every_device_and_merges_the_answers() {
 
 /// The roadmap's acceptance line, with the fixture standing in for a phone:
 /// something that turns up becomes a live source, and quickly.
-// The lock is a plain `std::sync::Mutex` and this test awaits, so it is taken
-// on a blocking thread and given back before the first await: the registry is
-// process wide and only the setup touches it.
-#[tokio::test(flavor = "multi_thread")]
-async fn a_device_publisher_becomes_a_live_source_within_five_seconds() {
+//
+// A plain `#[test]` with a runtime built by hand rather than `#[tokio::test]`,
+// and the reason is the lock. The plugin registry is process wide: one `dir`,
+// one row per plugin name, and every test in this file installs the same
+// fixture under the same name `fakeservice`. This test used to give the lock
+// back as soon as the install was done, on the theory that only the setup
+// touched the registry. It is not only the setup. Everything after it reaches
+// the registry too: `start_all` looks the provides up, and launching one reads
+// the plugin's root off the same row. So with the lock given back early, the
+// reload test would take it, install the fixture over this one (moving the row
+// to its own directory), write `#!/bin/sh\nexit 1` into that copy's `run.sh`
+// and finally uninstall the plugin altogether. Whatever this test's supervisor
+// started after that was the broken copy or nothing at all, no `source.appeared`
+// ever came, and all the failure said was that five seconds had passed.
+//
+// On a developer's ten core machine all seven tests are dispatched at once and
+// this one is usually done before the reload test gets going. On a two core
+// hosted runner the tests are dispatched two at a time, this one and the reload
+// test are the first two by name, and the window is the whole twenty seconds
+// the reload test takes. That is why it failed on every CI runner and on none
+// of the developer's runs, and it reproduces on the developer's machine with
+// `--test-threads=2`.
+//
+// Holding a `std::sync::MutexGuard` across an await is what clippy's
+// `await_holding_lock` is about, so the guard is held by a synchronous function
+// and the awaiting happens inside `block_on`. Same effect, no lint, and the
+// guard is given back when the test ends like it is in every other test here.
+#[test]
+fn a_device_publisher_becomes_a_live_source_within_five_seconds() {
+    let _lock = exclusive();
+    let runtime = tokio::runtime::Builder::new_multi_thread()
+        .enable_all()
+        .build()
+        .expect("a runtime for this test");
+    runtime.block_on(a_device_publisher_becomes_a_live_source());
+}
+
+async fn a_device_publisher_becomes_a_live_source() {
     let _ = gstreamer::init();
-    let dir = {
-        let _lock = exclusive();
-        install("adopt")
-    };
+    let dir = install("adopt");
 
     // A real mixer on its own thread, exactly as the binary runs one.
     let mut cfg: godwinmix_core::config::Config = toml::from_str(
@@ -270,7 +374,9 @@ async fn a_device_publisher_becomes_a_live_source_within_five_seconds() {
 
     let supervisor = Supervisor::new(canvas(), settings(Some("guest")));
     supervisor.attach(handle.clone());
-    supervisor.start_all();
+    // Kept rather than dropped: a singleton that would not start is the first
+    // thing to print when nothing turns up.
+    let failures = supervisor.start_all();
     supervisor.spawn_pump();
 
     // The plugin raised `source.appeared` as soon as it was up. What is being
@@ -290,8 +396,16 @@ async fn a_device_publisher_becomes_a_live_source_within_five_seconds() {
             .unwrap_or(false)
     };
     let budget = Duration::from_secs(5).mul_f64(godwinmix_core::plugin::harness::timing_slack());
-    let took = until_async("a publisher becoming a live source", budget, || live(handle.clone()))
-        .await;
+    let took = match until_async(budget, || live(handle.clone())).await {
+        Some(took) => took,
+        None => {
+            let view = diagnosis(&supervisor, &handle, &failures).await;
+            panic!(
+                "a publisher becoming a live source did not happen within {} ms\n{view}",
+                budget.as_millis()
+            )
+        }
+    };
     println!(
         "a device's publisher became a live source in {} ms; the bar is 5000 ms",
         took.as_millis()
@@ -304,11 +418,17 @@ async fn a_device_publisher_becomes_a_live_source_within_five_seconds() {
     supervisor
         .tool_call("fakeservice/discovery/echo", serde_json::json!({"take_it_away": true}))
         .expect("the tool call that makes it leave");
-    until_async("the source going away again", Duration::from_secs(5), || {
+    let gone = Duration::from_secs(5).mul_f64(godwinmix_core::plugin::harness::timing_slack());
+    if until_async(gone, || {
         let handle = handle.clone();
         async move { !live(handle).await }
     })
-    .await;
+    .await
+    .is_none()
+    {
+        let view = diagnosis(&supervisor, &handle, &failures).await;
+        panic!("the source going away again did not happen within {} ms\n{view}", gone.as_millis());
+    }
 
     supervisor.shutdown();
     let _ = handle.send(godwinmix_core::mixer::Command::Shutdown);

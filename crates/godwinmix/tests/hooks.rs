@@ -16,7 +16,7 @@ use godwinmix::control::{call, hooks, methods, AppState};
 use godwinmix_core::config::{Config, SourceConfig};
 use godwinmix_core::hooks::HookConfig;
 use godwinmix_core::mixer::{self, Mixer};
-use godwinmix_core::plugin::harness::max_frame_interval;
+use godwinmix_core::plugin::harness::{max_frame_interval, timing_slack};
 use godwinmix_core::snapshot::Tracker;
 use godwinmix_protocol::error::RpcError;
 use godwinmix_protocol::method::Registry;
@@ -461,12 +461,17 @@ async fn a_hook_that_answers_at_nineteen_milliseconds_delays_the_decision_by_und
     );
 
     let delay = with_hook.saturating_sub(bare).saturating_sub(idle_trip);
+    // 20 ms on a machine that can hold it; a shared runner declares its slack
+    // and the whole budget widens by that much, the way every timing check
+    // here does. The measurement is still printed.
+    let limit = Duration::from_millis(20).mul_f64(timing_slack());
     assert!(
-        delay < Duration::from_millis(20),
-        "the hook answered at 19 ms and delayed the decision by {} ms; the limit is 20 ms \
+        delay < limit,
+        "the hook answered at 19 ms and delayed the decision by {} ms; the limit is {} ms \
          (the middle of {TIMED_TAKES} takes was {} ms with the hook and {} ms on a core with \
           no hook configured, and one round trip to a receiver answering at once cost {} ms)",
         delay.as_millis(),
+        limit.as_millis(),
         with_hook.as_millis(),
         bare.as_millis(),
         idle_trip.as_millis()
@@ -546,7 +551,12 @@ async fn a_hook_that_refuses_in_time_stops_the_take_and_says_why() {
         Duration::from_millis(1),
         r#"{"allow": false, "reason": "cam2 has no audio"}"#,
     );
-    let core = Core::start(vec![http_hook("take.before", &receiver.url, None)]).await;
+    // "In time" is the default 20 ms on a machine that can answer an HTTP
+    // request in a millisecond. A loaded runner cannot, and a hook that is
+    // abandoned for being late lets the take through, which is the other
+    // test's subject, not this one's. So the deadline widens with the slack.
+    let in_time = (20.0 * timing_slack()).round() as u64;
+    let core = Core::start(vec![http_hook("take.before", &receiver.url, Some(in_time))]).await;
     core.settle().await;
 
     let refused = core.call("program.take", json!({ "source": "cam2" })).await.unwrap_err();

@@ -358,10 +358,13 @@ fn shell(cmd: &str, args: &[&str]) -> Option<String> {
 fn hostname() -> String {
     #[cfg(unix)]
     {
-        let mut buf = [0i8; 256];
+        // `c_char` is `i8` on x86 and Apple silicon and `u8` on aarch64
+        // Linux, so name the libc type rather than either.
+        let mut buf = [0 as libc::c_char; 256];
         // SAFETY: the buffer and its length are handed over together and the
         // result is read only as far as its first NUL.
         if unsafe { libc::gethostname(buf.as_mut_ptr(), buf.len()) } == 0 {
+            #[allow(clippy::unnecessary_cast)] // a real cast on x86 and macOS, a no op on aarch64 Linux
             let bytes: Vec<u8> =
                 buf.iter().take_while(|c| **c != 0).map(|c| *c as u8).collect();
             if let Ok(name) = String::from_utf8(bytes) {
