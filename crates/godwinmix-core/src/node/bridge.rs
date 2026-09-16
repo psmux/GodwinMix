@@ -82,8 +82,18 @@ impl Peer {
                 tokio::select! {
                     outgoing = out_rx.recv() => {
                         let Some(msg) = outgoing else { break "the peer was closed".to_string() };
+                        let hanging_up = matches!(msg, Message::Close(_));
                         if let Err(e) = sink.send(msg).await {
                             break format!("the socket would not take a frame: {e}");
+                        }
+                        if hanging_up {
+                            // Our own close frame is out; this side does not
+                            // wait for the far side to answer it. A Linux
+                            // runner showed the wait outliving a test's twenty
+                            // seconds, and everything that follows the pump
+                            // (the registry, the plugins the node offered)
+                            // was held up with it.
+                            break me.reason().unwrap_or_else(|| "closed from this side".to_string());
                         }
                     }
                     incoming = source.next() => {
