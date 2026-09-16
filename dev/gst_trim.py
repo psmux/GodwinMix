@@ -521,6 +521,11 @@ def relocate_macos(out: Path) -> None:
                        capture_output=True)
 
 
+def largest(path: Path, count: int) -> list[Path]:
+    files = [p for p in path.rglob("*") if p.is_file()]
+    return sorted(files, key=lambda p: p.stat().st_size, reverse=True)[:count]
+
+
 def megabytes(path: Path) -> float:
     total = sum(p.stat().st_size for p in path.rglob("*") if p.is_file())
     return total / (1024 * 1024)
@@ -636,6 +641,13 @@ def build(args: argparse.Namespace) -> int:
     if args.budget_mb and size > args.budget_mb:
         print(f"FAIL over the {args.budget_mb} MB budget by "
               f"{size - args.budget_mb:.1f} MB", file=sys.stderr)
+        # What the space went on, so the person deciding what to cut has the
+        # numbers in the same log as the failure. The first Windows trim was
+        # nineteen megabytes over with nothing to say about where.
+        print("the twenty five largest files in the tree:", file=sys.stderr)
+        for path in largest(out, 25):
+            print(f"  {path.stat().st_size / (1024 * 1024):7.1f} MB  "
+                  f"{path.relative_to(out)}", file=sys.stderr)
         return 1
     if args.budget_mb:
         print(f"OK within the {args.budget_mb} MB budget")
