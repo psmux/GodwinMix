@@ -117,13 +117,18 @@ impl OutputSlot {
             .context("adding output feed to program pipeline")?;
         gst::Element::link_many([&feed_video, &vproxy]).context("linking video feed")?;
         gst::Element::link_many([&feed_audio, &aproxy]).context("linking audio feed")?;
+        // Up before it is linked to the tees, far end first. A pad is
+        // flushing until its element is activated, and a live tee handed a
+        // flushing return passes it up its own chain, where a source loop
+        // pauses for good without a word on the bus. The same order as
+        // `InputPipeline::attach_thumb_end`, and for the same reason.
+        for el in [&vproxy, &aproxy, &feed_video, &feed_audio] {
+            el.sync_state_with_parent().ok();
+        }
         let tee_pads = vec![
             (video_tee.clone(), link_tee_to(video_tee, &feed_video).context("linking video tee")?),
             (audio_tee.clone(), link_tee_to(audio_tee, &feed_audio).context("linking audio tee")?),
         ];
-        for el in [&feed_video, &feed_audio, &vproxy, &aproxy] {
-            el.sync_state_with_parent().ok();
-        }
 
         let (kind, ready) = crate::plugin::output::open(cfg)?;
         let slot = Arc::new(Self {

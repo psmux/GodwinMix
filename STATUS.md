@@ -37,9 +37,16 @@ the three client suites and `python3 clients/gen/generate.py --check`.
    a race in the WASM worker that marked an instance spent after answering,
    and wall clock timing tests that a shared runner cannot hold. All four are
    fixed on 2026-09-16; the hosted jobs set `GODWINMIX_TIMING_SLACK=3` and
-   nightly keeps the strict 34 ms. The Windows job has still not run a single
-   test to completion, so the `cfg(windows)` arms are the least proven code in
-   the tree until it goes green. The release installers are unproven.
+   nightly keeps the strict 34 ms. The second Windows run found thirteen
+   more, all fixed the same day: a stderr reader joined before its child
+   was killed (a hang), Windows paths written into pipeline descriptions,
+   `unixfdsink` asked for on a platform without it, and a CRLF checkout
+   inflating the UI byte budget. The Linux runners then exposed a real
+   defect: a thumbnail branch was linked to a live tee before it was brought
+   up, so a buffer could meet a flushing pad and pause the source's loop for
+   good with nothing on the bus. The same order is now used for the output
+   feeds and the audio tap. macOS is green end to end; Linux and Windows are
+   one push from it as this is written. The release installers are unproven.
 3. **A core exited silently once during mosaic teardown**, unattributed.
 4. **Alpha graphics key to black**, because the graph is I420 throughout. The
    four edits needed are listed in `docs/reference/graphics.md`.

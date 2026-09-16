@@ -128,6 +128,14 @@ jobs:
             cargo test --profile ci --locked --workspace --no-fail-fast
           fi
 
+      - name: Keep the pipeline graphs of a failed test
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gst-dot-${{ matrix.name }}
+          path: target/gst-dot/
+          if-no-files-found: ignore
+
       - name: What the codec probe picks here
         shell: bash
         run: |

@@ -860,8 +860,41 @@ impl InputPipeline {
     /// A tee hands out a new src pad while the others keep flowing, so the
     /// programme branch never sees this: measured as no change at all on the
     /// programme's frame interval, because nothing on that path is touched.
-    /// The branch is added in NULL and synced to the parent, which is how
-    /// every other element in a live pipeline is added here.
+    ///
+    /// The order is the whole of it, and it is the same order
+    /// `attach_programme_return` uses: build the branch, put it in the
+    /// pipeline, link it to itself, bring every element up to the pipeline's
+    /// state from the far end backwards, and only then ask the tee for a pad.
+    /// A branch is joined to a live tee only once nothing in it is still in
+    /// NULL.
+    ///
+    /// This used to link the tee first and bring the states up after, which
+    /// hands buffers to elements that are still in NULL. A pad is flushing
+    /// until it is activated, so such a push comes back `GST_FLOW_FLUSHING`,
+    /// and `allow-not-linked` does not cover that: the tee gives the flushing
+    /// return to its own sink pad and it travels back up the chain. Measured
+    /// on this path, with a 30 ms sleep standing in for a mixer thread the
+    /// scheduler took away: four or five of twelve attaches returned flushing
+    /// at the source's tee and as far up as the `videorate` above it. With the
+    /// order below, none of twelve did.
+    ///
+    /// What that return does if it reaches the source itself is the part with
+    /// no way back. `gst_base_src_loop` pauses its task and posts nothing on
+    /// the bus, because flushing is how a source is told a flush is running,
+    /// and nothing starts that task again. The programme branch beside the
+    /// thumbnail then gets no frames at all, ever, which is what the liveness
+    /// probe on the programme `proxysink` reads as a source whose idle time
+    /// climbs and never comes back. Whether it gets that far depends on what
+    /// the elements in between make of it: on the GStreamer this was measured
+    /// against the `videorate` above the tee swallowed it and the source
+    /// lived. A branch has no business handing a live tee a flushing return in
+    /// either case.
+    ///
+    /// Both windows were open: between the tee link and the queue reaching
+    /// PAUSED, and between the queue reaching PAUSED and the `videorate`
+    /// behind it doing the same, because a queue starts its loop as soon as
+    /// its pads are active. Both are microseconds wide on an idle machine and
+    /// as wide as the scheduler feels like on a loaded two core runner.
     pub fn attach_thumb_end(&self, canvas: &CanvasCaps, thumb_fps: i32) -> Result<gst::Element> {
         let mut held = self.thumb_proxy.lock();
         if let Some(existing) = held.as_ref() {
@@ -883,14 +916,48 @@ impl InputPipeline {
         let _ = canvas;
         let branch = [&queue, &rate, &scale, &caps, &proxy];
         self.pipeline.add_many(branch).context("adding a thumbnail end")?;
-        gst::Element::link_many([&self.vtee, &queue, &rate, &scale, &caps, &proxy])
-            .context("linking a thumbnail end")?;
-        for el in branch {
-            el.sync_state_with_parent().ok();
+        let joined = gst::Element::link_many([&queue, &rate, &scale, &caps, &proxy])
+            .context("linking a thumbnail end")
+            // Downstream first, so no element in the branch is ever asked to
+            // push into one behind it that has not caught up yet.
+            .and_then(|()| {
+                for el in branch.iter().rev() {
+                    el.sync_state_with_parent()
+                        .with_context(|| format!("starting {}", el.name()))?;
+                }
+                self.link_thumb_end(&queue)
+            });
+        if let Err(e) = joined {
+            // Half a branch left hanging off a running pipeline is worse than
+            // no branch, and the caller is about to report the failure.
+            for el in branch {
+                let _ = el.set_state(gst::State::Null);
+                let _ = self.pipeline.remove(el);
+            }
+            return Err(e);
         }
         debug!(source = %id, "thumbnail end attached to a running source");
         *held = Some(proxy.clone());
         Ok(proxy)
+    }
+
+    /// Join a thumbnail branch that is already running to the source's tee.
+    ///
+    /// The last step of `attach_thumb_end` and the only one that touches the
+    /// live side of the source. The tee copies its sticky events onto the new
+    /// pad, so the branch gets stream-start, caps and segment before its first
+    /// buffer.
+    fn link_thumb_end(&self, head: &gst::Element) -> Result<()> {
+        let sink = head.static_pad("sink").context("a thumbnail queue with no sink pad")?;
+        let teepad = self
+            .vtee
+            .request_pad_simple("src_%u")
+            .context("the source tee refused a pad for a thumbnail end")?;
+        if let Err(e) = teepad.link(&sink) {
+            self.vtee.release_request_pad(&teepad);
+            return Err(anyhow::Error::from(e).context("linking a thumbnail end onto the tee"));
+        }
+        Ok(())
     }
 
     /// Take the thumbnail end back out, for a source nobody is looking at.
