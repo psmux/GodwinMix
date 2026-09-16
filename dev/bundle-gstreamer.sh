@@ -50,7 +50,10 @@ while [[ $# -gt 0 ]]; do
 done
 
 WORK=""
-cleanup() { [[ -n "$WORK" ]] && rm -rf "$WORK"; }
+# An `if`, not `[[ ]] &&`: with nothing to clean the `&&` list returns 1,
+# and a failing EXIT trap is the script's own exit status, so a trim from a
+# Homebrew runtime printed OK and then failed the job.
+cleanup() { if [[ -n "$WORK" ]]; then rm -rf "$WORK"; fi; }
 trap cleanup EXIT
 
 # --- where the runtime comes from -------------------------------------------

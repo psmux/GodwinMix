@@ -4089,9 +4089,15 @@ impl Mixer {
                         .context("adding multiview tile")?;
                 }
                 mv.follow_clock_of(&self.program);
-                mv.start().context("starting multiview")?;
-                self.multiview = Some(mv);
+                // Marked built before the first frame can leave it: a
+                // subscriber that reads `is_built` the moment its frame lands
+                // must find it true, and on Windows the frame beat the flag.
                 self.mv.mark_built(Some(shape));
+                if let Err(e) = mv.start() {
+                    self.mv.mark_built(None);
+                    return Err(e.context("starting multiview"));
+                }
+                self.multiview = Some(mv);
                 // Last, once the mosaic is running. The branch ends at a
                 // `proxysink`, and a proxysink pushing into a `proxysrc` whose
                 // pipeline has not started yet has nowhere to put the buffer:
