@@ -26,6 +26,21 @@ const FPS: u32 = 30;
 
 #[test]
 fn ten_seconds_of_programme_are_recorded_and_the_file_plays() {
+    // Unix only, and not because of `mkfifo`. An output plugin receives the
+    // programme on a FIFO, Windows has none, and the core refuses a sidecar
+    // output there before it ever starts one; `capture-common`'s `fifo.rs`
+    // says the same thing to anybody who gets past it. Running this on
+    // Windows would test that refusal by way of an empty folder. The named
+    // pipe that would fix it is the open question in
+    // docs/reference/plugin-lifecycle.md; until it lands, record on Windows
+    // with a first party output (rtmp/output, srt/output).
+    if !cfg!(unix) {
+        eprintln!(
+            "skipping: an output plugin receives the programme on a FIFO and this platform \
+             has none, so the core refuses a sidecar output here"
+        );
+        return;
+    }
     gst::init().expect("GStreamer starts");
     let Some(encoder) = ["x264enc", "vtenc_h264", "avenc_h264_videotoolbox"]
         .into_iter()

@@ -24,6 +24,32 @@ use serde_json::{json, Value};
 use std::sync::Arc;
 use std::time::Duration;
 
+/// Wait until `want` takes have reached `program.history`.
+///
+/// Bounded, and it says what it was waiting for: a take that never reaches the
+/// history is a bug in the subscriber, not slowness, and the message has to
+/// tell the two apart.
+async fn wait_for_history(core: &Core, token: &Token, want: usize) {
+    let deadline = std::time::Instant::now() + Duration::from_secs(10);
+    loop {
+        let history = core
+            .call(token, "program.history", json!({ "limit": 10 }))
+            .await
+            .expect("program.history answers");
+        let takes = history.as_array().map_or(0, |t| t.len());
+        if takes >= want {
+            return;
+        }
+        assert!(
+            std::time::Instant::now() < deadline,
+            "{want} takes were made and {takes} reached the history in 10 s. \
+             program.revert reads the history, so it would refuse to go back to a \
+             shot that was on air."
+        );
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    }
+}
+
 /// A whole core: pipelines running, two sources live, the method table in
 /// front of them.
 struct Core {
@@ -220,6 +246,14 @@ async fn the_minimum_hold_refuses_a_second_take_and_revert_puts_the_shot_back() 
         core.call(&loose, "program.take", json!({ "source": "cam2" })).await.unwrap();
     }
     assert_eq!(core.program().await.as_deref(), Some("cam2"));
+
+    // The take history is written by the subscriber on the event bus, not by
+    // the call that made the take, so a shot is on air a moment before it is
+    // in the log. `program.revert` reads the log. Wait for it to catch up
+    // rather than racing it: on the first Windows CI run both takes were on
+    // air and neither had been recorded, and revert answered "0 takes have
+    // been recorded on this core".
+    wait_for_history(&core, &token, 2).await;
 
     let reverted = core.call(&token, "program.revert", json!({})).await.unwrap();
     assert_eq!(reverted["program"], "cam1", "revert goes back to the shot before");

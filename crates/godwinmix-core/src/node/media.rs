@@ -503,12 +503,23 @@ fn ghost(bin: &gst::Bin, name: &str, head: &gst::Element) -> Result<()> {
 
 /// Refuse early and by name when the elements a transport needs are not here.
 fn needs(elements: &[&str], transport: &str) -> Result<()> {
-    let missing: Vec<&str> =
-        elements.iter().copied().filter(|e| !crate::probe::exists(e)).collect();
+    // Asked by building one, not by looking it up. A factory can be in the
+    // registry and still fail every `make`, because the registry remembers a
+    // plugin file that will not load: the official Windows GStreamer 1.28
+    // installer ships `gstsrt.dll` in exactly that state, and `srtsrc` there
+    // answers `exists` with yes and `make` with "Failed to load element
+    // factory". An element the bridge cannot build is an element this machine
+    // has not got, and the operator needs to be told that here, with the
+    // other transport named, rather than three lines later.
+    let missing: Vec<&str> = elements
+        .iter()
+        .copied()
+        .filter(|e| gst::ElementFactory::make(e).build().is_err())
+        .collect();
     anyhow::ensure!(
         missing.is_empty(),
-        "this machine has no {} for the `{transport}` transport between a node and the core. \
-         Install gst-plugins-bad, or set transport = \"{}\" on the source",
+        "this machine cannot build {} for the `{transport}` transport between a node and \
+         the core. Install gst-plugins-bad, or set transport = \"{}\" on the source",
         missing.join(", "),
         if transport == "srt" { "rtp" } else { "srt" }
     );

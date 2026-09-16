@@ -291,12 +291,36 @@ mod tests {
         let settings = Settings::from_params(&json!({
             "endpoint": "http://127.0.0.1:1/whep", "timeout_secs": 1
         }));
-        let err = match Watcher::start_into(&settings, None, Some(path.clone())) {
-            Ok(_) => panic!("nothing is listening on port 1, so no session can be negotiated"),
-            Err(e) => e,
-        };
-        assert!(err.contains("127.0.0.1:1"), "{err}");
-        assert!(err.contains("POST"), "{err}");
+        // Where the receiver negotiates inside the state change, the refusal
+        // comes back from `start_into` and names the endpoint. Where it
+        // negotiates on a thread of its own the state change succeeds and the
+        // refusal arrives on the bus a moment later, which is what Windows
+        // does. Both are the same answer to an operator: this endpoint is not
+        // carrying media. Waiting for the second is bounded, because a
+        // receiver that never reports anything is a failure too.
+        match Watcher::start_into(&settings, None, Some(path.clone())) {
+            Err(err) => {
+                assert!(err.contains("127.0.0.1:1"), "{err}");
+                assert!(err.contains("POST"), "{err}");
+            }
+            Ok(watcher) => {
+                let deadline = std::time::Instant::now() + std::time::Duration::from_secs(30);
+                loop {
+                    let health = watcher.health();
+                    if health.state == godwinmix_sdk::wire::HealthState::Failing {
+                        break;
+                    }
+                    assert!(
+                        std::time::Instant::now() < deadline,
+                        "nothing is listening on 127.0.0.1:1, so the receiver has to go \
+                         failing; 30 s after start it still reports {:?} ({:?})",
+                        health.state,
+                        health.detail
+                    );
+                    std::thread::sleep(std::time::Duration::from_millis(100));
+                }
+            }
+        }
         let _ = std::fs::remove_file(&path);
     }
 
