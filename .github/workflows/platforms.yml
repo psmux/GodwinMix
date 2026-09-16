@@ -248,6 +248,27 @@ jobs:
           & .\tauri-app\target\release\godwinmix-desktop.exe --headless-check
           if ($LASTEXITCODE -ne 0) { throw "--headless-check failed" }
 
+      # What the mixer said when the headless check found it stopped. The
+      # desktop app writes its logs under the platform's log directory, and a
+      # runner has no other way to show them.
+      - name: The desktop app's logs, when the check failed
+        if: failure()
+        shell: bash
+        run: |
+          for dir in "$HOME/Library/Logs/mix.godwin.desktop" \
+                     "$HOME/.local/share/mix.godwin.desktop/logs" \
+                     "$HOME/.local/share/mix.godwin.desktop" \
+                     "$LOCALAPPDATA/mix.godwin.desktop/logs" \
+                     "$LOCALAPPDATA/mix.godwin.desktop"; do
+            [ -d "$dir" ] || continue
+            for f in "$dir"/*.log; do
+              [ -f "$f" ] || continue
+              echo "::group::$f"
+              tail -n 80 "$f"
+              echo "::endgroup::"
+            done
+          done
+
       # The number the whole brief turns on. Measured on the artefact a person
       # actually downloads, not on the directory it was made from.
       - name: The installer against the budget
