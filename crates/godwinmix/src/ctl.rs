@@ -603,8 +603,18 @@ impl Api {
             v.set_sensitive(true);
             headers.insert(AUTHORIZATION, v);
         }
+        // A deadline, so a core whose mixer loop has wedged is an error
+        // that names the state rather than a command that never returns.
+        // Every method answers inside five seconds and the long ones hand
+        // back a task, so a minute is generous; a slow link can raise it.
+        let timeout = std::env::var("GODWINMIX_HTTP_TIMEOUT_SECS")
+            .ok()
+            .and_then(|s| s.trim().parse::<u64>().ok())
+            .filter(|s| *s > 0)
+            .unwrap_or(60);
         let client = reqwest::Client::builder()
             .default_headers(headers)
+            .timeout(std::time::Duration::from_secs(timeout))
             .build()
             .context("building the HTTP client")?;
         Ok(Self { base: base.trim_end_matches('/').to_string(), client })
