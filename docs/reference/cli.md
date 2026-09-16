@@ -7,6 +7,8 @@ hand. Point it elsewhere with `--url` or `GODWINMIX_URL`, and pass `--token`
 when the mixer has one. `gmx` is the same binary under a shorter name, so
 `gmx ctl status` and `godwinmix ctl status` are one command.
 
+Every request has a deadline of sixty seconds, so a core that has stopped answering is an error rather than a command that never returns. `GODWINMIX_HTTP_TIMEOUT_SECS` raises or lowers it.
+
 ```sh
 godwinmix ctl status
 godwinmix ctl take cam2                 # or: take   (with no id, cuts to black)
