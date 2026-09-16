@@ -40,6 +40,10 @@ bad() {
 # run, because a shared runner cannot hold a 30 fps programme through a take
 # and the number on its own says nothing about the mixer. Unset, it is `bad`.
 SLACK="${GODWINMIX_TIMING_SLACK:-1}"
+# Every curl below carries --max-time: a core whose mixer loop has wedged
+# answers /api/v1/core/info and never /api/status or /metrics, and a request
+# with no deadline turns that into a job that runs until the runner kills it,
+# with no line in the log to say which step. Thirty seconds fails the step.
 late() {
     if [[ "$SLACK" != "1" ]]; then
         printf 'noted\n'
@@ -158,11 +162,11 @@ step "core starts"
 (cd "$WORK" && exec "$REPO/target/debug/godwinmix" --config "$WORK/godwinmix.toml") >"$LOG" 2>&1 &
 CORE_PID=$!
 for _ in $(seq 1 100); do
-    curl -fsS "$BASE/api/v1/core/info" "${AUTH[@]}" >/dev/null 2>&1 && break
+    curl -fsS --max-time 30 "$BASE/api/v1/core/info" "${AUTH[@]}" >/dev/null 2>&1 && break
     kill -0 "$CORE_PID" 2>/dev/null || break
     sleep 0.2
 done
-if curl -fsS "$BASE/api/v1/core/info" "${AUTH[@]}" >/dev/null 2>&1; then
+if curl -fsS --max-time 30 "$BASE/api/v1/core/info" "${AUTH[@]}" >/dev/null 2>&1; then
     ok
 else
     bad "the core never answered; see $LOG"
@@ -174,10 +178,10 @@ fi
 # --- the three doors --------------------------------------------------------
 
 step "GET / serves the UI"
-if curl -fsS "$BASE/" | grep -qi "<!doctype html>"; then ok; else bad "no page at /"; fi
+if curl -fsS --max-time 30 "$BASE/" | grep -qi "<!doctype html>"; then ok; else bad "no page at /"; fi
 
 step "GET /api/v1/core/info says api_level 1"
-INFO="$(curl -fsS "$BASE/api/v1/core/info" "${AUTH[@]}")"
+INFO="$(curl -fsS --max-time 30 "$BASE/api/v1/core/info" "${AUTH[@]}")"
 if python3 -c "import json,sys; d=json.load(sys.stdin); sys.exit(0 if d['api_level']==1 else 1)" <<<"$INFO"; then
     ok
 else
@@ -201,7 +205,7 @@ else
 fi
 
 step "POST /api/v1/sources adds test://smpte"
-ADD="$(curl -fsS -X POST "$BASE/api/v1/sources" "${AUTH[@]}" \
+ADD="$(curl -fsS --max-time 30 -X POST "$BASE/api/v1/sources" "${AUTH[@]}" \
     -H 'content-type: application/json' \
     -d '{"id":"bars","uri":"test://smpte","name":"Smoke bars"}')"
 if python3 -c "
@@ -220,20 +224,20 @@ step "a pattern videotestsrc lacks is refused, not fatal"
 BAD="$(curl -s -X POST "$BASE/api/v1/sources" "${AUTH[@]}" \
     -H 'content-type: application/json' \
     -d '{"id":"nope","uri":"test://bars"}')"
-if grep -q "smpte" <<<"$BAD" && curl -fsS "$BASE/api/v1/core/status" "${AUTH[@]}" >/dev/null; then
+if grep -q "smpte" <<<"$BAD" && curl -fsS --max-time 30 "$BASE/api/v1/core/status" "${AUTH[@]}" >/dev/null; then
     ok
 else
     bad "expected an error listing the patterns, got: $BAD"
 fi
 
 step "POST /api/v1/program/take puts it on air"
-TAKE="$(curl -fsS -X POST "$BASE/api/v1/program/take" "${AUTH[@]}" \
+TAKE="$(curl -fsS --max-time 30 -X POST "$BASE/api/v1/program/take" "${AUTH[@]}" \
     -H 'content-type: application/json' -d '{"source":"bars"}')"
 if grep -q '"bars"' <<<"$TAKE"; then ok; else bad "program.take answered: $TAKE"; fi
 
 step "GET /api/v1/sources shows it live"
 for _ in $(seq 1 50); do
-    LIST="$(curl -fsS "$BASE/api/v1/sources" "${AUTH[@]}")"
+    LIST="$(curl -fsS --max-time 30 "$BASE/api/v1/sources" "${AUTH[@]}")"
     grep -q '"state":"live"' <<<"$LIST" && break
     sleep 0.2
 done
@@ -251,14 +255,14 @@ else
 fi
 
 step "/metrics carries gmx_programme_frame_interval_ms"
-if curl -fsS "$BASE/metrics" | grep -q "gmx_programme_frame_interval_ms"; then
+if curl -fsS --max-time 30 "$BASE/metrics" | grep -q "gmx_programme_frame_interval_ms"; then
     ok
 else
     bad "the histogram is not in the scrape"
 fi
 
 step "GET /api/v1/snapshot/sheet returns a JPEG"
-if curl -fsS "$BASE/api/v1/snapshot/sheet?width=320" "${AUTH[@]}" -o "$WORK/sheet.jpg" \
+if curl -fsS --max-time 30 "$BASE/api/v1/snapshot/sheet?width=320" "${AUTH[@]}" -o "$WORK/sheet.jpg" \
     && [[ -s "$WORK/sheet.jpg" ]] \
     && [[ "$(head -c 2 "$WORK/sheet.jpg" | xxd -p)" == "ffd8" ]]; then
     ok
@@ -278,7 +282,7 @@ fi
 step "the mosaic goes after the linger"
 DOWN=0
 for _ in $(seq 1 40); do
-    SUBS="$(curl -fsS "$BASE/metrics" | awk '/^gmx_multiview_subscribers/ {print $2}')"
+    SUBS="$(curl -fsS --max-time 30 "$BASE/metrics" | awk '/^gmx_multiview_subscribers/ {print $2}')"
     if [[ "$SUBS" == "0" ]]; then
         DOWN=1
         break
@@ -304,7 +308,7 @@ if grep -qi "multiview\|mosaic" "$LOG"; then ok; else bad "nothing in the log ab
 # designer and an agent make.
 
 step "a second test source to build a scene from"
-curl -fsS -X POST "$BASE/api/v1/sources" "${AUTH[@]}" \
+curl -fsS --max-time 30 -X POST "$BASE/api/v1/sources" "${AUTH[@]}" \
     -H 'content-type: application/json' \
     -d '{"id":"ball","uri":"test://ball","name":"Smoke ball"}' >"$WORK/second.log" 2>&1
 if grep -q '"ball"' "$WORK/second.log"; then ok; else bad "$(cat "$WORK/second.log")"; fi
@@ -355,7 +359,7 @@ else
 fi
 
 step "scene.import.obs lands the full fixture with its filter report"
-OBS="$(curl -fsS -X POST "$BASE/api/v1/scenes/import/obs" "${AUTH[@]}" \
+OBS="$(curl -fsS --max-time 30 -X POST "$BASE/api/v1/scenes/import/obs" "${AUTH[@]}" \
     -H 'content-type: application/json' \
     -d "{\"path\": \"$REPO/tests/fixtures/obs/full.json\"}" 2>&1)"
 if python3 -c "
@@ -395,7 +399,7 @@ else
 fi
 
 step "scene.item.schema answers the graphic's OGraf schema"
-SCHEMA="$(curl -fsS "$BASE/api/v1/scenes/item/schema?type=ograf/lower-third" "${AUTH[@]}" 2>&1)"
+SCHEMA="$(curl -fsS --max-time 30 "$BASE/api/v1/scenes/item/schema?type=ograf/lower-third" "${AUTH[@]}" 2>&1)"
 if python3 -c "
 import json, sys
 d = json.load(sys.stdin)
@@ -424,14 +428,14 @@ else
 fi
 
 step "a {{speaker}} binding follows scene.params.set"
-curl -fsS -X POST "$BASE/api/v1/scenes/item/set" "${AUTH[@]}" \
+curl -fsS --max-time 30 -X POST "$BASE/api/v1/scenes/item/set" "${AUTH[@]}" \
     -H 'content-type: application/json' \
     -d '{"scene": "smoke graphic", "item": "speaker strap", "props": {"content": {"graphic": "ograf/lower-third", "params": {"name": "{{speaker}}"}}}}' \
     >/dev/null 2>&1
-curl -fsS -X POST "$BASE/api/v1/scenes/params/set" "${AUTH[@]}" \
+curl -fsS --max-time 30 -X POST "$BASE/api/v1/scenes/params/set" "${AUTH[@]}" \
     -H 'content-type: application/json' \
     -d '{"values": {"speaker": "Grace Hopper"}}' >/dev/null 2>&1
-BOUND="$(curl -fsS -X POST "$BASE/api/v1/scenes/apply_graphic" "${AUTH[@]}" \
+BOUND="$(curl -fsS --max-time 30 -X POST "$BASE/api/v1/scenes/apply_graphic" "${AUTH[@]}" \
     -H 'content-type: application/json' \
     -d '{"graphic": "ograf/lower-third", "values": {}}' 2>&1)"
 if python3 -c "
@@ -461,17 +465,17 @@ else
 fi
 
 step "the programme reports the scene it is on"
-if curl -fsS "$BASE/api/v1/program" "${AUTH[@]}" | grep -q '"scene":"smoke two"'; then
+if curl -fsS --max-time 30 "$BASE/api/v1/program" "${AUTH[@]}" | grep -q '"scene":"smoke two"'; then
     ok
 else
-    bad "$(curl -fsS "$BASE/api/v1/program" "${AUTH[@]}")"
+    bad "$(curl -fsS --max-time 30 "$BASE/api/v1/program" "${AUTH[@]}")"
 fi
 
 # Measured across the take and not over the whole run: the first interval of a
 # pipeline that has just started is always long, and what is being asserted is
 # that a take costs nothing, not that start up is instant.
 interval_counts() {
-    curl -fsS "$BASE/metrics" | awk '
+    curl -fsS --max-time 30 "$BASE/metrics" | awk '
         /^gmx_programme_frame_interval_ms_bucket\{le="100"\}/ { inside = $2 }
         /^gmx_programme_frame_interval_ms_count/ { total = $2 }
         END { print inside, total }'
@@ -517,7 +521,7 @@ fi
 
 step "arming a scene makes it the preview"
 "$GMX" ctl scene arm "smoke two" >"$WORK/scene-arm.log" 2>&1
-if curl -fsS "$BASE/api/v1/scenes" "${AUTH[@]}" | grep -q '"armed":true'; then
+if curl -fsS --max-time 30 "$BASE/api/v1/scenes" "${AUTH[@]}" | grep -q '"armed":true'; then
     ok
 else
     bad "$(cat "$WORK/scene-arm.log")"
@@ -570,7 +574,7 @@ else
 fi
 
 step "event/program.took carries the transition and its duration"
-TOOK="$(curl -fsS "$BASE/api/v1/program/history?limit=1" "${AUTH[@]}" 2>/dev/null)"
+TOOK="$(curl -fsS --max-time 30 "$BASE/api/v1/program/history?limit=1" "${AUTH[@]}" 2>/dev/null)"
 if [[ -n "$TOOK" ]]; then ok; else bad "program.history answered nothing"; fi
 
 step "a transition this core does not have is refused by name"
@@ -582,10 +586,10 @@ else
 fi
 
 step "and the programme is still on the scene it was on"
-if curl -fsS "$BASE/api/v1/program" "${AUTH[@]}" | grep -q '"scene":"smoke two"'; then
+if curl -fsS --max-time 30 "$BASE/api/v1/program" "${AUTH[@]}" | grep -q '"scene":"smoke two"'; then
     ok
 else
-    bad "$(curl -fsS "$BASE/api/v1/program" "${AUTH[@]}")"
+    bad "$(curl -fsS --max-time 30 "$BASE/api/v1/program" "${AUTH[@]}")"
 fi
 
 step "the armed scene is composited as a preview"
@@ -595,7 +599,7 @@ step "the armed scene is composited as a preview"
 # first ask, and on a slow machine it is not always up within one wait.
 FRAME=""
 for _ in 1 2 3 4 5; do
-    FRAME="$(curl -fsS "$BASE/api/v1/scenes/preview/frame?width=320" "${AUTH[@]}" 2>&1)"
+    FRAME="$(curl -fsS --max-time 30 "$BASE/api/v1/scenes/preview/frame?width=320" "${AUTH[@]}" 2>&1)"
     grep -q '"image"' <<<"$FRAME" && break
     sleep 1
 done
@@ -607,10 +611,10 @@ fi
 
 step "and the preview compositor went away with the asking"
 sleep 3
-if curl -fsS "$BASE/metrics" "${AUTH[@]}" | grep -q '^gmx_multiview_subscribers 0'; then
+if curl -fsS --max-time 30 "$BASE/metrics" "${AUTH[@]}" | grep -q '^gmx_multiview_subscribers 0'; then
     ok
 else
-    bad "$(curl -fsS "$BASE/metrics" "${AUTH[@]}" | grep multiview_subscribers)"
+    bad "$(curl -fsS --max-time 30 "$BASE/metrics" "${AUTH[@]}" | grep multiview_subscribers)"
 fi
 
 "$GMX" ctl take bars >/dev/null 2>&1
@@ -678,7 +682,7 @@ PYEOF
 PRESET_PID=$!
 PUP=0
 for _ in $(seq 1 80); do
-    if curl -fsS "http://127.0.0.1:$PPORT/api/v1/core/info" >"$WORK/pinfo.json" 2>/dev/null; then PUP=1; break; fi
+    if curl -fsS --max-time 30 "http://127.0.0.1:$PPORT/api/v1/core/info" >"$WORK/pinfo.json" 2>/dev/null; then PUP=1; break; fi
     sleep 0.25
 done
 if [[ $PUP -eq 1 ]]; then ok; else bad "the core did not come up: $(tail -3 "$WORK/preset-core.log")"; fi
@@ -688,7 +692,7 @@ UI="$(python3 -c 'import json,sys; d=json.load(open(sys.argv[1])).get("ui") or {
 if [[ "$UI" == "church calm icon 4" ]]; then ok; else bad "core.info ui is '${UI:-absent}'"; fi
 
 step "the preset's theme is served over HTTP"
-if curl -fsS "http://127.0.0.1:$PPORT/presets/church/theme.css" | grep -q -- "--live"; then
+if curl -fsS --max-time 30 "http://127.0.0.1:$PPORT/presets/church/theme.css" | grep -q -- "--live"; then
     ok
 else
     bad "no stylesheet at /presets/church/theme.css"
@@ -703,7 +707,7 @@ else
 fi
 
 step "preset.apply over the API returns the plan"
-APPLIED="$(curl -fsS -X POST "http://127.0.0.1:$PPORT/api/v1/preset/apply" \
+APPLIED="$(curl -fsS --max-time 30 -X POST "http://127.0.0.1:$PPORT/api/v1/preset/apply" \
     -H 'content-type: application/json' -d '{"name":"church","dry_run":true}' \
     | python3 -c 'import json,sys; r=json.load(sys.stdin); print(r["dry_run"], len(r["plan"]["steps"]))' 2>/dev/null)"
 if [[ "$APPLIED" == "True 3" ]]; then ok; else bad "preset.apply answered '${APPLIED:-nothing}'"; fi
@@ -830,7 +834,7 @@ else
 fi
 
 step "tool.call reaches the service and the answer comes back"
-CALLED="$(curl -fsS -X POST "$BASE/api/v1/tool/call" "${AUTH[@]}" \
+CALLED="$(curl -fsS --max-time 30 -X POST "$BASE/api/v1/tool/call" "${AUTH[@]}" \
     -H 'content-type: application/json' \
     -d '{"name": "fakeservice/echo", "arguments": {"say": "smoke"}}' 2>&1)"
 if grep -q '"echo"' <<<"$CALLED"; then
@@ -840,7 +844,7 @@ else
 fi
 
 step "device.discover asks the device and merges what it finds"
-FOUND="$(curl -fsS -X POST "$BASE/api/v1/device/discover" "${AUTH[@]}" \
+FOUND="$(curl -fsS --max-time 30 -X POST "$BASE/api/v1/device/discover" "${AUTH[@]}" \
     -H 'content-type: application/json' -d '{"timeout_ms": 2000}' 2>&1)"
 if grep -q "Fake Camera" <<<"$FOUND"; then
     ok
@@ -849,7 +853,7 @@ else
 fi
 
 step "plugin.reload swaps the running instances"
-RELOADED="$(curl -fsS -X POST "$BASE/api/v1/plugins/fakeservice/reload" "${AUTH[@]}" \
+RELOADED="$(curl -fsS --max-time 30 -X POST "$BASE/api/v1/plugins/fakeservice/reload" "${AUTH[@]}" \
     -H 'content-type: application/json' -d '{}' 2>&1)"
 if grep -q "fakeservice" <<<"$RELOADED"; then
     ok
@@ -897,7 +901,7 @@ else
     # to listen on is a param and the CLI takes only an id, a type and a URI.
     # Params ride at the top level: AddSourceRequest flattens them, which is the
     # seam a plugin's settings reach its config through.
-    curl -fsS -X POST "$BASE/api/v1/sources" "${AUTH[@]}" \
+    curl -fsS --max-time 30 -X POST "$BASE/api/v1/sources" "${AUTH[@]}" \
         -H 'content-type: application/json' \
         -d "{\"id\":\"phone\",\"uri\":\"ingest/rtmp\",\"type\":\"ingest/rtmp\",\"bind\":\"127.0.0.1\",\"port\":$RTMP_PORT}" \
         >"$WORK/ingest-source.log" 2>&1 || true
@@ -982,13 +986,13 @@ if [[ -n "$NODE_TOKEN" ]]; then
     fi
 
     step "a source placed on the node goes live"
-    curl -fsS -X POST "$BASE/api/v1/sources" "${AUTH[@]}" -H 'content-type: application/json' \
+    curl -fsS --max-time 30 -X POST "$BASE/api/v1/sources" "${AUTH[@]}" -H 'content-type: application/json' \
         -d '{"id":"remote","uri":"test://smpte","place":"node:smoke-node","transport":"srt","latency_ms":120}' \
         >"$WORK/node-source.log" 2>&1 || true
     LIVE=no
     for _ in $(seq 1 40); do
         sleep 0.5
-        if curl -fsS "$BASE/api/v1/sources/remote" "${AUTH[@]}" 2>/dev/null | grep -q '"live"'; then
+        if curl -fsS --max-time 30 "$BASE/api/v1/sources/remote" "${AUTH[@]}" 2>/dev/null | grep -q '"live"'; then
             LIVE=yes
             break
         fi
@@ -996,7 +1000,7 @@ if [[ -n "$NODE_TOKEN" ]]; then
     if [[ "$LIVE" == yes ]]; then ok; else bad "$(cat "$WORK/node-source.log"; tail -5 "$WORK/node-daemon.log")"; fi
 
     step "the node's heartbeat is on /metrics"
-    if curl -fsS "$BASE/metrics" "${AUTH[@]}" 2>/dev/null \
+    if curl -fsS --max-time 30 "$BASE/metrics" "${AUTH[@]}" 2>/dev/null \
         | grep -qE 'gmx_node_heartbeat_age_ms\{node="smoke-node"\}'; then
         ok
     else
@@ -1010,7 +1014,7 @@ if [[ -n "$NODE_TOKEN" ]]; then
     if grep -qi "already used" <<<"$SECOND"; then ok; else bad "$SECOND"; fi
 
     step "the source comes off and the node is removed"
-    curl -fsS -X DELETE "$BASE/api/v1/sources/remote" "${AUTH[@]}" >/dev/null 2>&1 || true
+    curl -fsS --max-time 30 -X DELETE "$BASE/api/v1/sources/remote" "${AUTH[@]}" >/dev/null 2>&1 || true
     kill "$NODE_PID" 2>/dev/null || true
     wait "$NODE_PID" 2>/dev/null || true
     NODE_PID=""
@@ -1033,7 +1037,7 @@ if [[ "$COUNT" == "5" ]]; then ok; else bad "minimal listed ${COUNT:-nothing}, w
 # --- shutdown ---------------------------------------------------------------
 
 step "core.shutdown stops the process"
-curl -fsS -X POST "$BASE/api/v1/core/shutdown" "${AUTH[@]}" -d '{}' \
+curl -fsS --max-time 30 -X POST "$BASE/api/v1/core/shutdown" "${AUTH[@]}" -d '{}' \
     -H 'content-type: application/json' >/dev/null 2>&1
 GONE=0
 for _ in $(seq 1 60); do
