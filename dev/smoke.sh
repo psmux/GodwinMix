@@ -1044,7 +1044,15 @@ for _ in $(seq 1 60); do
     kill -0 "$CORE_PID" 2>/dev/null || { GONE=1; break; }
     sleep 0.25
 done
-if [[ $GONE -eq 1 ]]; then ok; else bad "the core is still running after core.shutdown"; fi
+if [[ $GONE -eq 1 ]]; then
+    ok
+else
+    # Say what the core was doing, then take it down: a wedged shutdown left
+    # the old unbounded wait here holding a Linux runner for an hour. The
+    # mixer's watchdog line, if there is one, names the command it is stuck in.
+    bad "the core is still running after core.shutdown; the last lines of its log: $(tail -n 30 "$LOG" | tr '\n' ';' | cut -c1-2000)"
+    kill -9 "$CORE_PID" 2>/dev/null
+fi
 wait "$CORE_PID" 2>/dev/null
 CORE_PID=""
 
