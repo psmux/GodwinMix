@@ -425,6 +425,12 @@ input = "schemas/look.json"
     core.nodes.link("studio-b").unwrap().close("the test is done");
     until("the node to go", || !core.nodes.is_online("studio-b")).await;
     let _ = driving.await;
-    assert!(remote::nodes_with("faux/source").is_empty());
+    // The socket's pump forgets the plugins when it returns, and the link's
+    // own close marks the node offline first, on another task; wait for the
+    // offer to go the same way the arrival was waited for above.
+    until("the node's plugins to be withdrawn", || {
+        remote::nodes_with("faux/source").is_empty()
+    })
+    .await;
     godwinmix_core::plugin::loader::set_dir(was);
 }
