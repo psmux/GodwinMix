@@ -598,7 +598,9 @@ step "the armed scene is composited as a preview"
 # client does and this does too: the preview compositor is built by the
 # first ask, and on a slow machine it is not always up within one wait.
 FRAME=""
-for _ in 1 2 3 4 5; do
+# Five asks on a machine that keeps time, that many times the slack on one
+# that does not: each ask already waits two seconds for the compositor.
+for _ in $(seq 1 $((5 * ${SLACK%.*}))); do
     FRAME="$(curl -fsS --max-time 30 "$BASE/api/v1/scenes/preview/frame?width=320" "${AUTH[@]}" 2>&1)"
     grep -q '"image"' <<<"$FRAME" && break
     sleep 1
