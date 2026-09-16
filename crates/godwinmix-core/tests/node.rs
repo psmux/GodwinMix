@@ -428,8 +428,10 @@ input = "schemas/look.json"
     // The socket's pump forgets the plugins when it returns, and the link's
     // own close marks the node offline first, on another task; wait for the
     // offer to go the same way the arrival was waited for above.
+    // This node's offer, not the table's: the table is process wide and a
+    // neighbouring test may be holding a node of its own open.
     until("the node's plugins to be withdrawn", || {
-        remote::nodes_with("faux/source").is_empty()
+        !remote::nodes_with("faux/source").iter().any(|n| n == "studio-b")
     })
     .await;
     godwinmix_core::plugin::loader::set_dir(was);
