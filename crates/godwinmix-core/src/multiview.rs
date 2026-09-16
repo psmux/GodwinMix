@@ -1991,6 +1991,15 @@ mod tests {
         let (mut mix, handle, cmd_rx, _bus_rx) = crate::mixer::Mixer::build(cfg).unwrap();
         mix.start().unwrap();
         let mv = mix.multiview_handle();
+        // Held for the forensics below, the same way the churn test does:
+        // a Windows runner wedged on round 22 and printed nothing else.
+        let pipes: Vec<(String, gst::Pipeline)> = [
+            ("input-cam1".to_string(), mix.source_pipeline("cam1")),
+            ("programme".to_string(), Some(mix.program_pipeline().clone())),
+        ]
+        .into_iter()
+        .filter_map(|(name, p)| p.map(|p| (name, p)))
+        .collect();
         let preview = mix.preview_handle();
         let canvas = mix.canvas().clone();
         let thread = crate::mixer::spawn(mix, cmd_rx, handle.clone());
@@ -2014,8 +2023,9 @@ mod tests {
             let alive = tokio::time::timeout(Duration::from_secs(5), handle.status()).await;
             assert!(
                 matches!(alive, Ok(Ok(_))),
-                "the mixer stopped answering after preview teardown round {round}: {:?}",
-                alive.map(|r| r.map(|_| ()))
+                "the mixer stopped answering after preview teardown round {round}: {:?}{}",
+                alive.map(|r| r.map(|_| ())),
+                forensics(round as usize, &pipes)
             );
         }
 
