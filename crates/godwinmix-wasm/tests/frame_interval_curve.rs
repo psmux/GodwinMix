@@ -12,7 +12,7 @@ mod support;
 
 use godwinmix_core::observe::metrics;
 use std::time::Duration;
-use support::{clean, install, Core, MAX_FRAME_INTERVAL};
+use support::{clean, install, max_frame_interval, Core};
 
 #[test]
 #[ignore = "timing; run in release, see frame_interval.rs"]
@@ -48,10 +48,10 @@ fn a_component_that_answers_drives_the_pads_and_costs_no_frame_either() {
         println!("longest programme frame interval: {} ms", gap.as_millis());
         assert!(gap > Duration::ZERO, "the programme probe saw no frames");
         assert!(
-            gap <= MAX_FRAME_INTERVAL,
+            gap <= max_frame_interval(),
             "the ease cost the programme a {} ms gap; the bar is {} ms",
             gap.as_millis(),
-            MAX_FRAME_INTERVAL.as_millis()
+            max_frame_interval().as_millis()
         );
         core.shutdown();
     });

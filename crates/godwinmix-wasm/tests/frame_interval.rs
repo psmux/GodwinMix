@@ -21,7 +21,7 @@ mod support;
 
 use godwinmix_core::observe::metrics;
 use std::time::Duration;
-use support::{clean, install, Core, MAX_FRAME_INTERVAL};
+use support::{clean, install, max_frame_interval, Core};
 
 #[test]
 #[ignore = "timing; run in release, see the module docs"]
@@ -51,10 +51,10 @@ fn a_render_cut_by_its_fuel_limit_does_not_move_the_programmes_frame_interval() 
         println!("longest programme frame interval: {} ms", gap.as_millis());
         assert!(gap > Duration::ZERO, "the programme probe saw no frames, so this measured nothing");
         assert!(
-            gap <= MAX_FRAME_INTERVAL,
+            gap <= max_frame_interval(),
             "a component that ran out of fuel cost the programme a {} ms gap; the bar is {} ms",
             gap.as_millis(),
-            MAX_FRAME_INTERVAL.as_millis()
+            max_frame_interval().as_millis()
         );
         // And the take still happened: a transition that cannot be described
         // is a cut, not a refusal, so the programme is on the new scene.

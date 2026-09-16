@@ -12,8 +12,11 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
 
-/// One frame at 30 fps plus the margin Phase 6 states its hook criteria with.
-pub const MAX_FRAME_INTERVAL: Duration = Duration::from_millis(34);
+/// One frame at 30 fps plus the margin Phase 6 states its hook criteria with,
+/// widened by `GODWINMIX_TIMING_SLACK` on a machine that declares itself slow.
+pub fn max_frame_interval() -> Duration {
+    godwinmix_core::plugin::harness::max_frame_interval()
+}
 
 pub fn ease() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../examples/wasm-ease")

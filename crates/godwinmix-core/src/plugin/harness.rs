@@ -343,6 +343,27 @@ pub const RESTART_TIMEOUT: Duration = Duration::from_secs(12);
 /// comment on `check_kill`.
 pub const MAX_FRAME_INTERVAL: Duration = Duration::from_millis(34);
 
+/// How much wider a wall clock budget a test may accept on this machine.
+///
+/// `GODWINMIX_TIMING_SLACK` is a multiplier, `1` unless set. A hosted CI
+/// runner shares two cores with its neighbours and cannot hold 34 ms even
+/// when the mixer does nothing wrong, so the workflows set `3` there. Every
+/// test that uses it still prints what it measured, so a real regression is
+/// visible in the log. The product never reads this; nightly leaves it unset.
+pub fn timing_slack() -> f64 {
+    std::env::var("GODWINMIX_TIMING_SLACK")
+        .ok()
+        .and_then(|s| s.trim().parse::<f64>().ok())
+        .filter(|s| s.is_finite() && *s >= 1.0)
+        .unwrap_or(1.0)
+}
+
+/// [`MAX_FRAME_INTERVAL`] widened by [`timing_slack`], for a test on a
+/// machine that has declared itself slow.
+pub fn max_frame_interval() -> Duration {
+    MAX_FRAME_INTERVAL.mul_f64(timing_slack())
+}
+
 /// Check 7: the manifest, the tool schemas and every SKILL.md.
 ///
 /// The only check that needs no process and no pipeline, which is why

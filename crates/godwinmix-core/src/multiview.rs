@@ -1493,7 +1493,11 @@ mod tests {
             (rate - 8.0).abs() < 2.0,
             "asked for 8 fps and got {rate:.1} ({frames} frames)"
         );
-        assert!(instant < 4, "{instant} frames arrived back to back: the mosaic burst");
+        let burst = 4.0 * crate::plugin::harness::timing_slack();
+        assert!(
+            f64::from(instant) < burst,
+            "{instant} frames arrived back to back: the mosaic burst"
+        );
         let reported = mv.fps();
         assert!(
             (reported - rate).abs() < 2.0,

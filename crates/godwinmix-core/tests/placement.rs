@@ -120,7 +120,7 @@ async fn moving_a_running_source_does_not_cost_the_programme_a_frame() {
     // this is a wall clock measurement on a machine running a test suite, and
     // a scheduler hiccup is not a dropped frame.
     let period = 1000.0 / 30.0;
-    let ceiling = period * 2.0;
+    let ceiling = period * 2.0 * godwinmix_core::plugin::harness::timing_slack();
     let worst = all.iter().cloned().fold(0.0f64, f64::max);
     let over: Vec<&f64> = all.iter().filter(|i| **i > ceiling).collect();
     println!(

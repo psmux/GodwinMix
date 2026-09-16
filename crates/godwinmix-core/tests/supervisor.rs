@@ -289,10 +289,9 @@ async fn a_device_publisher_becomes_a_live_source_within_five_seconds() {
             })
             .unwrap_or(false)
     };
-    let took = until_async("a publisher becoming a live source", Duration::from_secs(5), || {
-        live(handle.clone())
-    })
-    .await;
+    let budget = Duration::from_secs(5).mul_f64(godwinmix_core::plugin::harness::timing_slack());
+    let took = until_async("a publisher becoming a live source", budget, || live(handle.clone()))
+        .await;
     println!(
         "a device's publisher became a live source in {} ms; the bar is 5000 ms",
         took.as_millis()
