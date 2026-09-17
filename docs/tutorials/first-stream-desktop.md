@@ -20,6 +20,10 @@ mixer's own account of it is in **Open logs folder** in the menu.
 
 ## 2. Add a source
 
+If the welcome tiles are up, press **Start empty** to get to the picker, or
+pick the setup closest to what you are doing and let it configure the mixer for
+you.
+
 Press **Add a source**. You are asked what kind: a camera or encoder sending
 RTMP, a video file, a website.
 
@@ -61,13 +65,15 @@ broadcast should not end because somebody tidied their desktop.
 
 ## What next
 
-* Your settings live in a file you can edit: **Open config folder** in the
-  menu. The canvas size, the bitrate and the reconnect behaviour are all there,
-  with a comment on every line.
+* **Start from a preset instead.** The welcome tiles come up on a mixer nobody
+  has set up: a church service, a classroom, a gaming stream, or your OBS
+  scenes brought across. Picking one configures the whole mixer and then puts
+  up a checklist you finish on the page, with a box for each stream key and an
+  Install button for anything missing. Settings, then **Show the welcome tiles
+  again**, brings it back later.
+* **The canvas size, the bitrate, the reconnect behaviour.** Settings. Every
+  one of them is a control with the reason for it written beside it.
 * The same app drives a mixer running on a server. **Connect to a mixer** in
   the menu, then "Another machine" and its address. Everything above works the
   same way, because it is the same page. See
   [the desktop app](../how-to/desktop-app.md).
-* Nothing here needs the app at all. `gmx` does the same things from a terminal
-  and the API does them from a script, which is how a mixer with no screen is
-  run.

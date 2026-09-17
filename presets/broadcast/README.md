@@ -12,9 +12,9 @@ The venues' encoders pointed at this machine's ports 9001 and 9002, an SRT addre
 
 ## Three steps
 
-1. `gmx preset apply broadcast`.
-2. Open the two listener ports on the firewall, put your delivery address into the `[[outputs]]` block, and set a passphrase on each SRT source if the venues use one.
-3. `gmx`. The venues connect on their own as soon as their encoders start; `gmx ctl source list` says which have arrived.
+1. `gmx preset apply broadcast`, or pick it on the welcome page if this machine has a screen.
+2. Finish the checklist: press Install for the SRT plugin, so the venue feeds and the network output can connect.
+3. Press **Studio** to go on air, then cut to a venue when its feed is green.
 
 ## When it does not work
 

@@ -7,89 +7,70 @@ You need a machine with GodwinMix on it and a YouTube account. No cameras yet.
 The preset starts with test patterns on purpose, so you find out whether the
 stream works before you find out whether the cameras do.
 
-## 1. Apply the preset (1 minute)
+Everything here happens on the page. You will not open a file.
 
-```sh
-gmx preset apply church --dry-run
-```
+## 1. Open the mixer (30 seconds)
 
-It prints what it would do and writes nothing. Read it. The part that matters:
+Start GodwinMix and open the address it prints, which on that machine is
+`http://localhost:8080`. The desktop app opens it for you.
 
-```
-plugins
-  MISSING  camera@^1        `gmx plugin add camera`
-  have     browser@^1       browser/source
-  have     rtmp@^1          rtmp/source, rtmp/output
-```
+Because nothing has been set up, the page asks what you are streaming and shows
+five tiles. Press **Church service**.
 
-The camera plugin is not here yet and that is fine: the two cameras in this
-preset are test patterns until it is. Everything else is built in.
+It takes a second or two: it writes the configuration, the four scenes and the
+layout, sets the theme, and brings up the sources and destinations that can
+start without a restart.
 
-```sh
-gmx preset apply church
-```
+## 2. Finish the checklist (3 minutes, mostly YouTube's)
 
-Three files now sit beside you: `godwinmix.toml`, `godwinmix.scenes.json` and
-`godwinmix.runtime.toml`. The first has the preset's own comments in it, which
-are the instructions for the rest of this page.
+The page now shows what is left, one row each, with a count at the top that
+starts at "0 of 3 done".
 
-## 2. Get your stream key (3 minutes, mostly YouTube's)
+**YouTube: needs a stream key.** Open YouTube Studio, then Create, then Go
+Live. Pick "Streaming software" if it asks. The page shows a **Stream URL** and
+a **Stream key**. Copy the key, paste it into the box on the row, and press
+**Save**.
 
-Open YouTube Studio, then Create, then Go Live. Pick "Streaming software" if it
-asks. The page shows a **Stream URL** and a **Stream key**. Leave it open.
+The row goes green and says the destination reconnects on its own. The mixer
+never hands a key back to any client, so the count moving to "1 of 3 done" is
+the mixer's own answer that the placeholder is gone, not this page assuming so.
 
-Open `godwinmix.toml` and find the two `[[outputs]]` blocks near the bottom.
-Put the key on the end of the YouTube URL, where `YOUR-STREAM-KEY` is:
+**Facebook: needs a stream key.** The same, from the Live producer page. Leave
+it if the service only goes to YouTube: a destination left on a placeholder
+keeps trying and failing, which is noise in the log rather than a fault, and
+the Outputs panel removes it.
 
-```toml
-[[outputs]]
-id = "youtube"
-type = "rtmp/output"
-uri = "rtmp://a.rtmp.youtube.com/live2/abcd-efgh-ijkl-mnop-qrst"
-```
+**The camera plugin is not installed.** Press **Install camera support**. It
+takes up to a minute and nothing restarts. The two cameras in this preset are
+test patterns until it is there, which is the point: the stream is real before
+the cameras are.
 
-Delete the whole `facebook` block if you are not using it. An output pointing at
-a key that does not exist reconnects forever, which is noise in the log rather
-than a fault, but there is no reason to have it.
+Then press **Go to the mixer**.
 
-## 3. Start it (30 seconds)
+## 3. Put something on air (10 seconds)
 
-```sh
-gmx
-```
+Press the **Wide** tile.
 
-It prints the address it is listening on. Open `http://localhost:8080`.
+The programme monitor at the top shows the test pattern, and the tile takes a
+red frame, which on this page always means "this is going out".
 
-The page is in the preset's own theme, and the tiles are icons rather than
-moving pictures, because that is what the church preset chose: a machine at the
-back of a hall keeps its cores for the encoder. Settings changes it.
-
-## 4. Put something on air (10 seconds)
-
-Press the **Wide** tile. The programme monitor at the top shows the test
-pattern, and the tile takes a red frame, which on this page always means "this
-is going out".
+The tiles are icons rather than moving pictures, because that is what the
+church preset chose: a machine at the back of a hall keeps its cores for the
+encoder. Settings changes it.
 
 Go back to YouTube Studio. Within about twenty seconds the preview fills in and
 the health indicator turns green. That is your stream.
 
-## 5. Check it is healthy
+## 4. Check it is healthy
 
-```sh
-gmx ctl status
-```
+The Outputs panel along the bottom has a row per destination, with its state
+and its reconnect count. `live` with no reconnects is what you want.
 
-```
-program : cam-wide
-backend : vtenc_h264_hw (hardware)
-source  : cam-wide   live       test://smpte/…
-source  : cam-pulpit live       test://ball/…
-output  : youtube    connected  0 reconnects
-```
+A reconnect count that climbs means the upload is not keeping up. A lower
+programme bitrate is the fix; 3000 looks better steady than 4500 stuttering.
 
-`connected` with `0 reconnects` is what you want. A number that climbs means the
-upload is not keeping up: lower `video_bitrate_kbps` in `[program]` to 3000 and
-restart. A service looks better steady at 3000 than stuttering at 4500.
+The Alerts panel carries anything the mixer wants to tell you, in the words the
+far end used.
 
 ## What you have
 
@@ -99,33 +80,40 @@ change is the only thing that can break.
 
 ## Next
 
-**Real cameras.** `gmx plugin add camera` installs the camera plugin. Then in
-`godwinmix.toml` change the two `test/source` entries to `camera/source` and put
-the device into `params`. Nothing else in the file moves.
+**Real cameras.** Once the camera plugin is installed, press **+ Add source**
+in the Sources panel and pick your camera off the list. The picker names the
+cameras this machine can see, so there is nothing to type. Then remove the test
+pattern: a source keeps the address it was made with, so a real camera is a new
+source rather than an edit.
 
-**The lyrics.** The `lyrics` source points at `http://127.0.0.1:8000/lyrics`.
-Point it at whatever your presentation software serves, and give that page a
+**The lyrics.** The `lyrics` source points at a page on this machine. Add one
+pointing at your presentation software's address instead, and give that page a
 transparent background: if it is white in a browser it is white on air.
 
-**The slides.** Drag a video file onto the page. It lands in the media library;
-change the `slides` source's `uri` to the name it lands under.
+**The slides.** Drag a video file onto the page. It lands in the media library
+and can be added as a source from there.
 
-**Stopping.** Press the tile again, or `gmx ctl output stop youtube`, then stop
-YouTube's end. Ctrl-C stops the mixer.
+**Stopping.** Press the tile again to go to black, stop each destination in the
+Outputs panel, then stop YouTube's end.
 
 ## If it does not work
 
-**Nothing at `localhost:8080`.** The mixer printed an address; use that one. On
-a server, `[control] bind` is `0.0.0.0:8080` in this preset, so use the server's
-own address and set a token before it is on a network anybody else is on.
+**Nothing at `localhost:8080`.** The mixer printed an address when it started;
+use that one. On a server, this preset listens on every address, so use the
+server's own, and set a token before it is on a network anybody else is on.
 
-**The output says `reconnecting`.** The key is wrong, or YouTube has not started
-its side. The Alerts panel carries the reason the server gave, verbatim.
+**The page asks for a token.** Whoever started the mixer has it. It is saved on
+that device, so you are asked once.
 
-**A tile is black.** `gmx ctl source list` says what each one is doing. A source
-that says `connecting` has nothing arriving at that address.
+**A destination says `reconnecting`.** The key is wrong, or YouTube has not
+started its side. The button on that row says **Add key** while the mixer still
+reads the address as a placeholder and **Edit** afterwards; either one takes a
+new key. The Alerts panel carries the reason the server gave, verbatim.
 
-**Everything else.** `gmx doctor` checks this machine: elements, encoders,
-ports, the config and the disk, and exits non zero when something the default
-pipeline needs is missing. It is the first thing to run and the first thing to
-paste into an issue.
+**A tile is black.** The Sources panel says what each one is doing. A source
+that says `connecting` has nothing arriving at that address yet.
+
+**Everything else.** Ctrl+K opens the command palette, which lists every method
+this mixer publishes, `core.doctor` among them: it checks the elements, the
+encoders, the ports, the configuration and the disk, and its answer is the
+first thing to paste into an issue.
