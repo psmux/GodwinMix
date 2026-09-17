@@ -69,6 +69,9 @@ struct Connection {
     /// carries one, so a grid that changes under a client has to be announced
     /// or the frames stop matching anything it knows.
     layout: u32,
+    /// The sources the last layout said the preview was drawing, for a client
+    /// that asked for one. None while it asked for no preview.
+    told_preview: Option<Vec<String>>,
     /// The programme clock, carried forward between status snapshots so every
     /// frame header this connection writes has a running time on it.
     clock: RunningTime,
@@ -105,6 +108,7 @@ pub async fn serve_rpc(socket: WebSocket, ctx: Ctx, token: Token) {
         program_scene: None,
         sources: Vec::new(),
         layout: 0,
+        told_preview: None,
         clock: RunningTime::default(),
         frame_no: 0,
         preview_no: 0,
@@ -407,8 +411,10 @@ impl Connection {
         self.sub = Some(Subscription { patterns: patterns.clone(), ext: request.ext });
         self.seq = self.ctx.app.mixer.event_seq();
         // A client re-subscribing is rebuilding from nothing, so the grid it
-        // was told about last time counts for nothing either.
+        // was told about last time, and what the preview was drawing, count
+        // for nothing either.
         self.layout = 0;
+        self.told_preview = None;
         serde_json::to_value(SubscribeResult {
             seq: self.seq,
             events: patterns,
@@ -439,37 +445,57 @@ impl Connection {
         self.flush().await
     }
 
-    /// Tell the client about the grid, when it wants the mosaic and the grid
-    /// is not the one it already has.
+    /// Tell the client about the grid, when it wants the mosaic and neither the
+    /// grid nor what the preview is drawing is what it already has.
     async fn send_layout(&mut self, multiview: &godwinmix_protocol::MultiviewStatus) -> Result<(), ()> {
         if !self.sub.as_ref().is_some_and(|s| s.wants("multiview.layout")) {
             return Ok(());
         }
         let layout = crate::control::layout_of(multiview);
-        if layout.id == self.layout {
+        // What the preview is drawing, for a client that asked for it. Arming
+        // a scene does not move a single cell, so a layout compared on its id
+        // alone would leave `preview_empty` saying "empty" for the rest of the
+        // connection while frames of the armed scene arrived beside it.
+        let preview = self.wants_preview.map(|_| self.preview_sources());
+        if layout.id == self.layout && preview == self.told_preview {
             return Ok(());
         }
         self.layout = layout.id;
+        self.told_preview = preview.clone();
         let mut value = serde_json::to_value(layout).map_err(|_| ())?;
         // A client that asked for the preview is told whether there is one. An
         // empty preview is a fact about the show, not an error, and saying so
         // is what stops a designer waiting for a picture that is not coming.
-        if self.wants_preview.is_some() {
+        if let Some(sources) = preview {
             if let Some(map) = value.as_object_mut() {
-                let sources = self.preview_sources();
                 map.insert("preview_empty".into(), json!(sources.is_empty()));
                 map.insert("preview_sources".into(), json!(sources));
                 if sources.is_empty() {
                     map.insert(
                         "preview_note".into(),
                         json!(
-                            "no scene is armed, so the preview is empty. Arm one with                              scene.preview.set when the scene server is available."
+                            "no scene is armed, so the preview is empty. Arm one with \
+                             scene.preview.set when the scene server is available."
                         ),
                     );
                 }
             }
         }
         self.send(rpc::notification("event/multiview.layout", value)).await
+    }
+
+    /// Say the grid again after the armed scene changed.
+    ///
+    /// Only a status event carries a `MultiviewStatus`, and arming a scene
+    /// raises none, so the one the layout is built from is read here. A client
+    /// that did not ask for the preview has nothing new to hear and is not
+    /// made to wait on the mixer for it.
+    async fn resend_layout(&mut self) -> Result<(), ()> {
+        if self.wants_preview.is_none() {
+            return Ok(());
+        }
+        let Ok(status) = self.ctx.app.mixer.status().await else { return Ok(()) };
+        self.send_layout(&status.multiview).await
     }
 
     /// One event: remember what it says, then write it out if this client
@@ -509,6 +535,12 @@ impl Connection {
         }
         if moves_tally {
             self.send_tally().await?;
+        }
+        // A scene armed or cleared changes what the preview is drawing without
+        // moving a cell, so the layout is said again for whoever is watching
+        // the preview.
+        if name == "preview.changed" {
+            self.resend_layout().await?;
         }
         Ok(())
     }
@@ -680,6 +712,7 @@ impl Connection {
         self.send(rpc::notification("event/resync", value)).await?;
         self.seq = self.ctx.app.mixer.event_seq();
         self.layout = 0;
+        self.told_preview = None;
         self.after_subscribe().await
     }
 }

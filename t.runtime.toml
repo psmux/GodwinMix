@@ -1,0 +1,31 @@
+# Sources and outputs managed from the GodwinMix UI or API.
+# These lists take precedence over the ones in the config file.
+# Delete this file to go back to the config file's lists.
+
+outputs = []
+
+[[sources]]
+id = "bars"
+type = "test/source"
+uri = "test://smpte"
+stall_timeout_secs = 2.0
+rtmp_client = "auto"
+superimpose = "off"
+gain = 1.0
+muted = false
+
+[sources.params]
+uri = "test://smpte"
+
+[[sources]]
+id = "ball"
+type = "test/source"
+uri = "test://ball"
+stall_timeout_secs = 2.0
+rtmp_client = "auto"
+superimpose = "off"
+gain = 1.0
+muted = false
+
+[sources.params]
+uri = "test://ball"
