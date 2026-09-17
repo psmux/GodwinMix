@@ -10,7 +10,7 @@ import { Store } from "../client/store.js";
 import { SchemaForm } from "../client/schema-form.js";
 import { Client } from "../client/index.js";
 import { RpcError, CODES } from "../client/errors.js";
-import { rank } from "../shell/palette.js";
+import { rank, paramsSchema } from "../shell/palette.js";
 import { chordOf, DEFAULT_MAP } from "../shell/keymap.js";
 import { IS_MAC } from "../shell/dom.js";
 import { kindOfUri } from "../client/kinds.js";
@@ -21,6 +21,7 @@ import { WelcomePanel } from "../panels/welcome/panel.js";
 import { connect } from "../client/index.js";
 import { shell, panelSection } from "../shell/shell.js";
 import { buildTile, syncTile } from "../panels/sources/tile.js";
+import { settableOnly, setRequest } from "../panels/sources/setreq.js";
 import { SceneMirror } from "../kits/protocol/mirror.js";
 import { Prediction, mergeProps } from "../kits/protocol/predict.js";
 import { gizmosFor, handlesFor, applyDrag } from "../kits/canvas/gizmos.js";
@@ -419,6 +420,58 @@ test("the palette prefers a title that starts with what was typed", () => {
   eq(rank(cmds, "take")[0].id, "a");
   eq(rank(cmds, "add")[0].id, "b");
   eq(rank(cmds, "zzz").length, 0);
+});
+
+test("a method whose params are a $ref still gets its fields", () => {
+  // How nearly every method in the protocol is written: params point into the
+  // document's $defs. Reading `properties` off the reference finds nothing,
+  // which is what made the palette send {} for 91 of the 123 methods.
+  const method = {
+    name: "plugin.add",
+    params: { $ref: "#/$defs/AddPluginRequest" },
+    $defs: {
+      AddPluginRequest: {
+        type: "object",
+        required: ["source"],
+        properties: { source: { type: "string", title: "Source" } },
+      },
+    },
+  };
+  const schema = paramsSchema(method);
+  ok(schema.properties && schema.properties.source, "the field came through");
+  const form = new SchemaForm(schema, {});
+  ok(form.el.querySelector("input"), "and the form drew a control for it");
+});
+
+test("a method that takes nothing still gets an empty form, not a broken one", () => {
+  const schema = paramsSchema({ name: "core.shutdown", params: { type: "object", properties: {} } });
+  eq(Object.keys(schema.properties || {}).length, 0);
+});
+
+// ------------------------------------------------------- the source drawer
+
+test("the drawer does not offer an address source.set cannot change", () => {
+  const kind = {
+    type: "object",
+    required: ["uri"],
+    properties: { uri: { type: "string" }, name: { type: "string" } },
+  };
+  const settable = settableOnly(kind);
+  ok(!("uri" in settable.properties), "uri is gone");
+  ok(settable.required.indexOf("uri") === -1, "and it is not required either");
+  ok("name" in settable.properties, "what can be set is still there");
+});
+
+test("what the drawer sends is split the way source.set reads it", () => {
+  const req = setRequest("cam1", { name: "Wide", color: "#fff", superimpose: "auto", uri: undefined });
+  eq(req.id, "cam1");
+  eq(req.name, "Wide");
+  eq(req.color, "#fff");
+  // Anything the request has no field for goes to params, which source.set
+  // merges, rather than to the top level, where serde drops it in silence.
+  eq(req.params.superimpose, "auto");
+  ok(!("superimpose" in req), "it did not go out at the top level");
+  ok(!("uri" in req), "an undefined value is left out");
 });
 
 // ---------------------------------------------------------------- keymap
