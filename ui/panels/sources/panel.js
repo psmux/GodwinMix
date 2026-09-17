@@ -1,9 +1,13 @@
-// The tray: every input as a tile.
+// The tray: every source as a tile.
 //
 // This is the panel 05 section 3a is about. Tiles you select, rename, colour,
 // sweep over and tap. A tap puts a source on air; in producer mode it arms it
 // instead. The gallery toggle steps every tile between live, snapshot, icon and
 // label, and only the live mode costs the core anything.
+//
+// Sources are global and scenes reference them, so the panel has two scopes:
+// what the focused scene draws, which is what an operator works in, and
+// everything the mixer has. The choice is remembered on this device.
 
 import { el, clear, on } from "../../shell/dom.js";
 import { DragSelect } from "../../shell/pointer.js";
@@ -23,6 +27,17 @@ import { buildTile, syncTile, setTileMode } from "./tile.js";
 import { setLocal, nameOf } from "./local.js";
 import { settableOnly, setRequest } from "./setreq.js";
 import { emptyState } from "../../shell/firstrun.js";
+import { focusedScene, onFocusChanged } from "../../shell/focus.js";
+
+const SCOPE_KEY = "gmx.sources.scope";
+
+function savedScope() {
+  try {
+    return localStorage.getItem(SCOPE_KEY) === "all" ? "all" : "scene";
+  } catch {
+    return "scene";
+  }
+}
 
 class SourcesPanel extends HTMLElement {
   static get panel() {
@@ -41,6 +56,7 @@ class SourcesPanel extends HTMLElement {
     this.tiles = new Map();
     this.selection = new Selection();
     this.filter = "";
+    this.scope = savedScope();
     this.perTile = new Map();
 
     this.search = el("input", { type: "search", placeholder: "Filter", "aria-label": "Filter sources", style: { maxWidth: "180px" } });
@@ -55,13 +71,18 @@ class SourcesPanel extends HTMLElement {
     on(this.modeSelect, "change", () => setSetting("gallery", this.modeSelect.value));
 
     this.count = el("span.sm.dim");
+    this.sceneTab = el("button", { text: "In this scene", onclick: () => this.setScope("scene") });
+    this.allTab = el("button", { text: "All sources", onclick: () => this.setScope("all") });
+    this.scopeTabs = el("div.tabs", { "aria-label": "Which sources" }, [this.sceneTab, this.allTab]);
+    this.addButton = el("button.btn.primary", { text: "Add", title: "Ctrl+N", onclick: () => this.addSource() });
     this.bar = el("div.row.pad", {}, [
       el("strong", { text: "Sources" }),
       this.count,
+      this.scopeTabs,
       el("span.grow"),
       this.search,
       this.modeSelect,
-      el("button.btn.primary", { text: "Add", title: "Ctrl+N", onclick: () => openPicker(this.client, "source") }),
+      this.addButton,
     ]);
 
     this.grid = el("div.gallery", { role: "listbox", "aria-label": "Sources" });
@@ -90,6 +111,12 @@ class SourcesPanel extends HTMLElement {
         if (key === "tileWidth" || key === "multiviewFps") this.retune();
       }),
       on(document, "visibilitychange", () => this.retune()),
+      onFocusChanged(() => this.render(this.client.state)),
+      this.client.on("event", ({ name }) => {
+        // A scene edit never touches the mixer's own state, so nothing else
+        // would redraw a scoped tray after somebody drops a source on a scene.
+        if (name === "scene.patch") this.sceneChanged();
+      }),
       registerAll(this.commands()),
     ];
 
@@ -111,6 +138,7 @@ class SourcesPanel extends HTMLElement {
     if (this.drag) this.drag.destroy();
     if (this.io) this.io.disconnect();
     if (this.ro) this.ro.disconnect();
+    if (this.sceneTimer) clearTimeout(this.sceneTimer);
     dropViews("tile:");
     this.release();
     if (this.positionWant) this.positionWant.release();
@@ -119,9 +147,57 @@ class SourcesPanel extends HTMLElement {
   // ---------------------------------------------------------------- data
 
   sources(s) {
-    const list = s.sources || [];
+    let list = s.sources || [];
+    const scene = this.scopedTo();
+    if (scene) {
+      const drawn = new Set(scene.sources || []);
+      list = list.filter((x) => drawn.has(x.id));
+    }
     if (!this.filter) return list;
     return list.filter((x) => (nameOf(x) + " " + x.id + " " + x.uri).toLowerCase().includes(this.filter));
+  }
+
+  /**
+   * The focused scene's summary, whatever the scope is, or null.
+   *
+   * Null covers more than an unfocused mixer: a core with no scene server, a
+   * collection with no scenes in it and a remembered focus that points at a
+   * scene somebody has since removed all answer null here, and every one of
+   * them means the panel shows every source the mixer has. A tray that hides
+   * everything helps nobody.
+   */
+  focusedSummary() {
+    const scenes = this.sceneClient();
+    if (!scenes) return null;
+    const ids = scenes.scenes().map((x) => x.id);
+    if (!ids.length) return null;
+    const id = focusedScene(ids);
+    return id ? scenes.summary(id) : null;
+  }
+
+  /** The scene this panel is filtered to, or null for all of them. */
+  scopedTo() {
+    return this.scope === "scene" ? this.focusedSummary() : null;
+  }
+
+  setScope(scope) {
+    if (scope === this.scope) return;
+    this.scope = scope;
+    try {
+      localStorage.setItem(SCOPE_KEY, scope);
+    } catch {
+      /* the choice lasts the session */
+    }
+    this.render(this.client.state);
+  }
+
+  /** A scene changed under us. Debounced, because a drag is a patch a frame. */
+  sceneChanged() {
+    if (this.sceneTimer) return;
+    this.sceneTimer = setTimeout(() => {
+      this.sceneTimer = null;
+      if (this.scope === "scene") this.render(this.client.state);
+    }, 40);
   }
 
   order() {
@@ -143,6 +219,7 @@ class SourcesPanel extends HTMLElement {
     }
     const list = this.sources(s);
     this.count.textContent = list.length ? `${list.length}` : "";
+    this.paintScope();
 
     const signature = list.map((x) => [x.id, x.has_audio !== false, x.seekable === true].join(":")).join("|");
     if (signature !== this.signature) {
@@ -171,18 +248,56 @@ class SourcesPanel extends HTMLElement {
       if (producer && source.id === document.body.dataset.armed) tile.node.classList.add("armed");
     });
 
-    if (!s.sources.length && !this.filter) {
-      if (!this.empty) {
-        this.empty = emptyState(() => openPicker(this.client, "source"));
-        this.appendChild(this.empty);
-      }
-      this.grid.hidden = true;
-    } else if (this.empty) {
-      this.empty.remove();
-      this.empty = null;
-      this.grid.hidden = false;
-    }
+    this.paintEmpty(s, list);
     this.retune();
+  }
+
+  /**
+   * The two scope buttons, named after the scene they would show.
+   *
+   * Hidden outright when there is no scene to name: a mixer with no scenes
+   * yet, or a core with no scene server, has one list of sources and a choice
+   * between it and itself is noise in the bar.
+   */
+  paintScope() {
+    const scene = this.focusedSummary();
+    this.scopeTabs.hidden = !scene;
+    if (scene) this.sceneTab.textContent = `In ${scene.name}`;
+    const scoped = !!scene && this.scope === "scene";
+    this.sceneTab.classList.toggle("on", scoped);
+    this.allTab.classList.toggle("on", !scoped);
+  }
+
+  /**
+   * Nothing to show. Three different nothings: no sources on the mixer at all,
+   * which is the first run tiles; nothing in the scene being shown, which is a
+   * scene to add to; and a filter that matches nothing, which is the operator
+   * mid keystroke and wants the grid left alone.
+   */
+  paintEmpty(s, list) {
+    const scene = this.scopedTo();
+    let key = null;
+    if (!this.filter && !s.sources.length) key = "first";
+    else if (!this.filter && !list.length && scene) key = `scene:${scene.id}:${scene.name}`;
+    if (key !== this.emptyKey) {
+      if (this.empty) this.empty.remove();
+      this.empty = null;
+      this.emptyKey = key;
+      if (key === "first") this.empty = emptyState(() => this.addSource());
+      else if (key) this.empty = this.scopedEmpty(scene);
+      if (this.empty) this.appendChild(this.empty);
+    }
+    this.grid.hidden = !!this.empty;
+  }
+
+  scopedEmpty(scene) {
+    return el("div.empty", {}, [
+      el("div", {}, [
+        el("h2", { text: `Nothing in ${scene.name} yet` }),
+        el("p.dim", { text: "Add a source and it lands in this scene. The other tab has everything the mixer knows about." }),
+        el("button.btn.primary", { text: `Add to ${scene.name}`, onclick: () => this.addSource() }),
+      ]),
+    ]);
   }
 
   rebuild(list) {
@@ -287,6 +402,11 @@ class SourcesPanel extends HTMLElement {
 
   // ------------------------------------------------------------ actions
 
+  /** The Add button, the Ctrl+N chord and both empty states. */
+  addSource() {
+    return openPicker(this.client, "source");
+  }
+
   activate(id) {
     const tile = this.tiles.get(id);
     if (settings().gallery === "snapshot" && tile) {
@@ -316,6 +436,20 @@ class SourcesPanel extends HTMLElement {
     const node = document.querySelector("gmx-scenes");
     if (!node || !node.scenes || !node.scenes.supported) return null;
     return node.scenes.scenes().length ? node : null;
+  }
+
+  /**
+   * The same panel's scene client, with no scene in it required.
+   *
+   * `scenesPanel` answers null for an empty collection because the number keys
+   * fall back to the sources then. The scope has the opposite need: a mixer
+   * with one empty Default scene is exactly the case that has to be placed in,
+   * so this one answers whenever the panel is there and its core supports it.
+   */
+  sceneClient() {
+    const node = document.querySelector("gmx-scenes");
+    if (!node || !node.scenes || !node.scenes.supported) return null;
+    return node.scenes;
   }
 
   /**
