@@ -246,6 +246,28 @@ impl SceneServer {
         Ok(armed.and_then(|id| self.list().into_iter().find(|s| s.id == id)))
     }
 
+    /// Every source a named scene actually draws, for whoever has to say
+    /// which cameras are live.
+    ///
+    /// The preview side of tally has always read `preview_layout`. The
+    /// programme side had nothing to read, so it compared each source id
+    /// against the one the mixer names, which is null for any scene of more
+    /// than one item, and every camera in a two box read "off" while it was
+    /// on air. Same composition, same alpha rule, so the two sides of a tally
+    /// agree about what "drawn" means.
+    pub fn sources_in(&self, which: &str) -> Vec<String> {
+        let inner = self.inner.lock();
+        let Ok(scene) = find::scene(&inner.doc, which) else { return Vec::new() };
+        let mut sources: Vec<String> = compose::placements(&inner.doc, scene, &inner.canvas)
+            .into_iter()
+            .filter(|p| p.alpha > 0.0)
+            .map(|p| p.source)
+            .collect();
+        sources.sort();
+        sources.dedup();
+        sources
+    }
+
     /// The armed scene's placements, at multiview size, for whoever is
     /// building the preview picture.
     ///

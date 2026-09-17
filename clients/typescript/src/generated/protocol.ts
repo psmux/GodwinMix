@@ -1179,6 +1179,11 @@ export interface SetSettingsRequest {
  * Every field is optional and only what is named moves, which is how every
  * other setter in this protocol works. The one that matters here is `place`:
  * it moves a running source between the core, a sidecar and a node.
+ *
+ * Unknown fields are refused rather than dropped. Serde's default is to
+ * ignore what it does not recognise, and a setter that answers 200 to a field
+ * it threw away is indistinguishable from one that saved it: the first party
+ * drawer sent `uri` here for months and told the operator it was saved.
  */
 export interface SetSourceRequest {
   color?: string | null;
