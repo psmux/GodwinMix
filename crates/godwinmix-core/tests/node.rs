@@ -106,8 +106,16 @@ impl Drop for Core {
     }
 }
 
-/// Wait for a condition, or fail with what was actually true.
-async fn until(what: &str, mut check: impl FnMut() -> bool) {
+/// Wait for a condition, and on a timeout say what the world looked like.
+///
+/// These tests fail on a loaded runner and never on the machine of whoever has
+/// to fix them, so the failure has to carry its own diagnosis or the next
+/// person is reading tea leaves out of a CI log.
+async fn until(
+    what: &str,
+    mut check: impl FnMut() -> bool,
+    diagnose: impl Fn() -> String,
+) {
     let deadline = std::time::Instant::now() + Duration::from_secs(20);
     while std::time::Instant::now() < deadline {
         if check() {
@@ -115,7 +123,38 @@ async fn until(what: &str, mut check: impl FnMut() -> bool) {
         }
         tokio::time::sleep(Duration::from_millis(50)).await;
     }
-    panic!("timed out waiting for {what}");
+    panic!("timed out waiting for {what}\n{}", diagnose());
+}
+
+/// Everything that decides whether a node's plugins are offered, in one block.
+///
+/// The registry's view of the node, the state of its bridge, the whole process
+/// wide remote table (which every test in this binary writes to), what the
+/// core's watcher heard, and what the node's own task is doing.
+fn diagnosis(core: &Core, node: &str, daemon: &str) -> String {
+    use godwinmix_core::plugin::remote;
+    let view = core.nodes.view(node);
+    let offered: Vec<String> =
+        remote::reachable().into_iter().map(|(id, on)| format!("{id} on {on}")).collect();
+    // The registry's "never beaten" is a sentinel the size of half a u64, and
+    // printing it raw is how a reader loses ten minutes.
+    let beat = match view.as_ref().map(|v| v.heartbeat_age_ms) {
+        None => "no record".to_string(),
+        Some(age) if age >= u64::MAX / 2 => "never".to_string(),
+        Some(age) => format!("{age} ms ago"),
+    };
+    format!(
+        "  the registry's {node}: {}, online: {}, last beat: {beat}\n\
+         \x20 its bridge: {}\n\
+         \x20 the remote plugin table (process wide, every test in this binary): [{}]\n\
+         \x20 the core's watcher heard: [{}]\n\
+         \x20 the node's own task: {daemon}",
+        view.as_ref().map_or("not in the registry".to_string(), |v| v.state.clone()),
+        core.nodes.is_online(node),
+        core.nodes.link_state(node),
+        offered.join(", "),
+        core.seen.lock().join(", "),
+    )
 }
 
 /// A node with no certificate may enrol exactly once, and the certificate it
@@ -179,8 +218,11 @@ async fn a_token_for_another_node_and_an_expired_token_are_both_refused() {
 /// takes the node's name out of it rather than out of anything the node says.
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn the_bridge_is_mutual_tls_and_the_name_comes_from_the_certificate() {
+    // A name of its own: see the note on the describe test below. Every node
+    // in this binary shares one process wide plugin table, keyed by name.
+    const NODE: &str = "studio-mtls";
     let core = Core::start("mtls").await;
-    let options = core.options("studio-b", Some(core.token("studio-b")));
+    let options = core.options(NODE, Some(core.token(NODE)));
     let identity = daemon::ensure_identity(&options).await.unwrap();
 
     let node = daemon::Node::new(options).unwrap();
@@ -195,20 +237,25 @@ async fn the_bridge_is_mutual_tls_and_the_name_comes_from_the_certificate() {
             outcome
         }
     });
-    until("the node to join", || core.nodes.is_online("studio-b")).await;
+    until(
+        "the node to join",
+        || core.nodes.is_online(NODE),
+        || diagnosis(&core, NODE, task_state(&driving)),
+    )
+    .await;
 
-    let view = core.nodes.view("studio-b").expect("the node is in the registry");
+    let view = core.nodes.view(NODE).expect("the node is in the registry");
     assert_eq!(view.state, "online");
     assert_eq!(
         view.identity.as_deref(),
-        Some("spiffe://godwinmix/node/studio-b"),
+        Some("spiffe://godwinmix/node/studio-mtls"),
         "the core must have read the identity off the presented client certificate"
     );
-    assert!(core.saw("joined:studio-b"));
+    assert!(core.saw(&format!("joined:{NODE}")));
 
     // A hello that claims another name on this connection is refused, because
     // the certificate has already settled who this is.
-    let link = core.nodes.link("studio-b").expect("a live bridge");
+    let link = core.nodes.link(NODE).expect("a live bridge");
     link.close("the test is done");
     driving.abort();
 }
@@ -218,8 +265,9 @@ async fn the_bridge_is_mutual_tls_and_the_name_comes_from_the_certificate() {
 /// when it comes back they are started again with no core restart.
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn cutting_the_socket_fails_the_sources_and_reconnecting_restores_them() {
+    const NODE: &str = "studio-cut";
     let core = Core::start("cut").await;
-    let options = core.options("studio-b", Some(core.token("studio-b")));
+    let options = core.options(NODE, Some(core.token(NODE)));
     let identity = daemon::ensure_identity(&options).await.unwrap();
 
     let node = daemon::Node::new(options.clone()).unwrap();
@@ -228,7 +276,12 @@ async fn cutting_the_socket_fails_the_sources_and_reconnecting_restores_them() {
         let identity = identity.clone();
         async move { daemon::connect(&node, &identity).await }
     });
-    until("the node to join", || core.nodes.is_online("studio-b")).await;
+    until(
+        "the node to join",
+        || core.nodes.is_online(NODE),
+        || diagnosis(&core, NODE, task_state(&first)),
+    )
+    .await;
 
     // The reconciler wants two sources on it. The node has neither, so both
     // are decisions to start.
@@ -237,7 +290,7 @@ async fn cutting_the_socket_fails_the_sources_and_reconnecting_restores_them() {
         reconciler.want(node::reconcile::Desired {
             instance: id.into(),
             type_id: "test/source".into(),
-            place: node::Place::Node("studio-b".into()),
+            place: node::Place::Node(NODE.into()),
             params: serde_json::Value::Null,
             transport: wire::BridgeTransport::Srt,
             latency_ms: None,
@@ -251,8 +304,13 @@ async fn cutting_the_socket_fails_the_sources_and_reconnecting_restores_them() {
     );
 
     // Pull the cable.
-    core.nodes.link("studio-b").unwrap().close("the test pulled the cable");
-    until("the node to go offline", || !core.nodes.is_online("studio-b")).await;
+    core.nodes.link(NODE).unwrap().close("the test pulled the cable");
+    until(
+        "the node to go offline",
+        || !core.nodes.is_online(NODE),
+        || diagnosis(&core, NODE, task_state(&first)),
+    )
+    .await;
     let cut = reconciler.tick();
     assert!(
         cut.iter().all(|a| matches!(a, node::reconcile::Action::Unreachable { .. })),
@@ -270,7 +328,12 @@ async fn cutting_the_socket_fails_the_sources_and_reconnecting_restores_them() {
         let node = node.clone();
         async move { daemon::connect(&node, &identity).await }
     });
-    until("the node to come back", || core.nodes.is_online("studio-b")).await;
+    until(
+        "the node to come back",
+        || core.nodes.is_online(NODE),
+        || diagnosis(&core, NODE, task_state(&second)),
+    )
+    .await;
     let back = reconciler.tick();
     assert!(
         back.iter().any(|a| matches!(a, node::reconcile::Action::Back { .. })),
@@ -289,17 +352,23 @@ async fn cutting_the_socket_fails_the_sources_and_reconnecting_restores_them() {
 /// machinery underneath.
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn a_nodes_plugins_are_offered_by_the_core() {
+    const NODE: &str = "studio-offers";
     let core = Core::start("plugins").await;
-    let options = core.options("studio-b", Some(core.token("studio-b")));
+    let options = core.options(NODE, Some(core.token(NODE)));
     let identity = daemon::ensure_identity(&options).await.unwrap();
     let node = daemon::Node::new(options).unwrap();
     let driving = tokio::spawn({
         let node = node.clone();
         async move { daemon::connect(&node, &identity).await }
     });
-    until("the node to join", || core.nodes.is_online("studio-b")).await;
+    until(
+        "the node to join",
+        || core.nodes.is_online(NODE),
+        || diagnosis(&core, NODE, task_state(&driving)),
+    )
+    .await;
 
-    let view = core.nodes.view("studio-b").unwrap();
+    let view = core.nodes.view(NODE).unwrap();
     assert!(view.clock_synced || view.heartbeat_age_ms < 3_000, "it is beating: {view:?}");
     assert_eq!(view.platform.as_deref(), Some(daemon::platform()));
     // A node with no plugins installed reports none, and that is a fact rather
@@ -325,10 +394,17 @@ fn every_enrolment_refusal_says_what_to_do() {
 /// settings schema. This is the acceptance criterion "a remote plugin's
 /// settings form, tools and health appear identically to a local one", checked
 /// at the layer where it is decided.
+///
+/// The node is named for this test and no other. The remote plugin table is
+/// process wide, keyed by node name, and every test in this file that connects
+/// a node writes to it; a shared name meant one test's hello replaced another's
+/// entry and one test's departure withdrew another's plugins, which is what
+/// made this test flaky on a loaded runner and never on a fast desk.
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn a_plugin_on_a_node_looks_the_same_as_one_installed_here() {
+    const NODE: &str = "studio-describe";
     let core = Core::start("describe").await;
-    let options = core.options("studio-b", Some(core.token("studio-b")));
+    let options = core.options(NODE, Some(core.token(NODE)));
     let identity = daemon::ensure_identity(&options).await.unwrap();
 
     // A plugin in a directory of its own, which the node will find and report.
@@ -386,16 +462,24 @@ input = "schemas/look.json"
         let node = node.clone();
         async move { daemon::connect(&node, &identity).await }
     });
-    until("the node to join", || core.nodes.is_online("studio-b")).await;
-    until("the node's plugins to arrive", || {
-        !godwinmix_core::plugin::remote::nodes_with("faux/source").is_empty()
-    })
+    until(
+        "the node to join",
+        || core.nodes.is_online(NODE),
+        || diagnosis(&core, NODE, task_state(&driving)),
+    )
+    .await;
+    use godwinmix_core::plugin::remote;
+    // This node's offer, not the table's: the table is process wide and a
+    // neighbouring test in this binary has a node of its own, reading the same
+    // process wide loader directory, so it reports the same plugin.
+    until(
+        "the node's plugins to arrive",
+        || remote::nodes_with("faux/source").iter().any(|n| n == NODE),
+        || diagnosis(&core, NODE, task_state(&driving)),
+    )
     .await;
 
-    use godwinmix_core::plugin::remote;
-    assert_eq!(remote::nodes_with("faux/source"), vec!["studio-b".to_string()]);
-
-    let manifest = remote::plugin_manifest("faux/source", Some("studio-b")).expect("the manifest");
+    let manifest = remote::plugin_manifest("faux/source", Some(NODE)).expect("the manifest");
     assert_eq!(manifest.plugin.version, "1.0.0");
     assert_eq!(manifest.plugin.placements, vec!["sidecar", "node"]);
     assert_eq!(manifest.tools.len(), 1, "its tools come across whole");
@@ -422,17 +506,35 @@ input = "schemas/look.json"
     );
 
     // And when the node goes, it stops being offered.
-    core.nodes.link("studio-b").unwrap().close("the test is done");
-    until("the node to go", || !core.nodes.is_online("studio-b")).await;
-    let _ = driving.await;
+    core.nodes.link(NODE).unwrap().close("the test is done");
+    until(
+        "the node to go",
+        || !core.nodes.is_online(NODE),
+        || diagnosis(&core, NODE, task_state(&driving)),
+    )
+    .await;
+    let ended = match driving.await {
+        Ok(Ok(why)) => format!("it returned: {why}"),
+        Ok(Err(e)) => format!("it failed: {e:#}"),
+        Err(e) => format!("its task ended badly: {e}"),
+    };
     // The socket's pump forgets the plugins when it returns, and the link's
     // own close marks the node offline first, on another task; wait for the
     // offer to go the same way the arrival was waited for above.
-    // This node's offer, not the table's: the table is process wide and a
-    // neighbouring test may be holding a node of its own open.
-    until("the node's plugins to be withdrawn", || {
-        !remote::nodes_with("faux/source").iter().any(|n| n == "studio-b")
-    })
+    until(
+        "the node's plugins to be withdrawn",
+        || !remote::nodes_with("faux/source").iter().any(|n| n == NODE),
+        || diagnosis(&core, NODE, &ended),
+    )
     .await;
     godwinmix_core::plugin::loader::set_dir(was);
+}
+
+/// Whether the node's own task is still going, for a failure message.
+fn task_state<T>(driving: &tokio::task::JoinHandle<T>) -> &'static str {
+    if driving.is_finished() {
+        "finished"
+    } else {
+        "still running"
+    }
 }

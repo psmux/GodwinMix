@@ -63,7 +63,18 @@ pub fn learn(
             table.interned.insert(type_id, manifest);
         }
     }
-    table.by_node.insert(node.to_string(), plugins);
+    let offered: Vec<String> = plugins
+        .iter()
+        .flat_map(|p| p.provides.iter().map(move |d| format!("{}/{}", p.plugin.name, d.id)))
+        .collect();
+    let had = table.by_node.insert(node.to_string(), plugins).map(|old| old.len());
+    tracing::info!(
+        node,
+        offers = offered.len(),
+        offered = %offered.join(", "),
+        replaced = had.unwrap_or(0),
+        "a node's plugins are reachable"
+    );
 }
 
 /// A node has gone, or was removed. Its plugins stop being offered.
@@ -72,7 +83,15 @@ pub fn learn(
 /// hold one while a source is torn down. What goes is the node's claim to
 /// offer them, which is what the picker and the reconciler read.
 pub fn forget(node: &str) {
-    table().write().by_node.remove(node);
+    let gone = table().write().by_node.remove(node);
+    match gone {
+        Some(plugins) => tracing::info!(
+            node,
+            plugins = plugins.len(),
+            "a node's plugins stopped being reachable"
+        ),
+        None => tracing::debug!(node, "a node with nothing reachable was forgotten"),
+    }
 }
 
 /// The interned manifest for a provide some node has.
