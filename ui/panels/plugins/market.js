@@ -140,15 +140,15 @@ export function marketTab(client) {
   };
 
   async function refresh() {
-    let answer;
+    // The search first, because it clears the problem line, and the list
+    // second, because it is the one that can fail on a read only token: the
+    // marketplaces are Admin and searching what is cached is not.
+    await search();
     try {
-      answer = await client.call("marketplace.list", {});
+      drawMarkets((await client.call("marketplace.list", {})) || {});
     } catch (e) {
       showProblem(problems, e);
-      return;
     }
-    drawMarkets(answer || {});
-    await search();
   }
 
   function drawMarkets(answer) {
