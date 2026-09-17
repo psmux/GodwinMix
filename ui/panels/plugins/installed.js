@@ -6,7 +6,7 @@
 // plugin costs stay in `plugin.list` and in the CLI, because this panel is for
 // deciding what is on the machine rather than for watching it run.
 
-import { el, clear } from "../../shell/dom.js";
+import { el, clear, append } from "../../shell/dom.js";
 import { confirmModal, modal } from "../../shell/modal.js";
 import { runTask, showProblem } from "./task.js";
 
@@ -113,12 +113,14 @@ export function installedTab(client) {
     const say = el("div.plugin-say.sm.dim");
     const buttons = el("div.row.sm");
     const remote = String(plugin.root || "").startsWith("node:");
-    buttons.append(
+    // `append` from dom.js rather than the DOM's own, which would turn every
+    // button this row does not have into the word "null".
+    append(buttons, [
       remote ? el("span.sm.faint", { text: "on " + plugin.root.slice(5) }) : toggle(plugin, say),
       configurable.has(plugin.name) ? settingsButton(plugin) : null,
       remote ? null : updateButton(plugin, say),
-      remote ? null : removeButton(plugin, say)
-    );
+      remote ? null : removeButton(plugin, say),
+    ]);
     return el("div.plugin-row", { "data-plugin": plugin.name }, [
       el("div.row", {}, [
         el("span.dot" + (plugin.problem ? ".failed" : plugin.enabled ? "" : ".stalled")),
