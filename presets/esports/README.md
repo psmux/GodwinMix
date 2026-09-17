@@ -20,6 +20,6 @@ A second machine (or four) sending NDI, a gigabit switch between them, and your 
 
 **Feeds stutter.** Usually the network is the first thing to check, not the mixer. Four 1080p60 NDI feeds are about 500 Mbit; put them on their own switch.
 
-**The encoder is behind.** Usually `gmx ctl status` shows the frame interval. 1080p60 with no GPU is more than a laptop can do; drop `fps` to 30 in `[canvas]`, or run this on a box with a GPU.
+**The encoder is behind.** 1080p60 with no GPU is more than a laptop can do. Drop the canvas to 30 fps, or run this on a box with a GPU. The Alerts panel says when the encoder is falling behind.
 
 **The overlay is a frame late.** Usually it is a browser page and it will be. Put anything that has to be frame accurate in the scene as a graphic, not in the page.

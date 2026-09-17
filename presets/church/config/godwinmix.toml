@@ -5,9 +5,8 @@
 #
 # The two cameras are placeholders you can put on air today: they show a test
 # pattern so the picture moves and the stream is real while you set the rest
-# up. `gmx plugin add camera` replaces them with the real thing when the camera
-# plugin is installed; change `type` to "camera/source" and put the device in
-# `params` and nothing else in this file moves.
+# up. The page offers to install the camera plugin, and then lists the cameras
+# this machine can see, so nothing in this file has to be typed by hand.
 
 [canvas]
 width = 1920
@@ -53,7 +52,7 @@ bind = "0.0.0.0:8080"
 decode = "auto"
 encode = "auto"
 
-# The two cameras. Until `gmx plugin add camera` has run these are test
+# The two cameras. Until the camera plugin is installed these are test
 # patterns, which means the service can go out today and the cameras can be
 # sorted out next week.
 [[sources]]
