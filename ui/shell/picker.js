@@ -387,7 +387,12 @@ function openSourcePicker(client, kinds, plugins, opts) {
       }
       await rescan();
     };
-    return el("div.col", {}, [el("p.dim", { text: cat.plugin.line, style: { marginTop: "0" } }), button, note]);
+    return el("div.col", {}, [
+      el("p.dim", { text: cat.plugin.line, style: { marginTop: "0" } }),
+      // In a row rather than loose in the column, which would stretch a
+      // primary button the whole width of the modal.
+      el("div.row", {}, [button, note, el("span.grow")]),
+    ]);
   }
 
   function icon(name) {
