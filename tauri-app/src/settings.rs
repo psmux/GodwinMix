@@ -82,6 +82,20 @@ pub fn data_dir(app: &AppHandle) -> io::Result<PathBuf> {
     Ok(dir)
 }
 
+/// Where the mixer reads plugins from when this app carries some of its own.
+///
+/// Inside the application data directory rather than `~/.godwinmix/plugins`,
+/// which is where a mixer started from a terminal reads them. Two reasons:
+/// the app seeds this directory and retires its own older copies out of it,
+/// which is not something to do to a directory somebody else's mixer is also
+/// reading, and an operator who removes the app should not be left with three
+/// plugin directories in their home they never made.
+pub fn plugins_dir(app: &AppHandle) -> io::Result<PathBuf> {
+    let dir = data_dir(app)?.join("plugins");
+    fs::create_dir_all(&dir)?;
+    Ok(dir)
+}
+
 /// The application log directory, created if it is not there yet.
 pub fn log_dir(app: &AppHandle) -> io::Result<PathBuf> {
     let dir = app.path().app_log_dir().map_err(other)?;
