@@ -1069,6 +1069,22 @@ mod tests {
     /// behind so, by design; a test that was not scheduled for a quarter of a
     /// second is such a reader and reads again rather than calling the
     /// channel closed.
+    /// One preview frame inside `within`, reading again on a lag, with the
+    /// same shape of answer `timeout(recv())` gives so a caller can report it.
+    async fn read_past_lag(
+        sub: &mut PreviewSubscription,
+        within: Duration,
+    ) -> Result<Result<Arc<[u8]>, broadcast::error::RecvError>, tokio::time::error::Elapsed> {
+        let deadline = Instant::now() + within;
+        loop {
+            let left = deadline.saturating_duration_since(Instant::now());
+            match tokio::time::timeout(left, sub.recv()).await {
+                Ok(Err(broadcast::error::RecvError::Lagged(_))) => continue,
+                other => return other,
+            }
+        }
+    }
+
     async fn next_frame(sub: &mut MultiviewSubscription, within: Duration) -> Arc<[u8]> {
         let deadline = Instant::now() + within;
         loop {
@@ -2206,7 +2222,11 @@ mod tests {
 
         let asked = Instant::now();
         let mut sub = mv.subscribe_preview(PreviewRequest { fps: 8, width: 320, full: false });
-        let frame = tokio::time::timeout(Duration::from_secs(2), sub.recv()).await;
+        // Read past a lag: the channel keeps the newest two frames and tells a
+        // reader that fell behind so, and a test thread that was not scheduled
+        // for a moment on a slow runner is such a reader. A Linux runner
+        // produced frames and the test read Lagged(1) as no frame.
+        let frame = read_past_lag(&mut sub, Duration::from_secs(2)).await;
         let frame = match frame {
             Ok(Ok(frame)) => frame,
             other => {
