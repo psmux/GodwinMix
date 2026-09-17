@@ -2291,7 +2291,7 @@ mod tests {
         }]);
         let asked = Instant::now();
         let mut sub = mv.subscribe_preview(PreviewRequest { fps: 8, width: 320, full: false });
-        match tokio::time::timeout(Duration::from_secs(2), sub.recv()).await {
+        match read_past_lag(&mut sub, Duration::from_secs(2)).await {
             Ok(Ok(frame)) => assert_eq!(&frame[..2], &[0xFF, 0xD8], "that is not a JPEG"),
             other => {
                 let report = preview_forensics(mv.pipeline());
