@@ -67,6 +67,7 @@ Keys accepted on every method, handled before a method runs.
 | `output.list` | `GET /api/v1/outputs` | read |  | 1 | Every destination, with its state, reconnect count and how much is buffered. |
 | `output.reconnect` | `POST /api/v1/outputs/{id}/reconnect` | operate |  | 1 | Drop and re-establish one destination's connection now, without waiting for its reconnect policy. |
 | `output.remove` | `DELETE /api/v1/outputs/{id}` | operate | yes | 1 | Stop sending to a destination and forget it. Other outputs are unaffected. |
+| `output.set` | `POST /api/v1/outputs/{id}/set` | operate |  | 1 | Change a destination in place: a new address with a new stream key, a new reconnect policy, a deeper outage buffer. The address is write only, so a client that only wants the buffer never has to hold the key. |
 | `pipeline.clock` | `GET /api/v1/pipeline/clock` | read |  | 1 | The clock every pipeline is running against, and how far each one has got. |
 | `pipeline.dot` | `GET /api/v1/pipeline/dot` | read |  | 1 | One pipeline as a graphviz graph: every element, every pad and the caps negotiated between them. |
 | `pipeline.latency` | `GET /api/v1/pipeline/latency` | read |  | 1 | How much delay one pipeline is carrying, and which stage put it there. |
@@ -730,6 +731,23 @@ MCP tool `remove_output` in the `search` profile: readOnlyHint false, destructiv
   },
   "result": {
     "type": "object"
+  }
+}
+```
+
+#### `output.set`
+
+Change a destination in place: a new address with a new stream key, a new reconnect policy, a deeper outage buffer. The address is write only, so a client that only wants the buffer never has to hold the key.
+
+MCP tool `set_output` in the `standard` profile: readOnlyHint false, destructiveHint false, idempotentHint true.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/SetOutputRequest"
+  },
+  "result": {
+    "$ref": "#/$defs/OutputStatus"
   }
 }
 ```

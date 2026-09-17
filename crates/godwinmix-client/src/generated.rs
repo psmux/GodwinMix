@@ -1444,6 +1444,14 @@ pub const OUTPUT_STATE_VALUES: &[&str] = &["connecting", "live", "reconnecting",
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct OutputStatus {
+    /// False while the address still carries a placeholder a preset wrote in
+    /// for somebody to replace, such as `YOUR-STREAM-KEY`. The key itself
+    /// never leaves the core, so this is how a client knows to put its own
+    /// form up and say "needs a stream key" without ever seeing the key.
+    ///
+    /// True for an address with no key in it at all, an SRT one for instance,
+    /// because there is nothing there for anybody to replace.
+    pub has_key: bool,
     pub id: String,
     /// Seconds of encoded data waiting in the pre-muxer queue. A number that
     /// climbs and stays high means the destination cannot keep up.
@@ -1973,6 +1981,32 @@ pub struct SetItemRequest {
     /// discard the echoes of moves it has already drawn past.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub seq: Option<u64>,
+}
+
+/// `output.set`. Change one destination in place, naming only what moves.
+///
+/// The id picks the output and is never changed by this; renaming one is a
+/// remove and an add, because the id is what alerts, hooks and the runtime
+/// store call it.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct SetOutputRequest {
+    /// The destination to change.
+    pub id: String,
+    /// "own" or "cdn", as `output.add`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub policy: Option<String>,
+    /// Seconds of encoded data to hold before the muxer.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub queue_secs: Option<f64>,
+    /// The whole new address, stream key and all. Write only: no method ever
+    /// reads it back, so leaving it out keeps the address already in force
+    /// and a client can offer "change the buffer" without holding the key.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub uri: Option<String>,
+    /// Anything this build does not know a name for.
+    #[serde(flatten)]
+    pub extra: BTreeMap<String, Value>,
 }
 
 /// `plugin.settings.set`.
@@ -2586,7 +2620,7 @@ pub struct MethodInfo {
     pub rest: Option<(&'static str, &'static str)>,
 }
 
-pub const METHODS: [MethodInfo; 123] = [
+pub const METHODS: [MethodInfo; 124] = [
     MethodInfo { name: "adbreak.end", summary: "Cut a running ad short, or disarm one that is scheduled.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/adbreak/end")) },
     MethodInfo { name: "adbreak.start", summary: "Interrupt the programme with a clip, then rejoin live when it ends.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/adbreak/start")) },
     MethodInfo { name: "agent.state", summary: "The compact document written for agents: the programme, each source's state and a motion score saying how much its picture is changing.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/agent/state")) },
@@ -2621,6 +2655,7 @@ pub const METHODS: [MethodInfo; 123] = [
     MethodInfo { name: "output.list", summary: "Every destination, with its state, reconnect count and how much is buffered.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/outputs")) },
     MethodInfo { name: "output.reconnect", summary: "Drop and re-establish one destination's connection now, without waiting for its reconnect policy.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/outputs/{id}/reconnect")) },
     MethodInfo { name: "output.remove", summary: "Stop sending to a destination and forget it. Other outputs are unaffected.", scope: "operate", mutating: true, destructive: true, rest: Some(("DELETE", "/api/v1/outputs/{id}")) },
+    MethodInfo { name: "output.set", summary: "Change a destination in place: a new address with a new stream key, a new reconnect policy, a deeper outage buffer. The address is write only, so a client that only wants the buffer never has to hold the key.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/outputs/{id}/set")) },
     MethodInfo { name: "pipeline.clock", summary: "The clock every pipeline is running against, and how far each one has got.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/pipeline/clock")) },
     MethodInfo { name: "pipeline.dot", summary: "One pipeline as a graphviz graph: every element, every pad and the caps negotiated between them.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/pipeline/dot")) },
     MethodInfo { name: "pipeline.latency", summary: "How much delay one pipeline is carrying, and which stage put it there.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/pipeline/latency")) },
@@ -3085,6 +3120,11 @@ impl Client {
     /// Stop sending to a destination and forget it. Other outputs are unaffected.
     pub async fn output_remove(&self, params: &IdRequest) -> Result<BTreeMap<String, Value>> {
         self.call("output.remove", params).await
+    }
+
+    /// Change a destination in place: a new address with a new stream key, a new reconnect policy, a deeper outage buffer. The address is write only, so a client that only wants the buffer never has to hold the key.
+    pub async fn output_set(&self, params: &SetOutputRequest) -> Result<OutputStatus> {
+        self.call("output.set", params).await
     }
 
     /// The clock every pipeline is running against, and how far each one has got.
