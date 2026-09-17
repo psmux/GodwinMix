@@ -10,10 +10,10 @@
 import { Store } from "./store.js";
 import { RpcTransport } from "./transport-rpc.js";
 import { asRpcError } from "./errors.js";
-import { SheetPainter, sheetWidthFor } from "./frames.js";
+import { SheetPainter, PicturePainter, sheetWidthFor } from "./frames.js";
 
 export { RpcError, CODES } from "./errors.js";
-export { SheetPainter, sheetWidthFor, parseFrame, HEADER_BYTES } from "./frames.js";
+export { SheetPainter, PicturePainter, sheetWidthFor, parseFrame, HEADER_BYTES } from "./frames.js";
 export { Store, emptyState } from "./store.js";
 
 const TOKEN_KEY = "gmx.token";
@@ -42,6 +42,9 @@ export class Client {
     this.transport = transport;
     this.store = store;
     this.sheet = new SheetPainter();
+    // The armed scene, which arrives on the same socket as the mosaic and is
+    // one whole picture rather than a sheet of cells.
+    this.preview = new PicturePainter();
     this.listeners = new Map();
     this._ext = new Map(); // key -> Map(holder id -> request)
     this._holder = 0;
@@ -281,6 +284,13 @@ export class Client {
   }
 
   handleFrame(frame) {
+    // Two pictures, one socket. The mosaic keeps the name it had, so a panel
+    // watching for programme frames is not woken by the preview.
+    if (frame.preview) {
+      this.preview.push(frame);
+      this.emit("preview-frame", frame);
+      return;
+    }
     this.sheet.push(frame);
     this.emit("frame", frame);
   }
@@ -288,6 +298,7 @@ export class Client {
   close() {
     this.transport.close();
     this.sheet.destroy();
+    this.preview.destroy();
   }
 }
 

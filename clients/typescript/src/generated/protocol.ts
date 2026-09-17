@@ -1793,6 +1793,7 @@ export interface EventPayloads {
   "agent.state": Record<string, unknown>;
   "multiview.layout": MultiviewLayout;
   "multiview.frame": Uint8Array;
+  "preview.frame": Uint8Array;
   "resync": Resync;
   "flush": Flush;
 }
@@ -1966,6 +1967,7 @@ export const EVENT_NAMES: readonly EventName[] = [
   "agent.state",
   "multiview.layout",
   "multiview.frame",
+  "preview.frame",
   "resync",
   "flush",
 ];
