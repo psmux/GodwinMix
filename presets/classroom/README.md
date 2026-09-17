@@ -6,7 +6,7 @@ A lesson recorded and streamed: a camera on the teacher, the screen beside it, t
 
 Three inputs, two destinations and three scenes, on a 720p25 canvas that runs on the laptop already in the room. Tiles start as stills, refreshed when you click one, which is what a laptop on battery wants.
 
-The camera and the screen start as test patterns, so the lesson can be recorded before the room's hardware is sorted out. `gmx plugin add camera` and `gmx plugin add screen` replace them: change `type` and put the device into `params`.
+The camera and the screen start as test patterns, so the lesson can be recorded before the room's hardware is sorted out. The page offers to install the camera and screen plugins, and the picker then lists the devices this room actually has.
 
 ## What you need
 
@@ -14,9 +14,9 @@ A machine in the room, and somewhere to send to. Most schools run mediamtx on th
 
 ## Three steps
 
-1. `gmx preset apply classroom`. It writes `godwinmix.toml`, the scenes and the layout.
-2. Change the two `[[outputs]]` addresses to your school's recorder and stream, or leave them pointing at a local mediamtx.
-3. `gmx`. Open http://localhost:8080 and press Teacher to start the lesson.
+1. Pick **Classroom** on the welcome page, or apply it with `gmx preset apply classroom`.
+2. Finish the checklist the page puts up: press Install for the camera and screen plugins, so the test patterns become the real room.
+3. Press **Teacher** to go on air, then **Split** to put the shared screen beside it.
 
 ## When it does not work
 

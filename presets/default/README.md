@@ -12,9 +12,9 @@ A machine on the same network as your cameras or encoders, and one RTMP address 
 
 ## Three steps
 
-1. `gmx preset apply default`. It writes `godwinmix.toml` beside you.
-2. Open `godwinmix.toml` and put your own destination in the `[[outputs]]` block. If your cameras publish somewhere other than this machine, change the two `[[sources]]` addresses too.
-3. `gmx` (or `docker run`). Open http://localhost:8080 and press the camera you want on air.
+1. Pick a setup on the welcome page, or apply this one with `gmx preset apply default`.
+2. Add your camera: **Add a source**, then its address, or drop a video file onto the page.
+3. Press its tile to put it on air. **Destinations**, then **Edit**, sends the programme somewhere other than this machine.
 
 ## When it does not work
 

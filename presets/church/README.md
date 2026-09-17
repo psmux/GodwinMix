@@ -6,7 +6,7 @@ A Sunday service on air: two cameras, the lyrics over the picture, the slides, a
 
 Four inputs and two destinations, already configured, plus four scenes you can put on air by pressing a tile. The tiles start as icons rather than pictures, so the machine at the back of the hall keeps its cores for the encoder.
 
-The two cameras start as test patterns, so the stream is real from the first minute and the cameras can wait. `gmx plugin add camera` installs the camera plugin; change `type = "test/source"` to `type = "camera/source"` and nothing else moves.
+The two cameras start as test patterns, so the stream is real from the first minute and the cameras can wait. The page offers to install the camera plugin, and the picker swaps a test pattern for a real camera without anything else moving.
 
 ## What you need
 
@@ -14,9 +14,9 @@ A machine that can reach the internet, and your YouTube and Facebook stream keys
 
 ## Three steps
 
-1. `gmx preset apply church`. It writes `godwinmix.toml`, the scenes and the layout.
-2. Put your two stream keys into the `[[outputs]]` blocks of `godwinmix.toml`.
-3. `gmx`. Open http://localhost:8080 on the volunteer's screen, press Wide, and press the red button when the service starts.
+1. Pick **Church service** on the welcome page, or apply it with `gmx preset apply church`.
+2. Finish the checklist the page puts up: paste your YouTube key, paste your Facebook key, and press Install for the camera plugin if you want real cameras.
+3. Press **Wide** to put a picture on air, then the red button when the service starts.
 
 ## When it does not work
 
@@ -24,6 +24,6 @@ A machine that can reach the internet, and your YouTube and Facebook stream keys
 
 **The lyrics do not appear over the picture.** The lyrics page has to have a transparent background. Open its address in a browser: if it is white there, it is white here.
 
-**The slides tile is black.** It is looking for `media/slides.mp4`. Drop a file onto the page, then change the `slides` source's `uri` to the name it lands under.
+**The slides tile is black.** It is looking for `media/slides.mp4`. Drop a file onto the page and pick it on the `slides` source.
 
-**The service is over and the stream is still running.** Press the red button again, or `gmx ctl output stop youtube`.
+**The service is over and the stream is still running.** Press the red button again, then stop the destination in the Destinations panel.

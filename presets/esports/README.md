@@ -12,9 +12,9 @@ A second machine (or four) sending NDI, a gigabit switch between them, and your 
 
 ## Three steps
 
-1. `gmx preset apply esports`.
-2. Put your stream key into the `[[outputs]]` block, and run `gmx ctl device list` to get the NDI names of the four player machines into the `[[sources]]` blocks.
-3. `gmx`, then http://localhost:8080. `Quad` shows all four, `Full` puts one player up, `Pip` puts the caster in the corner.
+1. Pick **Streamer or gaming** on the welcome page, or apply it with `gmx preset apply esports`.
+2. Finish the checklist the page puts up: paste your Twitch key, and press Install for the NDI plugin so the player feeds can arrive.
+3. Press **Caster** to go on air, then **Quad** when the match starts.
 
 ## When it does not work
 

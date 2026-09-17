@@ -7,9 +7,14 @@ Ten minutes, one camera or one video file, one destination.
 Start the mixer, then open `http://<the machine>:8080/` in any browser. On the
 same machine that is `http://localhost:8080/`.
 
-If it asks for a token, paste the one the mixer was started with. It is the
-value of `GODWINMIX_TOKEN`, or the `token` line under `[control]` in the config
-file. It is saved on this device, so you are asked once.
+If it asks for a token, paste the one the mixer was started with. Whoever set
+the mixer up has it. It is saved on this device, so you are asked once.
+
+On a mixer nobody has set up yet the welcome tiles come up first: a church
+service, a classroom, a gaming stream, your OBS scenes, or **Start empty**.
+Picking one configures the mixer and then puts up a checklist you finish here,
+with a box for each stream key. This page takes the empty path; [Your first
+stream with a preset](first-stream-with-a-preset.md) takes the other one.
 
 The bar across the top is the programme: what your audience sees. It says
 **black** because nothing is on air yet.
