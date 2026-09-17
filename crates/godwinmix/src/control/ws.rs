@@ -17,7 +17,9 @@ use godwinmix_protocol::{Flush, Resync, Snapshot, SubscribeRequest, SubscribeRes
 use godwinmix_protocol::types::Event;
 use crate::control::call::dispatch;
 use crate::control::{Ctx, RunningTime};
-use godwinmix_core::multiview::{MultiviewRequest, MultiviewSubscription};
+use godwinmix_core::multiview::{
+    MultiviewRequest, MultiviewSubscription, PreviewRequest, PreviewSubscription,
+};
 use godwinmix_core::state::Envelope;
 use axum::extract::ws::{Message, WebSocket};
 use futures_util::stream::{SplitSink, StreamExt};
@@ -67,21 +69,26 @@ struct Connection {
     /// carries one, so a grid that changes under a client has to be announced
     /// or the frames stop matching anything it knows.
     layout: u32,
+    /// The sources the last layout said the preview was drawing, for a client
+    /// that asked for one. None while it asked for no preview.
+    told_preview: Option<Vec<String>>,
     /// The programme clock, carried forward between status snapshots so every
     /// frame header this connection writes has a running time on it.
     clock: RunningTime,
     /// Frames written to this client, which is the counter in the header.
     frame_no: u32,
+    /// The same, counted apart for the preview: the two pictures are numbered
+    /// per stream, so a gap in one says nothing about the other.
+    preview_no: u32,
     /// What this client asked the mosaic for, or None when it asked for no
     /// mosaic at all. `serve_rpc` turns a change here into a subscription.
     wants_mosaic: Option<MultiviewRequest>,
-    /// Whether this client asked for the preview scene. Decides whether
-    /// `event/tally` carries `preview` and whether the layout says the preview
-    /// is empty.
-    wants_preview: bool,
-    /// What keeps the preview compositor up while this client wants one.
-    /// Dropped with the connection, which is what takes it away again.
-    preview: Option<godwinmix_core::multiview::PreviewSubscription>,
+    /// What this client asked the preview compositor for, or None when it
+    /// asked for no preview. `serve_rpc` turns a change here into the
+    /// subscription that keeps the compositor up, exactly as it does for the
+    /// mosaic, and this also decides whether the layout says the preview is
+    /// empty.
+    wants_preview: Option<PreviewRequest>,
     /// `ext.telemetry` and `ext.agent`. Holding this is what keeps the
     /// telemetry probes measuring. See `control/push.rs`.
     push: crate::control::push::Push,
@@ -101,11 +108,12 @@ pub async fn serve_rpc(socket: WebSocket, ctx: Ctx, token: Token) {
         program_scene: None,
         sources: Vec::new(),
         layout: 0,
+        told_preview: None,
         clock: RunningTime::default(),
         frame_no: 0,
+        preview_no: 0,
         wants_mosaic: None,
-        wants_preview: false,
-        preview: None,
+        wants_preview: None,
         push: crate::control::push::Push::none(),
     };
     // Holding this is what keeps the mosaic up, and dropping it is what takes
@@ -113,6 +121,11 @@ pub async fn serve_rpc(socket: WebSocket, ctx: Ctx, token: Token) {
     // `ext.multiview` never builds one. See `multiview.rs`.
     let mut mosaic: Option<MultiviewSubscription> = None;
     let mut asked: Option<MultiviewRequest> = None;
+    // The preview compositor's hold, kept out here beside the mosaic's rather
+    // than on the connection, so the frame arm below can borrow it while the
+    // arm's body writes to the client.
+    let mut preview: Option<PreviewSubscription> = None;
+    let mut asked_preview: Option<PreviewRequest> = None;
     // The scene document's own change stream. Taken for every connection,
     // whether or not it has subscribed yet: the channel is a broadcast and a
     // receiver that nobody reads from costs one slot, while starting it later
@@ -135,6 +148,14 @@ pub async fn serve_rpc(socket: WebSocket, ctx: Ctx, token: Token) {
                     if conn.wants_mosaic != asked {
                         asked = conn.wants_mosaic;
                         mosaic = asked.map(|req| conn.ctx.app.multiview.subscribe(req));
+                    }
+                    // And the same for the preview: a client that stops asking
+                    // for it gives the compositor back, and one that asks at a
+                    // new size gets the new hold before the old one goes.
+                    if conn.wants_preview != asked_preview {
+                        asked_preview = conn.wants_preview;
+                        preview = asked_preview
+                            .map(|req| conn.ctx.app.multiview.subscribe_preview(req));
                     }
                 }
                 Some(Ok(_)) => {}
@@ -215,6 +236,26 @@ pub async fn serve_rpc(socket: WebSocket, ctx: Ctx, token: Token) {
                 }
                 Err(broadcast::error::RecvError::Closed) => break,
             },
+            // The armed scene, on the same socket as the mosaic. Without this
+            // arm every frame the preview compositor published was dropped on
+            // the floor and a client that asked for `ext.preview` got a built
+            // pipeline and no picture.
+            frame = async {
+                match preview.as_mut() {
+                    Some(p) => p.recv().await,
+                    None => std::future::pending().await,
+                }
+            } => match frame {
+                Ok(jpeg) => {
+                    if conn.send_preview_frame(&jpeg).await.is_err() {
+                        break;
+                    }
+                }
+                Err(broadcast::error::RecvError::Lagged(n)) => {
+                    debug!(skipped = n, "rpc client fell behind on preview frames");
+                }
+                Err(broadcast::error::RecvError::Closed) => break,
+            },
         }
     }
     debug!("rpc client disconnected");
@@ -236,6 +277,24 @@ impl Connection {
         }
         self.frame_no = self.frame_no.wrapping_add(1);
         let header = rpc::frame_header(self.frame_no, self.layout, self.clock.now_ms());
+        let mut out = Vec::with_capacity(header.len() + jpeg.len());
+        out.extend_from_slice(&header);
+        out.extend_from_slice(jpeg);
+        self.write(Message::Binary(out.into())).await
+    }
+
+    /// One preview frame out, in the same header as a mosaic frame.
+    ///
+    /// The stream bit on the sequence number is what tells the two apart, so
+    /// one socket carries both and a client sends this one to the pane beside
+    /// the programme rather than cutting tiles out of it. The counter is the
+    /// preview's own: a mosaic frame dropped on a slow link is not a gap here.
+    async fn send_preview_frame(&mut self, jpeg: &[u8]) -> Result<(), ()> {
+        if !self.sub.as_ref().is_some_and(|s| s.wants("preview.frame")) {
+            return Ok(());
+        }
+        self.preview_no = self.preview_no.wrapping_add(1);
+        let header = rpc::preview_frame_header(self.preview_no, self.clock.now_ms());
         let mut out = Vec::with_capacity(header.len() + jpeg.len());
         out.extend_from_slice(&header);
         out.extend_from_slice(jpeg);
@@ -320,11 +379,10 @@ impl Connection {
         // section 3), so asking for it is also asking for the mosaic. A client
         // that wants only the preview does not have to know that.
         let wants_multiview = request.ext.wants_multiview() || request.ext.wants_preview();
-        self.wants_preview = request.ext.wants_preview();
         // The preview compositor is built by holding a subscription, exactly
         // as the mosaic is, and taken away when this connection drops it. The
         // armed scene is pushed first so the first frame is the right picture.
-        self.preview = match self.wants_preview {
+        self.wants_preview = match request.ext.wants_preview() {
             true => {
                 crate::control::push_preview(&self.ctx.app);
                 let (fps, width) = match &request.ext.preview {
@@ -333,13 +391,7 @@ impl Connection {
                     }
                     _ => (0, 0),
                 };
-                Some(self.ctx.app.multiview.subscribe_preview(
-                    godwinmix_core::multiview::PreviewRequest {
-                        fps,
-                        width,
-                        full: request.ext.wants_full_preview(),
-                    },
-                ))
+                Some(PreviewRequest { fps, width, full: request.ext.wants_full_preview() })
             }
             false => None,
         };
@@ -359,8 +411,10 @@ impl Connection {
         self.sub = Some(Subscription { patterns: patterns.clone(), ext: request.ext });
         self.seq = self.ctx.app.mixer.event_seq();
         // A client re-subscribing is rebuilding from nothing, so the grid it
-        // was told about last time counts for nothing either.
+        // was told about last time, and what the preview was drawing, count
+        // for nothing either.
         self.layout = 0;
+        self.told_preview = None;
         serde_json::to_value(SubscribeResult {
             seq: self.seq,
             events: patterns,
@@ -391,37 +445,57 @@ impl Connection {
         self.flush().await
     }
 
-    /// Tell the client about the grid, when it wants the mosaic and the grid
-    /// is not the one it already has.
+    /// Tell the client about the grid, when it wants the mosaic and neither the
+    /// grid nor what the preview is drawing is what it already has.
     async fn send_layout(&mut self, multiview: &godwinmix_protocol::MultiviewStatus) -> Result<(), ()> {
         if !self.sub.as_ref().is_some_and(|s| s.wants("multiview.layout")) {
             return Ok(());
         }
         let layout = crate::control::layout_of(multiview);
-        if layout.id == self.layout {
+        // What the preview is drawing, for a client that asked for it. Arming
+        // a scene does not move a single cell, so a layout compared on its id
+        // alone would leave `preview_empty` saying "empty" for the rest of the
+        // connection while frames of the armed scene arrived beside it.
+        let preview = self.wants_preview.map(|_| self.preview_sources());
+        if layout.id == self.layout && preview == self.told_preview {
             return Ok(());
         }
         self.layout = layout.id;
+        self.told_preview = preview.clone();
         let mut value = serde_json::to_value(layout).map_err(|_| ())?;
         // A client that asked for the preview is told whether there is one. An
         // empty preview is a fact about the show, not an error, and saying so
         // is what stops a designer waiting for a picture that is not coming.
-        if self.wants_preview {
+        if let Some(sources) = preview {
             if let Some(map) = value.as_object_mut() {
-                let sources = self.preview_sources();
                 map.insert("preview_empty".into(), json!(sources.is_empty()));
                 map.insert("preview_sources".into(), json!(sources));
                 if sources.is_empty() {
                     map.insert(
                         "preview_note".into(),
                         json!(
-                            "no scene is armed, so the preview is empty. Arm one with                              scene.preview.set when the scene server is available."
+                            "no scene is armed, so the preview is empty. Arm one with \
+                             scene.preview.set when the scene server is available."
                         ),
                     );
                 }
             }
         }
         self.send(rpc::notification("event/multiview.layout", value)).await
+    }
+
+    /// Say the grid again after the armed scene changed.
+    ///
+    /// Only a status event carries a `MultiviewStatus`, and arming a scene
+    /// raises none, so the one the layout is built from is read here. A client
+    /// that did not ask for the preview has nothing new to hear and is not
+    /// made to wait on the mixer for it.
+    async fn resend_layout(&mut self) -> Result<(), ()> {
+        if self.wants_preview.is_none() {
+            return Ok(());
+        }
+        let Ok(status) = self.ctx.app.mixer.status().await else { return Ok(()) };
+        self.send_layout(&status.multiview).await
     }
 
     /// One event: remember what it says, then write it out if this client
@@ -461,6 +535,12 @@ impl Connection {
         }
         if moves_tally {
             self.send_tally().await?;
+        }
+        // A scene armed or cleared changes what the preview is drawing without
+        // moving a cell, so the layout is said again for whoever is watching
+        // the preview.
+        if name == "preview.changed" {
+            self.resend_layout().await?;
         }
         Ok(())
     }
@@ -632,6 +712,7 @@ impl Connection {
         self.send(rpc::notification("event/resync", value)).await?;
         self.seq = self.ctx.app.mixer.event_seq();
         self.layout = 0;
+        self.told_preview = None;
         self.after_subscribe().await
     }
 }

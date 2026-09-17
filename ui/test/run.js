@@ -5,7 +5,14 @@
 import { Selection, overlaps, rectFrom } from "../shell/selection.js";
 import { dbToPos, FLOOR } from "../shell/meter.js";
 import { posToGain, gainToPos, gainLabel, UNITY, AudioGestures, ScrubGestures } from "../shell/fader.js";
-import { parseFrame, sheetWidthFor, HEADER_BYTES, SheetPainter } from "../client/frames.js";
+import {
+  parseFrame,
+  sheetWidthFor,
+  HEADER_BYTES,
+  PREVIEW_STREAM,
+  SheetPainter,
+  PicturePainter,
+} from "../client/frames.js";
 import { Store } from "../client/store.js";
 import { SchemaForm } from "../client/schema-form.js";
 import { Client } from "../client/index.js";
@@ -698,6 +705,92 @@ test("what the drawer sends is split the way source.set reads it", () => {
   eq(req.params.superimpose, "auto");
   ok(!("superimpose" in req), "it did not go out at the top level");
   ok(!("uri" in req), "an undefined value is left out");
+});
+
+// -------------------------------------------------- producer preview
+
+test("the stream bit tells the armed scene from the mosaic", () => {
+  const frame = (seq) => {
+    const buf = new ArrayBuffer(HEADER_BYTES + 2);
+    const view = new DataView(buf);
+    view.setUint32(0, seq, true);
+    view.setUint32(4, 99, true);
+    new Uint8Array(buf).set([0xff, 0xd8], HEADER_BYTES);
+    return parseFrame(buf);
+  };
+  const mosaic = frame(12);
+  ok(!mosaic.preview, "a mosaic frame is what it always was");
+  eq(mosaic.seq, 12);
+  eq(mosaic.layout, 99);
+  // The same counter with the top bit set is the preview, and the counter
+  // still reads 12: the bit is the stream, not part of the number.
+  const preview = frame((12 | PREVIEW_STREAM) >>> 0);
+  ok(preview.preview, "the stream bit was not read");
+  eq(preview.seq, 12);
+});
+
+test("a preview frame goes to the preview, never onto the mosaic tiles", () => {
+  const client = new Client({ name: "test" }, new Store());
+  const seen = [];
+  client.on("preview-frame", () => seen.push("preview"));
+  client.on("frame", () => seen.push("mosaic"));
+  const pushed = [];
+  client.sheet.push = (f) => pushed.push(["sheet", f]);
+  client.preview.push = (f) => pushed.push(["picture", f]);
+  client.handleFrame({ preview: true, seq: 1, layout: 0, jpeg: new Uint8Array([0xff]) });
+  client.handleFrame({ preview: false, seq: 2, layout: 7, jpeg: new Uint8Array([0xff]) });
+  eq(seen, ["preview", "mosaic"]);
+  eq(pushed.map((p) => p[0]), ["picture", "sheet"]);
+});
+
+test("the preview is painted whole, with no layout to wait for", () => {
+  const painter = new PicturePainter();
+  const bitmap = document.createElement("canvas");
+  bitmap.width = 2;
+  bitmap.height = 2;
+  const brush = bitmap.getContext("2d");
+  brush.fillStyle = "#00ff00";
+  brush.fillRect(0, 0, 2, 2);
+  painter.bitmap = bitmap;
+  const target = document.createElement("canvas");
+  target.width = 2;
+  target.height = 2;
+  const detach = painter.attach(target);
+  eq([...target.getContext("2d").getImageData(0, 0, 1, 1).data], [0, 255, 0, 255]);
+  detach();
+  ok(!painter.wanted, "letting go stops the painting");
+  painter.destroy();
+});
+
+test("a snapshot does not take the armed scene away again", () => {
+  // The status document has no field for the armed scene, and asking for the
+  // preview stream re-subscribes, which brings a fresh snapshot with it. A
+  // snapshot that cleared what was armed made the pane appear and go dark
+  // again in the same second.
+  const client = new Client({ name: "test", subscribe: () => Promise.resolve({}) }, new Store());
+  client.handleEvent("preview.changed", { scene: "Two box" });
+  client.handleEvent("snapshot", { state: { program: "cam1", sources: [] }, seq: 4 });
+  eq(client.state.preview, "Two box");
+  // Disarming still clears it, and a status that does name one still wins.
+  client.handleEvent("preview.changed", { scene: null });
+  eq(client.state.preview, null);
+  client.handleEvent("snapshot", { state: { preview: "cam2", sources: [] }, seq: 5 });
+  eq(client.state.preview, "cam2");
+});
+
+test("the pane beside the programme asks the core for ext.preview", () => {
+  // `want` keys are `ext` keys: the armed scene is only composited while a
+  // client has asked for it by name, so a pane that asked for the wrong one
+  // would show black for ever.
+  const client = new Client({ name: "test", subscribe: () => Promise.resolve({}) }, new Store());
+  const want = client.want("preview", { fps: 8, width: 640 });
+  eq(client.extSpec(), { preview: { fps: 8, width: 640 } });
+  // Two askers are one subscription at the widest of them, as the mosaic is.
+  const second = client.want("preview", { fps: 8, width: 960 });
+  eq(client.extSpec().preview.width, 960);
+  second.release();
+  want.release();
+  eq(client.extSpec(), {});
 });
 
 // ------------------------------------------------------- programme monitor

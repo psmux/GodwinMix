@@ -2207,7 +2207,8 @@ Subscribe with `core.subscribe`. Patterns match the part after `event/`, so `pro
 | `event/telemetry` | `telemetry` |  | Numbers instead of a picture, up to ten times a second and under 200 bytes: the shot change score, the black ratio, a freeze flag, short term and integrated loudness, a silence flag and which sources are live. From cheap probes on the raw programme frames, which run only while a client is subscribed. |
 | `event/agent.state` | `agent` |  | The agent.state document, pushed when a telemetry threshold crosses or a take lands, with `why` naming which and a snapshot URL beside it. Edge triggered and at most one a second, so a picture that stays black is one message rather than one a tick. |
 | `event/multiview.layout` | `multiview` |  | How to read the binary frames that follow: the cells, and the layout id carried in every frame header. |
-| `event/multiview.frame` | `multiview` | `raw JPEG binary frame` | A mosaic frame, as a binary WebSocket frame rather than JSON: a 16 byte little endian header (seq u32, layout id u32, programme running time in milliseconds u64) then the JPEG. |
+| `event/multiview.frame` | `multiview` | `raw JPEG binary frame` | A mosaic frame, as a binary WebSocket frame rather than JSON: a 16 byte little endian header (seq u32, layout id u32, programme running time in milliseconds u64) then the JPEG. The top bit of seq is the stream and is clear on a mosaic frame; the other 31 bits count. |
+| `event/preview.frame` | `preview` |  | The armed scene as a picture, on the same socket and in the same 16 byte header as a mosaic frame, with the top bit of seq set to say so and the layout id zero because there is no grid to cut up. One picture per frame: draw it whole. |
 | `event/resync` |  |  | This client fell behind and events were dropped. Re-subscribe for a fresh snapshot; nothing between from_seq and the new snapshot arrives. |
 | `event/flush` |  |  | The end of a batch. Render here and not before, so a client never paints half an update. |
 
@@ -2257,7 +2258,7 @@ A client declares which expensive streams it wants. The core does no work for a 
 | `tally` | `true` | event/tally | yes |
 | `positions` | `true` | event/source.position | yes |
 | `thumb` | `{fps}` | per source thumbnails from a node | not yet |
-| `preview` | `{fps, width} or "full"` | the armed scene, composited in the multiview pipeline from the per source thumbnails and published to /mjpeg/preview, scene.preview.frame and its own cell on the mosaic. "full" composites it at the canvas's own size while a client is subscribed, so a designer's handles land on real coordinates | yes |
+| `preview` | `{fps, width} or "full"` | event/preview.frame: the armed scene, composited in the multiview pipeline from the per source thumbnails and published on this socket, to /mjpeg/preview, to scene.preview.frame and to its own cell on the mosaic. "full" composites it at the canvas's own size while a client is subscribed, so a designer's handles land on real coordinates | yes |
 | `telemetry` | `{hz: 1..10}` | event/telemetry | not yet |
 | `agent` | `true or thresholds` | event/agent.state with a snapshot URL | not yet |
 

@@ -12,16 +12,24 @@
 // flight. Today's server sends a bare JPEG with no header; the legacy adapter
 // hands frames here with `bare: true` and the layout the status document
 // carries.
+//
+// One socket carries two pictures: the mosaic, and the armed scene for the
+// pane beside the programme. The top bit of the sequence number says which,
+// because the header had no spare field. A preview frame is one whole picture
+// and names no grid.
 
 export const HEADER_BYTES = 16;
+export const PREVIEW_STREAM = 0x80000000;
 
 /** Split one binary frame into its header and its JPEG. */
 export function parseFrame(buffer) {
   const bytes = buffer instanceof ArrayBuffer ? new Uint8Array(buffer) : buffer;
   if (bytes.length <= HEADER_BYTES) return null;
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  const seq = view.getUint32(0, true);
   return {
-    seq: view.getUint32(0, true),
+    seq: seq & ~PREVIEW_STREAM,
+    preview: (seq & PREVIEW_STREAM) !== 0,
     layout: view.getUint32(4, true),
     runningTimeMs: view.getBigUint64(8, true),
     jpeg: bytes.subarray(HEADER_BYTES),
@@ -31,7 +39,8 @@ export function parseFrame(buffer) {
 /** Wrap a bare JPEG so callers see one shape whichever transport delivered it. */
 export function bareFrame(buffer, layout) {
   const bytes = buffer instanceof ArrayBuffer ? new Uint8Array(buffer) : buffer;
-  return { seq: 0, layout: layout || 0, runningTimeMs: 0n, jpeg: bytes };
+  // The legacy stream is the mosaic and only ever was.
+  return { seq: 0, preview: false, layout: layout || 0, runningTimeMs: 0n, jpeg: bytes };
 }
 
 /**
@@ -96,6 +105,62 @@ export class SheetPainter {
       const ctx = canvas.getContext("2d", { alpha: false });
       if (!ctx) continue;
       ctx.drawImage(this.bitmap, cell.x, cell.y, cell.w, cell.h, 0, 0, w, h);
+    }
+  }
+
+  destroy() {
+    if (this.bitmap && this.bitmap.close) this.bitmap.close();
+    this.bitmap = null;
+    this.targets.clear();
+  }
+}
+
+/**
+ * The newest whole picture, painted onto every canvas attached to it.
+ *
+ * The preview is one frame rather than a sheet, so there is no layout to wait
+ * for and nothing to cut out: decode, then blit. Same shape as `SheetPainter`.
+ */
+export class PicturePainter {
+  constructor() {
+    this.bitmap = null;
+    this.pending = false;
+    this.targets = new Set();
+  }
+
+  /** Register a canvas to be painted with the whole picture. */
+  attach(canvas) {
+    this.targets.add(canvas);
+    this._paint();
+    return () => this.targets.delete(canvas);
+  }
+
+  get wanted() {
+    return this.targets.size > 0;
+  }
+
+  /** Take a frame. Late frames are dropped rather than queued, as the sheet does. */
+  async push(frame) {
+    if (!this.wanted || this.pending) return;
+    this.pending = true;
+    try {
+      const decoded = await decode(new Blob([frame.jpeg], { type: "image/jpeg" }));
+      if (this.bitmap && this.bitmap.close) this.bitmap.close();
+      this.bitmap = decoded;
+      this._paint();
+    } catch {
+      // A truncated frame is not worth a message: the next one is along.
+    } finally {
+      this.pending = false;
+    }
+  }
+
+  _paint() {
+    if (!this.bitmap) return;
+    for (const canvas of this.targets) {
+      if (!canvas.width || !canvas.height) continue;
+      const ctx = canvas.getContext("2d", { alpha: false });
+      if (ctx) ctx.drawImage(this.bitmap, 0, 0, canvas.width, canvas.height);
     }
   }
 
