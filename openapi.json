@@ -4175,7 +4175,8 @@
         "type": "object"
       },
       "SetSourceRequest": {
-        "description": "`source.set`: a full state assignment for one source.\n\nEvery field is optional and only what is named moves, which is how every\nother setter in this protocol works. The one that matters here is `place`:\nit moves a running source between the core, a sidecar and a node.",
+        "additionalProperties": false,
+        "description": "`source.set`: a full state assignment for one source.\n\nEvery field is optional and only what is named moves, which is how every\nother setter in this protocol works. The one that matters here is `place`:\nit moves a running source between the core, a sidecar and a node.\n\nUnknown fields are refused rather than dropped. Serde's default is to\nignore what it does not recognise, and a setter that answers 200 to a field\nit threw away is indistinguishable from one that saved it: the first party\ndrawer sent `uri` here for months and told the operator it was saved.",
         "properties": {
           "color": {
             "description": "The colour the UI and the tally show it in. On the scene document,\nlike the name.",

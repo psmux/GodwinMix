@@ -272,7 +272,13 @@ fn refuse(e: anyhow::Error) -> RpcError {
 /// Every field is optional and only what is named moves, which is how every
 /// other setter in this protocol works. The one that matters here is `place`:
 /// it moves a running source between the core, a sidecar and a node.
+///
+/// Unknown fields are refused rather than dropped. Serde's default is to
+/// ignore what it does not recognise, and a setter that answers 200 to a field
+/// it threw away is indistinguishable from one that saved it: the first party
+/// drawer sent `uri` here for months and told the operator it was saved.
 #[derive(Debug, serde::Serialize, serde::Deserialize, schemars::JsonSchema)]
+#[serde(deny_unknown_fields)]
 pub struct SetSourceRequest {
     /// Source id. `source` is accepted too, which is what the scene side of
     /// this method has always been called with.
@@ -328,6 +334,26 @@ pub(crate) fn register_set(reg: &mut Registry<Call>) {
 }
 
 async fn set(call: Call, params: Value) -> Result<Value, RpcError> {
+    // Read before the struct does, so that `uri` never has to be a field here.
+    // If it were one, `deny_unknown_fields` would list it as accepted in every
+    // other error it writes, which is the opposite of true. A source's address
+    // is fixed for its life, and what a caller wants is almost always a new
+    // source, so the message says that rather than naming the field.
+    if params.get("uri").is_some() {
+        let id = params
+            .get("id")
+            .or_else(|| params.get("source"))
+            .and_then(|v| v.as_str())
+            .unwrap_or("that source");
+        return Err(RpcError::invalid_params(format!(
+            "a source's address is fixed once it exists, so '{id}' cannot be moved to \
+             another one here. Remove it with source.remove and add it again with \
+             source.add at the address you want."
+        ))
+        .with("id", id)
+        .with("remove", "source.remove")
+        .with("add", "source.add"));
+    }
     let req: SetSourceRequest = call.params(&params)?;
     let configs = call.app.mixer.configs().await.map_err(|e| call.mixer_error(e))?;
     let Some(current) = configs.sources.iter().find(|s| s.id == req.id).cloned() else {
@@ -483,4 +509,52 @@ fn check_move(
             .with("placements", serde_json::json!(declared))
             .with("retryable", serde_json::json!(false))
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The schema a client reads must not offer `uri`, because `source.set`
+    /// will refuse it. The drawer built its form from a kind's `source.add`
+    /// schema, which does carry one, and that is how the silent drop got in.
+    #[test]
+    fn the_published_schema_does_not_offer_an_address() {
+        let schema = serde_json::to_value(schemars::schema_for!(SetSourceRequest)).unwrap();
+        let props = schema["properties"].as_object().expect("an object schema");
+        assert!(!props.contains_key("uri"), "uri is on the schema: {props:?}");
+        assert_eq!(schema["additionalProperties"], serde_json::json!(false));
+    }
+
+    /// Serde ignores what it does not recognise unless it is told not to, and
+    /// a setter that answers 200 to a field it threw away cannot be told from
+    /// one that saved it.
+    #[test]
+    fn an_unknown_field_is_refused_rather_than_dropped() {
+        let params = serde_json::json!({ "id": "cam1", "bitrate": 9000 });
+        let err = serde_json::from_value::<SetSourceRequest>(params).unwrap_err().to_string();
+        assert!(err.contains("unknown field"), "{err}");
+        assert!(err.contains("bitrate"), "{err}");
+        // The list it prints is the list a caller may use, so `uri` must not
+        // be in it: the address is refused for a reason of its own.
+        assert!(!err.contains("uri"), "uri is offered as acceptable: {err}");
+    }
+
+    #[test]
+    fn the_fields_that_are_settable_still_parse() {
+        let params = serde_json::json!({ "id": "cam1", "name": "Wide", "latency_ms": 200 });
+        let req: SetSourceRequest = serde_json::from_value(params).unwrap();
+        assert_eq!(req.id, "cam1");
+        assert_eq!(req.name.as_deref(), Some("Wide"));
+        assert_eq!(req.latency_ms, Some(200));
+    }
+
+    /// `source` is what the scene side of this method has always been called
+    /// with, and deny_unknown_fields must not break the alias.
+    #[test]
+    fn the_source_alias_still_works() {
+        let req: SetSourceRequest =
+            serde_json::from_value(serde_json::json!({ "source": "cam1" })).unwrap();
+        assert_eq!(req.id, "cam1");
+    }
 }
