@@ -507,11 +507,17 @@ staged in the bundle has to come back at the version the bundle carries with
 nothing wrong with it:
 
 ```
-3 device plugins in /Applications/GodwinMix.app/Contents/Resources/plugins/macos
+3 device plugins in .../GodwinMix.app/Contents/Resources/plugins/macos
   audio-device 0.1.0 loaded
   camera 0.1.0 loaded
   screen 0.1.0 loaded
 every device plugin the app carries is loaded and has no problem
+```
+
+The launch that does the copying says so first, once per plugin:
+
+```
+[desktop] put camera 0.1.0 in /Users/you/Library/Application Support/mix.godwin.desktop/plugins
 ```
 
 The list comes off the bundle rather than out of the program, so a fourth
@@ -532,6 +538,18 @@ installed.
 **"The mixer did not answer within 25 seconds."** A cold GStreamer registry
 scan on a small board can take that long once. Try again; the second start uses
 the cache.
+
+**No camera, no screen and no microphone to add.** The app carries the three
+plugins and copies them out on the launch that starts the mixer.
+`--headless-check` says whether the mixer loaded them, and the copies are in
+`plugins/` in the application data directory. A build made without
+`dev/bundle-plugins.sh` carries none, and then the mixer reads whatever is in
+`~/.godwinmix/plugins` as it always did.
+
+**`--headless-check` printed nothing and exited 0.** Another copy of the app is
+open. The shell is single instance: a second launch hands its arguments to the
+first and leaves, and `--headless-check` is not exempt from that. Quit the app
+and run it again.
 
 **Two mixers.** If the shell is killed rather than quit, the mixer it started
 keeps running, which is the right way round: a broadcast should not end because
