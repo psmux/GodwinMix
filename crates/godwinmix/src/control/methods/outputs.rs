@@ -1,4 +1,4 @@
-//! Destinations: list, get, add, remove, reconnect.
+//! Destinations: list, get, add, set, remove, reconnect.
 
 use super::{body, handler};
 use godwinmix_protocol::error::RpcError;
@@ -71,6 +71,31 @@ pub fn register(reg: &mut Registry<Call>) {
 
     reg.register(
         MethodDef::new(
+            "output.set",
+            Scope::Operate,
+            "Change a destination in place: a new address with a new stream key, a new \
+             reconnect policy, a deeper outage buffer. The address is write only, so a \
+             client that only wants the buffer never has to hold the key.",
+            handler(set),
+        )
+        .params(schema_of::<SetOutputRequest>)
+        .result(schema_of::<OutputStatus>)
+        .tool(
+            "set_output",
+            Tier::Standard,
+            "Change one destination in place without losing its id: give it a new address \
+             (the whole URL, stream key and all), a new reconnect `policy`, or a deeper \
+             `queue_secs` outage buffer. Only the fields you name move. This is how a \
+             placeholder stream key gets replaced: `list_outputs` shows `has_key` false \
+             while the address a preset wrote still says YOUR-STREAM-KEY, and this method \
+             puts the real one in. The destination is rebuilt, so it reconnects; the \
+             programme and every other output are not disturbed. The address is never \
+             read back by any method. Refused on a core started with --rehearsal.",
+        ),
+    );
+
+    reg.register(
+        MethodDef::new(
             "output.remove",
             Scope::Operate,
             "Stop sending to a destination and forget it. Other outputs are unaffected.",
@@ -136,6 +161,144 @@ async fn add(call: Call, params: Value) -> Result<Value, RpcError> {
         .await
         .map_err(|e| call.mixer_error(e))?;
     body(find(&call, &id).await?)
+}
+
+/// Change one destination, naming only what moves.
+///
+/// The merge is done here, against the config the mixer is actually running,
+/// rather than by making the caller resend the whole record: an address it
+/// cannot read back is not one it can echo, so a partial request is the only
+/// honest shape this can have.
+async fn set(call: Call, params: Value) -> Result<Value, RpcError> {
+    let req: SetOutputRequest = call.params(&params)?;
+    let configs = call.app.mixer.configs().await.map_err(|e| call.mixer_error(e))?;
+    let Some(current) = configs.outputs.iter().find(|o| o.id == req.id).cloned() else {
+        let ids = configs.outputs.iter().map(|o| o.id.clone()).collect::<Vec<_>>();
+        return Err(RpcError::not_found("output", &req.id, &ids));
+    };
+    let wanted = merge(&req, current)?;
+
+    if call.dry_run {
+        return Ok(call.dry_run_answer(!req.is_empty(), diff_of(&req)));
+    }
+    if req.is_empty() {
+        // Nothing was named, so there is nothing to rebuild a live
+        // destination for. Answering with the record says so.
+        return body(find(&call, &req.id).await?);
+    }
+    // One command. The mixer takes the output down and puts it back under the
+    // same id on its own thread, so no status a client reads is ever missing
+    // it, and the programme carries on: the encoder is shared and the other
+    // destinations keep their connections.
+    call.app
+        .mixer
+        .request(|ack| Command::SetOutput(Box::new(wanted), Some(ack)))
+        .await
+        .map_err(|e| call.mixer_error(e))?;
+    body(find(&call, &req.id).await?)
+}
+
+/// The request laid over the config the output is running, and nothing else.
+fn merge(
+    req: &SetOutputRequest,
+    current: godwinmix_core::config::OutputConfig,
+) -> Result<godwinmix_core::config::OutputConfig, RpcError> {
+    let mut wanted = current;
+    if let Some(uri) = &req.uri {
+        // Trimmed, because a stream key pasted out of a platform's dashboard
+        // arrives with a newline on the end often enough to be worth handling
+        // here as well as in the surface that took it.
+        let uri = uri.trim();
+        if uri.is_empty() {
+            return Err(RpcError::invalid_params(format!(
+                "output '{}' still needs an address. Send `uri` with the whole URL \
+                 including the stream key, or leave `uri` out to keep the one it has.",
+                req.id
+            ))
+            .with("id", req.id.clone())
+            .with("field", "uri"));
+        }
+        if scheme_of(uri) != scheme_of(&wanted.uri) {
+            // The kind is worked out from the address when `type` is absent,
+            // so a move from rtmp:// to srt:// has to let it be worked out
+            // again rather than keep the old kind's id.
+            wanted.type_id = None;
+        }
+        // An output kind reads `params.uri` ahead of the config's own, so a
+        // params copy left over from an earlier add would quietly win.
+        wanted.params.remove("uri");
+        wanted.extra.remove("uri");
+        wanted.uri = uri.to_string();
+    }
+    if let Some(policy) = &req.policy {
+        wanted.policy = match policy.as_str() {
+            "own" => godwinmix_core::config::OutputPolicy::Own,
+            "cdn" => godwinmix_core::config::OutputPolicy::Cdn,
+            other => {
+                return Err(RpcError::invalid_params(format!(
+                    "'{other}' is not a reconnect policy. Send \"own\" for a server you \
+                     run or \"cdn\" for a platform that penalises hammering."
+                ))
+                .with("id", req.id.clone())
+                .with("field", "policy")
+                .with("policies", vec!["own", "cdn"]))
+            }
+        };
+    }
+    if let Some(secs) = req.queue_secs {
+        if !(0.0..=60.0).contains(&secs) || !secs.is_finite() {
+            return Err(RpcError::invalid_params(format!(
+                "an outage buffer of {secs} seconds is not usable. Send `queue_secs` \
+                 between 0 and 60."
+            ))
+            .with("id", req.id.clone())
+            .with("field", "queue_secs"));
+        }
+        wanted.queue_secs = secs;
+    }
+    for (key, value) in &req.params {
+        match toml::Value::try_from(value) {
+            Ok(v) => {
+                wanted.params.insert(key.clone(), v);
+            }
+            Err(e) => {
+                return Err(RpcError::invalid_params(format!(
+                    "`{key}` is not something an output config can hold: {e}. Send a \
+                     string, a number or a boolean."
+                ))
+                .with("id", req.id.clone())
+                .with("field", key.clone()))
+            }
+        }
+    }
+    Ok(wanted)
+}
+
+/// The scheme, lowercased, or "" for an address that has none.
+fn scheme_of(uri: &str) -> String {
+    uri.split_once("://").map(|(s, _)| s.to_lowercase()).unwrap_or_default()
+}
+
+/// What a dry run says it would do. The address is never named, only that one
+/// was given, because printing it back would be the one leak this all avoids.
+fn diff_of(req: &SetOutputRequest) -> Vec<String> {
+    let mut diff = Vec::new();
+    if req.uri.is_some() {
+        diff.push(format!("point {} at the address you sent", req.id));
+    }
+    if let Some(policy) = &req.policy {
+        diff.push(format!("set {}'s reconnect policy to {policy}", req.id));
+    }
+    if let Some(secs) = req.queue_secs {
+        diff.push(format!("set {}'s outage buffer to {secs} seconds", req.id));
+    }
+    for key in req.params.keys() {
+        diff.push(format!("set {}'s {key}", req.id));
+    }
+    if !diff.is_empty() {
+        diff.push(format!("{} reconnects; the programme is not disturbed", req.id));
+    }
+    diff
 }
 
 async fn remove(call: Call, params: Value) -> Result<Value, RpcError> {
