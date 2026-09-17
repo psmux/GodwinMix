@@ -751,6 +751,29 @@ impl Multiview {
 
         let src = make("proxysrc", &format!("mv-src-{tag}"))?;
         src.set_property("proxysink", proxy);
+        // Stop the latency query at the join, the way every other proxy
+        // boundary in the core does.
+        //
+        // A live aggregator produces its first frame at `base time + start
+        // time + latency` (`gst_aggregator_wait_and_check`), and that latency
+        // is whatever the query answers upstream. Left to travel, this one
+        // crosses into the programme pipeline, and the programme return tile
+        // takes it all the way to `vmix`, which carries
+        // `MIN_UPSTREAM_LATENCY_NS`. Measured here: the mosaic compositor
+        // configured 1.258 s of latency and the preview one 0.45 s, so the
+        // mosaic sat for a second and a quarter after its first tile arrived
+        // before it produced anything, consuming nothing while it waited. A
+        // tile tee is linked straight to a mosaic pad, so the tee blocks once
+        // that pad is full, and a preview branch hanging off the same tee is
+        // starved for exactly as long. On a runner where everything is
+        // software that window swallowed the two seconds
+        // `scene.preview.frame` waits, every time.
+        //
+        // The programme's second of slack belongs to the programme's mixers,
+        // which have real sources to wait for. This pipeline shares the
+        // programme's clock and base time (`follow_clock_of`), so the join
+        // adds nothing and there is nothing here to negotiate.
+        gstutil::answer_latency_here(&src)?;
         let queue = gstutil::queue_preview(&format!("mv-q-{tag}"))?;
         let rate = make("videorate", &format!("mv-rate-{tag}"))?;
         // Start at the first buffer that arrives, not at the start of the
@@ -1505,7 +1528,16 @@ mod tests {
         // gap in one burst.
         tokio::time::sleep(Duration::from_secs(2)).await;
         let mut sub = mv.subscribe(MultiviewRequest::configured());
-        next_frame(&mut sub, Duration::from_secs(3)).await;
+        // The first frame is the slow one: a whole pipeline is built, a
+        // thumbnail end is spliced into every source, and the compositor then
+        // holds its first output for its declared latency. A machine that has
+        // said it is slow gets that much longer for it, the way every other
+        // wait in these tests does.
+        next_frame(
+            &mut sub,
+            Duration::from_secs(3).mul_f64(crate::plugin::harness::timing_slack()),
+        )
+        .await;
         let started = Instant::now();
         let mut frames = 0u32;
         let mut instant = 0u32;
@@ -2033,6 +2065,130 @@ mod tests {
             );
         }
 
+        let _ = handle.send(crate::mixer::Command::Shutdown);
+        tokio::task::spawn_blocking(move || thread.join()).await.unwrap().unwrap();
+    }
+
+    /// A preview built over sources that have been running for a while has two
+    /// seconds to produce, because that is what `scene.preview.frame` promises.
+    ///
+    /// The Linux smoke asked fifteen times over forty five seconds and was
+    /// refused every time while every other step passed. What it was waiting
+    /// for was a latency budget: a live aggregator holds its first output
+    /// until `base time + start time + latency`, and the latency was whatever
+    /// the query answered when it crossed the proxy into the programme
+    /// pipeline, where the programme return leads to `vmix` and its
+    /// `MIN_UPSTREAM_LATENCY_NS`. Measured on this machine before the fix: the
+    /// mosaic compositor configured 1.258 s and the preview one 0.45 s, and
+    /// the mosaic consumes nothing while it waits, so the tile tees stay
+    /// blocked and the preview slots stay empty for as long as that lasts.
+    ///
+    /// So this is the smoke's own shape: sources running for seconds, a mosaic
+    /// already up, then a preview asked for cold and a JPEG inside the API's
+    /// deadline. The margin is in the failure message, because the next time
+    /// this fails on a runner nobody can reproduce, that number is the report.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn a_preview_built_over_running_sources_produces_inside_the_api_deadline() {
+        init();
+        let mut cfg = mixer_cfg(MultiviewConfig {
+            width: 320,
+            height: 180,
+            fps: 8,
+            linger_secs: 0,
+            ..Default::default()
+        });
+        // Two sources, as the smoke scene has: one slot can be feeding while
+        // the other has not delivered a buffer yet, which is the state the
+        // compositor has to produce through.
+        cfg.sources = vec![
+            test_source(),
+            crate::config::SourceConfig::bare("cam2", "test://ball"),
+        ];
+        let (mut mix, handle, cmd_rx, _bus_rx) = crate::mixer::Mixer::build(cfg).unwrap();
+        mix.start().unwrap();
+        let mv = mix.multiview_handle();
+        let preview = mix.preview_handle();
+        let canvas = mix.canvas().clone();
+        let thread = crate::mixer::spawn(mix, cmd_rx, handle.clone());
+        preview.set_scene(vec![
+            preview::Cell {
+                source: "cam1".into(),
+                x: 0,
+                y: 0,
+                width: canvas.width / 2,
+                height: canvas.height,
+                alpha: 1.0,
+            },
+            preview::Cell {
+                source: "cam2".into(),
+                x: canvas.width / 2,
+                y: 0,
+                width: canvas.width / 2,
+                height: canvas.height,
+                alpha: 1.0,
+            },
+        ]);
+
+        // Long enough that the sources, the programme and their running times
+        // are all well past zero when the compositor is built.
+        tokio::time::sleep(Duration::from_secs(5)).await;
+
+        // The mosaic first, held open, which is the state the smoke is in by
+        // the time it asks: building a whole pipeline and splicing a thumbnail
+        // end into every source is work the API's two seconds was never meant
+        // to cover, and the smoke retries for it. What has to fit in two
+        // seconds is the preview compositor itself.
+        let mut mosaic = mv.subscribe(MultiviewRequest::configured());
+        next_frame(
+            &mut mosaic,
+            Duration::from_secs(5).mul_f64(crate::plugin::harness::timing_slack()),
+        )
+        .await;
+
+        let asked = Instant::now();
+        let mut sub = mv.subscribe_preview(PreviewRequest { fps: 8, width: 320, full: false });
+        let frame = tokio::time::timeout(Duration::from_secs(2), sub.recv()).await;
+        let frame = match frame {
+            Ok(Ok(frame)) => frame,
+            other => {
+                let _ = handle.send(crate::mixer::Command::Shutdown);
+                panic!(
+                    "no preview frame within the two seconds scene.preview.frame waits: {:?}",
+                    other.map(|r| r.map(|_| ()))
+                );
+            }
+        };
+        let took = asked.elapsed();
+        assert_eq!(&frame[..2], &[0xFF, 0xD8], "that is not a JPEG");
+        assert!(
+            took < Duration::from_secs(2),
+            "the first preview frame took {took:?} of the two seconds the API waits"
+        );
+
+        // And the reason it holds on a slow machine: neither compositor is
+        // carrying the programme's latency budget any more. This is the part
+        // of the fix that can be measured rather than timed, so it is the part
+        // that is asserted: a mosaic that has inherited `vmix`'s second sits
+        // that long before its first frame whatever the machine, and a two
+        // second promise has nothing left to spend.
+        let pipeline =
+            crate::observe::introspect::pipeline("multiview").expect("no multiview pipeline");
+        for name in ["mv-comp", "pv-comp"] {
+            let comp = pipeline.by_name(name).unwrap_or_else(|| panic!("no {name}"));
+            let pad = comp.static_pad("src").unwrap();
+            let mut query = gst::query::Latency::new();
+            assert!(pad.query(&mut query), "{name} would not answer a latency query");
+            let (_, min, _) = query.result();
+            // Four frames of the mosaic's own rate. Measured before the fix:
+            // 1.258 s on the mosaic and 0.45 s on the preview, against 8 fps.
+            assert!(
+                min <= gst::ClockTime::from_mseconds(500),
+                "{name} declares {min} of latency, so its first frame is that late"
+            );
+        }
+
+        drop(sub);
+        drop(mosaic);
         let _ = handle.send(crate::mixer::Command::Shutdown);
         tokio::task::spawn_blocking(move || thread.join()).await.unwrap().unwrap();
     }

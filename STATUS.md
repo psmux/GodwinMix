@@ -114,6 +114,18 @@ the three client suites and `python3 clients/gen/generate.py --check`.
    would cap it and changes backpressure on the programme tee, so it waits
    for its own tests. Every record is in `bench/results`, and `dev/soak.sh
    --skip` bisects by phase.
+
+   The scene preview on a Linux runner never produced a frame inside the
+   API's two seconds, and once on a macOS runner. The mosaic's tile
+   branches start at a proxysrc that answered no latency of its own, so
+   the query crossed into the programme and came back with the programme
+   compositor's one second budget: the mosaic held its first frame 1.26 s,
+   the preview 450 ms, and a tile tee linked straight to a full mosaic pad
+   starved the preview branch beside it. The runners' GStreamer 1.24 has
+   no clock based start for a force live aggregator, so there the preview
+   could not produce at all. The proxy now answers the latency itself, as
+   every other boundary in the core does; the mosaic and preview declare
+   375 ms and 250 ms and a test holds both under 500 ms.
 4. **Alpha graphics key to black**, because the graph is I420 throughout. The
    four edits needed are listed in `docs/reference/graphics.md`.
 5. **Smaller gaps**, each with its file and line in the git history: only
