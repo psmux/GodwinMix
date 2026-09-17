@@ -185,6 +185,14 @@ pub struct SourcePositionState {
 pub struct OutputStatus {
     pub id: OutputId,
     pub uri_host: String,
+    /// False while the address still carries a placeholder a preset wrote in
+    /// for somebody to replace, such as `YOUR-STREAM-KEY`. The key itself
+    /// never leaves the core, so this is how a client knows to put its own
+    /// form up and say "needs a stream key" without ever seeing the key.
+    ///
+    /// True for an address with no key in it at all, an SRT one for instance,
+    /// because there is nothing there for anybody to replace.
+    pub has_key: bool,
     pub state: OutputState,
     pub reconnects: u32,
     /// Seconds of encoded data waiting in the pre-muxer queue. A number that
@@ -478,6 +486,24 @@ pub struct DryRun {
     pub method: String,
 }
 
+/// Placeholders a preset writes into an address, meaning "put the real thing
+/// here". Matched without regard to case, so `change-me` covers `CHANGE-ME`.
+///
+/// The same list `preset::plan` prints its todo lines from. It is repeated
+/// here rather than shared because this crate sits underneath the presets and
+/// `has_key` is part of the wire contract; a marker added there should be
+/// added here too.
+pub const KEY_PLACEHOLDERS: &[&str] = &["your-stream-key", "your-key", "change-me"];
+
+/// Whether an address carries a real stream key rather than a placeholder.
+///
+/// It only looks for the markers. An address with no key in it is not a
+/// problem anybody has to fix, so it answers true.
+pub fn uri_has_key(uri: &str) -> bool {
+    let lower = uri.to_lowercase();
+    !KEY_PLACEHOLDERS.iter().any(|marker| lower.contains(marker))
+}
+
 /// Strip credentials out of an RTMP URI before it goes anywhere near the UI.
 /// Stream keys live in the path of most CDN ingest URLs and must not be shown.
 pub fn safe_uri_label(uri: &str) -> String {
@@ -564,6 +590,7 @@ mod tests {
         let o = OutputStatus {
             id: "yt".into(),
             uri_host: "rtmp://a.rtmp.youtube.com/…".into(),
+            has_key: true,
             state: OutputState::Live,
             reconnects: 0,
             queue_secs: 0.2,
@@ -593,5 +620,21 @@ mod tests {
             "rtmp://ingest.example.com/…"
         );
         assert_eq!(safe_uri_label("garbage"), "…");
+    }
+
+    #[test]
+    fn a_placeholder_key_is_not_a_key() {
+        // What the church preset writes, and the two other spellings a preset
+        // may use. Case does not matter.
+        assert!(!uri_has_key("rtmp://a.rtmp.youtube.com/live2/YOUR-STREAM-KEY"));
+        assert!(!uri_has_key("rtmp://a.rtmp.youtube.com/live2/your-stream-key"));
+        assert!(!uri_has_key("rtmp://ingest.example.com/app/CHANGE-ME"));
+        assert!(!uri_has_key("rtmp://ingest.example.com/app/YOUR-KEY"));
+
+        // A real key, and an address with no key in it at all. Neither is
+        // anything an operator has to go and fix.
+        assert!(uri_has_key("rtmp://a.rtmp.youtube.com/live2/abcd-efgh-ijkl-mnop"));
+        assert!(uri_has_key("srt://192.168.1.50:9000"));
+        assert!(uri_has_key(""));
     }
 }

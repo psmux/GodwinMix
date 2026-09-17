@@ -699,6 +699,7 @@ mod tests {
             outputs: vec![OutputStatus {
                 id: "primary".into(),
                 uri_host: "host".into(),
+                has_key: true,
                 state: OutputState::Live,
                 reconnects: 2,
                 queue_secs: 0.1,

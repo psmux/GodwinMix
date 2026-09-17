@@ -40,6 +40,7 @@ same thing without a mixer. The ones the how to pages reach for:
 |---|---|
 | `POST /api/v1/sources` | the whole of `source.add`: `{"id","uri","name","type","place","latency_ms","params"}`. `uri` is required, and the type id goes in it when a source has no address of its own |
 | `POST /api/v1/outputs` | `output.add`: `{"id","uri","policy"}` |
+| `POST /api/v1/outputs/{id}/set` | `output.set`: `{"uri","policy","queue_secs"}`, naming only what moves. `uri` is write only and an absent one keeps the address in force, which is how a stream key is replaced without anything ever reading it back. See [stream to a platform](../how-to/stream-to-a-platform.md) |
 | `POST /api/v1/tool/call` | `tool.call`: `{"name","arguments"}`, the name being `<plugin>/<tool>` |
 | `GET /api/v1/plugins/{id}/settings` | a plugin's settings, and `POST` with `{"settings":{...}}` changes the keys it names |
 

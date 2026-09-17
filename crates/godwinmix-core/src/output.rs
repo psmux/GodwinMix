@@ -31,7 +31,7 @@
 use crate::config::OutputConfig;
 use crate::gstutil::{self, make, BusEvent, BusOwner};
 use crate::plugin::output::{Output, OutputCtx};
-use crate::state::{safe_uri_label, OutputId, OutputState, OutputStatus};
+use crate::state::{safe_uri_label, uri_has_key, OutputId, OutputState, OutputStatus};
 use anyhow::{Context, Result};
 use gstreamer as gst;
 use gstreamer::prelude::*;
@@ -398,6 +398,10 @@ impl OutputSlot {
         OutputStatus {
             id: self.cfg.id.clone(),
             uri_host: safe_uri_label(&self.cfg.uri),
+            // The address itself never leaves the core. This is the one bit
+            // of it that does: whether a preset's placeholder is still in
+            // there, so a surface can put its own key form up and say so.
+            has_key: uri_has_key(&self.cfg.uri),
             state: self.state(),
             reconnects: self.reconnects.load(Ordering::Relaxed),
             queue_secs: gstutil::queue_level_secs(&self.feed_video),
