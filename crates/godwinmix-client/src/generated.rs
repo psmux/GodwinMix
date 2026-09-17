@@ -1385,7 +1385,11 @@ pub struct NameRequest {
 pub struct Next {
     /// One of `NEXT_ACTIONS`. Anything else is a preset written against a
     /// newer surface than this one; a surface shows its `text` or skips it.
-    pub do: String,
+    ///
+    /// Spelled `action` rather than `do` because `do` is a reserved word in
+    /// Rust and in JavaScript, and a wire name that every generated client
+    /// has to escape is a wire name that will eventually not be escaped.
+    pub action: String,
     /// `add_source`: the kind to add, as `<plugin>/<provide>`.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub kind: Option<String>,

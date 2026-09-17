@@ -71,17 +71,17 @@ scenes = "scenes"
 gallery = "icon"
 
 [[provides.preset.next]]
-do = "stream_key"
+action = "stream_key"
 output = "youtube"
 text = "YouTube Studio, then Create, then Go Live, shows the key."
 
 [[provides.preset.next]]
-do = "install_plugin"
+action = "install_plugin"
 name = "camera"
 text = "The cameras are test patterns until this is here."
 
 [[provides.preset.next]]
-do = "take"
+action = "take"
 source = "cam-wide"
 text = "Press Wide to put a picture on air."
 ```
@@ -104,16 +104,16 @@ text = "Press Wide to put a picture on air."
 A surface draws a control for each entry rather than printing a sentence,
 because a sentence that says "put your stream key into the `[[outputs]]` block"
 is a graphical program telling somebody the answer is in a text editor. Each
-entry is one table with a `do` and the one field that `do` needs.
+entry is one table with an `action` and the one field that `do` needs.
 
 ```toml
 [[provides.preset.next]]
-do = "stream_key"
+action = "stream_key"
 output = "youtube"
 text = "YouTube Studio, then Create, then Go Live, shows the key."
 ```
 
-| `do` | Its field | What a surface does with it |
+| `action` | Its field | What a surface does with it |
 |---|---|---|
 | `stream_key` | `output` | A box and a Save on the destination with that id, if the core still reports `has_key` false for it. Saving calls `output.set`. |
 | `install_plugin` | `name` | An Install button that calls `plugin.add`. A surface may take the list from the plan's own missing plugins instead and use this only for the wording. |

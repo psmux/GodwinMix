@@ -26,14 +26,14 @@ gallery = "label"
 # draws a control; it is read through `preset.list`.
 # `docs/reference/presets.md` is the schema.
 [[provides.preset.next]]
-do = "note"
+action = "note"
 text = "Nobody sits at this mixer. An agent drives it over the protocol, and the mixer describes every method it has."
 
 [[provides.preset.next]]
-do = "note"
+action = "note"
 text = "Give the agent the control token this mixer was started with. Without one it answers nothing."
 
 [[provides.preset.next]]
-do = "take"
+action = "take"
 source = "page"
 text = "The channel page goes on air first, and standby covers the gap when it is not ready."

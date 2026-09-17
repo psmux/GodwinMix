@@ -682,8 +682,8 @@ async function onboardingSuite() {
     const result = {
       plan: { plugins: [{ name: "rtmp", installed: true }] },
       next: [
-        { do: "stream_key", output: "youtube", text: "YouTube Studio shows the key." },
-        { do: "take", source: "cam-wide", text: "Press Wide." },
+        { action: "stream_key", output: "youtube", text: "YouTube Studio shows the key." },
+        { action: "take", source: "cam-wide", text: "Press Wide." },
       ],
       needs_restart: [],
     };
@@ -785,7 +785,7 @@ async function onboardingSuite() {
     const client = stub({});
     const m = await showChecklist(client, CHURCH, {
       plan: { plugins: [{ name: "camera", installed: false }, { name: "rtmp", installed: true }] },
-      next: [{ do: "install_plugin", name: "camera", text: "Test patterns until it is here." }],
+      next: [{ action: "install_plugin", name: "camera", text: "Test patterns until it is here." }],
       needs_restart: [],
     });
     test("a missing plugin is an Install button and counts towards the progress", () => {

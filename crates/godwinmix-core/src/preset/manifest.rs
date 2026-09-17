@@ -92,7 +92,7 @@ pub struct PresetBlock {
     pub steps: Vec<String>,
 }
 
-/// The `do` values a `[[next]]` entry may carry.
+/// The `action` values a `[[next]]` entry may carry.
 pub const NEXT_ACTIONS: &[&str] =
     &["stream_key", "install_plugin", "add_source", "take", "note"];
 
@@ -107,7 +107,10 @@ pub const NEXT_ACTIONS: &[&str] =
 pub struct Next {
     /// One of `NEXT_ACTIONS`. Anything else is a preset written against a
     /// newer surface than this one; a surface shows its `text` or skips it.
-    #[serde(rename = "do")]
+    ///
+    /// Spelled `action` rather than `do` because `do` is a reserved word in
+    /// Rust and in JavaScript, and a wire name that every generated client
+    /// has to escape is a wire name that will eventually not be escaped.
     pub action: String,
     /// `stream_key`: the output whose address still holds a placeholder.
     #[serde(default, skip_serializing_if = "Option::is_none")]

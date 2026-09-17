@@ -295,24 +295,24 @@ fn next_tables(config: &Config) -> String {
             continue;
         }
         out.push_str(&format!(
-            "\n[[provides.preset.next]]\ndo = \"stream_key\"\noutput = {:?}\n\
+            "\n[[provides.preset.next]]\naction = \"stream_key\"\noutput = {:?}\n\
              text = \"Say here where this key is found.\"\n",
             output.id
         ));
     }
     match config.sources.first() {
         Some(source) => out.push_str(&format!(
-            "\n[[provides.preset.next]]\ndo = \"take\"\nsource = {:?}\n\
+            "\n[[provides.preset.next]]\naction = \"take\"\nsource = {:?}\n\
              text = \"Press it to put a picture on air.\"\n",
             source.id
         )),
         None => out.push_str(
-            "\n[[provides.preset.next]]\ndo = \"add_source\"\nkind = \"rtmp/source\"\n\
+            "\n[[provides.preset.next]]\naction = \"add_source\"\nkind = \"rtmp/source\"\n\
              text = \"Say here what to point at this mixer.\"\n",
         ),
     }
     out.push_str(
-        "\n[[provides.preset.next]]\ndo = \"note\"\n\
+        "\n[[provides.preset.next]]\naction = \"note\"\n\
          text = \"Replace this with the one other thing somebody has to know.\"\n",
     );
     out

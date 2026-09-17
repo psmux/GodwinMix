@@ -62,16 +62,16 @@ scenes = "scenes"
 gallery = "icon"
 
 [[provides.preset.next]]
-do = "stream_key"
+action = "stream_key"
 output = "youtube"
 text = "YouTube Studio, then Create, then Go Live, shows the key."
 
 [[provides.preset.next]]
-do = "install_plugin"
+action = "install_plugin"
 name = "camera"
 
 [[provides.preset.next]]
-do = "take"
+action = "take"
 source = "cam-wide"
 ```
 
@@ -82,7 +82,7 @@ surface plugin. `theme` is a theme name the surface resolves: one of `dark`,
 `label`); leave it out and the surface asks the machine. The `[[next]]` tables
 are what the person does next, typed rather than written out, so the welcome
 panel puts a box, a Save or an Install button on the screen instead of telling
-somebody to go and edit a file. Three to five of them. `do` is one of
+somebody to go and edit a file. Three to five of them. `action` is one of
 `stream_key`, `install_plugin`, `add_source`, `take` and `note`. The paths are
 relative to the preset directory.
 

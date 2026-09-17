@@ -26,20 +26,20 @@ gallery = "snapshot"
 # What the teacher does next, as data rather than as sentences. The welcome
 # panel draws a control for each one. `docs/reference/presets.md` is the schema.
 [[provides.preset.next]]
-do = "install_plugin"
+action = "install_plugin"
 name = "camera"
 text = "The camera is a test pattern until this is here, so the lesson records before the room is sorted out."
 
 [[provides.preset.next]]
-do = "install_plugin"
+action = "install_plugin"
 name = "screen"
 text = "The same for the shared screen."
 
 [[provides.preset.next]]
-do = "take"
+action = "take"
 source = "teacher"
 text = "Press Teacher to put a picture on air, then Split to show the screen beside it."
 
 [[provides.preset.next]]
-do = "note"
+action = "note"
 text = "The recording and the stream both go to this machine. Destinations, then Edit, sends either one elsewhere."

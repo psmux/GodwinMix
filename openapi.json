@@ -2844,8 +2844,8 @@
       "Next": {
         "description": "One thing the person does after a preset is applied.\n\nTyped rather than written out, because a sentence sends a volunteer to a\ntext editor and a type puts a control on the screen. The welcome panel\nturns `stream_key` into a box with a Save beside it and `install_plugin`\ninto the Install button. `note` is the escape hatch for what really is\nonly words.",
         "properties": {
-          "do": {
-            "description": "One of `NEXT_ACTIONS`. Anything else is a preset written against a\nnewer surface than this one; a surface shows its `text` or skips it.",
+          "action": {
+            "description": "One of `NEXT_ACTIONS`. Anything else is a preset written against a\nnewer surface than this one; a surface shows its `text` or skips it.\n\nSpelled `action` rather than `do` because `do` is a reserved word in\nRust and in JavaScript, and a wire name that every generated client\nhas to escape is a wire name that will eventually not be escaped.",
             "type": "string"
           },
           "kind": {
@@ -2885,7 +2885,7 @@
           }
         },
         "required": [
-          "do"
+          "action"
         ],
         "type": "object"
       },
