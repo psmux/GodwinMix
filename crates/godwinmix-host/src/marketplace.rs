@@ -340,6 +340,80 @@ pub fn remove(name: &str) -> Result<Added> {
     Ok(gone)
 }
 
+/// A marketplace the project runs, offered to a machine that has none.
+///
+/// A fresh core knows no marketplaces at all, so `plugin.search` answers
+/// nothing and `plugin.add camera` cannot resolve a bare name. The CLI has
+/// always printed these two as the next thing to type; a surface with no
+/// terminal needs the same two as data it can put behind a button.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct Recommendation {
+    /// The slug the document carries, which is what it will be listed under.
+    pub name: String,
+    /// What to pass to `marketplace.add`.
+    pub source: String,
+    pub title: String,
+    pub description: String,
+    /// Whether this machine has it already.
+    pub added: bool,
+    /// True for the one the project itself publishes.
+    pub first_party: bool,
+}
+
+/// The two the project runs, first party first.
+const RECOMMENDED: &[(&str, &str, &str, &str, bool)] = &[
+    (
+        "godwinmix",
+        "psmux/godwinmix",
+        "GodwinMix official",
+        "The plugins the project maintains: the camera, the audio device, NDI, SRT and \
+         the rest. Built on the public sidecar contract, run through the conformance \
+         harness in CI on every platform they declare, and signed by the release workflow.",
+        true,
+    ),
+    (
+        "godwinmix-plugins",
+        "psmux/godwinmix-plugins",
+        "Community index",
+        "Everything anybody has published and the harness bot has checked, with the \
+         result of that check beside each version. Most of it is nobody's responsibility \
+         but its author's, so read the tier before installing.",
+        false,
+    ),
+];
+
+/// What to offer a machine, narrowed by `only` the way a search is.
+///
+/// An operator who pinned `[marketplaces] only` gets nothing offered that the
+/// pin would refuse to read: a button that adds a marketplace this core then
+/// ignores is worse than no button.
+pub fn recommendations(only: &[String]) -> Vec<Recommendation> {
+    let have = load_store();
+    RECOMMENDED
+        .iter()
+        .filter(|(name, source, ..)| {
+            only.is_empty() || only.iter().any(|o| o == name || o == source)
+        })
+        .map(|(name, source, title, description, first_party)| Recommendation {
+            name: (*name).to_string(),
+            source: (*source).to_string(),
+            title: (*title).to_string(),
+            description: description.split_whitespace().collect::<Vec<_>>().join(" "),
+            added: have.marketplaces.iter().any(|m| &m.name == name || &m.source == source),
+            first_party: *first_party,
+        })
+        .collect()
+}
+
+/// Whether `only` would ever read a marketplace under this name and spec.
+///
+/// Read before an add rather than after: adding one that the pin excludes
+/// writes a line nothing consults, and the operator finds out when a search
+/// comes back empty.
+pub fn pinned_out(name: &str, spec: &str, only: &[String]) -> bool {
+    !only.is_empty() && !only.iter().any(|o| o == name || o == spec)
+}
+
 /// Every marketplace document this machine has, in the order they were added,
 /// narrowed by `only` when the operator pinned a list.
 pub fn documents(only: &[String]) -> Vec<Marketplace> {
