@@ -1716,16 +1716,6 @@ impl Mixer {
             superimposed = overlay.is_some(),
             "adding source"
         );
-        // Said before the pipeline exists, so the state is on the bus before
-        // the first frame can arrive. The snapshot after the build reads the
-        // state at that moment, and on a slow machine a test pattern was
-        // already live by then, so a client following the stream saw the
-        // source go straight to live and a session replay graded on the
-        // change to connecting failed for a state it never saw.
-        let _ = self.events.send(Event::SourceStateChanged {
-            source: cfg.id.clone(),
-            state: SourceState::Connecting,
-        });
         self.add_source_kind(cfg, true, overlay)?;
         self.persist_runtime();
         Ok(())
@@ -1737,6 +1727,17 @@ impl Mixer {
         in_multiview: bool,
         overlay: Option<MediaReport>,
     ) -> Result<()> {
+        // Said before the pipeline exists, so the state is on the bus before
+        // the first frame can arrive. The snapshot after the build reads the
+        // state at that moment, and on a slow machine a test pattern, and an
+        // ad's file, was already live by then, so a client following the
+        // stream saw the source go straight to live and a session replay
+        // graded on the change to connecting failed for a state it never saw.
+        // Here rather than in `add_source`, so an ad break says it too.
+        let _ = self.events.send(Event::SourceStateChanged {
+            source: cfg.id.clone(),
+            state: SourceState::Connecting,
+        });
         if self.sources.iter().any(|s| s.input.id == cfg.id) {
             anyhow::bail!("source {} already exists", cfg.id);
         }
