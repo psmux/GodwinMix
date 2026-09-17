@@ -71,6 +71,10 @@ export async function addProtocolCommands(client, openMethodForm) {
     return () => {};
   }
   const methods = (api && api.methods) || [];
+  // The document's shared definitions. Nearly every method points its params
+  // at one of these rather than spelling them out, so the form needs them to
+  // draw anything at all.
+  const defs = (api && api.$defs) || {};
   const offs = [];
   for (const m of methods) {
     const id = "protocol:" + m.name;
@@ -82,7 +86,7 @@ export async function addProtocolCommands(client, openMethodForm) {
         group: "Protocol",
         detail: m.summary || "",
         method: m.name,
-        run: () => openMethodForm(m),
+        run: () => openMethodForm(Object.assign({ $defs: defs }, m)),
       })
     );
   }
