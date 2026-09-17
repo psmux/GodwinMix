@@ -496,6 +496,274 @@ test("a method that takes nothing still gets an empty form, not a broken one", (
   eq(Object.keys(schema.properties || {}).length, 0);
 });
 
+// ------------------------------------------------ add source picker
+
+/**
+ * The picker that replaced four address boxes.
+ *
+ * Driven against a stubbed client rather than the core, because what is being
+ * checked is what the modal draws and what it sends: that the categories are
+ * on screen before discovery answers, that a found camera becomes a row whose
+ * button sends the params the device already handed over, and that a category
+ * whose plugin is missing offers to install it rather than naming a command.
+ */
+async function addSourcePickerSuite() {
+  const { openPicker } = await import("../shell/picker.js");
+  const kinds = await import("../client/kinds.js");
+
+  /** A client that answers from a table and remembers what it was asked. */
+  function stub(over) {
+    const answers = Object.assign(
+      {
+        "core.api": {
+          kinds: {
+            source: [
+              { id: "file/source" },
+              { id: "browser/source" },
+              { id: "rtmp/source" },
+              { id: "hls/source" },
+              { id: "exec/source" },
+              { id: "test/source" },
+            ],
+          },
+        },
+        "plugin.list": { plugins: [] },
+        "device.discover": { candidates: [] },
+        "media.list": { items: [] },
+        "source.add": (p) => ({ id: "added", uri: p.uri, name: p.name }),
+      },
+      over
+    );
+    return {
+      calls: [],
+      state: { sources: [] },
+      call(method, params) {
+        this.calls.push([method, params]);
+        const answer = answers[method];
+        if (answer === undefined) return Promise.reject(new Error(`no stub for ${method}`));
+        return Promise.resolve(typeof answer === "function" ? answer(params) : answer);
+      },
+      sent(method) {
+        const hit = this.calls.find((c) => c[0] === method);
+        return hit ? hit[1] : null;
+      },
+    };
+  }
+
+  const CAMERA_PLUGIN = {
+    name: "camera",
+    version: "0.1.0",
+    description: "A USB or built in camera as a source",
+    enabled: true,
+    provides: ["camera/source", "camera/devices"],
+  };
+  const railTitles = (m) => [...m.el.querySelectorAll(".picker-rail button")].map((b) => b.textContent.trim());
+  const panelText = (m) => m.el.querySelector(".picker-panel").textContent;
+  const buttonSaying = (m, text) =>
+    [...m.el.querySelectorAll(".picker-panel button")].find((b) => b.textContent.includes(text));
+
+  // ------------------------------------------------------------ the table
+
+  // The bug: `loadKinds` answered the moment `core.api` yielded anything, and
+  // `core.api` always yields something, so a camera plugin could be installed
+  // and running and the picker still showed four address boxes.
+  const catalogue = await kinds.loadKinds(stub({ "plugin.list": { plugins: [CAMERA_PLUGIN] } }), "source");
+
+  test("a plugin's source kind reaches the picker even though the core named its own", () => {
+    ok(catalogue.some((k) => k.id === "camera/source"), "the plugin's kind is in the catalogue");
+    ok(catalogue.some((k) => k.id === "file"), "and the built in kinds are still there");
+    ok(!catalogue.some((k) => k.id === "camera/devices"), "a device provide is not something to add");
+  });
+
+  test("a kind lands in the category an operator would look in", () => {
+    const camera = { id: "camera/source", provides: ["camera/source"] };
+    eq(kinds.categoryOf(camera), "cameras");
+    eq(kinds.categoryOf({ id: "page", provides: ["browser/source"] }), "web");
+    eq(kinds.categoryOf({ id: "test", provides: ["test/source"] }), "test");
+    // Anything nobody has placed is still offered, at the bottom.
+    eq(kinds.categoryOf({ id: "odd/source", provides: ["odd/source"] }), "more");
+  });
+
+  test("a candidate is already a source.add request", () => {
+    const req = kinds.addRequestFor({
+      type: "camera/source",
+      name: "Logitech BRIO",
+      params: { device: "/dev/video0", label: "Logitech BRIO" },
+    });
+    // A kind named outright has no address, and the core still keys an id off
+    // `uri`, so the type goes there. `gmx ctl source add --type` does the same.
+    eq(req.uri, "camera/source");
+    eq(req.type, "camera/source");
+    eq(req.name, "Logitech BRIO");
+    eq(req.device, "/dev/video0");
+    eq(kinds.addRequestFor({ type: "ndi/source", params: { uri: "ndi://hall" } }).uri, "ndi://hall");
+  });
+
+  test("a device that is already a source is not offered twice", () => {
+    const candidate = { type: "camera/source", name: "Logitech BRIO", params: { device: "/dev/video0" } };
+    const sources = [{ id: "logitech-brio", name: "Logitech BRIO", uri: "camera/source" }];
+    ok(kinds.alreadyAdded(sources, candidate), "the name it was added under");
+    const other = { type: "camera/source", name: "MacBook Pro Camera", params: { device: "1" } };
+    // Every camera on a machine shares the one URI, so the URI must not be
+    // allowed to answer this on its own.
+    ok(!kinds.alreadyAdded(sources, other), "a second camera is still on offer");
+  });
+
+  test("the size a device advertises is read wherever it put it", () => {
+    eq(kinds.candidateSize({ params: { width: 1920, height: 1080 } }), "1920 x 1080");
+    eq(kinds.candidateSize({ params: { best_size: [1280, 720] } }), "1280 x 720");
+    eq(kinds.candidateSize({ params: { device: "/dev/video0" } }), "");
+  });
+
+  const listed = await kinds.pluginSourceFor(
+    stub({ "plugin.search": { results: [{ name: "camera", source: "./plugins/camera" }] } }),
+    "camera"
+  );
+  const unlisted = await kinds.pluginSourceFor(stub({}), "camera");
+
+  test("a marketplace decides what plugin.add is sent, and there is a fallback", () => {
+    eq(listed, "./plugins/camera");
+    eq(unlisted, "psmux/godwinmix", "a mixer that knows no marketplace still has somewhere to go");
+  });
+
+  // ------------------------------------------------------------ the modal
+
+  let held = null;
+  const looking = stub({
+    "plugin.list": { plugins: [CAMERA_PLUGIN] },
+    "device.discover": () => new Promise((resolve) => (held = resolve)),
+  });
+  const cameras = await openPicker(looking, "source", { category: "cameras" });
+
+  test("every category is on screen before any hardware has answered", () => {
+    eq(railTitles(cameras), [
+      "Cameras",
+      "Screens and windows",
+      "Microphones and audio",
+      "Video and images",
+      "Web pages",
+      "Streams and feeds",
+      "Test patterns",
+      "More",
+    ]);
+    ok(panelText(cameras).includes("Looking for devices"), "and it says what it is doing");
+    ok(held, "discovery was asked, and the modal did not wait for it");
+  });
+
+  held({
+    candidates: [
+      {
+        type: "camera/source",
+        name: "Fake Camera 1",
+        params: { device: "/dev/video0", label: "Fake Camera 1", width: 1920, height: 1080 },
+      },
+    ],
+  });
+  await waitFor(() => panelText(cameras).includes("Fake Camera 1"), 2000, "the camera row to appear");
+
+  test("a found camera is a row with its name, its size and one button", () => {
+    ok(panelText(cameras).includes("1920 x 1080"), "the size it advertises");
+    const row = cameras.el.querySelector(".picker-row");
+    ok(row.querySelector("svg"), "a kind icon");
+    eq(row.querySelector("button").textContent, "Add");
+  });
+
+  cameras.el.querySelector(".picker-row button").click();
+  await waitFor(() => looking.sent("source.add"), 2000, "the add to be sent");
+
+  test("Add sends the params the device handed over, and the name defaults to the device", () => {
+    const sent = looking.sent("source.add");
+    eq(sent.type, "camera/source");
+    eq(sent.uri, "camera/source");
+    eq(sent.name, "Fake Camera 1");
+    eq(sent.device, "/dev/video0");
+  });
+
+  await waitFor(() => panelText(cameras).includes("Added"), 2000, "the row to settle");
+
+  test("a device that has just been added says so and cannot be added again", () => {
+    const button = cameras.el.querySelector(".picker-row button");
+    eq(button.textContent, "Added");
+    ok(button.disabled, "and it is disabled");
+  });
+
+  test("typing searches across every category at once", () => {
+    const search = cameras.el.querySelector(".picker-head input");
+    search.value = "bars";
+    search.dispatchEvent(new Event("input"));
+    const text = panelText(cameras);
+    ok(text.includes("Test patterns"), "the category it was found in is named");
+    ok(text.includes("Colour bars"), "and the pattern is there");
+    ok(!text.includes("Fake Camera 1"), "what does not match is gone");
+    search.value = "rtmp";
+    search.dispatchEvent(new Event("input"));
+    ok(panelText(cameras).includes("Incoming stream"), "a kind's description is searched too");
+    search.value = "";
+    search.dispatchEvent(new Event("input"));
+  });
+
+  [...cameras.el.querySelectorAll(".picker-rail button")]
+    .find((b) => b.textContent.includes("Test patterns"))
+    .click();
+  buttonSaying(cameras, "Add").click();
+  await waitFor(() => looking.calls.filter((c) => c[0] === "source.add").length === 2, 2000, "the second add");
+
+  test("a test pattern is one click and needs no typing", () => {
+    const sent = looking.calls.filter((c) => c[0] === "source.add")[1][1];
+    eq(sent.uri, "test://smpte");
+    eq(sent.name, "Colour bars");
+  });
+
+  cameras.close();
+
+  // ------------------------------------------------------------ installing
+
+  const bare = stub({
+    "plugin.list": { plugins: [] },
+    "plugin.search": { results: [{ name: "camera", source: "./plugins/camera" }] },
+    "plugin.add": { name: "camera", version: "0.1.0" },
+  });
+  const missing = await openPicker(bare, "source", { category: "cameras" });
+
+  test("a category whose plugin is missing still appears, and offers to install it", () => {
+    ok(panelText(missing).includes("Cameras need the camera plugin"), "one plain sentence");
+    ok(buttonSaying(missing, "Install camera support"), "and a button, not a terminal command");
+  });
+
+  buttonSaying(missing, "Install camera support").click();
+  await waitFor(() => bare.sent("plugin.add"), 2000, "the install to be sent");
+
+  test("Install calls plugin.add with what the marketplace named", () => {
+    eq(bare.sent("plugin.add").source, "./plugins/camera");
+    ok(bare.calls.filter((c) => c[0] === "device.discover").length >= 1, "and it looks for devices again");
+  });
+
+  missing.close();
+
+  // ------------------------------------------------------------ the library
+
+  const withMedia = stub({
+    "media.list": { items: [{ name: "opener.mp4", path: "/srv/media/opener.mp4", size_bytes: 4096 }] },
+  });
+  const files = await openPicker(withMedia, "source", { category: "files" });
+  await waitFor(() => panelText(files).includes("opener.mp4"), 2000, "the library listing");
+
+  test("the files category offers the library and a way to a path", () => {
+    ok(panelText(files).includes("A file somewhere else"), "the file that is not in the library");
+    ok(buttonSaying(files, "Browse"), "which is the file kind's own form");
+  });
+
+  buttonSaying(files, "Add").click();
+  await waitFor(() => withMedia.sent("source.add"), 2000, "the clip to be added");
+
+  test("a library clip is added by its path, under its own name", () => {
+    eq(withMedia.sent("source.add").uri, "/srv/media/opener.mp4");
+    eq(withMedia.sent("source.add").name, "opener.mp4");
+  });
+
+  files.close();
+}
+
 // ------------------------------------------------------- scoped sources
 
 /**
@@ -1741,6 +2009,12 @@ legacySuite()
   .catch((e) => {
     failed += 1;
     line("fail", "the number key suite threw: " + e.message);
+    console.error(e);
+  })
+  .then(addSourcePickerSuite)
+  .catch((e) => {
+    failed += 1;
+    line("fail", "the add source picker suite threw: " + e.message);
     console.error(e);
   })
   .then(scopedSourcesSuite)
