@@ -15,6 +15,12 @@ at all, and the camera plugin, which ships in this repository.
 
 ## 1. Install the plugin
 
+Using the desktop app? Skip this step. The camera, the screen and the
+microphone travel inside it and are installed the first time it starts the
+mixer. See [The plugins inside the app](desktop-app.md#the-plugins-inside-the-app).
+
+From a checkout or a bare `godwinmix`:
+
 ```sh
 ./plugins/camera/build
 gmx plugin add ./plugins/camera
