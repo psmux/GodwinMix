@@ -85,7 +85,7 @@ export class GmxShell extends HTMLElement {
 
 /** Keep each control group separate from the programme monitor. */
 export function panelSection(id, node) {
-  const titles = { "core/sources": "Sources", "core/scenes": "Scenes", "core/outputs": "Outputs", "core/media": "Media", "core/alerts": "Alerts" };
+  const titles = { "core/sources": "Sources", "core/scenes": "Scenes", "core/outputs": "Outputs", "core/media": "Media", "core/alerts": "Alerts", "core/plugins": "Plugins" };
   if (!titles[id]) return node;
   const key = "gmx.section." + id;
   let open = id === "core/sources" || id === "core/scenes";

@@ -39,6 +39,10 @@ import { snapTargets, snapDelta } from "../kits/canvas/snap.js";
 import { safeAreas } from "../kits/canvas/safe.js";
 import { describeForm, valuesOf, readForm, missing } from "../kits/schema/describe.js";
 import { layoutFor, applyRules, controlsOf } from "../kits/schema/ui-schema.js";
+import { compareVersions, updateFor, mergeSchemas } from "../panels/plugins/installed.js";
+import { taskWords } from "../panels/plugins/task.js";
+import { resultNote } from "../panels/plugins/market.js";
+import "../panels/plugins/panel.js";
 
 let passed = 0;
 let failed = 0;
@@ -436,6 +440,62 @@ test("a unit annotation is printed beside the control", () => {
   const form = new SchemaForm({ type: "object", properties: { queue: { type: "number", "x-gmx-unit": "s" } } }, {});
   ok(form.el.querySelector(".unit"), "the unit is on screen");
   eq(form.el.querySelector(".unit").textContent, "s");
+});
+
+// ---------------------------------------------------------------- plugins
+
+test("an update is offered only when a marketplace lists a newer version", () => {
+  const camera = { name: "camera", version: "0.1.0" };
+  eq(updateFor(camera, [{ name: "camera", version: "0.2.0" }]), "0.2.0");
+  eq(updateFor(camera, [{ name: "camera", version: "0.1.0" }]), "", "the same version is not an update");
+  eq(updateFor(camera, [{ name: "ndi", version: "9.0.0" }]), "", "and another plugin's version is not one either");
+  // A mixer with no marketplace has nothing to update from, and no button.
+  eq(updateFor(camera, []), "");
+  eq(compareVersions("0.10.0", "0.9.0"), 1, "ten comes after nine, not before it");
+  eq(compareVersions("1.2.0-rc1", "1.2.0"), 0, "a pre-release tail is not part of the number");
+});
+
+test("a plugin's provides become one settings form, because its settings are one table", () => {
+  const merged = mergeSchemas({
+    "cam/source": { type: "object", properties: { device: { type: "string", title: "Device" } }, required: ["device"] },
+    "cam/output": { type: "object", properties: { quality: { type: "number", "x-gmx-unit": "%" } } },
+  });
+  eq(Object.keys(merged.properties).join(","), "device,quality");
+  eq(merged.required, ["device"]);
+  const form = new SchemaForm(merged, { device: "/dev/video0" });
+  eq(form.read().device, "/dev/video0", "and what plugin.settings.get gave back is in it");
+  ok(form.el.querySelector(".unit"), "the annotations survive the merge");
+  eq(Object.keys(mergeSchemas({}).properties).length, 0, "a plugin with no schema gets no form");
+});
+
+test("a long running install says what it is doing rather than spinning", () => {
+  ok(taskWords({ state: "running", progress: 0.42 }).includes("42%"), "the fraction is words, not a bar with no number");
+  ok(taskWords({ state: "running" }).includes("checked"), "and it says what the wait is for");
+  ok(taskWords({ state: "running", age_secs: 40 }).includes("40s"));
+  eq(taskWords({ state: "failed", error: "no asset for macos-aarch64." }), "no asset for macos-aarch64.");
+  ok(taskWords({ state: "cancelled" }).includes("Nothing was installed"));
+});
+
+test("a search result says what it is in one line", () => {
+  const line = resultNote({ version: "1.2.0", tier: "gold", kinds: ["source", "output"], marketplace: "godwinmix" });
+  ok(line.includes("v1.2.0") && line.includes("gold") && line.includes("from godwinmix"));
+  ok(resultNote({ tier: "custom" }).includes("custom, unreviewed"), "an unreviewed tier is spelled out");
+  eq(resultNote({}), "", "and nothing known is nothing shown");
+});
+
+test("the Plugins section costs a volunteer nothing until somebody opens it", () => {
+  try { localStorage.removeItem("gmx.section.core/plugins"); } catch { /* fresh either way */ }
+  const panel = document.createElement("gmx-plugins");
+  panel.setClient({ call: async () => ({}) });
+  const section = panelSection("core/plugins", panel);
+  eq(section.tagName, "DETAILS", "it is a section like the others");
+  ok(!section.open, "closed on a first visit: nobody opens the page to manage plugins");
+  document.body.appendChild(section);
+  eq(panel.loading, undefined, "and nothing was fetched while it was closed");
+  section.open = true;
+  section.dispatchEvent(new Event("toggle"));
+  ok(panel.loading, "opening it is what asks for the body");
+  document.body.removeChild(section);
 });
 
 // ---------------------------------------------------------------- outputs

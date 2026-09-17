@@ -502,3 +502,42 @@ gmx-program canvas, gmx-program img {
 .panel-section:not([open]) > :not(summary) { display: none; }
 .panel-section > :not(summary) > .row.pad:first-child > strong:first-child { display: none; }
 gmx-program canvas, gmx-program img { height: min(32vh, 300px); }
+
+/* ---------------------------------------------------------------- plugins */
+
+.plugins { padding: var(--pad); display: flex; flex-direction: column; gap: 8px; }
+.plugin-tabs { display: flex; gap: 4px; }
+.plugin-tab.on { border-color: var(--select); background: var(--panel2); }
+.plugin-body { display: block; }
+
+.plugin-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px;
+  border: 1px solid var(--line-soft, var(--line));
+  border-radius: var(--radius, 8px);
+  background: var(--panel2);
+}
+
+/* The one click offer: it is the whole answer on a machine with no
+   marketplace, so it reads as an offer rather than as another row. */
+.plugin-offer { border-color: var(--select); }
+
+/* What a long running install is doing. Empty until there is news, so it
+   takes no room on a row nobody has touched. */
+.plugin-say:empty { display: none; }
+
+.plugin-problem {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px;
+  margin-bottom: 8px;
+  border: 1px solid var(--bad, #d9584c);
+  border-radius: var(--radius, 8px);
+  background: var(--panel2);
+}
+
+.plugin-more > summary { cursor: pointer; padding: 6px 0; font-size: var(--fs-sm); color: var(--dim); }
+.plugin-more > :not(summary) { padding-top: 4px; }
