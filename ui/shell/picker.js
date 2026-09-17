@@ -376,7 +376,15 @@ function openSourcePicker(client, kinds, plugins, opts) {
       }
       note.textContent = "Installed. Looking for devices.";
       state.plugins = await listPlugins(client);
-      draw();
+      if (!hasPlugin(state.plugins, cat.plugin.name)) {
+        // The install answered, so something is on disk, but the core has not
+        // registered it. Saying so beats redrawing the same offer with no
+        // word about what just happened.
+        toast({
+          kind: "warning",
+          text: `${cat.plugin.name} was installed, but the mixer has not picked it up yet.`,
+        });
+      }
       await rescan();
     };
     return el("div.col", {}, [el("p.dim", { text: cat.plugin.line, style: { marginTop: "0" } }), button, note]);
