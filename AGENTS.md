@@ -44,7 +44,7 @@ cargo test -p godwinmix-sdk --features gst   # and the GStreamer backed half
 |---|---|
 | `crates/godwinmix-protocol/` | the wire contract: types, methods, errors, scopes, the OpenAPI and MCP tables. No media stack |
 | `crates/godwinmix-core/` | the mixing engine as a library: pipeline, sources, outputs, filters, scenes, caps, the codec catalogue |
-| `crates/godwinmix-host/` | the tier 2 sidecar host: spawning plugins, the core side of the handshake. Mostly empty today |
+| `crates/godwinmix-host/` | the tier 2 sidecar host: launch planning, the JSON lines channel and handshake, the lifecycle state machine, budgets, the sampler, offline testing, sigstore verification and the seven plugin source backends |
 | `crates/godwinmix-sdk/` | what a Rust plugin author depends on: the manifest, the JSON lines loop, pacing, the media writers |
 | `crates/godwinmix-wasm/` | the tier W host: wasmtime with the component model, behind the binary's `wasm` feature. Optional, off by default |
 | `crates/godwinmix-sdk-wasm/` | what a WebAssembly plugin author depends on. Outside the workspace: built for `wasm32-wasip2` only, by `dev/build-wasm.sh` |

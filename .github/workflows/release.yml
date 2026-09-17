@@ -394,8 +394,8 @@ jobs:
                   -e GODWINMIX_TOKEN=change-me ghcr.io/${{ github.repository }}:${{ github.ref_name }}
 
             Desktop: the `.dmg` on macOS, the `.msi` on Windows, the `.deb` on
-            Debian and Ubuntu. GStreamer is not bundled yet, so the desktop app
-            needs it installed (see the README, Platforms).
+            Debian and Ubuntu. Each carries its own trimmed GStreamer, so
+            nothing else needs installing (see the README, Platforms).
 
             Server: the archive for your platform holds `godwinmix` and `gmx`,
             the same binary under two names, plus the example config. The
