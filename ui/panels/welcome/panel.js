@@ -39,7 +39,7 @@ const CHOICES = [
     id: null,
     art: "empty",
     title: "Start empty",
-    line: "Nothing configured. Add your first input yourself.",
+    line: "Nothing configured. Add your first source yourself.",
   },
   {
     id: "obs",
@@ -163,7 +163,7 @@ function showSteps(choice, result) {
   );
   const list = el("ol.welcome-steps");
   for (const step of steps) list.appendChild(el("li", { text: step }));
-  if (!steps.length) list.appendChild(el("li", { text: "Add an input and press its tile." }));
+  if (!steps.length) list.appendChild(el("li", { text: "Add a source and press its tile." }));
   body.appendChild(list);
 
   for (const plugin of missing) {

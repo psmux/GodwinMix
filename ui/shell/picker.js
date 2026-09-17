@@ -1,4 +1,4 @@
-// The add input and add output picker.
+// The add source and add output picker.
 //
 // OBS shows a text list of source types. This shows a tile per kind with an
 // icon, one line of description and the plugin that provides it, grouped, with
@@ -57,7 +57,7 @@ export async function openPicker(client, what, opts = {}) {
   });
 
   const m = modal({
-    title: what === "output" ? "Add an output" : "Add an input",
+    title: what === "output" ? "Add an output" : "Add a source",
     body,
     footer: [toggle, el("button.btn", { text: "Cancel", onclick: () => m.close() })],
     wide: true,
@@ -156,7 +156,7 @@ export async function openForm(client, what, kind, preset, opts = {}) {
       return;
     }
     m.close();
-    toast({ text: what === "output" ? "Sending started." : "Added. It appears in the tray as soon as it connects." });
+    toast({ text: what === "output" ? "Sending started." : "Added. It appears as soon as it connects." });
     // Whatever the caller wanted doing with the thing that now exists. It is
     // run outside the try on purpose: the add succeeded, the form is gone, and
     // a failure in the follow up is the caller's to explain.
