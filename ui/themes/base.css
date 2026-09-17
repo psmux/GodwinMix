@@ -297,6 +297,25 @@ label { display: block; }
 .kindtile .who { color: var(--faint); font-size: var(--fs-sm); }
 .group-title { color: var(--dim); font-size: var(--fs-sm); text-transform: uppercase; letter-spacing: 0.06em; margin: var(--pad) 0 4px; }
 
+/* ---------------------------------------------------------------- outputs */
+
+/* Two lines per destination: the name and what it is doing on the first,
+   where it goes and how it is coping on the second. The actions sit on the
+   first line because the state is what an operator is reading when they reach
+   for one of them. */
+.output-row { display: flex; flex-direction: column; gap: 2px; padding: 4px 0; }
+.output-row + .output-row { border-top: var(--border) solid var(--line); }
+.output-detail { color: var(--faint); }
+/* A destination still carrying a preset's placeholder is a fault, not a
+   warning: nothing is arriving anywhere and nothing will until somebody
+   pastes a key. */
+.needs-key { color: var(--bad); }
+.dot.reconnecting { background: var(--warn); }
+/* The add flow's tiles are one line of platform and one of where to find the
+   key, with no icon, so they read as a list of choices rather than a gallery. */
+.picker-grid.destinations .kindtile { align-items: center; }
+.form .field .replace-key { align-self: flex-start; }
+
 /* ---------------------------------------------------------------- forms */
 
 .form { display: flex; flex-direction: column; gap: var(--gap); }
