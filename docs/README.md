@@ -108,6 +108,7 @@ Start here if you have never run it.
 * [The first party plugins](reference/plugins.md)
 * [The plugin manifest](reference/plugin-manifest.md)
 * [The index format](reference/index-format.md)
+* [The marketplace methods](reference/marketplaces.md)
 * [The quality scale](reference/quality-scale.md)
 * [Surfaces: a whole UI, and `gmx ui`](reference/surfaces.md)
 * [The plugin protocol](reference/plugin-protocol.md)

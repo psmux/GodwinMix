@@ -4,9 +4,43 @@ A plugin adds a source, an output, a filter, a background service or a device
 finder to a running mixer. It is a separate process, so installing one cannot
 break the programme and removing one takes everything it added with it.
 
-This page takes about five minutes.
+This page takes about five minutes. There are two ways in, and the first one
+needs no terminal.
 
-## Install it
+## From the web page
+
+Open the mixer's page, scroll to **Plugins** and open it. It is closed on a
+first visit, because nobody opens a mixer to manage plugins.
+
+**Installed** is what is on this machine. Each plugin has its version, what it
+provides, an **Enabled** switch, **Settings** when it publishes a schema,
+**Update** when a marketplace lists a newer build, and **Remove**. Switching one
+off is remembered: it is written down beside the plugin, so it stays off across
+a restart.
+
+**Get more** is where the rest comes from. On a mixer that has never been told
+about a marketplace there is nothing to search yet, so the first thing on that
+tab is a button that adds the GodwinMix marketplace. Press it, then search for
+what you want:
+
+1. Type a word: `camera`, `ndi`, `chat`.
+2. Press **Install** on the result you want.
+3. Watch the line under the button. An install fetches, checks the signature
+   and the api level, and only then copies anything, so a big one takes a
+   minute and says so rather than spinning.
+
+When it lands, its types are in the add picker and the plugin is on the
+Installed tab. Nothing restarts and the programme keeps going out.
+
+Two more things live on that tab. **Install from a source you were sent** takes
+anything the command line takes, for a plugin that is not in any marketplace.
+**Marketplaces** is the list itself: add somebody else's, or forget one.
+Forgetting one uninstalls nothing.
+
+If something goes wrong it is said in the panel, with the next step. It is
+never a command to type.
+
+## From the command line
 
 `gmx plugin add` takes seven forms. Reach for the first one:
 
@@ -24,6 +58,10 @@ Add the community index once and names start working:
 
     gmx marketplace add psmux/godwinmix-plugins
     gmx plugin search ndi
+
+The same list is reachable over the protocol, which is what the Plugins panel
+uses: `marketplace.list`, `marketplace.add`, `marketplace.remove` and
+`marketplace.refresh`. See [the marketplace methods](../reference/marketplaces.md).
 
 A directory works from a clean checkout, with nothing built first:
 
@@ -115,7 +153,12 @@ the safe state.
 
 ## Change its settings
 
-There is no `gmx` subcommand for this yet, so it is two HTTP calls:
+**Settings** on the Plugins panel builds a form from the plugin's own schema:
+nothing about any plugin is written into the page, so a plugin published
+tomorrow gets the same form as one shipped with the mixer. A field the schema
+marks secret is a password box, and what is stored never comes back out.
+
+There is no `gmx` subcommand for it, so from a terminal it is two HTTP calls:
 
     curl -s localhost:8080/api/v1/plugins/bars/settings
     curl -s -X POST localhost:8080/api/v1/plugins/bars/settings \
@@ -139,8 +182,18 @@ instead.
     gmx plugin disable bars
     gmx plugin enable bars
 
+Or the **Enabled** switch on the Plugins panel, which sends the same two
+methods.
+
 Disabled means it contributes nothing: no process, no provide, no tool. The
 directory stays where it is, so enabling it again needs no download.
+
+Off is written down, not only remembered. The core leaves a `.gmx-disabled`
+file in the plugin's own directory, beside its version directories, and reads
+it at startup, so a plugin you switched off is still off tomorrow and an update
+that installs a new version does not quietly switch it back on. Deleting that
+file before the mixer starts turns the plugin back on, which is the same thing
+`gmx plugin enable` does.
 
 ## Update one
 
@@ -241,6 +294,8 @@ proves and what none of them do.
 * [Test a plugin](test-a-plugin.md), before you install it anywhere that matters.
 * [Publish a plugin](publish-a-plugin.md), when it is somebody else's turn to
   install yours.
+* [The marketplace methods](../reference/marketplaces.md), for a surface that
+  wants to do all of this itself.
 * [The plugin lifecycle](../reference/plugin-lifecycle.md): the states, the
   budgets, and the environment a plugin process gets.
 * [Write a source plugin](write-a-source-plugin.md).
