@@ -471,7 +471,10 @@ impl MultiviewHandle {
         *self.shared.shape.lock() = shape;
         self.shared.built.store(shape.is_some(), Ordering::Release);
         self.shared.frames_out.store(0, Ordering::Relaxed);
-        *self.shared.since.lock() = shape.map(|_| Instant::now());
+        // The clock for the fps metric starts at the first frame out, not
+        // here: the flag is set before the pipeline starts, and on a slow
+        // machine the run up to the first frame read as half the rate.
+        *self.shared.since.lock() = None;
     }
 
     /// The shape the current demand implies, for the mixer to build at.
@@ -508,6 +511,7 @@ struct Publisher {
 
 impl Publisher {
     fn publish(&self, frame: Arc<[u8]>) {
+        self.shared.since.lock().get_or_insert_with(Instant::now);
         self.shared.frames_out.fetch_add(1, Ordering::Relaxed);
         // A send failure just means nobody is watching.
         let _ = self.shared.frames.send(frame);
