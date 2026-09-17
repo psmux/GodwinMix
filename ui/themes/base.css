@@ -249,11 +249,28 @@ label { display: block; }
   background: var(--select-fill); pointer-events: none; z-index: 5;
 }
 
-/* ---------------------------------------------------------------- program */
+/* ------------------------------------------------ preview and programme */
 
 .program { background: #000; display: grid; place-items: center; position: relative; }
 .program img { max-width: 100%; max-height: 100%; display: block; }
 .program.on { box-shadow: inset 0 0 0 2px var(--live); }
+
+/* Two monitors: what is armed on the left, what the audience sees on the
+   right, and the bar that puts one onto the other underneath them both. */
+gmx-program .monitors { display: grid; grid-template-columns: 1fr 1fr; gap: 1px; background: var(--line); }
+gmx-program .monitor { display: flex; flex-direction: column; min-width: 0; background: var(--panel); }
+gmx-program .mlabel { display: flex; align-items: baseline; gap: 6px; padding: 4px 8px; text-transform: uppercase; letter-spacing: 0.08em; }
+gmx-program .mlabel .armed { color: var(--warn); }
+gmx-program .mlabel .live { color: var(--live); }
+gmx-program .mlabel .who {
+  text-transform: none; letter-spacing: 0; color: var(--dim);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+gmx-program .pane { background: #000; display: grid; place-items: center; position: relative; min-width: 0; }
+gmx-program .pane.preview.armed { box-shadow: inset 0 0 0 2px var(--warn); }
+gmx-program .empty { padding: var(--pad); }
+gmx-program .transition { border-top: var(--border) solid var(--line); }
+gmx-program .transition input[type=number] { width: 5.5em; }
 
 /* ---------------------------------------------------------------- modal */
 
@@ -282,6 +299,15 @@ label { display: block; }
 .scene-tabs button.program { color: var(--text); border-bottom-color: var(--live); }
 .scene-tabs button.armed { border-bottom-color: var(--warn); }
 .scene-tabs .btn { margin-left: auto; color: var(--text); background: var(--panel2); border: var(--border) solid var(--line); border-radius: var(--radius-sm); }
+/* A tab and its own add button, which is how a source gets into that scene
+   without a drag. The pair reads as one control, so they share a border. */
+.scene-tabs .scene-tab { display: inline-flex; align-items: stretch; }
+.scene-tabs .scene-tab > button:first-child { border-top-right-radius: 0; border-bottom-right-radius: 0; }
+.scene-tabs .plus {
+  max-width: none; padding: 0 7px; color: var(--dim); border-left-width: 0;
+  border-top-left-radius: 0; border-bottom-left-radius: 0;
+}
+.scene-tabs .plus:hover { color: var(--text); }
 
 /* ---------------------------------------------------------------- picker */
 
@@ -439,10 +465,11 @@ iframe.panel { width: 100%; border: 0; background: var(--panel); display: block;
   overflow-x: auto;
 }
 
-/* Keep the monitor and source tray visible together on a laptop. */
-gmx-program .program { flex: 1 1 0; background: #000; }
+/* Keep both monitors and the source tray visible together on a laptop. Two
+   pictures side by side are each half as wide, so they are shorter too. */
+gmx-program .pane { flex: 1 1 0; }
 gmx-program canvas, gmx-program img {
-  height: min(34vh, 320px); object-fit: contain;
+  width: 100%; display: block; height: min(26vh, 240px); object-fit: contain;
 }
 .tile .playback { padding: 3px 6px; font-size: var(--fs-sm); color: var(--dim); }
 
@@ -454,4 +481,4 @@ gmx-program canvas, gmx-program img {
 .panel-section > :not(summary) { display: block; }
 .panel-section:not([open]) > :not(summary) { display: none; }
 .panel-section > :not(summary) > .row.pad:first-child > strong:first-child { display: none; }
-gmx-program canvas, gmx-program img { height: min(32vh, 300px); }
+gmx-program canvas, gmx-program img { height: min(24vh, 220px); }
