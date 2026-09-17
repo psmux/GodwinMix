@@ -60,9 +60,9 @@ export async function showChecklist(client, choice, result) {
   for (const plugin of missingPlugins(plan)) {
     track(installRow(client, plugin, textFor(next, "install_plugin", "name", plugin.name), progress));
   }
-  for (const item of next.filter((n) => n.action === "add_source")) track(sourceRow(client, item));
-  for (const item of next.filter((n) => n.action === "take" || n.action === "note")) {
-    track(plainRow(item.text || "", item.action === "take" ? "Then" : ""));
+  for (const item of next.filter((n) => n.do === "add_source")) track(sourceRow(client, item));
+  for (const item of next.filter((n) => n.do === "take" || n.do === "note")) {
+    track(plainRow(item.text || "", item.do === "take" ? "Then" : ""));
   }
   for (const item of pending.filter((p) => p.reason === "restart")) {
     track(restartRow(client, item, canRestart));
@@ -84,9 +84,14 @@ export async function showChecklist(client, choice, result) {
   return m;
 }
 
-/** The sentence the preset wrote about one entry, matched on its own field. */
+/**
+ * The sentence the preset wrote about one entry, matched on its own field.
+ *
+ * The discriminator on the wire is `do`, which reads as English in the TOML a
+ * preset author writes and is a perfectly good property name here.
+ */
 function textFor(next, action, field, value) {
-  const hit = next.find((n) => n.action === action && n[field] === value);
+  const hit = next.find((n) => n.do === action && n[field] === value);
   return (hit && hit.text) || "";
 }
 

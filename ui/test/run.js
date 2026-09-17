@@ -606,6 +606,269 @@ test("a method that takes nothing still gets an empty form, not a broken one", (
   eq(Object.keys(schema.properties || {}).length, 0);
 });
 
+// ------------------------------------------------------------- onboarding
+
+/**
+ * The checklist after a preset, and the OBS importer.
+ *
+ * Both are driven against a stubbed client, because what is being checked is
+ * what the dialog draws and what it sends: that a destination the core says
+ * has no key gets a box and a Save rather than a sentence about a TOML file,
+ * that the row only goes green when the core says `has_key` flipped, that a
+ * restart is offered as a button only when the core publishes a method for
+ * it, and that an OBS source this machine cannot open is named instead of
+ * silently dropped.
+ */
+async function onboardingSuite() {
+  const { showChecklist } = await import("../panels/welcome/checklist.js");
+  const { importFromObs } = await import("../panels/welcome/obs.js");
+
+  /** A client that answers from a table and remembers what it was asked. */
+  function stub(over) {
+    const answers = Object.assign(
+      {
+        "core.api": { methods: [{ name: "output.set" }, { name: "core.shutdown" }] },
+        "output.list": [],
+        "plugin.list": { plugins: [] },
+        "plugin.search": { results: [] },
+      },
+      over
+    );
+    return {
+      calls: [],
+      state: { sources: [] },
+      call(method, params) {
+        this.calls.push([method, params]);
+        const answer = answers[method];
+        if (answer === undefined) return Promise.reject(new Error(`no stub for ${method}`));
+        return Promise.resolve(typeof answer === "function" ? answer(params) : answer);
+      },
+      sent(method) {
+        const hit = this.calls.find((c) => c[0] === method);
+        return hit ? hit[1] : null;
+      },
+    };
+  }
+
+  const CHURCH = { title: "Church service" };
+  const rowsOf = (m) => [...m.el.querySelectorAll(".wizard-row")];
+  const countOf = (m) => m.el.querySelector(".wizard-count").textContent;
+  const buttonSaying = (m, text) =>
+    [...m.el.querySelectorAll("button")].find((b) => b.textContent.includes(text));
+
+  // ------------------------------------------------------- the stream key
+
+  // The whole point of the exercise. `output.list` says has_key false, so the
+  // row is a password box and a Save, and Save sends the whole address to
+  // `output.set` with the key joined onto YouTube's own ingest server.
+  {
+    let keyed = false;
+    const client = stub({
+      "output.list": () => [
+        {
+          id: "youtube",
+          uri_host: "a.rtmp.youtube.com",
+          has_key: keyed,
+          state: "connecting",
+          reconnects: 0,
+          queue_secs: 0,
+        },
+      ],
+      "output.set": (p) => {
+        keyed = true;
+        return { id: p.id };
+      },
+    });
+    const result = {
+      plan: { plugins: [{ name: "rtmp", installed: true }] },
+      next: [
+        { do: "stream_key", output: "youtube", text: "YouTube Studio shows the key." },
+        { do: "take", source: "cam-wide", text: "Press Wide." },
+      ],
+      needs_restart: [],
+    };
+    const m = await showChecklist(client, CHURCH, result);
+
+    test("a destination with no stream key gets a box and a Save, not a sentence", () => {
+      const rows = rowsOf(m);
+      ok(rows.length >= 2, `only ${rows.length} rows`);
+      const first = rows[0];
+      ok(first.textContent.includes("YouTube"), "the platform is named: " + first.textContent);
+      const box = first.querySelector("input");
+      ok(box, "no box to paste a key into");
+      eq(box.type, "password", "the key is not a password field");
+      ok(buttonSaying(m, "Save"), "nothing to press");
+      eq(countOf(m), "0 of 1 done");
+    });
+
+    test("nothing in the checklist tells anybody to edit a file or type a command", () => {
+      const words = m.el.textContent.toLowerCase();
+      for (const banned of ["godwinmix.toml", "config file", "terminal", "gmx "]) {
+        ok(!words.includes(banned), `the checklist says ${JSON.stringify(banned)}`);
+      }
+    });
+
+    const box = m.el.querySelector(".wizard-row input");
+    box.value = "abcd-efgh-ijkl-mnop";
+    buttonSaying(m, "Save").click();
+    for (let i = 0; i < 100 && !client.sent("output.set"); i += 1) {
+      await new Promise((r) => setTimeout(r, 10));
+    }
+    await new Promise((r) => setTimeout(r, 30));
+
+    test("Save sends the whole address to output.set and never keeps the key", () => {
+      const sent = client.sent("output.set");
+      ok(sent, "output.set was never called");
+      eq(sent.id, "youtube");
+      eq(sent.uri, "rtmp://a.rtmp.youtube.com/live2/abcd-efgh-ijkl-mnop");
+      eq(m.el.querySelector(".wizard-row input"), null, "the box is still on screen");
+    });
+
+    test("the row goes green because the core said has_key flipped, not because we asked", () => {
+      const first = rowsOf(m)[0];
+      ok(first.classList.contains("done"), "the row did not finish: " + first.textContent);
+      ok(first.querySelector(".dot.live"), "the dot is not green");
+      eq(countOf(m), "1 of 1 done");
+    });
+    m.close();
+  }
+
+  // ------------------------------------------------------------- a restart
+
+  // A core with no restart method gets a sentence. Printing a command for
+  // somebody to type is the thing the checklist exists to stop.
+  {
+    const client = stub({});
+    const m = await showChecklist(client, CHURCH, {
+      plan: { plugins: [] },
+      next: [],
+      needs_restart: [
+        {
+          id: "cam-wide",
+          reason: "restart",
+          message: "cam-wide is in the config file; it starts on the next `gmx` restart",
+        },
+      ],
+    });
+
+    test("a core with no restart method offers a sentence and no command", () => {
+      const rows = rowsOf(m);
+      eq(rows.length, 1, "one row");
+      ok(rows[0].textContent.includes("cam-wide"), rows[0].textContent);
+      ok(!buttonSaying(m, "Restart now"), "it offered a restart the core cannot do");
+      ok(!rows[0].textContent.includes("gmx"), "it printed a command: " + rows[0].textContent);
+      ok(!rows[0].textContent.includes("config file"), rows[0].textContent);
+      // Nothing here is countable, so the counter says nothing at all.
+      eq(countOf(m), "");
+    });
+    m.close();
+  }
+
+  {
+    const client = stub({
+      "core.api": { methods: [{ name: "core.restart" }] },
+    });
+    const m = await showChecklist(client, CHURCH, {
+      plan: { plugins: [] },
+      next: [],
+      needs_restart: [{ id: "cam-wide", reason: "restart", message: "starts on the next restart" }],
+    });
+    test("a core that publishes core.restart gets the button", () => {
+      ok(buttonSaying(m, "Restart now"), "no button on a core that can restart");
+    });
+    m.close();
+  }
+
+  // ------------------------------------------------------- a missing plugin
+
+  {
+    const client = stub({});
+    const m = await showChecklist(client, CHURCH, {
+      plan: { plugins: [{ name: "camera", installed: false }, { name: "rtmp", installed: true }] },
+      next: [{ do: "install_plugin", name: "camera", text: "Test patterns until it is here." }],
+      needs_restart: [],
+    });
+    test("a missing plugin is an Install button and counts towards the progress", () => {
+      ok(buttonSaying(m, "Install camera support"), "no Install button");
+      ok(m.el.textContent.includes("Test patterns until it is here."), "the preset's line is dropped");
+      eq(countOf(m), "0 of 1 done");
+    });
+    m.close();
+  }
+
+  // ------------------------------------------------------------ OBS import
+
+  {
+    const REPORT = {
+      scenes: ["Main", "Interview"],
+      items: 5,
+      skipped: [],
+      sources: ["clip", "webcam"],
+      source_report: [
+        { obs_type: "ffmpeg_source", obs_name: "Clip", outcome: "imported", type: "file", id: "clip", placements: 1 },
+        { obs_type: "av_capture_input", obs_name: "FaceTime HD Camera", outcome: "skipped", reason: "this machine has no camera called FaceTime HD Camera", placements: 2 },
+      ],
+      add_sources: [{ id: "clip", name: "Clip", type: "file/source", uri: "/tmp/clip.mp4", params: {} }],
+    };
+    const client = stub({ "scene.import.obs": REPORT, "source.add": { id: "clip" } });
+    const m = importFromObs(client);
+
+    test("the OBS tile is a file picker, not a command to copy", () => {
+      const input = m.el.querySelector('input[type="file"]');
+      ok(input, "no file picker");
+      eq(m.el.querySelector("pre"), null, "there is still a block of shell in it");
+      ok(!m.el.textContent.includes("gmx import"), m.el.textContent);
+    });
+    m.close();
+
+    // The second half, through the same door the page uses: pick a file, press
+    // Import, and let the stubbed method answer with the report above.
+    const picker = importFromObs(client);
+    const input = picker.el.querySelector('input[type="file"]');
+    const data = new DataTransfer();
+    data.items.add(new File([JSON.stringify({ sources: [] })], "Untitled.json", { type: "application/json" }));
+    input.files = data.files;
+    input.dispatchEvent(new Event("change"));
+    [...picker.el.querySelectorAll("button")].find((b) => b.textContent === "Import").click();
+    let shown = null;
+    for (let i = 0; i < 200 && !shown; i += 1) {
+      await new Promise((r) => setTimeout(r, 10));
+      shown = document.querySelector('.dialog[aria-label="What came across"]');
+    }
+
+    test("an imported collection offers to add each source it can", () => {
+      ok(shown, "the source list never came up");
+      const rows = [...shown.querySelectorAll(".wizard-row")];
+      eq(rows.length, 2, "one row per OBS source");
+      ok(rows[0].textContent.includes("Clip"), rows[0].textContent);
+      ok(rows[0].querySelector("button"), "the addable one has no Add");
+    });
+
+    test("a capture device this machine does not have is named, not dropped", () => {
+      const rows = [...shown.querySelectorAll(".wizard-row")];
+      const camera = rows.find((r) => r.textContent.includes("FaceTime HD Camera"));
+      ok(camera, "the camera vanished from the report");
+      ok(camera.textContent.includes("no camera called"), camera.textContent);
+      eq(camera.querySelector("button"), null, "it offered Add for something it cannot add");
+    });
+
+    test("Add sends what the import worked out rather than guessing", async () => {
+      const rows = [...shown.querySelectorAll(".wizard-row")];
+      rows[0].querySelector("button").click();
+      for (let i = 0; i < 100 && !client.sent("source.add"); i += 1) {
+        await new Promise((r) => setTimeout(r, 10));
+      }
+      const sent = client.sent("source.add");
+      ok(sent, "source.add was never called");
+      eq(sent.id, "clip");
+      eq(sent.uri, "/tmp/clip.mp4");
+      eq(sent.type, "file/source");
+    });
+    const close = [...shown.querySelectorAll("button")].find((b) => b.textContent === "Done");
+    if (close) close.click();
+  }
+}
+
 // ------------------------------------------------ add source picker
 
 /**
@@ -2113,6 +2376,12 @@ legacySuite()
   .catch((e) => {
     failed += 1;
     line("fail", "the welcome suite threw: " + e.message);
+    console.error(e);
+  })
+  .then(onboardingSuite)
+  .catch((e) => {
+    failed += 1;
+    line("fail", "the onboarding suite threw: " + e.message);
     console.error(e);
   })
   .then(numberKeySuite)
