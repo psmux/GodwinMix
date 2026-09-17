@@ -229,8 +229,9 @@ impl<C> Registry<C> {
 
 /// Collection nouns: `source.list` is `GET /api/v1/sources`. Everything else
 /// is a singleton, where `program.take` is `POST /api/v1/program/take`.
-const COLLECTIONS: &[&str] =
-    &["source", "output", "filter", "media", "plugin", "node", "scene", "codec"];
+const COLLECTIONS: &[&str] = &[
+    "source", "output", "filter", "media", "plugin", "node", "scene", "codec", "marketplace",
+];
 
 /// Methods on a collection that are about the collection and not about one of
 /// its members, so they carry no `{id}`.
@@ -239,9 +240,11 @@ const COLLECTIONS: &[&str] =
 /// `/api/v1/sources/{id}/audio`. `scene.transaction.begin` is a batch over the
 /// whole document and `scene.undo` undoes whatever happened last, wherever it
 /// happened: neither has a member to name, and routing them under `{id}` would
-/// invent one. Listed rather than guessed, so the rule stays one rule and this
-/// is the exception it names.
+/// invent one. `marketplace.refresh` fetches every marketplace there is, which
+/// is the same shape of thing. Listed rather than guessed, so the rule stays
+/// one rule and this is the exception it names.
 const COLLECTION_LEVEL: &[&str] = &[
+    "marketplace.refresh",
     "scene.transaction",
     "scene.history",
     "scene.edit",
@@ -400,6 +403,12 @@ mod tests {
         assert_eq!(at("media.list"), "GET /api/v1/media");
         assert_eq!(at("codec.list"), "GET /api/v1/codecs");
         assert_eq!(at("media.remove"), "DELETE /api/v1/media/{id}");
+        // Marketplaces are a collection like any other, and refreshing them is
+        // about the collection rather than about one of them.
+        assert_eq!(at("marketplace.list"), "GET /api/v1/marketplaces");
+        assert_eq!(at("marketplace.add"), "POST /api/v1/marketplaces");
+        assert_eq!(at("marketplace.remove"), "DELETE /api/v1/marketplaces/{id}");
+        assert_eq!(at("marketplace.refresh"), "POST /api/v1/marketplaces/refresh");
         // A bare word is not a method and gets no route.
         assert_eq!(rest_transform("ping"), None);
     }
