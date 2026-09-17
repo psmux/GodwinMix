@@ -194,6 +194,8 @@ test("saved layouts keep control panels outside the monitor", () => {
   eq(migrated.monitor, ["core/program"]);
   ok(!migrated.main.includes("core/program"));
   ok(migrated.main.includes("core/outputs") && migrated.main.includes("core/media"));
+  // And the scenes lead the sources, whatever order the saved layout had.
+  eq(layout.place({ main: ["core/sources", "core/scenes"] }, "sidebar", "ndi/senders").main, ["core/scenes", "core/sources"]);
 });
 
 test("the mute button toggles the latest source state", () => {
