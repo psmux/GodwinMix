@@ -52,7 +52,7 @@ async function authorise(base) {
     const answer = await askForToken(
       attempt === 0
         ? null
-        : "That token was refused. It is the value of GODWINMIX_TOKEN, or the token line in the config file."
+        : "That token was refused. Check it with whoever set this mixer up, and paste the whole of it."
     );
     if (!answer) return null;
     token = answer;

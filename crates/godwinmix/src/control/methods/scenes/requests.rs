@@ -60,11 +60,23 @@ pub struct DuplicateSceneRequest {
     pub name: Option<String>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, JsonSchema)]
 pub struct ImportObsRequest {
     /// The collection JSON exported from OBS (Scene Collection, Export), as a
     /// path on the machine the core is running on.
-    pub path: String,
+    ///
+    /// Optional, because a browser cannot give one: a page reads the file the
+    /// person picked and sends `json` instead, which is how the collection
+    /// can come off a laptop that is not the machine running the mixer.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub path: Option<String>,
+    /// The collection itself. Wins over `path` when both are given.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub json: Option<String>,
+    /// What to call it in the report, when the text came in rather than a
+    /// path. The file name is what the person will recognise.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
 }
 
 /// `scene.item.add`.

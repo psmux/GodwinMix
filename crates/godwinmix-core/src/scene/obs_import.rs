@@ -84,7 +84,7 @@ pub struct Report {
 /// A source in the config the import writes, in the shape of 03 section 3:
 /// a plugin qualified `type` and a `params` table, with `uri` kept where one
 /// makes sense so today's config still reads it.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 pub struct ImportedSource {
     pub id: String,
     pub name: String,
