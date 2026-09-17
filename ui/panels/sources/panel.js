@@ -350,12 +350,12 @@ class SourcesPanel extends HTMLElement {
     } catch {
       /* no plugin.describe on this core: the built in schema stands in */
     }
-    const form = new SchemaForm(schema, { uri: source.uri, name: nameOf(source) });
+    const form = new SchemaForm(settableOnly(schema), { name: nameOf(source) });
     const apply = el("button.btn.primary", {
       text: "Apply",
       onclick: async () => {
         try {
-          await this.client.call("source.set", Object.assign({ id }, form.read()));
+          await this.client.call("source.set", setRequest(id, form.read()));
           toast({ text: "Saved." });
         } catch (e) {
           if (e.code === -32601) {
@@ -371,7 +371,10 @@ class SourcesPanel extends HTMLElement {
     shell.drawer(
       el("div.pad.col", {}, [
         el("div.row", {}, [el("strong.grow", { text: nameOf(source) }), el("button.btn.icon", { text: "×", onclick: () => shell.drawer(null) })]),
-        el("div.sm.dim", { text: source.uri }),
+        el("div.sm.dim", { text: source.uri, title: source.uri }),
+        el("div.sm.dim", {
+          text: "The address is fixed once a source exists. To point it somewhere else, remove this source and add it again.",
+        }),
         form.el,
         el("div.row", {}, [apply]),
       ])
@@ -600,3 +603,39 @@ class SourcesPanel extends HTMLElement {
 customElements.define("gmx-sources", SourcesPanel);
 window.godwinmixPanels.push(SourcesPanel);
 export default SourcesPanel;
+
+/**
+ * `source.set` takes a fixed set of fields and merges anything else into
+ * `params`. A kind's schema is written for `source.add`, so it carries `uri`
+ * as well, and `uri` is not settable on a source that already exists.
+ *
+ * Both halves of this matter. Showing a field the core will not act on is the
+ * bug this exists to stop: the call answers 200 either way, so an address
+ * typed into a form that drops it looks exactly like one that was saved.
+ */
+const SET_SOURCE_FIELDS = ["name", "color", "place", "transport", "latency_ms"];
+
+/** The kind's schema with the fields `source.set` cannot act on taken out. */
+function settableOnly(schema) {
+  const props = (schema && schema.properties) || {};
+  if (!("uri" in props)) return schema;
+  const properties = Object.assign({}, props);
+  delete properties.uri;
+  return Object.assign({}, schema, {
+    properties,
+    required: (schema.required || []).filter((r) => r !== "uri"),
+  });
+}
+
+/** A `source.set` request: the known fields at the top, the rest under `params`. */
+function setRequest(id, values) {
+  const req = { id };
+  const params = {};
+  for (const [key, value] of Object.entries(values)) {
+    if (value === undefined) continue;
+    if (SET_SOURCE_FIELDS.includes(key)) req[key] = value;
+    else params[key] = value;
+  }
+  if (Object.keys(params).length) req.params = params;
+  return req;
+}
