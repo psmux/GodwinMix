@@ -163,13 +163,13 @@ fn dirs() -> &'static Dirs {
 }
 
 fn default_plugins_dir() -> PathBuf {
-    // No `dirs` crate for one path. HOME is set on every platform this runs on,
-    // and USERPROFILE covers a Windows service that does not set HOME.
-    let home = std::env::var_os("HOME")
-        .or_else(|| std::env::var_os("USERPROFILE"))
-        .map(PathBuf::from)
-        .unwrap_or_else(|| PathBuf::from("."));
-    home.join(".godwinmix").join("plugins")
+    // The loader's answer, not a second copy of it. Both have to name the same
+    // directory or a plugin loads and its panel and its icon come back 404,
+    // which is what happened when this worked out `~/.godwinmix/plugins` for
+    // itself and the loader was reading `GODWINMIX_PLUGINS_DIR` instead. The
+    // desktop app sets that variable, so the two answers differed there and
+    // nowhere else.
+    godwinmix_core::plugin::loader::default_dir()
 }
 
 /// The whole UI, ready to `.merge()` into the control router.

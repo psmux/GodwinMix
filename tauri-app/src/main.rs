@@ -9,6 +9,8 @@
 //
 //   * the mixer itself, bundled as a sidecar, started on a free port with a
 //     generated token and stopped again when the app quits;
+//   * the camera, the screen and the microphone, which are plugins, put where
+//     the mixer will find them before it starts;
 //   * a connect dialog, so the same app drives a headless server;
 //   * a tray icon, a menu, remembered window geometry, one instance;
 //   * two ways out, as menu items and as `godwinmix://quit` and
@@ -21,6 +23,7 @@
 
 mod commands;
 mod core_link;
+mod plugins;
 mod settings;
 mod sidecar;
 mod ui;

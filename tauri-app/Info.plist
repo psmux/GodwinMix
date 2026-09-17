@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  What macOS reads out to the operator when the app first asks for a camera or
+  a microphone. `cargo tauri build` merges this file into the Info.plist it
+  generates, because it sits beside tauri.conf.json; nothing has to name it.
+
+  Without these two keys the app does not get a refusal, it gets killed: macOS
+  ends a process that touches a camera with no NSCameraUsageDescription in the
+  bundle it belongs to, and the operator sees a source that will not go live
+  and a mixer.log that stops mid sentence.
+
+  The camera, the screen and the microphone are captured by plugin processes
+  the mixer starts, not by this shell, and the strings still belong here: the
+  permission is granted to the application bundle at the top of the process
+  tree, and that is this one. Screen recording has no key of its own; macOS
+  writes that prompt itself and only names the app.
+
+  Plain sentences, not a legal notice. This is read by somebody with twenty
+  minutes before a service who wants to know why a window is asking.
+-->
+<plist version="1.0">
+<dict>
+	<key>NSCameraUsageDescription</key>
+	<string>GodwinMix shows your camera in the mixer, so you can put it on screen and send it to whatever you are streaming to.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>GodwinMix takes the sound from your microphone, your sound card or your mixing desk and mixes it into the programme.</string>
+</dict>
+</plist>

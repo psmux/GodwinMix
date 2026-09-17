@@ -45,7 +45,8 @@
     ],
     "externalBin": ["binaries/godwinmix"],
     "resources": {
-      "gstreamer": "gstreamer"
+      "gstreamer": "gstreamer",
+      "plugins": "plugins"
     },
     "macOS": {
       "minimumSystemVersion": "10.15"

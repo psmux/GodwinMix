@@ -270,6 +270,14 @@ fn stamp() -> String {
 
 /// The environment the daemon is started in.
 ///
+/// If the app carries device plugins, they are put in the application data
+/// directory and the daemon is pointed at that with `GODWINMIX_PLUGINS_DIR`,
+/// which is what gives a person who has never opened a terminal a camera, a
+/// screen and a microphone to choose from. `plugin.add` from the window then
+/// installs into the same directory, so the three the app brought and anything
+/// added afterwards sit together. A build that carries none sets nothing and
+/// the daemon reads the plugins directory it would have read anyway.
+///
 /// If a `gstreamer/` directory has been put in the app's resources, the
 /// daemon is pointed at it and at nothing else: that is how Windows gets a
 /// media stack without the operator installing a 527 MB runtime by hand, and
@@ -284,6 +292,9 @@ pub fn environment(app: &AppHandle) -> HashMap<String, String> {
     // start.
     if let Ok(dir) = crate::settings::data_dir(app) {
         env.insert("GST_REGISTRY".into(), dir.join("gstreamer-registry.bin").display().to_string());
+    }
+    if let Some(dir) = crate::plugins::ensure(app) {
+        env.insert("GODWINMIX_PLUGINS_DIR".into(), dir.display().to_string());
     }
     let Some(root) = bundled_gstreamer(app) else { return env };
 
