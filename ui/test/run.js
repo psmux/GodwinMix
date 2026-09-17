@@ -528,6 +528,86 @@ test("the monitor subscribes before the mosaic has told it which cell is the pro
   ok(!mosaicWanted({ multiview: { enabled: false, cells: [] } }, true), "and not with multiview switched off");
 });
 
+// ---------------------------------------------------------------- scene tabs
+
+/**
+ * The tab strip in the Scenes panel, against a stubbed scene list.
+ *
+ * What is worth testing here is the gesture, not the markup. A tile takes on a
+ * single click; a tab must not, or a strip under the operator's thumb cuts the
+ * programme every time somebody looks at a scene. The only thing in this view
+ * allowed to reach `program.take` is the button that says Take.
+ */
+async function sceneTabsSuite() {
+  window.godwinmixPanels = window.godwinmixPanels || [];
+  const { default: ScenesPanel } = await import("../panels/scenes/panel.js");
+  const { focusedScene, setFocusedScene } = await import("../shell/focus.js");
+
+  test("the focused scene is remembered, and a scene that went away is not", () => {
+    setFocusedScene("wide");
+    eq(focusedScene(), "wide");
+    eq(focusedScene(["wide", "two-box"]), "wide");
+    eq(focusedScene(["two-box"]), null, "an id that is not in the collection any more");
+    setFocusedScene(null);
+    eq(focusedScene(), null);
+  });
+
+  const summaries = [
+    { id: "wide", name: "Wide", items: 2 },
+    { id: "two-box", name: "Two box", items: 1 },
+  ];
+  const calls = [];
+  const client = {
+    state: { connected: true },
+    call: (method, params) => {
+      calls.push({ method, params });
+      return Promise.resolve({});
+    },
+    on: () => () => {},
+    onRender: () => () => {},
+  };
+  const panel = new ScenesPanel();
+  panel.setClient(client);
+  // The list `scene.list` would have answered with, filed by hand so the panel
+  // has scenes without a core behind it.
+  panel.scenes.summaries = summaries;
+  panel.scenes.start = () => Promise.resolve(summaries);
+  panel.scenes.refresh = () => Promise.resolve(summaries);
+  document.body.appendChild(panel);
+  panel.setView("tabs");
+
+  test("a tab per scene, with its item count, and the focus seeded from the first", () => {
+    eq(panel.tabs.size, 2);
+    eq(panel.tabs.get("two-box").textContent, "Two box1", "the name and then the count");
+    eq(focusedScene(), "wide", "nothing was remembered, so the first scene is the one in hand");
+  });
+
+  test("a click on a tab moves the focus and puts nothing on air", () => {
+    calls.length = 0;
+    panel.tabs.get("two-box").click();
+    eq(focusedScene(), "two-box");
+    ok(!calls.some((c) => c.method === "program.take"), `it called ${JSON.stringify(calls.map((c) => c.method))}`);
+    ok(panel.tabs.get("two-box").classList.contains("on"), "the focused tab reads as the one in hand");
+  });
+
+  test("a double click on a tab opens the composer on that scene", () => {
+    const opened = [];
+    panel.open = (id) => opened.push(id);
+    panel.tabs.get("wide").dispatchEvent(new MouseEvent("dblclick", { bubbles: true }));
+    eq(opened, ["wide"]);
+  });
+
+  test("the Take button puts the focused scene on air", () => {
+    calls.length = 0;
+    setFocusedScene("two-box");
+    panel.take.click();
+    eq(calls.filter((c) => c.method === "program.take").map((c) => c.params.scene), ["two-box"]);
+  });
+
+  panel.remove();
+  setFocusedScene(null);
+}
+
 // ---------------------------------------------------------------- keymap
 
 test("a chord is spelled the way the map spells it", () => {
@@ -1159,6 +1239,9 @@ async function liveSuite() {
     })
   );
   await waitFor(() => panel.scenes.scenes().length > before, 8000, "the new scene");
+  // The list changes first and the panel repaints a tick later, on the kit's
+  // own settle timer, so wait for the tiles as well as for the summaries.
+  await waitFor(() => panel.tiles.size === panel.scenes.scenes().length, 8000, "the tiles to catch up");
   const scene = panel.scenes.scenes()[panel.scenes.scenes().length - 1];
   const view = panel.scenes.view(scene.id);
 
@@ -1392,6 +1475,12 @@ legacySuite()
   .catch((e) => {
     failed += 1;
     line("fail", "the designer fixture suite threw: " + e.message);
+    console.error(e);
+  })
+  .then(sceneTabsSuite)
+  .catch((e) => {
+    failed += 1;
+    line("fail", "the scene tab suite threw: " + e.message);
     console.error(e);
   })
   .then(liveSuite)
