@@ -5475,6 +5475,56 @@ mod tests {
         mix.shutdown();
     }
 
+    /// A slot taken off air keeps its picture flowing for as long as a source
+    /// is bound to it, and a slot with nothing on it does not.
+    ///
+    /// This is worth a test of its own because getting it wrong is invisible
+    /// in the picture and costs a second of programme. A compositor sink pad
+    /// that has had buffers and then stops getting them is not an inactive
+    /// pad, so `ignore-inactive-pads` does not cover it and the aggregator
+    /// waits the whole of `MIN_UPSTREAM_LATENCY_NS` for it. Measured on
+    /// 2026-09-17 before this held: the programme produced nothing for 1.06 s
+    /// after every take that took a slot off air, and the sixty frame stall
+    /// gauge read 50.6 ms against a 34 ms bar for the length of a ten minute
+    /// soak.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn a_slot_taken_off_air_keeps_feeding_while_a_source_is_on_it() {
+        let mut mix = with_sources(&["cam1"]).await;
+        let canvas = mix.canvas.clone();
+        // The same camera in two boxes, so the second box is on a slot that is
+        // not that source's home slot. A home slot has always kept its picture
+        // flowing; this is about the other kind.
+        mix.take_scene(
+            scene("two", vec![box_at(&canvas, "cam1", 0, 0), box_at(&canvas, "cam1", 100, 0)]),
+            None,
+        )
+        .expect("one camera in two boxes");
+        mix.take(Some("cam1".into()), None).expect("back to one item");
+
+        let cam1: SourceId = "cam1".into();
+        let off = mix
+            .pool
+            .slots()
+            .iter()
+            .find(|s| s.source() == Some(&cam1) && !s.showing())
+            .expect("the second box's slot is still bound to cam1 and no longer drawn");
+        assert!(
+            off.feeding(),
+            "a hidden slot with a source on it must keep its compositor pad fed"
+        );
+        let spare = mix
+            .pool
+            .slots()
+            .iter()
+            .find(|s| s.source().is_none())
+            .expect("the pool has a slot with nothing on it");
+        assert!(
+            !spare.feeding(),
+            "a slot with nothing bound to it has no picture to pass and its valve is shut"
+        );
+        mix.shutdown();
+    }
+
     /// Audio follows the item flags: a source is heard when any live item of
     /// it says `follow` and is visible, or says `always`, and nothing else.
     #[tokio::test(flavor = "multi_thread")]

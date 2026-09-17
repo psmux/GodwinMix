@@ -16,10 +16,16 @@
 # given back: none of those show up in a single pass and all of them end a show
 # two hours in.
 #
-# Usage: dev/soak.sh [--minutes N] [--machine ID] [--keep]
+# Usage: dev/soak.sh [--minutes N] [--machine ID] [--keep] [--skip PHASES]
 #   --minutes N   how long to run. 10 by default; the nightly runs 60
 #   --machine ID  names the machine in the record. The hostname by default
 #   --keep        leave the working directory and the core's log behind
+#   --skip P,Q    leave phases out of every round. Names: sources, take,
+#                 streams, plugin. For bisecting a number that grows across a
+#                 run: take one phase out at a time and see which one the
+#                 growth leaves with. A skipped phase times zero and the
+#                 record names it, so a run with a phase out is never mistaken
+#                 for a clean one. GODWINMIX_SOAK_SKIP sets the same thing.
 #
 # It writes bench/results/soak-<machine>-<date>.json and prints a summary
 # table. A bar that fails also fails the script.
@@ -34,13 +40,15 @@ MINUTES=10
 MACHINE="$(hostname -s 2>/dev/null || hostname)"
 KEEP=0
 PERIOD=5
+SKIP="${GODWINMIX_SOAK_SKIP:-}"
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --minutes) MINUTES="${2:-}"; shift 2 ;;
         --machine) MACHINE="${2:-}"; shift 2 ;;
         --keep) KEEP=1; shift ;;
-        -h|--help) sed -n '2,26p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit 0 ;;
+        --skip) SKIP="${SKIP:+$SKIP,}${2:-}"; shift 2 ;;
+        -h|--help) sed -n '2,32p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit 0 ;;
         *) echo "unknown argument: $1. dev/soak.sh --help lists them." >&2; exit 2 ;;
     esac
 done
@@ -48,6 +56,23 @@ if ! [[ "$MINUTES" =~ ^[0-9]+$ ]] || [[ "$MINUTES" -lt 2 ]]; then
     echo "--minutes takes a whole number of at least 2. The warm up alone is one minute." >&2
     exit 2
 fi
+
+# Which of the four phases a round runs. `skipping sources` is true when the
+# name is in the list, and a name nobody recognises is a typo worth stopping
+# for rather than a run that quietly measured all four.
+SKIP="${SKIP//[[:space:]]/}"
+SKIPPED=""
+if [[ -n "$SKIP" ]]; then
+    IFS=',' read -r -a SKIP_NAMES <<<"$SKIP"
+    for name in "${SKIP_NAMES[@]}"; do
+        [[ -z "$name" ]] && continue
+        case "$name" in
+            sources|take|streams|plugin) SKIPPED="$SKIPPED $name" ;;
+            *) echo "--skip takes sources, take, streams or plugin, not '$name'." >&2; exit 2 ;;
+        esac
+    done
+fi
+skipping() { [[ " $SKIPPED " == *" $1 "* ]]; }
 
 WORK="$(mktemp -d "${TMPDIR:-/tmp}/gmx-soak.XXXXXX")"
 LOG="$WORK/core.log"
@@ -165,6 +190,9 @@ AUTH=(-H "Authorization: Bearer $TOKEN")
 BUDGET=(--max-time $((PERIOD * 2)))
 
 echo "GodwinMix soak on $BASE for $MINUTES minute(s), a round every ${PERIOD}s"
+if [[ -n "$SKIPPED" ]]; then
+    echo "phases left out of every round:$SKIPPED. This run cannot be compared with a full one."
+fi
 echo
 
 # Release, unlike dev/smoke.sh. A debug core misses a 34 ms frame bar on its
@@ -272,7 +300,9 @@ fi
 # teardown, not a compiler.
 step "a plugin to install and remove every round"
 PLUGDIR="$WORK/soak-bars"
-if "$GMX" plugin new soak-bars --kind source --lang shell --out "$PLUGDIR" \
+if skipping plugin; then
+    printf 'skipped\n'
+elif "$GMX" plugin new soak-bars --kind source --lang shell --out "$PLUGDIR" \
         >"$WORK/plugin-new.log" 2>&1; then
     ok
 else
@@ -479,13 +509,13 @@ while :; do
     # different bug report from "the round got slower", and the four phases
     # fail in four different places.
     T0="$(now_ms)"
-    round_sources
+    skipping sources || round_sources
     T1="$(now_ms)"
-    round_take
+    skipping take || round_take
     T2="$(now_ms)"
-    round_streams
+    skipping streams || round_streams
     T3="$(now_ms)"
-    round_plugin
+    skipping plugin || round_plugin
     T4="$(now_ms)"
     SOURCES_MS=$((T1 - T0))
     TAKE_MS=$((T2 - T1))
@@ -534,14 +564,17 @@ echo
 
 DATE="$(date -u +%Y-%m-%d)"
 RECORD="$REPO/bench/results/soak-$MACHINE-$DATE.json"
+[[ -n "$SKIPPED" ]] && RECORD="$REPO/bench/results/soak-$MACHINE-$DATE${SKIPPED// /-no}.json"
 COMMIT="$(cd "$REPO" && git rev-parse --short HEAD 2>/dev/null || echo unknown)"
 
 python3 - "$SAMPLES" "$RECORD" "$MACHINE" "$COMMIT" "$MINUTES" "$PERIOD" \
-    "$STALL_BAR" "$RSS_GROWTH_PCT" "$WARMUP_SECS" "$FD_SLACK" "$THREAD_SLACK" <<'PY'
+    "$STALL_BAR" "$RSS_GROWTH_PCT" "$WARMUP_SECS" "$FD_SLACK" "$THREAD_SLACK" \
+    "$SKIPPED" <<'PY'
 import json, platform, sys, datetime
 
 (samples, record, machine, commit, minutes, period,
- stall_bar, rss_pct, warmup, fd_slack, thread_slack) = sys.argv[1:12]
+ stall_bar, rss_pct, warmup, fd_slack, thread_slack, skipped) = sys.argv[1:13]
+skipped = skipped.split()
 stall_bar, rss_pct = float(stall_bar), float(rss_pct)
 warmup, fd_slack, thread_slack = int(warmup), int(fd_slack), int(thread_slack)
 
@@ -639,6 +672,9 @@ rounds_ms = [r["round_ms"] for r in rows]
 slowest = max(rows, key=lambda r: r["round_ms"])
 print(f'{len(rows)} rounds over {last["elapsed_s"]} s, asked for one every {period} s. '
       f'Warm up sample at {warm["elapsed_s"]} s.')
+if skipped:
+    print(f'{", ".join(skipped)} did not run this time, so this record is a bisection '
+          f'rather than a verdict on the build.')
 print(f'A round took {sum(rounds_ms) / len(rounds_ms) / 1000:.1f} s on average and '
       f'{slowest["round_ms"] / 1000:.1f} s at its worst, on round {slowest["round"]}.')
 if missed:
@@ -671,6 +707,7 @@ out = {
     "period_s": int(period),
     "warmup_s": warmup,
     "rounds": len(rows),
+    "skipped_phases": skipped,
     "bars": {
         "stall_ms": stall_bar,
         "rss_growth_pct": rss_pct,

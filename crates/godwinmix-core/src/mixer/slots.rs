@@ -443,17 +443,40 @@ impl Slot {
         self.pad.property::<f64>("alpha") > 0.0
     }
 
+    /// True when pictures are still reaching this slot's compositor pad,
+    /// whether or not the pad is drawn.
+    ///
+    /// Not the same question as [`Slot::showing`], and the difference is a
+    /// second of programme output: see [`Slot::hide`].
+    pub fn feeding(&self) -> bool {
+        !self.gate.property::<bool>("drop")
+    }
+
     /// Hide this slot without unbinding it, which is what makes the next take
     /// a property write.
     ///
-    /// A home slot keeps its picture flowing: the compositor skips a pad at
-    /// alpha 0 before any conversion, and having the frame already there is
-    /// what makes a take show the current picture rather than a stale one. Any
-    /// other slot shuts its valve, because the chain feeding a hidden pad is
-    /// not free even when the pad is.
+    /// A slot with a source on it keeps its picture flowing, whether it is
+    /// drawn or not. The compositor skips a pad at alpha 0 before any
+    /// conversion, so a hidden pad costs almost nothing to blend, and having
+    /// the frame already there is what makes a take show the current picture
+    /// rather than a stale one.
+    ///
+    /// Shutting the valve instead looks like the saving and is not. A
+    /// compositor sink pad that has had buffers and then stops getting them is
+    /// not an inactive pad: `ignore-inactive-pads` covers a pad that has never
+    /// produced anything, and this one has. So the aggregator waits for it,
+    /// and what it waits is the whole of `MIN_UPSTREAM_LATENCY_NS`, one
+    /// second. Measured on this Mac on 2026-09-17, with a take every five
+    /// seconds between a two box and a single: the programme compositor
+    /// produced the frame for running time 11.900 and then nothing at all for
+    /// 1.061 s, once for every take that took a slot off air, which is the
+    /// whole of the 50.6 ms the sixty frame stall gauge read against a 34 ms
+    /// bar. A slot with nothing bound to it is a different case: nothing feeds
+    /// it, its pad has never seen a buffer, the aggregator ignores it, and its
+    /// valve shuts so the chain is not woken for a picture nobody wants.
     fn hide(&self) {
         set_f64(&self.pad, "alpha", 0.0);
-        if !self.home {
+        if !self.home && self.bound.is_none() {
             self.gate.set_property("drop", true);
         }
     }
