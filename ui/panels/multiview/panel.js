@@ -146,11 +146,9 @@ class ProgramPanel extends HTMLElement {
   /**
    * The armed scene in the pane beside the programme.
    *
-   * Its own subscription, because it is its own picture: the core composites
-   * the preview from the same thumbnails the mosaic is drawn from and sends it
-   * on the same socket, and `ext.preview` is what builds it. Nothing is asked
-   * for outside producer mode, with nothing armed, or while nobody can see it,
-   * which is the rule the monitor above follows too.
+   * Its own subscription: `ext.preview` is what builds the compositor, and it
+   * is asked for only in producer mode, with something armed, and while
+   * somebody can see it, which is the rule the monitor above follows too.
    */
   retunePreview(s) {
     const wanted = !!(settings().producer && s.preview && this.visible && !document.hidden);
