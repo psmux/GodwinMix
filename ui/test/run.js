@@ -575,6 +575,22 @@ test("the preview is painted whole, with no layout to wait for", () => {
   painter.destroy();
 });
 
+test("a snapshot does not take the armed scene away again", () => {
+  // The status document has no field for the armed scene, and asking for the
+  // preview stream re-subscribes, which brings a fresh snapshot with it. A
+  // snapshot that cleared what was armed made the pane appear and go dark
+  // again in the same second.
+  const client = new Client({ name: "test", subscribe: () => Promise.resolve({}) }, new Store());
+  client.handleEvent("preview.changed", { scene: "Two box" });
+  client.handleEvent("snapshot", { state: { program: "cam1", sources: [] }, seq: 4 });
+  eq(client.state.preview, "Two box");
+  // Disarming still clears it, and a status that does name one still wins.
+  client.handleEvent("preview.changed", { scene: null });
+  eq(client.state.preview, null);
+  client.handleEvent("snapshot", { state: { preview: "cam2", sources: [] }, seq: 5 });
+  eq(client.state.preview, "cam2");
+});
+
 test("the pane beside the programme asks the core for ext.preview", () => {
   // `want` keys are `ext` keys: the armed scene is only composited while a
   // client has asked for it by name, so a pane that asked for the wrong one
