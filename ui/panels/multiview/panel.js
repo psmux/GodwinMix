@@ -108,6 +108,7 @@ class ProgramPanel extends HTMLElement {
   retune() {
     const s = this.client.state;
     const cell = this.programCell(s);
+    this.retunePreview(s);
     if (!mosaicWanted(s, this.visible)) {
       this.release();
       this.canvas.hidden = true;
@@ -142,6 +143,53 @@ class ProgramPanel extends HTMLElement {
     this.detach = cell === null ? null : this.client.sheet.attach(this.canvas, cell);
   }
 
+  /**
+   * The armed scene in the pane beside the programme.
+   *
+   * Its own subscription, because it is its own picture: the core composites
+   * the preview from the same thumbnails the mosaic is drawn from and sends it
+   * on the same socket, and `ext.preview` is what builds it. Nothing is asked
+   * for outside producer mode, with nothing armed, or while nobody can see it,
+   * which is the rule the monitor above follows too.
+   */
+  retunePreview(s) {
+    const wanted = !!(settings().producer && s.preview && this.visible && !document.hidden);
+    if (!wanted) {
+      this.releasePreview();
+      return;
+    }
+    const box = this.previewCanvas.getBoundingClientRect();
+    const fps = settings().multiviewFps;
+    // One picture rather than a sheet, so one cell across.
+    const width = sheetWidthFor(box.width || 320, 1);
+    if (!this.previewWant) this.previewWant = this.client.want("preview", { fps, width });
+    else if (width !== this.lastPreviewWidth || fps !== this.lastPreviewFps) {
+      this.previewWant.update({ fps, width });
+    }
+    this.lastPreviewWidth = width;
+    this.lastPreviewFps = fps;
+
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const w = Math.round((box.width || 320) * dpr);
+    const h = Math.round((w * 9) / 16);
+    if (w > 0 && (this.previewCanvas.width !== w || this.previewCanvas.height !== h)) {
+      this.previewCanvas.width = w;
+      this.previewCanvas.height = h;
+    }
+    if (!this.detachPreview) this.detachPreview = this.client.preview.attach(this.previewCanvas);
+  }
+
+  releasePreview() {
+    if (this.previewWant) {
+      this.previewWant.release();
+      this.previewWant = null;
+    }
+    if (this.detachPreview) {
+      this.detachPreview();
+      this.detachPreview = null;
+    }
+  }
+
   release() {
     if (this.want) {
       this.want.release();
@@ -151,6 +199,7 @@ class ProgramPanel extends HTMLElement {
       this.detach();
       this.detach = null;
     }
+    this.releasePreview();
   }
 
   applyMode() {
