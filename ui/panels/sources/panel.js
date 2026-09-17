@@ -459,6 +459,14 @@ class SourcesPanel extends HTMLElement {
     if (settings().gallery === "snapshot" && tile) {
       tile.still.src = this.client.snapshotUrl(id, tile.still.clientWidth * 2 || 320);
     }
+    // Inside a scene the scene is what goes to air, and its tab is what takes
+    // it. A tap on one of the pieces it is built from selects that piece, the
+    // way clicking a layer does, and the programme is left alone.
+    if (this.scopedTo()) return;
+    this.putOnAir(id);
+  }
+
+  async putOnAir(id) {
     if (settings().producer) {
       document.body.dataset.armed = id;
       this.client.call("scene.preview.set", { scene: id }).catch(() => {
@@ -468,7 +476,27 @@ class SourcesPanel extends HTMLElement {
       this.render(this.client.state);
       return;
     }
+    if (!(await this.askBeforeTake())) return;
     this.client.call("program.take", { source: id }).catch((e) => errorToast(e, "Take"));
+  }
+
+  /**
+   * `program.take {source}` is one picture, so it replaces a composed scene
+   * entirely and nothing on the way says so. Worth a question while a scene
+   * with more than one item in it is live, and worth nothing at all the rest
+   * of the time, which is most of the time.
+   */
+  async askBeforeTake() {
+    if (!settings().confirmTake) return true;
+    const live = this.client.state.scene;
+    if (!live) return true;
+    const scenes = this.sceneClient();
+    const summary = scenes ? scenes.summary(live) : null;
+    if (!summary || (summary.items || 0) < 2) return true;
+    return confirmModal(
+      `${summary.name} is on air with ${summary.items} things in it. Putting this source on air replaces all of them with the one picture.`,
+      "Put it on air"
+    );
   }
 
   /**
@@ -588,7 +616,7 @@ class SourcesPanel extends HTMLElement {
     const many = ids.length > 1;
     const key = (cmd) => shell.keymap.keyFor(cmd);
     contextMenu(e.clientX, e.clientY, [
-      id && { label: settings().producer ? "Arm" : "Put on air", key: "Click", run: () => this.activate(id) },
+      id && { label: settings().producer ? "Arm" : "Put on air", key: this.scopedTo() ? null : "Click", run: () => this.putOnAir(id) },
       id && { label: "Rename", key: key("tray.rename") || "F2", disabled: many, run: () => this.beginRename(id) },
       id && { kind: "colours", onColour: (colour) => this.setColour(ids, colour) },
       id && { label: "Settings", run: () => this.openDrawer(id) },
