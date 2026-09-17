@@ -249,6 +249,36 @@ fn arming_a_scene_makes_it_the_preview_and_gives_a_layout_for_it() {
 }
 
 #[test]
+fn every_source_a_scene_draws_is_named_so_tally_can_light_them_all() {
+    let s = server();
+    let view = two_box(&s);
+
+    // The programme half of tally used to compare each source against the one
+    // id the mixer reports, which is null for any scene of more than one item,
+    // so both cameras in a two box read "off" while they were on air.
+    assert_eq!(s.sources_in("two"), vec!["cam1".to_string(), "cam2".to_string()]);
+    // By id as well as by name, the way every other scene lookup works.
+    assert_eq!(s.sources_in(&view.id.to_string()), vec!["cam1".to_string(), "cam2".to_string()]);
+
+    assert!(s.sources_in("no such scene").is_empty(), "an unknown name draws nothing");
+}
+
+#[test]
+fn a_source_a_scene_does_not_draw_is_not_named() {
+    let s = server();
+    two_box(&s);
+    // The same "not drawn" the preview side already uses, so the two halves
+    // of a tally agree about what is on screen.
+    s.edit(None, |doc| {
+        let scene = doc.scenes.iter_mut().find(|sc| sc.name == "two").expect("the scene");
+        scene.items[1].visible = false;
+        Ok(())
+    })
+    .expect("hiding one box");
+    assert_eq!(s.sources_in("two"), vec!["cam1".to_string()]);
+}
+
+#[test]
 fn a_scene_named_by_name_or_by_id_is_the_same_scene() {
     let s = server();
     let view = two_box(&s);
