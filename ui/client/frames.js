@@ -15,8 +15,8 @@
 //
 // One socket carries two pictures: the mosaic, and the armed scene for the
 // pane beside the programme. The top bit of the sequence number says which,
-// because the header had no spare field and every client reads it at sixteen
-// bytes. A preview frame is one whole picture and names no grid.
+// because the header had no spare field. A preview frame is one whole picture
+// and names no grid.
 
 export const HEADER_BYTES = 16;
 export const PREVIEW_STREAM = 0x80000000;
@@ -119,8 +119,7 @@ export class SheetPainter {
  * The newest whole picture, painted onto every canvas attached to it.
  *
  * The preview is one frame rather than a sheet, so there is no layout to wait
- * for and nothing to cut out: decode, then blit. Same shape as `SheetPainter`
- * so a panel holds either the same way.
+ * for and nothing to cut out: decode, then blit. Same shape as `SheetPainter`.
  */
 export class PicturePainter {
   constructor() {
