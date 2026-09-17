@@ -126,18 +126,6 @@ pub fn register(reg: &mut Registry<Call>) {
 
     reg.register(
         MethodDef::new(
-            "source.set",
-            Scope::Operate,
-            "Name and colour a source. Both live on the scene document, so every client, \
-             the tally and an agent see the same ones.",
-            handler(source_set),
-        )
-        .params(schema_of::<SetSourceMetaRequest>)
-        .result(any_object),
-    );
-
-    reg.register(
-        MethodDef::new(
             "source.group",
             Scope::Operate,
             "Put sources in a tray folder. A tag for finding things, not a group on the \
@@ -293,25 +281,27 @@ fn json_type(value: &Value) -> &'static str {
     }
 }
 
-async fn source_set(call: Call, params: Value) -> Result<Value, RpcError> {
-    let req: SetSourceMetaRequest = call.params(&params)?;
-    let known = call.source_ids().await?;
-    if !known.contains(&req.source) {
-        return Err(RpcError::not_found("source", &req.source, &known));
-    }
-    let (meta, _) = server(&call)
-        .edit(client(&call).as_deref(), |doc| {
-            let entry = doc.sources.entry(req.source.clone()).or_default();
-            if let Some(name) = &req.name {
+/// Name and colour a source on the scene document, for `source.set`, which
+/// is registered beside the placement half in `methods::sources`.
+pub(crate) fn set_source_meta(
+    call: &Call,
+    source: &str,
+    name: Option<String>,
+    color: Option<String>,
+) -> Result<SourceMetaRecord, RpcError> {
+    let (meta, _) = server(call)
+        .edit(client(call).as_deref(), |doc| {
+            let entry = doc.sources.entry(source.to_string()).or_default();
+            if let Some(name) = &name {
                 entry.name = Some(name.clone());
             }
-            if let Some(color) = &req.color {
+            if let Some(color) = &color {
                 entry.color = Some(color.clone());
             }
             Ok(entry.clone())
         })
-        .map_err(|e| scene_error(&call, e))?;
-    body(SourceMetaRecord { source: req.source, meta })
+        .map_err(|e| scene_error(call, e))?;
+    Ok(SourceMetaRecord { source: source.to_string(), meta })
 }
 
 async fn source_group(call: Call, params: Value) -> Result<Value, RpcError> {

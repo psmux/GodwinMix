@@ -1274,12 +1274,23 @@ class SetSettingsRequest(TypedDict, total=False):
     settings: Dict[str, Any]
     # Only the keys named are changed.
 
-class SetSourceMetaRequest(TypedDict, total=False):
-    """`source.set`."""
+class SetSourceRequest(TypedDict, total=False):
+    """`source.set`: a full state assignment for one source. Every field is optional and only what is named moves, which is how every other setter in this protocol works. The one that matters here is `place`: it moves a running source between the core, a sidecar and a node."""
 
     color: Optional[str]
+    # The colour the UI and the tally show it in. On the scene document, like the name.
+    id: str
+    # Source id. `source` is accepted too, which is what the scene side of this method has always been called with.
+    latency_ms: Optional[int]
+    # The latency budget in milliseconds, answered on the LATENCY query.
     name: Optional[str]
-    source: str
+    # What to call it in the UI. Kept on the scene document, so every client, the tally and an agent read the same name.
+    params: Optional[Dict[str, Any]]
+    # Params for the source's own kind. Merged over what it has.
+    place: Union[Place, None]
+    # Where it runs: `core`, `in-process`, `sidecar` or `node:<name>`.
+    transport: Union[BridgeTransport, None]
+    # How a remote source's media travels: `rtp`, `srt` or `whip`.
 
 class Snapshot(TypedDict, total=False):
     """`event/snapshot`: the full state, and where in the stream it sits."""
@@ -1610,6 +1621,9 @@ Audio = Literal['follow', 'always', 'never']
 # OBS's blend enum, so an import carries across unchanged.
 Blend = Literal['normal', 'add', 'screen', 'multiply', 'lighten', 'darken', 'subtract']
 
+# How media crosses between a node and the core.
+BridgeTransport = Literal['rtp', 'srt', 'whip']
+
 ConversionPhase = Literal['running', 'done', 'failed']
 
 # How content fills its frame. SVG's vocabulary, which replaces OBS's seven bounds types and maps onto `sizing-policy` on a `glvideomixer` pad.
@@ -1625,6 +1639,9 @@ Id = str
 MultiviewExt = Union[bool, Dict[str, Any]]
 
 OutputState = Literal['connecting', 'live', 'reconnecting', 'failed']
+
+# Where an instance runs: core, in-process, sidecar, or node:<name>.
+Place = str
 
 # `ext.preview`. Either `"full"`, `false`, or an object.
 PreviewExt = Union[str, bool, Dict[str, Any]]
@@ -1765,7 +1782,7 @@ METHODS = (
     {"name": "source.list", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/sources"), "summary": 'Every source, with its state, whether it has video and audio, and its fader.'},
     {"name": "source.remove", "scope": "operate", "mutating": True, "destructive": True, "rest": ("DELETE", "/api/v1/sources/{id}"), "summary": 'Remove a source. If it is on programme the mixer cuts to the slate first.'},
     {"name": "source.seek", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/sources/{id}/seek"), "summary": 'Move a seekable source to a position. Answers with where it actually landed.'},
-    {"name": "source.set", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/sources/{id}/set"), "summary": 'Name and colour a source. Both live on the scene document, so every client, the tally and an agent see the same ones.'},
+    {"name": "source.set", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/sources/{id}/set"), "summary": 'Change a running source: its name and colour, its params, or where it runs. The name and colour live on the scene document. Moving a source between the core, a sidecar and a node is `place`; the programme keeps its frame rate across the move and the compositor covers the swap.'},
     {"name": "task.cancel", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/task/cancel"), "summary": 'Ask a piece of long running work to stop. Cooperative: the answer says the request landed, not that the work has stopped yet.'},
     {"name": "task.get", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/task"), "summary": 'How a piece of long running work is getting on, and its answer once it has one.'},
     {"name": "task.list", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/task/list"), "summary": 'Every background job this core knows about, newest first.'},
@@ -3398,18 +3415,30 @@ class GeneratedMethods:
 
     async def source_set(
         self,
-        source: str,
+        id: str,
         *,
         color: Optional[str] = None,
+        latency_ms: Optional[int] = None,
         name: Optional[str] = None,
-    ) -> Dict[str, Any]:
-        """Name and colour a source. Both live on the scene document, so every client, the tally and an agent see the same ones."""
+        params: Optional[Dict[str, Any]] = None,
+        place: Optional[Union[Place, None]] = None,
+        transport: Optional[Union[BridgeTransport, None]] = None,
+    ) -> SourceStatus:
+        """Change a running source: its name and colour, its params, or where it runs. The name and colour live on the scene document. Moving a source between the core, a sidecar and a node is `place`; the programme keeps its frame rate across the move and the compositor covers the swap."""
         params: Dict[str, Any] = {}
-        params["source"] = source
+        params["id"] = id
         if color is not None:
             params["color"] = color
+        if latency_ms is not None:
+            params["latency_ms"] = latency_ms
         if name is not None:
             params["name"] = name
+        if params is not None:
+            params["params"] = params
+        if place is not None:
+            params["place"] = place
+        if transport is not None:
+            params["transport"] = transport
         return await self._call("source.set", params)
 
     async def task_cancel(

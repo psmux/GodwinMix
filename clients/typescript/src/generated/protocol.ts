@@ -182,6 +182,9 @@ export interface BindRequest {
 /** OBS's blend enum, so an import carries across unchanged. */
 export type Blend = "normal" | "add" | "screen" | "multiply" | "lighten" | "darken" | "subtract";
 
+/** How media crosses between a node and the core. */
+export type BridgeTransport = "rtp" | "srt" | "whip";
+
 /** What an importer is told before it reads the document. */
 export interface Bundle {
   assets: BundleAsset[];
@@ -902,6 +905,9 @@ export interface PipelineRequest {
   name?: string;
 }
 
+/** Where an instance runs: core, in-process, sidecar, or node:<name>. */
+export type Place = string;
+
 /** The whole of one plugin, for an agent about to use it. */
 export interface PluginDescription {
   description: string;
@@ -1167,11 +1173,21 @@ export interface SetSettingsRequest {
   settings?: Record<string, unknown>;
 }
 
-/** `source.set`. */
-export interface SetSourceMetaRequest {
+/**
+ * `source.set`: a full state assignment for one source.
+ *
+ * Every field is optional and only what is named moves, which is how every
+ * other setter in this protocol works. The one that matters here is `place`:
+ * it moves a running source between the core, a sidecar and a node.
+ */
+export interface SetSourceRequest {
   color?: string | null;
+  id: string;
+  latency_ms?: number | null;
   name?: string | null;
-  source: string;
+  params?: Record<string, unknown> | null;
+  place?: Place | null;
+  transport?: BridgeTransport | null;
 }
 
 /** How much the reader should care. */
@@ -1616,7 +1632,7 @@ export interface MethodParams {
   "source.list": Record<string, never>;
   "source.remove": IdRequest;
   "source.seek": SeekParams;
-  "source.set": SetSourceMetaRequest;
+  "source.set": SetSourceRequest;
   "task.cancel": TaskRequest;
   "task.get": TaskRequest;
   "task.list": Record<string, never>;
@@ -1743,7 +1759,7 @@ export interface MethodResults {
   "source.list": SourceStatus[];
   "source.remove": Record<string, unknown>;
   "source.seek": SourcePositionState;
-  "source.set": Record<string, unknown>;
+  "source.set": SourceStatus;
   "task.cancel": Record<string, unknown>;
   "task.get": TaskView;
   "task.list": TaskView[];
@@ -1907,7 +1923,7 @@ export const METHODS: readonly MethodInfo[] = [
   { name: "source.list", summary: "Every source, with its state, whether it has video and audio, and its fader.", scope: "read", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/sources" } },
   { name: "source.remove", summary: "Remove a source. If it is on programme the mixer cuts to the slate first.", scope: "operate", mutating: true, destructive: true, rest: { method: "DELETE", path: "/api/v1/sources/{id}" } },
   { name: "source.seek", summary: "Move a seekable source to a position. Answers with where it actually landed.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/sources/{id}/seek" } },
-  { name: "source.set", summary: "Name and colour a source. Both live on the scene document, so every client, the tally and an agent see the same ones.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/sources/{id}/set" } },
+  { name: "source.set", summary: "Change a running source: its name and colour, its params, or where it runs. The name and colour live on the scene document. Moving a source between the core, a sidecar and a node is `place`; the programme keeps its frame rate across the move and the compositor covers the swap.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/sources/{id}/set" } },
   { name: "task.cancel", summary: "Ask a piece of long running work to stop. Cooperative: the answer says the request landed, not that the work has stopped yet.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/task/cancel" } },
   { name: "task.get", summary: "How a piece of long running work is getting on, and its answer once it has one.", scope: "read", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/task" } },
   { name: "task.list", summary: "Every background job this core knows about, newest first.", scope: "read", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/task/list" } },
@@ -2552,9 +2568,9 @@ export class GeneratedMethods {
     return this._call("source.seek", params as unknown as Record<string, unknown>) as Promise<SourcePositionState>;
   }
 
-  /** Name and colour a source. Both live on the scene document, so every client, the tally and an agent see the same ones. */
-  sourceSet(params: SetSourceMetaRequest): Promise<Record<string, unknown>> {
-    return this._call("source.set", params as unknown as Record<string, unknown>) as Promise<Record<string, unknown>>;
+  /** Change a running source: its name and colour, its params, or where it runs. The name and colour live on the scene document. Moving a source between the core, a sidecar and a node is `place`; the programme keeps its frame rate across the move and the compositor covers the swap. */
+  sourceSet(params: SetSourceRequest): Promise<SourceStatus> {
+    return this._call("source.set", params as unknown as Record<string, unknown>) as Promise<SourceStatus>;
   }
 
   /** Ask a piece of long running work to stop. Cooperative: the answer says the request landed, not that the work has stopped yet. */

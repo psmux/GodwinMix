@@ -274,11 +274,18 @@ fn refuse(e: anyhow::Error) -> RpcError {
 /// it moves a running source between the core, a sidecar and a node.
 #[derive(Debug, serde::Serialize, serde::Deserialize, schemars::JsonSchema)]
 pub struct SetSourceRequest {
-    /// Source id.
+    /// Source id. `source` is accepted too, which is what the scene side of
+    /// this method has always been called with.
+    #[serde(alias = "source")]
     pub id: String,
-    /// What to call it in the UI.
+    /// What to call it in the UI. Kept on the scene document, so every
+    /// client, the tally and an agent read the same name.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub name: Option<String>,
+    /// The colour the UI and the tally show it in. On the scene document,
+    /// like the name.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub color: Option<String>,
     /// Where it runs: `core`, `in-process`, `sidecar` or `node:<name>`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub place: Option<godwinmix_core::node::Place>,
@@ -298,9 +305,10 @@ pub(crate) fn register_set(reg: &mut Registry<Call>) {
         MethodDef::new(
             "source.set",
             Scope::Operate,
-            "Change a running source: its name, its params, or where it runs. Moving a \
-             source between the core, a sidecar and a node is `place`; the programme keeps \
-             its frame rate across the move and the compositor covers the swap.",
+            "Change a running source: its name and colour, its params, or where it runs. \
+             The name and colour live on the scene document. Moving a source between the \
+             core, a sidecar and a node is `place`; the programme keeps its frame rate \
+             across the move and the compositor covers the swap.",
             handler(set),
         )
         .params(schema_of::<SetSourceRequest>)
@@ -325,6 +333,14 @@ async fn set(call: Call, params: Value) -> Result<Value, RpcError> {
     let Some(current) = configs.sources.iter().find(|s| s.id == req.id).cloned() else {
         return Err(RpcError::not_found("source", &req.id, &call.source_ids().await?));
     };
+    // The name and colour go on the scene document first, where every client
+    // reads them. Two methods used to answer to this name, one for these two
+    // fields and one for the placement, and the second registration won, so
+    // `place` and `params` were unreachable and the `set_source` tool with
+    // them. One method now, and it does both.
+    if (req.name.is_some() || req.color.is_some()) && !call.dry_run {
+        super::scenes::layout::set_source_meta(&call, &req.id, req.name.clone(), req.color.clone())?;
+    }
 
     let mut wanted = current.clone();
     if let Some(name) = req.name.clone() {
@@ -376,6 +392,8 @@ async fn set(call: Call, params: Value) -> Result<Value, RpcError> {
         return Ok(call.dry_run_answer(!diff.is_empty(), diff));
     }
     if !moving && req.params.is_none() && req.name.is_none() {
+        // A colour alone is already on the document; answer with the source.
+
         // Nothing to do, and saying so is better than rebuilding a live source
         // for no reason (Kubernetes server side dry run's `would_change`).
         return body(find(&call, &req.id).await?);

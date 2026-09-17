@@ -655,6 +655,26 @@
       ],
       "type": "string"
     },
+    "BridgeTransport": {
+      "description": "How media crosses between a node and the core.",
+      "oneOf": [
+        {
+          "const": "rtp",
+          "description": "RTP over UDP with RFC 6051 header extensions. The default: the receiver\nknows the sender's timeline from the first packet.",
+          "type": "string"
+        },
+        {
+          "const": "srt",
+          "description": "SRT, for a link that loses packets. ARQ without inventing anything.",
+          "type": "string"
+        },
+        {
+          "const": "whip",
+          "description": "WHIP, for a WAN or a NAT nobody controls.",
+          "type": "string"
+        }
+      ]
+    },
     "Bundle": {
       "description": "What an importer is told before it reads the document.",
       "properties": {
@@ -3343,6 +3363,14 @@
       },
       "type": "object"
     },
+    "Place": {
+      "description": "Where an instance runs: core, in-process, sidecar, or node:<name>.",
+      "examples": [
+        "sidecar",
+        "node:studio-b"
+      ],
+      "type": "string"
+    },
     "PluginDescription": {
       "description": "The whole of one plugin, for an agent about to use it.",
       "properties": {
@@ -4366,27 +4394,69 @@
       ],
       "type": "object"
     },
-    "SetSourceMetaRequest": {
-      "description": "`source.set`.",
+    "SetSourceRequest": {
+      "description": "`source.set`: a full state assignment for one source.\n\nEvery field is optional and only what is named moves, which is how every\nother setter in this protocol works. The one that matters here is `place`:\nit moves a running source between the core, a sidecar and a node.",
       "properties": {
         "color": {
+          "description": "The colour the UI and the tally show it in. On the scene document,\nlike the name.",
           "type": [
             "string",
+            "null"
+          ]
+        },
+        "id": {
+          "description": "Source id. `source` is accepted too, which is what the scene side of\nthis method has always been called with.",
+          "type": "string"
+        },
+        "latency_ms": {
+          "description": "The latency budget in milliseconds, answered on the LATENCY query.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": [
+            "integer",
             "null"
           ]
         },
         "name": {
+          "description": "What to call it in the UI. Kept on the scene document, so every\nclient, the tally and an agent read the same name.",
           "type": [
             "string",
             "null"
           ]
         },
-        "source": {
-          "type": "string"
+        "params": {
+          "additionalProperties": true,
+          "description": "Params for the source's own kind. Merged over what it has.",
+          "type": [
+            "object",
+            "null"
+          ]
+        },
+        "place": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Place"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Where it runs: `core`, `in-process`, `sidecar` or `node:<name>`."
+        },
+        "transport": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/BridgeTransport"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "How a remote source's media travels: `rtp`, `srt` or `whip`."
         }
       },
       "required": [
-        "source"
+        "id"
       ],
       "type": "object"
     },
@@ -8778,21 +8848,28 @@
     {
       "destructive": false,
       "idempotent": true,
+      "mcp": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "profile": "search",
+        "readOnlyHint": false,
+        "tool": "set_source"
+      },
       "mutating": true,
       "name": "source.set",
       "params": {
-        "$ref": "#/$defs/SetSourceMetaRequest"
+        "$ref": "#/$defs/SetSourceRequest"
       },
       "rest": {
         "method": "POST",
         "path": "/api/v1/sources/{id}/set"
       },
       "result": {
-        "type": "object"
+        "$ref": "#/$defs/SourceStatus"
       },
       "scope": "operate",
       "since": "1",
-      "summary": "Name and colour a source. Both live on the scene document, so every client, the tally and an agent see the same ones."
+      "summary": "Change a running source: its name and colour, its params, or where it runs. The name and colour live on the scene document. Moving a source between the core, a sidecar and a node is `place`; the programme keeps its frame rate across the move and the compositor covers the swap."
     },
     {
       "destructive": false,
