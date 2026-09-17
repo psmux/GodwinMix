@@ -7,7 +7,7 @@
 
 import { el, clear, on } from "./dom.js";
 import { all } from "./commands.js";
-import { modal } from "./modal.js";
+import { modal, confirmModal } from "./modal.js";
 import { errorToast } from "./toast.js";
 
 export function openPalette() {
@@ -144,7 +144,7 @@ function subsequence(hay, needle) {
  * reachable the day it ships.
  */
 export function methodForm(client, method, SchemaForm) {
-  const form = new SchemaForm(method.params || { type: "object", properties: {} }, {});
+  const form = new SchemaForm(paramsSchema(method), {});
   const out = el("pre.sm", { style: { whiteSpace: "pre-wrap", margin: "var(--gap) 0 0", maxHeight: "40vh", overflow: "auto" } });
   const send = el("button.btn.primary", { text: "Call" });
   const m = modal({
@@ -153,6 +153,16 @@ export function methodForm(client, method, SchemaForm) {
     footer: [el("button.btn", { text: "Close", onclick: () => m.close() }), send],
   });
   send.onclick = async () => {
+    // The protocol marks its own dangerous methods. core.shutdown is one of
+    // them, it takes no parameters, and without this it was one click from
+    // the palette: the programme off air with nothing asked.
+    if (method.destructive) {
+      const ok = await confirmModal(
+        `${method.name} is destructive. ${method.summary || ""}`.trim(),
+        "Call it"
+      );
+      if (!ok) return;
+    }
     send.disabled = true;
     try {
       const result = await client.call(method.name, form.read());
@@ -163,4 +173,23 @@ export function methodForm(client, method, SchemaForm) {
     send.disabled = false;
   };
   return m;
+}
+
+/**
+ * The params schema for one method, ready for `SchemaForm`.
+ *
+ * Most methods declare their params as a bare `$ref` into the document's
+ * `$defs`, and `SchemaForm` only walks `properties`, so it drew an empty form
+ * and sent `{}` for every one of them. `addProtocolCommands` hangs the
+ * document's `$defs` on each method so the reference can be followed here,
+ * and leaves it for the nested ones to resolve against too.
+ */
+function paramsSchema(method) {
+  const params = method.params || { type: "object", properties: {} };
+  const defs = method.$defs || params.$defs || {};
+  let schema = params;
+  if (typeof params.$ref === "string" && params.$ref.startsWith("#/$defs/")) {
+    schema = defs[params.$ref.slice("#/$defs/".length)] || { type: "object", properties: {} };
+  }
+  return Object.assign({}, schema, { $defs: defs });
 }
