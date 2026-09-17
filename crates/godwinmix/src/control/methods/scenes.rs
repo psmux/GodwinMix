@@ -25,7 +25,7 @@ use std::sync::Arc;
 pub(crate) mod edit;
 mod graphics;
 mod items;
-mod layout;
+pub(crate) mod layout;
 mod requests;
 mod share;
 

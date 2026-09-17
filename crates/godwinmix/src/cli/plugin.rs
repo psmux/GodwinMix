@@ -353,7 +353,7 @@ fn print_added(record: &Value) {
         }
         if !provides.is_empty() {
             println!(
-                "\nAdd one with:  gmx source add <id> --type {}",
+                "\nAdd one with:  gmx ctl source add <id> --type {}",
                 provides[0].as_str().unwrap_or("")
             );
         }

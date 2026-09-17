@@ -343,6 +343,11 @@ pub type Blend = String;
 /// The values api_level 1 knows for [`Blend`].
 pub const BLEND_VALUES: &[&str] = &["normal", "add", "screen", "multiply", "lighten", "darken", "subtract"];
 
+/// How media crosses between a node and the core.
+pub type BridgeTransport = String;
+/// The values api_level 1 knows for [`BridgeTransport`].
+pub const BRIDGE_TRANSPORT_VALUES: &[&str] = &["rtp", "srt", "whip"];
+
 /// What an importer is told before it reads the document.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
@@ -1529,6 +1534,9 @@ pub struct PipelineRequest {
     pub name: Option<String>,
 }
 
+/// Where an instance runs: core, in-process, sidecar, or node:<name>.
+pub type Place = String;
+
 /// The whole of one plugin, for an agent about to use it.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
@@ -1976,15 +1984,37 @@ pub struct SetSettingsRequest {
     pub settings: BTreeMap<String, Value>,
 }
 
-/// `source.set`.
+/// `source.set`: a full state assignment for one source.
+///
+/// Every field is optional and only what is named moves, which is how every
+/// other setter in this protocol works. The one that matters here is `place`:
+/// it moves a running source between the core, a sidecar and a node.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
-pub struct SetSourceMetaRequest {
+pub struct SetSourceRequest {
+    /// The colour the UI and the tally show it in. On the scene document,
+    /// like the name.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub color: Option<String>,
+    /// Source id. `source` is accepted too, which is what the scene side of
+    /// this method has always been called with.
+    pub id: String,
+    /// The latency budget in milliseconds, answered on the LATENCY query.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub latency_ms: Option<u32>,
+    /// What to call it in the UI. Kept on the scene document, so every
+    /// client, the tally and an agent read the same name.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub name: Option<String>,
-    pub source: String,
+    /// Params for the source's own kind. Merged over what it has.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub params: Option<BTreeMap<String, Value>>,
+    /// Where it runs: `core`, `in-process`, `sidecar` or `node:<name>`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub place: Option<Place>,
+    /// How a remote source's media travels: `rtp`, `srt` or `whip`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub transport: Option<BridgeTransport>,
 }
 
 /// How much the reader should care.
@@ -2670,7 +2700,7 @@ pub const METHODS: [MethodInfo; 123] = [
     MethodInfo { name: "source.list", summary: "Every source, with its state, whether it has video and audio, and its fader.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/sources")) },
     MethodInfo { name: "source.remove", summary: "Remove a source. If it is on programme the mixer cuts to the slate first.", scope: "operate", mutating: true, destructive: true, rest: Some(("DELETE", "/api/v1/sources/{id}")) },
     MethodInfo { name: "source.seek", summary: "Move a seekable source to a position. Answers with where it actually landed.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/sources/{id}/seek")) },
-    MethodInfo { name: "source.set", summary: "Name and colour a source. Both live on the scene document, so every client, the tally and an agent see the same ones.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/sources/{id}/set")) },
+    MethodInfo { name: "source.set", summary: "Change a running source: its name and colour, its params, or where it runs. The name and colour live on the scene document. Moving a source between the core, a sidecar and a node is `place`; the programme keeps its frame rate across the move and the compositor covers the swap.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/sources/{id}/set")) },
     MethodInfo { name: "task.cancel", summary: "Ask a piece of long running work to stop. Cooperative: the answer says the request landed, not that the work has stopped yet.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/task/cancel")) },
     MethodInfo { name: "task.get", summary: "How a piece of long running work is getting on, and its answer once it has one.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/task")) },
     MethodInfo { name: "task.list", summary: "Every background job this core knows about, newest first.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/task/list")) },
@@ -3468,8 +3498,8 @@ impl Client {
         self.call("source.seek", params).await
     }
 
-    /// Name and colour a source. Both live on the scene document, so every client, the tally and an agent see the same ones.
-    pub async fn source_set(&self, params: &SetSourceMetaRequest) -> Result<BTreeMap<String, Value>> {
+    /// Change a running source: its name and colour, its params, or where it runs. The name and colour live on the scene document. Moving a source between the core, a sidecar and a node is `place`; the programme keeps its frame rate across the move and the compositor covers the swap.
+    pub async fn source_set(&self, params: &SetSourceRequest) -> Result<SourceStatus> {
         self.call("source.set", params).await
     }
 

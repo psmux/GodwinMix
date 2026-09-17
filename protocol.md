@@ -151,7 +151,7 @@ Keys accepted on every method, handled before a method runs.
 | `source.list` | `GET /api/v1/sources` | read |  | 1 | Every source, with its state, whether it has video and audio, and its fader. |
 | `source.remove` | `DELETE /api/v1/sources/{id}` | operate | yes | 1 | Remove a source. If it is on programme the mixer cuts to the slate first. |
 | `source.seek` | `POST /api/v1/sources/{id}/seek` | operate |  | 1 | Move a seekable source to a position. Answers with where it actually landed. |
-| `source.set` | `POST /api/v1/sources/{id}/set` | operate |  | 1 | Name and colour a source. Both live on the scene document, so every client, the tally and an agent see the same ones. |
+| `source.set` | `POST /api/v1/sources/{id}/set` | operate |  | 1 | Change a running source: its name and colour, its params, or where it runs. The name and colour live on the scene document. Moving a source between the core, a sidecar and a node is `place`; the programme keeps its frame rate across the move and the compositor covers the swap. |
 | `task.cancel` | `POST /api/v1/task/cancel` | operate |  | 1 | Ask a piece of long running work to stop. Cooperative: the answer says the request landed, not that the work has stopped yet. |
 | `task.get` | `GET /api/v1/task` | read |  | 1 | How a piece of long running work is getting on, and its answer once it has one. |
 | `task.list` | `GET /api/v1/task/list` | read |  | 1 | Every background job this core knows about, newest first. |
@@ -2100,15 +2100,17 @@ MCP tool `seek_source` in the `search` profile: readOnlyHint false, destructiveH
 
 #### `source.set`
 
-Name and colour a source. Both live on the scene document, so every client, the tally and an agent see the same ones.
+Change a running source: its name and colour, its params, or where it runs. The name and colour live on the scene document. Moving a source between the core, a sidecar and a node is `place`; the programme keeps its frame rate across the move and the compositor covers the swap.
+
+MCP tool `set_source` in the `search` profile: readOnlyHint false, destructiveHint false, idempotentHint true.
 
 ```json
 {
   "params": {
-    "$ref": "#/$defs/SetSourceMetaRequest"
+    "$ref": "#/$defs/SetSourceRequest"
   },
   "result": {
-    "type": "object"
+    "$ref": "#/$defs/SourceStatus"
   }
 }
 ```

@@ -311,15 +311,6 @@ pub struct MarkRequest {
     pub label: Option<String>,
 }
 
-/// `source.set`.
-#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
-pub struct SetSourceMetaRequest {
-    pub source: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub name: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub color: Option<String>,
-}
 
 /// `source.group`.
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
