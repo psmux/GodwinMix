@@ -82,7 +82,11 @@ pub fn register(reg: &mut Registry<Call>) {
         .result(schema_of::<OutputStatus>)
         .tool(
             "set_output",
-            Tier::Standard,
+            // Search, not Standard, beside `reconnect_output` and
+            // `remove_output`. Correcting a destination is rare and always
+            // deliberate, and the standard profile is a budget somebody else
+            // has to live inside.
+            Tier::Search,
             "Change one destination in place without losing its id: give it a new address \
              (the whole URL, stream key and all), a new reconnect `policy`, or a deeper \
              `queue_secs` outage buffer. Only the fields you name move. This is how a \

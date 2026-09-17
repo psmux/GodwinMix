@@ -7046,7 +7046,7 @@
       "mcp": {
         "destructiveHint": false,
         "idempotentHint": true,
-        "profile": "standard",
+        "profile": "search",
         "readOnlyHint": false,
         "tool": "set_output"
       },

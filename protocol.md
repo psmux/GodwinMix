@@ -739,7 +739,7 @@ MCP tool `remove_output` in the `search` profile: readOnlyHint false, destructiv
 
 Change a destination in place: a new address with a new stream key, a new reconnect policy, a deeper outage buffer. The address is write only, so a client that only wants the buffer never has to hold the key.
 
-MCP tool `set_output` in the `standard` profile: readOnlyHint false, destructiveHint false, idempotentHint true.
+MCP tool `set_output` in the `search` profile: readOnlyHint false, destructiveHint false, idempotentHint true.
 
 ```json
 {
