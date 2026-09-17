@@ -188,7 +188,7 @@ pub async fn dispatch(
 
     // Whoever is calling is still there, which is what the operator watchdog
     // in `safety` watches for.
-    app.safety.note_call(&token.id);
+    app.safety().note_call(&token.id);
 
     // The key is claimed before the work, not after it. Two clients racing on
     // one key: the first owns it and the second waits on the same slot and

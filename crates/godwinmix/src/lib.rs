@@ -468,8 +468,24 @@ pub fn main_with_room() -> anyhow::Result<()> {
                 .block_on(run())
         })
         .context("starting the program's thread")?;
-    program.join().unwrap_or_else(|panic| std::panic::resume_unwind(panic))
+    let outcome = program.join().unwrap_or_else(|panic| std::panic::resume_unwind(panic));
+    // `core.restart` went down the same road as `core.shutdown`, so by here
+    // the outputs are closed and the mixer thread has joined. The only thing
+    // left is to leave with the status a supervisor is watching for.
+    if outcome.is_ok() && control::methods::restart_wanted() {
+        std::process::exit(EXIT_RESTART);
+    }
+    outcome
 }
+
+/// The status the core leaves with when `core.restart` asked it to.
+///
+/// 75 is `EX_TEMPFAIL` from `sysexits.h`: a failure that is expected to clear,
+/// which is exactly what this is. It matters that it is not zero, because
+/// systemd's `Restart=on-failure` and the desktop shell both read the status
+/// to tell "it was asked to stop" from "it is meant to come back", and a
+/// number nothing else uses cannot be confused with a crash.
+pub const EXIT_RESTART: i32 = 75;
 
 pub async fn run() -> Result<()> {
     let args = Args::parse();

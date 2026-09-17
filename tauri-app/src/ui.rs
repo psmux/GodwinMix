@@ -72,6 +72,7 @@ pub fn build_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
     let connect = MenuItemBuilder::with_id("connect", "Connect to a mixer...")
         .accelerator("CmdOrCtrl+Shift+C")
         .build(app)?;
+    let restart = MenuItemBuilder::with_id("restart-core", "Restart the mixer").build(app)?;
     let logs = MenuItemBuilder::with_id("logs", "Open logs folder").build(app)?;
     let config = MenuItemBuilder::with_id("config", "Open config folder").build(app)?;
     let updates = MenuItemBuilder::with_id("updates", "Check for updates...").build(app)?;
@@ -83,7 +84,7 @@ pub fn build_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
     let about = PredefinedMenuItem::about(app, Some("About GodwinMix"), Some(about_metadata()))?;
     let separator = || PredefinedMenuItem::separator(app);
     let app_menu = SubmenuBuilder::new(app, "GodwinMix")
-        .items(&[&about, &updates, &separator()?, &connect, &separator()?, &logs, &config, &separator()?, &quit, &quit_all])
+        .items(&[&about, &updates, &separator()?, &connect, &restart, &separator()?, &logs, &config, &separator()?, &quit, &quit_all])
         .build()?;
     let edit = SubmenuBuilder::new(app, "Edit")
         .items(&[
@@ -143,6 +144,7 @@ pub fn on_menu(app: &AppHandle, id: &str) {
     match id {
         "show" => show(app),
         "connect" => connect(app),
+        "restart-core" => restart_core(app.clone()),
         "logs" => reveal(app, crate::settings::log_dir(app).ok()),
         "config" => reveal(app, crate::settings::data_dir(app).ok()),
         "updates" => check_for_updates(app.clone()),
@@ -182,6 +184,34 @@ pub fn connect(app: &AppHandle) {
     if let Err(e) = window.navigate(url) {
         eprintln!("[desktop] could not open the connect page: {e}");
     }
+}
+
+/// Ask the mixer to stop and come back, which is how a setting that cannot be
+/// changed while it runs takes effect.
+///
+/// Nothing here starts anything. The core closes its outputs, leaves with the
+/// status that says it wants to come back, and the watcher in `sidecar` starts
+/// it again and sends the window to it. A core this app did not start has
+/// nobody to do that, and its own refusal says as much, so that sentence is
+/// what appears in the dialog.
+fn restart_core(app: AppHandle) {
+    tauri::async_runtime::spawn(async move {
+        let target = app.state::<Shell>().target.lock().unwrap().clone();
+        let Some(target) = target else {
+            tell(
+                &app,
+                "Not connected to a mixer",
+                "Connect to a mixer first, then this will restart it.",
+                MessageDialogKind::Info,
+            );
+            return;
+        };
+        let http = app.state::<Shell>().http.clone();
+        match crate::core_link::restart(&http, &target).await {
+            Ok(()) => {}
+            Err(why) => tell(&app, "The mixer will not restart", &why, MessageDialogKind::Warning),
+        }
+    });
 }
 
 fn reveal(app: &AppHandle, dir: Option<std::path::PathBuf>) {

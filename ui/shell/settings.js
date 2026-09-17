@@ -1,9 +1,14 @@
 // Settings: the store, the global modal, and the drawer beside the tray.
 //
-// Two tabs, simple first. Nothing a volunteer does not need is on the first
+// Three tabs, simple first. Nothing a volunteer does not need is on the first
 // tab. The drawer is a different thing: it is the selected item's own form,
 // rendered from its schema, in the `sidebar` slot, so a plugin can add a
 // section to its own item's drawer and to nothing else.
+//
+// Simple and Advanced are this browser's own preferences and live in
+// `localStorage`. Mixer is not: it is the mixer's configuration file, read and
+// written over the API, and it is fetched with `import()` the first time
+// somebody opens it so that a volunteer who never does pays nothing for it.
 
 import { el, clear, on } from "./dom.js";
 import { modal } from "./modal.js";
@@ -89,9 +94,15 @@ export function openSettings(client, opts = {}) {
   const s = settings();
   const simple = el("div.form");
   const advanced = el("div.form");
+  // Filled the first time the tab is opened, and never before: the module
+  // behind it is a page of its own and most sessions do not want it.
+  const mixer = el("div.form");
+  let mixerLoaded = false;
   const body = el("div");
   const tabs = el("div.tabs");
-  let shown = opts.tab === "advanced" ? advanced : simple;
+  let shown = simple;
+  if (opts.tab === "advanced") shown = advanced;
+  if (opts.tab === "mixer") shown = mixer;
 
   function tab(label, node) {
     const b = el("button", {
@@ -101,6 +112,7 @@ export function openSettings(client, opts = {}) {
         for (const other of tabs.children) other.classList.toggle("on", other === b);
         clear(body);
         body.appendChild(node);
+        if (node === mixer) fillMixerTab();
       },
     });
     if (node === shown) b.classList.add("on");
@@ -215,10 +227,33 @@ export function openSettings(client, opts = {}) {
   }
   advanced.appendChild(keys);
 
+  // --------------------------------------------------------- mixer tab
+
+  /// The tab's own module, fetched once and only when it is asked for. A core
+  /// too old to have `config.get` says so in the tab rather than anywhere the
+  /// operator has to go looking.
+  async function fillMixerTab() {
+    if (mixerLoaded) return;
+    mixerLoaded = true;
+    mixer.appendChild(el("div.hint", { text: "Loading..." }));
+    try {
+      const { mixerTab } = await import("./mixer-settings.js");
+      clear(mixer);
+      mixer.appendChild(mixerTab(client));
+    } catch (e) {
+      clear(mixer);
+      mixer.appendChild(
+        el("div.hint", { text: `This mixer's settings could not be opened: ${e.message || e}` })
+      );
+    }
+  }
+
   tab("Simple", simple);
   tab("Advanced", advanced);
+  tab("Mixer", mixer);
   clear(body);
   body.appendChild(shown);
+  if (shown === mixer) fillMixerTab();
 
   const m = modal({
     title: "Settings",

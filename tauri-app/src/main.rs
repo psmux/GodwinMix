@@ -277,6 +277,74 @@ async fn bundled_plugins_check(app: &AppHandle, target: &Target) -> Option<i32> 
     Some(0)
 }
 
+/// Prove `core.restart` works on a mixer this app started.
+///
+/// This is the whole of the supervised restart path and there is no other way
+/// to test it: the claim is that a core started here exits on request and this
+/// process starts it again, which needs both halves running. The proof is a
+/// different process id on a mixer that answers, because "the port answers
+/// again" would also be true of a core that never left.
+///
+/// `Ok` carries the mixer that is running now, which after a restart is not
+/// the one that went in. `Err` carries whatever is running so the caller can
+/// still stop it.
+async fn restart_check(app: &AppHandle, local: Local) -> Result<Local, Local> {
+    let before = local.pid();
+    let target = local.target.clone();
+    let http = app.state::<Shell>().http.clone();
+    // The app holds the mixer while the respawn happens, because the watcher
+    // in `sidecar` puts the new one there.
+    *app.state::<Shell>().local.lock().unwrap() = Some(local);
+
+    if let Err(why) = core_link::restart(&http, &target).await {
+        println!("FAIL it would not restart: {why}");
+        return Err(take_local(app));
+    }
+    println!("asked it to restart");
+
+    // Up to the sidecar's own start timeout, which is what a cold Raspberry Pi
+    // needs, plus the moment the old process takes to let go of its port.
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(40);
+    while std::time::Instant::now() < deadline {
+        tokio::time::sleep(std::time::Duration::from_millis(250)).await;
+        let running = {
+            let held = app.state::<Shell>();
+            let guard = held.local.lock().unwrap();
+            guard.as_ref().filter(|l| l.is_running()).map(|l| (l.target.clone(), l.pid()))
+        };
+        let Some((target, after)) = running else { continue };
+        if after == before {
+            continue;
+        }
+        if core_link::info(&http, &target, "this computer").await.is_err() {
+            continue;
+        }
+        match (before, after) {
+            (Some(before), Some(after)) => {
+                println!("restarted on {}: process {before} became {after}", target.base)
+            }
+            _ => println!("restarted on {}", target.base),
+        }
+        return Ok(take_local(app));
+    }
+    println!("FAIL it did not come back within forty seconds of being asked to restart");
+    Err(take_local(app))
+}
+
+/// The mixer the shell is holding, taken out so the caller owns it again.
+///
+/// A placeholder is never left behind: everything after this either stops what
+/// it gets back or hands it on, and the shell's own exit path takes whatever is
+/// there at the time.
+fn take_local(app: &AppHandle) -> Local {
+    app.state::<Shell>()
+        .local
+        .lock()
+        .unwrap()
+        .take()
+        .expect("the shell was given a mixer before the restart check began")
+}
+
 /// `--headless-check`: the acceptance test for the sidecar, runnable on a
 /// machine with no one at the keyboard and in CI.
 ///
@@ -341,6 +409,15 @@ async fn headless_check(app: &AppHandle) -> i32 {
         return 1;
     }
     println!("still up after three seconds");
+
+    let local = match restart_check(app, local).await {
+        Ok(local) => local,
+        Err(local) => {
+            sidecar::stop(app, local).await;
+            return 1;
+        }
+    };
+    let target = local.target.clone();
 
     sidecar::stop(app, local).await;
     tokio::time::sleep(std::time::Duration::from_millis(500)).await;

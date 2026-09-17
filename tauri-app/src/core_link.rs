@@ -155,6 +155,42 @@ pub async fn shutdown(http: &reqwest::Client, target: &Target) -> Result<(), Str
     }
 }
 
+/// Ask a core to stop and come back.
+///
+/// It only works on a core something is supervising, which from this app's
+/// point of view means one it started itself: the sidecar is given
+/// `GODWINMIX_SUPERVISED=1` and this process watches for the status it leaves
+/// with. A core the operator connected to over the network answers with its
+/// own refusal naming what to do instead, and that sentence is what the
+/// operator is shown rather than one written here.
+pub async fn restart(http: &reqwest::Client, target: &Target) -> Result<(), String> {
+    let mut req = http.post(format!("{}/api/v1/core/restart", target.base));
+    if !target.token.is_empty() {
+        req = req.bearer_auth(&target.token);
+    }
+    let reply = req.send().await.map_err(|e| plain(&e))?;
+    if reply.status().is_success() {
+        return Ok(());
+    }
+    let status = reply.status();
+    // The core's refusals name the state and the next step, so the message it
+    // wrote is better than anything this shell could say about it.
+    let said = reply
+        .json::<serde_json::Value>()
+        .await
+        .ok()
+        .and_then(|body| {
+            body.get("error")
+                .and_then(|e| e.get("message"))
+                .and_then(|m| m.as_str())
+                .map(str::to_string)
+        });
+    Err(match said {
+        Some(message) => message,
+        None => format!("{} answered {status} when asked to restart.", target.base),
+    })
+}
+
 enum Trouble {
     /// A 404: something is listening, but not on that path.
     Absent,

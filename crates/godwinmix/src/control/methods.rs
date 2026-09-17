@@ -19,6 +19,7 @@ use std::future::Future;
 use std::sync::Arc;
 
 pub mod agent;
+pub mod config;
 mod filters;
 mod media;
 mod nodes;
@@ -39,6 +40,10 @@ where
 {
     Arc::new(move |call, params| Box::pin(f(call, params)))
 }
+
+/// True when `core.restart` asked for this exit. Re-exported so `main` reads
+/// it without knowing which module the method lives in.
+pub use config::restart_wanted;
 
 /// Turn a serialisable answer into the body a method returns.
 pub(crate) fn body<T: serde::Serialize>(value: T) -> Result<Value, RpcError> {
@@ -61,6 +66,7 @@ pub fn registry() -> Registry<Call> {
     tasks::register(&mut reg);
     agent::register(&mut reg);
     filters::register(&mut reg);
+    config::register(&mut reg);
     scenes::register(&mut reg);
     preview::register(&mut reg);
     plugins::register(&mut reg);

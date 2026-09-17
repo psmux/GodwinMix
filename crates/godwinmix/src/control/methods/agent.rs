@@ -144,7 +144,7 @@ pub fn concise(call: &Call, status: &MixerStatus) -> Concise {
 
 /// Why the programme cannot be taken right now, if it cannot.
 fn held_reason(call: &Call) -> Option<String> {
-    call.app.safety.check(&call.token).err().map(|r| r.message)
+    call.app.safety().check(&call.token).err().map(|r| r.message)
 }
 
 /// The same without a `Call`, so the event push can build it too.
@@ -201,9 +201,9 @@ fn detail(call: &Call, status: &MixerStatus, document: &mut Value) {
     map.insert(
         "safety".into(),
         serde_json::json!({
-            "min_hold_ms": call.app.safety.limits_for(&call.token).min_hold_ms,
-            "max_takes_per_minute": call.app.safety.limits_for(&call.token).max_takes_per_minute,
-            "flash_guard": call.app.safety.limits_for(&call.token).flash_guard,
+            "min_hold_ms": call.app.safety().limits_for(&call.token).min_hold_ms,
+            "max_takes_per_minute": call.app.safety().limits_for(&call.token).max_takes_per_minute,
+            "flash_guard": call.app.safety().limits_for(&call.token).flash_guard,
         }),
     );
     let telemetry = godwinmix_core::telemetry::telemetry().read();
