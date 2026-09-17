@@ -178,9 +178,6 @@ async fn set(call: Call, params: Value) -> Result<Value, RpcError> {
     };
     let wanted = merge(&req, current)?;
 
-    if call.dry_run {
-        return Ok(call.dry_run_answer(!req.is_empty(), diff_of(&req)));
-    }
     if req.is_empty() {
         // Nothing was named, so there is nothing to rebuild a live
         // destination for. Answering with the record says so.
@@ -277,28 +274,6 @@ fn merge(
 /// The scheme, lowercased, or "" for an address that has none.
 fn scheme_of(uri: &str) -> String {
     uri.split_once("://").map(|(s, _)| s.to_lowercase()).unwrap_or_default()
-}
-
-/// What a dry run says it would do. The address is never named, only that one
-/// was given, because printing it back would be the one leak this all avoids.
-fn diff_of(req: &SetOutputRequest) -> Vec<String> {
-    let mut diff = Vec::new();
-    if req.uri.is_some() {
-        diff.push(format!("point {} at the address you sent", req.id));
-    }
-    if let Some(policy) = &req.policy {
-        diff.push(format!("set {}'s reconnect policy to {policy}", req.id));
-    }
-    if let Some(secs) = req.queue_secs {
-        diff.push(format!("set {}'s outage buffer to {secs} seconds", req.id));
-    }
-    for key in req.params.keys() {
-        diff.push(format!("set {}'s {key}", req.id));
-    }
-    if !diff.is_empty() {
-        diff.push(format!("{} reconnects; the programme is not disturbed", req.id));
-    }
-    diff
 }
 
 async fn remove(call: Call, params: Value) -> Result<Value, RpcError> {
