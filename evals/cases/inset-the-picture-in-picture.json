@@ -6,7 +6,7 @@
     "pending",
     "scenes"
   ],
-  "pending": "scenes land with the scene server; there is no scene.item.* yet",
+  "pending": "the scripted driver does not place an item yet; scene.item.add exists",
   "initial": {
     "sources": [
       {

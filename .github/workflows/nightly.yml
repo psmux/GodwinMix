@@ -44,7 +44,9 @@ jobs:
             gstreamer1.0-plugins-bad gstreamer1.0-plugins-ugly gstreamer1.0-libav gstreamer1.0-tools
 
       - name: Build
-        run: cargo build --release --locked
+        # With the WASM tier: one case installs min-hold, whose only placement is
+        # wasm, and a core built without the feature loads it and runs nothing.
+        run: cargo build --release --locked --features wasm
 
       # The runner has no GPU and no display, which is the machine most of the
       # people this is for actually have.

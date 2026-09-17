@@ -20,6 +20,11 @@
     {
       "what": "source",
       "id": "cam-jib",
+      "to": "connecting"
+    },
+    {
+      "what": "source",
+      "id": "cam-jib",
       "to": "live"
     },
     {
@@ -28,5 +33,5 @@
     }
   ],
   "settle_ms": 3500,
-  "note": "connecting is transient: a test source can be live before the first delta is published, so only the state that lasts is graded."
+  "note": "connecting is announced before the source is built, so it is always seen; then live, then the take."
 }

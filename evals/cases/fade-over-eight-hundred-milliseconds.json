@@ -5,7 +5,7 @@
     "parameterised",
     "pending"
   ],
-  "pending": "transitions land in Phase 6; there is no program.take {transition} yet",
+  "pending": "the scripted driver does not attempt a transition yet; program.take takes one",
   "initial": {
     "sources": [
       {
