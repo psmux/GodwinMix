@@ -18,14 +18,17 @@ const LIST_KEY = "gmx.picker.list";
 /**
  * @param {object} client
  * @param {"source"|"output"} what
- * @param {{preset?: object, kind?: string}} opts  a dropped file or URL arrives
- *        here as `{preset: {uri}, kind}`, which skips straight to the form.
+ * @param {{preset?: object, kind?: string, onAdded?: (answer: object) => any}}
+ *        opts  a dropped file or URL arrives here as `{preset: {uri}, kind}`,
+ *        which skips straight to the form. `onAdded` is the caller's follow up
+ *        on the thing that was just made, which is how the tray puts a new
+ *        source in the scene it was added from.
  */
 export async function openPicker(client, what, opts = {}) {
   const kinds = await loadKinds(client, what).catch(() => (what === "output" ? OUTPUT_KINDS : SOURCE_KINDS));
   if (opts.kind) {
     const chosen = kinds.find((k) => k.id === opts.kind);
-    if (chosen) return openForm(client, what, chosen, opts.preset);
+    if (chosen) return openForm(client, what, chosen, opts.preset, opts);
   }
 
   let listView = false;
@@ -92,7 +95,7 @@ export async function openPicker(client, what, opts = {}) {
       {
         onclick: () => {
           m.close();
-          openForm(client, what, kind, opts.preset);
+          openForm(client, what, kind, opts.preset, opts);
         },
       },
       [
@@ -119,7 +122,7 @@ export async function openPicker(client, what, opts = {}) {
  * kilobytes that matter only once somebody is adding something, and the picker
  * itself is already a modal the operator waited a moment for.
  */
-export async function openForm(client, what, kind, preset) {
+export async function openForm(client, what, kind, preset, opts = {}) {
   const { SchemaForm } = await import("../client/schema-form.js");
   const form = new SchemaForm(kind.schema, preset || {});
   const add = el("button.btn.primary", { text: what === "output" ? "Start sending" : "Add" });
@@ -143,15 +146,21 @@ export async function openForm(client, what, kind, preset) {
       return;
     }
     add.disabled = true;
+    let answer;
     try {
       const params = kind.build(form.read());
-      await client.call(what === "output" ? "output.add" : "source.add", params);
-      m.close();
-      toast({ text: what === "output" ? "Sending started." : "Added. It appears in the tray as soon as it connects." });
+      answer = await client.call(what === "output" ? "output.add" : "source.add", params);
     } catch (e) {
       errorToast(e, kind.title);
       add.disabled = false;
+      return;
     }
+    m.close();
+    toast({ text: what === "output" ? "Sending started." : "Added. It appears in the tray as soon as it connects." });
+    // Whatever the caller wanted doing with the thing that now exists. It is
+    // run outside the try on purpose: the add succeeded, the form is gone, and
+    // a failure in the follow up is the caller's to explain.
+    if (opts.onAdded) await opts.onAdded(answer);
   };
   form.focusFirst();
   return m;
