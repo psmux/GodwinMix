@@ -26,6 +26,11 @@
 #   dev/bundle-plugins.sh --no-build         stage what cargo has already built
 #   dev/bundle-plugins.sh --out some/dir --budget-mb 20
 #
+# Not dev/plugins.sh, which builds every first party plugin and stages each
+# binary into its own `plugins/<name>/bin/` so that `gmx plugin add ./plugins/
+# camera` works from a checkout. This one takes three of them and lays out an
+# installed copy for the app to carry.
+#
 # One script for all three platforms, unlike the GStreamer bundler: the only
 # difference Windows makes here is the .exe on the end of a binary, and CI
 # already runs its bash steps through git bash there. Two scripts for that
@@ -51,7 +56,7 @@ ALL=(camera screen audio-device)
 
 OUT="$REPO/tauri-app/plugins/$PLATFORM"
 BUILD=1
-# Three stripped binaries and their schemas. The three come to about 5 MB on
+# Three stripped binaries and their schemas. The three come to 4 MB on
 # macOS, so this is a tripwire for something going badly wrong rather than a
 # tight budget: the 150 MB installer has 130 MB of it spoken for by GStreamer.
 BUDGET=20
@@ -63,7 +68,7 @@ while [[ $# -gt 0 ]]; do
         --no-build) BUILD=0; shift ;;
         --budget-mb) BUDGET="$2"; shift 2 ;;
         --no-budget) BUDGET=0; shift ;;
-        -h|--help) sed -n '2,33p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit 0 ;;
+        -h|--help) sed -n '2,38p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit 0 ;;
         -*) echo "unknown option: $1" >&2; exit 1 ;;
         *) WANTED+=("$1"); shift ;;
     esac
