@@ -12,7 +12,7 @@ export const SLOTS = ["header", "monitor", "main", "sidebar", "strip", "footer",
 let fallback = {
   header: ["core/header"],
   monitor: ["core/program"],
-  main: ["core/sources", "core/scenes", "core/outputs", "core/media", "core/alerts"],
+  main: ["core/scenes", "core/sources", "core/outputs", "core/media", "core/alerts"],
   sidebar: [],
   strip: [],
   footer: [],
@@ -74,6 +74,16 @@ function normalise(layout) {
       out.footer = out.footer.filter((panel) => panel !== id);
       if (!out.main.includes(id)) out.main.push(id);
     }
+  }
+  // Scenes lead the column. A scene is the thing you put on air; the sources
+  // list is the shared library it draws from, so it reads second. A layout
+  // saved from the older order is moved here rather than asking anyone to
+  // reset their arrangement to see it.
+  const scenes = out.main.indexOf("core/scenes");
+  const sources = out.main.indexOf("core/sources");
+  if (scenes > -1 && sources > -1 && sources < scenes) {
+    out.main.splice(scenes, 1);
+    out.main.splice(sources, 0, "core/scenes");
   }
   return out;
 }
