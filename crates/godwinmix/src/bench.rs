@@ -918,13 +918,13 @@ fn scene_rows() -> Vec<Row> {
             "crossfade-1080p",
             "A crossfade between two eight item scenes at 1080p30",
             "`gpu` and `n100`: no dropped frame; `laptop`: documented",
-            "scenes do not exist yet, so there is nothing to fade between",
+            "the bench case is not written yet; scenes and fades exist, see dev/smoke.sh",
         ),
         Row::not_yet(
             "hidden-slots",
             "Sixteen hidden slots at alpha 0",
             "within 2 percent of the no compositor baseline",
-            "scenes do not exist yet",
+            "the bench case is not written yet; hidden slots exist, see mixer/slots.rs",
         ),
     ]
 }
