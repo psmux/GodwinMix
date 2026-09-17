@@ -278,6 +278,42 @@ impl AddOutputRequest {
     }
 }
 
+/// `output.set`. Change one destination in place, naming only what moves.
+///
+/// The id picks the output and is never changed by this; renaming one is a
+/// remove and an add, because the id is what alerts, hooks and the runtime
+/// store call it.
+#[derive(Debug, Clone, Default, Serialize, Deserialize, JsonSchema)]
+pub struct SetOutputRequest {
+    /// The destination to change.
+    pub id: String,
+    /// The whole new address, stream key and all. Write only: no method ever
+    /// reads it back, so leaving it out keeps the address already in force
+    /// and a client can offer "change the buffer" without holding the key.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub uri: Option<String>,
+    /// "own" or "cdn", as `output.add`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub policy: Option<String>,
+    /// Seconds of encoded data to hold before the muxer.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub queue_secs: Option<f64>,
+    /// Merged over the params the output already has.
+    #[serde(flatten, default, skip_serializing_if = "Map::is_empty")]
+    pub params: Map<String, Value>,
+}
+
+impl SetOutputRequest {
+    /// Whether anything at all was named. A call that names nothing is worth
+    /// answering with the output rather than rebuilding a live destination.
+    pub fn is_empty(&self) -> bool {
+        self.uri.is_none()
+            && self.policy.is_none()
+            && self.queue_secs.is_none()
+            && self.params.is_empty()
+    }
+}
+
 /// `adbreak.start`.
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 pub struct AdBreakRequest {
@@ -705,6 +741,32 @@ mod tests {
         // would refuse.
         let bare = AddOutputRequest { policy: None, params: Map::new(), ..r };
         assert!(bare.to_config_json().get("policy").is_none());
+    }
+
+    /// `output.set` names only what moves, and the address is one of the
+    /// things that may not move, so a request with nothing in it has to be
+    /// recognisable before a live destination is torn down for it.
+    #[test]
+    fn an_output_set_request_knows_when_it_asks_for_nothing() {
+        let empty: SetOutputRequest = serde_json::from_value(json!({ "id": "yt" })).unwrap();
+        assert!(empty.is_empty());
+        assert!(empty.uri.is_none(), "an absent uri is not an empty one");
+
+        let keyed: SetOutputRequest =
+            serde_json::from_value(json!({ "id": "yt", "uri": "rtmp://a/b/key" })).unwrap();
+        assert!(!keyed.is_empty());
+        assert_eq!(keyed.uri.as_deref(), Some("rtmp://a/b/key"));
+
+        let buffered: SetOutputRequest =
+            serde_json::from_value(json!({ "id": "yt", "queue_secs": 8 })).unwrap();
+        assert!(!buffered.is_empty());
+        assert_eq!(buffered.queue_secs, Some(8.0));
+        assert!(buffered.params.is_empty(), "a known key must not also land in params");
+
+        let extra: SetOutputRequest =
+            serde_json::from_value(json!({ "id": "yt", "latency_ms": 200 })).unwrap();
+        assert!(!extra.is_empty());
+        assert_eq!(extra.params["latency_ms"], 200);
     }
 
     /// The ext table is the contract with every client. `false` is off, an

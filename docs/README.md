@@ -64,6 +64,7 @@ Start here if you have never run it.
 * [Publish a plugin](how-to/publish-a-plugin.md)
 * [Run a marketplace](how-to/run-a-marketplace.md)
 * [Receive a phone or an OBS stream](how-to/receive-a-phone-or-obs-stream.md)
+* [Stream to YouTube, Facebook or Twitch](how-to/stream-to-a-platform.md)
 * [Receive and send SRT](how-to/srt.md)
 * [Send the programme to a WHIP endpoint](how-to/send-to-whip.md)
 * [Use NDI](how-to/use-ndi.md)

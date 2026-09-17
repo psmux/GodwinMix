@@ -403,6 +403,9 @@ pub enum Command {
     RemoveSource(SourceId, Option<Ack>),
     ReconnectOutput(OutputId, Option<Ack>),
     AddOutput(Box<OutputConfig>, Option<Ack>),
+    /// Change a destination in place. The config carries the id it replaces,
+    /// and the swap happens here so nothing can land between the two halves.
+    SetOutput(Box<OutputConfig>, Option<Ack>),
     RemoveOutput(OutputId, Option<Ack>),
     RestartSource(SourceId),
     /// Move a source's audio controls: the operator's own fader and mute, which
@@ -2567,6 +2570,48 @@ impl Mixer {
         Ok(())
     }
 
+    /// Change a destination in place: a new address, a new reconnect policy,
+    /// a deeper outage buffer.
+    ///
+    /// A remove and an add under the same id, run here on the mixer thread
+    /// rather than sent as two commands, so nothing can land between them and
+    /// no surface ever sees the output missing. The programme is not touched:
+    /// the encoder is shared and every other output keeps its connection, the
+    /// same as adding one costs nothing on air.
+    ///
+    /// The old config is put back if the new one will not attach, because the
+    /// alternative is an operator who asked to correct a typo and is now off
+    /// air with nothing.
+    pub fn set_output(&mut self, cfg: &OutputConfig) -> Result<()> {
+        anyhow::ensure!(!cfg.uri.trim().is_empty(), "an output needs a uri");
+        let Some(pos) = self.outputs.iter().position(|o| o.id() == &cfg.id) else {
+            anyhow::bail!("no such output {}", cfg.id);
+        };
+        let previous = self.outputs[pos].cfg.clone();
+        self.remove_output(&cfg.id)?;
+        match self.add_output(cfg) {
+            Ok(()) => Ok(()),
+            Err(e) => {
+                // Back to where it was, and say which of the two happened.
+                // A caller that reads "put back" knows its change was refused
+                // and the broadcast is still going; one that reads the other
+                // knows the destination is gone and has to be added again.
+                match self.add_output(&previous) {
+                    Ok(()) => Err(e.context(format!(
+                        "output {} was put back as it was: the new address could not be \
+                         attached",
+                        cfg.id
+                    ))),
+                    Err(back) => Err(e.context(format!(
+                        "output {} is now gone: neither the new address nor the old one \
+                         would attach ({back:#}). Add it again with output.add",
+                        cfg.id
+                    ))),
+                }
+            }
+        }
+    }
+
     /// Detach a destination. The programme and every other output carry on.
     pub fn remove_output(&mut self, id: &OutputId) -> Result<()> {
         let Some(pos) = self.outputs.iter().position(|o| o.id() == id) else {
@@ -3373,6 +3418,7 @@ impl Mixer {
             Command::RemoveSource(..) => "source.remove",
             Command::ReconnectOutput(..) => "output.reconnect",
             Command::AddOutput(..) => "output.add",
+            Command::SetOutput(..) => "output.set",
             Command::RemoveOutput(..) => "output.remove",
             Command::RestartSource(_) => "source.restart",
             Command::SetAudio { .. } => "source.audio.set",
@@ -3498,6 +3544,11 @@ impl Mixer {
             }
             Command::AddOutput(cfg, ack) => {
                 let r = self.add_output(&cfg);
+                reply(ack, &r);
+                r?;
+            }
+            Command::SetOutput(cfg, ack) => {
+                let r = self.set_output(&cfg);
                 reply(ack, &r);
                 r?;
             }
@@ -6620,6 +6671,76 @@ mod tests {
             q.static_pad("sink").and_then(|p| p.peer()).is_none(),
             "the return branch is still on the tee with nothing reading it"
         );
+        mix.shutdown();
+    }
+
+    /// The whole point of `output.set`: a destination the church preset left
+    /// with a placeholder key gets a real address without the operator ever
+    /// opening a TOML file, and keeps its id, so alerts and hooks still call
+    /// it the same thing.
+    ///
+    /// The address it is pointed at is a port nothing is listening on. That is
+    /// deliberate: an operator retyping a key is almost always doing it
+    /// because the destination is not working, and the swap must not wait on a
+    /// connection that is never going to happen.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn setting_an_output_replaces_its_address_and_keeps_its_id() {
+        let dir = crate::observe::tempdir("output-set");
+        let store = dir.join("godwinmix.runtime.toml");
+        let mut mix = with_sources(&["cam1"]).await;
+        mix.persist_runtime_to(store.clone());
+
+        let placeholder =
+            OutputConfig::bare("youtube", "rtmp://127.0.0.1:1935/live2/YOUR-STREAM-KEY");
+        mix.add_output(&placeholder).expect("a destination nothing is listening on still attaches");
+        let before = mix.status();
+        let out = before.outputs.iter().find(|o| o.id == "youtube").expect("the output is listed");
+        assert!(!out.has_key, "a placeholder address must not read as having a key");
+        let host_before = out.uri_host.clone();
+
+        let mut wanted = placeholder.clone();
+        wanted.uri = "rtmp://127.0.0.1:1935/live2/abcd-efgh-ijkl-mnop".into();
+        wanted.queue_secs = 7.0;
+        mix.set_output(&wanted).expect("the destination is changed in place");
+
+        let after = mix.status();
+        assert_eq!(
+            after.outputs.iter().filter(|o| o.id == "youtube").count(),
+            1,
+            "the swap must leave exactly one output under the id"
+        );
+        let out =
+            after.outputs.iter().find(|o| o.id == "youtube").expect("the output is still listed");
+        assert!(out.has_key, "the real key must read as a key");
+        assert_eq!(out.uri_host, host_before, "the host did not change, so the label must not");
+        assert!(
+            !serde_json::to_string(&after).unwrap().contains("abcd-efgh-ijkl-mnop"),
+            "the key must not appear anywhere in a status a client reads"
+        );
+
+        // Persisted the way add and remove already persist, so it survives a
+        // restart. This is the file the operator no longer has to edit.
+        let saved = std::fs::read_to_string(&store).expect("the runtime store was written");
+        assert!(saved.contains("abcd-efgh-ijkl-mnop"), "the new address was not saved: {saved}");
+        assert!(!saved.contains("YOUR-STREAM-KEY"), "the placeholder outlived the change: {saved}");
+        assert!(saved.contains("queue_secs = 7"), "the buffer was not saved: {saved}");
+
+        // The programme is untouched throughout: the encoder is shared and
+        // this only ever rebuilt one output's own pipeline.
+        assert_eq!(after.program.as_deref(), before.program.as_deref());
+        mix.shutdown();
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// An id nobody added is a mistake worth naming, not a silent add.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn setting_an_output_that_is_not_there_says_so() {
+        let mut mix = with_sources(&[]).await;
+        let err = mix
+            .set_output(&OutputConfig::bare("nope", "rtmp://127.0.0.1:1935/live/key"))
+            .expect_err("there is no output called nope");
+        assert!(format!("{err:#}").contains("nope"), "{err:#}");
+        assert!(mix.status().outputs.is_empty(), "nothing should have been added");
         mix.shutdown();
     }
 

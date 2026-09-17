@@ -852,6 +852,7 @@ export interface Ograf {
 export type OutputState = "connecting" | "live" | "reconnecting" | "failed";
 
 export interface OutputStatus {
+  has_key: boolean;
   id: string;
   queue_secs: number;
   reconnects: number;
@@ -1165,6 +1166,21 @@ export interface SetItemRequest {
   props: Record<string, unknown>;
   scene: string;
   seq?: number | null;
+}
+
+/**
+ * `output.set`. Change one destination in place, naming only what moves.
+ *
+ * The id picks the output and is never changed by this; renaming one is a
+ * remove and an add, because the id is what alerts, hooks and the runtime
+ * store call it.
+ */
+export interface SetOutputRequest {
+  id: string;
+  policy?: string | null;
+  queue_secs?: number | null;
+  uri?: string | null;
+  [key: string]: unknown;
 }
 
 /** `plugin.settings.set`. */
@@ -1553,6 +1569,7 @@ export interface MethodParams {
   "output.list": Record<string, never>;
   "output.reconnect": IdRequest;
   "output.remove": IdRequest;
+  "output.set": SetOutputRequest;
   "pipeline.clock": Record<string, never>;
   "pipeline.dot": PipelineRequest;
   "pipeline.latency": PipelineRequest;
@@ -1680,6 +1697,7 @@ export interface MethodResults {
   "output.list": OutputStatus[];
   "output.reconnect": OutputStatus;
   "output.remove": Record<string, unknown>;
+  "output.set": OutputStatus;
   "pipeline.clock": Record<string, unknown>;
   "pipeline.dot": PipelineDot;
   "pipeline.latency": Record<string, unknown>;
@@ -1845,6 +1863,7 @@ export const METHODS: readonly MethodInfo[] = [
   { name: "output.list", summary: "Every destination, with its state, reconnect count and how much is buffered.", scope: "read", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/outputs" } },
   { name: "output.reconnect", summary: "Drop and re-establish one destination's connection now, without waiting for its reconnect policy.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/outputs/{id}/reconnect" } },
   { name: "output.remove", summary: "Stop sending to a destination and forget it. Other outputs are unaffected.", scope: "operate", mutating: true, destructive: true, rest: { method: "DELETE", path: "/api/v1/outputs/{id}" } },
+  { name: "output.set", summary: "Change a destination in place: a new address with a new stream key, a new reconnect policy, a deeper outage buffer. The address is write only, so a client that only wants the buffer never has to hold the key.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/outputs/{id}/set" } },
   { name: "pipeline.clock", summary: "The clock every pipeline is running against, and how far each one has got.", scope: "read", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/pipeline/clock" } },
   { name: "pipeline.dot", summary: "One pipeline as a graphviz graph: every element, every pad and the caps negotiated between them.", scope: "read", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/pipeline/dot" } },
   { name: "pipeline.latency", summary: "How much delay one pipeline is carrying, and which stage put it there.", scope: "read", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/pipeline/latency" } },
@@ -2153,6 +2172,11 @@ export class GeneratedMethods {
   /** Stop sending to a destination and forget it. Other outputs are unaffected. */
   outputRemove(params: IdRequest): Promise<Record<string, unknown>> {
     return this._call("output.remove", params as unknown as Record<string, unknown>) as Promise<Record<string, unknown>>;
+  }
+
+  /** Change a destination in place: a new address with a new stream key, a new reconnect policy, a deeper outage buffer. The address is write only, so a client that only wants the buffer never has to hold the key. */
+  outputSet(params: SetOutputRequest): Promise<OutputStatus> {
+    return this._call("output.set", params as unknown as Record<string, unknown>) as Promise<OutputStatus>;
   }
 
   /** The clock every pipeline is running against, and how far each one has got. */

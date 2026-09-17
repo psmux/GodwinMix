@@ -20,7 +20,9 @@ import { RpcError, CODES } from "../client/errors.js";
 import { rank, paramsSchema, methodForm } from "../shell/palette.js";
 import { chordOf, DEFAULT_MAP } from "../shell/keymap.js";
 import { IS_MAC } from "../shell/dom.js";
-import { kindOfUri } from "../client/kinds.js";
+import { kindOfUri, PLATFORMS, platformOfHost, joinKey } from "../client/kinds.js";
+import { schemaFor, paramsFor } from "../panels/outputs/destination.js";
+import { stateLabel, dotClass } from "../panels/outputs/panel.js";
 import { tagFor } from "../shell/registry.js";
 import * as layout from "../shell/layout.js";
 import { ART } from "../panels/welcome/tiles.js";
@@ -434,6 +436,114 @@ test("a unit annotation is printed beside the control", () => {
   const form = new SchemaForm({ type: "object", properties: { queue: { type: "number", "x-gmx-unit": "s" } } }, {});
   ok(form.el.querySelector(".unit"), "the unit is on screen");
   eq(form.el.querySelector(".unit").textContent, "s");
+});
+
+// ---------------------------------------------------------------- outputs
+
+test("a platform is recognised from the masked host the core hands out", () => {
+  eq(platformOfHost("rtmp://a.rtmp.youtube.com/\u2026").id, "youtube");
+  eq(platformOfHost("rtmps://live-api-s.facebook.com/\u2026").id, "facebook");
+  eq(platformOfHost("rtmp://live.twitch.tv/\u2026").id, "twitch");
+  // A Twitch regional ingest, which is not the default one on the table.
+  eq(platformOfHost("rtmp://lhr03.contribute.live-video.net/\u2026").id, "twitch");
+  // Anything else falls back to something the form can still open with.
+  eq(platformOfHost("rtmp://rtmp.church.example/\u2026").id, "custom");
+  eq(platformOfHost("srt://192.168.1.50/\u2026").id, "srt");
+  eq(platformOfHost("").id, "custom");
+});
+
+test("a stream key pasted with whitespace round it is trimmed onto the server", () => {
+  eq(joinKey("rtmp://a.rtmp.youtube.com/live2", "  abcd-efgh-ijkl \n"), "rtmp://a.rtmp.youtube.com/live2/abcd-efgh-ijkl");
+  // A trailing slash on the server must not double up.
+  eq(joinKey("rtmp://a.rtmp.youtube.com/live2/", "abcd"), "rtmp://a.rtmp.youtube.com/live2/abcd");
+  // No key is a server on its own, not a trailing slash.
+  eq(joinKey("srt://192.168.1.50:9000", ""), "srt://192.168.1.50:9000");
+});
+
+test("adding a destination asks for the key and builds the whole address", () => {
+  const yt = PLATFORMS.find((p) => p.id === "youtube");
+  const form = new SchemaForm(schemaFor(yt, null), {});
+  // The ingest is filled in and the id defaults to the platform, so a
+  // volunteer has one box to touch.
+  eq(form.read().id, "youtube");
+  eq(form.read().server, "rtmp://a.rtmp.youtube.com/live2");
+  eq(form.read().key, undefined, "an untyped secret is never sent");
+  eq(form.missing(), ["key"], "the key is the one thing still wanted");
+
+  const key = form.fields.find((f) => f.name === "key").input;
+  eq(key.type, "password", "a stream key is never on screen in the clear");
+  key.value = " abcd-efgh-ijkl ";
+  key.dispatchEvent(new Event("input"));
+
+  const asked = paramsFor(yt, null, form.read());
+  eq(asked.error, undefined);
+  eq(asked.params.uri, "rtmp://a.rtmp.youtube.com/live2/abcd-efgh-ijkl");
+  eq(asked.params.id, "youtube");
+  eq(asked.params.policy, "cdn", "a platform gets the backing off policy by default");
+});
+
+test("editing a destination sends no address unless the key was retyped", () => {
+  const yt = PLATFORMS.find((p) => p.id === "youtube");
+  const output = { id: "youtube", uri_host: "rtmp://a.rtmp.youtube.com/\u2026", state: "reconnecting", reconnects: 47, queue_secs: 0, has_key: false };
+  const form = new SchemaForm(schemaFor(yt, output), {});
+  eq(form.read().key, undefined, "the key field starts empty");
+  eq(form.fields.find((f) => f.name === "key").input.placeholder, "kept");
+  ok(!form.fields.find((f) => f.name === "id"), "the id is not editable here");
+
+  // Only the buffer moved. Sending a uri here would need a key nobody has.
+  const queue = form.fields.find((f) => f.name === "queue_secs").input;
+  queue.value = "8";
+  queue.dispatchEvent(new Event("input"));
+  let asked = paramsFor(yt, output, form.read());
+  eq(asked.params.uri, undefined, "an untouched key must not be rebuilt");
+  eq(asked.params.queue_secs, 8);
+  eq(asked.params.policy, undefined, "keep means keep");
+
+  // Now the key, which rebuilds the whole address from the ingest on file.
+  const key = form.fields.find((f) => f.name === "key").input;
+  key.value = "wxyz-1234";
+  key.dispatchEvent(new Event("input"));
+  asked = paramsFor(yt, output, form.read());
+  eq(asked.params.uri, "rtmp://a.rtmp.youtube.com/live2/wxyz-1234");
+  eq(asked.params.id, "youtube");
+});
+
+test("a server changed on its own says what else it needs", () => {
+  const twitch = PLATFORMS.find((p) => p.id === "twitch");
+  const output = { id: "twitch", uri_host: "rtmp://live.twitch.tv/\u2026", state: "live", reconnects: 0, queue_secs: 1, has_key: true };
+  // A regional ingest pasted over the default, with the key left alone. The
+  // key is half the address and the core will not hand it back, so this has
+  // to be refused out loud rather than half applied or silently dropped.
+  const asked = paramsFor(twitch, output, { server: "rtmp://lhr03.contribute.live-video.net/app" });
+  ok(asked.error, "a half address must not go through");
+  ok(asked.error.includes("Replace key"), asked.error);
+  eq(asked.params, undefined);
+});
+
+test("an SRT destination has an address and no key at all", () => {
+  const srt = PLATFORMS.find((p) => p.id === "srt");
+  const form = new SchemaForm(schemaFor(srt, null), {});
+  ok(!form.fields.find((f) => f.name === "key"), "there is no stream key in SRT");
+  const server = form.fields.find((f) => f.name === "server").input;
+  server.value = "srt://192.168.1.50:9000";
+  server.dispatchEvent(new Event("input"));
+  const asked = paramsFor(srt, null, form.read());
+  eq(asked.params.uri, "srt://192.168.1.50:9000");
+  eq(asked.params.policy, "own");
+});
+
+test("an output's state is spelled out as the next thing to do about it", () => {
+  eq(stateLabel({ state: "live", has_key: true }), "Live");
+  eq(stateLabel({ state: "reconnecting", reconnects: 12, has_key: true }), "Reconnecting, attempt 12");
+  eq(stateLabel({ state: "connecting", has_key: true }), "Connecting");
+  eq(stateLabel({ state: "failed", has_key: true }), "Stopped");
+  // The placeholder a preset wrote, which is the whole reason this reads in
+  // words: "Reconnecting, attempt 47" tells nobody to go and paste a key.
+  eq(stateLabel({ state: "reconnecting", reconnects: 47, has_key: false }), "Needs a stream key");
+  eq(dotClass({ state: "reconnecting", has_key: false }), "failed");
+  // An older core says nothing about keys, and must not be read as missing one.
+  eq(stateLabel({ state: "live" }), "Live");
+  eq(stateLabel({ state: "reconnecting", reconnects: 2 }), "Reconnecting, attempt 2");
 });
 
 // ---------------------------------------------------------------- palette

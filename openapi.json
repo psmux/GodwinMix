@@ -3016,6 +3016,10 @@
       "OutputStatus": {
         "additionalProperties": true,
         "properties": {
+          "has_key": {
+            "description": "False while the address still carries a placeholder a preset wrote in\nfor somebody to replace, such as `YOUR-STREAM-KEY`. The key itself\nnever leaves the core, so this is how a client knows to put its own\nform up and say \"needs a stream key\" without ever seeing the key.\n\nTrue for an address with no key in it at all, an SRT one for instance,\nbecause there is nothing there for anybody to replace.",
+            "type": "boolean"
+          },
           "id": {
             "type": "string"
           },
@@ -3039,6 +3043,7 @@
         "required": [
           "id",
           "uri_host",
+          "has_key",
           "state",
           "reconnects",
           "queue_secs"
@@ -4153,6 +4158,42 @@
           "scene",
           "item",
           "props"
+        ],
+        "type": "object"
+      },
+      "SetOutputRequest": {
+        "additionalProperties": true,
+        "description": "`output.set`. Change one destination in place, naming only what moves.\n\nThe id picks the output and is never changed by this; renaming one is a\nremove and an add, because the id is what alerts, hooks and the runtime\nstore call it.",
+        "properties": {
+          "id": {
+            "description": "The destination to change.",
+            "type": "string"
+          },
+          "policy": {
+            "description": "\"own\" or \"cdn\", as `output.add`.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "queue_secs": {
+            "description": "Seconds of encoded data to hold before the muxer.",
+            "format": "double",
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "uri": {
+            "description": "The whole new address, stream key and all. Write only: no method ever\nreads it back, so leaving it out keeps the address already in force\nand a client can offer \"change the buffer\" without holding the key.",
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "id"
         ],
         "type": "object"
       },
@@ -6280,6 +6321,55 @@
           }
         },
         "summary": "Drop and re-establish one destination's connection now, without waiting for its reconnect policy.",
+        "tags": [
+          "output"
+        ],
+        "x-destructive": false,
+        "x-idempotent": true,
+        "x-scope": "operate"
+      }
+    },
+    "/api/v1/outputs/{id}/set": {
+      "post": {
+        "description": "JSON-RPC method `output.set`. Needs the `operate` scope. Accepts `idempotency_key`, honoured for 24 hours.",
+        "operationId": "output.set",
+        "parameters": [
+          {
+            "description": "The id, as listed by the matching list call.",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetOutputRequest"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OutputStatus"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Change a destination in place: a new address with a new stream key, a new reconnect policy, a deeper outage buffer. The address is write only, so a client that only wants the buffer never has to hold the key.",
         "tags": [
           "output"
         ],
