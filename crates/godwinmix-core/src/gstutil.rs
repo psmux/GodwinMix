@@ -19,6 +19,61 @@ pub fn make(factory: &str, name: &str) -> Result<gst::Element> {
         .with_context(|| format!("creating element {factory} (named {name})"))
 }
 
+/// Wake everything parked on the chain below `sink`.
+///
+/// `FLUSH_START` is the one event that reaches a streaming thread which is
+/// already inside something: it is not serialized, so sending it needs no
+/// stream lock, and every queue and aggregator below sees it at once. A queue
+/// that gets it sets its flow to flushing and signals the condition a
+/// serialized query is waiting on; an aggregator pad that gets it stops
+/// waiting for the compositor to reach the buffer it is holding.
+///
+/// That matters because a pad only changes state when its streaming thread is
+/// out of it. `gst_pad_set_active(pad, FALSE)` takes the pad's stream lock
+/// before the element's own deactivate function runs, so a thread parked
+/// inside a serialized query on that pad holds the state change off for as
+/// long as the query takes, which can be forever. Flushing first is what
+/// bounds it.
+pub fn wake_chain(sink: &gst::Pad) {
+    sink.send_event(gst::event::FlushStart::new());
+}
+
+/// Put a chain back after [`wake_chain`], keeping its running time.
+///
+/// `reset_time` is false on purpose: the rest of the graph is still on air and
+/// a chain that came back with a fresh running time would draw its first frame
+/// at the wrong place on the programme's timeline.
+pub fn resume_chain(sink: &gst::Pad) {
+    sink.send_event(gst::event::FlushStop::new(false));
+}
+
+/// A graph step that held its caller for longer than this is worth a line.
+///
+/// Two hundred milliseconds is six frames at 30 fps: long enough that no
+/// ordinary pad relink reaches it, short enough that a step on its way to
+/// seconds is named the first time it slips.
+pub const SLOW_STEP_MS: u64 = 200;
+
+/// Time one step of a graph change and say so when it was slow.
+///
+/// The mixer command loop answers nothing while it is inside a command, so a
+/// step that costs seconds is the whole of a wedge report and the only
+/// question worth asking is which step it was. Warn level on purpose: the soak
+/// reads the core's log at the default filter, and a debug line there would be
+/// invisible exactly when it is needed.
+#[macro_export]
+macro_rules! slow_step {
+    ($what:expr, $who:expr, $body:expr) => {{
+        let at = std::time::Instant::now();
+        let out = $body;
+        let ms = at.elapsed().as_millis() as u64;
+        if ms >= $crate::gstutil::SLOW_STEP_MS {
+            tracing::warn!(step = $what, on = %$who, ms, "a graph step held its caller");
+        }
+        out
+    }};
+}
+
 /// Build an aggregator (`compositor`, `audiomixer`) that keeps producing
 /// output even when no live source is linked upstream.
 ///
@@ -191,9 +246,19 @@ where
         gst::PadProbeReturn::Remove
     });
 
+    let waited = std::time::Instant::now();
     if rx.recv_timeout(timeout).is_ok() {
+        let ms = waited.elapsed().as_millis() as u64;
+        if ms >= SLOW_STEP_MS {
+            warn!(pad = %pad.name(), ms, "a pad took its time reaching an idle point");
+        }
         return Ok(());
     }
+    warn!(
+        pad = %pad.name(),
+        ms = waited.elapsed().as_millis() as u64,
+        "a pad never reached an idle point inside the wait"
+    );
 
     if state
         .compare_exchange(BLOCK_IDLE, BLOCK_CANCELLED, Ordering::SeqCst, Ordering::SeqCst)
