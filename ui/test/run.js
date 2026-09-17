@@ -1130,6 +1130,9 @@ async function liveSuite() {
   panel.style.cssText = "display:block;width:900px;height:320px";
   document.body.appendChild(panel);
   panel.connectedCallback();
+  // Everything below is the tile grammar: the marquee, the tile names, F2. The
+  // panel opens on the tab strip now, so ask it for the grid.
+  panel.setView("tiles");
   await waitFor(() => panel.scenes.supported !== undefined && panel.scenes.summaries !== null, 5000, "scene.list");
 
   if (!panel.scenes.supported) {

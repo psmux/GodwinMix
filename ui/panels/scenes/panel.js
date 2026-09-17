@@ -25,6 +25,7 @@ import { el, clear, on } from "../../shell/dom.js";
 import { DragSelect } from "../../shell/pointer.js";
 import { Selection } from "../../shell/selection.js";
 import { registerAll } from "../../shell/commands.js";
+import { focusedScene, setFocusedScene, onFocusChanged } from "../../shell/focus.js";
 import { shell } from "../../shell/shell.js";
 import { toast, errorToast } from "../../shell/toast.js";
 import { settings } from "../../shell/settings.js";
@@ -32,6 +33,23 @@ import { SceneClient } from "../../kits/protocol/index.js";
 
 /** Colours a scene can be given, matching the swatches in the tile menu. */
 const DEFAULT_COLOUR = "var(--kind-stream)";
+
+/**
+ * Tabs or tiles, remembered on this device.
+ *
+ * Tabs are for the desk: a scene list that fits one line down the side of a
+ * laptop, where a click chooses what you are working on rather than cutting
+ * the programme. Tiles are the file manager grammar above, unchanged.
+ */
+const VIEW_KEY = "gmx.scenes.view";
+
+function savedView() {
+  try {
+    return localStorage.getItem(VIEW_KEY) === "tiles" ? "tiles" : "tabs";
+  } catch {
+    return "tabs";
+  }
+}
 
 class ScenesPanel extends HTMLElement {
   static get panel() {
@@ -47,17 +65,40 @@ class ScenesPanel extends HTMLElement {
     if (this.built) return;
     this.built = true;
     this.tiles = new Map();
+    this.tabs = new Map();
+    this.view = savedView();
     this.selection = new Selection();
     this.clipboard = null;
     this.layoutClip = null;
 
     this.count = el("span.sm.dim");
+    // Named for the view it switches to, the way the add picker names its own.
+    this.viewBtn = el("button.btn.sm", {
+      title: "Show the scenes as a strip of tabs or as a grid of tiles",
+      onclick: () => this.setView(this.view === "tabs" ? "tiles" : "tabs"),
+    });
     this.bar = el("div.row.pad", {}, [
       el("strong", { text: "Scenes" }),
       this.count,
       el("span.grow"),
+      this.viewBtn,
       el("button.btn", { text: "New scene", title: "An empty scene to drag inputs into", onclick: () => this.newScene() }),
     ]);
+
+    // The tab strip. A tab is not a tile: clicking one says which scene the
+    // operator is working on and touches nothing else, because the tile
+    // gesture above takes on a single click and a strip that sits under the
+    // thumb cannot afford that. The one button here that reaches the
+    // programme is the one that says Take.
+    this.take = el("button.btn.sm", {
+      text: "Take",
+      title: "Put the focused scene on air. In producer mode it arms it instead.",
+      onclick: () => {
+        const id = focusedScene([...this.tabs.keys()]);
+        if (id) this.activate(id);
+      },
+    });
+    this.strip = el("div.tabs.scene-tabs", { role: "tablist", "aria-label": "Scenes" });
 
     // The grid is the drop target for empty space: dropping inputs on it makes
     // a scene. It takes focus so the keys below belong to this panel and not
@@ -73,7 +114,7 @@ class ScenesPanel extends HTMLElement {
       text: "Scenes arrange sources from the shared Sources library. Drag sources onto a scene to add them. Double click a scene to edit its layout. Outputs send the programme and are shared by every scene.",
       style: { maxWidth: "56ch" },
     });
-    this.append(this.bar, this.grid, this.hint);
+    this.append(this.bar, this.strip, this.grid, this.hint);
 
     this.drag = new DragSelect({
       container: this.grid,
@@ -95,6 +136,9 @@ class ScenesPanel extends HTMLElement {
       on(this.grid, "pointerdown", () => this.grid.focus({ preventScroll: true })),
       registerAll(this.commands()),
       this.client.onRender(() => this.paintTally()),
+      // The focus is the shell's, not this panel's: the composer and the
+      // source list move it too, and the strip follows wherever it goes.
+      onFocusChanged(() => this.paintTally()),
     ];
 
     this.scenes.onChange(() => this.render());
@@ -115,6 +159,10 @@ class ScenesPanel extends HTMLElement {
     const list = this.scenes.scenes();
     this.count.textContent = list.length ? String(list.length) : "";
     this.hint.hidden = false;
+    const tabbed = this.view === "tabs" && this.scenes.supported;
+    this.viewBtn.textContent = this.view === "tabs" ? "Tiles" : "Tabs";
+    this.strip.hidden = !tabbed;
+    this.grid.hidden = tabbed;
     if (!this.scenes.supported) {
       this.hint.hidden = false;
       this.hint.textContent =
@@ -134,8 +182,61 @@ class ScenesPanel extends HTMLElement {
       }
     }
     for (const summary of list) this.syncTile(this.tiles.get(summary.id), summary);
+    // Built in either view, so the strip is right the moment it is shown and
+    // the Take button has a scene to put on air whichever one is up.
+    this.renderTabs(list);
     this.paintSelection();
     this.paintTally();
+  }
+
+  /** Tabs or tiles, for this panel and for the next time this browser opens. */
+  setView(view) {
+    this.view = view === "tiles" ? "tiles" : "tabs";
+    try {
+      localStorage.setItem(VIEW_KEY, this.view);
+    } catch {
+      /* the choice lasts the session */
+    }
+    this.render();
+  }
+
+  /**
+   * The strip, rebuilt only when a name, a count or the list itself moved. A
+   * tab the pointer is resting on must not be swapped out under it, and this
+   * runs on every change the document sends.
+   */
+  renderTabs(list) {
+    const signature = list.map((s) => `${s.id}/${s.name}/${s.items || 0}`).join("|");
+    if (signature !== this.tabSignature) {
+      this.tabSignature = signature;
+      clear(this.strip);
+      this.tabs.clear();
+      for (const summary of list) {
+        const tab = el(
+          "button",
+          {
+            role: "tab",
+            "data-id": summary.id,
+            title: "Work on this scene. Double click to arrange it, Take to put it on air.",
+            onclick: () => setFocusedScene(summary.id),
+            ondblclick: () => this.open(summary.id),
+          },
+          [el("span.ellipsis", { text: summary.name }), el("span.num.dim", { text: String(summary.items || 0) })]
+        );
+        this.tabs.set(summary.id, tab);
+        this.strip.appendChild(tab);
+      }
+      this.strip.appendChild(this.take);
+    }
+    this.seedFocus(list);
+  }
+
+  /** Nothing focused yet: the armed scene, then the live one, then the first. */
+  seedFocus(list) {
+    const ids = list.map((s) => s.id);
+    if (!ids.length || focusedScene(ids)) return;
+    const live = this.client.state.scene;
+    setFocusedScene(this.scenes.armed() || (ids.includes(live) ? live : null) || ids[0]);
   }
 
   buildTile(summary) {
@@ -201,11 +302,22 @@ class ScenesPanel extends HTMLElement {
     // programme is a single source, which is a one item scene's shorthand.
     const program = this.client.state.scene || this.client.state.program;
     const armed = this.client.state.preview || this.scenes.armed();
-    for (const [id, tile] of this.tiles) {
+    // The core names a scene by id or by name, depending on which command put
+    // it there, so both are worth comparing.
+    const is = (id, who) => {
       const summary = this.scenes.summary(id);
-      const named = summary ? summary.name : id;
-      tile.node.classList.toggle("program", program === id || program === named);
-      tile.node.classList.toggle("armed", armed === id || armed === named);
+      return who === id || (summary && who === summary.name);
+    };
+    for (const [id, tile] of this.tiles) {
+      tile.node.classList.toggle("program", is(id, program));
+      tile.node.classList.toggle("armed", is(id, armed));
+    }
+    const focused = focusedScene([...this.tabs.keys()]);
+    for (const [id, tab] of this.tabs) {
+      tab.classList.toggle("program", is(id, program));
+      tab.classList.toggle("armed", is(id, armed));
+      tab.classList.toggle("on", id === focused);
+      tab.setAttribute("aria-selected", id === focused ? "true" : "false");
     }
   }
 
