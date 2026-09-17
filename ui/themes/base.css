@@ -466,10 +466,19 @@ iframe.panel { width: 100%; border: 0; background: var(--panel); display: block;
 }
 
 /* Keep both monitors and the source tray visible together on a laptop. Two
-   pictures side by side are each half as wide, so they are shorter too. */
+   pictures side by side are each half as wide, so they are shorter too. The
+   height is what is scarce, so it leads: the width follows at sixteen by nine
+   and the subscription is taken at the size the picture is actually drawn. */
 gmx-program .pane { flex: 1 1 0; }
 gmx-program canvas, gmx-program img {
-  width: 100%; display: block; height: min(26vh, 240px); object-fit: contain;
+  display: block; height: min(26vh, 240px); aspect-ratio: 16 / 9;
+  width: auto; max-width: 100%; object-fit: contain;
+}
+/* On a phone the two monitors stack rather than shrinking to nothing. Both
+   are still there: the flow is the same one the desk has. */
+@media (max-width: 560px) {
+  gmx-program .monitors { grid-template-columns: 1fr; }
+  gmx-program canvas, gmx-program img { height: min(22vh, 200px); }
 }
 .tile .playback { padding: 3px 6px; font-size: var(--fs-sm); color: var(--dim); }
 
