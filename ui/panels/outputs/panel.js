@@ -147,5 +147,5 @@ class OutputsPanel extends HTMLElement {
 }
 
 customElements.define("gmx-outputs", OutputsPanel);
-window.godwinmixPanels.push(OutputsPanel);
+if (window.godwinmixPanels) window.godwinmixPanels.push(OutputsPanel);
 export default OutputsPanel;
