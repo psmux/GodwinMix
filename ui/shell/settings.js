@@ -32,6 +32,7 @@ const DEFAULTS = {
   tileWidth: 168,
   multiviewFps: 8,
   confirmRemove: true,
+  confirmTake: true,
 };
 
 let state = null;
@@ -129,6 +130,9 @@ export function openSettings(client, opts = {}) {
   simple.appendChild(check("Show faders on tiles", s.faders, (v) => setSetting("faders", v)));
   simple.appendChild(check("Show the scrubber on files", s.lanes, (v) => setSetting("lanes", v)));
   simple.appendChild(check("Ask before removing anything", s.confirmRemove, (v) => setSetting("confirmRemove", v)));
+  simple.appendChild(
+    check("Ask before one source replaces a scene on air", s.confirmTake, (v) => setSetting("confirmTake", v))
+  );
 
   simple.appendChild(
     field(
