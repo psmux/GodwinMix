@@ -735,6 +735,22 @@ async function monitorSuite() {
     eq(takeRequest({ source: "cam1" }, 0), { source: "cam1" });
   });
 
+  test("a status that names the armed scene wins, null included", () => {
+    // The core always writes `preview` now, so a snapshot is the truth: a page
+    // that loads while a scene is armed draws it, and one that arrives after a
+    // disarm does not keep painting a preview of nothing.
+    const store = new Store();
+    store.snapshot({ preview: "Two box", sources: [] }, 1);
+    eq(store.state.preview, "Two box");
+    store.snapshot({ preview: null, sources: [] }, 2);
+    eq(store.state.preview, null, "a status naming nothing armed must clear it");
+    // A core too old to have the field says nothing, and what the events said
+    // stands.
+    store.patch({ preview: "Wide" });
+    store.snapshot({ sources: [] }, 3);
+    eq(store.state.preview, "Wide", "an older core must not clear what it cannot name");
+  });
+
   const state = {
     connected: true,
     program: null,
