@@ -82,6 +82,7 @@ const ASSETS: &[(&str, &str)] = &[
     ("panels/welcome/tiles.js", include_str!("../../../ui/panels/welcome/tiles.js")),
     ("shell/commands.js", include_str!("../../../ui/shell/commands.js")),
     ("shell/dom.js", include_str!("../../../ui/shell/dom.js")),
+    ("shell/focus.js", include_str!("../../../ui/shell/focus.js")),
     ("shell/fader.js", include_str!("../../../ui/shell/fader.js")),
     ("shell/firstrun.js", include_str!("../../../ui/shell/firstrun.js")),
     ("shell/keymap.js", include_str!("../../../ui/shell/keymap.js")),
