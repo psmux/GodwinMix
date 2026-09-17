@@ -273,6 +273,17 @@ label { display: block; }
 .tabs button { background: none; border: 0; border-bottom: 2px solid transparent; padding: 6px 10px; color: var(--dim); }
 .tabs button.on { color: var(--text); border-bottom-color: var(--accent); }
 
+/* The scene strip: tabs that choose, and one button that takes. */
+.scene-tabs { flex-wrap: wrap; align-items: center; gap: 4px; padding: 0 var(--pad) var(--pad); }
+.scene-tabs button:not(.btn) {
+  display: flex; align-items: center; gap: 6px; max-width: 18ch;
+  border: var(--border) solid var(--line); border-bottom-width: 2px; border-radius: var(--radius-sm);
+}
+.scene-tabs button:not(.btn).on { background: var(--panel2); color: var(--text); border-color: var(--accent); }
+.scene-tabs button.program { color: var(--text); border-bottom-color: var(--live); }
+.scene-tabs button.armed { border-bottom-color: var(--warn); }
+.scene-tabs .btn { margin-left: auto; color: var(--text); background: var(--panel2); border: var(--border) solid var(--line); border-radius: var(--radius-sm); }
+
 /* ---------------------------------------------------------------- picker */
 
 .picker-grid { display: grid; gap: var(--gap); grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); }
