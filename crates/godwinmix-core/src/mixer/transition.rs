@@ -37,6 +37,15 @@
 //! to the property thread in `mixer.rs`. That is the only thing the thread is
 //! for now. `Bound::unbound` is what it is handed.
 //!
+//! # Who owns a pad's property
+//!
+//! One binding per pad and property, made the first time a transition needs it
+//! and then left on the pad. A transition rewrites the curve behind it and
+//! turns it on; settling turns it off. Nothing is ever taken off a pad while
+//! the compositor is running, because the aggregator walks that list every
+//! frame without a lock and without a reference. [`Controllers`] has the
+//! detail and the `gstobject.c` line it rests on.
+//!
 //! # Who decides the shape
 //!
 //! [`Transition`] does. `cut`, `fade`, `move` and `stinger` are in here; a
@@ -705,22 +714,165 @@ pub fn audio_curves(x: &Crossing) -> Vec<Curve> {
 // Binding
 // ---------------------------------------------------------------------------
 
-/// A transition that is running: the bindings to take off, and the values to
-/// leave the pads at.
+/// Every control binding this mixer has put on a compositor pad.
+///
+/// One binding per pad and property, made the first time a transition drives
+/// it and then left where it is for as long as the pad is on the element. A
+/// transition loads its curve into the control source the binding already
+/// reads and turns the binding on; settling turns it off again. Nothing is
+/// ever taken off a pad while the pipeline is running.
+///
+/// That rule is not tidiness, it is the only thing keeping the aggregator
+/// alive. `gst_object_sync_values` walks the pad's list of bindings with the
+/// object lock commented out (`gstobject.c` says "FIXME: this deadlocks") and
+/// takes no reference to the binding it is about to call. Every frame, for
+/// every pad. `gst_object_remove_control_binding` takes that lock, frees the
+/// list node under it and unparents the binding, which was the compositor's
+/// last reference to it. Do that from the mixer thread and the aggregator
+/// reads a freed node and calls a freed object, which is the SIGSEGV in
+/// `gst_object_sync_values` this design exists to remove.
+///
+/// What is left is safe against the same unlocked walk:
+///
+/// * `disabled` is a plain boolean the walk reads and nothing frees. The
+///   binding stays in the list either way.
+/// * an `InterpolationControlSource`'s timed values are behind that source's
+///   own mutex, which its `get_value` takes. Rewriting the curve under a
+///   running aggregator is what the type is for.
+/// * the binding holds a strong reference to its control source, so the walk
+///   cannot meet a freed one.
+///
+/// A pad the compositor has given back is dropped from here on the next bind.
+/// That drops a reference and nothing else: the binding stays parented to the
+/// pad and is freed with it, and by then the pad is off the element and no
+/// aggregator can be walking it.
+#[derive(Default)]
+pub struct Controllers {
+    entries: Vec<Entry>,
+}
+
+/// One pad, one property, and the two objects that drive it for good.
+struct Entry {
+    pad: gst::Pad,
+    property: &'static str,
+    binding: gst::ControlBinding,
+    source: InterpolationControlSource,
+}
+
+impl Controllers {
+    /// Bind a set of curves onto their pads.
+    ///
+    /// A pad that refuses a binding is not an error: its curve goes back in
+    /// `unbound` and the caller runs it the old way. That is how a GPU
+    /// compositor whose pad does not declare a property controllable keeps
+    /// working.
+    pub fn bind(&mut self, curves: Vec<Curve>) -> Bound {
+        self.forget_released_pads();
+        let mut driven = Vec::new();
+        let mut unbound = Vec::new();
+        for curve in curves {
+            if curve.points.len() < 2 {
+                unbound.push(curve);
+                continue;
+            }
+            if !curve.pad.has_property(curve.property) {
+                warn!(pad = %curve.pad.name(), property = curve.property, "this pad has no such property");
+                continue;
+            }
+            let Some(entry) = self.controller(&curve.pad, curve.property) else {
+                debug!(
+                    pad = %curve.pad.name(),
+                    property = curve.property,
+                    "this pad would not take a control binding; the property thread will run it"
+                );
+                unbound.push(curve);
+                continue;
+            };
+            // Off while the curve is written, so the aggregator never blends a
+            // frame against half of it, and on once it is whole.
+            entry.binding.set_disabled(true);
+            entry.source.unset_all();
+            for (at, value) in &curve.points {
+                entry.source.set(*at, *value);
+            }
+            entry.binding.set_disabled(false);
+            driven.push(Driven {
+                pad: curve.pad.clone(),
+                property: curve.property,
+                binding: entry.binding.clone(),
+                source: entry.source.clone(),
+                value: curve.settle(),
+            });
+        }
+        Bound { driven, unbound }
+    }
+
+    /// How many pads and properties this mixer has ever driven. For a test
+    /// that has to prove the bindings are made once rather than per take.
+    pub fn count(&self) -> usize {
+        self.entries.len()
+    }
+
+    /// The binding for this pad and property, made if this is the first time.
+    ///
+    /// It is made disabled, with an empty control source, because the pad is
+    /// already on a compositor that syncs every binding it holds: an enabled
+    /// one would write whatever the empty source said on the very next frame.
+    fn controller(&mut self, pad: &gst::Pad, property: &'static str) -> Option<&Entry> {
+        if let Some(i) =
+            self.entries.iter().position(|e| &e.pad == pad && e.property == property)
+        {
+            return Some(&self.entries[i]);
+        }
+        let source = InterpolationControlSource::new();
+        source.set_mode(InterpolationMode::Linear);
+        let binding =
+            gstreamer_controller::DirectControlBinding::new_absolute(pad, property, &source);
+        binding.set_disabled(true);
+        if let Err(e) = pad.add_control_binding(&binding) {
+            debug!(pad = %pad.name(), property, ?e, "this pad refused a control binding");
+            return None;
+        }
+        self.entries.push(Entry {
+            pad: pad.clone(),
+            property,
+            binding: binding.upcast(),
+            source,
+        });
+        self.entries.last()
+    }
+
+    /// Drop what belongs to a pad the compositor has taken back.
+    fn forget_released_pads(&mut self) {
+        self.entries.retain(|e| e.pad.parent().is_some());
+    }
+}
+
+/// A transition that is running: what it drives, and where each property is to
+/// be left when it ends.
 pub struct Bound {
-    bindings: Vec<(gst::Pad, gst::ControlBinding, &'static str, f64)>,
+    driven: Vec<Driven>,
     /// Curves no pad would take. The property thread runs these instead, which
     /// is the only thing it is still for.
     pub unbound: Vec<Curve>,
 }
 
+/// One property this transition owns until it settles.
+struct Driven {
+    pad: gst::Pad,
+    property: &'static str,
+    binding: gst::ControlBinding,
+    source: InterpolationControlSource,
+    value: f64,
+}
+
 impl Bound {
     pub fn is_empty(&self) -> bool {
-        self.bindings.is_empty() && self.unbound.is_empty()
+        self.driven.is_empty() && self.unbound.is_empty()
     }
 
     pub fn len(&self) -> usize {
-        self.bindings.len()
+        self.driven.len()
     }
 
     /// Whether this property of this pad is being driven right now.
@@ -730,66 +882,24 @@ impl Bound {
     /// the next sync anyway, but it also makes the picture jump for one frame,
     /// so the tick asks first.
     pub fn drives(&self, pad: &gst::Pad, property: &str) -> bool {
-        self.bindings.iter().any(|(p, _, name, _)| p == pad && *name == property)
+        self.driven.iter().any(|d| &d.pad == pad && d.property == property)
     }
 
-    /// Take every binding off and leave each property where its curve ended.
+    /// Hand every property back and leave each one where its curve ended.
+    ///
+    /// The curve is collapsed to that one value before the binding is turned
+    /// off, so a sync already in flight on the aggregator thread computes the
+    /// same number this thread is about to write and the two cannot disagree.
+    /// A transition cut short by a newer take therefore lands on its
+    /// destination rather than wherever it had got to.
     pub fn settle(self) {
-        for (pad, binding, property, value) in self.bindings {
-            let _ = pad.remove_control_binding(&binding);
-            write(&pad, property, value);
+        for d in self.driven {
+            d.source.unset_all();
+            d.source.set(gst::ClockTime::ZERO, d.value);
+            d.binding.set_disabled(true);
+            write(&d.pad, d.property, d.value);
         }
     }
-}
-
-/// Bind a set of curves onto their pads.
-///
-/// A pad that refuses the binding is not an error: its curve goes back in
-/// `unbound` and the caller runs it the old way. That is how a GPU compositor
-/// whose pad does not declare a property controllable keeps working.
-pub fn bind(curves: Vec<Curve>) -> Bound {
-    let mut bindings = Vec::new();
-    let mut unbound = Vec::new();
-    for curve in curves {
-        if curve.points.len() < 2 {
-            unbound.push(curve);
-            continue;
-        }
-        if !curve.pad.has_property(curve.property) {
-            warn!(pad = %curve.pad.name(), property = curve.property, "this pad has no such property");
-            continue;
-        }
-        let source = InterpolationControlSource::new();
-        source.set_mode(InterpolationMode::Linear);
-        for (at, value) in &curve.points {
-            source.set(*at, *value);
-        }
-        let binding = gstreamer_controller::DirectControlBinding::new_absolute(
-            &curve.pad,
-            curve.property,
-            &source,
-        );
-        match curve.pad.add_control_binding(&binding) {
-            Ok(()) => {
-                bindings.push((
-                    curve.pad.clone(),
-                    binding.upcast(),
-                    curve.property,
-                    curve.settle(),
-                ));
-            }
-            Err(e) => {
-                debug!(
-                    pad = %curve.pad.name(),
-                    property = curve.property,
-                    ?e,
-                    "this pad would not take a control binding; the property thread will run it"
-                );
-                unbound.push(curve);
-            }
-        }
-    }
-    Bound { bindings, unbound }
 }
 
 /// Write a curve's value at a fraction of its window, for the fallback thread.
@@ -1038,20 +1148,53 @@ mod tests {
 
     /// The binding itself, on a real compositor pad, because the whole design
     /// rests on the pad taking one.
+    ///
+    /// And on the pad keeping it. Settling disables the binding rather than
+    /// removing it: `gst_object_sync_values` walks the pad's bindings on the
+    /// aggregator thread with no lock and no reference, so a removal from this
+    /// thread frees a list node and an object out from under that walk.
     #[test]
-    fn a_compositor_pad_takes_a_control_binding_and_gives_it_back() {
+    fn a_compositor_pad_takes_a_control_binding_and_keeps_it() {
         let (comp, pads) = pads(1);
         let x = crossing(vec![pads[0].clone()], Vec::new());
-        let bound = bind(Fade.curves(&x));
+        let mut controllers = Controllers::default();
+        let bound = controllers.bind(Fade.curves(&x));
         assert_eq!(bound.len(), 1, "a compositor pad must take an alpha binding");
         assert!(bound.unbound.is_empty(), "nothing should have fallen back");
         assert!(bound.drives(&pads[0], "alpha"));
         assert!(!bound.drives(&pads[0], "xpos"));
-        assert!(pads[0].control_binding("alpha").is_some(), "the pad is holding it");
+        let binding = pads[0].control_binding("alpha").expect("the pad is holding it");
+        assert!(!binding.is_disabled(), "and reading it while the transition runs");
         bound.settle();
-        assert!(pads[0].control_binding("alpha").is_none(), "settle must take it off again");
+        assert!(
+            pads[0].control_binding("alpha").expect("still there").is_disabled(),
+            "settle must hand the property back without taking the binding off"
+        );
         assert_eq!(pads[0].property::<f64>("alpha"), 0.0, "settle leaves the curve's last value");
+
+        // A second transition on the same pad reuses the binding it made the
+        // first time rather than adding another one.
+        let again = controllers.bind(Fade.curves(&x));
+        assert_eq!(controllers.count(), 1, "one binding per pad and property, ever");
+        assert!(!pads[0].control_binding("alpha").expect("still there").is_disabled());
+        again.settle();
         comp.release_request_pad(&pads[0]);
+    }
+
+    /// A pad the compositor has taken back is forgotten, or the pool would
+    /// grow one dead pad per source for the length of a show.
+    #[test]
+    fn a_released_pad_is_forgotten_on_the_next_bind() {
+        let (comp, pads) = pads(2);
+        let mut controllers = Controllers::default();
+        let first = crossing(vec![pads[0].clone()], Vec::new());
+        controllers.bind(Fade.curves(&first)).settle();
+        assert_eq!(controllers.count(), 1);
+        comp.release_request_pad(&pads[0]);
+        let second = crossing(vec![pads[1].clone()], Vec::new());
+        controllers.bind(Fade.curves(&second)).settle();
+        assert_eq!(controllers.count(), 1, "the released pad's entry went with it");
+        comp.release_request_pad(&pads[1]);
     }
 
     #[test]

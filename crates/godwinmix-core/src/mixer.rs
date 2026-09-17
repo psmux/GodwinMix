@@ -932,9 +932,15 @@ pub struct Mixer {
     /// than fighting the newer one, and `event/program.took` carries it so a
     /// client can tell two takes apart.
     take_generation: Arc<AtomicU64>,
-    /// The transition on the canvas right now, with the bindings to take off
-    /// when its window passes.
+    /// The transition on the canvas right now, with the properties to hand
+    /// back when its window passes.
     running_transition: Option<RunningTransition>,
+    /// The control bindings this mixer has put on compositor pads, one per pad
+    /// and property, kept for the life of the pad. A transition turns them on
+    /// and off; nothing takes one off a pad while the pipeline runs, because
+    /// the aggregator walks that list every frame with no lock and no
+    /// reference. `transition::Controllers` has the whole argument.
+    controllers: transition::Controllers,
     /// What to ask when a take names a transition this build does not have.
     /// Installed by the plugin supervisor; `None` on a core with no plugins,
     /// where a transition plugin's name is simply an error that lists the
@@ -1545,6 +1551,7 @@ impl Mixer {
             ad_cue_ms: None,
             take_generation: Arc::new(AtomicU64::new(0)),
             running_transition: None,
+            controllers: transition::Controllers::default(),
             transitions: None,
             pgm_out,
             pending_take: None,
@@ -2851,7 +2858,7 @@ impl Mixer {
             None => self.plugin_curves(spec, &x)?,
         };
         curves.extend(transition::audio_curves(&x));
-        let bound = transition::bind(curves);
+        let bound = self.controllers.bind(curves);
         if !bound.unbound.is_empty() {
             // A pad that would not take a binding is driven the old way. One
             // thread for the whole transition, abandoned the moment a newer
@@ -3165,8 +3172,12 @@ impl Mixer {
 
         // A pad a transition is driving is the transition's until it settles.
         // The visibility tick runs twice a second and would otherwise stamp a
-        // fade flat halfway through it.
-        targets.retain(|(pad, _)| pad.control_binding("volume").is_none());
+        // fade flat halfway through it. A pad that has been in a transition
+        // keeps its binding for good, so what this asks is whether the binding
+        // is live.
+        targets.retain(|(pad, _)| {
+            !pad.control_binding("volume").is_some_and(|b| !b.is_disabled())
+        });
         if ramp_audio && self.cfg.program.audio_ramp_ms > 0 {
             ramp_volumes(
                 targets,
@@ -4510,8 +4521,8 @@ impl Mixer {
     pub fn shutdown(&mut self) {
         info!("shutting down mixer");
         // A transition on the canvas goes first, or its scheduled end would
-        // fire at a mixer that has taken its pads away and its bindings would
-        // outlive the pool that holds them.
+        // fire at a mixer that has taken its pads away, and the curves would
+        // still be driving pads the pool is dismantling.
         self.settle_transition();
         for p in [self.pending_take.take(), self.pending_ad_end.take()].into_iter().flatten() {
             p.unschedule();
@@ -6147,7 +6158,7 @@ mod tests {
         .expect("a long crossfade");
         assert!(mix.transition_window().is_some(), "the transition is running");
         assert!(
-            mix.pool.slots().iter().any(|s| s.pad().control_binding("alpha").is_some()),
+            !mix.pool.driven_by_a_transition("alpha").is_empty(),
             "a fade drives alpha through a control binding"
         );
 
@@ -6156,8 +6167,13 @@ mod tests {
 
         assert!(mix.transition_window().is_none(), "the cut settled the transition");
         assert!(
-            mix.pool.slots().iter().all(|s| s.pad().control_binding("alpha").is_none()),
+            mix.pool.driven_by_a_transition("alpha").is_empty(),
             "no pad may still be driven by a transition the cut replaced"
+        );
+        assert!(
+            mix.pool.slots().iter().any(|s| s.pad().control_binding("alpha").is_some()),
+            "the binding itself stays on the pad: taking one off a running \
+             compositor is what crashes the aggregator"
         );
         assert_eq!(mix.program_source.as_deref(), Some("cam1"));
         assert_eq!(mix.pool.visible(), 1, "one item on the canvas after a cut");
@@ -6204,11 +6220,8 @@ mod tests {
         assert!(mix.transition_window().is_none());
         assert_eq!(mix.pool.visible(), 1, "only the new scene is drawn once it has landed");
         assert!(
-            mix.pool
-                .slots()
-                .iter()
-                .all(|s| s.pad().control_binding("alpha").is_none()),
-            "settling must take every binding off"
+            mix.pool.driven_by_a_transition("alpha").is_empty(),
+            "settling must hand every property back"
         );
         mix.shutdown();
     }

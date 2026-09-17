@@ -1391,8 +1391,14 @@ fn frame_size(caps: &gst::Caps) -> Option<(i32, i32)> {
 /// runs twice a second whatever else is happening. So every write here asks
 /// first, and the tick stops stamping on a live transition without knowing
 /// that transitions exist.
+///
+/// What it asks is whether a binding is live. A pad keeps its bindings for as
+/// long as it is on the compositor, because taking one off a running
+/// aggregator is a use after free (`mixer::transition::Controllers` says why),
+/// so a pad that has ever been in a transition holds one for ever and that one
+/// is disabled between transitions.
 fn driven(pad: &gst::Pad, name: &str) -> bool {
-    pad.control_binding(name).is_some()
+    pad.control_binding(name).is_some_and(|b| !b.is_disabled())
 }
 
 /// Property writes that do not fight the element over its own type.
