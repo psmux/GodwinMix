@@ -175,6 +175,10 @@ jobs:
       # get published.
       WINDOWS_INSTALLER_BUDGET_MB: 150
       RUNTIME_BUDGET_MB: 130
+      # The three device plugins together, measured at 4 MB on macOS. A
+      # tripwire rather than a tight budget: what fills the installer is
+      # GStreamer, and these three have no business growing to twenty.
+      PLUGINS_BUDGET_MB: 20
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -225,6 +229,14 @@ jobs:
             cp target/release/godwinmix "tauri-app/binaries/godwinmix-${triple}"
           fi
 
+      # The camera, the screen and the microphone, staged the way the core
+      # expects to find an installed plugin. Without this step the app goes out
+      # with no way to add a source that is not a file or a URL, and the
+      # operator is back in a terminal running `gmx plugin add camera`.
+      - name: The device plugins, inside the app
+        shell: bash
+        run: ./dev/bundle-plugins.sh --budget-mb "$PLUGINS_BUDGET_MB"
+
       # The trimmed runtime, which tauri.conf.json lists under
       # bundle.resources. Without this step the installers go out expecting
       # the operator to install a 527 MB GStreamer first, which is the thing
@@ -271,6 +283,15 @@ jobs:
           app=tauri-app/target/release/bundle/macos/GodwinMix.app
           test -d "$app/Contents/Resources/gstreamer" \
             || { echo "::error::no gstreamer in $app" >&2; exit 1; }
+          find "$app/Contents/Resources/plugins" -name gmx-camera -type f | grep -q . \
+            || { echo "::error::no camera plugin in $app" >&2; exit 1; }
+          # Without this key macOS does not refuse the camera, it kills the
+          # process that asked for it, and the operator gets a source that
+          # will not go live and a log that stops mid sentence.
+          grep -q NSCameraUsageDescription "$app/Contents/Info.plist" \
+            || { echo "::error::tauri-app/Info.plist was not merged into $app" >&2; exit 1; }
+          # --headless-check asks the mixer it starts whether it loaded each
+          # of them, which is the claim that matters.
           ./"$app"/Contents/MacOS/godwinmix-desktop --headless-check
 
       - name: Sizes, against the budget
