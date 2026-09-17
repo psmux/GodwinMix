@@ -297,6 +297,35 @@ label { display: block; }
 .kindtile .who { color: var(--faint); font-size: var(--fs-sm); }
 .group-title { color: var(--dim); font-size: var(--fs-sm); text-transform: uppercase; letter-spacing: 0.06em; margin: var(--pad) 0 4px; }
 
+/* The source picker: what to add on the left, what there is on the right. */
+.picker { display: grid; grid-template-columns: 210px minmax(0, 1fr); gap: var(--gap); min-height: 400px; }
+.picker-rail { display: flex; flex-direction: column; gap: 2px; padding-right: var(--gap); border-right: var(--border) solid var(--line); }
+.picker-rail button {
+  display: flex; align-items: center; gap: var(--gap); text-align: left;
+  background: none; border: 0; border-radius: var(--radius-sm); padding: 7px 9px; color: var(--dim);
+}
+.picker-rail button svg { width: 18px; height: 18px; flex: none; }
+.picker-rail button:hover { background: var(--panel2); color: var(--text); }
+.picker-rail button.on { background: var(--raise); color: var(--text); }
+.picker-main { display: flex; flex-direction: column; gap: var(--gap); min-width: 0; }
+.picker-head input { width: 100%; }
+.picker-panel { display: flex; flex-direction: column; gap: 6px; overflow: auto; max-height: min(56vh, 520px); }
+.picker-panel .picker-grid { margin-bottom: var(--pad); }
+.picker-row {
+  display: flex; align-items: center; gap: var(--gap); padding: 7px var(--pad);
+  background: var(--panel2); border: var(--border) solid var(--line); border-radius: var(--radius-sm);
+}
+.picker-row svg { width: 20px; height: 20px; flex: none; }
+.picker-row .grow { min-width: 0; }
+.picker-row .btn { flex: none; }
+
+/* A narrow window puts the rail across the top, where the tabs already live. */
+@media (max-width: 720px) {
+  .picker { grid-template-columns: minmax(0, 1fr); min-height: 0; }
+  .picker-rail { flex-direction: row; overflow-x: auto; padding: 0 0 var(--gap); border-right: 0; border-bottom: var(--border) solid var(--line); }
+  .picker-rail button { white-space: nowrap; }
+}
+
 /* ---------------------------------------------------------------- forms */
 
 .form { display: flex; flex-direction: column; gap: var(--gap); }

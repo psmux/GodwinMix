@@ -60,6 +60,11 @@ export function askForToken(reason) {
 /**
  * The empty state. Three sentences, in the order a first time user does them.
  * Shown in the tray when there are no sources at all.
+ *
+ * The button opens the picker on Cameras rather than on whatever it opened
+ * last. Somebody who has just started a mixer and has nothing in it is nearly
+ * always looking at a camera, and the picker lists the ones this machine can
+ * see without them typing anything.
  */
 export function emptyState(onAdd) {
   return el("div.empty", {}, [
@@ -70,7 +75,7 @@ export function emptyState(onAdd) {
         el("li", { text: "Tap its tile to put it on air. The picture at the top is what your audience sees." }),
         el("li", { text: "Add an output to send that picture somewhere." }),
       ]),
-      el("button.btn.primary", { text: "Add a source", onclick: onAdd }),
+      el("button.btn.primary", { text: "+ Add a camera or anything else", onclick: () => onAdd({ category: "cameras" }) }),
     ]),
   ]);
 }
