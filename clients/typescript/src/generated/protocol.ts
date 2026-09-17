@@ -814,7 +814,7 @@ export interface NameRequest {
  * only words.
  */
 export interface Next {
-  do: string;
+  action: string;
   kind?: string | null;
   name?: string | null;
   output?: string | null;

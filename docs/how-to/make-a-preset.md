@@ -85,7 +85,7 @@ gallery = "icon"                   # live, snapshot, icon or label
 
 # What the person does next, one table each. See below.
 [[provides.preset.next]]
-do = "stream_key"
+action = "stream_key"
 output = "stream"
 ```
 
@@ -111,22 +111,22 @@ Each one is typed, so the welcome panel can draw a control for it:
 
 ```toml
 [[provides.preset.next]]
-do = "stream_key"
+action = "stream_key"
 output = "youtube"
 text = "YouTube Studio, then Create, then Go Live, shows the key."
 
 [[provides.preset.next]]
-do = "install_plugin"
+action = "install_plugin"
 name = "camera"
 text = "The two cameras are test patterns until this is here."
 
 [[provides.preset.next]]
-do = "take"
+action = "take"
 source = "cam-wide"
 text = "Press Wide to put a picture on air."
 ```
 
-| `do` | Its field | What the person gets |
+| `action` | Its field | What the person gets |
 |---|---|---|
 | `stream_key` | `output` | A box and a Save on that destination, which goes green when the mixer says the key took. |
 | `install_plugin` | `name` | An Install button. |
@@ -140,11 +140,11 @@ whole entry.
 Write them as things, not as instructions. "Put your stream key into the
 `[[outputs]]` block" is the sentence this schema exists to delete: the person
 reading it is looking at a page with a box on it, and sending them to a text
-editor instead is the thing the owner calls nonsense. Say `do = "stream_key"`
+editor instead is the thing the owner calls nonsense. Say `action = "stream_key"`
 and let the page put the box up.
 
 [The presets reference](../reference/presets.md) has the whole schema, including
-what happens to a `do` a build does not know.
+what happens to an `action` a build does not know.
 
 `steps`, a list of three sentences, is what this replaced. A preset that still
 carries one applies fine and every line is read as a `note`, so nothing third

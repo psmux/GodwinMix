@@ -873,8 +873,8 @@ class NameRequest(TypedDict, total=False):
 class Next(TypedDict, total=False):
     """One thing the person does after a preset is applied. Typed rather than written out, because a sentence sends a volunteer to a text editor and a type puts a control on the screen. The welcome panel turns `stream_key` into a box with a Save beside it and `install_plugin` into the Install button. `note` is the escape hatch for what really is only words."""
 
-    do: str
-    # One of `NEXT_ACTIONS`. Anything else is a preset written against a newer surface than this one; a surface shows its `text` or skips it.
+    action: str
+    # One of `NEXT_ACTIONS`. Anything else is a preset written against a newer surface than this one; a surface shows its `text` or skips it. Spelled `action` rather than `do` because `do` is a reserved word in Rust and in JavaScript, and a wire name that every generated client has to escape is a wire name that will eventually not be escaped.
     kind: Optional[str]
     # `add_source`: the kind to add, as `<plugin>/<provide>`.
     name: Optional[str]

@@ -26,16 +26,16 @@ gallery = "live"
 # What the caster does next, as data rather than as sentences. The welcome
 # panel draws a control for each one. `docs/reference/presets.md` is the schema.
 [[provides.preset.next]]
-do = "stream_key"
+action = "stream_key"
 output = "twitch"
 text = "Twitch, Creator Dashboard, Settings, Stream shows the primary stream key."
 
 [[provides.preset.next]]
-do = "install_plugin"
+action = "install_plugin"
 name = "ndi"
 text = "The four player feeds arrive over NDI, so nothing appears in the quad until this is here."
 
 [[provides.preset.next]]
-do = "take"
+action = "take"
 source = "caster"
 text = "Press Caster to go on air, then Quad when the match starts."

@@ -25,15 +25,15 @@ gallery = "live"
 # What the person does next, as data rather than as sentences. The welcome
 # panel draws a control for each one. `docs/reference/presets.md` is the schema.
 [[provides.preset.next]]
-do = "add_source"
+action = "add_source"
 kind = "rtmp/source"
 text = "Point your camera or phone encoder at this mixer, or drop a video file on the page."
 
 [[provides.preset.next]]
-do = "take"
+action = "take"
 source = "cam1"
 text = "Press a tile to put it on air. The picture at the top is what your audience sees."
 
 [[provides.preset.next]]
-do = "note"
+action = "note"
 text = "The destination starts pointed at this machine. Destinations, then Edit, sends it somewhere else."
