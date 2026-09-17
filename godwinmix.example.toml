@@ -74,17 +74,29 @@ idle_secs = 15
 [safety]
 # A take within this window of the last one is refused with error -32003 and
 # data.retry_after_ms, and the message says how long is left. Not a standard:
-# no standards body publishes a minimum shot length, so this is a default an
-# operator is expected to move. A concert would use 1500; a church service
-# leaves it where it is.
-min_hold_ms = 8000
-# Takes allowed in any rolling minute, counted per core.
-max_takes_per_minute = 12
+# no standards body publishes a minimum shot length, and the three second rule
+# people quote is folklore.
+#
+# Zero, because a vision mixer cuts on a word or on a beat, and a desk that
+# will not let its operator cut is not a desk. Set it if the house wants a
+# minimum shot: a locked off lecture might use 30000. A token marked
+# `agent = true` is held to eight seconds whatever this says, which is what
+# these rules were written for.
+min_hold_ms = 0
+# Takes allowed in any rolling minute, counted per core. High enough never to
+# meet a person cutting a song, low enough to stop a loop taking on every
+# pass. An agent token is held to twelve.
+max_takes_per_minute = 120
 # ITU-R BT.1702-3, which Ofcom rule 2.12 gives the force of a rule in the UK:
 # a cut that changes the picture's luminance by 20 candela per square metre or
 # more over more than a quarter of the frame is held 360 ms from the next one
 # (334 above 50 Hz), and at most three of those are allowed in any second.
 # This is the one hold time here that is not a matter of taste.
+#
+# It acts on luminance the core has actually measured, which means telemetry
+# has to be running for it to see anything. A cut nothing measured is not
+# refused: a guard that stops cuts it has no evidence about gives false
+# assurance rather than compliance.
 flash_guard = true
 # What happens when whoever made the last take stops calling. The core raises
 # a critical alert and then does this. "alert" changes nothing, which is the
