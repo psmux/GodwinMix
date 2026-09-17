@@ -24,7 +24,9 @@
 //! # What it costs
 //!
 //! A compositor pad and a leaky queue per source in the armed scene, at
-//! thumbnail size. 11 section 3 prices a mosaic sized composite at about 1.7
+//! thumbnail size, and one sixteen pixel square black source on a pad of its
+//! own that keeps the compositor ticking whatever the sources do (see
+//! `backdrop`). 11 section 3 prices a mosaic sized composite at about 1.7
 //! percent of a programme one. Nothing exists while nothing is armed and
 //! nobody is subscribed, which is the rule the whole core is built on.
 //!
@@ -103,8 +105,9 @@ pub struct ScenePreview {
 impl ScenePreview {
     /// Build the preview branch into a multiview pipeline that is running.
     ///
-    /// Everything is added at once and brought up together, so there is no
-    /// moment where a compositor with no sink pad is waiting on a timeout.
+    /// Everything is added at once and brought up together, including the
+    /// backdrop pad, so there is no moment where a compositor with nothing
+    /// feeding it is waiting on a timeout it may never get.
     pub fn build(
         pipeline: &gst::Pipeline,
         shape: PreviewShape,
@@ -148,10 +151,16 @@ impl ScenePreview {
         );
         let sink: gst::Element = sink.upcast();
 
-        let chain = vec![comp.clone(), caps, tee, queue, conv, enc, sink];
+        let mut chain = vec![comp.clone(), caps, tee, queue, conv, enc, sink];
         pipeline.add_many(&chain).context("adding the preview branch")?;
         gst::Element::link_many(chain.iter().collect::<Vec<_>>())
             .context("linking the preview branch")?;
+        // The heartbeat, before anything is brought up, so the compositor
+        // starts with a pad of its own that is certain to feed it.
+        match backdrop(pipeline, &comp, shape) {
+            Ok(mut els) => chain.append(&mut els),
+            Err(e) => warn!(?e, "the preview has no backdrop, so its first frame waits on a source"),
+        }
         for el in &chain {
             el.sync_state_with_parent().ok();
         }
@@ -355,6 +364,55 @@ pub struct Cell {
     pub width: i32,
     pub height: i32,
     pub alpha: f64,
+}
+
+/// A tiny black source on a compositor pad of its own.
+///
+/// An aggregator does not start when it is told to; it starts when it can
+/// answer "what running time does my output begin at". A `force-live` one on
+/// GStreamer 1.26 and later takes that from the clock as soon as it is
+/// PLAYING, and produces black until something arrives. On 1.24, which is what
+/// Ubuntu 24.04 and so the Linux CI runners have, the answer can only come
+/// from a buffer: `gst_aggregator_wait_and_check` takes the "wait until every
+/// pad has data" branch for as long as `start-time-selection=first` has not
+/// been satisfied, and `ignore-inactive-pads` cannot rescue it, because a pad
+/// only counts as inactive once the aggregator has timed out on the clock at
+/// least once, which is a thing that never happens in that branch.
+///
+/// So the preview, whose pads are all bound after it is already running and
+/// any of which may be a source that has not delivered yet, could sit for
+/// ever. It did: the Linux smoke asked fifteen times over forty five seconds
+/// and the compositor produced nothing at all, while one slot's queue filled
+/// and leaked and the other never received a buffer.
+///
+/// One live pad that is always feeding fixes it on every version, because the
+/// first buffer arrives within a frame of the branch coming up and the start
+/// time comes with it. Sixteen pixels square at zero alpha: never drawn, never
+/// scaled, and about four hundred bytes eight times a second.
+fn backdrop(
+    pipeline: &gst::Pipeline,
+    comp: &gst::Element,
+    shape: PreviewShape,
+) -> Result<Vec<gst::Element>> {
+    let src = make("videotestsrc", "pv-bg")?;
+    src.set_property_from_str("pattern", "black");
+    crate::probe::set_bool(&src, "is-live", true);
+    let caps = gstutil::capsfilter(
+        "pv-bg-caps",
+        &CanvasCaps::video_at(16, 16, gst::Fraction::new(shape.fps, 1)),
+    )?;
+    pipeline.add_many([&src, &caps]).context("adding the preview backdrop")?;
+    src.link(&caps).context("linking the preview backdrop")?;
+    let pad = comp
+        .request_pad_simple("sink_%u")
+        .context("the preview compositor refused the backdrop a pad")?;
+    pad.set_property("alpha", 0.0f64);
+    pad.set_property("zorder", 0u32);
+    caps.static_pad("src")
+        .context("the preview backdrop has no src pad")?
+        .link(&pad)
+        .context("linking the preview backdrop into the compositor")?;
+    Ok(vec![src, caps])
 }
 
 fn set_i32(pad: &gst::Pad, name: &str, v: i32) {

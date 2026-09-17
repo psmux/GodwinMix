@@ -192,6 +192,9 @@ struct Shared {
     /// subscribers are. Empty means no preview compositor exists.
     preview_subs: Mutex<Vec<(u64, PreviewRequest)>>,
     preview_built: Mutex<Option<crate::multiview::preview::PreviewShape>>,
+    /// This mixer's mosaic pipeline while one is up, weakly, so that holding
+    /// the handle never keeps a pipeline alive. Written by `Multiview::build`.
+    pipeline: Mutex<Option<gst::glib::WeakRef<gst::Pipeline>>>,
 }
 
 impl Shared {
@@ -330,6 +333,7 @@ impl MultiviewHandle {
                 preview_frames,
                 preview_subs: Mutex::new(Vec::new()),
                 preview_built: Mutex::new(None),
+                pipeline: Mutex::new(None),
                 subs: Mutex::new(Vec::new()),
                 next_id: AtomicU64::new(1),
                 subscribers: AtomicU64::new(0),
@@ -382,6 +386,17 @@ impl MultiviewHandle {
     /// What the preview is actually built at, or `None` when there is none.
     pub fn preview_built(&self) -> Option<preview::PreviewShape> {
         *self.shared.preview_built.lock()
+    }
+
+    /// This mixer's own mosaic pipeline, while one is up.
+    ///
+    /// `observe::introspect` keeps one entry per name for the whole process,
+    /// so it answers "multiview" with whichever mixer registered last and
+    /// nothing at all once that one has gone. A test binary runs several
+    /// mixers at a time, and so does a host embedding more than one core, so
+    /// anything that means *this* mosaic has to come from this handle.
+    pub fn pipeline(&self) -> Option<gst::Pipeline> {
+        self.shared.pipeline.lock().as_ref().and_then(|weak| weak.upgrade())
     }
 
     pub fn mark_preview_built(&self, shape: Option<preview::PreviewShape>) {
@@ -643,6 +658,7 @@ impl Multiview {
 
         let pipeline = gst::Pipeline::with_name("multiview");
         crate::observe::register_pipeline("multiview", &pipeline);
+        *handle.shared.pipeline.lock() = Some(pipeline.downgrade());
         let fps = gst::Fraction::new(cfg.fps.max(1), 1);
 
         // force-live and ignore-inactive-pads together make the mosaic tick
@@ -1778,6 +1794,49 @@ mod tests {
         out
     }
 
+    /// What the preview looked like when it did not produce.
+    ///
+    /// This one only fails on a Linux runner nobody can reproduce, so the
+    /// failure has to carry the answer rather than the question: what each
+    /// compositor declared as its latency, which is what an aggregator holds
+    /// its first frame for; whether the appsink ever prerolled, which says
+    /// whether a buffer ever left the compositor at all; and for every preview
+    /// queue how much it is holding and whether the tee pad feeding it is
+    /// linked, which says whether the compositor is being starved or is
+    /// sitting on buffers it has not taken.
+    fn preview_forensics(pipeline: Option<gst::Pipeline>) -> String {
+        let Some(pipeline) = pipeline else {
+            return "\n--- this mixer has no mosaic pipeline to look at ---\n".to_string();
+        };
+        let mut out = String::from("\n--- what the preview looked like ---\n");
+        for name in ["mv-comp", "pv-comp"] {
+            match pipeline.by_name(name) {
+                Some(comp) => {
+                    let mut query = gst::query::Latency::new();
+                    let answered =
+                        comp.static_pad("src").map(|p| p.query(&mut query)).unwrap_or(false);
+                    let (live, min, max) = query.result();
+                    out.push_str(&format!(
+                        "  {name} latency: answered {answered}, live {live}, min {min}, max {max:?}\n"
+                    ));
+                }
+                None => out.push_str(&format!("  {name}: not in the pipeline\n")),
+            }
+        }
+        // Everything the preview is made of, and the mosaic compositor the
+        // tile tees push into, because a tee held by a full mosaic pad is one
+        // of the two ways a preview slot goes hungry.
+        for el in pipeline.children().iter().rev() {
+            let name = el.name();
+            if name.starts_with("pv-") || name == "mv-comp" {
+                element_report(el, "  ", &mut out);
+            }
+        }
+        out.push_str(&dump_dot("preview-no-frame", &[("multiview".to_string(), pipeline)]));
+        out.push('\n');
+        out
+    }
+
     /// Reported from live runs: a `test://` source went live and then stalled
     /// within about twenty seconds, repeatedly, whenever a client subscribed to
     /// the mosaic and left again.
@@ -2151,9 +2210,10 @@ mod tests {
         let frame = match frame {
             Ok(Ok(frame)) => frame,
             other => {
+                let report = preview_forensics(mv.pipeline());
                 let _ = handle.send(crate::mixer::Command::Shutdown);
                 panic!(
-                    "no preview frame within the two seconds scene.preview.frame waits: {:?}",
+                    "no preview frame within the two seconds scene.preview.frame waits: {:?}{report}",
                     other.map(|r| r.map(|_| ()))
                 );
             }
@@ -2162,7 +2222,8 @@ mod tests {
         assert_eq!(&frame[..2], &[0xFF, 0xD8], "that is not a JPEG");
         assert!(
             took < Duration::from_secs(2),
-            "the first preview frame took {took:?} of the two seconds the API waits"
+            "the first preview frame took {took:?} of the two seconds the API waits{}",
+            preview_forensics(mv.pipeline())
         );
 
         // And the reason it holds on a slow machine: neither compositor is
@@ -2171,10 +2232,15 @@ mod tests {
         // that is asserted: a mosaic that has inherited `vmix`'s second sits
         // that long before its first frame whatever the machine, and a two
         // second promise has nothing left to spend.
-        let pipeline =
-            crate::observe::introspect::pipeline("multiview").expect("no multiview pipeline");
+        // This mixer's own pipeline, not whatever the process wide
+        // introspection registry has under "multiview": a test binary runs
+        // several mixers at once and the registry answers for the last one to
+        // register, or for none at all once it has gone.
+        let pipeline = mv.pipeline().expect("this mixer has no mosaic pipeline");
         for name in ["mv-comp", "pv-comp"] {
-            let comp = pipeline.by_name(name).unwrap_or_else(|| panic!("no {name}"));
+            let comp = pipeline
+                .by_name(name)
+                .unwrap_or_else(|| panic!("no {name}{}", preview_forensics(mv.pipeline())));
             let pad = comp.static_pad("src").unwrap();
             let mut query = gst::query::Latency::new();
             assert!(pad.query(&mut query), "{name} would not answer a latency query");
@@ -2183,8 +2249,39 @@ mod tests {
             // 1.258 s on the mosaic and 0.45 s on the preview, against 8 fps.
             assert!(
                 min <= gst::ClockTime::from_mseconds(500),
-                "{name} declares {min} of latency, so its first frame is that late"
+                "{name} declares {min} of latency, so its first frame is that late{}",
+                preview_forensics(mv.pipeline())
             );
+        }
+
+        // Round two, the way the smoke asks again after a refusal, and with
+        // nothing the mosaic can draw: the armed scene names a source that has
+        // no tile, so not one slot is bound. A preview that shows black is an
+        // answer; a preview that never comes back is a wedged API call, and on
+        // GStreamer 1.24 that is exactly what an aggregator with no pad
+        // feeding it does.
+        drop(sub);
+        preview.set_scene(vec![preview::Cell {
+            source: "nowhere".into(),
+            x: 0,
+            y: 0,
+            width: canvas.width,
+            height: canvas.height,
+            alpha: 1.0,
+        }]);
+        let asked = Instant::now();
+        let mut sub = mv.subscribe_preview(PreviewRequest { fps: 8, width: 320, full: false });
+        match tokio::time::timeout(Duration::from_secs(2), sub.recv()).await {
+            Ok(Ok(frame)) => assert_eq!(&frame[..2], &[0xFF, 0xD8], "that is not a JPEG"),
+            other => {
+                let report = preview_forensics(mv.pipeline());
+                let _ = handle.send(crate::mixer::Command::Shutdown);
+                panic!(
+                    "a preview with nothing to draw produced nothing in {:?}: {:?}{report}",
+                    asked.elapsed(),
+                    other.map(|r| r.map(|_| ()))
+                );
+            }
         }
 
         drop(sub);
