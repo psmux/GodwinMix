@@ -262,7 +262,7 @@ pub(crate) fn push_preview_for(app: &crate::control::AppState) {
                 .collect()
         })
         .unwrap_or_default();
-    app.preview.set_scene(cells);
+    app.preview.set_scene(cells, app.scenes.armed_name());
 }
 
 /// The preview still.

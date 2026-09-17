@@ -220,6 +220,7 @@ mod tests {
         let status = MixerStatus {
             program: Some("cam1".into()),
             scene: None,
+            preview: Some("Two box".into()),
             sources: vec![page],
             outputs: vec![],
             multiview: MultiviewStatus {
@@ -250,6 +251,9 @@ mod tests {
         assert_eq!(v["program"], "cam1");
         assert!(v.get("status").is_none(), "snapshot must not be nested");
         assert_eq!(v["multiview"]["fps"], 8);
+        // The armed scene rides in the snapshot, so a page that loads while
+        // one is armed draws a preview without waiting for the next arm.
+        assert_eq!(v["preview"], "Two box");
         assert_eq!(v["running_time_ms"], 4200);
         assert_eq!(v["backend"]["hardware_accelerated"], true);
         // The source list drives both the row badges and the multiview labels,

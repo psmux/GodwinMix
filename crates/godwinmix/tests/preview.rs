@@ -257,3 +257,42 @@ async fn a_client_that_asked_for_the_mosaic_alone_is_sent_no_preview_frames() {
     let heard = quiet.preview_frames(1, 3).await;
     assert!(heard.is_empty(), "a client that asked for the mosaic was sent preview frames");
 }
+
+/// A page loaded while a scene is already armed has to know it.
+///
+/// `event/preview.changed` only reaches a client that was connected when the
+/// scene was armed. Everybody else reads the status document, so the armed
+/// scene is in it: `core.status` for a client that asks, and the snapshot a
+/// fresh connection is sent before its first delta.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_status_names_the_armed_scene() {
+    let (url, _quit) = serve().await;
+    let mut client = Client::open(&url).await;
+    client.call("core.subscribe", json!({})).await.expect("subscribing");
+
+    let cold = client.call("core.status", json!({})).await.expect("a status");
+    assert_eq!(cold.get("preview"), None, "nothing is armed, so nothing is named: {cold}");
+
+    let scene = client
+        .call("scene.create_from", json!({ "sources": ["bars", "ball"], "name": "two box" }))
+        .await
+        .expect("a scene to arm");
+    let id = scene["id"].as_str().expect("the new scene's id").to_string();
+    client.call("scene.preview.set", json!({ "scene": id })).await.expect("arming");
+
+    let armed = client.call("core.status", json!({})).await.expect("a status");
+    assert_eq!(armed["preview"], json!("two box"), "the status did not name it: {armed}");
+
+    // The second connection is the one that matters: it heard no
+    // `preview.changed` and still has a preview to draw.
+    let mut latecomer = Client::open(&url).await;
+    latecomer.call("core.subscribe", json!({})).await.expect("subscribing");
+    let seen = latecomer.call("core.status", json!({})).await.expect("a status");
+    assert_eq!(seen["preview"], json!("two box"), "a page loaded after the arm: {seen}");
+
+    // Disarming takes it out again, rather than leaving a name behind that
+    // would draw a preview of nothing.
+    client.call("scene.preview.set", json!({})).await.expect("disarming");
+    let clear = client.call("core.status", json!({})).await.expect("a status");
+    assert_eq!(clear.get("preview"), None, "disarming left the scene named: {clear}");
+}

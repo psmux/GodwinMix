@@ -240,6 +240,12 @@ pub struct MixerStatus {
     /// The scene on air, when one was taken by name.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub scene: Option<String>,
+    /// The armed scene, by name, or None with nothing armed. A page loaded
+    /// while a scene is already armed reads it here: `event/preview.changed`
+    /// says when it moves, and only a client that was connected at the time
+    /// hears that.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub preview: Option<String>,
     pub sources: Vec<SourceStatus>,
     pub outputs: Vec<OutputStatus>,
     pub multiview: MultiviewStatus,

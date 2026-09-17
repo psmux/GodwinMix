@@ -233,6 +233,14 @@ impl SceneServer {
         self.inner.lock().preview
     }
 
+    /// What the armed scene is called, for the status document. Held by id
+    /// here, named there, because that is how a client asks for one back.
+    pub fn armed_name(&self) -> Option<String> {
+        let inner = self.inner.lock();
+        let id = inner.preview?;
+        inner.doc.scene(&id).map(|s| s.name.clone())
+    }
+
     /// Arm a scene. The armed scene is the preview, and nothing is composited
     /// for it until a client subscribes with `ext.preview`.
     pub fn arm(&self, which: Option<&str>) -> Result<Option<SceneSummary>> {

@@ -1010,6 +1010,10 @@ pub struct Mixer {
     /// The armed scene, in canvas pixels, as the control plane last said. The
     /// preview compositor draws these when one exists.
     preview_cells: Vec<crate::multiview::preview::Cell>,
+    /// What that scene is called, for the status document. The name comes from
+    /// the scene server with the cells, because the scene collection lives
+    /// there and nothing in here knows what a scene is.
+    preview_scene: Option<String>,
 }
 
 /// A scene as the compositor has it: a name to report and the placements that
@@ -1574,6 +1578,7 @@ impl Mixer {
             program_scene: None,
             ramp: None,
             preview_cells: Vec::new(),
+            preview_scene: None,
         };
         Ok((mixer, handle, rx, bus_rx))
     }
@@ -4080,6 +4085,10 @@ impl Mixer {
 
         MixerStatus {
             scene: self.program_scene.as_ref().map(|s| s.name.clone()),
+            // The armed scene, so a page that loads while one is already armed
+            // has a preview to draw. `event/preview.changed` only reaches a
+            // client that was connected when it moved.
+            preview: self.preview_scene.clone(),
             program: self.program_source.clone(),
             sources,
             outputs: self.outputs.iter().map(|o| o.status()).collect(),
@@ -4407,7 +4416,10 @@ impl Mixer {
                 let _ = reply.send(self.open_local_preview(&target));
             }
             P::CloseLocal { target } => self.close_local_preview(&target),
-            P::Scene { cells } => self.set_preview_cells(cells),
+            P::Scene { cells, scene } => {
+                self.preview_scene = scene;
+                self.set_preview_cells(cells);
+            }
         }
     }
 
