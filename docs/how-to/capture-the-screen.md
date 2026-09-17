@@ -48,7 +48,7 @@ type = "screen/source"
 params = { monitor = 1, show_cursor = false }
 ```
 
-`gmx ctl status` shows `lyrics` going live. `gmx take lyrics` puts it on air.
+`gmx ctl status` shows `lyrics` going live. `gmx ctl take lyrics` puts it on air.
 
 Turn the pointer off for lyrics and slides; leave it on for a tutorial where
 the audience is meant to follow the mouse.

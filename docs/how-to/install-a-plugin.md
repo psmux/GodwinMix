@@ -47,7 +47,7 @@ everything the plugin declares. It answers with what it added:
     installed bars v0.1.0
       provides bars/source
 
-    Add one with:  gmx source add <id> --type bars/source
+    Add one with:  gmx ctl source add <id> --type bars/source
 
 Nothing restarts. The programme keeps going while this happens.
 
@@ -55,18 +55,23 @@ Nothing restarts. The programme keeps going while this happens.
 
 The `type` id from that listing is what goes in `type` when you add a source:
 
-    gmx source add cam1 --type bars/source
+    gmx ctl source add cam1 --type bars/source
     gmx ctl status
 
 Within a few seconds `gmx ctl status` shows `cam1` as live and you can take it
 to programme:
 
-    gmx take cam1
+    gmx ctl take cam1
 
 If the plugin declared a URI scheme, a bare address works too and picks the
 plugin by rank, the way `rtmp://` already picks the RTMP source:
 
-    gmx source add cam1 ndi://CAM\ 1\ \(Studio\)
+    gmx ctl source add feed srt://203.0.113.10:9000
+
+The scheme only chooses the plugin. Whether the address is enough on its own is
+that plugin's business: `srt/source` reads it, while `ndi/source` wants its
+sender in `name` or `address`, so an NDI source is named with `--type` and
+given its settings.
 
 ## See what it costs
 
@@ -110,7 +115,14 @@ the safe state.
 
 ## Change its settings
 
-    gmx ctl ... plugin.settings.get     # or over HTTP: GET /api/v1/plugins/bars/settings
+There is no `gmx` subcommand for this yet, so it is two HTTP calls:
+
+    curl -s localhost:8080/api/v1/plugins/bars/settings
+    curl -s -X POST localhost:8080/api/v1/plugins/bars/settings \
+      -H 'content-type: application/json' -d '{"settings":{"<key>":"<value>"}}'
+
+`gmx plugin describe bars` prints the schema, so it says what the keys are.
+Only the keys you name change.
 
 Settings are written in your config under `[plugins.<name>]` and the core never
 reads inside them: the table is handed to the plugin named and nothing else
