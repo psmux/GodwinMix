@@ -98,9 +98,22 @@ the three client suites and `python3 clients/gen/generate.py --check`.
    and property is made the first time a transition drives it and kept for
    the pad's life, a transition rewrites the curve behind it, and settling
    collapses the curve and disables it. Two ten minute soaks after that ran
-   to the end with the core up, descriptors and threads flat. The two bars
-   still missed are the constant 50 ms stall gauge and resident memory,
-   about 2.5 MB a round, both older than any of this.
+   to the end with the core up, descriptors and threads flat.
+
+   The stall gauge's 50 ms was real, and is fixed: hiding a slot that still
+   had a source bound to it shut its valve, and the programme compositor
+   then waited out its whole upstream latency, one second, for a pad that
+   had gone quiet, on every take that took a slot off air. A bound slot
+   keeps feeding while hidden now and the gauge reads 34.3 ms, against a
+   bar of 34; the last 0.4 ms is the source add and remove phase. Resident
+   memory still grows, about 1 MB a second while the mosaic is up, and is
+   measured to be GStreamer buffer pools on the programme path ratcheting
+   their high water mark each time the mosaic taps and untaps the tee, not
+   a leak: nothing is unreachable and no element, pad or pool outlives its
+   round. Bounding the raw path's queues by buffers as well as by time
+   would cap it and changes backpressure on the programme tee, so it waits
+   for its own tests. Every record is in `bench/results`, and `dev/soak.sh
+   --skip` bisects by phase.
 4. **Alpha graphics key to black**, because the graph is I420 throughout. The
    four edits needed are listed in `docs/reference/graphics.md`.
 5. **Smaller gaps**, each with its file and line in the git history: only
