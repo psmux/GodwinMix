@@ -2163,7 +2163,7 @@ mod tests {
             width: canvas.width,
             height: canvas.height,
             alpha: 1.0,
-        }]);
+        }], None);
 
         for round in 0..40u64 {
             let sub = mv.subscribe_preview(PreviewRequest { fps: 8, width: 320, full: false });
@@ -2244,7 +2244,7 @@ mod tests {
                 height: canvas.height,
                 alpha: 1.0,
             },
-        ]);
+        ], None);
 
         // Long enough that the sources, the programme and their running times
         // are all well past zero when the compositor is built.
@@ -2330,7 +2330,7 @@ mod tests {
             width: canvas.width,
             height: canvas.height,
             alpha: 1.0,
-        }]);
+        }], None);
         let asked = Instant::now();
         let mut sub = mv.subscribe_preview(PreviewRequest { fps: 8, width: 320, full: false });
         match read_past_lag(&mut sub, Duration::from_secs(2)).await {
