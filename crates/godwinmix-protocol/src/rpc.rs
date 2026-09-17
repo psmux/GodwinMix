@@ -147,7 +147,12 @@ impl Subscription {
             "meters" => self.ext.meters,
             "tally" => self.ext.tally,
             "source.position" => self.ext.positions,
-            "multiview.layout" | "multiview.frame" => self.ext.wants_multiview(),
+            "multiview.frame" => self.ext.wants_multiview(),
+            // The preview is composited in the multiview pipeline, so a client
+            // that asked for it alone is still owed the layout: that is where
+            // `preview_empty` says whether a picture is coming at all.
+            "multiview.layout" => self.ext.wants_multiview() || self.ext.wants_preview(),
+            "preview.frame" => self.ext.wants_preview(),
             // The stream's own bookkeeping is never filtered out: a client
             // that missed a flush would never render.
             "snapshot" | "flush" | "resync" => true,
@@ -282,7 +287,42 @@ impl MeterBatch {
 /// answer to exactly that.
 pub const FRAME_HEADER_BYTES: usize = 16;
 
+/// The top bit of the sequence number, which names the picture a frame
+/// carries: clear for a mosaic frame, set for a preview frame.
+///
+/// One socket carries both, so a client has to tell them apart before it
+/// decodes anything, and the header has no spare field: every client in the
+/// tree reads exactly sixteen bytes at fixed offsets. A seventeenth byte would
+/// move all of them, so the stream takes the high bit of the counter instead.
+/// Thirty one bits is still eighty years of frames at thirty a second, and the
+/// counter was documented as wrapping in any case.
+pub const PREVIEW_STREAM: u32 = 1 << 31;
+
+/// The frame counter with the stream bit taken off.
+pub fn frame_seq(seq: u32) -> u32 {
+    seq & !PREVIEW_STREAM
+}
+
+/// Whether a header's sequence number names a preview frame.
+pub fn is_preview_frame(seq: u32) -> bool {
+    seq & PREVIEW_STREAM != 0
+}
+
 pub fn frame_header(seq: u32, layout: u32, running_time_ms: u64) -> [u8; FRAME_HEADER_BYTES] {
+    write_header(frame_seq(seq), layout, running_time_ms)
+}
+
+/// The same header in front of a preview JPEG.
+///
+/// The preview is one picture rather than a sheet of cells, so there is no
+/// grid to name and the layout id is zero. The stream bit is what a client
+/// reads to send this frame to the pane beside the programme instead of
+/// cutting tiles out of it.
+pub fn preview_frame_header(seq: u32, running_time_ms: u64) -> [u8; FRAME_HEADER_BYTES] {
+    write_header(frame_seq(seq) | PREVIEW_STREAM, 0, running_time_ms)
+}
+
+fn write_header(seq: u32, layout: u32, running_time_ms: u64) -> [u8; FRAME_HEADER_BYTES] {
     let mut out = [0u8; FRAME_HEADER_BYTES];
     out[0..4].copy_from_slice(&seq.to_le_bytes());
     out[4..8].copy_from_slice(&layout.to_le_bytes());
@@ -293,6 +333,9 @@ pub fn frame_header(seq: u32, layout: u32, running_time_ms: u64) -> [u8; FRAME_H
 /// Read a header back. Here so that a client library in any language has a
 /// reference implementation to check itself against, and so the test below is
 /// testing the pair rather than a restatement of the writer.
+///
+/// The sequence number comes back as it was written, stream bit and all, so a
+/// caller reads it with `is_preview_frame` and counts with `frame_seq`.
 pub fn read_frame_header(bytes: &[u8]) -> Option<(u32, u32, u64)> {
     if bytes.len() < FRAME_HEADER_BYTES {
         return None;
@@ -509,6 +552,42 @@ mod tests {
         // in JavaScript passes `true` to `getUint32`.
         assert_eq!(h[0], (4821u32 & 0xff) as u8);
         assert!(read_frame_header(&h[..15]).is_none());
+    }
+
+    /// One socket carries the mosaic and the preview, so the header has to say
+    /// which picture a frame is before anybody decodes it.
+    #[test]
+    fn a_preview_frame_is_the_same_header_with_the_stream_bit_set() {
+        let mosaic = frame_header(9, 7, 500);
+        let preview = preview_frame_header(9, 500);
+        assert_eq!(preview.len(), FRAME_HEADER_BYTES, "the header did not grow");
+        let (seq, layout, time) = read_frame_header(&preview).unwrap();
+        assert!(is_preview_frame(seq));
+        assert_eq!(frame_seq(seq), 9, "the counter survives beside the bit");
+        assert_eq!(layout, 0, "one picture, so there is no grid to name");
+        assert_eq!(time, 500);
+        let (seq, _, _) = read_frame_header(&mosaic).unwrap();
+        assert!(!is_preview_frame(seq), "a mosaic frame is what it always was");
+        // A counter that has run past two billion frames wraps into the bit
+        // unless the writer masks it, and a mosaic frame would then be painted
+        // as a preview.
+        let (high, _, _) = read_frame_header(&frame_header(u32::MAX, 7, 0)).unwrap();
+        assert!(!is_preview_frame(high));
+    }
+
+    /// The expensive streams are governed by their `ext` key alone, and the
+    /// preview's layout says whether a picture is coming.
+    #[test]
+    fn the_preview_stream_follows_its_own_ext_key() {
+        let on: Subscription = Subscription {
+            patterns: vec!["*".into()],
+            ext: serde_json::from_value(json!({ "preview": { "fps": 8 } })).unwrap(),
+        };
+        assert!(on.wants("preview.frame"));
+        assert!(on.wants("multiview.layout"), "preview alone is still owed the layout");
+        assert!(!on.wants("multiview.frame"), "and is not owed the mosaic it rides on");
+        let off = Subscription { patterns: vec!["*".into()], ext: Ext::default() };
+        assert!(!off.wants("preview.frame"));
     }
 
     /// Two clients that joined at different moments have to agree on the
