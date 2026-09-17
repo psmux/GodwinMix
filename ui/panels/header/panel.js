@@ -69,10 +69,12 @@ class HeaderPanel extends HTMLElement {
   }
 
   render(s) {
-    const on = !!s.program;
-    const source = on ? s.sources.find((x) => x.id === s.program) : null;
+    // A multi item scene puts nothing in `program`, so reading that alone
+    // said "black" over a live programme.
+    const on = !!(s.program || s.scene);
+    const source = s.program ? s.sources.find((x) => x.id === s.program) : null;
     this.tally.classList.toggle("on", on);
-    this.tally.lastChild.textContent = source ? source.name : on ? s.program : "black";
+    this.tally.lastChild.textContent = source ? source.name : s.program || s.scene || "black";
     document.body.classList.toggle("onair", on);
     this.uptime.textContent = fmtDuration(s.uptime_secs);
     const b = s.backend;

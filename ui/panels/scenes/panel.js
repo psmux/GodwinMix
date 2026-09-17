@@ -197,7 +197,9 @@ class ScenesPanel extends HTMLElement {
 
   /** The red frame on air and the amber one armed, from the core's own view. */
   paintTally() {
-    const program = this.client.state.program;
+    // The live scene is `scene`; `program` carries a source id when the
+    // programme is a single source, which is a one item scene's shorthand.
+    const program = this.client.state.scene || this.client.state.program;
     const armed = this.client.state.preview || this.scenes.armed();
     for (const [id, tile] of this.tiles) {
       const summary = this.scenes.summary(id);
