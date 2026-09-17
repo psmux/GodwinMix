@@ -2757,7 +2757,8 @@
           "type": "array"
         },
         "preview": {
-          "description": "The armed scene, by name, or None with nothing armed. A page loaded\nwhile a scene is already armed reads it here: `event/preview.changed`\nsays when it moves, and only a client that was connected at the time\nhears that.",
+          "default": null,
+          "description": "The armed scene, by name, or None with nothing armed. A page loaded\nwhile a scene is already armed reads it here: `event/preview.changed`\nsays when it moves, and only a client that was connected at the time\nhears that.\n\nAlways written, never skipped when empty, because a client that keeps\nthe armed scene between snapshots has to be able to tell \"nothing is\narmed\" from \"this core is too old to say\".",
           "type": [
             "string",
             "null"

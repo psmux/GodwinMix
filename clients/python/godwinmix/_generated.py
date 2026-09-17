@@ -811,7 +811,7 @@ class MixerStatus(TypedDict, total=False):
     multiview: MultiviewStatus
     outputs: List[OutputStatus]
     preview: Optional[str]
-    # The armed scene, by name, or None with nothing armed. A page loaded while a scene is already armed reads it here: `event/preview.changed` says when it moves, and only a client that was connected at the time hears that.
+    # The armed scene, by name, or None with nothing armed. A page loaded while a scene is already armed reads it here: `event/preview.changed` says when it moves, and only a client that was connected at the time hears that. Always written, never skipped when empty, because a client that keeps the armed scene between snapshots has to be able to tell "nothing is armed" from "this core is too old to say".
     program: Optional[str]
     # Source currently on program, or None while the slate is showing. A scene of one full canvas item reports that item's source here too, so anything written against this before scenes existed still reads.
     running_time_ms: int
