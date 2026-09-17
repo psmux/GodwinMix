@@ -234,6 +234,39 @@ impl Nodes {
         self.inner.read().get(name).and_then(|r| r.link.clone()).filter(|l| !l.is_closed())
     }
 
+    /// Is this the bridge the node is on right now?
+    ///
+    /// A node that reconnects gets a new connection, and the one it replaced
+    /// has a task still winding down behind it. That task must not tear down
+    /// the node the new connection has just set up, so it asks this first.
+    pub fn holds(&self, name: &str, peer: &Arc<Peer>) -> bool {
+        self.inner
+            .read()
+            .get(name)
+            .and_then(|r| r.link.as_ref())
+            .is_some_and(|live| Arc::ptr_eq(live, peer))
+    }
+
+    /// How long since this node last beat. `None` if there is no such node.
+    pub fn heartbeat_age_ms(&self, name: &str) -> Option<u64> {
+        self.inner.read().get(name).map(NodeRecord::heartbeat_age_ms)
+    }
+
+    /// What this node's bridge is doing, in words. For a log line and for the
+    /// failure message of a test that expected it to have gone.
+    pub fn link_state(&self, name: &str) -> String {
+        match self.inner.read().get(name) {
+            None => "no record".to_string(),
+            Some(record) => match &record.link {
+                None => "no link".to_string(),
+                Some(link) if link.is_closed() => {
+                    format!("closed ({})", link.reason().unwrap_or_else(|| "no reason".into()))
+                }
+                Some(_) => "open".to_string(),
+            },
+        }
+    }
+
     /// Where a node sends media from, for building the core's receive side.
     pub fn media_host(&self, name: &str) -> Option<String> {
         self.inner.read().get(name).map(|r| r.media_host.clone()).filter(|h| !h.is_empty())

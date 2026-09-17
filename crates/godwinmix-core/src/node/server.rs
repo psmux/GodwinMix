@@ -32,6 +32,15 @@ use tokio_rustls::TlsAcceptor;
 /// The port a core listens for nodes on unless the config says otherwise.
 pub const DEFAULT_PORT: u16 = 8443;
 
+/// How often a live bridge checks that its node is still beating.
+const WATCHDOG_EVERY: std::time::Duration = std::time::Duration::from_millis(500);
+
+/// How long a bridge stays up for a node that has stopped beating. Twice the
+/// tolerance the registry judges a node by, so a node that is merely late gets
+/// a second chance and one that is gone stops being offered within seconds
+/// rather than whenever its socket eventually notices.
+const SILENCE_GRACE_MS: u64 = super::wire::HEARTBEAT_TOLERANCE_MS * 2;
+
 /// Something that wants to know when a node does something.
 ///
 /// A callback rather than an event bus, because the engine's event bus lives
@@ -249,7 +258,41 @@ impl NodeServer {
         let handler = self.clone().handler(name.clone(), from, identity, slot.clone());
         let (peer, pump) = Peer::start(ws, handler);
         *slot.lock() = Some(peer.clone());
-        let why = pump.await;
+        let mut pump = std::pin::pin!(pump);
+        // Two ways this ends. The socket ends, which is the ordinary one, or
+        // the node stops beating while the socket stays up, which is a machine
+        // that has wedged or a network that is dropping everything silently.
+        // The second one has to be bounded: the registry writes a silent node
+        // off after the heartbeat tolerance, and until this returns the node is
+        // still offering its plugins to the picker. A departure nothing hears
+        // of is the case `NodeRecord::online` exists to catch, so the bridge
+        // catches it too rather than parking on a read that will never wake.
+        let why = loop {
+            tokio::select! {
+                why = &mut pump => break why,
+                _ = tokio::time::sleep(WATCHDOG_EVERY) => {
+                    if !self.nodes.holds(&name, &peer) {
+                        continue;
+                    }
+                    let age = self.nodes.heartbeat_age_ms(&name).unwrap_or(0);
+                    if age >= SILENCE_GRACE_MS {
+                        break format!(
+                            "this node's socket is still open and it has not beaten for {age} ms, \
+                             which is past the {SILENCE_GRACE_MS} ms a bridge waits. Check the \
+                             machine and the network between it and the core"
+                        );
+                    }
+                }
+            }
+        };
+        // A connection the node has already replaced tears nothing down: its
+        // hello has been overtaken by a newer one and forgetting the name here
+        // would withdraw the plugins the live connection just offered.
+        if !self.nodes.holds(&name, &peer) {
+            tracing::info!(node = %name, %from, why, "a bridge a node had already replaced ended");
+            return Ok(());
+        }
+        peer.close(&why);
         // Its plugins stop being offered the moment its socket goes, and
         // before the registry says it has gone: anyone who reads the node as
         // offline must find nothing offered from it, and the other order left
