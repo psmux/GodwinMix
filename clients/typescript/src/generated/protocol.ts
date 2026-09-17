@@ -744,6 +744,7 @@ export interface MixerStatus {
   backend: BackendInfo;
   multiview: MultiviewStatus;
   outputs: OutputStatus[];
+  preview?: string | null;
   program?: string | null;
   running_time_ms: number;
   scene?: string | null;
