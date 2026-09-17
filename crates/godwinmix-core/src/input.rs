@@ -987,6 +987,14 @@ impl InputPipeline {
                 }
                 self.vtee.release_request_pad(&teepad);
             }
+            // Wake the branch before anything on it goes to NULL. Its queue's
+            // thread can be parked inside the proxysink at the end, pushing
+            // into a mosaic that has stopped reading, and NULL joins that
+            // thread: a macOS runner printed the queue "Paused going to Null"
+            // with the mixer thread held behind it for good. A flush start
+            // reaches a parked thread, and nothing here comes back, so there
+            // is no flush stop.
+            gstutil::wake_chain(&sink);
         }
         for part in ["vthumb-q", "trate", "tscale", "tcaps", "tproxy"] {
             if let Some(el) = self.pipeline.by_name(&format!("{}-{part}", self.id)) {
