@@ -3177,6 +3177,10 @@
     "OutputStatus": {
       "additionalProperties": true,
       "properties": {
+        "has_key": {
+          "description": "False while the address still carries a placeholder a preset wrote in\nfor somebody to replace, such as `YOUR-STREAM-KEY`. The key itself\nnever leaves the core, so this is how a client knows to put its own\nform up and say \"needs a stream key\" without ever seeing the key.\n\nTrue for an address with no key in it at all, an SRT one for instance,\nbecause there is nothing there for anybody to replace.",
+          "type": "boolean"
+        },
         "id": {
           "type": "string"
         },
@@ -3200,6 +3204,7 @@
       "required": [
         "id",
         "uri_host",
+        "has_key",
         "state",
         "reconnects",
         "queue_secs"
@@ -4373,6 +4378,42 @@
         "scene",
         "item",
         "props"
+      ],
+      "type": "object"
+    },
+    "SetOutputRequest": {
+      "additionalProperties": true,
+      "description": "`output.set`. Change one destination in place, naming only what moves.\n\nThe id picks the output and is never changed by this; renaming one is a\nremove and an add, because the id is what alerts, hooks and the runtime\nstore call it.",
+      "properties": {
+        "id": {
+          "description": "The destination to change.",
+          "type": "string"
+        },
+        "policy": {
+          "description": "\"own\" or \"cdn\", as `output.add`.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "queue_secs": {
+          "description": "Seconds of encoded data to hold before the muxer.",
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "uri": {
+          "description": "The whole new address, stream key and all. Write only: no method ever\nreads it back, so leaving it out keeps the address already in force\nand a client can offer \"change the buffer\" without holding the key.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "id"
       ],
       "type": "object"
     },
@@ -6998,6 +7039,32 @@
       "scope": "operate",
       "since": "1",
       "summary": "Stop sending to a destination and forget it. Other outputs are unaffected."
+    },
+    {
+      "destructive": false,
+      "idempotent": true,
+      "mcp": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "profile": "standard",
+        "readOnlyHint": false,
+        "tool": "set_output"
+      },
+      "mutating": true,
+      "name": "output.set",
+      "params": {
+        "$ref": "#/$defs/SetOutputRequest"
+      },
+      "rest": {
+        "method": "POST",
+        "path": "/api/v1/outputs/{id}/set"
+      },
+      "result": {
+        "$ref": "#/$defs/OutputStatus"
+      },
+      "scope": "operate",
+      "since": "1",
+      "summary": "Change a destination in place: a new address with a new stream key, a new reconnect policy, a deeper outage buffer. The address is write only, so a client that only wants the buffer never has to hold the key."
     },
     {
       "destructive": false,

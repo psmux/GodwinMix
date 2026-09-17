@@ -913,6 +913,8 @@ class Ograf(TypedDict, total=False):
     version: Optional[str]
 
 class OutputStatus(TypedDict, total=False):
+    has_key: bool
+    # False while the address still carries a placeholder a preset wrote in for somebody to replace, such as `YOUR-STREAM-KEY`. The key itself never leaves the core, so this is how a client knows to put its own form up and say "needs a stream key" without ever seeing the key. True for an address with no key in it at all, an SRT one for instance, because there is nothing there for anybody to replace.
     id: str
     queue_secs: float
     # Seconds of encoded data waiting in the pre-muxer queue. A number that climbs and stays high means the destination cannot keep up.
@@ -1266,6 +1268,18 @@ class SetItemRequest(TypedDict, total=False):
     scene: str
     seq: Optional[int]
     # A client's own sequence number, echoed on the patch so a drag can discard the echoes of moves it has already drawn past.
+
+class SetOutputRequest(TypedDict, total=False):
+    """`output.set`. Change one destination in place, naming only what moves. The id picks the output and is never changed by this; renaming one is a remove and an add, because the id is what alerts, hooks and the runtime store call it."""
+
+    id: str
+    # The destination to change.
+    policy: Optional[str]
+    # "own" or "cdn", as `output.add`.
+    queue_secs: Optional[float]
+    # Seconds of encoded data to hold before the muxer.
+    uri: Optional[str]
+    # The whole new address, stream key and all. Write only: no method ever reads it back, so leaving it out keeps the address already in force and a client can offer "change the buffer" without holding the key.
 
 class SetSettingsRequest(TypedDict, total=False):
     """`plugin.settings.set`."""
@@ -1698,6 +1712,7 @@ METHODS = (
     {"name": "output.list", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/outputs"), "summary": 'Every destination, with its state, reconnect count and how much is buffered.'},
     {"name": "output.reconnect", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/outputs/{id}/reconnect"), "summary": "Drop and re-establish one destination's connection now, without waiting for its reconnect policy."},
     {"name": "output.remove", "scope": "operate", "mutating": True, "destructive": True, "rest": ("DELETE", "/api/v1/outputs/{id}"), "summary": 'Stop sending to a destination and forget it. Other outputs are unaffected.'},
+    {"name": "output.set", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/outputs/{id}/set"), "summary": 'Change a destination in place: a new address with a new stream key, a new reconnect policy, a deeper outage buffer. The address is write only, so a client that only wants the buffer never has to hold the key.'},
     {"name": "pipeline.clock", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/pipeline/clock"), "summary": 'The clock every pipeline is running against, and how far each one has got.'},
     {"name": "pipeline.dot", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/pipeline/dot"), "summary": 'One pipeline as a graphviz graph: every element, every pad and the caps negotiated between them.'},
     {"name": "pipeline.latency", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/pipeline/latency"), "summary": 'How much delay one pipeline is carrying, and which stage put it there.'},
@@ -2182,6 +2197,27 @@ class GeneratedMethods:
         params: Dict[str, Any] = {}
         params["id"] = id
         return await self._call("output.remove", params)
+
+    async def output_set(
+        self,
+        id: str,
+        *,
+        policy: Optional[str] = None,
+        queue_secs: Optional[float] = None,
+        uri: Optional[str] = None,
+        **extra: Any,
+    ) -> OutputStatus:
+        """Change a destination in place: a new address with a new stream key, a new reconnect policy, a deeper outage buffer. The address is write only, so a client that only wants the buffer never has to hold the key."""
+        params: Dict[str, Any] = {}
+        params["id"] = id
+        if policy is not None:
+            params["policy"] = policy
+        if queue_secs is not None:
+            params["queue_secs"] = queue_secs
+        if uri is not None:
+            params["uri"] = uri
+        params.update(extra)
+        return await self._call("output.set", params)
 
     async def pipeline_clock(
         self,

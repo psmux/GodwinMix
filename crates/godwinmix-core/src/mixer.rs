@@ -6674,6 +6674,76 @@ mod tests {
         mix.shutdown();
     }
 
+    /// The whole point of `output.set`: a destination the church preset left
+    /// with a placeholder key gets a real address without the operator ever
+    /// opening a TOML file, and keeps its id, so alerts and hooks still call
+    /// it the same thing.
+    ///
+    /// The address it is pointed at is a port nothing is listening on. That is
+    /// deliberate: an operator retyping a key is almost always doing it
+    /// because the destination is not working, and the swap must not wait on a
+    /// connection that is never going to happen.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn setting_an_output_replaces_its_address_and_keeps_its_id() {
+        let dir = crate::observe::tempdir("output-set");
+        let store = dir.join("godwinmix.runtime.toml");
+        let mut mix = with_sources(&["cam1"]).await;
+        mix.persist_runtime_to(store.clone());
+
+        let placeholder =
+            OutputConfig::bare("youtube", "rtmp://127.0.0.1:1935/live2/YOUR-STREAM-KEY");
+        mix.add_output(&placeholder).expect("a destination nothing is listening on still attaches");
+        let before = mix.status();
+        let out = before.outputs.iter().find(|o| o.id == "youtube").expect("the output is listed");
+        assert!(!out.has_key, "a placeholder address must not read as having a key");
+        let host_before = out.uri_host.clone();
+
+        let mut wanted = placeholder.clone();
+        wanted.uri = "rtmp://127.0.0.1:1935/live2/abcd-efgh-ijkl-mnop".into();
+        wanted.queue_secs = 7.0;
+        mix.set_output(&wanted).expect("the destination is changed in place");
+
+        let after = mix.status();
+        assert_eq!(
+            after.outputs.iter().filter(|o| o.id == "youtube").count(),
+            1,
+            "the swap must leave exactly one output under the id"
+        );
+        let out =
+            after.outputs.iter().find(|o| o.id == "youtube").expect("the output is still listed");
+        assert!(out.has_key, "the real key must read as a key");
+        assert_eq!(out.uri_host, host_before, "the host did not change, so the label must not");
+        assert!(
+            !serde_json::to_string(&after).unwrap().contains("abcd-efgh-ijkl-mnop"),
+            "the key must not appear anywhere in a status a client reads"
+        );
+
+        // Persisted the way add and remove already persist, so it survives a
+        // restart. This is the file the operator no longer has to edit.
+        let saved = std::fs::read_to_string(&store).expect("the runtime store was written");
+        assert!(saved.contains("abcd-efgh-ijkl-mnop"), "the new address was not saved: {saved}");
+        assert!(!saved.contains("YOUR-STREAM-KEY"), "the placeholder outlived the change: {saved}");
+        assert!(saved.contains("queue_secs = 7"), "the buffer was not saved: {saved}");
+
+        // The programme is untouched throughout: the encoder is shared and
+        // this only ever rebuilt one output's own pipeline.
+        assert_eq!(after.program.as_deref(), before.program.as_deref());
+        mix.shutdown();
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// An id nobody added is a mistake worth naming, not a silent add.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn setting_an_output_that_is_not_there_says_so() {
+        let mut mix = with_sources(&[]).await;
+        let err = mix
+            .set_output(&OutputConfig::bare("nope", "rtmp://127.0.0.1:1935/live/key"))
+            .expect_err("there is no output called nope");
+        assert!(format!("{err:#}").contains("nope"), "{err:#}");
+        assert!(mix.status().outputs.is_empty(), "nothing should have been added");
+        mix.shutdown();
+    }
+
     /// Two timers firing while the mixer is busy must not both queue. A
     /// supervisor tick is worth doing once.
     #[test]
