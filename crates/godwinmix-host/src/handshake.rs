@@ -56,15 +56,22 @@ pub fn negotiate_transport(declared: &[Transport]) -> anyhow::Result<Transport> 
 ///
 /// A `service`, a `device` and a `transition` have no media contract: they are
 /// control plane only, and the manifest validator does not ask them for a
-/// transport. So one that declares none is recorded as `container`, which is
-/// the transport whose media address is empty, and no socket is ever made.
+/// transport. So one of those is recorded as `container`, which is the
+/// transport whose media address is empty, and no socket is ever made.
 /// Anything that does carry media must still declare one, and the error says
 /// which to pick.
+///
+/// What it declared is not consulted for those, because `initialize` is sent
+/// once per process and names what the process can do, not what this provide
+/// needs. One binary serving both `camera/source` and `camera/devices` says
+/// `unixfd, container` either way, and a device instance given the socket
+/// asks for a media address nobody can give it: the handshake then fails and
+/// the mixer has no camera to discover. That is what it did.
 pub fn negotiate_transport_for(
     declared: &[Transport],
     carries_media: bool,
 ) -> anyhow::Result<Transport> {
-    if declared.is_empty() && !carries_media {
+    if !carries_media {
         return Ok(Transport::Container);
     }
     anyhow::ensure!(
@@ -215,6 +222,18 @@ mod tests {
         let err = negotiate_transport(&[Transport::Unixfd, Transport::Shm])
             .expect_err("neither is available here");
         assert!(format!("{err}").contains("container"), "{err}");
+    }
+
+    #[test]
+    fn a_device_provide_gets_the_container_whatever_the_process_declared() {
+        // The camera plugin: one binary, a source provide that wants the
+        // socket and a device provide that discovers cameras. `initialize`
+        // names the process's transports, so the device instance arrives here
+        // carrying `unixfd` and must still be given the container.
+        let t = negotiate_transport_for(&[Transport::Unixfd, Transport::Container], false)
+            .expect("a device provide needs no media address");
+        assert_eq!(t, Transport::Container);
+        assert_eq!(negotiate_transport_for(&[], false).unwrap(), Transport::Container);
     }
 
     #[test]

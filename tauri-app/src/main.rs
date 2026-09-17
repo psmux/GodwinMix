@@ -9,6 +9,8 @@
 //
 //   * the mixer itself, bundled as a sidecar, started on a free port with a
 //     generated token and stopped again when the app quits;
+//   * the camera, the screen and the microphone, which are plugins, put where
+//     the mixer will find them before it starts;
 //   * a connect dialog, so the same app drives a headless server;
 //   * a tray icon, a menu, remembered window geometry, one instance;
 //   * two ways out, as menu items and as `godwinmix://quit` and
@@ -21,6 +23,7 @@
 
 mod commands;
 mod core_link;
+mod plugins;
 mod settings;
 mod sidecar;
 mod ui;
@@ -222,6 +225,58 @@ fn bundled_runtime_check(app: &AppHandle) -> Option<i32> {
     Some(0)
 }
 
+/// Prove the mixer loaded the device plugins the app carries.
+///
+/// `None` when this build carries none, the same way the runtime check is
+/// skipped by a build with no GStreamer in it. Otherwise every plugin staged
+/// in the bundle has to come back from `/api/v1/plugins` at the version the
+/// bundle carries and with nothing wrong with it, because "it is in the
+/// resources directory" and "the mixer loaded it" are different claims and
+/// only the second one gives an operator a camera.
+///
+/// The list is read off the bundle rather than written down here. A fourth
+/// plugin added to `dev/bundle-plugins.sh` is then checked by this without
+/// anybody remembering to come back and add it.
+async fn bundled_plugins_check(app: &AppHandle, target: &Target) -> Option<i32> {
+    let root = plugins::bundled(app)?;
+    let carried = plugins::versions(&root);
+    println!("{} device plugins in {}", carried.len(), root.display());
+
+    let http = app.state::<Shell>().http.clone();
+    let installed = match core_link::plugins(&http, target).await {
+        Ok(installed) => installed,
+        Err(why) => {
+            println!("FAIL the mixer would not say what it has installed: {why}");
+            return Some(1);
+        }
+    };
+
+    let mut failed = false;
+    for (name, version, _) in carried {
+        match installed.iter().find(|(got, _, _)| *got == name) {
+            Some((_, got, None)) if *got == version => println!("  {name} {version} loaded"),
+            Some((_, got, None)) => {
+                println!("FAIL the mixer loaded {name} {got}, and the app carries {version}");
+                failed = true;
+            }
+            Some((_, _, Some(problem))) => {
+                println!("FAIL the mixer will not load {name}: {problem}");
+                failed = true;
+            }
+            None => {
+                println!("FAIL the mixer did not find {name} at all");
+                failed = true;
+            }
+        }
+    }
+    if failed {
+        println!("the plugins in the app are not the ones the mixer has; rebuild them with dev/bundle-plugins.sh");
+        return Some(1);
+    }
+    println!("every device plugin the app carries is loaded and has no problem");
+    Some(0)
+}
+
 /// `--headless-check`: the acceptance test for the sidecar, runnable on a
 /// machine with no one at the keyboard and in CI.
 ///
@@ -268,6 +323,13 @@ async fn headless_check(app: &AppHandle) -> i32 {
         Err(why) => {
             println!("FAIL it did not say what it is: {why}");
             return 1;
+        }
+    }
+
+    if let Some(code) = bundled_plugins_check(app, &target).await {
+        if code != 0 {
+            sidecar::stop(app, local).await;
+            return code;
         }
     }
 

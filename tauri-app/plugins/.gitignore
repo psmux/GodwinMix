@@ -1,0 +1,15 @@
+# The device plugins that travel inside the app, one directory per platform,
+# are build output and never source. The plugins themselves are in plugins/ at
+# the top of the repository; what lands here is a built copy of three of them:
+#
+#   dev/bundle-plugins.sh
+#
+# tauri.conf.json lists plugins/ under bundle.resources, so whatever is here
+# when `cargo tauri build` runs goes inside the app, and the shell seeds it
+# into the application data directory at launch. With nothing here the app
+# leaves the mixer's own plugins directory alone, which is how a developer
+# build and a bare `godwinmix` keep working.
+macos/
+windows/
+linux/
+!.gitignore

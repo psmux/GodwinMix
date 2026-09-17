@@ -14,6 +14,7 @@ compiled into the shell.
 * What the first launch creates: [First launch](#first-launch)
 * Driving a mixer on another machine: [Connecting to a server](#connecting-to-a-server)
 * The bundled media stack: [The GStreamer inside the app](#the-gstreamer-inside-the-app)
+* The camera, the screen and the microphone: [The plugins inside the app](#the-plugins-inside-the-app)
 * Updates: [Updates](#updates)
 
 Installing a release rather than building one is
@@ -56,7 +57,20 @@ into the bundle. Skipping this step is fine for a developer build: the app
 then uses the GStreamer on the machine, which is what the Linux `.deb` does on
 purpose. See [The GStreamer inside the app](#the-gstreamer-inside-the-app).
 
-**3. Bundle.**
+**3. Put the device plugins where the bundler looks for them.** The camera,
+the screen and the microphone are plugins, and an app built without this step
+has no way to add any of the three:
+
+```sh
+dev/bundle-plugins.sh
+```
+
+That builds `gmx-camera`, `gmx-screen` and `gmx-audio-device` and stages each
+one into `tauri-app/plugins/<platform>/<name>/<version>/`. It runs on all
+three platforms, Windows included, through git bash. See [The plugins inside
+the app](#the-plugins-inside-the-app).
+
+**4. Bundle.**
 
 ```sh
 cd tauri-app
@@ -109,6 +123,7 @@ directory:
 | `connection.json` | which mixer was connected to last |
 | `local-core.port` | the port the local mixer was given, so a shell that crashed finds its mixer again instead of starting a second one |
 | `gstreamer-registry.bin` | GStreamer's plugin cache, kept here because an installed app's own directory is read only |
+| `plugins/` | the camera, the screen and the microphone, copied out of the app, plus anything added from the window later |
 
 Where that directory is, and where the mixer's log goes:
 
@@ -365,6 +380,155 @@ runners, on every push. A Windows installer over 150 MB fails the job.
 `.github/workflows/release.yml` does the same before it publishes, so an
 installer without a media stack inside it cannot be released.
 
+## The plugins inside the app
+
+A camera, a screen and a microphone are what a person expects to find when they
+open a video mixer. All three are plugins rather than built in kinds, and until
+the app carried them the way to get one was `gmx marketplace add` and `gmx
+plugin add camera` in a terminal. A desktop app whose first instruction is
+"open Terminal" has failed at the only thing it is for, so the three travel
+inside it.
+
+### Building them
+
+```sh
+dev/bundle-plugins.sh                # all three, for this platform
+dev/bundle-plugins.sh camera         # one of them
+dev/bundle-plugins.sh --no-build     # stage what cargo has already built
+```
+
+It builds `gmx-camera`, `gmx-screen` and `gmx-audio-device` and stages each one
+the way the core expects to find an installed plugin:
+
+```
+tauri-app/plugins/macos/camera/0.1.0/gmx-plugin.toml
+tauri-app/plugins/macos/camera/0.1.0/bin/gmx-camera
+tauri-app/plugins/macos/camera/0.1.0/schemas/...
+tauri-app/plugins/macos/camera/0.1.0/skills/...
+tauri-app/plugins/macos/camera/0.1.0/ui/icons/camera.svg
+```
+
+Then it reads the manifest back and checks that every file the manifest points
+at was really staged, which is what catches a plugin that grows a directory the
+script does not know about. It also writes a `.gmx-trust.json` saying where the
+copy came from, so `gmx plugin list` and the window say "built from the same
+source tree as the app" rather than "nothing recorded where it came from".
+
+One script for all three platforms, unlike the GStreamer bundler. The only
+difference Windows makes here is the `.exe` on the end of a binary, and CI
+already runs its bash steps through git bash there.
+
+Measured on an Apple M4 Pro, 0.2.0: 1.3 MB per binary, 4.0 MB for the three
+with their schemas, skills and icons. Against the 150 MB installer budget that
+is noise; the script fails over 20 MB anyway, as a tripwire.
+
+### Resources, not `externalBin`
+
+`tauri.conf.json` carries them the same way it carries GStreamer:
+
+```json
+"resources": { "gstreamer": "gstreamer", "plugins": "plugins" }
+```
+
+`externalBin` was the other option and it does not fit. Tauri renames an
+external binary to its target triple and puts it in `Contents/MacOS`, and the
+manifest says its binary is at `bin/gmx-camera` relative to the plugin's own
+root, with `schemas/`, `skills/` and `ui/` beside it. Flattening that into one
+directory leaves no plugin for the core to load. A resource directory keeps the
+shape the loader already reads.
+
+The cost of that choice is signing. Tauri signs the frameworks, the external
+binaries and the app bundle, and does not walk `Contents/Resources` looking for
+executables, so a build with a signing identity would leave the three plugin
+binaries unsigned and fail notarisation. The bundled GStreamer has the same
+hole and deals with it in the trimmer, which signs each file it rewrites.
+Nothing in this repository is signed yet, so neither hole bites today; whoever
+turns signing on signs these three before `cargo tauri build`, and adds
+`com.apple.security.device.camera` and `com.apple.security.device.audio-input`
+to an entitlements file, because the hardened runtime Tauri asks for when it
+signs refuses a camera without them.
+
+### How they reach the mixer
+
+The shell copies `resources/plugins/<platform>/` into `plugins/` in the
+application data directory before it starts the mixer, and starts the mixer
+with `GODWINMIX_PLUGINS_DIR` pointed there.
+
+Copied rather than read where they lie, because an installed app's own
+directory is read only on all three platforms and `plugin.add` from the window
+has to be able to put a fourth plugin beside these three. A read only directory
+would make that button a lie.
+
+Each copy carries a `.gmx-bundled` stamp of the bundle it came from, which
+decides what happens at the next launch:
+
+| What is there | What happens |
+|---|---|
+| this bundle's copy | nothing; the stamp matches |
+| an older bundle's copy, or the same version rebuilt | replaced, and other versions this app seeded are removed |
+| a plugin the operator installed themselves | left exactly as it is, at any version |
+
+The last row is the rule that matters. An app may replace its own copies and
+may not touch anybody else's, and the stamp is how it tells them apart.
+
+A build with nothing staged in it sets no variable at all, so the mixer reads
+`~/.godwinmix/plugins` as it always did. That is how a developer build works
+and how somebody who installed these three by hand keeps the ones they
+installed. `[control] plugins_dir` in the config file still wins over both: an
+operator who names a directory means it.
+
+### macOS permissions
+
+`tauri-app/Info.plist` carries the two usage strings, and the bundler merges
+that file into the app's `Info.plist` because it sits beside
+`tauri.conf.json`:
+
+| Key | Why |
+|---|---|
+| `NSCameraUsageDescription` | macOS kills a process that opens a camera with no string in the bundle it belongs to; it does not merely refuse it |
+| `NSMicrophoneUsageDescription` | the same for sound input |
+
+Screen recording has no key of its own. macOS writes that prompt itself, names
+the app and offers System Settings, and the grant takes effect only after the
+app is quit and reopened.
+
+The capture is done by a plugin process the mixer starts, and the mixer is a
+sidecar of the app, so the camera is opened two processes below the window.
+macOS attributes that to the application bundle at the top of the tree, which
+is why the strings belong in the app's `Info.plist` and not somewhere in the
+plugin. Enumerating devices needs no permission at all: `device.discover` lists
+every camera and microphone on the machine before anything has been granted,
+and the prompt comes when a source is added and the device is opened.
+
+### Proving they are there
+
+`--headless-check` asks the mixer it starts what it loaded, and every plugin
+staged in the bundle has to come back at the version the bundle carries with
+nothing wrong with it:
+
+```
+3 device plugins in .../GodwinMix.app/Contents/Resources/plugins/macos
+  audio-device 0.1.0 loaded
+  camera 0.1.0 loaded
+  screen 0.1.0 loaded
+every device plugin the app carries is loaded and has no problem
+```
+
+The launch that does the copying says so first, once per plugin:
+
+```
+[desktop] put camera 0.1.0 in /Users/you/Library/Application Support/mix.godwin.desktop/plugins
+```
+
+The list comes off the bundle rather than out of the program, so a fourth
+plugin added to `dev/bundle-plugins.sh` is checked without anybody remembering
+to come back here. A build carrying none skips the section.
+
+`.github/workflows/build.yml` builds the three on every platform,
+`platforms.yml` and `release.yml` stage them before `cargo tauri build`, and
+the release job opens the finished `.app` to check that the camera plugin and
+the camera usage string are both really inside it.
+
 ## When it does not start
 
 **"The mixer started and stopped again."** The mixer's own reason is in
@@ -374,6 +538,18 @@ installed.
 **"The mixer did not answer within 25 seconds."** A cold GStreamer registry
 scan on a small board can take that long once. Try again; the second start uses
 the cache.
+
+**No camera, no screen and no microphone to add.** The app carries the three
+plugins and copies them out on the launch that starts the mixer.
+`--headless-check` says whether the mixer loaded them, and the copies are in
+`plugins/` in the application data directory. A build made without
+`dev/bundle-plugins.sh` carries none, and then the mixer reads whatever is in
+`~/.godwinmix/plugins` as it always did.
+
+**`--headless-check` printed nothing and exited 0.** Another copy of the app is
+open. The shell is single instance: a second launch hands its arguments to the
+first and leaves, and `--headless-check` is not exempt from that. Quit the app
+and run it again.
 
 **Two mixers.** If the shell is killed rather than quit, the mixer it started
 keeps running, which is the right way round: a broadcast should not end because

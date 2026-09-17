@@ -107,6 +107,34 @@ fn describe(body: &serde_json::Value, target: &Target, label: &str) -> CoreInfo 
     }
 }
 
+/// What a core says is installed: a name, a version and the reason it is not
+/// loaded, for each plugin it found.
+///
+/// Only `--headless-check` asks. The window never does: the operator UI talks
+/// to the core over the same API from the page the core serves, and a shell
+/// keeping its own idea of what is installed would be a second answer with
+/// nothing to keep it true.
+pub async fn plugins(
+    http: &reqwest::Client,
+    target: &Target,
+) -> Result<Vec<(String, String, Option<String>)>, String> {
+    let body = ask(http, target, "/api/v1/plugins").await.map_err(|e| e.say(&target.base))?;
+    let list = body
+        .get("plugins")
+        .and_then(|p| p.as_array())
+        .ok_or_else(|| format!("{}/api/v1/plugins answered without a list of plugins", target.base))?;
+    Ok(list
+        .iter()
+        .map(|p| {
+            let text = |key: &str| {
+                p.get(key).and_then(serde_json::Value::as_str).unwrap_or_default().to_string()
+            };
+            let problem = p.get("problem").and_then(serde_json::Value::as_str).map(str::to_string);
+            (text("name"), text("version"), problem)
+        })
+        .collect())
+}
+
 /// Ask a core to shut down. Used by "Quit and stop the mixer" and when the
 /// app quits with a mixer of its own running.
 pub async fn shutdown(http: &reqwest::Client, target: &Target) -> Result<(), String> {

@@ -24,6 +24,12 @@ if ! curl -sf "$API" >/dev/null 2>&1; then
   curl -sf "$API" >/dev/null 2>&1 || { echo "the mixer did not come up; see dev/harness/logs/mixer.log"; exit 1; }
 fi
 
+# The camera, the screen and the microphone, staged where the bundler picks
+# them up. Cheap when nothing has changed, because cargo does the deciding, and
+# it means the next `cargo tauri build` carries them whether or not anybody
+# remembered the step.
+"$ROOT/dev/bundle-plugins.sh" >/dev/null || echo "the device plugins did not stage; run dev/bundle-plugins.sh to see why"
+
 # The bundle, if it has been built, else the bare binary from cargo. Run in
 # the foreground so its exit status is known: "Quit and stop the mixer" in
 # the app menu exits with 2 after stopping the mixer, and that is when the
@@ -33,6 +39,12 @@ APP="$ROOT/tauri-app/target/release/bundle/macos/GodwinMix.app/Contents/MacOS/go
 BIN="$ROOT/tauri-app/target/release/godwinmix-desktop"
 if [ -x "$APP" ]; then RUN="$APP"; elif [ -x "$BIN" ]; then RUN="$BIN"; else
   echo "no desktop build yet: cd tauri-app && cargo tauri build --bundles app"; exit 1
+fi
+# A bundle built before the plugins travelled with it has no camera in it, and
+# from the window that looks like a bug rather than a build that is behind.
+RESOURCES="$ROOT/tauri-app/target/release/bundle/macos/GodwinMix.app/Contents/Resources/plugins"
+if [ "$RUN" = "$APP" ] && [ -z "$(find "$RESOURCES" -name 'gmx-camera' 2>/dev/null)" ]; then
+  echo "this bundle carries no camera plugin; rebuild it: cd tauri-app && cargo tauri build --bundles app"
 fi
 echo "desktop app open against http://localhost:8080 (this waits until it quits)"
 "$RUN" 2>> "$ROOT/dev/harness/logs/desktop.log"
