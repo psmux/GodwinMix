@@ -663,7 +663,7 @@ impl Connection {
             false => None,
         };
         let messages = self.push.messages(live, program.as_deref(), move || {
-            let held = app.safety.check(&token).err().map(|r| r.message);
+            let held = app.safety().check(&token).err().map(|r| r.message);
             match status {
                 Some(status) => serde_json::to_value(
                     crate::control::methods::agent::document(&status, &snapshots, held),

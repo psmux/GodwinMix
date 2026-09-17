@@ -35,6 +35,12 @@ const START_TIMEOUT: Duration = Duration::from_secs(25);
 const STOP_GRACE: Duration = Duration::from_secs(3);
 /// Past this, the log is rolled over. One previous file is kept.
 const LOG_MAX_BYTES: u64 = 4 * 1024 * 1024;
+/// The status the daemon leaves with when `core.restart` asked it to, rather
+/// than because it crashed or because this app asked it to stop. It is
+/// `EX_TEMPFAIL`, and it is declared on the daemon's side as
+/// `godwinmix::EXIT_RESTART`; this app does not link that crate, so the number
+/// is written here as well and a test on the daemon's side keeps it honest.
+const EXIT_RESTART: i32 = 75;
 
 /// The mixer on this computer, as this app knows it: one it started, or one
 /// it started in an earlier run and has found again.
@@ -46,6 +52,9 @@ pub struct Local {
     /// process is not its parent.
     child: Option<CommandChild>,
     stopped: Arc<AtomicBool>,
+    /// Set the moment this app decides the daemon is going away for good, so
+    /// the watcher that respawns a restarting daemon knows not to.
+    retiring: Arc<AtomicBool>,
 }
 
 impl Local {
@@ -80,6 +89,11 @@ pub async fn start(app: &AppHandle) -> Result<Local, String> {
     let target = Target::new(format!("http://127.0.0.1:{port}"), token.clone());
     let mut env = environment(app);
     env.insert("GODWINMIX_TOKEN".into(), token);
+    // This app is the daemon's parent and will start it again, so `core.restart`
+    // works here. A daemon started any other way has no parent watching it and
+    // refuses that call rather than taking the programme off air for good. The
+    // daemon has no way to look up and find out, so it is told.
+    env.insert("GODWINMIX_SUPERVISED".into(), "1".into());
     // The daemon colours its output for a terminal. This one goes to a file
     // that a person opens in a text editor, where the escape codes are just
     // noise around every word.
@@ -99,8 +113,9 @@ pub async fn start(app: &AppHandle) -> Result<Local, String> {
 
     let (rx, child) = command.spawn().map_err(|e| format!("the mixer would not start: {e}"))?;
     let stopped = Arc::new(AtomicBool::new(false));
-    record(rx, log.clone(), stopped.clone());
-    let local = Local { target, log, child: Some(child), stopped };
+    let retiring = Arc::new(AtomicBool::new(false));
+    record(app.clone(), rx, log.clone(), stopped.clone(), retiring.clone());
+    let local = Local { target, log, child: Some(child), stopped, retiring };
 
     match wait_until_answering(app, &local).await {
         Ok(()) => {
@@ -132,12 +147,65 @@ pub async fn adopt_existing(app: &AppHandle) -> Option<Local> {
     let http = app.state::<crate::Shell>().http.clone();
     core_link::info(&http, &target, "this computer").await.ok()?;
     eprintln!("[desktop] found the mixer from an earlier run on {}", target.base);
-    Some(Local { target, log: log_file(app).ok()?, child: None, stopped: Arc::new(AtomicBool::new(false)) })
+    Some(Local {
+        target,
+        log: log_file(app).ok()?,
+        child: None,
+        stopped: Arc::new(AtomicBool::new(false)),
+        retiring: Arc::new(AtomicBool::new(false)),
+    })
+}
+
+/// Start the mixer again after it left on its own, and send the window to it.
+///
+/// Reached only from the watcher below, and only for the one status that means
+/// "I was asked to come back". The port is taken from the operating system
+/// again rather than reused, because the old daemon may still be letting go of
+/// the one it had, and the window is sent to the new address: the page is the
+/// core's own, so a reload is what reconnects it.
+async fn respawn(app: AppHandle) {
+    let local = match start(&app).await {
+        Ok(local) => local,
+        Err(why) => {
+            eprintln!("[desktop] the mixer asked to restart and would not come back: {why}");
+            crate::ui::tell(
+                &app,
+                "The mixer did not come back",
+                &format!("{why}\n\nUse Connect to start it again."),
+                tauri_plugin_dialog::MessageDialogKind::Error,
+            );
+            return;
+        }
+    };
+    eprintln!("[desktop] the mixer restarted on {}", local.target.base);
+    let url = local.target.page_url();
+    let target = local.target.clone();
+    {
+        let shell = app.state::<crate::Shell>();
+        *shell.local.lock().unwrap() = Some(local);
+        *shell.target.lock().unwrap() = Some(target.clone());
+    }
+    let http = app.state::<crate::Shell>().http.clone();
+    if let Ok(info) = core_link::info(&http, &target, "this computer").await {
+        crate::ui::set_title(&app, &info);
+    }
+    let Some(window) = app.get_webview_window("main") else { return };
+    match tauri::Url::parse(&url) {
+        Ok(url) => {
+            if let Err(e) = window.navigate(url) {
+                eprintln!("[desktop] could not point the window at the restarted mixer: {e}");
+            }
+        }
+        Err(e) => eprintln!("[desktop] the restarted mixer's address will not parse: {e}"),
+    }
 }
 
 /// Stop the mixer this app started: ask over the API first, so it closes its
 /// outputs and its recordings properly, and kill it only if it will not go.
 pub async fn stop(app: &AppHandle, local: Local) {
+    // Before anything else, so the watcher below does not read a status on its
+    // way out as a request to start the daemon over again.
+    local.retiring.store(true, Ordering::Relaxed);
     let http = app.state::<crate::Shell>().http.clone();
     if local.is_running() {
         if let Err(e) = core_link::shutdown(&http, &local.target).await {
@@ -222,11 +290,23 @@ fn log_file(app: &AppHandle) -> Result<PathBuf, String> {
     Ok(path)
 }
 
-/// Pipe the daemon's output into the log file, and notice when it exits.
+/// Pipe the daemon's output into the log file, notice when it exits, and start
+/// it again when it left to be started again.
 ///
 /// A task rather than the main thread: the daemon writes a line per source
 /// event and the shell must never be the reason a write blocks.
-fn record(mut rx: tauri::async_runtime::Receiver<CommandEvent>, path: PathBuf, stopped: Arc<AtomicBool>) {
+///
+/// The respawn is here rather than anywhere else because this is the one place
+/// that sees the exit status. `core.restart` closes the outputs, stops the
+/// programme and leaves with `EXIT_RESTART`, which no other road out uses: a
+/// crash is a signal or a one, and `core.shutdown` is a zero.
+fn record(
+    app: AppHandle,
+    mut rx: tauri::async_runtime::Receiver<CommandEvent>,
+    path: PathBuf,
+    stopped: Arc<AtomicBool>,
+    retiring: Arc<AtomicBool>,
+) {
     tauri::async_runtime::spawn(async move {
         let mut file = OpenOptions::new().create(true).append(true).open(&path).ok();
         let mut put = |bytes: &[u8]| {
@@ -250,7 +330,11 @@ fn record(mut rx: tauri::async_runtime::Receiver<CommandEvent>, path: PathBuf, s
                 CommandEvent::Terminated(end) => {
                     put(format!("--- mixer exited with {:?} ---\n", end.code).as_bytes());
                     stopped.store(true, Ordering::Relaxed);
-                    break;
+                    if end.code == Some(EXIT_RESTART) && !retiring.load(Ordering::Relaxed) {
+                        put(b"--- it asked to be started again ---\n");
+                        respawn(app).await;
+                    }
+                    return;
                 }
                 _ => {}
             }

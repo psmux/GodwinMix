@@ -19,6 +19,15 @@ import { Client } from "../client/index.js";
 import { RpcError, CODES } from "../client/errors.js";
 import { rank, paramsSchema, methodForm } from "../shell/palette.js";
 import { chordOf, DEFAULT_MAP } from "../shell/keymap.js";
+import {
+  groupKeys,
+  pendingKeys,
+  changesFrom,
+  describeDefault,
+  label,
+  saidWhat,
+  mixerTab,
+} from "../shell/mixer-settings.js";
 import { IS_MAC } from "../shell/dom.js";
 import { kindOfUri, PLATFORMS, platformOfHost, joinKey } from "../client/kinds.js";
 import { schemaFor, paramsFor } from "../panels/outputs/destination.js";
@@ -1264,6 +1273,166 @@ async function sceneTabsSuite() {
   setFocusedScene(null);
 }
 
+// --------------------------------------------------------- mixer settings
+
+// A `config.get` answer, cut down to the keys these assertions are about. The
+// shape is the method's own: key, table, value, `file_value` when the file has
+// moved on, plus the unit, the default and the timing a form draws.
+const MIXER_SETTINGS = {
+  path: "/etc/godwinmix.toml",
+  supervised: false,
+  restart_pending: true,
+  keys: [
+    {
+      key: "program.video_bitrate_kbps",
+      table: "program",
+      value: 6000,
+      file_value: 4500,
+      default: "6000",
+      unit: "kbit/s",
+      kind: "integer",
+      timing: "restart",
+      source: "pending restart",
+      about: "Video bitrate of the outgoing programme.",
+    },
+    {
+      key: "safety.min_hold_ms",
+      table: "safety",
+      value: 500,
+      default: "0",
+      unit: "milliseconds",
+      kind: "integer",
+      timing: "hot",
+      source: "file",
+      about: "A take inside this window of the last one is refused.",
+    },
+    {
+      key: "safety.flash_guard",
+      table: "safety",
+      value: true,
+      default: "true",
+      unit: "",
+      kind: "boolean",
+      timing: "hot",
+      source: "default",
+      about: "The BT.1702-3 hold.",
+    },
+    {
+      key: "canvas.width",
+      table: "canvas",
+      value: 1920,
+      default: "1920",
+      unit: "pixels",
+      kind: "integer",
+      timing: "restart",
+      source: "default",
+      about: "Canvas width.",
+    },
+  ],
+};
+
+test("the mixer tab groups keys by table, in reading order", () => {
+  const groups = groupKeys(MIXER_SETTINGS);
+  eq(groups.map((g) => g.table), ["program", "safety", "canvas"]);
+  eq(groups.map((g) => g.keys.length), [1, 2, 1]);
+});
+
+test("the canvas group is the read only one", () => {
+  const groups = groupKeys(MIXER_SETTINGS);
+  eq(groups.filter((g) => g.readOnly).map((g) => g.table), ["canvas"]);
+});
+
+test("a table the page has never heard of is still shown", () => {
+  // Better an ugly section than a setting the core has and the form drops.
+  const extra = { keys: [{ key: "future.thing", table: "future", value: 1, kind: "integer" }] };
+  eq(groupKeys(extra).map((g) => g.table), ["future"]);
+});
+
+test("a key the file has moved on from is the one waiting for a restart", () => {
+  eq(pendingKeys(MIXER_SETTINGS), ["program.video_bitrate_kbps"]);
+});
+
+test("only the fields that moved are sent, and against the file's value", () => {
+  // The bitrate field shows 4500, which is what the file says and what a
+  // restart would give. Leaving it alone must not send it again; typing 6000
+  // back into it is a real change and must.
+  const untouched = {
+    "program.video_bitrate_kbps": 4500,
+    "safety.min_hold_ms": 500,
+    "safety.flash_guard": true,
+  };
+  eq(changesFrom(MIXER_SETTINGS.keys, untouched), {});
+  const edited = Object.assign({}, untouched, {
+    "safety.min_hold_ms": 1200,
+    "program.video_bitrate_kbps": 6000,
+  });
+  eq(changesFrom(MIXER_SETTINGS.keys, edited), {
+    "program.video_bitrate_kbps": 6000,
+    "safety.min_hold_ms": 1200,
+  });
+});
+
+test("every field says its unit, its default and when it lands", () => {
+  eq(describeDefault(MIXER_SETTINGS.keys[0]), "Default 6000 kbit/s. needs a restart.");
+  eq(describeDefault(MIXER_SETTINGS.keys[2]), "Default true. applies at once.");
+});
+
+test("a dotted key becomes a label a person can read", () => {
+  eq(label(MIXER_SETTINGS.keys[0]), "Video bitrate");
+  eq(label(MIXER_SETTINGS.keys[1]), "Min hold");
+  eq(label(MIXER_SETTINGS.keys[3]), "Width");
+});
+
+test("a save says what is on now and what is waiting", () => {
+  eq(saidWhat({ applied: [], needs_restart: [] }), "Nothing changed.");
+  eq(saidWhat({ applied: ["safety.min_hold_ms"], needs_restart: [] }), "1 setting in force now.");
+  eq(
+    saidWhat({ applied: [], needs_restart: ["canvas.width", "canvas.height"] }),
+    "2 settings saved, waiting for a restart."
+  );
+  eq(
+    saidWhat({ applied: ["safety.min_hold_ms"], needs_restart: ["canvas.width"] }),
+    "1 in force now, 1 waiting for a restart."
+  );
+});
+
+/**
+ * The tab itself, drawn against a stub client.
+ *
+ * `mixerTab` hands back its node at once and fills it in when the core
+ * answers, so this waits a turn of the event loop and then asserts
+ * synchronously the way every other test here does. It is chained onto the
+ * runner's promise at the bottom of this file.
+ */
+async function mixerTabSuite() {
+  const settled = () => new Promise((resolve) => setTimeout(resolve, 0));
+
+  const plain = mixerTab({ call: async () => MIXER_SETTINGS });
+  const supervised = mixerTab({
+    call: async () => Object.assign({}, MIXER_SETTINGS, { supervised: true }),
+  });
+  await settled();
+
+  test("the restart button appears only on a core that says it is supervised", () => {
+    ok(!plain.textContent.includes("Apply and restart"), "an unsupervised core must not offer it");
+    ok(plain.textContent.includes("Restart the mixer yourself"), "it must say who should restart it");
+    ok(supervised.textContent.includes("Apply and restart"), "a supervised core offers it");
+  });
+
+  test("the canvas fields are disabled until somebody asks for them", () => {
+    const inputs = [...plain.querySelectorAll("input")];
+    eq(inputs.length, 4, "one control per key");
+    // The canvas width is the only locked one.
+    eq(inputs.filter((i) => i.disabled).length, 1);
+    ok(plain.textContent.includes("Change the canvas"), "there is a way to unlock it");
+  });
+
+  test("a key waiting for a restart says so beside its field", () => {
+    ok(plain.textContent.includes("waiting for a restart"), "the tab says something is waiting");
+    ok(plain.textContent.includes("the mixer is still on 6000"), "it names what is running");
+  });
+}
+
 // ---------------------------------------------------------------- keymap
 
 test("a chord is spelled the way the map spells it", () => {
@@ -2149,6 +2318,12 @@ legacySuite()
   .catch((e) => {
     failed += 1;
     line("fail", "the scene tab suite threw: " + e.message);
+    console.error(e);
+  })
+  .then(mixerTabSuite)
+  .catch((e) => {
+    failed += 1;
+    line("fail", "the mixer settings suite threw: " + e.message);
     console.error(e);
   })
   .then(liveSuite)

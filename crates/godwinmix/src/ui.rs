@@ -90,6 +90,7 @@ const ASSETS: &[(&str, &str)] = &[
     ("shell/layout.js", include_str!("../../../ui/shell/layout.js")),
     ("shell/menu.js", include_str!("../../../ui/shell/menu.js")),
     ("shell/meter.js", include_str!("../../../ui/shell/meter.js")),
+    ("shell/mixer-settings.js", include_str!("../../../ui/shell/mixer-settings.js")),
     ("shell/modal.js", include_str!("../../../ui/shell/modal.js")),
     ("shell/palette.js", include_str!("../../../ui/shell/palette.js")),
     ("shell/picker.js", include_str!("../../../ui/shell/picker.js")),
@@ -619,6 +620,7 @@ mod tests {
         reachable.extend(closure_of("client/transport-legacy.js"));
         reachable.extend(closure_of("client/schema-form.js"));
         reachable.extend(closure_of("shell/palette.js"));
+        reachable.extend(closure_of("shell/mixer-settings.js"));
         reachable.extend(closure_of("shell/sandbox.js"));
         reachable.extend(closure_of("panels/welcome/tiles.js"));
         // Not imported by this page at all: it is what a sandboxed panel's own
@@ -651,6 +653,7 @@ mod tests {
             ("client/transport-legacy.js", "a core with no /rpc"),
             ("client/schema-form.js", "the add picker and the settings drawer"),
             ("shell/palette.js", "Ctrl+K"),
+            ("shell/mixer-settings.js", "the Mixer tab in Settings"),
             ("shell/sandbox.js", "a sandboxed plugin panel"),
             ("panels/welcome/tiles.js", "the welcome dialog"),
         ] {

@@ -233,7 +233,7 @@ async fn the_minimum_hold_refuses_a_second_take_and_revert_puts_the_shot_back() 
     assert_eq!(core.program().await.as_deref(), Some("cam1"));
 
     // Revert is not held by the minimum hold, and it lands on the shot before.
-    core.app.safety.record("desk");
+    core.app.safety().record("desk");
     let taken = core.call(&token, "program.take", json!({ "source": "cam2" })).await;
     // The hold is still on, so take cam2 by going round it the way a vision
     // mixer with a looser token would.

@@ -103,7 +103,16 @@ pub struct AppState {
     /// The rules that stand in front of every take: the minimum hold, the rate
     /// limit, the flash guard and the operator watchdog. See
     /// `godwinmix_core::safety`.
-    pub safety: Arc<godwinmix_core::safety::Guard>,
+    ///
+    /// Behind a lock, and read through `safety()`, because `config.set` of a
+    /// `[safety]` key applies at once. A `Guard` holds its `SafetyConfig` by
+    /// value and has no setter, so applying a change means building a new
+    /// guard and putting it here.
+    safety: Arc<std::sync::RwLock<Arc<godwinmix_core::safety::Guard>>>,
+    /// The configuration this core is running on, which is not always what is
+    /// in the file: a key that needs a restart is written down and left here
+    /// until one happens. `config.get` reports both and says which is which.
+    pub config: Arc<std::sync::RwLock<Arc<Config>>>,
     /// Work that outlives the call that started it. `task.get`, `task.cancel`,
     /// and the handle `media.convert` answers with.
     pub tasks: Arc<godwinmix_core::tasks::Tasks>,
@@ -210,12 +219,13 @@ impl AppState {
                 fps: cfg.canvas.fps,
             },
             tokens: Arc::new(tokens),
+            config: Arc::new(std::sync::RwLock::new(Arc::new(cfg.clone()))),
             confirmations: Confirmations::new(),
             idempotency: idempotency::Cache::new(),
             history: Arc::new(History::new()),
             scenes,
             peaks: Arc::new(history::Peaks::new()),
-            safety,
+            safety: Arc::new(std::sync::RwLock::new(safety)),
             tasks: godwinmix_core::tasks::Tasks::new(),
             rehearsal,
             plugin_settings: Arc::new(cfg.plugins.settings.clone()),
@@ -225,6 +235,46 @@ impl AppState {
             hooks,
             plugins,
         }
+    }
+
+    /// The rules in force right now.
+    ///
+    /// Cloned out of the lock rather than borrowed, because a take must never
+    /// wait on a settings screen and a settings screen must never wait on a
+    /// take. The `Arc` is cheap and a caller holding one while the guard is
+    /// swapped is simply checked against the rules that were in force when it
+    /// started, which is the right answer.
+    pub fn safety(&self) -> Arc<godwinmix_core::safety::Guard> {
+        self.safety.read().unwrap_or_else(|e| e.into_inner()).clone()
+    }
+
+    /// Put new safety rules in force now.
+    ///
+    /// The guard is rebuilt rather than edited, which costs its little
+    /// history: the minimum hold clock and the takes-in-a-minute window start
+    /// again from here. That is a real effect and it is named in
+    /// `docs/how-to/change-mixer-settings.md`, but it is bounded, it needs an
+    /// admin token, and the alternative is telling an operator to restart the
+    /// mixer to lengthen a hold.
+    pub fn set_safety(&self, cfg: godwinmix_core::safety::SafetyConfig) {
+        let fps = self.canvas.fps.max(1) as u32;
+        let fresh = godwinmix_core::safety::Guard::new(cfg, fps);
+        // The flash guard cannot tell a flash from a dissolve without a
+        // luminance measurement, and telemetry is the only thing that takes
+        // one. Rebinding here is what keeps that true across a swap.
+        godwinmix_core::telemetry::telemetry().bind_guard(fresh.clone());
+        *self.safety.write().unwrap_or_else(|e| e.into_inner()) = fresh;
+    }
+
+    /// The configuration this core is running on.
+    pub fn config(&self) -> Arc<Config> {
+        self.config.read().unwrap_or_else(|e| e.into_inner()).clone()
+    }
+
+    /// Replace the running configuration, after a change that has already been
+    /// written to the file and applied.
+    pub fn set_config(&self, cfg: Config) {
+        *self.config.write().unwrap_or_else(|e| e.into_inner()) = Arc::new(cfg);
     }
 
     /// The transitions a plugin has added to the built in four, for
@@ -1411,17 +1461,17 @@ fn spawn_history(app: AppState) {
 /// programme that keeps running is the safe state.
 fn spawn_operator_watchdog(app: AppState) {
     use godwinmix_core::safety::SilenceAction;
-    let after = app.safety.config().on_operator_silence.after_secs;
+    let after = app.safety().config().on_operator_silence.after_secs;
     tokio::spawn(async move {
         let mut tick = tokio::time::interval(Duration::from_secs(1));
         tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
         loop {
             tick.tick().await;
-            let Some(who) = app.safety.silent_operator() else { continue };
-            let action = app.safety.config().on_operator_silence.action.clone();
+            let Some(who) = app.safety().silent_operator() else { continue };
+            let action = app.safety().config().on_operator_silence.action.clone();
             // Arm it before acting, so this fires once rather than every
             // second until somebody comes back.
-            app.safety.arm_silence(matches!(action, SilenceAction::Hold));
+            app.safety().arm_silence(matches!(action, SilenceAction::Hold));
             let what = match &action {
                 SilenceAction::Alert => "the programme is unchanged".to_string(),
                 SilenceAction::Hold => "the programme is held until somebody calls".to_string(),
