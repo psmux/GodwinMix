@@ -17,10 +17,10 @@ until then.
 | `whip/whep` | source | `whip` | receive a stream over WHEP | yes |
 | `ingest/rtmp` | source | `ingest` | listen for an RTMP publisher | yes |
 | `ingest/whip` | source | `ingest` | run a WHIP endpoint publishers send to | yes |
-| `ingest/discover` | device | `ingest` | one RTMP port for many publishers | needs the core to load device provides |
+| `ingest/discover` | device | `ingest` | one RTMP port for many publishers | yes |
 | `ndi/source` | source | `ndi` | receive an NDI sender | yes, with the NDI runtime |
 | `ndi/output` | output | `ndi` | announce the programme as an NDI sender | needs the core to load plugin outputs |
-| `ndi/discover` | device | `ndi` | list NDI senders, `list_senders` | needs the core to load device provides |
+| `ndi/discover` | device | `ndi` | list NDI senders, `list_senders` | yes, with the NDI runtime |
 
 ### What "needs the core" means, precisely
 
@@ -29,13 +29,15 @@ until then.
   loader. `crates/godwinmix-core/src/plugin/source.rs` already does the
   equivalent lookup for sources; the same `.or_else(|| loader::…)` in the output
   registry is what is missing.
-* **Device provides.** `crates/godwinmix-core/src/plugin/loader.rs` interns only
-  provides whose `kind` is `"source"`. `SidecarDevice` exists in
-  `crates/godwinmix-core/src/plugin/host/service.rs` and is constructed nowhere,
-  and no RPC method, CLI command or timer calls `discover`.
-* **Plugin tools.** `tool.call` is not a registered method, so neither the MCP
-  bridge's `POST /api/v1/tool/call` nor a direct RPC call reaches a plugin's
-  tool.
+* **Device provides** are loaded: the supervisor starts a device as a
+  singleton beside a service, `device.discover` asks every device and merges
+  the answers, and the smoke test drives both. The two rows above that say
+  "needs the core to load device provides" are older than that and are wrong;
+  they load.
+* **Plugin tools** reach the plugin: `tool.call` is registered
+  (`crates/godwinmix/src/control/methods/plugins.rs`), `POST /api/v1/tool/call`
+  is its route, and the answer comes back from whichever running instance of
+  the plugin owns the tool.
 * **Auto add from an event.** A plugin's `event` notification is parsed by
   `crates/godwinmix-core/src/plugin/host/process.rs` into a bounded ring buffer
   with no reader. Nothing turns a notification into `source.add`.
