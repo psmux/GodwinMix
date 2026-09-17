@@ -89,7 +89,18 @@ the three client suites and `python3 clients/gen/generate.py --check`.
    the bin's own state walk putting a freshly NULLed element back up before
    it was removed; sixty of sixty runs under load reproduced it and zero
    with the fix. Every branch teardown now locks the element's state before
-   NULL, the way `Encoder::detach` always did.
+   NULL, the way `Encoder::detach` always did. The third cause, found by the
+   ten minute soak on 2026-09-17 at round 61 with a crash report to prove it:
+   the compositor's aggregate thread walks a pad's control bindings without
+   the object lock (GStreamer's own source says so), and a settling
+   transition removed a binding from the mixer thread under that walk. No
+   binding is removed while the pipeline runs any more: one binding per pad
+   and property is made the first time a transition drives it and kept for
+   the pad's life, a transition rewrites the curve behind it, and settling
+   collapses the curve and disables it. Two ten minute soaks after that ran
+   to the end with the core up, descriptors and threads flat. The two bars
+   still missed are the constant 50 ms stall gauge and resident memory,
+   about 2.5 MB a round, both older than any of this.
 4. **Alpha graphics key to black**, because the graph is I420 throughout. The
    four edits needed are listed in `docs/reference/graphics.md`.
 5. **Smaller gaps**, each with its file and line in the git history: only
