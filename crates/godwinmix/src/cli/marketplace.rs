@@ -64,10 +64,13 @@ fn list(json: bool) -> Result<()> {
     }
     if store.marketplaces.is_empty() {
         println!("no marketplaces added");
-        println!("\nAdd the official one, which lists the first party plugins:");
-        println!("  gmx marketplace add psmux/godwinmix");
-        println!("and the community index, which lists everything the bot has checked:");
-        println!("  gmx marketplace add psmux/godwinmix-plugins");
+        // The same two the API offers a surface with no terminal, off the one
+        // list, so the shell and the web page never disagree about which
+        // marketplace the project runs.
+        for offer in marketplace::recommendations(&[]) {
+            println!("\n{} ({})", offer.title, offer.name);
+            println!("  gmx marketplace add {}", offer.source);
+        }
         return Ok(());
     }
     println!("{:<22} {:<8} {:<36} SOURCE", "MARKETPLACE", "PLUGINS", "TITLE");

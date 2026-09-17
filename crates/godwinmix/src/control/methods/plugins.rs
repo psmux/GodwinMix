@@ -16,6 +16,7 @@
 use super::{any_object, body, handler};
 use crate::control::call::Call;
 use godwinmix_core::plugin::loader;
+use godwinmix_host::marketplace as market;
 use godwinmix_protocol::error::{ErrorCode, RpcError};
 use godwinmix_protocol::method::{schema_of, MethodDef, Registry, Tier};
 use godwinmix_protocol::scope::Scope;
@@ -228,6 +229,70 @@ pub fn register(reg: &mut Registry<Call>) {
         .params(schema_of::<SetSettingsRequest>)
         .result(schema_of::<PluginSettings>),
     );
+
+    // ------------------------------------------------------------ marketplaces
+    //
+    // A marketplace is where a bare plugin name comes from, and until this
+    // mixer has one `plugin.search` answers nothing and `plugin.add camera`
+    // cannot resolve. That was a shell command, which put the first step of
+    // installing a plugin somewhere a GUI user cannot reach. These four are
+    // the same store the CLI writes, over the protocol.
+
+    reg.register(
+        MethodDef::new(
+            "marketplace.list",
+            Scope::Admin,
+            "Every marketplace this machine knows, where each came from and how many \
+             plugins it lists, with the ones the project runs offered alongside so a \
+             surface with no terminal can add one.",
+            handler(marketplace_list),
+        )
+        .result(schema_of::<MarketplaceListing>)
+        .mutating(false)
+        .rest_at("GET", "/api/v1/marketplaces"),
+    );
+
+    reg.register(
+        MethodDef::new(
+            "marketplace.add",
+            Scope::Admin,
+            "Add a marketplace and fetch its listing: `owner/repo`, a URL, or a path to a \
+             directory with a marketplace document in it. From then on `plugin.search` \
+             reads it and `plugin.add <name>` resolves a bare name through it.",
+            handler(marketplace_add),
+        )
+        .params(schema_of::<AddMarketplaceRequest>)
+        .result(schema_of::<MarketplaceRecord>)
+        .destructive()
+        .rest_at("POST", "/api/v1/marketplaces"),
+    );
+
+    reg.register(
+        MethodDef::new(
+            "marketplace.remove",
+            Scope::Admin,
+            "Forget a marketplace and its cached listing. Plugins installed from it stay \
+             installed and keep working.",
+            handler(marketplace_remove),
+        )
+        .params(schema_of::<MarketplaceName>)
+        .result(schema_of::<MarketplaceRemoved>)
+        .destructive()
+        .rest_at("DELETE", "/api/v1/marketplaces/{id}"),
+    );
+
+    reg.register(
+        MethodDef::new(
+            "marketplace.refresh",
+            Scope::Admin,
+            "Fetch every added marketplace again. The cached copy of each one that cannot \
+             be reached is left where it is, so a search goes on working on a show network \
+             with no route out.",
+            handler(marketplace_refresh),
+        )
+        .result(schema_of::<MarketplaceRefreshed>)
+        .rest_at("POST", "/api/v1/marketplaces/refresh"),
+    );
 }
 
 /// `tool.call`.
@@ -366,6 +431,115 @@ pub struct SearchResult {
     pub marketplace: String,
     /// Whether it is already on this mixer.
     pub installed: bool,
+}
+
+// ---------------------------------------------------------------------------
+// Marketplaces
+// ---------------------------------------------------------------------------
+
+/// `marketplace.add`.
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+pub struct AddMarketplaceRequest {
+    /// `owner/repo`, a URL to the document or to the repository root, or a
+    /// path to a directory with `godwinmix-marketplace.json` in it.
+    pub source: String,
+}
+
+/// Anything that names one marketplace.
+///
+/// `id` because the REST layer fills it in from `/api/v1/marketplaces/{id}`,
+/// and `name` is accepted because that is what the document calls it.
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+pub struct MarketplaceName {
+    #[serde(alias = "name")]
+    pub id: String,
+}
+
+/// One marketplace as this machine has it.
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+pub struct MarketplaceRecord {
+    pub name: String,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub title: String,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub description: String,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub owner: String,
+    /// What was typed when it was added.
+    pub source: String,
+    /// The URL or path the document was last read from.
+    pub url: String,
+    /// How many plugins it lists.
+    pub plugins: usize,
+    /// When it was last fetched, seconds since the epoch. 0 if never.
+    pub fetched: u64,
+    /// Whether the document names the identity its CI signs with, which is
+    /// what a plugin resolved through it is verified against.
+    pub signs: bool,
+    /// Whether `[marketplaces] only` lets this core read it. One added before
+    /// a pin was set is still listed, and this says it is now being skipped.
+    pub consulted: bool,
+    /// Why the cached copy could not be read, when it could not.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub problem: Option<String>,
+}
+
+/// One of the marketplaces the project runs, for a machine that has none.
+///
+/// Mirrors `godwinmix_host::marketplace::Recommendation`, which lives in a
+/// crate with no schemars in it, so the shape the protocol publishes is
+/// declared here and filled from there.
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+pub struct MarketplaceOffer {
+    pub name: String,
+    /// What to pass to `marketplace.add`.
+    pub source: String,
+    pub title: String,
+    pub description: String,
+    /// Whether this machine has it already.
+    pub added: bool,
+    /// True for the one the project itself publishes.
+    pub first_party: bool,
+}
+
+/// What `marketplace.list` answers with.
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+pub struct MarketplaceListing {
+    pub marketplaces: Vec<MarketplaceRecord>,
+    /// Where the list is kept on this machine.
+    pub store: String,
+    /// `[marketplaces] only`, when the operator pinned a list. Empty means
+    /// every marketplace added here is read.
+    pub only: Vec<String>,
+    /// The marketplaces the project runs, so a surface can offer to add one
+    /// rather than telling somebody to open a terminal.
+    pub recommended: Vec<MarketplaceOffer>,
+}
+
+/// What `marketplace.remove` answers with.
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+pub struct MarketplaceRemoved {
+    pub removed: String,
+    pub source: String,
+    /// Said plainly, because it is the question anybody removing one has:
+    /// nothing is uninstalled by this.
+    pub note: String,
+}
+
+/// One marketplace's outcome from `marketplace.refresh`.
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+pub struct Refreshed {
+    pub name: String,
+    pub plugins: usize,
+    /// Why it was not refreshed, when it was not. The cached copy stays.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub problem: Option<String>,
+}
+
+/// What `marketplace.refresh` answers with, once the task finishes.
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+pub struct MarketplaceRefreshed {
+    pub refreshed: Vec<Refreshed>,
 }
 
 /// One running instance and its cost.
@@ -1133,3 +1307,168 @@ fn plugin_arrived(hooks: &std::sync::Arc<crate::control::hooks::Hooks>, installe
     });
 }
 
+
+// ---------------------------------------------------------------------------
+// Marketplaces
+// ---------------------------------------------------------------------------
+
+/// One row of `marketplace.list`, read from the store and the cached document.
+///
+/// The cache is a copy and can be missing or stale, so everything that comes
+/// from it is optional and a cache that will not parse becomes a `problem`
+/// rather than an absent row: a marketplace the operator added and cannot see
+/// is worse than one that says why it is not working.
+fn market_record(entry: &market::Added, only: &[String]) -> MarketplaceRecord {
+    let cached = market::Marketplace::read(&market::cache_path(&entry.name));
+    let doc = cached.as_ref().ok();
+    MarketplaceRecord {
+        name: entry.name.clone(),
+        title: doc.map(|d| d.title.clone()).unwrap_or_default(),
+        description: doc.map(|d| d.description.clone()).unwrap_or_default(),
+        owner: doc.map(|d| d.owner.clone()).unwrap_or_default(),
+        source: entry.source.clone(),
+        url: entry.url.clone(),
+        plugins: doc.map(|d| d.plugins.len()).unwrap_or(entry.plugins),
+        fetched: entry.fetched,
+        signs: doc.is_some_and(|d| d.signing.is_some()),
+        consulted: !market::pinned_out(&entry.name, &entry.source, only),
+        problem: cached.as_ref().err().map(|e| format!("{e:#}")),
+    }
+}
+
+fn offer(from: market::Recommendation) -> MarketplaceOffer {
+    MarketplaceOffer {
+        name: from.name,
+        source: from.source,
+        title: from.title,
+        description: from.description,
+        added: from.added,
+        first_party: from.first_party,
+    }
+}
+
+async fn marketplace_list(call: Call, _params: Value) -> Result<Value, RpcError> {
+    let only = call.app.marketplaces_only.clone();
+    let store = market::load_store();
+    body(MarketplaceListing {
+        marketplaces: store.marketplaces.iter().map(|m| market_record(m, &only)).collect(),
+        store: market::store_path().to_string_lossy().into_owned(),
+        recommended: market::recommendations(&only).into_iter().map(offer).collect(),
+        only,
+    })
+}
+
+async fn marketplace_add(call: Call, params: Value) -> Result<Value, RpcError> {
+    let req: AddMarketplaceRequest = call.params(&params)?;
+    let spec = req.source.trim().to_string();
+    if spec.is_empty() {
+        return Err(RpcError::invalid_params(
+            "marketplace.add takes a `source`: `owner/repo`, a URL, or a path to a \
+             directory with godwinmix-marketplace.json in it. marketplace.list names the \
+             ones the project runs under `recommended`, ready to pass straight back."
+                .to_string(),
+        ));
+    }
+    if call.dry_run {
+        return Ok(call.dry_run_answer(
+            true,
+            vec![format!(
+                "fetch the marketplace document for {spec}, check it, and record it in {}",
+                market::store_path().display()
+            )],
+        ));
+    }
+    // Over the network with a ten minute timeout on the other side of it, so
+    // a handle rather than a held connection, exactly as `plugin.add` does.
+    let only = call.app.marketplaces_only.clone();
+    let named = spec.clone();
+    Ok(super::tasks::spawn_task(
+        &call.app.tasks,
+        "marketplace.add",
+        Some(json!({ "source": named })),
+        move |_ctx| async move {
+            let added = tokio::task::spawn_blocking(move || add_marketplace(&spec, &only))
+                .await
+                .map_err(|e| format!("the fetch did not finish: {e}"))??;
+            serde_json::to_value(added).map_err(|e| e.to_string())
+        },
+    ))
+}
+
+/// Fetch one marketplace and record it, unless the operator's pin would make
+/// it dead weight.
+///
+/// The pin is a list of names or sources, and a document's name is only known
+/// once it has been read, so this adds and then puts it back. Recording a
+/// marketplace that `[marketplaces] only` makes this core skip would leave an
+/// operator with a row in the list, an empty search, and nothing saying why.
+fn add_marketplace(spec: &str, only: &[String]) -> Result<MarketplaceRecord, String> {
+    let added = market::add(spec).map_err(|e| format!("{e:#}"))?;
+    if market::pinned_out(&added.name, &added.source, only) {
+        let _ = market::remove(&added.name);
+        return Err(format!(
+            "`{}` was read and then put back. This mixer is pinned to {} by \
+             `[marketplaces] only`, so it would never be consulted. Add `{}` to that \
+             list in the config and restart the mixer, or take the pin off.",
+            added.name,
+            only.join(", "),
+            added.name
+        ));
+    }
+    Ok(market_record(&added, only))
+}
+
+async fn marketplace_remove(call: Call, params: Value) -> Result<Value, RpcError> {
+    let req: MarketplaceName = call.params(&params)?;
+    if call.dry_run {
+        return Ok(call.dry_run_answer(
+            true,
+            vec![format!("forget the marketplace `{}` and its cached listing", req.id)],
+        ));
+    }
+    let gone = market::remove(&req.id).map_err(|e| {
+        RpcError::new(ErrorCode::NotFound, format!("{e:#}")).with("marketplace", req.id.clone())
+    })?;
+    body(MarketplaceRemoved {
+        note: format!(
+            "plugins installed from `{}` stay installed and keep working; plugin.list \
+             still shows them. A bare name it was the only source of will stop \
+             resolving, so plugin.add needs the source written out from now on.",
+            gone.name
+        ),
+        removed: gone.name,
+        source: gone.source,
+    })
+}
+
+async fn marketplace_refresh(call: Call, _params: Value) -> Result<Value, RpcError> {
+    if call.dry_run {
+        let count = market::load_store().marketplaces.len();
+        return Ok(call.dry_run_answer(
+            true,
+            vec![format!("fetch {count} marketplace document(s) again")],
+        ));
+    }
+    Ok(super::tasks::spawn_task(
+        &call.app.tasks,
+        "marketplace.refresh",
+        None,
+        move |_ctx| async move {
+            let done = tokio::task::spawn_blocking(|| {
+                market::refresh()
+                    .into_iter()
+                    .map(|(name, outcome)| match outcome {
+                        Ok(plugins) => Refreshed { name, plugins, problem: None },
+                        // The cached copy is left where it is, so a search on
+                        // a show network with no route out goes on working.
+                        Err(e) => Refreshed { name, plugins: 0, problem: Some(format!("{e:#}")) },
+                    })
+                    .collect::<Vec<_>>()
+            })
+            .await
+            .map_err(|e| format!("the refresh did not finish: {e}"))?;
+            serde_json::to_value(MarketplaceRefreshed { refreshed: done })
+                .map_err(|e| e.to_string())
+        },
+    ))
+}
