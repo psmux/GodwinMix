@@ -138,6 +138,14 @@ impl ScenePreview {
             .drop(true)
             .sync(false)
             .build();
+        // Not async either. A sink added to a running pipeline answers its
+        // preroll with ASYNC, the pipeline loses PLAYING to PAUSED pending, and
+        // the branch elements brought up after it sync to PAUSED, where the
+        // live backdrop produces nothing, so the sink can never preroll: a
+        // Linux runner printed exactly that, the source and the slot queues
+        // Paused under a Playing compositor and the sink Ready going to
+        // Playing. A sink that does not sync has nothing to wait for.
+        sink.set_property("async", false);
         sink.set_callbacks(
             gst_app::AppSinkCallbacks::builder()
                 .new_sample(move |sink| {
