@@ -32,7 +32,9 @@ agent all see the same ones. "Put the orange one on air" is a sentence an agent
 can act on.
 
 **5. Put it on air.** Tap the tile. The picture cuts on the next frame and the
-tile takes a red frame.
+tile takes a red frame. On the tab strip it takes two presses instead: a tap
+brings the scene up in the preview monitor, and Cut or Auto under the monitors
+puts it out. See [preview-monitor.md](preview-monitor.md).
 
 That is the whole path. If something went wrong, Ctrl+Z takes it back, and a
 delete offers an Undo button in the toast rather than asking you first.
@@ -42,7 +44,8 @@ delete offers an Undo button in the toast rather than asking you first.
 | Gesture | What happens | The command underneath |
 |---|---|---|
 | tap a tile | it goes on air | `program.take {scene}` |
-| tap in producer mode | it is armed instead, and the Take button sends it | `scene.preview.set` then `program.take {}` |
+| tap a tab | it comes up in preview; Cut or Auto sends it | `scene.preview.set`, then `program.take {scene}` |
+| the + on a tab | the add picker, and what it makes lands in that scene | `source.add`, then `scene.item.add` |
 | drag inputs onto empty space | a new scene, laid out by count | `scene.create_from` |
 | drag an input onto a scene tile | it joins that scene, in the next free slot | `scene.item.add` |
 | drag an item chip onto another scene | it moves there; hold Alt to copy | `scene.item.move`, `scene.item.copy` |
@@ -104,12 +107,18 @@ and whether its sound is heard, then whatever the plugin behind it offers, then
 its filters. Filters hang on the item and not on the source, so a camera keyed
 in this scene is not keyed in every other one.
 
-## Producer mode
+## Tapping straight to air
 
-Settings has a switch that changes tap from "put it on air" to "arm it". Take
-and Auto appear beside the programme monitor, and the armed scene shows in the
-preview beside it. Nothing else changes and it costs nothing extra: the preview
-stream is the same either way.
+The tab strip arms rather than cuts, because a strip that sits under the thumb
+cannot afford to put something out every time somebody looks at a scene. A
+volunteer working alone with three cameras usually wants the single tap back:
+"Tap cuts directly", in the Scenes heading, gives it to them and is off by
+default. It is a choice per device, not part of the collection, so the desk in
+the gallery and the laptop at the back can differ. The number keys cut directly
+whatever it is set to.
+
+Tiles are unchanged: a tap on a tile still goes on air, and in producer mode it
+arms, as it always did.
 
 ## When there is no scene server
 
