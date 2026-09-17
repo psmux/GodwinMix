@@ -265,8 +265,13 @@ pub struct ApplyResult {
     pub dry_run: bool,
     /// The sources and outputs this core picked up without a restart.
     pub live: Vec<String>,
-    /// What still needs a restart, in plain words. Empty is the good case.
-    pub needs_restart: Vec<String>,
+    /// What the preset brought that is not running yet, one entry each.
+    /// Empty is the good case.
+    pub needs_restart: Vec<Pending>,
+    /// What the person does next, typed, in the order they do it. The same
+    /// list as `plan.next`, lifted out so a surface does not have to dig for
+    /// the one field it builds its checklist from.
+    pub next: Vec<Next>,
     /// The whole plan, as JSON. The same object `preset.list` rows point at.
     pub plan: Value,
 }
@@ -892,14 +897,30 @@ pub struct IdRequest {
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct ImportObsRequest {
+    /// The collection itself. Wins over `path` when both are given.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub json: Option<String>,
+    /// What to call it in the report, when the text came in rather than a
+    /// path. The file name is what the person will recognise.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
     /// The collection JSON exported from OBS (Scene Collection, Export), as a
     /// path on the machine the core is running on.
-    pub path: String,
+    ///
+    /// Optional, because a browser cannot give one: a page reads the file the
+    /// person picked and sends `json` instead, which is how the collection
+    /// can come off a laptop that is not the machine running the mixer.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub path: Option<String>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct ImportReport {
+    /// The same sources as `source.add` requests, so a page can offer to add
+    /// each one rather than asking somebody to paste a TOML block into a
+    /// file. `config_toml` is the same list for a text editor.
+    pub add_sources: Vec<ImportedSource>,
     /// The `[[sources]]` block to paste into a config, so the sources the
     /// scenes draw can be added in one edit rather than one call each.
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -949,6 +970,21 @@ pub struct ImportedReport {
     pub relink: Vec<Relink>,
     /// The scenes that were added, by the names they ended up with.
     pub scenes: Vec<String>,
+}
+
+/// A source in the config the import writes, in the shape of 03 section 3:
+/// a plugin qualified `type` and a `params` table, with `uri` kept where one
+/// makes sense so today's config still reads it.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct ImportedSource {
+    pub id: String,
+    pub name: String,
+    pub params: Value,
+    #[serde(rename = "type")]
+    pub r#type: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub uri: Option<String>,
 }
 
 /// One running instance and its cost.
@@ -1337,6 +1373,36 @@ pub struct NameRequest {
     pub name: String,
 }
 
+/// One thing the person does after a preset is applied.
+///
+/// Typed rather than written out, because a sentence sends a volunteer to a
+/// text editor and a type puts a control on the screen. The welcome panel
+/// turns `stream_key` into a box with a Save beside it and `install_plugin`
+/// into the Install button. `note` is the escape hatch for what really is
+/// only words.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct Next {
+    /// One of `NEXT_ACTIONS`. Anything else is a preset written against a
+    /// newer surface than this one; a surface shows its `text` or skips it.
+    pub do: String,
+    /// `add_source`: the kind to add, as `<plugin>/<provide>`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub kind: Option<String>,
+    /// `install_plugin`: the plugin, by the name `plugin.add` takes.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+    /// `stream_key`: the output whose address still holds a placeholder.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub output: Option<String>,
+    /// `take`: the source to put on air first.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub source: Option<String>,
+    /// The whole of a `note`, and a sentence of context on any of the others.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub text: Option<String>,
+}
+
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct NodeInstance {
@@ -1521,6 +1587,27 @@ pub struct Patch {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub source_client: Option<String>,
     pub updated: Vec<Update>,
+}
+
+/// One thing the preset brought that this core is not running, and why.
+///
+/// `reason` is what a surface branches on and `message` is what a terminal
+/// prints. Three reasons, and they must not be blurred together: a thing
+/// waiting on a plugin can be fixed from the page, a thing that was refused
+/// wants looking at now, and a restart is a thing that will be fine.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct Pending {
+    /// The source or output id, or the config path for the keys that were
+    /// written.
+    pub id: String,
+    /// The same sentence the CLI prints.
+    pub message: String,
+    /// The plugin to install, on `plugin_missing`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub plugin: Option<String>,
+    /// `plugin_missing`, `refused` or `restart`.
+    pub reason: String,
 }
 
 /// What `pipeline.dot` answers with on `/rpc`. The REST route serves the same

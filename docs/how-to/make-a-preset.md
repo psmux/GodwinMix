@@ -82,11 +82,11 @@ theme = "calm"
 theme_css = "theme.css"            # when the theme is your own
 scenes = "scenes"
 gallery = "icon"                   # live, snapshot, icon or label
-steps = [                          # the three things the person does next
-  "Run `gmx ctl device list` and put your cameras' names into [[sources]].",
-  "Put your stream key into the [[outputs]] block.",
-  "Run `gmx`, open http://localhost:8080, and press Wide.",
-]
+
+# What the person does next, one table each. See below.
+[[provides.preset.next]]
+do = "stream_key"
+output = "stream"
 ```
 
 `plugins` is a list of `name@range`, semver ranges. `gmx preset apply` installs
@@ -104,10 +104,51 @@ producer, `icon` for a volunteer on a modest machine, `snapshot` for a laptop on
 battery, `label` for a headless box. Leave it out and the surface asks the
 machine, which is what `gmx doctor` proposes.
 
-`steps` is three sentences, in order. They are what the welcome panel in the web
-UI shows straight after your preset is applied, with any missing plugin named
-alongside, and they are the same three that go in the README. Three, not five:
-somebody is reading them with a service starting.
+### What the person does next
+
+Three to five `[[provides.preset.next]]` tables, in the order they are done.
+Each one is typed, so the welcome panel can draw a control for it:
+
+```toml
+[[provides.preset.next]]
+do = "stream_key"
+output = "youtube"
+text = "YouTube Studio, then Create, then Go Live, shows the key."
+
+[[provides.preset.next]]
+do = "install_plugin"
+name = "camera"
+text = "The two cameras are test patterns until this is here."
+
+[[provides.preset.next]]
+do = "take"
+source = "cam-wide"
+text = "Press Wide to put a picture on air."
+```
+
+| `do` | Its field | What the person gets |
+|---|---|---|
+| `stream_key` | `output` | A box and a Save on that destination, which goes green when the mixer says the key took. |
+| `install_plugin` | `name` | An Install button. |
+| `add_source` | `kind` | A button that opens the add picker on that kind. |
+| `take` | `source` | The source to put on air first, named. |
+| `note` | `text` | A sentence, when there is nothing to press. |
+
+`text` is optional and is the line under the control. On a `note` it is the
+whole entry.
+
+Write them as things, not as instructions. "Put your stream key into the
+`[[outputs]]` block" is the sentence this schema exists to delete: the person
+reading it is looking at a page with a box on it, and sending them to a text
+editor instead is the thing the owner calls nonsense. Say `do = "stream_key"`
+and let the page put the box up.
+
+[The presets reference](../reference/presets.md) has the whole schema, including
+what happens to a `do` a build does not know.
+
+`steps`, a list of three sentences, is what this replaced. A preset that still
+carries one applies fine and every line is read as a `note`, so nothing third
+party breaks. Do not write a new one.
 
 ### `config/godwinmix.toml`
 
@@ -179,8 +220,9 @@ read anything else. Four headings, in this order, and nothing between them:
 * **What it gives you.** What is on air when it works. Two or three sentences.
 * **What you need.** Hardware, addresses, accounts. Be specific: "two NDI
   cameras on the same network" and "your YouTube stream key", not "a camera".
-* **Three steps.** Three, not five. The first is `gmx preset apply`, the second
-  is what to edit, the third is what to run and what to press.
+* **Three steps.** Three, not five, and the same three as your `[[next]]`
+  tables. Written for somebody looking at the page: which button, which box,
+  which tile. Never "edit this file".
 * **When it does not work.** The three or four things that actually go wrong,
   each with the one command that says which it is.
 
@@ -259,8 +301,8 @@ It works out the `plugins` list from the kinds your sources and outputs
 actually use, carries the theme across, gives every scene fresh ids, and leaves
 a README with the four headings for you to fill in. Three things it cannot do
 for you, and you have to: write the description somebody browsing the index
-will read, write the `steps`, and write the "when it does not work" section from
-what has actually gone wrong for you.
+will read, write the `[[next]]` tables, and write the "when it does not work"
+section from what has actually gone wrong for you.
 
 Read the config it wrote before you publish it. The redaction covers the control
 token, the `[[tokens]]` table and the tail of every RTMP and SRT output URL, and
