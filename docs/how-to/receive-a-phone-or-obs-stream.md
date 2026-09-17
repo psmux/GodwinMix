@@ -26,7 +26,7 @@ core, and every element it uses ships with GStreamer itself.
 ## Add the source
 
 ```sh
-gmx source add phone --type ingest/rtmp
+gmx ctl source add phone --type ingest/rtmp
 ```
 
 That is the whole configuration. It listens on TCP port 1935, the port every
@@ -64,7 +64,7 @@ live/phone from 10.0.0.31:51666 started publishing
 Then take it:
 
 ```sh
-gmx take phone
+gmx ctl take phone
 ```
 
 ## Try it without anybody else
@@ -83,10 +83,17 @@ live and their own error box says why. For two at once, add a second source on
 another port:
 
 ```sh
-gmx source add laptop --type ingest/rtmp --params '{"port":1936}'
+curl -s -X POST localhost:8080/api/v1/sources \
+  -H 'content-type: application/json' \
+  -d '{"id":"laptop","uri":"ingest/rtmp","type":"ingest/rtmp","params":{"port":1936}}'
 ```
 
 and give that person `rtmp://<address>:1936/live`.
+
+`gmx ctl source add` carries an id, an address, a `--type` and a name, and has
+no flag for a plugin's own settings, so a source that needs them is added over
+the API. `uri` is required there: the type id goes in it when a source has no
+address of its own, which is what the command line puts there too.
 
 ## A stream key that is a password
 
@@ -94,7 +101,10 @@ An empty `stream_key` takes anybody. Setting one makes this source take only the
 publisher who knows it, which is the closest RTMP has to a password:
 
 ```sh
-gmx source add phone --type ingest/rtmp --params '{"app":"live","stream_key":"nine-fat-owls"}'
+curl -s -X POST localhost:8080/api/v1/sources \
+  -H 'content-type: application/json' \
+  -d '{"id":"phone","uri":"ingest/rtmp","type":"ingest/rtmp",
+       "params":{"app":"live","stream_key":"nine-fat-owls"}}'
 ```
 
 Anyone publishing under a different key is refused with a message naming the
@@ -110,7 +120,7 @@ in `ingest`: `srt/source` is one already, and `listener` is its default mode.
 
 ```sh
 gmx plugin add ./plugins/srt
-gmx source add feed --type srt/source --params '{"port":9000,"latency_ms":300}'
+gmx ctl source add feed "srt://0.0.0.0:9000?mode=listener&latency=300" --type srt/source
 ```
 
 They send to `srt://<the mixer's address>:9000` in caller mode.
@@ -122,7 +132,7 @@ They send to `srt://<the mixer's address>:9000` in caller mode.
 camera, and publishes over WebRTC:
 
 ```sh
-gmx source add guest --type ingest/whip
+gmx ctl source add guest --type ingest/whip
 ```
 
 They publish to `http://<the mixer's address>:8889/whip`. It needs
@@ -135,9 +145,10 @@ build the source refuses to start with a message naming the package.
 publishers and reports each one as a source ready to add, with an
 `event/ingest.publisher` notification and an `add_publishers` tool. The core
 cannot use any of it yet: it starts no `device` provides, calls `discover` from
-nowhere, drops a plugin's `event` notifications into a buffer nothing reads, and
-does not register `tool.call`. `plugins/ingest/src/device.rs` names all four
-gaps with the file that would change for each.
+nowhere, and drops a plugin's `event` notifications into a buffer nothing reads.
+`tool.call` itself is registered, so `add_publishers` would be reachable once a
+`ingest/discover` instance runs. `plugins/ingest/src/device.rs` names the gaps
+with the file that would change for each.
 
 Until they land, an `ingest/rtmp` source that owns its own port does the job:
 added once, every publisher who arrives afterwards is live within seconds with

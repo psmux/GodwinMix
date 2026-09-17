@@ -32,6 +32,17 @@ these and nothing else. A generated `openapi.json` and a `protocol.md` from
 | `POST /api/golive` | `{"url", "rtmp", "superimpose", "id"}`: add a page as a source, add the destination, take it once live; answers 202 |
 | `GET /ws` | JSON events and state, plus mosaic JPEGs as binary frames |
 
+The `/api/v1` routes are generated from the method table rather than written
+out, so `GET /api/v1/core/api` is the list and `godwinmix --api-info` prints the
+same thing without a mixer. The ones the how to pages reach for:
+
+| | |
+|---|---|
+| `POST /api/v1/sources` | the whole of `source.add`: `{"id","uri","name","type","place","latency_ms","params"}`. `uri` is required, and the type id goes in it when a source has no address of its own |
+| `POST /api/v1/outputs` | `output.add`: `{"id","uri","policy"}` |
+| `POST /api/v1/tool/call` | `tool.call`: `{"name","arguments"}`, the name being `<plugin>/<tool>` |
+| `GET /api/v1/plugins/{id}/settings` | a plugin's settings, and `POST` with `{"settings":{...}}` changes the keys it names |
+
 A scheduled take takes `at_running_time_ms`, armed on the pipeline clock so it
 lands on the intended frame rather than whenever the request happened to arrive.
 

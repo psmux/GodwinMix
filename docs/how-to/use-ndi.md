@@ -43,7 +43,8 @@ library.
 ## Find the senders
 
 ```sh
-gmx tool call ndi/list_senders
+curl -s -X POST localhost:8080/api/v1/tool/call \
+  -H 'content-type: application/json' -d '{"name":"ndi/list_senders"}'
 ```
 
 ```json
@@ -54,21 +55,37 @@ gmx tool call ndi/list_senders
 `id` is the slug a source would sensibly be added under. `name` is what goes in
 the source's settings, exactly as reported, brackets and spaces and all.
 
-The tool is not routed by the core yet (see "What the core cannot do yet"), so
-until that lands run the plugin binary by hand, as above, to see the same list.
+`tool.call` is a registered method and the core hands it to a running instance
+of the plugin, so an `ndi/source` has to be up before this answers. With no NDI
+instance running the call says so and lists the tools that are there. Running
+the plugin binary by hand, as above, prints the same list with no core at all.
 
 ## Add a source
 
 ```sh
-gmx source add cam1 --type ndi/source --params '{"name":"STUDIO (CAM 1)"}'
-gmx take cam1
+curl -s -X POST localhost:8080/api/v1/sources \
+  -H 'content-type: application/json' \
+  -d '{"id":"cam1","uri":"ndi/source","type":"ndi/source",
+       "params":{"name":"STUDIO (CAM 1)"}}'
+gmx ctl take cam1
 ```
+
+The sender's name is a setting, and `gmx ctl source add` carries an id, an
+address, a `--type` and a name of its own but no flag for a plugin's settings,
+so an NDI source is added over the API. `uri` is required there: the type id
+goes in it when a source has no address of its own, which is what the command
+line puts there too. A bare `ndi://STUDIO (CAM 1)` picks this plugin by its
+scheme, but the plugin reads `name` and `address` and never the address it was
+handed, so the sender would still be unset.
 
 For a sender mDNS cannot reach, which means another subnet, a VPN, or a network
 where multicast is filtered, give the address instead:
 
 ```sh
-gmx source add cam1 --type ndi/source --params '{"address":"10.0.0.21:5961"}'
+curl -s -X POST localhost:8080/api/v1/sources \
+  -H 'content-type: application/json' \
+  -d '{"id":"cam1","uri":"ndi/source","type":"ndi/source",
+       "params":{"address":"10.0.0.21:5961"}}'
 ```
 
 ## Save bandwidth on a source nobody is looking at closely
@@ -83,8 +100,13 @@ picture, and it is a real saving rather than a small one.
 
 ## Send the programme out as NDI
 
-```sh
-gmx output add network --type ndi/output --params '{"name":"Studio A Programme"}'
+There is no command for this yet. `gmx ctl output add` takes an id and a URL,
+and the core's output registry does not consult the plugin loader, so
+`ndi/output` cannot be named from anywhere; see "What the core cannot do yet"
+below. These are the settings it takes when it can be:
+
+```json
+{"name": "Studio A Programme"}
 ```
 
 Anything running NDI on the network can then take the programme with no address
@@ -114,9 +136,11 @@ machine already tight for CPU, an NDI output is the first thing to question.
 * **`ndi/output`.** The core's output registry
   (`crates/godwinmix-core/src/plugin/output.rs`) is a static list of the built in
   outputs and does not consult the plugin loader.
-* **`ndi/discover` and the `list_senders` tool.** The loader interns only
-  provides whose `kind` is `"source"`, nothing calls `discover`, and `tool.call`
-  is not a registered method.
+* **`ndi/discover`.** The loader interns only provides whose `kind` is
+  `"source"` (`crates/godwinmix-core/src/plugin/loader.rs`), so a device provide
+  is never started and nothing calls `discover`. `list_senders` itself is
+  reachable over `tool.call`, because tools are declared once per plugin and any
+  running instance answers for the whole plugin.
 
 Both are complete against the contract and are exercised offline:
 

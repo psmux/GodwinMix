@@ -38,9 +38,13 @@ gmx plugin add ./plugins/whip
 
 ## Add the output
 
-```sh
-gmx output add away --type whip/output \
-  --params '{"endpoint":"https://example.com/whip/studio","token":"..."}'
+There is no command for this yet. `gmx ctl output add` takes an id and a URL,
+and until the output registry consults the plugin loader there is no way to name
+`whip/output` from anywhere, as the section above says. These are the settings it
+takes:
+
+```json
+{"endpoint": "https://example.com/whip/studio", "token": "..."}
 ```
 
 `token` is `format: secret`: stored encrypted, never returned. Every answer this
@@ -96,10 +100,16 @@ The same plugin carries the source half: WHEP is WHIP pointed the other way,
 and it works today.
 
 ```sh
-gmx source add guest --type whip/whep \
-  --params '{"endpoint":"https://example.com/whep/guest"}'
-gmx take guest
+curl -s -X POST localhost:8080/api/v1/sources \
+  -H 'content-type: application/json' \
+  -d '{"id":"guest","uri":"https://example.com/whep/guest","type":"whip/whep",
+       "params":{"endpoint":"https://example.com/whep/guest"}}'
+gmx ctl take guest
 ```
+
+The endpoint is a setting rather than an address the core understands, and
+`gmx ctl source add` has no flag for a plugin's own settings, so this one goes
+over the API.
 
 A WHEP session is negotiated while the source starts, so an endpoint that is not
 there fails immediately with a message naming the URL, and the core's supervisor

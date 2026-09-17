@@ -5,7 +5,7 @@ of the time and it costs nothing. When you want the change to be seen rather
 than not noticed, name a transition.
 
 ```bash
-gmx take --scene "wide" --transition fade
+gmx ctl take --scene "wide" --transition fade
 ```
 
 That is a 300 millisecond crossfade. Everything else on this page is a
@@ -27,7 +27,7 @@ works like the four above.
 ## How long it takes
 
 ```bash
-gmx take --scene "wide" --transition fade --duration 800
+gmx ctl take --scene "wide" --transition fade --duration 800
 ```
 
 Or, over the protocol, as an object:
@@ -49,7 +49,7 @@ never leaves.
 incoming one and travels the ones that are in both:
 
 ```bash
-gmx take --scene "presenter-full" --transition move --duration 500
+gmx ctl take --scene "presenter-full" --transition move --duration 500
 ```
 
 If `presenter-full` is `wide-and-inset` with the inset grown to full screen,
@@ -101,7 +101,7 @@ same thing by it:
 ```
 
 ```bash
-gmx take --scene "wide" --transition house
+gmx ctl take --scene "wide" --transition house
 ```
 
 A name the collection knows wins over a built in one, so a collection can give
@@ -120,7 +120,7 @@ that number rather than by timing.
 ## On a schedule
 
 ```bash
-gmx take --scene "wide" --transition fade --at 1800000
+gmx ctl take --scene "wide" --transition fade --at 1800000
 ```
 
 The take is armed on the pipeline clock and the transition starts when it

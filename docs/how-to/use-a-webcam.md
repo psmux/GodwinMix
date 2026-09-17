@@ -69,7 +69,7 @@ cam1   camera/source   live    1280x720@30
 Then put it on air:
 
 ```sh
-gmx take cam1
+gmx ctl take cam1
 ```
 
 To pick a particular camera, use the id from `list_cameras`:
@@ -86,10 +86,14 @@ the UI's settings drawer all fill in. The command line adds a source without
 them; `source.add` over the API takes them with it:
 
 ```sh
-curl -s -X POST http://127.0.0.1:8080/rpc -H 'content-type: application/json' \
-  -d '{"jsonrpc":"2.0","id":1,"method":"source.add","params":
-       {"id":"cam2","type":"camera/source","params":{"device":"/dev/video2"}}}'
+curl -s -X POST localhost:8080/api/v1/sources \
+  -H 'content-type: application/json' \
+  -d '{"id":"cam2","uri":"camera/source","type":"camera/source",
+       "params":{"device":"/dev/video2"}}'
 ```
+
+`uri` is required: the type id goes in it when a source has no address of its
+own, which is what the command line puts there too.
 
 ## What the settings do, and what they do not
 
@@ -132,7 +136,8 @@ sound engineer actually wants. See
 Ask the mixer what it thinks:
 
 ```sh
-gmx plugin stats camera
+gmx ctl status
+gmx plugin stats
 ```
 
 | What it says | What it means |

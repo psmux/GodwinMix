@@ -96,28 +96,31 @@ page is about.
 Over the API instead:
 
 ```bash
-gmx call source.add '{"id":"cam1","type":"ndi/source","place":"node:studio-b","latency_ms":150}'
+curl -s -X POST localhost:8080/api/v1/sources \
+  -H 'content-type: application/json' \
+  -d '{"id":"cam1","uri":"ndi/source","type":"ndi/source","place":"node:studio-b",
+       "latency_ms":150,"params":{"name":"CAM 1"}}'
 ```
+
+`gmx ctl source add` carries an id, an address, a `--type` and a name, and has
+no flag for `place`, `latency_ms` or a plugin's own settings, so a source on a
+node is added over the API. `uri` is required there: the type id goes in it when
+a source has no address of its own.
 
 ## Moving a source between machines
 
-A source that is already running can move:
+A source that is already running is meant to move between machines with one
+call. That call does not exist on this build: `source.set` takes a source's name
+and colour and nothing else, so `place` has nowhere to go. Until it carries
+`place` again, moving a source means changing `place` in the config and
+restarting the core.
 
-```bash
-gmx call source.set '{"id":"cam1","place":"sidecar"}'
-```
-
-The programme does not stop and does not change frame rate: the compositor
-keeps composing at the canvas rate whatever the sources are doing, and the
-source's pad holds its last picture until the new instance's first frame
-arrives. A plugin that did not declare the placement is refused, and the
-refusal lists the placements it did declare.
-
-Ask what would happen first, if you like:
-
-```bash
-gmx call source.set '{"id":"cam1","place":"sidecar","dry_run":true}'
-```
+The core side of the move is written and this is what it does. The programme
+does not stop and does not change frame rate: the compositor keeps composing at
+the canvas rate whatever the sources are doing, and the source's pad holds its
+last picture until the new instance's first frame arrives. A plugin that did not
+declare the placement is refused, and the refusal lists the placements it did
+declare. `dry_run` says what would happen without doing it.
 
 ## Finding a node instead of typing its address
 

@@ -109,7 +109,9 @@ this kind, and none of them needs a frame.
 Its `[[tools]]` are reachable over `tool.call`:
 
 ```bash
-gmx call tool.call '{"name": "director/pick_shot", "arguments": {"hint": "wide"}}'
+curl -s -X POST localhost:8080/api/v1/tool/call \
+  -H 'content-type: application/json' \
+  -d '{"name":"director/pick_shot","arguments":{"hint":"wide"}}'
 ```
 
 The name is `<plugin>/<tool>`, or the bare tool name when only one plugin has

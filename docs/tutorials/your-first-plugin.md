@@ -294,9 +294,9 @@ Then install it into a running mixer and take it to programme:
 
 ```sh
 gmx plugin add .
-gmx source add cam1 --type my-cam/source
+gmx ctl source add cam1 --type my-cam/source
 gmx ctl status
-gmx take cam1
+gmx ctl take cam1
 ```
 
 `gmx plugin list` shows what your plugin is costing in cpu and memory while it

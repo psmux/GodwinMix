@@ -26,7 +26,7 @@ nothing.
 ```sh
 dev/harness/stage-plugins.sh
 gmx plugin add ./plugins/srt
-gmx source add guest --type srt/source --params '{"port":9000,"latency_ms":300}'
+gmx ctl source add guest "srt://0.0.0.0:9000?mode=listener&latency=300" --type srt/source
 ```
 
 The source now waits on **UDP** port 9000. Tell the person sending:
@@ -41,7 +41,7 @@ a mismatch is not an error, just a surprise.
 Then take it:
 
 ```sh
-gmx take guest
+gmx ctl take guest
 ```
 
 ## Dial out instead of waiting
@@ -49,8 +49,7 @@ gmx take guest
 When the far end is the one waiting:
 
 ```sh
-gmx source add feed --type srt/source \
-  --params '{"mode":"caller","host":"203.0.113.10","port":9000,"latency_ms":300}'
+gmx ctl source add feed "srt://203.0.113.10:9000?mode=caller&latency=300" --type srt/source
 ```
 
 An address pasted from a hardware encoder goes in whole and wins over `host` and
@@ -66,13 +65,17 @@ has a field quietly overwritten behind it.
 ## Encrypt it
 
 ```sh
-gmx source add guest --type srt/source \
-  --params '{"port":9000,"passphrase":"nine-fat-owls-in-a-row"}'
+curl -s -X POST localhost:8080/api/v1/sources \
+  -H 'content-type: application/json' \
+  -d '{"id":"guest","uri":"srt://0.0.0.0:9000","type":"srt/source",
+       "params":{"passphrase":"nine-fat-owls-in-a-row"}}'
 ```
 
 SRT requires 10 to 79 characters and both ends must use exactly the same one.
 The passphrase is `format: secret`: stored encrypted, never read back, and never
-put in an address this plugin builds, so no log line can carry it.
+put in an address this plugin builds, so no log line can carry it. That is why it
+is a setting rather than a part of the address, and why this one source goes over
+the API: `gmx ctl source add` has no flag for a plugin's own settings.
 
 A mismatched passphrase fails the handshake with no packets and no error the
 receiving end can see. It is the usual cause of "nothing arrives", and it is
@@ -81,7 +84,7 @@ worth checking second, after the sender is definitely running.
 ## Send the programme over SRT
 
 ```sh
-gmx output add away --type srt/output --params '{"uri":"srt://203.0.113.10:9000","latency_ms":300}'
+gmx ctl output add away "srt://203.0.113.10:9000?latency=300"
 ```
 
 Options ride in the query string, the way every other tool spells them:
@@ -96,8 +99,8 @@ them `srt://<the mixer's address>:9000`.
 ## Try both ends on this machine
 
 ```sh
-gmx source add loop --type srt/source --params '{"port":9000}'
-gmx output add away --type srt/output --params '{"uri":"srt://127.0.0.1:9000?mode=caller"}'
+gmx ctl source add loop "srt://0.0.0.0:9000" --type srt/source
+gmx ctl output add away "srt://127.0.0.1:9000?mode=caller"
 ```
 
 or, with no mixer at all:
