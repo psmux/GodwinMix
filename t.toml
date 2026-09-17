@@ -250,7 +250,7 @@ bind = "0.0.0.0:8080"
 #
 # Read the web UI from this directory instead of from the copy built into the
 # binary. For editing the page without rebuilding; leave it unset in production.
-# ui_dir = "/opt/godwinmix/ui"
+ui_dir = "/Users/godwin/workspace/GodwinMix/.claude/worktrees/agent-a1f4b5e023698d3af/ui"
 
 [hardware]
 # auto, nvidia, va, qsv, amf, videotoolbox, mediafoundation, d3d11, d3d12,
