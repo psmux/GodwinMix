@@ -70,3 +70,6 @@ examples/*/target/
 # Python bytecode embeds the local source filename.
 **/__pycache__/
 *.pyc
+
+# Agent worktrees, made by Claude Code while it works in parallel
+.claude/worktrees/
