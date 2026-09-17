@@ -266,6 +266,7 @@ class SourcesPanel extends HTMLElement {
     const scoped = !!scene && this.scope === "scene";
     this.sceneTab.classList.toggle("on", scoped);
     this.allTab.classList.toggle("on", !scoped);
+    this.addButton.textContent = scoped ? `Add to ${scene.name}` : "Add";
   }
 
   /**
@@ -402,9 +403,55 @@ class SourcesPanel extends HTMLElement {
 
   // ------------------------------------------------------------ actions
 
-  /** The Add button, the Ctrl+N chord and both empty states. */
+  /**
+   * The Add button, the Ctrl+N chord and both empty states.
+   *
+   * `source.add` never touches a scene, so on its own it leaves a first time
+   * user with a full tray and an empty Default scene. The picker hands back
+   * the source it made and the placing happens here, in the order the
+   * protocol needs: the mixer has to own a source before a scene can draw it.
+   */
   addSource() {
-    return openPicker(this.client, "source");
+    const scene = this.scopedTo();
+    return openPicker(this.client, "source", { onAdded: (status) => this.place(scene, status) });
+  }
+
+  /**
+   * Put a source that has just been added into the scene it was added from.
+   *
+   * Scoped to a scene that is the scene on screen. Scoped to everything it is
+   * the one scene the mixer built at boot, and only while nothing has been put
+   * in it yet: after that, All means all and a source added there stays where
+   * it was put.
+   */
+  async place(scene, status) {
+    const scenes = this.sceneClient();
+    const id = status && status.id;
+    const target = scene || this.untouchedScene();
+    if (!scenes || !id || !target) return;
+    try {
+      await scenes.itemAdd(target.id, { source: id });
+    } catch (e) {
+      // The source exists and nothing is rolled back for it: undoing an add
+      // the operator asked for, because a second call failed, loses their
+      // typing. They are told where it is instead.
+      toast({
+        kind: "warning",
+        text: `The source was added, but it could not be put in ${target.name}. Drag it onto that scene to place it.`,
+      });
+      return;
+    }
+    scenes.undo.record(`Added a source to ${target.name}`);
+    await scenes.reread([target.id]);
+    this.render(this.client.state);
+  }
+
+  /** The single scene a fresh mixer boots with, while it is still empty. */
+  untouchedScene() {
+    const scenes = this.sceneClient();
+    const list = scenes ? scenes.scenes() : [];
+    if (list.length !== 1) return null;
+    return (list[0].items || 0) === 0 ? list[0] : null;
   }
 
   activate(id) {
@@ -548,7 +595,7 @@ class SourcesPanel extends HTMLElement {
       id && { kind: "separator" },
       id && { label: many ? `Remove ${ids.length}` : "Remove", key: key("tray.delete") || "Delete", run: () => this.remove(ids) },
       { kind: "separator" },
-      { label: "Add an input", key: key("tray.add") || "Ctrl+N", run: () => openPicker(this.client, "source") },
+      { label: "Add an input", key: key("tray.add") || "Ctrl+N", run: () => this.addSource() },
       { label: "Select all", key: key("tray.select-all") || "Ctrl+A", run: () => this.selectAll() },
     ].filter(Boolean));
   }
@@ -674,7 +721,7 @@ class SourcesPanel extends HTMLElement {
   commands() {
     const selected = () => this.selection.list(this.order());
     return [
-      { id: "tray.add", title: "Add an input", group: "Sources", key: "Ctrl+N", run: () => openPicker(this.client, "source") },
+      { id: "tray.add", title: "Add an input", group: "Sources", key: "Ctrl+N", run: () => this.addSource() },
       { id: "tray.filter", title: "Filter the tray", group: "Sources", key: "Ctrl+F", run: () => this.search.focus() },
       { id: "tray.select-all", title: "Select all", group: "Sources", key: "Ctrl+A", run: () => this.selectAll() },
       {
