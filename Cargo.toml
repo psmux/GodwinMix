@@ -72,6 +72,10 @@ tower-http = "0.6"
 serde = "1"
 serde_json = "1"
 toml = "0.9"
+# The same file, edited rather than rewritten. `config.set` changes a handful
+# of keys in the operator's `godwinmix.toml` and everything else in it, the
+# comments included, has to survive. Already in the lock tree.
+toml_edit = "0.25"
 schemars = "1"
 
 anyhow = "1"

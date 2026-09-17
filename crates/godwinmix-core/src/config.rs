@@ -1651,6 +1651,292 @@ impl Config {
     }
 }
 
+// --- what a surface may change, and when it takes effect ---------------------
+//
+// The owner's rule is that a GUI user never edits this file by hand, so the
+// control API has to be able to change it. Two things stop that being a
+// free-for-all: an allow list, so a call cannot reach the control token or a
+// stream key, and a stated timing per key, so a surface can tell an operator
+// "that is on now" apart from "that is waiting for a restart" instead of
+// guessing.
+//
+// The timing is a fact about this codebase, not a preference. A key is `Hot`
+// only where something running holds its value behind a handle the control
+// plane can replace. Today that is `[safety]` and nothing else:
+//
+//   * `safety::Guard` keeps its `SafetyConfig` by value, so the control plane
+//     swaps the whole guard. That is the one hot path, and it costs the take
+//     history: the minimum hold clock starts again from the change.
+//   * `[multiview]` lives inside `MultiviewHandle`, built once at startup with
+//     no setter on it, so the mosaic size and quality wait for a restart.
+//   * `[snapshot]` lives inside the `Tracker`, built once when the server
+//     starts serving, so the still limits wait for a restart.
+//   * `[program]`, `[canvas]`, `[stall]` and `[browser]` are read while the
+//     pipelines are built. The encoder is never restarted under a running
+//     programme by design, which is the whole reason `[canvas]` is fixed.
+//
+// Widening the hot set means giving one of those a setter first, and then
+// moving a row here. Nothing else has to change.
+
+/// When a change to a key lands.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Timing {
+    /// The running mixer takes it as soon as the file is written.
+    Hot,
+    /// It is in the file, and the mixer picks it up the next time it starts.
+    Restart,
+}
+
+impl Timing {
+    /// How it is spelled on the wire and in the UI.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Timing::Hot => "hot",
+            Timing::Restart => "restart",
+        }
+    }
+}
+
+/// What a key holds. A browser sends JSON, where 4500 and 4500.0 are the same
+/// number and a checkbox is a boolean, so the caller has to be told what TOML
+/// the key wants before anything is written.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Kind {
+    Int,
+    Bool,
+    Text,
+}
+
+impl Kind {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Kind::Int => "integer",
+            Kind::Bool => "boolean",
+            Kind::Text => "text",
+        }
+    }
+}
+
+/// One key a surface may change, with everything a form needs to draw it.
+#[derive(Debug, Clone, Copy)]
+pub struct Settable {
+    /// The dotted path into the file, for example `program.video_bitrate_kbps`.
+    pub key: &'static str,
+    pub kind: Kind,
+    pub timing: Timing,
+    /// What the number is measured in, or an empty string where it is not a
+    /// measurement. Shown beside the field, because "keyframe interval: 2" is
+    /// ambiguous and "2 seconds" is not.
+    pub unit: &'static str,
+    /// The default as the file would spell it, so a form can show it and an
+    /// operator can get back to it.
+    pub default: &'static str,
+    pub about: &'static str,
+}
+
+/// Every key the control API may change, and nothing else.
+///
+/// An allow list rather than a deny list, so a table added to `Config` later
+/// is not settable over the wire until somebody decides it should be. What is
+/// deliberately absent: `[control]` bind and token, `[[tokens]]`, `[[outputs]]`
+/// and `[[sources]]` (those have their own methods), `[security]`, `[plugins]`,
+/// and the three `[browser]` keys that name an executable, its arguments and
+/// its environment. Being able to point the browser sidecar at any binary on
+/// the machine is a much larger grant than "change the mixer's settings", and
+/// it is not one this method hands out.
+pub const SETTABLE: &[Settable] = &[
+    Settable { key: "canvas.width", kind: Kind::Int, timing: Timing::Restart, unit: "pixels", default: "1920", about: "Canvas width. Every source is scaled to it." },
+    Settable { key: "canvas.height", kind: Kind::Int, timing: Timing::Restart, unit: "pixels", default: "1080", about: "Canvas height." },
+    Settable { key: "canvas.fps", kind: Kind::Int, timing: Timing::Restart, unit: "frames a second", default: "30", about: "Canvas frame rate. Every source is retimed to it." },
+    Settable { key: "canvas.sample_rate", kind: Kind::Int, timing: Timing::Restart, unit: "Hz", default: "48000", about: "Audio sample rate." },
+    Settable { key: "canvas.channels", kind: Kind::Int, timing: Timing::Restart, unit: "channels", default: "2", about: "Audio channels. Mono or stereo." },
+
+    Settable { key: "program.video_bitrate_kbps", kind: Kind::Int, timing: Timing::Restart, unit: "kbit/s", default: "6000", about: "Video bitrate of the outgoing programme." },
+    Settable { key: "program.audio_bitrate_kbps", kind: Kind::Int, timing: Timing::Restart, unit: "kbit/s", default: "160", about: "Audio bitrate of the outgoing programme." },
+    Settable { key: "program.keyframe_interval_secs", kind: Kind::Int, timing: Timing::Restart, unit: "seconds", default: "2", about: "Keyframe interval. Two is what every CDN asks for." },
+    Settable { key: "program.audio_ramp_ms", kind: Kind::Int, timing: Timing::Restart, unit: "milliseconds", default: "180", about: "Audio crossfade on a take. Zero gives an audible click." },
+    Settable { key: "program.encoder", kind: Kind::Text, timing: Timing::Restart, unit: "", default: "on-demand", about: "When the programme encoder runs: \"on-demand\" or \"always\"." },
+
+    Settable { key: "safety.min_hold_ms", kind: Kind::Int, timing: Timing::Hot, unit: "milliseconds", default: "0", about: "A take inside this window of the last one is refused." },
+    Settable { key: "safety.max_takes_per_minute", kind: Kind::Int, timing: Timing::Hot, unit: "takes a minute", default: "120", about: "Takes allowed in any rolling minute, counted for the whole core." },
+    Settable { key: "safety.flash_guard", kind: Kind::Bool, timing: Timing::Hot, unit: "", default: "true", about: "The BT.1702-3 hold: no more than three flashes in any second." },
+    Settable { key: "safety.on_operator_silence.after_secs", kind: Kind::Int, timing: Timing::Hot, unit: "seconds", default: "120", about: "How long whoever made the last take may go quiet before the watchdog fires." },
+    Settable { key: "safety.on_operator_silence.action", kind: Kind::Text, timing: Timing::Hot, unit: "", default: "alert", about: "What the watchdog does: \"alert\", \"hold\", \"slate\" or \"fallback:<source id>\"." },
+
+    Settable { key: "multiview.enabled", kind: Kind::Bool, timing: Timing::Restart, unit: "", default: "true", about: "Build the mosaic at all. False removes it and the snapshot routes with it." },
+    Settable { key: "multiview.width", kind: Kind::Int, timing: Timing::Restart, unit: "pixels", default: "960", about: "Width of the whole mosaic, not of one cell." },
+    Settable { key: "multiview.height", kind: Kind::Int, timing: Timing::Restart, unit: "pixels", default: "540", about: "Height of the whole mosaic." },
+    Settable { key: "multiview.fps", kind: Kind::Int, timing: Timing::Restart, unit: "frames a second", default: "8", about: "Mosaic frame rate. Lower costs the mixer and the operator's link less." },
+    Settable { key: "multiview.jpeg_quality", kind: Kind::Int, timing: Timing::Restart, unit: "1 to 100", default: "60", about: "JPEG quality of the mosaic." },
+    Settable { key: "multiview.include_program", kind: Kind::Bool, timing: Timing::Restart, unit: "", default: "true", about: "Show what is going out as one of the cells." },
+    Settable { key: "multiview.linger_secs", kind: Kind::Int, timing: Timing::Restart, unit: "seconds", default: "2", about: "How long the mosaic stays up after the last watcher leaves." },
+
+    Settable { key: "snapshot.enabled", kind: Kind::Bool, timing: Timing::Restart, unit: "", default: "true", about: "Serve stills cut out of the mosaic." },
+    Settable { key: "snapshot.default_width", kind: Kind::Int, timing: Timing::Restart, unit: "pixels", default: "320", about: "What a request with no width asks for." },
+    Settable { key: "snapshot.min_interval_secs", kind: Kind::Int, timing: Timing::Restart, unit: "seconds", default: "5", about: "How long a client waits between stills. Zero turns the limit off." },
+    Settable { key: "snapshot.max_width", kind: Kind::Int, timing: Timing::Restart, unit: "pixels", default: "1280", about: "Widths above this need an explicit allow_large on the request." },
+    Settable { key: "snapshot.idle_secs", kind: Kind::Int, timing: Timing::Restart, unit: "seconds", default: "15", about: "How long the tracker follows the mosaic after the last request." },
+
+    Settable { key: "stall.restart_after_secs", kind: Kind::Int, timing: Timing::Restart, unit: "seconds", default: "10", about: "How long a source may deliver nothing before its pipeline is rebuilt." },
+    Settable { key: "stall.rebuild_attempts", kind: Kind::Int, timing: Timing::Restart, unit: "attempts", default: "3", about: "Rebuilds at full speed before the mixer starts backing off." },
+    Settable { key: "stall.rebuild_backoff_secs", kind: Kind::Int, timing: Timing::Restart, unit: "seconds", default: "30", about: "The wait after that, doubled on each further failure." },
+    Settable { key: "stall.rebuild_backoff_max_secs", kind: Kind::Int, timing: Timing::Restart, unit: "seconds", default: "300", about: "Ceiling for that wait." },
+    Settable { key: "stall.hold_last_frame", kind: Kind::Bool, timing: Timing::Restart, unit: "", default: "true", about: "Hold a rebuilding source's last frame on programme instead of cutting to the slate." },
+
+    Settable { key: "browser.overlay_fps", kind: Kind::Int, timing: Timing::Restart, unit: "frames a second", default: "10", about: "Frame rate for a page drawn over video the mixer decodes itself." },
+];
+
+/// The row for a key, or `None` when the key is not one a surface may change.
+pub fn settable(key: &str) -> Option<&'static Settable> {
+    SETTABLE.iter().find(|s| s.key == key)
+}
+
+/// A value on its way into the file, already typed.
+#[derive(Debug, Clone, PartialEq)]
+pub enum Setting {
+    Int(i64),
+    Bool(bool),
+    Text(String),
+}
+
+impl Setting {
+    fn into_item(self) -> toml_edit::Item {
+        match self {
+            Setting::Int(n) => toml_edit::value(n),
+            Setting::Bool(b) => toml_edit::value(b),
+            Setting::Text(s) => toml_edit::value(s),
+        }
+    }
+}
+
+/// The file's text with these keys changed, and nothing else touched.
+///
+/// The writer beside this one, the one `plugin.settings.set` uses, reparses
+/// the whole config into a `toml::Table` and prints it again. That loses every
+/// comment in the file and reorders what is left, which is said plainly in
+/// `docs/how-to/install-a-plugin.md`. It is not good enough for a settings
+/// screen an operator opens every week: `godwinmix.toml` is usually the
+/// annotated example file, and the annotations are most of its value.
+///
+/// So this edits the document instead. A key already in the file keeps its
+/// position and the comment above it and only its value changes; a key that is
+/// not there is appended to its table, and a table that is not there is
+/// appended to the file. Everything else survives byte for byte.
+/// `effective` is the configuration as it stands, and it is there for one
+/// reason: `[canvas]` and `[program]` have no per-key serde defaults, so a
+/// file that carries half of one of them does not parse at all. Writing a
+/// single canvas width into a file with no `[canvas]` section would produce a
+/// config the mixer refuses to start on. When that happens the rest of the
+/// table is filled in from what is running, which is the value the operator
+/// was looking at anyway. Tables that do have per-key defaults, which is every
+/// other one here, are left alone and gain exactly the line that was asked
+/// for.
+pub fn with_keys(text: &str, changes: &[(String, Setting)], effective: &Config) -> Result<String> {
+    let once = edit(text, changes)?;
+    if Config::from_toml(&once, "the edited config").is_ok() {
+        return Ok(once);
+    }
+    let filled = [changes, &siblings_of(changes, effective)].concat();
+    edit(text, &filled)
+}
+
+/// The other allow-listed keys of every table a change touches, read out of
+/// the running configuration and skipping the ones already being written.
+fn siblings_of(changes: &[(String, Setting)], effective: &Config) -> Vec<(String, Setting)> {
+    let Ok(document) = toml::Value::try_from(effective) else { return Vec::new() };
+    let tables: std::collections::BTreeSet<&str> =
+        changes.iter().filter_map(|(k, _)| k.split('.').next()).collect();
+    SETTABLE
+        .iter()
+        .filter(|row| tables.contains(row.key.split('.').next().unwrap_or_default()))
+        .filter(|row| !changes.iter().any(|(k, _)| k == row.key))
+        .filter_map(|row| Some((row.key.to_string(), read_key(&document, row.key, row.kind)?)))
+        .collect()
+}
+
+/// One dotted key out of a serialised configuration, typed the way its row
+/// says it is typed.
+pub fn read_key(document: &toml::Value, key: &str, kind: Kind) -> Option<Setting> {
+    let mut here = document;
+    for part in key.split('.') {
+        here = here.get(part)?;
+    }
+    match kind {
+        Kind::Int => here.as_integer().map(Setting::Int),
+        Kind::Bool => here.as_bool().map(Setting::Bool),
+        Kind::Text => here.as_str().map(|s| Setting::Text(s.to_string())),
+    }
+}
+
+/// The document editing itself, with no view on whether the result is a
+/// configuration the mixer would accept.
+fn edit(text: &str, changes: &[(String, Setting)]) -> Result<String> {
+    let mut doc: toml_edit::DocumentMut =
+        text.parse().context("the config file is not valid TOML, so nothing was changed")?;
+    for (key, value) in changes {
+        let path: Vec<&str> = key.split('.').collect();
+        let (last, tables) = path.split_last().expect("a key always has a last segment");
+        let mut item = doc.as_item_mut();
+        for (depth, name) in tables.iter().enumerate() {
+            let table = item.as_table_like_mut().ok_or_else(|| {
+                anyhow::anyhow!("`{name}` in the config file holds a value, not a table, so `{key}` has nowhere to go")
+            })?;
+            if table.get(name).is_none() {
+                let mut fresh = toml_edit::Table::new();
+                // A table only on the way to another one prints no header of
+                // its own: `safety.on_operator_silence.action` writes
+                // `[safety.on_operator_silence]` and not an empty `[safety]`
+                // above it.
+                fresh.set_implicit(depth + 1 < tables.len());
+                table.insert(name, toml_edit::Item::Table(fresh));
+            }
+            item = table.get_mut(name).expect("the table was just inserted");
+        }
+        let table = item
+            .as_table_like_mut()
+            .ok_or_else(|| anyhow::anyhow!("`{key}` does not name a value inside a table"))?;
+        match table.get_mut(last) {
+            Some(existing) => {
+                // Only the number changes. The whitespace and the trailing
+                // comment live in the value's decor, so `min_hold_ms = 500
+                // # measured on the desk` keeps the note beside it.
+                let decor = existing.as_value().map(|v| v.decor().clone());
+                *existing = value.clone().into_item();
+                if let (Some(decor), Some(fresh)) = (decor, existing.as_value_mut()) {
+                    *fresh.decor_mut() = decor;
+                }
+            }
+            None => {
+                table.insert(last, value.clone().into_item());
+            }
+        }
+    }
+    Ok(doc.to_string())
+}
+
+/// Write text over a file without ever leaving a half written one behind.
+///
+/// Into a temporary file in the same directory, then renamed over the
+/// original, which is atomic on every filesystem the mixer runs on. The point
+/// is the power cut in the middle of a save: the operator gets either the old
+/// config or the new one, never a truncated file that stops the mixer
+/// starting. The temporary file sits beside the config rather than in the
+/// system temporary directory so the rename never has to cross a device.
+pub fn write_atomically(path: &Path, text: &str) -> Result<()> {
+    let dir = path.parent().filter(|p| !p.as_os_str().is_empty()).unwrap_or_else(|| Path::new("."));
+    let mut name = path.file_name().unwrap_or_default().to_os_string();
+    name.push(format!(".{}.tmp", std::process::id()));
+    let temp = dir.join(name);
+    std::fs::write(&temp, text).with_context(|| format!("writing {}", temp.display()))?;
+    match std::fs::rename(&temp, path) {
+        Ok(()) => Ok(()),
+        Err(e) => {
+            let _ = std::fs::remove_file(&temp);
+            Err(e).with_context(|| format!("replacing {}", path.display()))
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -2097,5 +2383,167 @@ server_names = ["core.example"]
         .unwrap();
         let back = toml::to_string(&cfg).unwrap();
         assert!(back.contains("place = \"node:studio-b\""), "written back as: {back}");
+    }
+}
+
+/// The allow list, the timing split, and the writer that keeps an operator's
+/// comments. Everything `config.get` and `config.set` stand on.
+#[cfg(test)]
+mod settings_tests {
+    use super::*;
+
+    /// A configuration with nothing in it, which is every default.
+    fn shipped() -> Config {
+        Config::from_toml("", "the defaults").unwrap()
+    }
+
+    // --- the settable allow list and the writer beside it --------------------
+
+    #[test]
+    fn every_settable_key_names_a_real_field() {
+        // A key nobody can set is a key a form draws and a save refuses. The
+        // check is the round trip: write the documented default into an empty
+        // file, parse the result as a `Config`, and read the value back.
+        for row in SETTABLE {
+            let value = match row.kind {
+                Kind::Int => Setting::Int(row.default.parse().expect(row.key)),
+                Kind::Bool => Setting::Bool(row.default.parse().expect(row.key)),
+                Kind::Text => Setting::Text(row.default.to_string()),
+            };
+            let text = with_keys("", &[(row.key.to_string(), value)], &shipped())
+                .unwrap_or_else(|e| panic!("{}: {e:#}", row.key));
+            let cfg = Config::from_toml(&text, row.key)
+                .unwrap_or_else(|e| panic!("{} wrote a config that will not parse: {e:#}", row.key));
+            let back = toml::Value::try_from(&cfg).expect("a config always serialises");
+            let mut here = &back;
+            for part in row.key.split('.') {
+                here = here
+                    .get(part)
+                    .unwrap_or_else(|| panic!("{} is not in a parsed config at all", row.key));
+            }
+            assert_eq!(
+                here.to_string().trim_matches('"'),
+                row.default,
+                "{} did not come back as the default it documents",
+                row.key
+            );
+        }
+    }
+
+    #[test]
+    fn the_allow_list_stops_at_the_tables_it_names() {
+        // The rule this encodes: no credential, no bind address and no
+        // destination is settable this way. Each of those has its own method
+        // or no method at all, and a settings screen is not the place for it.
+        for row in SETTABLE {
+            let table = row.key.split('.').next().unwrap();
+            assert!(
+                ["canvas", "program", "safety", "multiview", "snapshot", "stall", "browser"]
+                    .contains(&table),
+                "{} is outside the tables this pass exposes",
+                row.key
+            );
+        }
+        for forbidden in [
+            "control.token",
+            "control.bind",
+            "security.allow_exec_sources",
+            "browser.sidecar",
+            "browser.args",
+        ] {
+            assert!(settable(forbidden).is_none(), "{forbidden} must not be settable");
+        }
+    }
+
+    #[test]
+    fn only_the_safety_table_is_hot() {
+        // The split is documented above the table and asserted here, so a row
+        // marked hot by mistake fails a test rather than promising an operator
+        // something that will not happen until they restart.
+        for row in SETTABLE {
+            let expected =
+                if row.key.starts_with("safety.") { Timing::Hot } else { Timing::Restart };
+            assert_eq!(row.timing, expected, "{} has the wrong timing", row.key);
+        }
+    }
+
+    #[test]
+    fn a_change_keeps_every_comment_around_it() {
+        let original = "# The mixer for the main hall.\n\
+                        [safety]\n\
+                        # Nobody cuts faster than this.\n\
+                        min_hold_ms = 500  # measured on the desk\n\
+                        flash_guard = true\n\
+                        \n\
+                        [program]\n\
+                        # 5 Mbit/s is what the uplink carries.\n\
+                        video_bitrate_kbps = 5000\n";
+        let out = with_keys(
+            original,
+            &[
+                ("safety.min_hold_ms".to_string(), Setting::Int(1200)),
+                ("program.video_bitrate_kbps".to_string(), Setting::Int(4500)),
+            ],
+            &shipped(),
+        )
+        .unwrap();
+        assert!(out.contains("# The mixer for the main hall."), "{out}");
+        assert!(out.contains("# Nobody cuts faster than this."), "{out}");
+        assert!(out.contains("# measured on the desk"), "{out}");
+        assert!(out.contains("# 5 Mbit/s is what the uplink carries."), "{out}");
+        assert!(out.contains("min_hold_ms = 1200"), "{out}");
+        assert!(out.contains("video_bitrate_kbps = 4500"), "{out}");
+        assert!(!out.contains("min_hold_ms = 500"), "{out}");
+        // And the file still parses as the thing it is.
+        let cfg = Config::from_toml(&out, "edited").unwrap();
+        assert_eq!(cfg.safety.min_hold_ms, 1200);
+        assert_eq!(cfg.program.video_bitrate_kbps, 4500);
+    }
+
+    #[test]
+    fn a_table_that_was_not_there_is_added() {
+        let out = with_keys(
+            "# nothing but a comment\n[control]\nbind = \"127.0.0.1:8080\"\n",
+            &[
+                ("multiview.jpeg_quality".to_string(), Setting::Int(40)),
+                ("safety.on_operator_silence.action".to_string(), Setting::Text("hold".into())),
+            ],
+            &shipped(),
+        )
+        .unwrap();
+        assert!(out.starts_with("# nothing but a comment"), "{out}");
+        assert!(out.contains("bind = \"127.0.0.1:8080\""), "{out}");
+        assert!(!out.contains("[safety]\n\n"), "an empty [safety] header was printed: {out}");
+        let cfg = Config::from_toml(&out, "grown").unwrap();
+        assert_eq!(cfg.multiview.jpeg_quality, 40);
+        assert_eq!(cfg.safety.on_operator_silence.action.as_str(), "hold");
+    }
+
+    #[test]
+    fn a_file_that_does_not_parse_changes_nothing() {
+        let e = with_keys(
+            "[safety\nmin_hold_ms = 1",
+            &[("safety.min_hold_ms".into(), Setting::Int(2))],
+            &shipped(),
+        )
+        .unwrap_err();
+        assert!(format!("{e:#}").contains("not valid TOML"), "{e:#}");
+    }
+
+    #[test]
+    fn a_write_replaces_the_file_and_leaves_nothing_behind() {
+        let dir = std::env::temp_dir().join(format!("gmx-cfg-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("godwinmix.toml");
+        std::fs::write(&path, "[safety]\nmin_hold_ms = 0\n").unwrap();
+        write_atomically(&path, "[safety]\nmin_hold_ms = 750\n").unwrap();
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), "[safety]\nmin_hold_ms = 750\n");
+        let left: Vec<_> = std::fs::read_dir(&dir)
+            .unwrap()
+            .filter_map(|e| e.ok())
+            .map(|e| e.file_name().to_string_lossy().to_string())
+            .collect();
+        assert_eq!(left, vec!["godwinmix.toml".to_string()], "a temporary file was left behind");
+        std::fs::remove_dir_all(&dir).unwrap();
     }
 }
