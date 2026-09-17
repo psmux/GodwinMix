@@ -135,8 +135,7 @@ gmx-shell {
 .btn {
   background: var(--raise); color: var(--text); border: var(--border) solid var(--line);
   border-radius: var(--radius-sm); padding: 5px 10px; line-height: 1.2;
-  transition: background var(--anim), border-color var(--anim);
-}
+  transition: background var(--anim), border-color var(--anim); white-space: nowrap; }
 .btn:hover { background: var(--panel2); border-color: var(--dim); }
 .btn:disabled { opacity: 0.45; cursor: default; }
 .btn.primary { background: var(--accent); color: var(--on-accent); border-color: var(--accent); }
@@ -270,7 +269,7 @@ label { display: block; }
 .dialog h2 { margin: 0; font-size: var(--fs-lg); }
 
 .tabs { display: flex; gap: 2px; }
-.tabs button { background: none; border: 0; border-bottom: 2px solid transparent; padding: 6px 10px; color: var(--dim); }
+.tabs button { background: none; border: 0; border-bottom: 2px solid transparent; padding: 6px 10px; color: var(--dim); white-space: nowrap; }
 .tabs button.on { color: var(--text); border-bottom-color: var(--accent); }
 
 /* The scene strip: tabs that choose, and one button that takes. */
