@@ -14,6 +14,10 @@ export const ICONS = {
   output: "M4 6h10v12H4V6zm12 3l5-3v12l-5-3V9z",
   media: "M5 4l14 8-14 8V4z",
   device: "M8 3h8v18H8V3zm3 16h2",
+  screen: "M3 5h18v11H3V5zm6 15h6m-3-4v4",
+  mic: "M12 3a3 3 0 013 3v5a3 3 0 01-6 0V6a3 3 0 013-3zM6 11a6 6 0 0012 0M12 17v4",
+  pattern: "M4 4h16v16H4V4zm5.3 0v16m5.4-16v16M4 9.3h16M4 14.7h16",
+  more: "M5 12h.01M12 12h.01M19 12h.01",
 };
 
 /**
@@ -106,6 +110,39 @@ export const SOURCE_KINDS = [
       superimpose: null,
     }),
   },
+  {
+    id: "test",
+    provides: ["test/source"],
+    title: "Test pattern",
+    group: "Test patterns",
+    icon: "pattern",
+    description: "Bars and a tone out of the mixer itself. Nothing to plug in and nothing to type.",
+    plugin: "built in",
+    schema: {
+      type: "object",
+      required: ["uri"],
+      properties: {
+        uri: { type: "string", title: "Pattern", examples: ["test://smpte"], description: "test:// and the name of a videotestsrc pattern." },
+        name: { type: "string", title: "Name" },
+      },
+    },
+    build: (v) => ({ uri: v.uri, name: v.name || null, kind: null, superimpose: null }),
+  },
+];
+
+/**
+ * The patterns worth a row of their own.
+ *
+ * `test/source` takes any name `videotestsrc` knows, which is dozens. These
+ * four are the ones a setup actually uses: bars to line a screen up, the ball
+ * to see whether motion is smooth, black to check a fade, snow to prove a
+ * source is live when a still picture would not.
+ */
+export const TEST_PATTERNS = [
+  { uri: "test://smpte", name: "Colour bars", note: "SMPTE bars and a 1 kHz tone" },
+  { uri: "test://ball", name: "Moving ball", note: "Motion, for checking frame rate" },
+  { uri: "test://black", name: "Black", note: "A flat black frame" },
+  { uri: "test://snow", name: "Snow", note: "Noise, which never looks frozen" },
 ];
 
 export const OUTPUT_KINDS = [
@@ -145,7 +182,110 @@ export const KIND_COLOUR = {
   exec: "var(--kind-other)",
   camera: "var(--kind-camera)",
   graphic: "var(--kind-graphic)",
+  screen: "var(--kind-camera)",
+  mic: "var(--kind-graphic)",
+  pattern: "var(--kind-other)",
+  media: "var(--kind-file)",
+  more: "var(--kind-other)",
 };
+
+/**
+ * The picker's left hand rail: what an operator is looking for, in the order
+ * they look for it.
+ *
+ * The order is deliberate and it is not the order the protocol lists kinds in.
+ * Somebody opening this wants the camera that is already plugged in; the
+ * address boxes are what they reach for when none of that worked. Wirecast and
+ * vMix both put hardware first for the same reason.
+ *
+ * `provides` are the type ids that land in the category, which is how a
+ * plugin's kind finds its place without anything here naming the plugin. A
+ * kind that matches nothing falls to More rather than being dropped.
+ *
+ * `plugin` names the first party plugin a category needs. The category is
+ * drawn whether or not it is installed: a camera tab that is missing until
+ * somebody runs a terminal command is how this got hard in the first place.
+ */
+export const CATEGORIES = [
+  {
+    id: "cameras",
+    title: "Cameras",
+    icon: "camera",
+    devices: true,
+    kinds: [],
+    provides: ["camera/source"],
+    plugin: {
+      name: "camera",
+      label: "Install camera support",
+      line: "Cameras need the camera plugin. It installs into this mixer while it runs, and nothing goes off air.",
+    },
+    nothing: "No camera answered. Check it is plugged in and that nothing else has it open, then rescan.",
+  },
+  {
+    id: "screens",
+    title: "Screens and windows",
+    icon: "screen",
+    devices: true,
+    kinds: [],
+    provides: ["screen/source"],
+    plugin: {
+      name: "screen",
+      label: "Install screen capture",
+      line: "Capturing a screen needs the screen plugin. It installs into this mixer while it runs.",
+    },
+    nothing: "Nothing to capture was offered. Rescan after granting this machine's screen recording permission.",
+  },
+  {
+    id: "audio",
+    title: "Microphones and audio",
+    icon: "mic",
+    devices: true,
+    kinds: [],
+    provides: ["audio-device/source"],
+    plugin: {
+      name: "audio-device",
+      label: "Install audio input support",
+      line: "Microphones and sound cards need the audio-device plugin. It installs into this mixer while it runs.",
+    },
+    nothing: "No sound input answered. Check the machine can hear it, then rescan.",
+  },
+  {
+    id: "files",
+    title: "Video and images",
+    icon: "file",
+    media: true,
+    kinds: ["file"],
+    provides: ["file/source"],
+  },
+  { id: "web", title: "Web pages", icon: "page", kinds: ["page"], provides: ["browser/source", "layered/source"] },
+  {
+    id: "streams",
+    title: "Streams and feeds",
+    icon: "stream",
+    kinds: ["stream"],
+    provides: ["rtmp/source", "hls/source", "srt/source", "ndi/source", "ingest/source", "whip/source"],
+  },
+  { id: "test", title: "Test patterns", icon: "pattern", patterns: true, kinds: ["test"], provides: ["test/source"] },
+  { id: "more", title: "More", icon: "more", kinds: ["exec"], provides: ["exec/source"] },
+];
+
+/** The category a type id belongs in, for a candidate or a plugin's kind. */
+export function categoryOfProvide(id) {
+  const want = String(id || "");
+  for (const cat of CATEGORIES) {
+    if ((cat.provides || []).includes(want)) return cat.id;
+  }
+  return "more";
+}
+
+/** The category one picker kind belongs in. */
+export function categoryOf(kind) {
+  for (const cat of CATEGORIES) {
+    if ((cat.kinds || []).includes(kind.id)) return cat.id;
+    if ((kind.provides || []).some((id) => (cat.provides || []).includes(id))) return cat.id;
+  }
+  return "more";
+}
 
 /**
  * Work out a kind from a URI, the way the server does. Duplicated here on
@@ -178,39 +318,32 @@ export function grouped(kinds) {
 /**
  * The catalogue for the picker. `core.api` `kinds` says what this build has;
  * the table above says how each one looks, matched by `provides`.
+ *
+ * Both sources are read and both are kept. This used to answer with the built
+ * in kinds the moment `core.api` named one, and `core.api` always names one,
+ * so every kind a plugin contributed was unreachable from the picker: a
+ * camera plugin could be installed and running and the page would still offer
+ * four address boxes. The core's list covers what is compiled in and
+ * `plugin.list` covers the rest.
  */
-export async function loadKinds(client, what) {
+export async function loadKinds(client, what, plugins) {
   const builtIn = what === "output" ? OUTPUT_KINDS : SOURCE_KINDS;
-  try {
-    const api = await client.call("core.api", {});
-    const kinds = extractKinds(api, what, builtIn);
-    if (kinds.length) return kinds;
-  } catch {
-    /* no core.api on this mixer */
-  }
-  try {
-    const list = await client.call("plugin.list", {});
-    const kinds = [];
-    for (const plugin of list.plugins || []) {
-      for (const provide of plugin.provides || []) {
-        if (provide.kind !== what) continue;
-        kinds.push({
-          id: provide.id,
-          title: provide.title || provide.id,
-          group: provide.group || "Everything else",
-          icon: provide.icon || (what === "output" ? "output" : "stream"),
-          description: provide.description || "",
-          plugin: plugin.name,
-          schema: provide.schema || { type: "object", properties: {} },
-          build: (v) => Object.assign({ kind: provide.id }, v),
-        });
-      }
-    }
-    if (kinds.length) return builtIn.concat(kinds);
-  } catch {
-    /* no plugin.list either */
-  }
-  return builtIn;
+  const api = await client.call("core.api", {}).catch(() => null);
+  const reported = extractKinds(api, what, builtIn);
+  const core = reported.length ? reported : builtIn;
+  const installed = plugins || (await listPlugins(client));
+  return core.concat(pluginKinds(client, installed, what, core));
+}
+
+/** Every plugin this mixer has, or nothing on a core that does not say. */
+export async function listPlugins(client) {
+  const list = await client.call("plugin.list", {}).catch(() => null);
+  return (list && list.plugins) || [];
+}
+
+/** Whether a named plugin is installed and loaded, given that listing. */
+export function hasPlugin(plugins, name) {
+  return (plugins || []).some((p) => p.name === name && p.enabled !== false && !p.problem);
 }
 
 /**
@@ -218,13 +351,176 @@ export async function loadKinds(client, what) {
  *
  * The core's `kinds` is a listing, not a form: it says a kind exists and what
  * it claims, not what to ask an operator for. So it is used to drop tiles this
- * build cannot serve, and the table still draws the ones that are left. A kind
- * with no tile (`test/source`, `srt/output`) is not offered yet; it needs its
- * own fields, not a generic address box.
+ * build cannot serve, and the table still draws the ones that are left.
  */
 function extractKinds(api, what, builtIn) {
   const reported = (api && api.kinds && api.kinds[what]) || [];
   if (!reported.length) return [];
   const have = new Set(reported.map((k) => k.id));
   return builtIn.filter((t) => !t.provides || t.provides.some((id) => have.has(id)));
+}
+
+/**
+ * One picker kind per provide a plugin contributes.
+ *
+ * `plugin.list` answers with type ids as plain strings (`camera/source`), and
+ * the kind is the half after the slash, the same convention the built in ids
+ * follow. An older core that answered with objects is still read, because the
+ * only cost of doing so is the two lines below.
+ *
+ * The settings schema is not fetched here. It is one `plugin.describe` per
+ * plugin and it is wanted only when somebody opens that kind's form, so it is
+ * left as a function the form awaits.
+ */
+function pluginKinds(client, plugins, what, already) {
+  const seen = new Set();
+  for (const kind of already) for (const id of kind.provides || []) seen.add(id);
+  const out = [];
+  for (const plugin of plugins) {
+    for (const provide of plugin.provides || []) {
+      const entry = typeof provide === "string" ? { id: provide } : provide || {};
+      let id = String(entry.id || entry.type || "");
+      if (id && !id.includes("/")) id = `${plugin.name}/${id}`;
+      const half = entry.kind || id.split("/")[1] || "";
+      if (!id || half !== what || seen.has(id)) continue;
+      seen.add(id);
+      out.push({
+        id,
+        provides: [id],
+        title: entry.title || titleFor(plugin.name, id),
+        group: entry.group || "Plugins",
+        icon: entry.icon || iconFor(id, what),
+        description: entry.description || plugin.description || "",
+        plugin: plugin.name,
+        schema: entry.schema || (() => provideSchema(client, plugin.name, id)),
+        build: buildFor(id),
+      });
+    }
+  }
+  return out;
+}
+
+/** "camera/source" from the camera plugin reads as "Camera". */
+function titleFor(pluginName, id) {
+  const half = id.split("/")[1] || "";
+  const stem = half === "source" || half === "output" ? pluginName : id;
+  return stem.replace(/[-_]/g, " ").replace(/^./, (c) => c.toUpperCase());
+}
+
+function iconFor(id, what) {
+  const [name] = id.split("/");
+  if (ICONS[name]) return name;
+  if (name === "audio-device") return "mic";
+  if (name === "ndi" || name === "srt" || name === "ingest" || name === "whip") return "stream";
+  return what === "output" ? "output" : "device";
+}
+
+/**
+ * What a plugin's kind sends to `source.add`.
+ *
+ * `type` names the kind outright and rides underneath the fields the core
+ * knows. `uri` is still required and a kind named outright has no address, so
+ * the type goes there too, which is what `gmx ctl source add --type` has
+ * always done and what the id is then derived from.
+ */
+function buildFor(id) {
+  return (values) => {
+    const rest = Object.assign({}, values);
+    const name = rest.name;
+    delete rest.name;
+    const uri = String(rest.uri || id).trim();
+    delete rest.uri;
+    return Object.assign({ type: id, uri, name: name || null }, rest);
+  };
+}
+
+/** A provide's settings schema, with a Name field the core always takes. */
+async function provideSchema(client, pluginName, id) {
+  let found = null;
+  try {
+    const described = await client.call("plugin.describe", { id: pluginName });
+    found = (described && described.schemas && described.schemas[id]) || null;
+  } catch {
+    /* an older core, or a plugin that went away between two calls */
+  }
+  const schema = found && typeof found === "object" ? JSON.parse(JSON.stringify(found)) : {};
+  schema.type = "object";
+  schema.properties = schema.properties || {};
+  if (!schema.properties.name) schema.properties.name = { type: "string", title: "Name" };
+  return schema;
+}
+
+// ------------------------------------------------------------- devices
+
+/**
+ * What every device plugin can see right now.
+ *
+ * One call, however many plugins answer it, and the core caps the wait at four
+ * and a half seconds. The picker draws its categories before this is asked and
+ * fills the rows in when it answers, because a modal that waits on hardware is
+ * a modal that looks broken on a machine with a slow camera.
+ */
+export async function discoverDevices(client, timeoutMs) {
+  const answer = await client.call("device.discover", { timeout_ms: timeoutMs || 2000 });
+  return (answer && answer.candidates) || [];
+}
+
+/** The size a candidate advertises, when it advertises one. */
+export function candidateSize(candidate) {
+  const params = (candidate && candidate.params) || {};
+  const pair = params.best_size || params.size || candidate.best_size;
+  if (Array.isArray(pair) && pair.length === 2) return `${pair[0]} x ${pair[1]}`;
+  if (typeof pair === "string" && pair.trim()) return pair.trim();
+  const w = params.width || candidate.width;
+  const h = params.height || candidate.height;
+  return w && h ? `${w} x ${h}` : "";
+}
+
+/** The `source.add` params a candidate is already carrying. */
+export function addRequestFor(candidate) {
+  const rest = Object.assign({}, (candidate && candidate.params) || {});
+  const type = String((candidate && (candidate.type || candidate.kind)) || "");
+  const uri = String(rest.uri || type).trim();
+  delete rest.uri;
+  delete rest.name;
+  return Object.assign({ type, uri, name: (candidate && candidate.name) || null }, rest);
+}
+
+/**
+ * Whether this mixer already has the thing a candidate offers.
+ *
+ * A source record carries an id, a name and a URI and nothing else, and every
+ * camera on a machine shares the one URI, so the name is what tells two of
+ * them apart. It is the device's own name, because that is what the picker
+ * adds it under.
+ */
+export function alreadyAdded(sources, candidate) {
+  const want = String((candidate && candidate.name) || "").trim().toLowerCase();
+  const uri = String(addRequestFor(candidate).uri || "").toLowerCase();
+  const typed = String((candidate && (candidate.type || candidate.kind)) || "").toLowerCase();
+  return (sources || []).some((s) => {
+    const name = String(s.name || "").trim().toLowerCase();
+    if (want && name === want) return true;
+    // A URI that is only the type id names the kind, not this device, so it
+    // proves nothing on its own.
+    return !!uri && uri !== typed && String(s.uri || "").toLowerCase() === uri;
+  });
+}
+
+/**
+ * What to pass `plugin.add` for a first party plugin.
+ *
+ * The bare name is the form to prefer, and a marketplace answers with exactly
+ * what to send. A mixer that knows no marketplace falls back to the
+ * repository the first party plugins live in.
+ */
+export async function pluginSourceFor(client, name) {
+  try {
+    const found = await client.call("plugin.search", { term: name });
+    const hit = (found.results || []).find((r) => r.name === name);
+    if (hit && hit.source) return hit.source;
+  } catch {
+    /* no marketplace configured, or no network to reach one */
+  }
+  return "psmux/godwinmix";
 }

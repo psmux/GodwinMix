@@ -74,7 +74,7 @@ class SourcesPanel extends HTMLElement {
     this.sceneTab = el("button", { text: "In this scene", onclick: () => this.setScope("scene") });
     this.allTab = el("button", { text: "All sources", onclick: () => this.setScope("all") });
     this.scopeTabs = el("div.tabs", { "aria-label": "Which sources" }, [this.sceneTab, this.allTab]);
-    this.addButton = el("button.btn.primary", { text: "Add", title: "Ctrl+N", onclick: () => this.addSource() });
+    this.addButton = el("button.btn.primary", { text: "+ Add source", title: "Ctrl+N", onclick: () => this.addSource() });
     this.bar = el("div.row.pad", {}, [
       el("strong", { text: "Sources" }),
       this.count,
@@ -266,7 +266,7 @@ class SourcesPanel extends HTMLElement {
     const scoped = !!scene && this.scope === "scene";
     this.sceneTab.classList.toggle("on", scoped);
     this.allTab.classList.toggle("on", !scoped);
-    this.addButton.textContent = scoped ? `Add to ${scene.name}` : "Add";
+    this.addButton.textContent = scoped ? `+ Add to ${scene.name}` : "+ Add source";
   }
 
   /**
@@ -284,7 +284,7 @@ class SourcesPanel extends HTMLElement {
       if (this.empty) this.empty.remove();
       this.empty = null;
       this.emptyKey = key;
-      if (key === "first") this.empty = emptyState(() => this.addSource());
+      if (key === "first") this.empty = emptyState((where) => this.addSource(where));
       else if (key) this.empty = this.scopedEmpty(scene);
       if (this.empty) this.appendChild(this.empty);
     }
@@ -296,7 +296,7 @@ class SourcesPanel extends HTMLElement {
       el("div", {}, [
         el("h2", { text: `Nothing in ${scene.name} yet` }),
         el("p.dim", { text: "Add a source and it lands in this scene. The other tab has everything the mixer knows about." }),
-        el("button.btn.primary", { text: `Add to ${scene.name}`, onclick: () => this.addSource() }),
+        el("button.btn.primary", { text: `+ Add to ${scene.name}`, onclick: () => this.addSource() }),
       ]),
     ]);
   }
@@ -411,9 +411,12 @@ class SourcesPanel extends HTMLElement {
    * the source it made and the placing happens here, in the order the
    * protocol needs: the mixer has to own a source before a scene can draw it.
    */
-  addSource() {
+  addSource(opts) {
     const scene = this.scopedTo();
-    return openPicker(this.client, "source", { onAdded: (status) => this.place(scene, status) });
+    return openPicker(this.client, "source", {
+      category: opts && opts.category,
+      onAdded: (status) => this.place(scene, status),
+    });
   }
 
   /**
