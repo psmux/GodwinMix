@@ -69,11 +69,21 @@ theme = "calm"
 theme_css = "theme.css"
 scenes = "scenes"
 gallery = "icon"
-steps = [
-  "Put your two stream keys into the [[outputs]] blocks of godwinmix.toml.",
-  "Run `gmx` and open http://localhost:8080.",
-  "Press Wide to put a picture on air.",
-]
+
+[[provides.preset.next]]
+do = "stream_key"
+output = "youtube"
+text = "YouTube Studio, then Create, then Go Live, shows the key."
+
+[[provides.preset.next]]
+do = "install_plugin"
+name = "camera"
+text = "The cameras are test patterns until this is here."
+
+[[provides.preset.next]]
+do = "take"
+source = "cam-wide"
+text = "Press Wide to put a picture on air."
 ```
 
 | Key | Required | What it is |
@@ -86,7 +96,42 @@ steps = [
 | `scenes` | yes | A directory of scene documents, one file each. |
 | `theme_css` | no | A stylesheet inside the preset, served at `/presets/<name>/theme.css`. Required when `theme` is not a built in one. |
 | `gallery` | no | What the tiles start as: `live`, `snapshot`, `icon` or `label` (05 section 3b). Absent means the surface asks the machine, which is what `gmx doctor` proposes. |
-| `steps` | no | The three things the person does next. The welcome panel shows these in order, and the README repeats them. |
+| `next` | no | What the person does next, typed, in the order they do it. One `[[provides.preset.next]]` table each. The table below is the schema. |
+| `steps` | no | Deprecated. The same list as sentences, from before `next` existed. A preset carrying only this still applies: every line is read as a `note`. |
+
+### What to do next
+
+A surface draws a control for each entry rather than printing a sentence,
+because a sentence that says "put your stream key into the `[[outputs]]` block"
+is a graphical program telling somebody the answer is in a text editor. Each
+entry is one table with a `do` and the one field that `do` needs.
+
+```toml
+[[provides.preset.next]]
+do = "stream_key"
+output = "youtube"
+text = "YouTube Studio, then Create, then Go Live, shows the key."
+```
+
+| `do` | Its field | What a surface does with it |
+|---|---|---|
+| `stream_key` | `output` | A box and a Save on the destination with that id, if the core still reports `has_key` false for it. Saving calls `output.set`. |
+| `install_plugin` | `name` | An Install button that calls `plugin.add`. A surface may take the list from the plan's own missing plugins instead and use this only for the wording. |
+| `add_source` | `kind` | A button that opens the add picker on that source kind. Only you know your camera's address, so nothing can be filled in for you. |
+| `take` | `source` | Names the source to put on air first. |
+| `note` | `text` | A sentence, for what really is only words. |
+
+`text` is optional on every one of them and is a line of explanation under the
+control: where the key comes from, what the plugin is for. On a `note` it is
+the whole entry, so a `note` without one says nothing and is skipped.
+
+Three to five entries. Somebody is reading them with a service starting, and a
+surface shows a count ("2 of 3 done") that a list of nine makes meaningless.
+
+A `do` this build does not know is a preset written against a newer surface.
+Nothing refuses it: a surface shows its `text` if it has one and skips it
+otherwise, so a preset can name something the machine in front of it cannot
+draw yet.
 
 ### The layout file
 
@@ -108,6 +153,10 @@ above, so a preset written against this table works on it.
 ## What applying one does
 
 `gmx preset apply <name>` writes three files beside the config and nothing else.
+Over the protocol, `preset.apply` answers with the plan, with `next` lifted out
+of it, and with `needs_restart`: one `{id, reason, plugin, message}` per thing
+the preset brought that is not running yet. `reason` is `plugin_missing`,
+`refused` or `restart`, and `message` is the same sentence the terminal prints.
 
 | File | What happens to it |
 |---|---|

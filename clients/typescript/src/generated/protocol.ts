@@ -133,7 +133,8 @@ export interface ApplyResult {
   applied?: unknown;
   dry_run: boolean;
   live: string[];
-  needs_restart: string[];
+  needs_restart: Pending[];
+  next: Next[];
   plan: unknown;
 }
 
@@ -532,10 +533,13 @@ export interface IdRequest {
 }
 
 export interface ImportObsRequest {
-  path: string;
+  json?: string | null;
+  name?: string | null;
+  path?: string | null;
 }
 
 export interface ImportReport {
+  add_sources?: ImportedSource[];
   config_toml?: string | null;
   filters_duplicated?: FilterReport[];
   items: number;
@@ -558,6 +562,19 @@ export interface ImportedReport {
   missing_plugins?: string[];
   relink?: Relink[];
   scenes: string[];
+}
+
+/**
+ * A source in the config the import writes, in the shape of 03 section 3:
+ * a plugin qualified `type` and a `params` table, with `uri` kept where one
+ * makes sense so today's config still reads it.
+ */
+export interface ImportedSource {
+  id: string;
+  name: string;
+  params: unknown;
+  type: string;
+  uri?: string | null;
 }
 
 /** One running instance and its cost. */
@@ -787,6 +804,24 @@ export interface NameRequest {
   name: string;
 }
 
+/**
+ * One thing the person does after a preset is applied.
+ *
+ * Typed rather than written out, because a sentence sends a volunteer to a
+ * text editor and a type puts a control on the screen. The welcome panel
+ * turns `stream_key` into a box with a Save beside it and `install_plugin`
+ * into the Install button. `note` is the escape hatch for what really is
+ * only words.
+ */
+export interface Next {
+  do: string;
+  kind?: string | null;
+  name?: string | null;
+  output?: string | null;
+  source?: string | null;
+  text?: string | null;
+}
+
 export interface NodeInstance {
   detail?: string | null;
   instance: string;
@@ -887,6 +922,21 @@ export interface Patch {
   seq: number;
   source_client?: string | null;
   updated?: Update[];
+}
+
+/**
+ * One thing the preset brought that this core is not running, and why.
+ *
+ * `reason` is what a surface branches on and `message` is what a terminal
+ * prints. Three reasons, and they must not be blurred together: a thing
+ * waiting on a plugin can be fixed from the page, a thing that was refused
+ * wants looking at now, and a restart is a thing that will be fine.
+ */
+export interface Pending {
+  id: string;
+  message: string;
+  plugin?: string | null;
+  reason: string;
 }
 
 /**
@@ -2380,7 +2430,7 @@ export class GeneratedMethods {
   }
 
   /** Read an OBS Studio scene collection and add its scenes to this one. */
-  sceneImportObs(params: ImportObsRequest): Promise<ImportReport> {
+  sceneImportObs(params: ImportObsRequest = {}): Promise<ImportReport> {
     return this._call("scene.import.obs", params as unknown as Record<string, unknown>) as Promise<ImportReport>;
   }
 

@@ -167,8 +167,10 @@ class ApplyResult(TypedDict, total=False):
     # True when nothing was written because `dry_run` was set.
     live: List[str]
     # The sources and outputs this core picked up without a restart.
-    needs_restart: List[str]
-    # What still needs a restart, in plain words. Empty is the good case.
+    needs_restart: List[Pending]
+    # What the preset brought that is not running yet, one entry each. Empty is the good case.
+    next: List[Next]
+    # What the person does next, typed, in the order they do it. The same list as `plan.next`, lifted out so a surface does not have to dig for the one field it builds its checklist from.
     plan: Any
     # The whole plan, as JSON. The same object `preset.list` rows point at.
 
@@ -564,10 +566,16 @@ class IdRequest(TypedDict, total=False):
     id: str
 
 class ImportObsRequest(TypedDict, total=False):
-    path: str
-    # The collection JSON exported from OBS (Scene Collection, Export), as a path on the machine the core is running on.
+    json: Optional[str]
+    # The collection itself. Wins over `path` when both are given.
+    name: Optional[str]
+    # What to call it in the report, when the text came in rather than a path. The file name is what the person will recognise.
+    path: Optional[str]
+    # The collection JSON exported from OBS (Scene Collection, Export), as a path on the machine the core is running on. Optional, because a browser cannot give one: a page reads the file the person picked and sends `json` instead, which is how the collection can come off a laptop that is not the machine running the mixer.
 
 class ImportReport(TypedDict, total=False):
+    add_sources: List[ImportedSource]
+    # The same sources as `source.add` requests, so a page can offer to add each one rather than asking somebody to paste a TOML block into a file. `config_toml` is the same list for a text editor.
     config_toml: Optional[str]
     # The `[[sources]]` block to paste into a config, so the sources the scenes draw can be added in one edit rather than one call each.
     filters_duplicated: List[FilterReport]
@@ -602,6 +610,15 @@ class ImportedReport(TypedDict, total=False):
     # Assets that did not come across, with the items that draw them. Empty when everything landed.
     scenes: List[str]
     # The scenes that were added, by the names they ended up with.
+
+class ImportedSource(TypedDict, total=False):
+    """A source in the config the import writes, in the shape of 03 section 3: a plugin qualified `type` and a `params` table, with `uri` kept where one makes sense so today's config still reads it."""
+
+    id: str
+    name: str
+    params: Any
+    type: str
+    uri: Optional[str]
 
 class InstanceRecord(TypedDict, total=False):
     """One running instance and its cost."""
@@ -853,6 +870,22 @@ class NameRequest(TypedDict, total=False):
     name: str
     # File name as it appears in the media listing. The REST layer puts it in the path, where the transform rule calls it `id`, so both spellings are read.
 
+class Next(TypedDict, total=False):
+    """One thing the person does after a preset is applied. Typed rather than written out, because a sentence sends a volunteer to a text editor and a type puts a control on the screen. The welcome panel turns `stream_key` into a box with a Save beside it and `install_plugin` into the Install button. `note` is the escape hatch for what really is only words."""
+
+    do: str
+    # One of `NEXT_ACTIONS`. Anything else is a preset written against a newer surface than this one; a surface shows its `text` or skips it.
+    kind: Optional[str]
+    # `add_source`: the kind to add, as `<plugin>/<provide>`.
+    name: Optional[str]
+    # `install_plugin`: the plugin, by the name `plugin.add` takes.
+    output: Optional[str]
+    # `stream_key`: the output whose address still holds a placeholder.
+    source: Optional[str]
+    # `take`: the source to put on air first.
+    text: Optional[str]
+    # The whole of a `note`, and a sentence of context on any of the others.
+
 class NodeInstance(TypedDict, total=False):
     detail: Optional[str]
     instance: str
@@ -955,6 +988,18 @@ class Patch(TypedDict, total=False):
     source_client: Optional[str]
     # Whoever asked for the change, so a client can suppress the echo of its own edits and not fight its own optimistic drawing.
     updated: List[Update]
+
+class Pending(TypedDict, total=False):
+    """One thing the preset brought that this core is not running, and why. `reason` is what a surface branches on and `message` is what a terminal prints. Three reasons, and they must not be blurred together: a thing waiting on a plugin can be fixed from the page, a thing that was refused wants looking at now, and a restart is a thing that will be fine."""
+
+    id: str
+    # The source or output id, or the config path for the keys that were written.
+    message: str
+    # The same sentence the CLI prints.
+    plugin: Optional[str]
+    # The plugin to install, on `plugin_missing`.
+    reason: str
+    # `plugin_missing`, `refused` or `restart`.
 
 class PipelineDot(TypedDict, total=False):
     """What `pipeline.dot` answers with on `/rpc`. The REST route serves the same graph as `text/vnd.graphviz`, so `gmx dot | dot -Tsvg` needs no unwrapping."""
@@ -2679,11 +2724,19 @@ class GeneratedMethods:
 
     async def scene_import_obs(
         self,
-        path: str,
+        *,
+        json: Optional[str] = None,
+        name: Optional[str] = None,
+        path: Optional[str] = None,
     ) -> ImportReport:
         """Read an OBS Studio scene collection and add its scenes to this one."""
         params: Dict[str, Any] = {}
-        params["path"] = path
+        if json is not None:
+            params["json"] = json
+        if name is not None:
+            params["name"] = name
+        if path is not None:
+            params["path"] = path
         return await self._call("scene.import.obs", params)
 
     async def scene_item_add(

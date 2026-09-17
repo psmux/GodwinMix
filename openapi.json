@@ -476,9 +476,16 @@
             "type": "array"
           },
           "needs_restart": {
-            "description": "What still needs a restart, in plain words. Empty is the good case.",
+            "description": "What the preset brought that is not running yet, one entry each.\nEmpty is the good case.",
             "items": {
-              "type": "string"
+              "$ref": "#/components/schemas/Pending"
+            },
+            "type": "array"
+          },
+          "next": {
+            "description": "What the person does next, typed, in the order they do it. The same\nlist as `plan.next`, lifted out so a surface does not have to dig for\nthe one field it builds its checklist from.",
+            "items": {
+              "$ref": "#/components/schemas/Next"
             },
             "type": "array"
           },
@@ -490,6 +497,7 @@
           "dry_run",
           "plan",
           "live",
+          "next",
           "needs_restart"
         ],
         "type": "object"
@@ -1833,18 +1841,39 @@
       },
       "ImportObsRequest": {
         "properties": {
+          "json": {
+            "description": "The collection itself. Wins over `path` when both are given.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "name": {
+            "description": "What to call it in the report, when the text came in rather than a\npath. The file name is what the person will recognise.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
           "path": {
-            "description": "The collection JSON exported from OBS (Scene Collection, Export), as a\npath on the machine the core is running on.",
-            "type": "string"
+            "description": "The collection JSON exported from OBS (Scene Collection, Export), as a\npath on the machine the core is running on.\n\nOptional, because a browser cannot give one: a page reads the file the\nperson picked and sends `json` instead, which is how the collection\ncan come off a laptop that is not the machine running the mixer.",
+            "type": [
+              "string",
+              "null"
+            ]
           }
         },
-        "required": [
-          "path"
-        ],
         "type": "object"
       },
       "ImportReport": {
         "properties": {
+          "add_sources": {
+            "description": "The same sources as `source.add` requests, so a page can offer to add\neach one rather than asking somebody to paste a TOML block into a\nfile. `config_toml` is the same list for a text editor.",
+            "items": {
+              "$ref": "#/components/schemas/ImportedSource"
+            },
+            "type": "array"
+          },
           "config_toml": {
             "description": "The `[[sources]]` block to paste into a config, so the sources the\nscenes draw can be added in one edit rather than one call each.",
             "type": [
@@ -1959,6 +1988,34 @@
           "scenes",
           "items",
           "bundle"
+        ],
+        "type": "object"
+      },
+      "ImportedSource": {
+        "description": "A source in the config the import writes, in the shape of 03 section 3:\na plugin qualified `type` and a `params` table, with `uri` kept where one\nmakes sense so today's config still reads it.",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "params": true,
+          "type": {
+            "type": "string"
+          },
+          "uri": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "type",
+          "params"
         ],
         "type": "object"
       },
@@ -2784,6 +2841,54 @@
         ],
         "type": "object"
       },
+      "Next": {
+        "description": "One thing the person does after a preset is applied.\n\nTyped rather than written out, because a sentence sends a volunteer to a\ntext editor and a type puts a control on the screen. The welcome panel\nturns `stream_key` into a box with a Save beside it and `install_plugin`\ninto the Install button. `note` is the escape hatch for what really is\nonly words.",
+        "properties": {
+          "do": {
+            "description": "One of `NEXT_ACTIONS`. Anything else is a preset written against a\nnewer surface than this one; a surface shows its `text` or skips it.",
+            "type": "string"
+          },
+          "kind": {
+            "description": "`add_source`: the kind to add, as `<plugin>/<provide>`.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "name": {
+            "description": "`install_plugin`: the plugin, by the name `plugin.add` takes.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "output": {
+            "description": "`stream_key`: the output whose address still holds a placeholder.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "source": {
+            "description": "`take`: the source to put on air first.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "text": {
+            "description": "The whole of a `note`, and a sentence of context on any of the others.",
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "do"
+        ],
+        "type": "object"
+      },
       "NodeInstance": {
         "properties": {
           "detail": {
@@ -3177,6 +3282,36 @@
         "required": [
           "seq",
           "scope"
+        ],
+        "type": "object"
+      },
+      "Pending": {
+        "description": "One thing the preset brought that this core is not running, and why.\n\n`reason` is what a surface branches on and `message` is what a terminal\nprints. Three reasons, and they must not be blurred together: a thing\nwaiting on a plugin can be fixed from the page, a thing that was refused\nwants looking at now, and a restart is a thing that will be fine.",
+        "properties": {
+          "id": {
+            "description": "The source or output id, or the config path for the keys that were\nwritten.",
+            "type": "string"
+          },
+          "message": {
+            "description": "The same sentence the CLI prints.",
+            "type": "string"
+          },
+          "plugin": {
+            "description": "The plugin to install, on `plugin_missing`.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "reason": {
+            "description": "`plugin_missing`, `refused` or `restart`.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "reason",
+          "message"
         ],
         "type": "object"
       },

@@ -60,21 +60,31 @@ theme = "calm"
 theme_css = "theme.css"
 scenes = "scenes"
 gallery = "icon"
-steps = [
-  "Put your two stream keys into the [[outputs]] blocks of godwinmix.toml.",
-  "Run `gmx` and open http://localhost:8080.",
-  "Press Wide to put a picture on air.",
-]
+
+[[provides.preset.next]]
+do = "stream_key"
+output = "youtube"
+text = "YouTube Studio, then Create, then Go Live, shows the key."
+
+[[provides.preset.next]]
+do = "install_plugin"
+name = "camera"
+
+[[provides.preset.next]]
+do = "take"
+source = "cam-wide"
 ```
 
 `plugins` are semver ranges. `surface` is `web`, `none`, or the name of a
 surface plugin. `theme` is a theme name the surface resolves: one of `dark`,
 `light`, `high-contrast` and `system`, or your own with `theme_css` beside it.
 `gallery` fixes what the input tiles show (`live`, `snapshot`, `icon`,
-`label`); leave it out and the surface asks the machine. `steps` is the three
-things the person does next, which the welcome panel in the web UI shows
-straight after the preset is applied. The paths are relative to the preset
-directory.
+`label`); leave it out and the surface asks the machine. The `[[next]]` tables
+are what the person does next, typed rather than written out, so the welcome
+panel puts a box, a Save or an Install button on the screen instead of telling
+somebody to go and edit a file. Three to five of them. `do` is one of
+`stream_key`, `install_plugin`, `add_source`, `take` and `note`. The paths are
+relative to the preset directory.
 
 `docs/reference/presets.md` is every key and the merge rules.
 
@@ -107,7 +117,8 @@ its plugin name.
    new ids already in it.
 5. Rewrite `README.md` for the person who will use it. Four hours, on a
    Sunday, with no time to read anything else. What it gives them, what they
-   need, three steps, and what to do when each of the usual things goes wrong.
+   need, three steps written as things to press rather than files to edit,
+   and what to do when each of the usual things goes wrong.
    Under 300 words, which the tests check.
 6. `gmx preset apply ./presets/my-church --dry-run` checks the whole of it and
    writes nothing: every file it names, the config under the mixer's own

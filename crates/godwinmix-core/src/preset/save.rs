@@ -77,7 +77,7 @@ pub fn run(name: &str, config_path: &Path, out: &Path) -> Result<Saved> {
     let plugins = plugins_in_use(&config);
     write(
         out.join("gmx-plugin.toml"),
-        &manifest_text(name, &plugins, &ui, theme_css),
+        &manifest_text(name, &plugins, &ui, theme_css, &config),
         &mut wrote,
     )?;
     write(out.join("README.md"), &readme(name, &config, scenes), &mut wrote)?;
@@ -285,7 +285,46 @@ fn plugins_in_use(config: &Config) -> Vec<String> {
     names.into_iter().map(|n| format!("{n}@^1")).collect()
 }
 
-fn manifest_text(name: &str, plugins: &[String], ui: &UiDefaults, theme_css: bool) -> String {
+/// One `[[provides.preset.next]]` table per destination that still wants a
+/// key, and a take at the end. Typed, because the welcome panel draws a
+/// control for each one and cannot draw anything from a sentence.
+fn next_tables(config: &Config) -> String {
+    let mut out = String::new();
+    for output in &config.outputs {
+        if godwinmix_protocol::types::uri_has_key(&output.uri) {
+            continue;
+        }
+        out.push_str(&format!(
+            "\n[[provides.preset.next]]\ndo = \"stream_key\"\noutput = {:?}\n\
+             text = \"Say here where this key is found.\"\n",
+            output.id
+        ));
+    }
+    match config.sources.first() {
+        Some(source) => out.push_str(&format!(
+            "\n[[provides.preset.next]]\ndo = \"take\"\nsource = {:?}\n\
+             text = \"Press it to put a picture on air.\"\n",
+            source.id
+        )),
+        None => out.push_str(
+            "\n[[provides.preset.next]]\ndo = \"add_source\"\nkind = \"rtmp/source\"\n\
+             text = \"Say here what to point at this mixer.\"\n",
+        ),
+    }
+    out.push_str(
+        "\n[[provides.preset.next]]\ndo = \"note\"\n\
+         text = \"Replace this with the one other thing somebody has to know.\"\n",
+    );
+    out
+}
+
+fn manifest_text(
+    name: &str,
+    plugins: &[String],
+    ui: &UiDefaults,
+    theme_css: bool,
+    config: &Config,
+) -> String {
     let list = plugins.iter().map(|p| format!("{p:?}")).collect::<Vec<_>>().join(", ");
     let theme = ui.theme.clone().unwrap_or_else(|| "dark".into());
     let gallery = match &ui.gallery {
@@ -293,6 +332,7 @@ fn manifest_text(name: &str, plugins: &[String], ui: &UiDefaults, theme_css: boo
         None => String::new(),
     };
     let css = if theme_css { "theme_css = \"theme.css\"\n" } else { "" };
+    let next = next_tables(config);
     format!(
         "[plugin]\n\
          name = {name:?}\n\
@@ -315,11 +355,7 @@ fn manifest_text(name: &str, plugins: &[String], ui: &UiDefaults, theme_css: boo
          scenes = \"scenes\"\n\
          {css}\
          {gallery}\
-         steps = [\n\
-         \x20 \"Put your own addresses and keys into godwinmix.toml.\",\n\
-         \x20 \"Run `gmx` and open the page it prints.\",\n\
-         \x20 \"Press a tile to put it on air.\",\n\
-         ]\n"
+         {next}"
     )
 }
 
@@ -333,9 +369,9 @@ fn readme(name: &str, config: &Config, scenes: usize) -> String {
          ## What you need\n\n\
          Say what has to exist before this works: the cameras, the addresses, the keys.\n\n\
          ## Three steps\n\n\
-         1. `gmx preset apply {name}`.\n\
-         2. Put your own addresses and keys into `godwinmix.toml`.\n\
-         3. `gmx`, then open the page it prints and press a tile.\n\n\
+         1. Pick this setup on the welcome page, or apply it with `gmx preset apply {name}`.\n\
+         2. Finish the checklist the page puts up: the stream keys, and any plugin it offers to install.\n\
+         3. Press a tile to put a picture on air.\n\n\
          ## When it does not work\n\n\
          Say what usually goes wrong here and what fixes it. One paragraph each.\n",
         config.sources.len(),
