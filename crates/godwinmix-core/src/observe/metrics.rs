@@ -578,6 +578,18 @@ pub fn observe_event(event: &Event) {
 /// structural change and on every supervisor tick, which is twice a second,
 /// so these are as fresh as a Prometheus scrape can use.
 pub fn observe_status(status: &MixerStatus) {
+    // A source or output that has gone takes its series with it. A show
+    // that adds and removes a source every few seconds otherwise leaves a
+    // dead series per gauge per source for the life of the process, and a
+    // metrics page that only ever grows.
+    let sources: Vec<&str> = status.sources.iter().map(|s| s.id.as_str()).collect();
+    let outputs: Vec<&str> = status.outputs.iter().map(|o| o.id.as_str()).collect();
+    for name in ["gmx_source_state", "gmx_source_video_behind_ms", "gmx_source_queue_buffers"] {
+        retain_instances(name, &sources);
+    }
+    for name in ["gmx_output_state", "gmx_output_queue_secs", "gmx_output_reconnects_total"] {
+        retain_instances(name, &outputs);
+    }
     for s in &status.sources {
         let labels = [("instance", s.id.as_str())];
         gauge("gmx_source_state", &labels).set(source_state_code(s.state));
@@ -593,6 +605,18 @@ pub fn observe_status(status: &MixerStatus) {
     }
     let fps = if status.multiview.enabled { status.multiview.fps as f64 } else { 0.0 };
     gauge("gmx_multiview_fps", &[]).set(fps);
+}
+
+/// Drop every series of one family whose `instance` label is not in `keep`.
+fn retain_instances(name: &str, keep: &[&str]) {
+    let mut reg = REGISTRY.write();
+    let Some(family) = reg.get_mut(name) else { return };
+    family.series.retain(|labels, _| {
+        labels
+            .iter()
+            .find(|(k, _)| k == "instance")
+            .is_none_or(|(_, v)| keep.contains(&v.as_str()))
+    });
 }
 
 /// How many clients are taking mosaic frames. Sampled rather than counted,
@@ -676,6 +700,17 @@ fn output_state_code(s: OutputState) -> f64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A gone source takes its series with it, and a present one keeps its.
+    #[test]
+    fn a_departed_instance_loses_its_series() {
+        gauge("gmx_source_state", &[("instance", "retain-a")]).set(1.0);
+        gauge("gmx_source_state", &[("instance", "retain-b")]).set(1.0);
+        retain_instances("gmx_source_state", &["retain-a"]);
+        let page = render();
+        assert!(page.contains("instance=\"retain-a\""), "the present source kept its series");
+        assert!(!page.contains("instance=\"retain-b\""), "the gone source lost its series");
+    }
 
     #[test]
     fn a_fresh_registry_already_lists_the_programme_frame_interval_histogram() {
