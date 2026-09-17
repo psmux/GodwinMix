@@ -1136,7 +1136,25 @@ impl InputPipeline {
         Ok(())
     }
 
+    /// Wake every branch below the tees before the pipeline changes state.
+    ///
+    /// A branch thread can be parked inside the proxysink at its end, pushing
+    /// into a programme or a mosaic that has stopped reading, and a pipeline
+    /// going to NULL joins every one of its threads: a Linux runner held the
+    /// mixer thread inside `source.restart` for thirty seconds that way. A
+    /// flush start is the one event that reaches a parked thread. Nothing is
+    /// put back: NULL and the start that follows it activate the pads afresh,
+    /// which clears the flushing flag.
+    fn wake_branches(&self) {
+        for tee in [&self.vtee, &self.atee] {
+            if let Some(sink) = tee.static_pad("sink") {
+                gstutil::wake_chain(&sink);
+            }
+        }
+    }
+
     pub fn stop(&self) {
+        self.wake_branches();
         let _ = self.pipeline.set_state(gst::State::Null);
         // The kind releases whatever it holds outside the pipeline: a child
         // process, a cached clip, a profile directory. The core does not know
@@ -1195,6 +1213,7 @@ impl InputPipeline {
     pub fn restart(&self) -> Result<()> {
         info!(source = %self.id, "restarting input pipeline");
         self.restart_armed.store(false, Ordering::SeqCst);
+        self.wake_branches();
         self.pipeline.set_state(gst::State::Null).ok();
         for p in &self.placement {
             p.reset();
