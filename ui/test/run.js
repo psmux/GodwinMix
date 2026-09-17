@@ -487,6 +487,191 @@ test("a method that takes nothing still gets an empty form, not a broken one", (
   eq(Object.keys(schema.properties || {}).length, 0);
 });
 
+// ------------------------------------------------------- scoped sources
+
+/**
+ * The tray scoped to one scene: what it shows, what it does with a source it
+ * has just added, and what it asks before one replaces a scene on air.
+ *
+ * Driven through the panel's own prototype against a stubbed `gmx-scenes` on
+ * the page, the way the number keys are, because the DOM lookup is half of
+ * what these methods do.
+ */
+async function scopedSourcesSuite() {
+  window.godwinmixPanels = window.godwinmixPanels || [];
+  const { default: SourcesPanel } = await import("../panels/sources/panel.js");
+  const { openForm } = await import("../shell/picker.js");
+  const { setFocusedScene } = await import("../shell/focus.js");
+  const { setSetting } = await import("../shell/settings.js");
+
+  let summaries = [];
+  const added = [];
+  const node = document.createElement("gmx-scenes");
+  // The real element would build itself on append and it has no client here.
+  node.built = true;
+  node.scenes = {
+    supported: true,
+    scenes: () => summaries,
+    summary: (id) => summaries.find((x) => x.id === id || x.name === id) || null,
+    itemAdd: async (scene, content) => {
+      added.push([scene, content]);
+    },
+    reread: async () => {},
+    undo: { record: () => {} },
+  };
+  document.body.appendChild(node);
+
+  const state = { sources: [{ id: "cam1", uri: "a" }, { id: "cam2", uri: "b" }, { id: "slides", uri: "c" }] };
+  const tray = {
+    scope: "scene",
+    filter: "",
+    client: { state: { scene: null } },
+    render: () => {},
+    sources: SourcesPanel.prototype.sources,
+    scopedTo: SourcesPanel.prototype.scopedTo,
+    focusedSummary: SourcesPanel.prototype.focusedSummary,
+    sceneClient: SourcesPanel.prototype.sceneClient,
+    untouchedScene: SourcesPanel.prototype.untouchedScene,
+    place: SourcesPanel.prototype.place,
+    askBeforeTake: SourcesPanel.prototype.askBeforeTake,
+  };
+  const shown = () => tray.sources(state).map((x) => x.id);
+
+  summaries = [
+    { id: "wide", name: "Wide", items: 2, sources: ["cam1", "slides"] },
+    { id: "two", name: "Two box", items: 2, sources: ["cam1", "cam2"] },
+  ];
+  setFocusedScene("wide");
+
+  test("in scene scope the tray keeps only what the focused scene draws", () => {
+    eq(shown(), ["cam1", "slides"]);
+  });
+
+  test("the filter still applies inside the scope", () => {
+    tray.filter = "slides";
+    eq(shown(), ["slides"]);
+    tray.filter = "";
+  });
+
+  test("the other tab is every source the mixer has", () => {
+    tray.scope = "all";
+    eq(shown(), ["cam1", "cam2", "slides"]);
+    tray.scope = "scene";
+  });
+
+  test("a focus on a scene that has since been removed falls back to all", () => {
+    setFocusedScene("deleted");
+    eq(shown(), ["cam1", "cam2", "slides"]);
+  });
+
+  test("a collection with no scenes in it falls back to all", () => {
+    summaries = [];
+    setFocusedScene("wide");
+    eq(shown(), ["cam1", "cam2", "slides"]);
+  });
+
+  // ---------------------------------------------- adding from inside a scope
+
+  const order = [];
+  const client = {
+    call: async (method, params) => {
+      order.push(method);
+      return { id: "cam9", name: "Cam 9", uri: params.uri };
+    },
+  };
+  const kind = {
+    id: "stub",
+    title: "Stub source",
+    description: "A kind that exists for this test and nowhere else.",
+    schema: { type: "object", properties: { uri: { type: "string", title: "Address" } } },
+    build: (values) => ({ uri: values.uri }),
+  };
+  const answers = [];
+  const form = await openForm(client, "source", kind, { uri: "rtmp://x/y" }, {
+    onAdded: (status) => {
+      order.push("onAdded");
+      answers.push(status);
+    },
+  });
+  [...form.el.querySelectorAll("button")].find((b) => b.textContent === "Add").click();
+  await waitFor(() => answers.length > 0, 2000, "the picker to call onAdded");
+
+  test("the picker hands the source it just made to whoever opened it", () => {
+    eq(order, ["source.add", "onAdded"], "and only once source.add has answered");
+    eq(answers[0].id, "cam9", "with the id the mixer assigned");
+  });
+
+  summaries = [{ id: "default", name: "Default", items: 0, sources: [] }];
+  added.length = 0;
+  await tray.place(null, { id: "cam9" });
+  const untouched = added.slice();
+
+  summaries = [{ id: "default", name: "Default", items: 1, sources: ["cam1"] }];
+  added.length = 0;
+  await tray.place(null, { id: "cam9" });
+  const started = added.slice();
+
+  summaries = [
+    { id: "a", name: "A", items: 0, sources: [] },
+    { id: "b", name: "B", items: 0, sources: [] },
+  ];
+  added.length = 0;
+  await tray.place(null, { id: "cam9" });
+  const two = added.slice();
+
+  test("the one empty scene a fresh mixer boots with takes the first source", () => {
+    eq(untouched, [["default", { source: "cam9" }]]);
+  });
+
+  test("a scene somebody has already put something in is left alone", () => {
+    eq(started, [], "All means all once the scene is not untouched");
+  });
+
+  test("and a collection of more than one scene is never guessed at", () => {
+    eq(two, []);
+  });
+
+  // ----------------------------------------------- taking a bare source
+
+  summaries = [{ id: "wide", name: "Wide", items: 3, sources: [] }];
+  tray.client = { state: { scene: "Wide" } };
+  const asked = tray.askBeforeTake();
+  const wasAsked = document.body.textContent.includes("Are you sure?");
+  const cancel = [...document.querySelectorAll(".dialog button")].find((b) => b.textContent === "Cancel");
+  if (cancel) cancel.click();
+  const answer = await asked;
+
+  test("a source that would replace a live scene of three asks first", () => {
+    ok(wasAsked, "nothing was asked");
+    eq(answer, false, "Cancel means the take does not happen");
+  });
+
+  summaries = [{ id: "solo", name: "Solo", items: 1, sources: [] }];
+  tray.client = { state: { scene: "Solo" } };
+  const oneItem = await tray.askBeforeTake();
+
+  summaries = [{ id: "wide", name: "Wide", items: 3, sources: [] }];
+  tray.client = { state: { scene: null } };
+  const nothingLive = await tray.askBeforeTake();
+
+  tray.client = { state: { scene: "Wide" } };
+  setSetting("confirmTake", false);
+  const switchedOff = await tray.askBeforeTake();
+  setSetting("confirmTake", true);
+
+  test("nothing is asked when there is nothing to lose", () => {
+    ok(oneItem, "a scene of one item is that one source, so there is nothing to replace");
+    ok(nothingLive, "a source on air rather than a scene");
+    ok(switchedOff, "and the setting switches the question off entirely");
+    ok(!document.body.textContent.includes("Are you sure?"), "no question was left on screen");
+  });
+
+  // The page goes on to drive the real panels against a real core, and the
+  // focus is remembered on the device the tests run on.
+  setFocusedScene(null);
+  node.remove();
+}
+
 // ------------------------------------------------------- the source drawer
 
 test("the drawer does not offer an address source.set cannot change", () => {
@@ -1375,6 +1560,12 @@ legacySuite()
   .catch((e) => {
     failed += 1;
     line("fail", "the number key suite threw: " + e.message);
+    console.error(e);
+  })
+  .then(scopedSourcesSuite)
+  .catch((e) => {
+    failed += 1;
+    line("fail", "the scoped sources suite threw: " + e.message);
     console.error(e);
   })
   .then(kitSuite)
