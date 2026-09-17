@@ -177,6 +177,15 @@ jobs:
           mkdir -p tauri-app/binaries
           cp "target/release/godwinmix${suffix}" "tauri-app/binaries/godwinmix-${triple}${suffix}"
 
+      # The camera, the screen and the microphone. All three are plugins, so an
+      # app that did not carry them would send a GUI user to a terminal for
+      # `gmx plugin add camera`. Here for what it catches: the three compile on
+      # every platform and the staging script runs on every platform, including
+      # Windows, where bash is the runner's git bash.
+      - name: The device plugins go in beside the mixer
+        shell: bash
+        run: ./dev/bundle-plugins.sh
+
       - name: Desktop app
         working-directory: tauri-app
         run: cargo build --release --locked

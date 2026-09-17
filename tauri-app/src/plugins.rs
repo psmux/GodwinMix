@@ -75,7 +75,7 @@ pub fn bundled(app: &AppHandle) -> Option<PathBuf> {
 }
 
 /// Every `<name>/<version>` under a directory that has a manifest in it.
-fn versions(root: &Path) -> Vec<(String, String, PathBuf)> {
+pub fn versions(root: &Path) -> Vec<(String, String, PathBuf)> {
     let mut found = Vec::new();
     let Ok(names) = fs::read_dir(root) else { return found };
     for name in names.flatten().filter(|e| e.path().is_dir()) {
