@@ -271,7 +271,7 @@ async fn a_status_names_the_armed_scene() {
     client.call("core.subscribe", json!({})).await.expect("subscribing");
 
     let cold = client.call("core.status", json!({})).await.expect("a status");
-    assert_eq!(cold.get("preview"), None, "nothing is armed, so nothing is named: {cold}");
+    assert_eq!(cold["preview"], json!(null), "nothing is armed, so nothing is named: {cold}");
 
     let scene = client
         .call("scene.create_from", json!({ "sources": ["bars", "ball"], "name": "two box" }))
@@ -294,5 +294,5 @@ async fn a_status_names_the_armed_scene() {
     // would draw a preview of nothing.
     client.call("scene.preview.set", json!({})).await.expect("disarming");
     let clear = client.call("core.status", json!({})).await.expect("a status");
-    assert_eq!(clear.get("preview"), None, "disarming left the scene named: {clear}");
+    assert_eq!(clear["preview"], json!(null), "disarming left the scene named: {clear}");
 }

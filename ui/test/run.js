@@ -707,6 +707,202 @@ test("what the drawer sends is split the way source.set reads it", () => {
   ok(!("uri" in req), "an undefined value is left out");
 });
 
+// ------------------------------------------ preview and programme
+
+/**
+ * The two monitors and the bar between them, against a stubbed core.
+ *
+ * The gestures are what is worth testing here, not the markup: a tab tap must
+ * arm and never cut, Cut must take the armed scene by name, and Auto must put
+ * its duration inside the transition object, because `duration_ms` beside the
+ * transition is a field `program.take` does not have and would be dropped in
+ * silence.
+ */
+async function monitorSuite() {
+  window.godwinmixPanels = window.godwinmixPanels || [];
+  const { default: ProgramPanel, takeRequest, savedFade } = await import("../panels/multiview/panel.js");
+  ok(ProgramPanel, "the monitor panel module has a panel in it");
+
+  test("a cut names no transition, and Auto's duration is inside the transition", () => {
+    eq(takeRequest(null, 0), null, "nothing armed is nothing to ask for");
+    eq(takeRequest({ scene: "Two box" }, 0), { scene: "Two box" });
+    eq(takeRequest({ scene: "Two box" }, 500), {
+      scene: "Two box",
+      transition: { type: "fade", duration_ms: 500 },
+    });
+    // A source armed from the tray is still taken as a source, so the older
+    // gesture works on a core with no scene server.
+    eq(takeRequest({ source: "cam1" }, 0), { source: "cam1" });
+  });
+
+  const state = {
+    connected: true,
+    program: null,
+    scene: null,
+    preview: null,
+    sources: [{ id: "cam1", name: "Camera 1" }],
+    multiview: { enabled: true, cols: 2, rows: 1, cells: [] },
+  };
+  const calls = [];
+  const client = {
+    state,
+    call: (method, params) => {
+      calls.push({ method, params });
+      return Promise.resolve({});
+    },
+    on: () => () => {},
+    onRender: () => () => {},
+    want: () => ({ update() {}, release() {} }),
+    sheet: { attach: () => () => {} },
+    preview: { attach: () => () => {} },
+  };
+  const panel = new ProgramPanel();
+  panel.setClient(client);
+  panel.style.cssText = "display:block;width:900px";
+  document.body.appendChild(panel);
+
+  test("two monitors, always, with the preview on the left", () => {
+    eq(panel.monitors.children.length, 2, "preview and programme");
+    ok(panel.monitors.children[0].contains(panel.previewPane), "the preview is not the left hand one");
+    ok(panel.monitors.children[1].contains(panel.programPane), "the programme is not the right hand one");
+  });
+
+  test("an empty preview says what to do about it rather than showing a black box", () => {
+    ok(!panel.previewEmpty.hidden, "the line is not shown");
+    ok(panel.previewEmpty.textContent.includes("Nothing armed"), panel.previewEmpty.textContent);
+    ok(panel.previewCanvas.hidden, "a canvas with nothing to paint is still up");
+    ok(panel.cutBtn.disabled && panel.autoBtn.disabled, "Cut and Auto with nothing armed");
+  });
+
+  test("arming fills the left hand monitor and lights the buttons", () => {
+    state.preview = "Two box";
+    panel.render(state);
+    ok(!panel.previewCanvas.hidden, "the preview canvas is still hidden");
+    ok(panel.previewEmpty.hidden, "the empty line is still up over a live preview");
+    eq(panel.previewName.textContent, "Two box", "the preview says which scene it is");
+    ok(panel.previewPane.classList.contains("armed"), "the armed pane is not marked");
+    ok(!panel.cutBtn.disabled && !panel.autoBtn.disabled, "Cut and Auto with a scene armed");
+  });
+
+  await (async () => {
+    calls.length = 0;
+    state.scene = "Wide";
+    panel.render(state);
+    panel.cutBtn.click();
+    await waitFor(() => calls.length >= 2, 2000, "the take and the swap");
+    test("Cut takes the armed scene by name, then puts what was on air into preview", () => {
+      eq(calls[0], { method: "program.take", params: { scene: "Two box" } });
+      eq(calls[1], { method: "scene.preview.set", params: { scene: "Wide" } });
+    });
+  })();
+
+  await (async () => {
+    calls.length = 0;
+    state.preview = "Two box";
+    state.scene = null;
+    panel.render(state);
+    panel.autoBtn.click();
+    await waitFor(() => calls.length >= 2, 2000, "the fade and the disarm");
+    test("Auto fades, and disarms rather than arming the black it came from", () => {
+      eq(calls[0].method, "program.take");
+      eq(calls[0].params.transition, { type: "fade", duration_ms: savedFade() });
+      eq(calls[1], { method: "scene.preview.set", params: {} });
+    });
+  })();
+
+  panel.remove();
+}
+
+/**
+ * The scene strip's half of the same gesture: the tap that arms, the setting
+ * that turns it back into a cut, and the add button on each tab.
+ */
+async function sceneStripSuite() {
+  window.godwinmixPanels = window.godwinmixPanels || [];
+  const { default: ScenesPanel, tapCuts, setTapCuts } = await import("../panels/scenes/panel.js");
+  const { focusedScene, setFocusedScene } = await import("../shell/focus.js");
+  setFocusedScene(null);
+  setTapCuts(false);
+
+  const summaries = [
+    { id: "wide", name: "Wide", items: 2 },
+    { id: "two-box", name: "Two box", items: 1 },
+  ];
+  const calls = [];
+  const client = {
+    state: { connected: true },
+    call: (method, params) => {
+      calls.push({ method, params });
+      return Promise.resolve({});
+    },
+    on: () => () => {},
+    onRender: () => () => {},
+  };
+  const panel = new ScenesPanel();
+  panel.setClient(client);
+  panel.scenes.summaries = summaries;
+  panel.scenes.start = () => Promise.resolve(summaries);
+  panel.scenes.refresh = () => Promise.resolve(summaries);
+  document.body.appendChild(panel);
+  panel.setView("tabs");
+
+  await (async () => {
+    calls.length = 0;
+    panel.tabs.get("two-box").click();
+    await waitFor(() => calls.length >= 1, 2000, "the arm");
+    test("a tab tap arms that scene and reaches nothing else", () => {
+      eq(calls[0], { method: "scene.preview.set", params: { scene: "two-box" } });
+      ok(!calls.some((c) => c.method === "program.take"), "a tap put something on air");
+      eq(focusedScene(), "two-box", "the tab that was tapped is the one in hand");
+    });
+  })();
+
+  await (async () => {
+    calls.length = 0;
+    setTapCuts(true);
+    ok(tapCuts(), "the setting did not stick");
+    panel.tabs.get("wide").click();
+    await waitFor(() => calls.length >= 1, 2000, "the take");
+    test("with Tap cuts directly on, a tap is a take again", () => {
+      eq(calls[0], { method: "program.take", params: { scene: "wide" } });
+    });
+    setTapCuts(false);
+  })();
+
+  test("every tab carries an add button, and the tab still reads as its name", () => {
+    const asked = [];
+    panel.addTo = (id) => asked.push(id);
+    const tab = panel.tabs.get("two-box");
+    eq(tab.textContent, "Two box1", "the plus must not be read out with the name");
+    const plus = tab.parentElement.querySelector(".plus");
+    ok(plus, "no add button beside the tab");
+    plus.click();
+    eq(asked, ["two-box"], "the picker was not scoped to that tab's scene");
+  });
+
+  await (async () => {
+    const added = [];
+    const reread = [];
+    panel.scenes.itemAdd = (scene, content) => {
+      added.push([scene, content]);
+      return Promise.resolve({});
+    };
+    panel.scenes.reread = (ids) => {
+      reread.push(ids);
+      return Promise.resolve();
+    };
+    panel.scenes.undo = { record: () => {} };
+    await panel.placeIn("two-box", "cam9");
+    test("what the picker made lands in that scene, and the scene is read back", () => {
+      eq(added, [["two-box", { source: "cam9" }]], "scene.item.add with the source as its content");
+      eq(reread, [["two-box"]]);
+    });
+  })();
+
+  panel.remove();
+  setFocusedScene(null);
+}
+
 // -------------------------------------------------- producer preview
 
 test("the stream bit tells the armed scene from the mosaic", () => {
@@ -1765,6 +1961,18 @@ legacySuite()
   .catch((e) => {
     failed += 1;
     line("fail", "the scene tab suite threw: " + e.message);
+    console.error(e);
+  })
+  .then(monitorSuite)
+  .catch((e) => {
+    failed += 1;
+    line("fail", "the monitor suite threw: " + e.message);
+    console.error(e);
+  })
+  .then(sceneStripSuite)
+  .catch((e) => {
+    failed += 1;
+    line("fail", "the scene strip suite threw: " + e.message);
     console.error(e);
   })
   .then(liveSuite)

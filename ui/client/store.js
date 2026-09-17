@@ -47,12 +47,13 @@ export class Store {
 
   /** Replace the status document wholesale. Used by `event/snapshot`. */
   snapshot(status, seq) {
-    // The armed scene is kept unless the status names one. The status document
-    // has no field for it and `event/preview.changed` is the only thing that
-    // says what is armed, so resetting it here took the armed scene away a
-    // moment after it arrived: asking for the preview stream re-subscribes,
-    // and a re-subscribe brings a fresh snapshot with it. The pane beside the
-    // programme appeared and went dark again on that one.
+    // The armed scene is kept unless the status names one. A core that knows
+    // about it always names it, null included, so a status wins; one that is
+    // older than the field says nothing and what `event/preview.changed`
+    // last said stands. Resetting it here unconditionally took the armed
+    // scene away a moment after it arrived: asking for the preview stream
+    // re-subscribes, and a re-subscribe brings a fresh snapshot with it. The
+    // pane beside the programme appeared and went dark again on that one.
     const keep = {
       media: this.state.media,
       meters: this.state.meters,

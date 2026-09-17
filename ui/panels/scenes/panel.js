@@ -4,7 +4,9 @@
 // is a tile, the same file manager gestures work on both, and every gesture is
 // one command on the public protocol:
 //
-//   tap                     program.take {scene}     (arm, in producer mode)
+//   tap a tab               scene.preview.set        the preview monitor
+//   tap a tile              program.take {scene}     (arm, in producer mode)
+//   the + on a tab          source.add, scene.item.add
 //   double tap, Enter       scene.edit.begin         the composer, on a copy
 //   F2                      scene.rename
 //   a colour from the menu  scene.rename {color}
@@ -29,6 +31,7 @@ import { focusedScene, setFocusedScene, onFocusChanged } from "../../shell/focus
 import { shell } from "../../shell/shell.js";
 import { toast, errorToast } from "../../shell/toast.js";
 import { settings } from "../../shell/settings.js";
+import { openPicker } from "../../shell/picker.js";
 import { SceneClient } from "../../kits/protocol/index.js";
 
 /** Colours a scene can be given, matching the swatches in the tile menu. */
@@ -48,6 +51,32 @@ function savedView() {
     return localStorage.getItem(VIEW_KEY) === "tiles" ? "tiles" : "tabs";
   } catch {
     return "tabs";
+  }
+}
+
+/**
+ * Whether a tab tap goes straight to air.
+ *
+ * Off by default, so the two monitor flow is what a new operator gets: a tap
+ * arms the scene into preview and Cut or Auto is what puts it on. The
+ * volunteer with three cameras and no producer turns this on and is back to
+ * one tap per shot. The number keys cut directly either way.
+ */
+const TAP_KEY = "gmx.scenes.tap-cuts";
+
+export function tapCuts() {
+  try {
+    return localStorage.getItem(TAP_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
+export function setTapCuts(on) {
+  try {
+    localStorage.setItem(TAP_KEY, on ? "1" : "0");
+  } catch {
+    /* the choice lasts the session */
   }
 }
 
@@ -77,28 +106,38 @@ class ScenesPanel extends HTMLElement {
       title: "Show the scenes as a strip of tabs or as a grid of tiles",
       onclick: () => this.setView(this.view === "tabs" ? "tiles" : "tabs"),
     });
+    this.tapBtn = el("button.btn.sm", {
+      text: "Tap cuts directly",
+      title: "Off: a tap arms the scene in preview and Cut or Auto puts it on air. On: a tap puts it on air.",
+      onclick: () => {
+        setTapCuts(!tapCuts());
+        this.paintTapMode();
+      },
+    });
     this.bar = el("div.row.pad", {}, [
       el("strong", { text: "Scenes" }),
       this.count,
       el("span.grow"),
+      this.tapBtn,
       this.viewBtn,
       el("button.btn", { text: "New scene", title: "An empty scene to drag inputs into", onclick: () => this.newScene() }),
     ]);
 
-    // The tab strip. A tab is not a tile: clicking one says which scene the
-    // operator is working on and touches nothing else, because the tile
-    // gesture above takes on a single click and a strip that sits under the
-    // thumb cannot afford that. The one button here that reaches the
-    // programme is the one that says Take.
+    // The tab strip. A tab is not a tile: clicking one arms the scene into
+    // the preview monitor and says which scene the operator is working on,
+    // because the tile gesture above takes on a single click and a strip that
+    // sits under the thumb cannot afford that. Cut and Auto beside the
+    // monitors are what reach air, and so is the button here that says Take.
     this.take = el("button.btn.sm", {
       text: "Take",
-      title: "Put the focused scene on air. In producer mode it arms it instead.",
+      title: "Put the focused scene on air now. In producer mode it arms it instead.",
       onclick: () => {
         const id = focusedScene([...this.tabs.keys()]);
         if (id) this.activate(id);
       },
     });
     this.strip = el("div.tabs.scene-tabs", { role: "tablist", "aria-label": "Scenes" });
+    this.paintTapMode();
 
     // The grid is the drop target for empty space: dropping inputs on it makes
     // a scene. It takes focus so the keys below belong to this panel and not
@@ -217,14 +256,26 @@ class ScenesPanel extends HTMLElement {
           {
             role: "tab",
             "data-id": summary.id,
-            title: "Work on this scene. Double click to arrange it, Take to put it on air.",
-            onclick: () => setFocusedScene(summary.id),
+            title: "Bring this scene up in preview. Double click to arrange it, Cut or Auto to put it on air.",
+            onclick: () => this.tapped(summary.id),
             ondblclick: () => this.open(summary.id),
           },
           [el("span.ellipsis", { text: summary.name }), el("span.num.dim", { text: String(summary.items || 0) })]
         );
+        // Its own element beside the tab rather than inside it: a tab's text
+        // is what the strip is read by, and a plus in the middle of it would
+        // be read out with the name.
+        const plus = el("button.plus", {
+          text: "+",
+          "aria-label": `Add a source to ${summary.name}`,
+          title: `Add a source to ${summary.name}`,
+          onclick: (e) => {
+            e.stopPropagation();
+            this.addTo(summary.id);
+          },
+        });
         this.tabs.set(summary.id, tab);
-        this.strip.appendChild(tab);
+        this.strip.appendChild(el("span.scene-tab", {}, [tab, plus]));
       }
       this.strip.appendChild(this.take);
     }
@@ -325,6 +376,71 @@ class ScenesPanel extends HTMLElement {
 
   selected() {
     return this.selection.list([...this.tiles.keys()]);
+  }
+
+  /**
+   * A tab tap.
+   *
+   * The scene comes up in the preview monitor and stays off air, so the tab
+   * and the left hand picture always agree and nothing goes out until Cut or
+   * Auto says so. A desk with "Tap cuts directly" on is back to the older
+   * gesture, which is one tap per shot for a volunteer working alone.
+   */
+  tapped(id) {
+    setFocusedScene(id);
+    if (tapCuts()) {
+      this.activate(id);
+      return;
+    }
+    this.arm(id);
+  }
+
+  async arm(id) {
+    try {
+      await this.scenes.arm(id);
+    } catch (e) {
+      errorToast(e, "Preview");
+    }
+    this.render();
+  }
+
+  paintTapMode() {
+    const on = tapCuts();
+    this.tapBtn.classList.toggle("on", on);
+    this.tapBtn.setAttribute("aria-pressed", on ? "true" : "false");
+  }
+
+  /**
+   * The add picker, scoped to one scene.
+   *
+   * `source.add` never touches a scene, so the picker hands back what it made
+   * and the placing happens here, in the order the protocol needs: the mixer
+   * has to own a source before a scene can draw it.
+   */
+  addTo(id) {
+    return openPicker(this.client, "source", {
+      scene: id,
+      onAdded: (answer) => this.placeIn(id, answer && answer.id),
+    });
+  }
+
+  async placeIn(scene, source) {
+    if (!source) return;
+    const name = (this.scenes.summary(scene) || {}).name || "that scene";
+    try {
+      await this.scenes.itemAdd(scene, { source });
+    } catch {
+      // The source exists and nothing is rolled back for it: undoing an add
+      // the operator asked for, because a second call failed, loses their
+      // typing. They are told where it is instead.
+      toast({
+        kind: "warning",
+        text: `The source was added, but it could not be put in ${name}. Drag it onto that scene to place it.`,
+      });
+      return;
+    }
+    this.scenes.undo.record(`Added a source to ${name}`, { offer: true });
+    await this.scenes.reread([scene]);
   }
 
   async activate(id) {
