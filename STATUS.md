@@ -126,6 +126,13 @@ the three client suites and `python3 clients/gen/generate.py --check`.
    could not produce at all. The proxy now answers the latency itself, as
    every other boundary in the core does; the mosaic and preview declare
    375 ms and 250 ms and a test holds both under 500 ms.
+
+   The first nightly soak on a hosted Linux runner, sixty minutes on
+   2026-09-17: 720 rounds, the core up at the end, no panic, no call
+   unanswered, descriptors and threads flat. Two bars missed: one 51 ms
+   stall at round 495, forty minutes in, and resident memory up 52 percent
+   over the hour, which is the buffer pool ratchet above. The overnight
+   wedge this item opened with has not been seen since the fixes above.
 4. **Alpha graphics key to black**, because the graph is I420 throughout. The
    four edits needed are listed in `docs/reference/graphics.md`.
 5. **Smaller gaps**, each with its file and line in the git history: only
