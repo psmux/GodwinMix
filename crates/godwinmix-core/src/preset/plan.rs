@@ -3,7 +3,7 @@
 //! The plan is the whole of `--dry-run` and the first half of a real apply. It
 //! is also what the welcome panel shows a volunteer: the plugins that are
 //! missing, the keys that will be set, the sources and outputs that will
-//! appear, and the three steps left for the person.
+//! appear, and the typed list of what is left for the person.
 //!
 //! A plan fails to build only on something genuinely wrong with the preset: a
 //! file it names that is not there, a config this build cannot load, a scene
@@ -17,7 +17,9 @@ use std::path::{Path, PathBuf};
 use anyhow::{Context, Result};
 use serde::Serialize;
 
-use super::manifest::{Preset, PresetBlock, PluginSpec, BUILT_IN_THEMES, GALLERY_MODES, PANELS, SLOTS};
+use super::manifest::{
+    Next, Preset, PresetBlock, PluginSpec, BUILT_IN_THEMES, GALLERY_MODES, PANELS, SLOTS,
+};
 use crate::config::Config;
 use crate::scene::document::{Collection, Scene};
 use crate::scene::{layout, validate};
@@ -81,6 +83,10 @@ pub struct Plan {
     pub theme_css: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub gallery: Option<String>,
+    /// What the person does next, typed, in the order they do it. This is
+    /// what a surface builds its checklist from.
+    pub next: Vec<Next>,
+    /// The same list as sentences, for a terminal and for an older client.
     pub steps: Vec<String>,
     pub plugins: Vec<PluginNeed>,
     pub config: Vec<ConfigChange>,
@@ -152,7 +158,8 @@ pub fn build(preset: &Preset, options: &Options) -> Result<Plan> {
         theme: block.theme.clone(),
         theme_css: block.theme_css.clone(),
         gallery: block.gallery.clone(),
-        steps: block.steps.clone(),
+        next: block.next_steps(),
+        steps: block.prose(),
         plugins,
         config,
         sources,

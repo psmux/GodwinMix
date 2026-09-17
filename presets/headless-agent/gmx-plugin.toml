@@ -22,10 +22,18 @@ theme = "dark"
 scenes = "scenes"
 gallery = "label"
 
-# The three things the person does next. The welcome panel in the web UI
-# shows these in this order, and the README repeats them.
-steps = [
-  "Put your destination's URL and stream key into the [[outputs]] block.",
-  "Run `gmx`, then point your agent at it with `gmx mcp --url http://localhost:8080`.",
-  "Ask the agent for `get_state`, then `take` a source, and watch `gmx ctl status`.",
-]
+# What the operator does next. This preset has no screen, so nothing here
+# draws a control; it is read through `preset.list`.
+# `docs/reference/presets.md` is the schema.
+[[provides.preset.next]]
+do = "note"
+text = "Nobody sits at this mixer. An agent drives it over the protocol, and the mixer describes every method it has."
+
+[[provides.preset.next]]
+do = "note"
+text = "Give the agent the control token this mixer was started with. Without one it answers nothing."
+
+[[provides.preset.next]]
+do = "take"
+source = "page"
+text = "The channel page goes on air first, and standby covers the gap when it is not ready."

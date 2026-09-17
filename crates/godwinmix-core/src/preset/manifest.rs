@@ -82,10 +82,110 @@ pub struct PresetBlock {
     /// A stylesheet inside the preset, served as the preset's own theme.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub theme_css: Option<String>,
-    /// The three things the person does after applying it. The welcome panel
-    /// shows these, in this order, and the README repeats them.
+    /// What the person does next, typed, in the order they do it. A surface
+    /// puts a control on the screen for each one.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub next: Vec<Next>,
+    /// Deprecated. The same list as prose, from before `next` existed. A
+    /// preset that carries only this still loads: every line becomes a `note`.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub steps: Vec<String>,
+}
+
+/// The `do` values a `[[next]]` entry may carry.
+pub const NEXT_ACTIONS: &[&str] =
+    &["stream_key", "install_plugin", "add_source", "take", "note"];
+
+/// One thing the person does after a preset is applied.
+///
+/// Typed rather than written out, because a sentence sends a volunteer to a
+/// text editor and a type puts a control on the screen. The welcome panel
+/// turns `stream_key` into a box with a Save beside it and `install_plugin`
+/// into the Install button. `note` is the escape hatch for what really is
+/// only words.
+#[derive(Debug, Clone, Default, Deserialize, Serialize, schemars::JsonSchema)]
+pub struct Next {
+    /// One of `NEXT_ACTIONS`. Anything else is a preset written against a
+    /// newer surface than this one; a surface shows its `text` or skips it.
+    #[serde(rename = "do")]
+    pub action: String,
+    /// `stream_key`: the output whose address still holds a placeholder.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub output: Option<String>,
+    /// `install_plugin`: the plugin, by the name `plugin.add` takes.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+    /// `add_source`: the kind to add, as `<plugin>/<provide>`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub kind: Option<String>,
+    /// `take`: the source to put on air first.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source: Option<String>,
+    /// The whole of a `note`, and a sentence of context on any of the others.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub text: Option<String>,
+}
+
+impl Next {
+    /// A line of prose with nothing structured behind it.
+    pub fn note(text: impl Into<String>) -> Self {
+        Self { action: "note".into(), text: Some(text.into()), ..Self::default() }
+    }
+
+    /// Whether this build knows what to do with it.
+    pub fn known(&self) -> bool {
+        NEXT_ACTIONS.contains(&self.action.as_str())
+    }
+
+    /// The sentence a terminal prints for it. The preset's own `text` wins
+    /// wherever it wrote one, because it knows where the key comes from and
+    /// this does not.
+    pub fn sentence(&self) -> String {
+        let own = self.text.clone().unwrap_or_default();
+        let lead = match self.action.as_str() {
+            "stream_key" => {
+                format!("put the stream key for {} in", self.output.clone().unwrap_or_default())
+            }
+            "install_plugin" => {
+                format!("install the {} plugin", self.name.clone().unwrap_or_default())
+            }
+            "add_source" => format!("add a {}", self.kind.clone().unwrap_or_default()),
+            "take" => format!("put {} on air", self.source.clone().unwrap_or_default()),
+            _ => return own,
+        };
+        if own.is_empty() {
+            capitalise(&lead) + "."
+        } else {
+            format!("{}. {own}", capitalise(&lead))
+        }
+    }
+}
+
+fn capitalise(text: &str) -> String {
+    let mut chars = text.chars();
+    match chars.next() {
+        Some(first) => first.to_uppercase().collect::<String>() + chars.as_str(),
+        None => String::new(),
+    }
+}
+
+impl PresetBlock {
+    /// What the person does next, whichever way the preset wrote it. A
+    /// `steps` list from before this schema existed becomes one note each.
+    pub fn next_steps(&self) -> Vec<Next> {
+        if !self.next.is_empty() {
+            return self.next.clone();
+        }
+        self.steps.iter().map(Next::note).collect()
+    }
+
+    /// The same list as sentences, for a terminal and for an older client.
+    pub fn prose(&self) -> Vec<String> {
+        if self.next.is_empty() {
+            return self.steps.clone();
+        }
+        self.next.iter().map(Next::sentence).collect()
+    }
 }
 
 /// One plugin a preset names, split into the parts that matter.
@@ -358,6 +458,50 @@ mod tests {
             from_binary.json_files(&block.scenes).unwrap().len(),
             from_disk.json_files(&block.scenes).unwrap().len()
         );
+    }
+
+    #[test]
+    fn a_preset_written_before_next_existed_still_says_what_to_do() {
+        let text = r#"
+[plugin]
+name = "old"
+version = "1.0.0"
+api = 1
+description = "A third party preset from before the typed list."
+
+[[provides]]
+kind = "preset"
+id = "old"
+
+[provides.preset]
+plugins = []
+config = "config/godwinmix.toml"
+layout = "config/layout.json"
+surface = "web"
+theme = "dark"
+scenes = "scenes"
+steps = ["Point it at your camera.", "Press a tile."]
+"#;
+        let manifest = parse(text).unwrap();
+        let block = manifest.provides[0].preset.as_ref().unwrap();
+        let next = block.next_steps();
+        assert_eq!(next.len(), 2);
+        assert!(next.iter().all(|n| n.action == "note"), "{next:?}");
+        assert_eq!(block.prose()[0], "Point it at your camera.");
+    }
+
+    #[test]
+    fn a_typed_entry_reads_as_a_sentence_for_a_terminal() {
+        let key = Next {
+            action: "stream_key".into(),
+            output: Some("youtube".into()),
+            text: Some("YouTube Studio shows it.".into()),
+            ..Next::default()
+        };
+        assert_eq!(key.sentence(), "Put the stream key for youtube in. YouTube Studio shows it.");
+        let take = Next { action: "take".into(), source: Some("cam-wide".into()), ..Next::default() };
+        assert_eq!(take.sentence(), "Put cam-wide on air.");
+        assert!(take.known() && !Next { action: "dance".into(), ..Next::default() }.known());
     }
 
     #[test]

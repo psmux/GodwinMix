@@ -30,7 +30,7 @@ pub mod plan;
 pub mod save;
 
 pub use apply::{apply_named, Applied};
-pub use manifest::{load, resolve, Manifest, Preset, PresetBlock, NAMES};
+pub use manifest::{load, resolve, Manifest, Next, Preset, PresetBlock, NAMES};
 pub use plan::{Options, Plan};
 
 /// One row of `gmx preset list`.
@@ -47,7 +47,9 @@ pub struct Listed {
     pub surface: String,
     /// The plugins it names, as written.
     pub plugins: Vec<String>,
-    /// The three things to do after applying it.
+    /// What to do after applying it, typed, in the order it is done.
+    pub next: Vec<Next>,
+    /// The same list as sentences, for a terminal and for an older client.
     pub steps: Vec<String>,
     /// True when it is one of the six that ship with GodwinMix.
     pub official: bool,
@@ -68,7 +70,8 @@ pub fn list() -> Vec<Listed> {
                 gallery: block.gallery.clone(),
                 surface: block.surface.clone(),
                 plugins: block.plugins.clone(),
-                steps: block.steps.clone(),
+                next: block.next_steps(),
+                steps: block.prose(),
                 official: NAMES.contains(&preset.name.as_str()),
             })
         })
@@ -80,7 +83,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn the_six_official_presets_are_listed_with_their_steps() {
+    fn the_six_official_presets_say_what_to_do_next_as_data() {
         let listed = list();
         for name in NAMES {
             let row = listed
@@ -89,7 +92,19 @@ mod tests {
                 .unwrap_or_else(|| panic!("{name} is not listed"));
             assert!(row.official);
             assert!(!row.theme.is_empty(), "{name} names no theme");
-            assert_eq!(row.steps.len(), 3, "{name} has {} steps, wanted three", row.steps.len());
+            assert!(
+                (3..=5).contains(&row.next.len()),
+                "{name} has {} things to do next, wanted three to five",
+                row.next.len()
+            );
+            for item in &row.next {
+                assert!(item.known(), "{name}: `do = {:?}` is not one of the five", item.action);
+                assert!(
+                    item.action != "note" || item.text.is_some(),
+                    "{name}: a note with nothing in it"
+                );
+            }
+            assert_eq!(row.steps.len(), row.next.len(), "{name}: the prose lost a line");
             for step in &row.steps {
                 assert!(step.len() > 10, "{name}: {step:?} is not a step");
             }

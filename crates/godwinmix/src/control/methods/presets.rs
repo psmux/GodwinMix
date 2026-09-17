@@ -12,7 +12,7 @@
 
 use super::{body, handler};
 use crate::control::call::Call;
-use godwinmix_core::preset::{self, plan::Options};
+use godwinmix_core::preset::{self, plan::Options, Next};
 use godwinmix_protocol::error::{ErrorCode, RpcError};
 use godwinmix_protocol::method::{any_object, schema_of, MethodDef, Registry, Tier};
 use godwinmix_protocol::scope::Scope;
@@ -107,8 +107,39 @@ pub struct ApplyResult {
     pub applied: Option<Value>,
     /// The sources and outputs this core picked up without a restart.
     pub live: Vec<String>,
-    /// What still needs a restart, in plain words. Empty is the good case.
-    pub needs_restart: Vec<String>,
+    /// What the person does next, typed, in the order they do it. The same
+    /// list as `plan.next`, lifted out so a surface does not have to dig for
+    /// the one field it builds its checklist from.
+    pub next: Vec<Next>,
+    /// What the preset brought that is not running yet, one entry each.
+    /// Empty is the good case.
+    pub needs_restart: Vec<Pending>,
+}
+
+/// One thing the preset brought that this core is not running, and why.
+///
+/// `reason` is what a surface branches on and `message` is what a terminal
+/// prints. Three reasons, and they must not be blurred together: a thing
+/// waiting on a plugin can be fixed from the page, a thing that was refused
+/// wants looking at now, and a restart is a thing that will be fine.
+#[derive(Debug, Clone, Serialize, schemars::JsonSchema)]
+pub struct Pending {
+    /// The source or output id, or the config path for the keys that were
+    /// written.
+    pub id: String,
+    /// `plugin_missing`, `refused` or `restart`.
+    pub reason: String,
+    /// The plugin to install, on `plugin_missing`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub plugin: Option<String>,
+    /// The same sentence the CLI prints.
+    pub message: String,
+}
+
+impl Pending {
+    fn new(id: impl Into<String>, reason: &str, message: impl Into<String>) -> Self {
+        Self { id: id.into(), reason: reason.into(), plugin: None, message: message.into() }
+    }
 }
 
 pub fn register(reg: &mut Registry<Call>) {
@@ -127,8 +158,9 @@ pub fn register(reg: &mut Registry<Call>) {
             "The named setups this mixer can apply in one step: for a church service, a \
              classroom, an esports match, a headless channel an agent drives, a broadcast \
              contribution feed, and the default. Each row says what it is for, which \
-             plugins it needs, which theme and gallery mode it chooses, and the three \
-             steps left for the person afterwards. Use it before `apply_preset`.",
+             plugins it needs, which theme and gallery mode it chooses, and what is left \
+             for the person afterwards, both as typed `next` entries and as sentences. \
+             Use it before `apply_preset`.",
         ),
     );
 
@@ -193,6 +225,7 @@ async fn apply(call: Call, params: Value) -> Result<Value, RpcError> {
             plan: plan_json,
             applied: None,
             live: Vec::new(),
+            next: plan.next.clone(),
             needs_restart: Vec::new(),
         });
     }
@@ -216,6 +249,7 @@ async fn apply(call: Call, params: Value) -> Result<Value, RpcError> {
         plan: plan_json,
         applied: Some(applied_json),
         live,
+        next: plan.next.clone(),
         needs_restart,
     })
 }
@@ -302,7 +336,7 @@ async fn reload(call: &Call, plan: &preset::Plan) -> Reload {
 /// something waiting on a plugin, something that was refused when this core
 /// tried it, and something the core never tried and will take on the next
 /// start. Only the last of those is a restart.
-fn still_pending(plan: &preset::Plan, reload: &Reload) -> Vec<String> {
+fn still_pending(plan: &preset::Plan, reload: &Reload) -> Vec<Pending> {
     let mut out = Vec::new();
     for addition in plan.sources.iter().chain(&plan.outputs) {
         // An exact match on the label `reload` wrote, so that an id which is
@@ -315,26 +349,46 @@ fn still_pending(plan: &preset::Plan, reload: &Reload) -> Vec<String> {
             continue;
         }
         if let Some((_, why)) = reload.failed.iter().find(|(id, _)| id == &addition.id) {
-            out.push(format!("{} did not start: {why}", addition.id));
+            out.push(Pending::new(
+                &addition.id,
+                "refused",
+                format!("{} did not start: {why}", addition.id),
+            ));
             continue;
         }
         match &addition.needs_plugin {
-            Some(plugin) => out.push(format!(
-                "{} waits for the {plugin} plugin: `gmx plugin add {plugin}`",
-                addition.id
-            )),
-            None => out.push(format!(
-                "{} is in the config file; this core did not bring it up now, so it \
-                 starts on the next `gmx` restart",
-                addition.id
+            Some(plugin) => {
+                let mut item = Pending::new(
+                    &addition.id,
+                    "plugin_missing",
+                    format!(
+                        "{} waits for the {plugin} plugin: `gmx plugin add {plugin}`",
+                        addition.id
+                    ),
+                );
+                item.plugin = Some(plugin.clone());
+                out.push(item);
+            }
+            None => out.push(Pending::new(
+                &addition.id,
+                "restart",
+                format!(
+                    "{} is in the config file; this core did not bring it up now, so it \
+                     starts on the next `gmx` restart",
+                    addition.id
+                ),
             )),
         }
     }
     if !plan.config.is_empty() {
-        out.push(format!(
-            "{} configuration key(s) were written to {} and take effect on restart",
-            plan.config.len(),
-            plan.config_path.display()
+        out.push(Pending::new(
+            plan.config_path.display().to_string(),
+            "restart",
+            format!(
+                "{} configuration key(s) were written to {} and take effect on restart",
+                plan.config.len(),
+                plan.config_path.display()
+            ),
         ));
     }
     out
@@ -363,6 +417,24 @@ mod tests {
     }
 
     #[test]
+    fn the_church_preset_answers_with_a_typed_list_the_page_can_draw() {
+        let _ = gstreamer::init();
+        let found = preset::resolve("church").unwrap();
+        let plan =
+            preset::plan::build(&found, &Options::new("/nowhere/godwinmix.toml")).unwrap();
+        // Two stream keys, the camera plugin, and the first take. Nothing in
+        // it is a sentence telling somebody to open a file.
+        let actions: Vec<&str> = plan.next.iter().map(|n| n.action.as_str()).collect();
+        assert_eq!(actions, ["stream_key", "stream_key", "install_plugin", "take"]);
+        let outputs: Vec<&str> =
+            plan.next.iter().filter_map(|n| n.output.as_deref()).collect();
+        assert_eq!(outputs, ["youtube", "facebook"]);
+        for step in &plan.steps {
+            assert!(!step.contains("godwinmix.toml"), "{step:?} sends somebody to a text editor");
+        }
+    }
+
+    #[test]
     fn what_is_left_after_an_apply_names_the_plugin_and_the_restart() {
         let _ = gstreamer::init();
         let found = preset::resolve("church").unwrap();
@@ -371,9 +443,10 @@ mod tests {
         let pending = still_pending(&plan, &Reload::default());
         // Every source the church preset brings runs on a built in kind, so
         // each one is waiting on a restart and none on a plugin.
-        assert!(pending.iter().any(|p| p.contains("cam-wide")), "{pending:?}");
-        assert!(pending.iter().all(|p| !p.contains("waits for")), "{pending:?}");
-        assert!(pending.iter().any(|p| p.contains("restart")), "{pending:?}");
+        assert!(pending.iter().any(|p| p.id == "cam-wide"), "{pending:?}");
+        assert!(pending.iter().all(|p| p.reason != "plugin_missing"), "{pending:?}");
+        assert!(pending.iter().any(|p| p.reason == "restart"), "{pending:?}");
+        assert!(pending.iter().all(|p| !p.message.is_empty()), "the prose is still there");
         // The camera plugin is still named, on the plan rather than here.
         assert!(plan.missing().iter().any(|p| p.name == "camera"));
     }
@@ -392,11 +465,11 @@ mod tests {
         let pending = still_pending(&plan, &reloaded);
         let line = pending
             .iter()
-            .find(|p| p.starts_with(&id))
+            .find(|p| p.id == id)
             .unwrap_or_else(|| panic!("nothing about {id} in {pending:?}"));
-        assert!(line.contains("did not start"), "{line}");
-        assert!(line.contains("no such device"), "{line}");
-        assert!(!line.contains("restart"), "{line}");
+        assert_eq!(line.reason, "refused");
+        assert!(line.message.contains("no such device"), "{}", line.message);
+        assert!(!line.message.contains("restart"), "{}", line.message);
     }
 
     #[test]
@@ -413,6 +486,6 @@ mod tests {
             failed: Vec::new(),
         };
         let pending = still_pending(&plan, &reloaded);
-        assert!(pending.iter().any(|p| p.starts_with(&id)), "{pending:?}");
+        assert!(pending.iter().any(|p| p.id == id), "{pending:?}");
     }
 }
