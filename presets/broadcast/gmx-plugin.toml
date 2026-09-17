@@ -23,10 +23,18 @@ scenes = "scenes"
 theme_css = "theme.css"
 gallery = "live"
 
-# The three things the person does next. The welcome panel in the web UI
-# shows these in this order, and the README repeats them.
-steps = [
-  "Put your SRT contribution address and passphrase into the [[sources]] blocks.",
-  "Put the SRT destination and the tally controller's address into the config.",
-  "Run `gmx`, open http://localhost:8080, and check `gmx doctor` before the first feed.",
-]
+# What the engineer does next, as data rather than as sentences. The welcome
+# panel draws a control for each one. `docs/reference/presets.md` is the schema.
+[[provides.preset.next]]
+do = "install_plugin"
+name = "srt"
+text = "Both venue feeds and the network output are SRT, so nothing connects until this is here."
+
+[[provides.preset.next]]
+do = "note"
+text = "The venues connect on their own as soon as their encoders start. The Sources panel says which have arrived."
+
+[[provides.preset.next]]
+do = "take"
+source = "studio"
+text = "Press Studio to go on air, then cut to a venue when its feed is green."

@@ -23,10 +23,25 @@ scenes = "scenes"
 theme_css = "theme.css"
 gallery = "icon"
 
-# The three things the person does next. The welcome panel in the web UI
-# shows these in this order, and the README repeats them.
-steps = [
-  "Put your YouTube and Facebook stream keys into the two [[outputs]] blocks of godwinmix.toml.",
-  "Run `gmx` and open http://localhost:8080 on the volunteer's screen.",
-  "Press Wide to put a picture on air, then press the red button when the service starts.",
-]
+# What the volunteer does next, as data rather than as sentences. The welcome
+# panel draws a control for each one: a box and a Save for a stream key, the
+# Install button for a plugin. `docs/reference/presets.md` is the schema.
+[[provides.preset.next]]
+do = "stream_key"
+output = "youtube"
+text = "YouTube Studio, then Create, then Go Live, shows the key beside the stream URL."
+
+[[provides.preset.next]]
+do = "stream_key"
+output = "facebook"
+text = "The Live producer page shows it. Leave it if the service only goes to YouTube."
+
+[[provides.preset.next]]
+do = "install_plugin"
+name = "camera"
+text = "The two cameras are test patterns until this is here, so the service can go out before they are."
+
+[[provides.preset.next]]
+do = "take"
+source = "cam-wide"
+text = "Press Wide to put a picture on air, then the red button when the service starts."

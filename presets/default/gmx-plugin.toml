@@ -22,10 +22,18 @@ theme = "dark"
 scenes = "scenes"
 gallery = "live"
 
-# The three things the person does next. The welcome panel in the web UI
-# shows these in this order, and the README repeats them.
-steps = [
-  "Put your camera's RTMP address into the two [[sources]] blocks, or drop a file on the page.",
-  "Put your destination's URL and stream key into the [[outputs]] block.",
-  "Run `gmx`, open http://localhost:8080, and press a tile to put it on air.",
-]
+# What the person does next, as data rather than as sentences. The welcome
+# panel draws a control for each one. `docs/reference/presets.md` is the schema.
+[[provides.preset.next]]
+do = "add_source"
+kind = "rtmp/source"
+text = "Point your camera or phone encoder at this mixer, or drop a video file on the page."
+
+[[provides.preset.next]]
+do = "take"
+source = "cam1"
+text = "Press a tile to put it on air. The picture at the top is what your audience sees."
+
+[[provides.preset.next]]
+do = "note"
+text = "The destination starts pointed at this machine. Destinations, then Edit, sends it somewhere else."

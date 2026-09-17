@@ -23,10 +23,19 @@ scenes = "scenes"
 theme_css = "theme.css"
 gallery = "live"
 
-# The three things the person does next. The welcome panel in the web UI
-# shows these in this order, and the README repeats them.
-steps = [
-  "Put the four player feeds and the caster camera into the [[sources]] blocks.",
-  "Put your destination's URL and stream key into the [[outputs]] block.",
-  "Run `gmx`, open http://localhost:8080, and press Quad to bring all four up.",
-]
+# What the caster does next, as data rather than as sentences. The welcome
+# panel draws a control for each one. `docs/reference/presets.md` is the schema.
+[[provides.preset.next]]
+do = "stream_key"
+output = "twitch"
+text = "Twitch, Creator Dashboard, Settings, Stream shows the primary stream key."
+
+[[provides.preset.next]]
+do = "install_plugin"
+name = "ndi"
+text = "The four player feeds arrive over NDI, so nothing appears in the quad until this is here."
+
+[[provides.preset.next]]
+do = "take"
+source = "caster"
+text = "Press Caster to go on air, then Quad when the match starts."
