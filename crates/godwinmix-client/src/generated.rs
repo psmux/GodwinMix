@@ -2712,7 +2712,7 @@ pub const METHODS: [MethodInfo; 123] = [
     MethodInfo { name: "tool.call", summary: "Call one of a plugin's tools, in MCP's shape. The name is `<plugin>/<tool>`, or the bare tool name when only one plugin has it.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/tool/call")) },
 ];
 
-pub const EVENT_NAMES: [&str; 20] = [
+pub const EVENT_NAMES: [&str; 21] = [
     "snapshot",
     "program.took",
     "scene.patch",
@@ -2731,6 +2731,7 @@ pub const EVENT_NAMES: [&str; 20] = [
     "agent.state",
     "multiview.layout",
     "multiview.frame",
+    "preview.frame",
     "resync",
     "flush",
 ];
@@ -2788,6 +2789,8 @@ pub enum Event {
     MultiviewLayout(MultiviewLayout),
     /// 16 byte header then JPEG, decoded by [`crate::frames::parse_frame`].
     MultiviewFrame(crate::frames::Frame),
+    /// 16 byte header then JPEG, decoded by [`crate::frames::parse_frame`].
+    PreviewFrame(crate::frames::Frame),
     /// This client fell behind and events were dropped. Re-subscribe for a fresh snapshot; nothing between from_seq and the new snapshot arrives.
     Resync(Resync),
     /// The end of a batch. Render here and not before, so a client never paints half an update.
@@ -2903,6 +2906,7 @@ impl Event {
             Event::AgentState(_) => "agent.state",
             Event::MultiviewLayout(_) => "multiview.layout",
             Event::MultiviewFrame(_) => "multiview.frame",
+            Event::PreviewFrame(_) => "preview.frame",
             Event::Resync(_) => "resync",
             Event::Flush(_) => "flush",
             Event::Other { name, .. } => name,

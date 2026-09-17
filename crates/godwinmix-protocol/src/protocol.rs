@@ -352,9 +352,27 @@ fn stream_events() -> Vec<EventDef> {
             since: "1",
             summary: "A mosaic frame, as a binary WebSocket frame rather than JSON: a 16 \
                       byte little endian header (seq u32, layout id u32, programme running \
-                      time in milliseconds u64) then the JPEG.",
+                      time in milliseconds u64) then the JPEG. The top bit of seq is the \
+                      stream and is clear on a mosaic frame; the other 31 bits count.",
             ext: Some("multiview"),
             legacy: Some("raw JPEG binary frame"),
+            payload: |_| {
+                inline(json!({
+                    "type": "string",
+                    "contentEncoding": "binary",
+                    "description": "16 byte header then JPEG. Not a JSON message."
+                }))
+            },
+        },
+        EventDef {
+            name: "preview.frame",
+            since: "1",
+            summary: "The armed scene as a picture, on the same socket and in the same 16 \
+                      byte header as a mosaic frame, with the top bit of seq set to say so \
+                      and the layout id zero because there is no grid to cut up. One \
+                      picture per frame: draw it whole.",
+            ext: Some("preview"),
+            legacy: None,
             payload: |_| {
                 inline(json!({
                     "type": "string",
@@ -402,10 +420,11 @@ pub fn ext_table() -> Vec<(&'static str, &'static str, &'static str, bool)> {
         (
             "preview",
             "{fps, width} or \"full\"",
-            "the armed scene, composited in the multiview pipeline from the per source \
-             thumbnails and published to /mjpeg/preview, scene.preview.frame and its own \
-             cell on the mosaic. \"full\" composites it at the canvas's own size while a \
-             client is subscribed, so a designer's handles land on real coordinates",
+            "event/preview.frame: the armed scene, composited in the multiview pipeline \
+             from the per source thumbnails and published on this socket, to \
+             /mjpeg/preview, to scene.preview.frame and to its own cell on the mosaic. \
+             \"full\" composites it at the canvas's own size while a client is subscribed, \
+             so a designer's handles land on real coordinates",
             true,
         ),
         ("telemetry", "{hz: 1..10}", "event/telemetry", false),

@@ -1808,6 +1808,7 @@ EVENT_NAMES = (
     "agent.state",
     "multiview.layout",
     "multiview.frame",
+    "preview.frame",
     "resync",
     "flush",
 )
