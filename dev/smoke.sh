@@ -608,7 +608,11 @@ done
 if grep -q '"image"' <<<"$FRAME" && grep -q '"layout"' <<<"$FRAME"; then
     ok
 else
-    bad "scene.preview.frame answered: ${FRAME:0:200}"
+    # A Linux runner answered "no frame yet" for forty five seconds while
+    # every other step passed, so the failure carries what the preview
+    # looked like: the core's own lines about it and the element states
+    # from the mosaic pipeline's graph.
+    bad "scene.preview.frame answered: ${FRAME:0:200}; core lines: $(grep -iE 'preview|pv-' "$LOG" | tail -n 8 | tr '\n' ';' | cut -c1-1500); graph lines: $(GODWINMIX_URL="$BASE" GODWINMIX_TOKEN="$TOKEN" "$GMX" dot multiview 2>/dev/null | grep -E 'pv-|proxysrc|tile' | head -n 40 | tr '\n' ' ' | tr -s ' ' | cut -c1-1500)"
 fi
 
 step "and the preview compositor went away with the asking"
