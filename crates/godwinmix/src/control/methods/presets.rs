@@ -199,8 +199,9 @@ async fn apply(call: Call, params: Value) -> Result<Value, RpcError> {
 
     let applied = preset::apply::run(&found, &plan)
         .map_err(|e| RpcError::internal(format!("applying {}: {e:#}", req.name)))?;
-    let live = reload(&call, &plan).await;
-    let needs_restart = still_pending(&plan, &live);
+    let reloaded = reload(&call, &plan).await;
+    let needs_restart = still_pending(&plan, &reloaded);
+    let live = reloaded.live.clone();
 
     {
         let mut held = runtime().write();
@@ -219,24 +220,38 @@ async fn apply(call: Call, params: Value) -> Result<Value, RpcError> {
     })
 }
 
+/// What a running core did with the preset: what it took, and what it tried
+/// and could not.
+///
+/// The two are kept apart because they read differently to the operator. A
+/// thing waiting for a restart is a thing that will be fine. A thing that
+/// refused to start is a thing to look at now.
+#[derive(Debug, Default)]
+pub struct Reload {
+    /// The sources and outputs this core picked up, as `source <id>` and
+    /// `output <id>`.
+    pub live: Vec<String>,
+    /// The ones whose add was refused, each with what the core said.
+    pub failed: Vec<(String, String)>,
+}
+
 /// Add what a running core can take now: the sources and outputs the preset
 /// brought whose plugin is here.
 ///
 /// Everything else stays in the file and comes up on the next start. Nothing in
-/// here can fail the call: a source that will not start is a source the operator
-/// sees in `source.list` with its state, which is where it belongs.
-async fn reload(call: &Call, plan: &preset::Plan) -> Vec<String> {
+/// here can fail the call: what would not start is reported, not thrown.
+async fn reload(call: &Call, plan: &preset::Plan) -> Reload {
     use godwinmix_core::mixer::Command;
 
-    let mut live = Vec::new();
+    let mut out = Reload::default();
     let Ok(config) = godwinmix_core::config::Config::load(&godwinmix_core::config::path_in_force(
         &plan.config_path,
     )) else {
-        return live;
+        return out;
     };
     let status = match call.app.mixer.status().await {
         Ok(s) => s,
-        Err(_) => return live,
+        Err(_) => return out,
     };
 
     for source in &config.sources {
@@ -247,14 +262,14 @@ async fn reload(call: &Call, plan: &preset::Plan) -> Vec<String> {
             continue;
         }
         let cfg = source.clone();
-        if call
+        match call
             .app
             .mixer
             .request(|ack| Command::AddSource(Box::new(cfg), Some(ack)))
             .await
-            .is_ok()
         {
-            live.push(format!("source {}", source.id));
+            Ok(_) => out.live.push(format!("source {}", source.id)),
+            Err(e) => out.failed.push((source.id.clone(), e.to_string())),
         }
     }
     for output in &config.outputs {
@@ -268,24 +283,39 @@ async fn reload(call: &Call, plan: &preset::Plan) -> Vec<String> {
             continue;
         }
         let cfg = output.clone();
-        if call
+        match call
             .app
             .mixer
             .request(|ack| Command::AddOutput(Box::new(cfg), Some(ack)))
             .await
-            .is_ok()
         {
-            live.push(format!("output {}", output.id));
+            Ok(_) => out.live.push(format!("output {}", output.id)),
+            Err(e) => out.failed.push((output.id.clone(), e.to_string())),
         }
     }
-    live
+    out
 }
 
 /// What the preset brought that this core did not pick up, and why.
-fn still_pending(plan: &preset::Plan, live: &[String]) -> Vec<String> {
+///
+/// Three different things end up here and they must not be blurred together:
+/// something waiting on a plugin, something that was refused when this core
+/// tried it, and something the core never tried and will take on the next
+/// start. Only the last of those is a restart.
+fn still_pending(plan: &preset::Plan, reload: &Reload) -> Vec<String> {
     let mut out = Vec::new();
     for addition in plan.sources.iter().chain(&plan.outputs) {
-        if addition.already_there || live.iter().any(|l| l.ends_with(&addition.id)) {
+        // An exact match on the label `reload` wrote, so that an id which is
+        // the tail of another id cannot be mistaken for it.
+        let took = reload
+            .live
+            .iter()
+            .any(|l| l == &format!("source {}", addition.id) || l == &format!("output {}", addition.id));
+        if addition.already_there || took {
+            continue;
+        }
+        if let Some((_, why)) = reload.failed.iter().find(|(id, _)| id == &addition.id) {
+            out.push(format!("{} did not start: {why}", addition.id));
             continue;
         }
         match &addition.needs_plugin {
@@ -338,7 +368,7 @@ mod tests {
         let found = preset::resolve("church").unwrap();
         let plan =
             preset::plan::build(&found, &Options::new("/nowhere/godwinmix.toml")).unwrap();
-        let pending = still_pending(&plan, &[]);
+        let pending = still_pending(&plan, &Reload::default());
         // Every source the church preset brings runs on a built in kind, so
         // each one is waiting on a restart and none on a plugin.
         assert!(pending.iter().any(|p| p.contains("cam-wide")), "{pending:?}");
@@ -346,5 +376,43 @@ mod tests {
         assert!(pending.iter().any(|p| p.contains("restart")), "{pending:?}");
         // The camera plugin is still named, on the plan rather than here.
         assert!(plan.missing().iter().any(|p| p.name == "camera"));
+    }
+
+    #[test]
+    fn a_source_that_was_refused_is_not_reported_as_waiting_for_a_restart() {
+        let _ = gstreamer::init();
+        let found = preset::resolve("church").unwrap();
+        let plan =
+            preset::plan::build(&found, &Options::new("/nowhere/godwinmix.toml")).unwrap();
+        let id = plan.sources.first().expect("the church preset brings sources").id.clone();
+        let reloaded = Reload {
+            live: Vec::new(),
+            failed: vec![(id.clone(), "no such device".into())],
+        };
+        let pending = still_pending(&plan, &reloaded);
+        let line = pending
+            .iter()
+            .find(|p| p.starts_with(&id))
+            .unwrap_or_else(|| panic!("nothing about {id} in {pending:?}"));
+        assert!(line.contains("did not start"), "{line}");
+        assert!(line.contains("no such device"), "{line}");
+        assert!(!line.contains("restart"), "{line}");
+    }
+
+    #[test]
+    fn an_id_that_is_the_tail_of_another_is_not_mistaken_for_it() {
+        let _ = gstreamer::init();
+        let found = preset::resolve("church").unwrap();
+        let plan =
+            preset::plan::build(&found, &Options::new("/nowhere/godwinmix.toml")).unwrap();
+        let id = plan.sources.first().expect("the church preset brings sources").id.clone();
+        // A different source whose label ends with this id. The old suffix
+        // match read this as "the one we wanted came up".
+        let reloaded = Reload {
+            live: vec![format!("source extra-{id}")],
+            failed: Vec::new(),
+        };
+        let pending = still_pending(&plan, &reloaded);
+        assert!(pending.iter().any(|p| p.starts_with(&id)), "{pending:?}");
     }
 }
