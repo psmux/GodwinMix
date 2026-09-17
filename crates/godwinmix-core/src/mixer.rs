@@ -4303,7 +4303,7 @@ impl Mixer {
                     .context("attaching the programme return branch for the mosaic")?;
                 info!(?shape, "multiview built for a subscriber");
             }
-            Demand::Preview => return self.preview_demand_now(),
+            Demand::Preview => {}
             Demand::Teardown => {
                 // Decided on another thread, checked again here: this is the
                 // one place where the count and the pipeline are both in hand.
@@ -4317,7 +4317,15 @@ impl Mixer {
         }
         // The preview lives in the mosaic's pipeline, so a mosaic that has
         // just been built or rebuilt has to be told what is armed.
-        self.preview_demand_now()
+        self.preview_demand_now()?;
+        // Clients learn the grid from the status document, and the grid has
+        // just changed: a mosaic was built, torn down, or given a preview
+        // cell. Nothing else announces that. A client subscribing before the
+        // mosaic existed was told `cells: []` and was never told otherwise,
+        // so it drew nothing on a canvas the mosaic was filling eight times a
+        // second.
+        self.broadcast_status();
+        Ok(())
     }
 
     /// Reconcile the preview compositor against what is subscribed.
@@ -6537,6 +6545,37 @@ mod tests {
     /// that blocked when full, so with no mosaic it was a second consumer of
     /// every frame that nobody read and a backpressure path onto the encoder's
     /// own tee. It goes on when the mosaic does and comes off with it.
+    /// Building the mosaic announces the grid.
+    ///
+    /// A client subscribes, which is what builds the mosaic, and is told the
+    /// grid in its subscribe snapshot: `cells: []`, because there is no mosaic
+    /// yet. Nothing told it otherwise afterwards, so it drew nothing on a
+    /// canvas the mosaic was filling eight times a second.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn building_the_mosaic_broadcasts_a_status_with_the_cells_in_it() {
+        let mut mix = with_sources_and_mosaic(&["cam1"]).await;
+        let mut events = mix.events.subscribe();
+        assert!(mix.status().multiview.cells.is_empty(), "no cells before a mosaic");
+
+        mix.multiview_demand(crate::multiview::DemandAt {
+            demand: Demand::Build(crate::multiview::MultiviewShape { fps: 8, width: 320, height: 180 }),
+            generation: mix.mv.generation(),
+        })
+        .expect("a subscriber builds the mosaic");
+
+        let mut announced = None;
+        while let Ok(envelope) = events.try_recv() {
+            if let Event::Status(status) = envelope.event {
+                if !status.multiview.cells.is_empty() {
+                    announced = Some(status.multiview.cells.clone());
+                }
+            }
+        }
+        let cells = announced.expect("no status with the grid in it was broadcast after the build");
+        assert!(cells.iter().any(|c| c.source.as_deref() == Some("cam1")), "{cells:?}");
+        mix.shutdown();
+    }
+
     #[tokio::test]
     async fn the_programme_return_branch_is_only_on_the_tee_while_the_mosaic_is() {
         let _ = gst::init();

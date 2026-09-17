@@ -14,6 +14,7 @@ import { sheetWidthFor } from "../../client/frames.js";
 import { settings, onSettingsChanged } from "../../shell/settings.js";
 import { toast, errorToast } from "../../shell/toast.js";
 import { register } from "../../shell/commands.js";
+import { mosaicWanted } from "./wanted.js";
 
 class ProgramPanel extends HTMLElement {
   static get panel() {
@@ -107,8 +108,7 @@ class ProgramPanel extends HTMLElement {
   retune() {
     const s = this.client.state;
     const cell = this.programCell(s);
-    const wanted = this.visible && !document.hidden && s.multiview && s.multiview.enabled && cell !== null;
-    if (!wanted) {
+    if (!mosaicWanted(s, this.visible)) {
       this.release();
       this.canvas.hidden = true;
       this.note.hidden = !(s.multiview && !s.multiview.enabled);
@@ -136,7 +136,10 @@ class ProgramPanel extends HTMLElement {
       this.canvas.height = h;
     }
     if (this.detach) this.detach();
-    this.detach = this.client.sheet.attach(this.canvas, cell);
+    // The programme cell exists only once the mosaic is up, and the mosaic
+    // comes up because somebody subscribed. Subscribe first, attach when the
+    // layout names the cell: the next render brings it here.
+    this.detach = cell === null ? null : this.client.sheet.attach(this.canvas, cell);
   }
 
   release() {
@@ -175,10 +178,13 @@ class ProgramPanel extends HTMLElement {
 
   render(s) {
     this.armed = s.preview || (document.body.dataset.armed || null) || null;
-    this.row.querySelector(".program").classList.toggle("on", !!s.program);
+    // A scene of more than one item is `scene`, not `program`; reading only
+    // the source said "black" under a live two box.
+    const onAir = s.program || s.scene;
+    this.row.querySelector(".program").classList.toggle("on", !!onAir);
     this.previewWrap.hidden = !(settings().producer && s.preview);
-    this.bar.firstChild.textContent = s.program
-      ? `Audience sees ${(s.sources.find((x) => x.id === s.program) || {}).name || s.program}`
+    this.bar.firstChild.textContent = onAir
+      ? `Audience sees ${(s.sources.find((x) => x.id === s.program) || {}).name || onAir}`
       : "Audience sees black";
     this.retune();
   }

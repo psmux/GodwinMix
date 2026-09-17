@@ -18,6 +18,7 @@ import { tagFor } from "../shell/registry.js";
 import * as layout from "../shell/layout.js";
 import { ART } from "../panels/welcome/tiles.js";
 import { WelcomePanel } from "../panels/welcome/panel.js";
+import { mosaicWanted } from "../panels/multiview/wanted.js";
 import { connect } from "../client/index.js";
 import { shell, panelSection } from "../shell/shell.js";
 import { buildTile, syncTile } from "../panels/sources/tile.js";
@@ -510,6 +511,19 @@ test("what the drawer sends is split the way source.set reads it", () => {
   eq(req.params.superimpose, "auto");
   ok(!("superimpose" in req), "it did not go out at the top level");
   ok(!("uri" in req), "an undefined value is left out");
+});
+
+// ------------------------------------------------------- programme monitor
+
+test("the monitor subscribes before the mosaic has told it which cell is the programme", () => {
+  // Before anybody subscribes the core reports no cells at all, because the
+  // mosaic only exists while something is subscribed. Waiting for the cell
+  // before subscribing was waiting for ever whenever the source tiles were
+  // showing icons, which is what the church preset ships.
+  const cold = { multiview: { enabled: true, cols: 0, rows: 0, cells: [] } };
+  ok(mosaicWanted(cold, true), "wanted with no cells reported yet");
+  ok(!mosaicWanted(cold, false), "but not while the pane is scrolled out of view");
+  ok(!mosaicWanted({ multiview: { enabled: false, cells: [] } }, true), "and not with multiview switched off");
 });
 
 // ---------------------------------------------------------------- keymap

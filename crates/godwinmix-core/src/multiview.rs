@@ -181,6 +181,13 @@ struct Shared {
     /// from `built`, so a test can prove that the GStreamer elements really
     /// have gone and not merely that a flag was cleared.
     live: AtomicUsize,
+    /// One flag per tile, raised by a probe the first time a buffer reaches
+    /// that tile's compositor pad. The compositor runs with
+    /// `ignore-inactive-pads` and a black background, so it produces whole
+    /// frames before any tile has delivered, and a still cut from one of
+    /// those is a black rectangle with a 200 response code. `warm` reads
+    /// these so a caller can wait for a frame that has something in it.
+    fed: Mutex<Vec<Arc<AtomicBool>>>,
     /// The mixer thread has no runtime of its own and a subscription may be
     /// dropped anywhere, so the linger is scheduled through a captured handle.
     rt: tokio::runtime::Handle,
@@ -343,6 +350,7 @@ impl MultiviewHandle {
                 shape: Mutex::new(None),
                 generation: AtomicU64::new(0),
                 live: AtomicUsize::new(0),
+                fed: Mutex::new(Vec::new()),
                 rt,
                 demand,
             }),
@@ -440,6 +448,14 @@ impl MultiviewHandle {
     /// Mosaic pipelines alive for this mixer right now: one or zero. What a
     /// test asks to prove that a disabled or unwanted mosaic is not merely
     /// flagged off but absent.
+    /// Whether every tile of the mosaic has delivered at least one buffer
+    /// since it was built. False before the first tile arrives and again for
+    /// a moment after a tile is added, which is exactly when a still cut
+    /// from the mosaic would be black where a picture should be.
+    pub fn warm(&self) -> bool {
+        self.is_built() && self.shared.fed.lock().iter().all(|f| f.load(Ordering::Acquire))
+    }
+
     pub fn live_pipelines(&self) -> usize {
         self.shared.live.load(Ordering::Relaxed)
     }
@@ -627,6 +643,8 @@ struct Tile {
     /// nothing, which is why it is always there rather than spliced in when a
     /// preview arrives.
     tee: gst::Element,
+    /// Raised once a buffer has reached `pad`. Shared with `Shared::fed`.
+    fed: Arc<AtomicBool>,
 }
 
 pub struct Multiview {
@@ -831,11 +849,24 @@ impl Multiview {
         let tee_pad = tee.request_pad_simple("src_%u").context("a tile tee refused a pad")?;
         tee_pad.link(&pad).context("linking tile into the mosaic")?;
 
+        // Say when this tile has actually put something on the canvas. The
+        // probe removes itself on the first buffer, so it costs one closure
+        // call for the life of the tile.
+        let fed = Arc::new(AtomicBool::new(false));
+        {
+            let fed = fed.clone();
+            pad.add_probe(gst::PadProbeType::BUFFER, move |_pad, _info| {
+                fed.store(true, Ordering::Release);
+                gst::PadProbeReturn::Remove
+            });
+        }
+        self.shared.fed.lock().push(fed.clone());
+
         for el in &branch {
             el.sync_state_with_parent().ok();
         }
 
-        self.tiles.push(Tile { source, pad, branch, tee });
+        self.tiles.push(Tile { source, pad, branch, tee, fed });
         self.relayout();
         debug!(%tag, "added multiview tile");
         Ok(())
@@ -850,6 +881,7 @@ impl Multiview {
             return Ok(());
         };
         let tile = self.tiles.remove(pos);
+        self.shared.fed.lock().retain(|f| !Arc::ptr_eq(f, &tile.fed));
         // The preview draws off this tile's tee, so its slot goes first or the
         // branch would be taken down under a linked pad.
         if let Some(preview) = self.preview.as_mut() {
@@ -965,7 +997,11 @@ impl Multiview {
         for el in &branch {
             el.sync_state_with_parent().ok();
         }
-        self.tiles.push(Tile { source: Some(PREVIEW_CELL.into()), pad: pad.clone(), branch, tee });
+        // Not part of `warm`: this tile exists only while a scene is armed,
+        // and a still with nothing armed must not wait on it. Raised from the
+        // start so the drop and remove paths can treat every tile alike.
+        let fed = Arc::new(AtomicBool::new(true));
+        self.tiles.push(Tile { source: Some(PREVIEW_CELL.into()), pad: pad.clone(), branch, tee, fed });
         Ok(pad)
     }
 
@@ -1057,6 +1093,12 @@ impl Multiview {
 impl Drop for Multiview {
     fn drop(&mut self) {
         self.stop();
+        {
+            let mut fed = self.shared.fed.lock();
+            for tile in &self.tiles {
+                fed.retain(|f| !Arc::ptr_eq(f, &tile.fed));
+            }
+        }
         self.shared.live.fetch_sub(1, Ordering::Relaxed);
     }
 }

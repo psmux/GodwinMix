@@ -242,9 +242,16 @@ impl Tracker {
             // it at the end of the ten seconds.
             self.want();
             if let Some(l) = self.latest() {
-                return Some(l);
-            }
-            if Instant::now() >= deadline || !self.enabled() {
+                // The mosaic's compositor draws whole frames before any tile
+                // has delivered, so the first frame after a cold start is a
+                // black rectangle, and it was served as the picture. Hold on
+                // for one with every tile in it; at the deadline, serve what
+                // there is, because a dead camera's cell is black on the
+                // operator's screen as well and a still should say so.
+                if self.mv.warm() || Instant::now() >= deadline {
+                    return Some(l);
+                }
+            } else if Instant::now() >= deadline || !self.enabled() {
                 return None;
             }
             tokio::time::sleep(Duration::from_millis(40)).await;
@@ -884,6 +891,64 @@ mod tests {
         assert!(!t.following());
         assert_eq!(t.starts(), 0);
         assert!(t.latest_wanted(Duration::from_millis(50)).await.is_none());
+    }
+
+    /// A still asked for the moment the mosaic is built has a picture in it.
+    ///
+    /// The mosaic's compositor runs with `ignore-inactive-pads` and a black
+    /// background, so it produces frames before the tiles have delivered, and
+    /// the tracker used to serve the first of those: every cold snapshot of a
+    /// colour bar source was a black rectangle, with a 200.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn the_first_still_after_a_cold_start_is_not_black() {
+        let _ = gstreamer::init();
+        let mut cfg: crate::config::Config = toml::from_str("").unwrap();
+        cfg.canvas = crate::config::Canvas {
+            width: 320,
+            height: 180,
+            fps: 15,
+            sample_rate: 48000,
+            channels: 2,
+        };
+        cfg.multiview = crate::config::MultiviewConfig {
+            width: 320,
+            height: 180,
+            linger_secs: 1,
+            ..Default::default()
+        };
+        cfg.sources = vec![crate::config::SourceConfig::bare("bars", "test://smpte")];
+        let (mut mix, handle, cmd_rx, _bus_rx) = crate::mixer::Mixer::build(cfg).unwrap();
+        mix.start().unwrap();
+        let mv = mix.multiview_handle();
+        let thread = crate::mixer::spawn(mix, cmd_rx, handle.clone());
+
+        let tracker = Tracker::new(
+            SnapshotConfig { idle_secs: 2, ..Default::default() },
+            mv.clone(),
+            handle.clone(),
+        );
+        let latest = tracker
+            .latest_wanted(Duration::from_secs(10))
+            .await
+            .expect("no frame within ten seconds of asking");
+        assert!(mv.warm(), "a frame was served before every tile had delivered");
+
+        let cell = latest
+            .cells
+            .iter()
+            .find(|c| c.source.as_deref() == Some("bars"))
+            .expect("the bars source has a cell")
+            .clone();
+        let mosaic = image::load_from_memory_with_format(&latest.jpeg, ImageFormat::Jpeg)
+            .expect("the still decodes")
+            .to_rgb8();
+        let still = crop_cell(&mosaic, &cell);
+        let luma = image::DynamicImage::ImageRgb8(still).to_luma8();
+        let mean = luma.pixels().map(|p| p.0[0] as u64).sum::<u64>() / luma.pixels().count().max(1) as u64;
+        assert!(mean > 40, "the still of a colour bar source is black: mean luma {mean}");
+
+        let _ = handle.send(crate::mixer::Command::Shutdown);
+        tokio::task::spawn_blocking(move || thread.join()).await.unwrap().unwrap();
     }
 
     /// The whole chain, against a real mixer: no tracker and no mosaic until
