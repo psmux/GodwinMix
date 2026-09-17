@@ -2110,8 +2110,8 @@ impl Mixer {
     }
 
     pub fn remove_source(&mut self, id: &SourceId) -> Result<()> {
-        let slot = self.detach_source(id)?;
-        slot.input.stop();
+        let slot = crate::slow_step!("detach_source", id, self.detach_source(id))?;
+        crate::slow_step!("input.stop", id, slot.input.stop());
         Ok(())
     }
 
@@ -2462,18 +2462,40 @@ impl Mixer {
         };
         // A held frame of this same source goes with it. Somebody removing a
         // source wants it gone, not a still of it left on the compositor.
-        self.release_retired(Some(id));
+        crate::slow_step!("release_retired", id, self.release_retired(Some(id)));
         if self.program_source.as_ref() == Some(id) {
-            self.take(None, None)?;
+            crate::slow_step!("take off programme", id, self.take(None, None))?;
         }
         let slot = self.sources.remove(pos);
         if let Some(mv) = &mut self.multiview {
-            mv.remove_tile(id).ok();
+            crate::slow_step!("multiview remove_tile", id, mv.remove_tile(id).ok());
         }
         // The slots this source was drawn in go back to the pool before its
         // tee leaves the pipeline, or they would be left holding a pad of an
         // element that is gone.
-        self.pool.drop_source(id);
+        crate::slow_step!("pool.drop_source", id, self.pool.drop_source(id));
+        // Then the video branch is flushed, from the first element below the
+        // proxy boundary.
+        //
+        // What is on the other side of that boundary is the source's own
+        // pipeline, whose threads push into this queue and send serialized
+        // queries down it. A `videotestsrc` renegotiates whenever a tee hands
+        // out or takes back a pad, which this soak makes it do every few
+        // seconds, and each renegotiation is an allocation query that travels
+        // the whole branch behind the video already queued. A thread inside
+        // one of those queries holds the stream lock of the proxy source's
+        // pad, and `set_state(Null)` on that proxy source cannot deactivate
+        // the pad without it. The flush ends every such query at once with
+        // `flushing`, which is the honest answer for a branch that is being
+        // destroyed. Nothing is resumed afterwards: none of this comes back.
+        //
+        // Video only. The audio side has no such wait, because releasing the
+        // audio mixer's pad below already flushes it, and a flush sent into
+        // the audio mixer from here is one this element does not expect
+        // outside a seek.
+        if let Some(pad) = slot.branch.vq.static_pad("sink") {
+            crate::slow_step!("branch flush", id, gstutil::wake_chain(&pad));
+        }
         // The audio mixer's pad goes first. Releasing an aggregator pad
         // flushes it, which is what lets a branch thread parked inside its
         // chain function out; a queue taken to NULL before that joins a
@@ -2481,11 +2503,20 @@ impl Mixer {
         // runner spent seventeen seconds inside `source.restart` here. Each
         // element is locked so the programme's own state walk cannot put it
         // back up before it is removed.
-        self.amix.release_request_pad(&slot.branch.apad);
+        crate::slow_step!(
+            "amix release_request_pad",
+            id,
+            self.amix.release_request_pad(&slot.branch.apad)
+        );
         for el in &slot.branch.elements {
-            el.set_locked_state(true);
-            let _ = el.set_state(gst::State::Null);
-            let _ = self.program.remove(el);
+            let name = el.name();
+            crate::slow_step!("branch element to NULL", name, {
+                el.set_locked_state(true);
+                let _ = el.set_state(gst::State::Null);
+            });
+            crate::slow_step!("branch element out of the pipeline", name, {
+                let _ = self.program.remove(el);
+            });
         }
         // Everything this module keeps under the source's id goes with it. The
         // ids are reused: a director alternates two of them, one per match, so
@@ -2497,9 +2528,9 @@ impl Mixer {
         self.rebuild_not_before.remove(id);
         info!(source = %id, "source removed");
         if id != AD_ID {
-            self.persist_runtime();
+            crate::slow_step!("persist_runtime", id, self.persist_runtime());
         }
-        self.broadcast_status();
+        crate::slow_step!("broadcast_status", id, self.broadcast_status());
         Ok(slot)
     }
 

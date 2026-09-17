@@ -1055,11 +1055,52 @@ impl SlotPool {
     /// Take a slot off whatever it was showing. The tee pad goes back so a
     /// source that is removed does not leave one behind.
     fn unbind(&mut self, index: usize) {
+        if self.slots[index].bound.is_none() {
+            // Nothing feeds this chain, so nothing is parked in it.
+            crate::slow_step!("slot clear_filters", index, self.clear_filters(index));
+            return;
+        }
+        // The chain is flushed before anything on it is touched, and put back
+        // at the end.
+        //
+        // A slot is a live path into the compositor. Its queue can be holding
+        // a buffer whose running time the compositor has not reached, and the
+        // thread that pushed it waits on that pad until it does; the queue
+        // behind it holds every serialized query that arrived after that
+        // buffer, and those queries reach back up the source's tee, across the
+        // proxy and into the source's own pipeline. Unlinking the tee pad does
+        // not wake any of that: the parked thread is below the link being cut.
+        // So the source's branch could not then be taken to NULL, because a
+        // pad only deactivates once its streaming thread is out of it, and the
+        // mixer command loop sat in `source.remove` for a minute at a time
+        // waiting for a query to come back through a chain it was itself
+        // dismantling. Measured on this Mac on 2026-09-17: 2.8 s, 9.1 s,
+        // 27.0 s and 58.1 s inside one two minute soak.
+        //
+        // The flush wakes every one of them and drops the frames of the source
+        // that is leaving, which is what the next source on this slot wants
+        // anyway: a slot must never open with the last one's picture.
+        //
+        // Flushed at the queue rather than at the valve above it. A valve that
+        // is dropping swallows every serialized event, and `FLUSH_STOP` is
+        // serialized while `FLUSH_START` is not, so a flush sent in above a
+        // valve this function is about to close goes in and never comes out:
+        // the slot stays flushing, the next bind cannot send its sticky events
+        // down it, and the programme loses the picture for good.
+        let chain = self.slots[index].queue.static_pad("sink");
+        if let Some(pad) = &chain {
+            crate::slow_step!("slot flush", index, gstutil::wake_chain(pad));
+        }
         // A filter chain belongs to the item that asked for it, not to the
         // slot, so a slot going to a different source loses it here rather
         // than carrying a chroma key onto the next camera.
-        self.clear_filters(index);
-        let Some(bound) = self.slots[index].bound.take() else { return };
+        crate::slow_step!("slot clear_filters", index, self.clear_filters(index));
+        let Some(bound) = self.slots[index].bound.take() else {
+            if let Some(pad) = &chain {
+                gstutil::resume_chain(pad);
+            }
+            return;
+        };
         let slot = &mut self.slots[index];
         slot.home = false;
         slot.drawn = None;
@@ -1068,18 +1109,29 @@ impl SlotPool {
         match bound {
             Bound::Source { tee_pad, .. } => {
                 if let Some(sink) = sink {
-                    let _ = tee_pad.unlink(&sink);
+                    crate::slow_step!("slot unlink from the source tee", index, {
+                        let _ = tee_pad.unlink(&sink);
+                    });
                 }
                 if let Some(tee) = tee_pad.parent_element() {
-                    tee.release_request_pad(&tee_pad);
+                    crate::slow_step!(
+                        "slot release of the source tee pad",
+                        index,
+                        tee.release_request_pad(&tee_pad)
+                    );
                 }
             }
             Bound::Group { mut sub, .. } => {
                 if let (Some(sink), Some(src)) = (sink, sub.output().static_pad("src")) {
                     let _ = src.unlink(&sink);
                 }
-                sub.teardown();
+                crate::slow_step!("slot group teardown", index, sub.teardown());
             }
+        }
+        // Back in service. The running time is kept, because every other slot
+        // is still on air against it.
+        if let Some(pad) = &chain {
+            crate::slow_step!("slot flush stop", index, gstutil::resume_chain(pad));
         }
     }
 

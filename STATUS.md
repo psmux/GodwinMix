@@ -44,6 +44,24 @@ the three client suites and `python3 clients/gen/generate.py --check`.
    `/metrics` answer 503 with that instead of hanging, and a watchdog on the
    supervisor's timer logs it once. A wedge is now a diagnosable error
    rather than a silent hang.
+
+   The second wedge, found by the soak on 2026-09-17 and reproducible in
+   under a minute with `dev/soak.sh`, was the one that matters: removing a
+   source took its branch's proxy source to NULL while a serialized
+   allocation query was still travelling down that branch, and the query's
+   tail was a slot thread parked in a compositor pad nobody had woken.
+   Deactivating the pad needs the stream lock the query holds, so the mixer
+   thread waited for a thread that was waiting for it, for as long as two
+   minutes. A tee handing out or taking back a pad makes the source
+   renegotiate, so every add and remove sent a fresh query down a live
+   branch. A flush at the slot's queue on unbind and at the branch's video
+   queue on detach frees the parked thread before any state change. After
+   it, thirty six soak rounds in three minutes: no unanswered call, every
+   removal inside 200 ms, threads and descriptors flat. Two bars still
+   fail, both older: the programme stall gauge keeps one early 50 ms
+   hiccup for the whole run, and resident memory grows about 3 MB a round
+   with threads and descriptors flat, which reads as retained buffer pool
+   heap rather than a leaked pipeline. Both records are in `bench/results`.
 2. **CI ran for the first time on 2026-09-15** and found what had only ever
    been built on Apple silicon: a test helper not gated to Unix (Windows did
    not compile), `c_char` hardcoded as `i8` (aarch64 Linux did not compile),
