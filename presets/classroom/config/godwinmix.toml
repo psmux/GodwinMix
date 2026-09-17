@@ -3,7 +3,7 @@
 #
 # The camera and the screen are placeholders you can put on air today: they
 # show a test pattern, so the lesson can be recorded while the room's hardware
-# is sorted out. `gmx plugin add camera` and `gmx plugin add screen` replace
+# is sorted out. The page offers to install the camera and screen plugins, and
 # them; change `type` and put the device in `params`, and nothing else moves.
 
 [canvas]

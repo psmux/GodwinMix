@@ -18,7 +18,7 @@ A machine on the same network as your cameras or encoders, and one RTMP address 
 
 ## When it does not work
 
-**A camera tile is black.** Usually the camera is not publishing yet. `gmx ctl source list` says what each one is doing; a source that says `connecting` has nothing arriving at that address.
+**A camera tile is black.** Usually the camera is not publishing yet. The Sources panel says what each one is doing; a source that says `connecting` has nothing arriving at that address.
 
 **The destination says reconnecting.** Usually the address or the stream key is wrong, or the far end is refusing you. The alerts panel carries the reason the server gave.
 
