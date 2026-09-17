@@ -55,6 +55,13 @@ video mixer will start. So the installer carries a trimmed copy:
 | the desktop shell | 9 MB |
 | the mixer itself | 8 MB |
 | GStreamer, trimmed to what the codec catalogue and the pipelines name | 85 to 110 MB |
+| the camera, the screen and the microphone, which are plugins | 4 MB |
+
+Those three are installed for you. The app copies them into
+`%APPDATA%\mix.godwin.desktop\plugins` the first time it starts the mixer, so
+a camera is in the add source list from the first launch and nothing has to be
+typed at a command prompt. Anything you add later from the window goes into the
+same folder and survives an update.
 
 The budget for the whole installer is 150 MB, measured on every push by the
 `platforms` job in CI, which fails if it is exceeded. OBS Studio, for
