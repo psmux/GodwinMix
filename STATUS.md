@@ -8,7 +8,7 @@ must never be copied into this one.
 ## Built and merged
 
 Everything in the plan's phases 0 to 6 except the items listed below. The
-protocol and generated clients, the plugin host with twelve first party
+protocol and generated clients, the plugin host with fourteen first party
 plugins, the SDK and templates, scenes with the composer, safety and the agent
 surface, presets and themes, hooks, session replay and evals, transitions,
 nodes, the WASM tier, OGraf graphics, the desktop app with a bundled
