@@ -54,6 +54,13 @@ MB rather than 110, and the plugins on the machine are the ones the machine's
 own applications use. It is also why the `.deb` needs no permission dialog and
 no unpacking step.
 
+What the package does carry is the camera, the screen and the microphone.
+Those three are GodwinMix plugins rather than GStreamer plugins, they add
+about 4 MB, and the app copies them into
+`~/.local/share/mix.godwin.desktop/plugins` the first time it starts the
+mixer. So a webcam is in the add source list from the first launch with
+nothing to install and nothing to type.
+
 Two packages `apt` will not install for you, worth adding by hand:
 
 ```sh

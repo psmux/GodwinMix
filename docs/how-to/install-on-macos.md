@@ -68,7 +68,15 @@ with its library paths rewritten so it runs wherever the app is put.
 | the desktop shell | 8.8 MB |
 | the mixer itself | 14 MB |
 | GStreamer, trimmed | 85 MB |
-| `GodwinMix.app` altogether | 108 MB |
+| the camera, screen and microphone plugins | 4.0 MB |
+| `GodwinMix.app` altogether | 112 MB |
+
+The camera, the screen and the microphone are plugins, and all three travel in
+`Contents/Resources/plugins/macos`. The app copies them into
+`~/Library/Application Support/mix.godwin.desktop/plugins` the first time it
+starts the mixer, so they are installed and ready before the window opens and
+nobody has to run `gmx plugin add` in a terminal. Anything you add later from
+the window lands in the same folder and stays there when the app is updated.
 
 The app never uses a GStreamer installed elsewhere on the machine, even if you
 have one from Homebrew. It pins `GST_PLUGIN_SYSTEM_PATH` to its own directory
@@ -171,7 +179,14 @@ it happens every time, delete that file and read `mixer.log`.
 **No camera in the list.** macOS asks for camera and microphone permission per
 app, and it asks the first time something tries to open one. System Settings,
 Privacy and Security, Camera. The app that has to be allowed is GodwinMix,
-even though it is the mixer inside it doing the capture.
+even though it is a plugin process two levels below the window doing the
+capture: the permission belongs to the app at the top of the tree.
+
+Finding cameras is not the same as opening one, and it needs no permission.
+If the add source list is empty rather than unauthorised, the plugins did not
+load. `--headless-check` says which of the three the mixer has, and the app's
+copies are in
+`~/Library/Application Support/mix.godwin.desktop/plugins`.
 
 **A screen capture source shows a black rectangle.** Screen Recording is a
 separate permission in the same Privacy and Security list, and it takes effect

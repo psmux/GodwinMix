@@ -16,9 +16,11 @@ name: platforms
 #   2. the smoke test runs end to end (dev/smoke.sh, or dev/smoke.ps1 on
 #      Windows, which is a step for step port of it)
 #   3. a trimmed GStreamer is built for the platform
-#   4. the desktop bundle is built with that runtime inside it
-#   5. --headless-check proves the bundled plugins are the ones that load, and
-#      the installer is measured against the budget
+#   4. the desktop bundle is built with that runtime inside it, and with the
+#      camera, screen and microphone plugins beside it
+#   5. --headless-check proves the GStreamer elements come out of the bundle
+#      and that the mixer loaded the three device plugins, and the installer
+#      is measured against the budget
 #
 # The Windows budget is the one that fails the job. 09-builders sets it at
 # 150 MB against the 527 MB the stock GStreamer runtime installer costs and
@@ -38,6 +40,9 @@ env:
   # What the GStreamer tree itself may take, once the shell and the mixer have
   # had the 17 MB they measured at.
   RUNTIME_BUDGET_MB: 130
+  # The three device plugins together, measured at 4 MB on macOS. A tripwire,
+  # not a tight budget: GStreamer is what fills the installer.
+  PLUGINS_BUDGET_MB: 20
 
 concurrency:
   group: platforms-${{ github.ref }}
@@ -204,6 +209,13 @@ jobs:
             cp target/release/godwinmix "tauri-app/binaries/godwinmix-${triple}"
           fi
           ls -la tauri-app/binaries
+
+      # The camera, the screen and the microphone go in beside it. They are
+      # plugins, and an app that carries none of them is an app whose operator
+      # has to open a terminal before they can add a source.
+      - name: The device plugins go in too
+        shell: bash
+        run: ./dev/bundle-plugins.sh --budget-mb "$PLUGINS_BUDGET_MB"
 
       - name: Tauri CLI
         run: cargo install tauri-cli --locked --version "^2.0" || cargo install tauri-cli --version "^2.0"
