@@ -10,7 +10,7 @@ import { Store } from "../client/store.js";
 import { SchemaForm } from "../client/schema-form.js";
 import { Client } from "../client/index.js";
 import { RpcError, CODES } from "../client/errors.js";
-import { rank, paramsSchema } from "../shell/palette.js";
+import { rank, paramsSchema, methodForm } from "../shell/palette.js";
 import { chordOf, DEFAULT_MAP } from "../shell/keymap.js";
 import { IS_MAC } from "../shell/dom.js";
 import { kindOfUri } from "../client/kinds.js";
@@ -441,6 +441,27 @@ test("a method whose params are a $ref still gets its fields", () => {
   ok(schema.properties && schema.properties.source, "the field came through");
   const form = new SchemaForm(schema, {});
   ok(form.el.querySelector("input"), "and the form drew a control for it");
+});
+
+test("a destructive method asks before it calls", () => {
+  // core.shutdown takes no parameters, so its palette form has always worked
+  // and its Call button was one click from the programme going off air.
+  let calls = 0;
+  const client = { call: async () => { calls += 1; return {}; } };
+  const form = methodForm(
+    client,
+    { name: "core.shutdown", summary: "Stop the mixer.", destructive: true, params: { type: "object", properties: {} } },
+    SchemaForm
+  );
+  const button = (label) => [...document.querySelectorAll("button")].find((b) => b.textContent === label);
+  // The handler is async, but confirmModal is reached before its first await,
+  // so the question is on screen by the time click() returns.
+  button("Call").click();
+  ok(document.body.textContent.includes("Are you sure?"), "it asked first");
+  eq(calls, 0, "and called nothing while it waited");
+  button("Cancel").click();
+  eq(calls, 0, "Cancel means no");
+  form.close();
 });
 
 test("a method that takes nothing still gets an empty form, not a broken one", () => {
