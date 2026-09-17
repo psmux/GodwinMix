@@ -184,7 +184,7 @@ export function methodForm(client, method, SchemaForm) {
  * document's `$defs` on each method so the reference can be followed here,
  * and leaves it for the nested ones to resolve against too.
  */
-function paramsSchema(method) {
+export function paramsSchema(method) {
   const params = method.params || { type: "object", properties: {} };
   const defs = method.$defs || params.$defs || {};
   let schema = params;
