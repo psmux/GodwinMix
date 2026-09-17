@@ -468,23 +468,61 @@ iframe.panel { width: 100%; border: 0; background: var(--panel); display: block;
   overflow: hidden;
 }
 
-.welcome-steps {
-  margin: 0 0 8px;
-  padding-left: 1.3em;
-  line-height: 1.6;
+/* The checklist after a preset (panels/welcome/checklist.js), and the source
+   list after an OBS import. A row is a dot, a heading, a line and whatever
+   control finishes it. A finished row keeps its place and goes quiet, so the
+   list does not move under somebody's hand. */
+
+.wizard-count {
+  font-size: var(--fs-sm);
+  color: var(--dim);
+  white-space: nowrap;
 }
 
-.welcome-code {
+.wizard-count.all-done { color: var(--live); }
+
+.wizard-list {
   margin: 0;
-  padding: 8px 10px;
-  background: var(--panel2);
-  border: 1px solid var(--line-soft);
-  border-radius: var(--radius, 8px);
-  font-family: var(--mono, ui-monospace, monospace);
-  font-size: 12px;
-  white-space: pre-wrap;
-  overflow-x: auto;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
+
+.wizard-row {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  padding: 10px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius, 8px);
+  line-height: 1.5;
+}
+
+.wizard-row.plain {
+  background: none;
+  border-color: transparent;
+  padding: 2px 10px;
+}
+
+.wizard-row.done {
+  border-color: var(--line-soft);
+  opacity: 0.75;
+}
+
+.wizard-row > .dot { margin-top: 6px; flex: 0 0 auto; }
+
+.wizard-form {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  margin-top: 8px;
+  flex-wrap: wrap;
+}
+
+.wizard-form input { flex: 1 1 200px; min-width: 0; }
 
 /* Keep the monitor and source tray visible together on a laptop. */
 gmx-program .program { flex: 1 1 0; background: #000; }

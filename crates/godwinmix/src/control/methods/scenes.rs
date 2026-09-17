@@ -336,16 +336,24 @@ async fn duplicate(call: Call, params: Value) -> Result<Value, RpcError> {
 
 async fn import_obs(call: Call, params: Value) -> Result<Value, RpcError> {
     let req: ImportObsRequest = call.params(&params)?;
-    let text = std::fs::read_to_string(&req.path).map_err(|e| {
-        RpcError::new(
-            ErrorCode::NotFound,
-            format!(
-                "could not read {}: {e}. Export the collection from OBS with Scene \
-                 Collection, Export, and give the path to the file it writes.",
-                req.path
-            ),
-        )
-    })?;
+    let text = match (&req.json, &req.path) {
+        (Some(json), _) => json.clone(),
+        (None, Some(path)) => std::fs::read_to_string(path).map_err(|e| {
+            RpcError::new(
+                ErrorCode::NotFound,
+                format!(
+                    "could not read {path}: {e}. Export the collection from OBS with Scene \
+                     Collection, Export, and give the path to the file it writes.",
+                ),
+            )
+        })?,
+        (None, None) => {
+            return Err(RpcError::invalid_params(
+                "scene.import.obs needs the collection: `path` to a file on this machine, \
+                 or `json` with its contents.",
+            ))
+        }
+    };
     let canvas = server(&call).canvas();
     let options = godwinmix_core::scene::obs_import::Options {
         canvas: Some(canvas),
@@ -375,6 +383,7 @@ async fn import_obs(call: Call, params: Value) -> Result<Value, RpcError> {
         skipped: imported.report.notes.clone(),
         sources: imported.sources.iter().map(|s| s.id.clone()).collect(),
         source_report: imported.report.sources.clone(),
+        add_sources: imported.sources.clone(),
         filters_duplicated: imported.report.filters_duplicated.clone(),
         config_toml: imported.to_config_toml().ok(),
     })
@@ -412,6 +421,11 @@ pub struct ImportReport {
     /// plugin that is not installed, or skipped with the reason.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub source_report: Vec<godwinmix_core::scene::obs_import::SourceReport>,
+    /// The same sources as `source.add` requests, so a page can offer to add
+    /// each one rather than asking somebody to paste a TOML block into a
+    /// file. `config_toml` is the same list for a text editor.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub add_sources: Vec<godwinmix_core::scene::obs_import::ImportedSource>,
     /// OBS attaches a filter to a source, so a camera keyed in one scene is
     /// keyed in all of them. Here filters belong to the item, so a source
     /// filter is copied onto each placement and each copy is named here. This

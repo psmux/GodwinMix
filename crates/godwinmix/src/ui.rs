@@ -78,7 +78,9 @@ const ASSETS: &[(&str, &str)] = &[
     ("panels/sources/panel.js", include_str!("../../../ui/panels/sources/panel.js")),
     ("panels/sources/setreq.js", include_str!("../../../ui/panels/sources/setreq.js")),
     ("panels/sources/tile.js", include_str!("../../../ui/panels/sources/tile.js")),
+    ("panels/welcome/checklist.js", include_str!("../../../ui/panels/welcome/checklist.js")),
     ("panels/welcome/defaults.js", include_str!("../../../ui/panels/welcome/defaults.js")),
+    ("panels/welcome/obs.js", include_str!("../../../ui/panels/welcome/obs.js")),
     ("panels/welcome/panel.js", include_str!("../../../ui/panels/welcome/panel.js")),
     ("panels/welcome/tiles.js", include_str!("../../../ui/panels/welcome/tiles.js")),
     ("shell/commands.js", include_str!("../../../ui/shell/commands.js")),
@@ -621,6 +623,8 @@ mod tests {
         reachable.extend(closure_of("shell/palette.js"));
         reachable.extend(closure_of("shell/sandbox.js"));
         reachable.extend(closure_of("panels/welcome/tiles.js"));
+        reachable.extend(closure_of("panels/welcome/checklist.js"));
+        reachable.extend(closure_of("panels/welcome/obs.js"));
         // Not imported by this page at all: it is what a sandboxed panel's own
         // HTML imports, inside the iframe, to talk the same protocol back.
         reachable.extend(closure_of("client/sandbox-client.js"));
@@ -653,6 +657,8 @@ mod tests {
             ("shell/palette.js", "Ctrl+K"),
             ("shell/sandbox.js", "a sandboxed plugin panel"),
             ("panels/welcome/tiles.js", "the welcome dialog"),
+            ("panels/welcome/checklist.js", "a preset that was just applied"),
+            ("panels/welcome/obs.js", "the Import from OBS tile"),
         ] {
             assert!(known(path).is_some(), "{path} is not served at all");
             assert!(!eager.contains(path), "{path} is fetched at load, but only {who} needs it");
@@ -723,6 +729,8 @@ mod tests {
             "panels/welcome/panel.js",
             "panels/welcome/tiles.js",
             "panels/welcome/defaults.js",
+            "panels/welcome/checklist.js",
+            "panels/welcome/obs.js",
         ] {
             assert!(ASSETS.iter().any(|(p, _)| *p == wanted), "{wanted} is not served");
         }
