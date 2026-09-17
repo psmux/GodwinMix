@@ -248,8 +248,7 @@ pub fn register(reg: &mut Registry<Call>) {
             handler(marketplace_list),
         )
         .result(schema_of::<MarketplaceListing>)
-        .mutating(false)
-        .rest_at("GET", "/api/v1/marketplaces"),
+        .mutating(false),
     );
 
     reg.register(
@@ -263,8 +262,7 @@ pub fn register(reg: &mut Registry<Call>) {
         )
         .params(schema_of::<AddMarketplaceRequest>)
         .result(schema_of::<MarketplaceRecord>)
-        .destructive()
-        .rest_at("POST", "/api/v1/marketplaces"),
+        .destructive(),
     );
 
     reg.register(
@@ -277,8 +275,7 @@ pub fn register(reg: &mut Registry<Call>) {
         )
         .params(schema_of::<MarketplaceName>)
         .result(schema_of::<MarketplaceRemoved>)
-        .destructive()
-        .rest_at("DELETE", "/api/v1/marketplaces/{id}"),
+        .destructive(),
     );
 
     reg.register(
@@ -290,8 +287,7 @@ pub fn register(reg: &mut Registry<Call>) {
              with no route out.",
             handler(marketplace_refresh),
         )
-        .result(schema_of::<MarketplaceRefreshed>)
-        .rest_at("POST", "/api/v1/marketplaces/refresh"),
+        .result(schema_of::<MarketplaceRefreshed>),
     );
 }
 
