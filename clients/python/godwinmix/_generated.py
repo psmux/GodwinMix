@@ -1275,7 +1275,7 @@ class SetSettingsRequest(TypedDict, total=False):
     # Only the keys named are changed.
 
 class SetSourceRequest(TypedDict, total=False):
-    """`source.set`: a full state assignment for one source. Every field is optional and only what is named moves, which is how every other setter in this protocol works. The one that matters here is `place`: it moves a running source between the core, a sidecar and a node."""
+    """`source.set`: a full state assignment for one source. Every field is optional and only what is named moves, which is how every other setter in this protocol works. The one that matters here is `place`: it moves a running source between the core, a sidecar and a node. Unknown fields are refused rather than dropped. Serde's default is to ignore what it does not recognise, and a setter that answers 200 to a field it threw away is indistinguishable from one that saved it: the first party drawer sent `uri` here for months and told the operator it was saved."""
 
     color: Optional[str]
     # The colour the UI and the tally show it in. On the scene document, like the name.
