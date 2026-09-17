@@ -1271,6 +1271,12 @@ pub struct MixerStatus {
     pub backend: BackendInfo,
     pub multiview: MultiviewStatus,
     pub outputs: Vec<OutputStatus>,
+    /// The armed scene, by name, or None with nothing armed. A page loaded
+    /// while a scene is already armed reads it here: `event/preview.changed`
+    /// says when it moves, and only a client that was connected at the time
+    /// hears that.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub preview: Option<String>,
     /// Source currently on program, or None while the slate is showing. A
     /// scene of one full canvas item reports that item's source here too, so
     /// anything written against this before scenes existed still reads.

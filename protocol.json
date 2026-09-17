@@ -2756,6 +2756,13 @@
           },
           "type": "array"
         },
+        "preview": {
+          "description": "The armed scene, by name, or None with nothing armed. A page loaded\nwhile a scene is already armed reads it here: `event/preview.changed`\nsays when it moves, and only a client that was connected at the time\nhears that.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
         "program": {
           "description": "Source currently on program, or None while the slate is showing. A\nscene of one full canvas item reports that item's source here too, so\nanything written against this before scenes existed still reads.",
           "type": [

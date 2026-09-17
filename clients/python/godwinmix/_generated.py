@@ -810,6 +810,8 @@ class MixerStatus(TypedDict, total=False):
     backend: BackendInfo
     multiview: MultiviewStatus
     outputs: List[OutputStatus]
+    preview: Optional[str]
+    # The armed scene, by name, or None with nothing armed. A page loaded while a scene is already armed reads it here: `event/preview.changed` says when it moves, and only a client that was connected at the time hears that.
     program: Optional[str]
     # Source currently on program, or None while the slate is showing. A scene of one full canvas item reports that item's source here too, so anything written against this before scenes existed still reads.
     running_time_ms: int
