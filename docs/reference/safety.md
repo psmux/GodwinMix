@@ -9,8 +9,8 @@ plugin can be uninstalled. They apply to every caller through every door:
 
 ```toml
 [safety]
-min_hold_ms = 8000
-max_takes_per_minute = 12
+min_hold_ms = 0
+max_takes_per_minute = 120
 flash_guard = true
 on_operator_silence = { after_secs = 120, action = "alert" }
 ```
@@ -19,23 +19,39 @@ Every key has a default and none of it has to be written out.
 
 | Key | Default | What it does |
 |---|---|---|
-| `min_hold_ms` | `8000` | A take within this window of the last one is refused |
-| `max_takes_per_minute` | `12` | Takes allowed in any rolling minute, counted per core |
+| `min_hold_ms` | `0` | A take within this window of the last one is refused |
+| `max_takes_per_minute` | `120` | Takes allowed in any rolling minute, counted per core |
 | `flash_guard` | `true` | The ITU-R BT.1702-3 hold, below |
 | `on_operator_silence` | `{ after_secs = 120, action = "alert" }` | What happens when whoever made the last take stops calling |
 
+### Who these rules are for
+
+An unattended caller, which in practice means an agent. A person at a desk is
+watching the output and is the safety mechanism rather than the thing being
+guarded against; a mixer that refuses a cut because the last one was recent is
+not a mixer.
+
+So the table's defaults hold nobody, and a token marked `agent = true` is held
+to its own floor whatever the table says: eight seconds between shots and
+twelve takes a minute, which is what every caller used to get. An agent's own
+`safety` override may still only tighten. An operator who wants an agent to cut
+freely gives it a token that is not marked `agent`.
+
 ### `min_hold_ms`
 
-A default, not a standard. No standards body publishes a minimum shot length,
-and the three second rule people quote is folklore. Eight seconds suits a
-service or a talk; a concert would put it at 1500 and a locked off lecture at
-30000. Move it.
+A house style, not a standard. No standards body publishes a minimum shot
+length, and the three second rule people quote is folklore. Zero by default,
+because a vision mixer cuts on a word or on a beat. A locked off lecture might
+put it at 30000, and a service that wants shots to breathe at 3000. An agent
+token never sees less than eight seconds.
 
 ### `max_takes_per_minute`
 
 Counted across the whole core rather than per token, because the programme
-only has one picture and two clients each taking eleven times a minute is
-twenty two cuts on air.
+only has one picture and two clients each taking sixty times a minute is one
+hundred and twenty cuts on air. The default is high enough that a person
+cutting a song will not meet it, and low enough to stop a loop that takes on
+every pass. An agent token is held to twelve.
 
 ### `flash_guard`
 
@@ -52,10 +68,13 @@ converts each sample to luminance on the reference display the standard is
 written for (BT.1886, 100 cd/m2 white, studio swing), and tells the guard when
 a step crosses the threshold.
 
-While nobody is subscribed there is no measurement, so the guard assumes the
-stricter thing and treats every cut as a possible flash. With the default eight
-second hold that never bites; it bites when somebody lowers `min_hold_ms` below
-360 milliseconds and has no probes running.
+While nobody is subscribed there is no measurement, and a cut nothing measured
+is not refused. The guard used to assume the opposite and record every cut as a
+flash, which put a 360 millisecond floor under every cut on any core with no
+probes running. That is not what the standard says, and a guard that refuses
+cuts it has no evidence about gives false assurance rather than compliance. If
+the flash guard has to be in force, run something subscribed to `ext.telemetry`
+so there is something to measure.
 
 ### `on_operator_silence`
 
@@ -106,7 +125,7 @@ The numbers in force for a token are in `agent.state` with
 ```json
 {
   "code": -32003,
-  "message": "the shot on air has been up for 1200 ms and this core holds a shot for 8000 ms, so there are 6800 ms left. Wait 6800 ms and take again, or use a token whose safety.min_hold_ms is lower.",
+  "message": "the shot on air has been up for 1200 ms and this core holds a shot for 8000 ms, so there are 6800 ms left. Wait 6800 ms and take again, or set [safety] min_hold_ms lower in the config and restart.",
   "data": {
     "rule": "min_hold",
     "retry_after_ms": 6800,

@@ -12,8 +12,8 @@
 //!
 //! ```toml
 //! [safety]
-//! min_hold_ms = 8000
-//! max_takes_per_minute = 12
+//! min_hold_ms = 0
+//! max_takes_per_minute = 120
 //! flash_guard = true
 //! on_operator_silence = { after_secs = 120, action = "alert" }
 //! ```
@@ -38,6 +38,15 @@ pub const FLASH_LUMINANCE_CD_M2: f64 = 20.0;
 /// How much of the picture has to take that step.
 pub const FLASH_AREA_FRACTION: f64 = 0.25;
 
+/// What an unattended caller is held to when nothing else says otherwise.
+///
+/// These are the numbers this table used to apply to everybody. They are the
+/// reason the rules exist: an agent cutting on every cycle of its loop, with
+/// nobody watching the output. A person at a desk is watching the output, and
+/// is the safety mechanism rather than the thing being guarded against.
+pub const AGENT_MIN_HOLD_MS: u64 = 8_000;
+pub const AGENT_MAX_TAKES_PER_MINUTE: u32 = 12;
+
 /// `[safety]`.
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
 #[serde(default)]
@@ -45,9 +54,18 @@ pub struct SafetyConfig {
     /// A take inside this window of the last one is refused, and the refusal
     /// says how long is left. Not a standard: no standards body publishes a
     /// minimum shot length, so this is a default an operator may move.
+    ///
+    /// Zero by default, because a vision mixer cuts on a word or a beat and a
+    /// desk that will not let its operator cut is not a desk. Set it to hold a
+    /// house style. An agent token is held to `AGENT_MIN_HOLD_MS` whatever
+    /// this says.
     pub min_hold_ms: u64,
     /// Takes allowed in any rolling minute, counted per core rather than per
     /// token, because the programme only has one picture.
+    ///
+    /// High enough not to meet a person cutting a song, low enough to stop a
+    /// loop that takes on every pass. An agent token is held to
+    /// `AGENT_MAX_TAKES_PER_MINUTE`.
     pub max_takes_per_minute: u32,
     /// The BT.1702-3 hold. On by default.
     pub flash_guard: bool,
@@ -57,8 +75,8 @@ pub struct SafetyConfig {
 impl Default for SafetyConfig {
     fn default() -> Self {
         Self {
-            min_hold_ms: 8_000,
-            max_takes_per_minute: 12,
+            min_hold_ms: 0,
+            max_takes_per_minute: 120,
             flash_guard: true,
             on_operator_silence: OperatorSilence::default(),
         }
@@ -150,14 +168,24 @@ impl SafetyConfig {
     /// A human token's `safety = { .. }` moves any of the three, in either
     /// direction: a vision mixer cutting a concert is not going to wait eight
     /// seconds and knows it. An agent's token may only tighten, so an agent
-    /// that has been told to loosen its own limits finds that it cannot.
+    /// that has been told to loosen its own limits finds that it cannot, and
+    /// it starts from the agent floor rather than from this core's numbers.
     /// The flash guard is never turned off by an agent token.
     pub fn for_token(&self, token: &Token) -> Limits {
-        let mine = Limits {
+        let mut mine = Limits {
             min_hold_ms: self.min_hold_ms,
             max_takes_per_minute: self.max_takes_per_minute,
             flash_guard: self.flash_guard,
         };
+        // An unattended caller carries its own floor, whatever this core is
+        // configured to. The rules were written for it, and a core tuned for
+        // the person at the desk must not quietly loosen them for the agent
+        // sharing the same port. An operator who wants an agent to cut freely
+        // gives it a token that is not marked `agent`.
+        if token.agent {
+            mine.min_hold_ms = mine.min_hold_ms.max(AGENT_MIN_HOLD_MS);
+            mine.max_takes_per_minute = mine.max_takes_per_minute.min(AGENT_MAX_TAKES_PER_MINUTE);
+        }
         let Some(over) = token.safety.as_ref() else { return mine };
         if token.agent {
             return tighten(mine, over);
@@ -269,12 +297,26 @@ impl Guard {
                 return Err(Refusal {
                     rule: "min_hold",
                     retry_after_ms: left,
-                    message: format!(
-                        "the shot on air has been up for {held} ms and this core holds a shot \
-                         for {} ms, so there are {left} ms left. Wait {left} ms and take \
-                         again, or use a token whose safety.min_hold_ms is lower.",
-                        limits.min_hold_ms
-                    ),
+                    // What to do about it differs by who is asking. A person
+                    // reads `[safety]` and changes it; an agent cannot, and
+                    // telling it to go and get a better token is the one piece
+                    // of advice it must not take.
+                    message: if token.agent {
+                        format!(
+                            "the shot on air has been up for {held} ms and an agent holds a \
+                             shot for {} ms, so there are {left} ms left. Wait {left} ms and \
+                             take again.",
+                            limits.min_hold_ms
+                        )
+                    } else {
+                        format!(
+                            "the shot on air has been up for {held} ms and this core holds a \
+                             shot for {} ms, so there are {left} ms left. Wait {left} ms and \
+                             take again, or set [safety] min_hold_ms lower in the config and \
+                             restart.",
+                            limits.min_hold_ms
+                        )
+                    },
                 });
             }
         }
@@ -367,14 +409,16 @@ impl Guard {
         state.operator = Some(token_id.to_string());
         state.last_call = Some(now);
         state.silent = false;
-        // Without telemetry running the core cannot tell a flash from any
-        // other cut, so it assumes the stricter thing. With the default
-        // eight second hold this never bites; it bites when somebody lowers
-        // `min_hold_ms` below the flash separation and has no probes on.
-        if self.cfg.flash_guard && !state.luma_observed {
-            state.flashes.push_back(now);
-            state.trim_flashes(now);
-        }
+        // A cut is not a flash. BT.1702-3 is about a sharp luminance step over
+        // a quarter of the picture, and two evenly lit cameras do not make one.
+        //
+        // This used to record every cut as a flash while nothing was measuring,
+        // on the reasoning that an unmeasured cut might be one. The eight
+        // second hold hid what that costs; without it, the assumption is a
+        // 360 ms floor under every cut on a core with no probes running, which
+        // is most of them. That is not the regulation, and a guard that refuses
+        // cuts it has no evidence about gives false assurance rather than
+        // compliance. Measured flashes still count, through `note_flash`.
     }
 
     /// Any call at all from any token, which is what the operator watchdog
@@ -510,7 +554,13 @@ mod tests {
     /// refused, and the refusal carries the time left rather than "no".
     #[test]
     fn a_second_take_inside_the_hold_is_refused_with_the_time_left() {
-        let g = guard(SafetyConfig { flash_guard: false, ..SafetyConfig::default() });
+        // A core that was asked for a hold. The default is no hold at all, so
+        // this names the number rather than inheriting one.
+        let g = guard(SafetyConfig {
+            min_hold_ms: 8_000,
+            flash_guard: false,
+            ..SafetyConfig::default()
+        });
         let t0 = Instant::now();
         assert!(g.check_at(&human(), t0).is_ok(), "the first take is always allowed");
         g.record_at("desk", t0);
@@ -526,7 +576,7 @@ mod tests {
 
     #[test]
     fn the_rate_limit_counts_a_rolling_minute() {
-        let g = guard(fast());
+        let g = guard(SafetyConfig { max_takes_per_minute: 12, ..fast() });
         let t0 = Instant::now();
         for i in 0..12 {
             let at = t0 + Duration::from_millis(i * 1_500);
@@ -577,18 +627,28 @@ mod tests {
         assert!(g.check_at(&human(), t0 + Duration::from_millis(1_050)).is_ok());
     }
 
-    /// Without telemetry the core cannot tell a flash from a dissolve, so it
-    /// assumes the stricter thing rather than turning the rule off.
+    /// An ordinary cut is not a flash, and the guard does not pretend to know
+    /// that it was one. BT.1702-3 is about a luminance step the core can only
+    /// see when telemetry is measuring; with nothing measuring there is no
+    /// evidence, and refusing on no evidence put a 360 ms floor under every
+    /// cut on every core with no probes running.
     #[test]
-    fn without_luminance_every_cut_is_treated_as_a_possible_flash() {
-        let g = guard(SafetyConfig { min_hold_ms: 0, ..SafetyConfig::default() });
+    fn an_unmeasured_cut_is_not_treated_as_a_flash() {
+        let g = guard(SafetyConfig::default());
         g.record("desk");
+        assert!(g.check(&human()).is_ok(), "nothing measured it, so nothing refuses it");
+
+        // What the rule is actually for still bites, from either source.
+        let g = guard(SafetyConfig::default());
+        g.set_luma_observed(true);
+        g.note_flash();
         assert_eq!(g.check(&human()).unwrap_err().rule, "flash_guard");
 
-        let g = guard(SafetyConfig { min_hold_ms: 0, ..SafetyConfig::default() });
+        // And an ordinary cut with probes on is still not a flash.
+        let g = guard(SafetyConfig::default());
         g.set_luma_observed(true);
         g.record("desk");
-        assert!(g.check(&human()).is_ok(), "with probes on, an ordinary cut is not a flash");
+        assert!(g.check(&human()).is_ok());
     }
 
     /// A human surface may raise the limits per token; an agent's token may
@@ -609,8 +669,8 @@ mod tests {
         assert!(!limits.flash_guard);
 
         let limits = cfg.for_token(&agent(looser));
-        assert_eq!(limits.min_hold_ms, 8_000, "an agent cannot shorten the hold");
-        assert_eq!(limits.max_takes_per_minute, 12);
+        assert_eq!(limits.min_hold_ms, AGENT_MIN_HOLD_MS, "an agent cannot shorten the hold");
+        assert_eq!(limits.max_takes_per_minute, AGENT_MAX_TAKES_PER_MINUTE);
         assert!(limits.flash_guard, "and cannot turn the flash guard off");
 
         // Tightening is allowed from either side.
@@ -623,8 +683,22 @@ mod tests {
         assert_eq!(limits.min_hold_ms, 20_000);
         assert_eq!(limits.max_takes_per_minute, 4);
 
-        // A token with no override is held to the config, whoever it is.
-        assert_eq!(cfg.for_token(&human()).min_hold_ms, 8_000);
+        // A token with no override is held to the config, and the config now
+        // holds nobody: a person at a desk cuts when they say so.
+        assert_eq!(cfg.for_token(&human()).min_hold_ms, 0);
+
+        // An agent with no override of its own is still held, because the
+        // rules were written for the caller nobody is watching.
+        let unattended = Token { id: "studio-agent".into(), agent: true, ..Token::open() };
+        let limits = cfg.for_token(&unattended);
+        assert_eq!(limits.min_hold_ms, AGENT_MIN_HOLD_MS);
+        assert_eq!(limits.max_takes_per_minute, AGENT_MAX_TAKES_PER_MINUTE);
+
+        // And a core that does want a house hold is obeyed for both, with the
+        // agent still taking the stricter of the two.
+        let strict = SafetyConfig { min_hold_ms: 30_000, ..SafetyConfig::default() };
+        assert_eq!(strict.for_token(&human()).min_hold_ms, 30_000);
+        assert_eq!(strict.for_token(&unattended).min_hold_ms, 30_000);
     }
 
     /// Revert is not held by the minimum hold, because undoing a take that
@@ -632,7 +706,11 @@ mod tests {
     /// flash guard still apply to it.
     #[test]
     fn revert_is_not_held_by_the_minimum_hold_but_is_by_the_other_rules() {
-        let g = guard(SafetyConfig { flash_guard: false, ..SafetyConfig::default() });
+        let g = guard(SafetyConfig {
+            min_hold_ms: 8_000,
+            flash_guard: false,
+            ..SafetyConfig::default()
+        });
         g.record("desk");
         assert_eq!(g.check(&human()).unwrap_err().rule, "min_hold");
         assert!(g.check_revert(&human()).is_ok());
@@ -688,8 +766,8 @@ mod tests {
     #[test]
     fn the_config_round_trips_through_toml_with_the_documented_defaults() {
         let cfg: SafetyConfig = toml::from_str("").unwrap();
-        assert_eq!(cfg.min_hold_ms, 8_000);
-        assert_eq!(cfg.max_takes_per_minute, 12);
+        assert_eq!(cfg.min_hold_ms, 0, "an attended desk is not held");
+        assert_eq!(cfg.max_takes_per_minute, 120);
         assert!(cfg.flash_guard);
         assert_eq!(cfg.on_operator_silence.after_secs, 120);
         assert_eq!(cfg.on_operator_silence.action, SilenceAction::Alert);
@@ -699,7 +777,7 @@ mod tests {
         )
         .unwrap();
         assert_eq!(cfg.min_hold_ms, 2_000);
-        assert_eq!(cfg.max_takes_per_minute, 12, "an unwritten key keeps its default");
+        assert_eq!(cfg.max_takes_per_minute, 120, "an unwritten key keeps its default");
         assert_eq!(cfg.on_operator_silence.action, SilenceAction::Fallback("cam1".into()));
         let text = toml::to_string(&cfg).unwrap();
         assert_eq!(toml::from_str::<SafetyConfig>(&text).unwrap(), cfg);
