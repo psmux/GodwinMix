@@ -196,7 +196,7 @@ pub fn read(root: &Path, budgets: &BTreeMap<String, crate::config::Params>) -> I
             Installed {
                 manifest,
                 root: root.to_path_buf(),
-                enabled: true,
+                enabled: !is_disabled(root),
                 provides,
                 tools,
                 hooks,
@@ -216,6 +216,54 @@ pub fn read(root: &Path, budgets: &BTreeMap<String, crate::config::Params>) -> I
             problem: Some(format!("{e}")),
             trust: trust_of(root),
         },
+    }
+}
+
+/// The file that says a plugin is switched off.
+///
+/// It sits in the plugin's own directory, beside its version directories, so
+/// an update that installs a new version under the same name does not quietly
+/// turn a plugin back on. Its contents are for whoever finds it; only its
+/// existence is read.
+pub const DISABLED_FILE: &str = ".gmx-disabled";
+
+/// Where the marker for the plugin installed at `root` lives. `root` is a
+/// version directory, so the marker is one level up with the other versions.
+fn disabled_marker(root: &Path) -> PathBuf {
+    root.parent().unwrap_or(root).join(DISABLED_FILE)
+}
+
+/// Whether the operator turned this plugin off, as it stands on disk.
+///
+/// `plugin.disable` used to change a field in memory and nothing else, so a
+/// plugin somebody switched off came back at the next restart, registering its
+/// provides and starting its processes. The file is the answer because the
+/// config file is not: settings under `[plugins.<name>]` are the plugin's own
+/// table and the core does not read inside it, and a plugin installed by hand
+/// has no config entry at all.
+fn is_disabled(root: &Path) -> bool {
+    disabled_marker(root).is_file()
+}
+
+/// Write or clear the marker for one plugin. Answers what went wrong, if
+/// anything, so the caller can say the change will not survive a restart.
+fn write_disabled(root: &Path, disabled: bool) -> std::io::Result<()> {
+    let path = disabled_marker(root);
+    if disabled {
+        if let Some(parent) = path.parent() {
+            std::fs::create_dir_all(parent)?;
+        }
+        std::fs::write(
+            &path,
+            "This plugin is switched off. It registers nothing and runs no process.\n\
+             Turn it back on with `gmx plugin enable <name>`, with plugin.enable over the\n\
+             API, or by deleting this file before the mixer starts.\n",
+        )
+    } else {
+        match std::fs::remove_file(&path) {
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
+            other => other,
+        }
     }
 }
 
@@ -341,11 +389,26 @@ pub fn remove(name: &str) -> Option<Installed> {
 
 /// Turn a plugin on or off without reinstalling it. `None` if there is no such
 /// plugin.
+///
+/// The change is written beside the plugin as well as made in memory, because
+/// an operator who switched a plugin off meant it to stay off. A disk that
+/// refuses the write leaves the plugin off for this run and says so in the
+/// log: the running state is what was asked for either way.
 pub fn set_enabled(name: &str, on: bool) -> Option<Installed> {
-    {
+    let root = {
         let mut reg = registry().write();
         let plugin = reg.plugins.get_mut(name)?;
         plugin.enabled = on;
+        plugin.root.clone()
+    };
+    if let Err(e) = write_disabled(&root, !on) {
+        warn!(
+            plugin = name,
+            "{name} is {} for this run, but {} could not be written ({e}), so a restart \
+             will read the old state. Check the permissions on the plugins directory.",
+            if on { "on" } else { "off" },
+            disabled_marker(&root).display()
+        );
     }
     intern_all();
     registry().read().plugins.get(name).cloned()
@@ -1704,6 +1767,38 @@ settings = "settings.json"
         set_enabled("toggle", true).expect("it is installed");
         assert!(source_provide("toggle/source").is_some(), "on brings it back");
         clear();
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn a_plugin_switched_off_is_still_off_after_a_restart() {
+        let _lock = exclusive();
+        let root = temp("persist");
+        let dir = write_plugin(&root, "quiet", "0.1.0", "");
+        // `dir` here is the plugin directory, so the loader's own is reached by path.
+        let was = super::dir();
+        set_dir(root.clone());
+        insert(read(&dir, &BTreeMap::new()));
+        set_enabled("quiet", false).expect("it is installed");
+        let marker = dir.parent().expect("a name directory").join(DISABLED_FILE);
+        assert!(marker.is_file(), "off is written down, not only remembered");
+
+        // The restart: the registry forgets everything and reads the plugins
+        // directory again, which is all `load_all` does at startup.
+        clear();
+        let found = load_all(&BTreeMap::new());
+        let quiet = found.iter().find(|p| p.name() == "quiet").expect("it is still installed");
+        assert!(!quiet.enabled, "it was switched off, so it comes back off");
+        assert!(source_provide("quiet/source").is_none(), "and it still registers nothing");
+
+        set_enabled("quiet", true).expect("it is installed");
+        assert!(!marker.exists(), "on takes the marker away again");
+        clear();
+        let again = load_all(&BTreeMap::new());
+        assert!(again.iter().any(|p| p.name() == "quiet" && p.enabled), "and on survives too");
+
+        clear();
+        set_dir(was);
         let _ = std::fs::remove_dir_all(&root);
     }
 

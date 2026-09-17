@@ -21,6 +21,7 @@ const PANELS = [
   "./panels/outputs/panel.js",
   "./panels/media/panel.js",
   "./panels/alerts/panel.js",
+  "./panels/plugins/panel.js",
   "./panels/welcome/panel.js",
 ];
 

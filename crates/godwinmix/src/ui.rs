@@ -72,6 +72,11 @@ const ASSETS: &[(&str, &str)] = &[
     ("panels/multiview/wanted.js", include_str!("../../../ui/panels/multiview/wanted.js")),
     ("panels/outputs/destination.js", include_str!("../../../ui/panels/outputs/destination.js")),
     ("panels/outputs/panel.js", include_str!("../../../ui/panels/outputs/panel.js")),
+    ("panels/plugins/installed.js", include_str!("../../../ui/panels/plugins/installed.js")),
+    ("panels/plugins/market.js", include_str!("../../../ui/panels/plugins/market.js")),
+    ("panels/plugins/panel.js", include_str!("../../../ui/panels/plugins/panel.js")),
+    ("panels/plugins/tabs.js", include_str!("../../../ui/panels/plugins/tabs.js")),
+    ("panels/plugins/task.js", include_str!("../../../ui/panels/plugins/task.js")),
     ("panels/scenes/more.js", include_str!("../../../ui/panels/scenes/more.js")),
     ("panels/scenes/panel.js", include_str!("../../../ui/panels/scenes/panel.js")),
     ("panels/sources/local.js", include_str!("../../../ui/panels/sources/local.js")),
@@ -616,6 +621,7 @@ mod tests {
         let mut reachable = eager_set();
         reachable.extend(closure_of("panels/composer/composer.js"));
         reachable.extend(closure_of("panels/scenes/more.js"));
+        reachable.extend(closure_of("panels/plugins/tabs.js"));
         reachable.extend(closure_of("client/transport-legacy.js"));
         reachable.extend(closure_of("client/schema-form.js"));
         reachable.extend(closure_of("shell/palette.js"));
@@ -648,6 +654,10 @@ mod tests {
             ("kits/schema/render.js", "the composer's inspector"),
             ("kits/protocol/predict.js", "the composer's canvas"),
             ("panels/scenes/more.js", "a right click or Ctrl+C on a scene"),
+            ("panels/plugins/tabs.js", "the Plugins section, when it is first opened"),
+            ("panels/plugins/installed.js", "the Plugins section"),
+            ("panels/plugins/market.js", "the Plugins section"),
+            ("panels/plugins/task.js", "the Plugins section"),
             ("client/transport-legacy.js", "a core with no /rpc"),
             ("client/schema-form.js", "the add picker and the settings drawer"),
             ("shell/palette.js", "Ctrl+K"),
