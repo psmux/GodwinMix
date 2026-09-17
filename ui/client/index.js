@@ -231,7 +231,15 @@ export class Client {
         this.call("core.info").catch(() => {});
         break;
       case "program.took":
-        s.patch({ program: params.source ?? params.scene ?? null, tookAt: Date.now() });
+        // The two fields the status document has, kept apart here as well.
+        // Folding a scene name into `program` made the live state disagree
+        // with every snapshot, so a reconnect under a multi item scene left
+        // the header reading "black" while the mixer was on air.
+        s.patch({
+          program: params.source ?? null,
+          scene: params.scene ?? null,
+          tookAt: Date.now(),
+        });
         break;
       case "preview.changed":
         s.patch({ preview: params.scene ?? null });

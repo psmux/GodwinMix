@@ -295,6 +295,23 @@ test("the store answers tally from programme and preview", () => {
   eq(store.tallyOf("cam3"), "off");
 });
 
+test("a live scene survives the snapshot a reconnect brings", () => {
+  // The core reports a multi item scene as `scene`, with `program` null,
+  // because there is no single source to name. The take event used to be
+  // folded into `program`, so the two disagreed and any reconnect under a
+  // live scene left the desk reading "black" while it was on air.
+  const store = new Store();
+  store.patch({ program: null, scene: "Two box" });
+  eq(store.state.scene, "Two box");
+  store.snapshot({ program: null, scene: "Two box", sources: [] }, 1);
+  eq(store.state.scene, "Two box", "the snapshot still knows what is on air");
+  eq(store.state.program, null, "and does not invent a source for it");
+
+  // A single source take still names the source, which is what tally reads.
+  store.snapshot({ program: "cam1", scene: null, sources: [] }, 2);
+  eq(store.tallyOf("cam1"), "program");
+});
+
 test("meters do not dirty the store, because they arrive ten times a second", () => {
   const store = new Store();
   store.flush(true);

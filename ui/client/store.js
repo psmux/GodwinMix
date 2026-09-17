@@ -8,7 +8,12 @@
 /** The shape the store starts in, so a panel never has to guard for undefined. */
 export function emptyState() {
   return {
+    // The source on air, when the programme is one source. Null whenever a
+    // scene with more than one item is live, which is what `scene` is for.
     program: null,
+    // The scene on air, by name. The core sends both in its status document
+    // and only one of them is ever set.
+    scene: null,
     preview: null,
     sources: [],
     outputs: [],
