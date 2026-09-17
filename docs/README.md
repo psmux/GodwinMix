@@ -28,6 +28,7 @@ Start here if you have never run it.
 * [Install on Windows](how-to/install-on-windows.md),
   [macOS](how-to/install-on-macos.md),
   [Linux](how-to/install-on-linux.md)
+* [Add a source](how-to/add-a-source.md): cameras, screens, microphones, files, pages and feeds
 * [Run it on a headless server](how-to/headless-server.md)
 * [Put it behind a reverse proxy with TLS](how-to/reverse-proxy.md)
 * [Run it on a Raspberry Pi](how-to/raspberry-pi.md)
