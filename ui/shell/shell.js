@@ -175,7 +175,6 @@ function shellCommands(client, node) {
         toast({ text: "Plugin panels reloaded." });
       },
     },
-    { id: "source.add", title: "Add an input", group: "Sources", key: "Ctrl+N", run: () => openPicker(client, "source") },
     { id: "output.add", title: "Add an output", group: "Outputs", run: () => openPicker(client, "output") },
     {
       id: "program.black",

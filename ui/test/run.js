@@ -432,7 +432,7 @@ test("a unit annotation is printed beside the control", () => {
 test("the palette prefers a title that starts with what was typed", () => {
   const cmds = [
     { id: "a", title: "Take the armed tile", group: "Programme", run() {} },
-    { id: "b", title: "Add an input", group: "Sources", run() {} },
+    { id: "b", title: "Add a source", group: "Sources", run() {} },
     { id: "c", title: "Remove the selection", group: "Sources", run() {} },
   ];
   eq(rank(cmds, "take")[0].id, "a");

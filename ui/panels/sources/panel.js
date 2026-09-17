@@ -603,11 +603,11 @@ class SourcesPanel extends HTMLElement {
       );
       return;
     }
-    // Tray folders are tags rather than scenes, and `source.group` is not
-    // wired to this panel yet, so a drop onto another tile says so rather than
-    // silently doing nothing.
+    // Folders are tags rather than scenes, and `source.group` is not wired to
+    // this panel yet, so a drop onto another tile says so rather than silently
+    // doing nothing.
     if (info.target && info.targetId && !this.selection.has(info.targetId)) {
-      toast({ text: "Tray folders arrive with source.group. To build a scene, drag these onto Scenes." });
+      toast({ text: "Folders arrive with source.group. To build a scene, drag these onto Scenes." });
     }
   }
 
@@ -623,7 +623,7 @@ class SourcesPanel extends HTMLElement {
       id && { kind: "separator" },
       id && { label: many ? `Remove ${ids.length}` : "Remove", key: key("tray.delete") || "Delete", run: () => this.remove(ids) },
       { kind: "separator" },
-      { label: "Add an input", key: key("tray.add") || "Ctrl+N", run: () => this.addSource() },
+      { label: "Add a source", key: key("tray.add") || "Ctrl+N", run: () => this.addSource() },
       { label: "Select all", key: key("tray.select-all") || "Ctrl+A", run: () => this.selectAll() },
     ].filter(Boolean));
   }
@@ -749,8 +749,8 @@ class SourcesPanel extends HTMLElement {
   commands() {
     const selected = () => this.selection.list(this.order());
     return [
-      { id: "tray.add", title: "Add an input", group: "Sources", key: "Ctrl+N", run: () => this.addSource() },
-      { id: "tray.filter", title: "Filter the tray", group: "Sources", key: "Ctrl+F", run: () => this.search.focus() },
+      { id: "tray.add", title: "Add a source", group: "Sources", key: "Ctrl+N", run: () => this.addSource() },
+      { id: "tray.filter", title: "Filter the sources", group: "Sources", key: "Ctrl+F", run: () => this.search.focus() },
       { id: "tray.select-all", title: "Select all", group: "Sources", key: "Ctrl+A", run: () => this.selectAll() },
       {
         id: "tray.escape",
@@ -768,7 +768,7 @@ class SourcesPanel extends HTMLElement {
       { id: "tray.open", title: "Open settings", group: "Sources", key: "Enter", enabled: () => selected().length === 1, run: () => this.openDrawer(selected()[0]) },
       {
         id: "tray.take-slot",
-        title: "Put scene 1 to 9 on air, or input 1 to 9 when there are no scenes",
+        title: "Put scene 1 to 9 on air, or source 1 to 9 when there are no scenes",
         group: "Programme",
         key: "1 to 9",
         run: (n) => this.takeSlot(n),
