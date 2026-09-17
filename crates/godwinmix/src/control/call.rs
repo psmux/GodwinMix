@@ -296,8 +296,12 @@ async fn claim(
 
 /// 09 section 5 item 14: a rehearsal core refuses to start a real output, so
 /// an agent rehearsing cannot put anything on a real destination by accident.
+///
+/// `output.set` is on the list for the same reason as `output.add`: it takes
+/// a whole new address, so without it a rehearsal could point an existing
+/// destination at a real ingest and go on air by the back door.
 fn rehearsal_refusal(app: &AppState, method: &str) -> Option<RpcError> {
-    if !app.rehearsal || method != "output.add" {
+    if !app.rehearsal || !matches!(method, "output.add" | "output.set") {
         return None;
     }
     Some(

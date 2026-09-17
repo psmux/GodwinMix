@@ -403,6 +403,9 @@ pub enum Command {
     RemoveSource(SourceId, Option<Ack>),
     ReconnectOutput(OutputId, Option<Ack>),
     AddOutput(Box<OutputConfig>, Option<Ack>),
+    /// Change a destination in place. The config carries the id it replaces,
+    /// and the swap happens here so nothing can land between the two halves.
+    SetOutput(Box<OutputConfig>, Option<Ack>),
     RemoveOutput(OutputId, Option<Ack>),
     RestartSource(SourceId),
     /// Move a source's audio controls: the operator's own fader and mute, which
@@ -2567,6 +2570,48 @@ impl Mixer {
         Ok(())
     }
 
+    /// Change a destination in place: a new address, a new reconnect policy,
+    /// a deeper outage buffer.
+    ///
+    /// A remove and an add under the same id, run here on the mixer thread
+    /// rather than sent as two commands, so nothing can land between them and
+    /// no surface ever sees the output missing. The programme is not touched:
+    /// the encoder is shared and every other output keeps its connection, the
+    /// same as adding one costs nothing on air.
+    ///
+    /// The old config is put back if the new one will not attach, because the
+    /// alternative is an operator who asked to correct a typo and is now off
+    /// air with nothing.
+    pub fn set_output(&mut self, cfg: &OutputConfig) -> Result<()> {
+        anyhow::ensure!(!cfg.uri.trim().is_empty(), "an output needs a uri");
+        let Some(pos) = self.outputs.iter().position(|o| o.id() == &cfg.id) else {
+            anyhow::bail!("no such output {}", cfg.id);
+        };
+        let previous = self.outputs[pos].cfg.clone();
+        self.remove_output(&cfg.id)?;
+        match self.add_output(cfg) {
+            Ok(()) => Ok(()),
+            Err(e) => {
+                // Back to where it was, and say which of the two happened.
+                // A caller that reads "put back" knows its change was refused
+                // and the broadcast is still going; one that reads the other
+                // knows the destination is gone and has to be added again.
+                match self.add_output(&previous) {
+                    Ok(()) => Err(e.context(format!(
+                        "output {} was put back as it was: the new address could not be \
+                         attached",
+                        cfg.id
+                    ))),
+                    Err(back) => Err(e.context(format!(
+                        "output {} is now gone: neither the new address nor the old one \
+                         would attach ({back:#}). Add it again with output.add",
+                        cfg.id
+                    ))),
+                }
+            }
+        }
+    }
+
     /// Detach a destination. The programme and every other output carry on.
     pub fn remove_output(&mut self, id: &OutputId) -> Result<()> {
         let Some(pos) = self.outputs.iter().position(|o| o.id() == id) else {
@@ -3373,6 +3418,7 @@ impl Mixer {
             Command::RemoveSource(..) => "source.remove",
             Command::ReconnectOutput(..) => "output.reconnect",
             Command::AddOutput(..) => "output.add",
+            Command::SetOutput(..) => "output.set",
             Command::RemoveOutput(..) => "output.remove",
             Command::RestartSource(_) => "source.restart",
             Command::SetAudio { .. } => "source.audio.set",
@@ -3498,6 +3544,11 @@ impl Mixer {
             }
             Command::AddOutput(cfg, ack) => {
                 let r = self.add_output(&cfg);
+                reply(ack, &r);
+                r?;
+            }
+            Command::SetOutput(cfg, ack) => {
+                let r = self.set_output(&cfg);
                 reply(ack, &r);
                 r?;
             }
