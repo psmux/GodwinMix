@@ -119,6 +119,11 @@ export GST_PLUGIN_SYSTEM_PATH="$PLUGINS"
 export GST_PLUGIN_SCANNER="$OUT/libexec/gstreamer-1.0/gst-plugin-scanner"
 export GST_REGISTRY="$OUT/../registry-check.bin"
 unset DYLD_LIBRARY_PATH LD_LIBRARY_PATH
+if [[ "$PLATFORM" == linux ]]; then
+    # Exercise the copied libraries, as the desktop launcher does. Otherwise
+    # gst-inspect silently validates the distribution's originals instead.
+    export LD_LIBRARY_PATH="$OUT/lib"
+fi
 rm -f "$GST_REGISTRY"
 
 echo
