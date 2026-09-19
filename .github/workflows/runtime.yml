@@ -41,3 +41,14 @@ jobs:
           done
           tauri-app/gstreamer/linux/bin/gst-launch-1.0 -q \
             audiotestsrc num-buffers=32 ! audioconvert ! avenc_aac ! avdec_aac ! fakesink
+  windows:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: llvm-tools
+      - name: Validate the stripped runtime budget and elements
+        shell: pwsh
+        run: ./dev/bundle-gstreamer.ps1 -BudgetMb 130
