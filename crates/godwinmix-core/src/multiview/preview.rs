@@ -355,7 +355,10 @@ impl ScenePreview {
         while !self.slots.is_empty() {
             self.unbind(self.slots.len() - 1);
         }
-        for el in &self.chain {
+        // Stop the live backdrop before removing its downstream compositor.
+        // Otherwise a resize can make it push into an unlinked sink and post
+        // a stream error while the replacement preview is being assembled.
+        for el in self.chain.iter().skip(7).chain(self.chain.iter().take(7)) {
             el.set_locked_state(true);
             let _ = el.set_state(gst::State::Null);
             let _ = self.pipeline.remove(el);
@@ -437,6 +440,31 @@ fn set_i32(pad: &gst::Pad, name: &str, v: i32) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn repeated_preview_resize_does_not_post_stream_errors() {
+        gst::init().unwrap();
+        let pipeline = gst::Pipeline::new();
+        let bus = pipeline.bus().unwrap();
+        pipeline.set_state(gst::State::Playing).unwrap();
+        for n in 0..40 {
+            let mut preview = ScenePreview::build(
+                &pipeline,
+                PreviewShape::at(if n % 2 == 0 { 640 } else { 320 }, 180, 30),
+                |_| {},
+                60,
+            ).unwrap();
+            std::thread::sleep(std::time::Duration::from_millis(40));
+            preview.teardown();
+        }
+        pipeline.set_state(gst::State::Null).unwrap();
+        let errors: Vec<_> = bus.iter().filter_map(|message| {
+            if let gst::MessageView::Error(error) = message.view() {
+                Some(format!("{}: {}", error.src().map(|s| s.name()).unwrap_or_default(), error.error()))
+            } else { None }
+        }).collect();
+        assert!(errors.is_empty(), "preview resize posted errors: {errors:?}");
+    }
 
     #[test]
     fn a_full_preview_is_the_canvas_and_a_mosaic_one_is_not() {

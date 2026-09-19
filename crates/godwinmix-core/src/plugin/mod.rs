@@ -175,6 +175,9 @@ pub enum Capability {
     AudioLayers,
     /// The source emits AYUV and wants to be composited over the programme.
     Alpha,
+    /// Raw timestamps already use the adopted programme clock and base time.
+    /// The mixer must not add its running time again.
+    ProgrammeTimeline,
 }
 
 impl Capability {
@@ -188,6 +191,7 @@ impl Capability {
             Self::Seek => "seek",
             Self::AudioLayers => "audio-layers",
             Self::Alpha => "alpha",
+            Self::ProgrammeTimeline => "programme-timeline",
         }
     }
 
@@ -195,7 +199,7 @@ impl Capability {
         Self::ALL.iter().copied().find(|c| c.as_str() == s)
     }
 
-    pub const ALL: [Capability; 8] = [
+    pub const ALL: [Capability; 9] = [
         Self::RestartInPlace,
         Self::LatencyReport,
         Self::Health,
@@ -204,6 +208,7 @@ impl Capability {
         Self::Seek,
         Self::AudioLayers,
         Self::Alpha,
+        Self::ProgrammeTimeline,
     ];
 
     const fn bit(self) -> u32 {

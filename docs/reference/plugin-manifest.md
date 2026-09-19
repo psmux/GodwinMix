@@ -295,6 +295,7 @@ choice. A source must declare at least one.
 | `seek` | `seek` and `position` are legal, and the source appears with a scrubber |
 | `audio-layers` | `audio.set` accepts `layers`, page and media levels |
 | `alpha` | the source emits AYUV and is composited over the programme layer, not under it |
+| `programme-timeline` | raw timestamps already use the programme clock and base time adopted by the in-process source pipeline, so the mixer does not shift them again |
 
 `seek` is only meaningful on a `source` and is refused anywhere else.
 

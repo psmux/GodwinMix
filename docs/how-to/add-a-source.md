@@ -153,3 +153,9 @@ including kinds with fixed pads such as test patterns.
 * [Capture the screen](capture-the-screen.md).
 * [Receive a phone or an OBS stream](receive-a-phone-or-obs-stream.md).
 * [Install a plugin](install-a-plugin.md).
+
+Test patterns use the programme clock directly. Adding or restarting one during
+a show keeps its buffers on the current programme timeline, without adding the
+show age a second time. In-process source plugins with the same timestamp
+contract declare `programme-timeline`; independently timestamped media leaves
+that capability unset.
