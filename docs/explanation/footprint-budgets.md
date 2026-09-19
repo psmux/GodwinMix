@@ -1,12 +1,8 @@
 # Footprint budgets and the reference machines
 
-**Every number on this page is a target, not a measurement.** Nothing here has
-been measured yet. The table is published anyway, before the measurements
-exist, because a budget you wrote down in advance is a commitment and a number
-you publish afterwards is a boast.
-
-When the measurements land they go in the empty column, produced by `gmx bench`
-with the command that produced them, and a cell over budget fails CI.
+The tables on this page define targets. Measured results, named machines and
+reproduction commands live in [Footprint](footprint.md), including the native
+runtime packaging checks. Empty reference machine cells remain unmeasured.
 
 ## Why publish numbers at all
 

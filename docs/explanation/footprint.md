@@ -2,13 +2,10 @@
 
 What GodwinMix costs to run, what it is allowed to cost, and how to check.
 
-The promise is that no performance claim here is a guess. Every number comes
-from `gmx bench` on a named machine at a named commit, with the command that
-produced it printed beside it, and the whole table is re run every release. OBS
-publishes no CPU or memory requirement at all; the public record is forum
-anecdote ranging from three percent idle to a 24 GB leak. A person sizing a
-Raspberry Pi or a mini PC cannot plan against that, so we print the table
-instead.
+Measurements name the machine, commit and command. Runtime resource figures
+come from `gmx bench`; packaged media runtime sizes come from the bundling
+scripts. A result on an M4 Pro does not establish performance on a Raspberry
+Pi or an older laptop. Those reference machines still need measurements.
 
 ## The budget
 
@@ -28,8 +25,56 @@ measured yet, and an empty cell means exactly that.
 | 720p30, two live sources, programme encode | `pi4` hardware at most 1.0 core; `n100` at most 0.6; `pi5` software at most 2.0 | 0.700 cores hardware, 0.880 software | | | |
 | Cold start, process exec to first encoded programme frame | at most 2.0 s on `pi4` | 0.15 s | | | |
 | Core binary | at most 30 MB, plus the platform's GStreamer (about 19 MB) | 8.4 MB | | | |
-| A crossfade between two eight item scenes at 1080p30 | `gpu` and `n100`: no dropped frame | not yet, scenes do not exist | | | |
-| Sixteen hidden slots at alpha 0 | within 2 percent of the no compositor baseline | not yet, scenes do not exist | | | |
+| A crossfade between two eight item scenes at 1080p30 | `gpu` and `n100`: no dropped frame | not yet measured | | | |
+| Sixteen hidden slots at alpha 0 | within 2 percent of the no compositor baseline | not yet measured | | | |
+
+## Packaged media runtimes
+
+Measured on 2026-09-19 UTC. These are uncompressed runtime directories,
+excluding the mixer, desktop shell and device plugins. Sizes are MiB; the
+scripts label their 1024 squared byte units as MB. The runtime limit remains
+130 MiB and the Windows installer limit remains 150 MiB.
+
+| Platform | Runtime and machine | Commit | Size | Validation |
+|---|---|---|---|---|
+| Windows | GStreamer 1.26.9, GitHub Windows hosted x64 runner | `e9930a2` | 111.7 MiB | Budget, bundled elements and software H.264 encoder passed |
+| Linux | GStreamer 1.24.2, private gst-libav 1.24.1, Ubuntu 24.04 hosted x64 runner | `e9930a2` | 127.1 MiB | Budget, bundled elements, H.264/HEVC/AAC factories, AAC encode/decode and deinterlacing passed |
+| macOS | Homebrew GStreamer 1.28.7, Apple M4 Pro | `e17e114` | 84.5 MiB | Budget, bundled elements and software H.264 encoder passed locally |
+
+[Native Windows and Linux logs](https://github.com/psmux/GodwinMix/actions/runs/35462725663)
+contain the commands, library counts and checks. Windows removed 37.2 MiB of
+debug sections, reducing the previous 148.9 MiB runtime to 111.7 MiB. GNU strip
+handles the MinGW dependency symbols which LLVM rejects in that package.
+
+Linux previously measured 239.2 MiB. Its distribution FFmpeg pulled in
+unrelated speech and rendering dependencies. The private build embeds FFmpeg
+in a freshly built gst-libav plugin, keeps all native decoders and demuxers,
+selects encoders from the public codec catalogue, and retains the filter
+graphs gst-libav exposes. GStreamer and GLib remain shared. Compression
+libraries remain shared too because distribution static archives need not be
+position independent. Library copies retain the SONAME their importers use.
+
+Reproduce after installing the build dependencies described in
+[Desktop app](../how-to/desktop-app.md):
+
+```sh
+# Linux
+./dev/build-linux-libav.sh /tmp/gmx-gst-prefix
+./dev/bundle-gstreamer.sh --from /tmp/gmx-gst-prefix --budget-mb 130
+
+# macOS
+./dev/bundle-gstreamer.sh --out /tmp/gmx-release-runtime --budget-mb 130
+```
+
+```powershell
+# Windows, after installing an MSVC GStreamer runtime
+./dev/bundle-gstreamer.ps1 -BudgetMb 130
+```
+
+These results establish runtime packaging and the listed software pipelines.
+They do not validate a finished installer, camera hardware, GPU drivers or
+broadcast endurance. Windows GStreamer 1.28 is not covered by this measurement.
+The release installer and hardware gates remain separate.
 
 ## What each row means
 
