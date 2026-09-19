@@ -303,7 +303,8 @@ The 130 MB runtime budget has not changed. Linux release jobs run
 `dev/build-linux-libav.sh <prefix>` first, then pass that prefix to the trimmer.
 The builder uses distribution source packages authenticated by apt, compiles
 FFmpeg without optional external libraries, and statically links it into a
-fresh gst-libav plugin. Native codecs, demuxers and filters remain available;
+fresh gst-libav plugin. Native decoders, demuxers and filters remain available. FFmpeg encoders are
+selected from `avenc_` entries in the codec catalogue; other encoders and
 platform hardware codecs still come from their GStreamer plugins. This avoids
 shipping the distribution FFmpeg's unrelated speech and rendering libraries.
 

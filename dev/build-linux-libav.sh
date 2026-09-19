@@ -3,6 +3,7 @@
 # optional speech, rendering and scientific dependency stacks in an AppImage.
 set -euo pipefail
 [[ $(uname -s) == Linux ]] || { echo 'This builder requires Linux.' >&2; exit 1; }
+REPO=$(cd "$(dirname "$0")/.." && pwd)
 OUT=${1:?usage: build-linux-libav.sh output-prefix}
 mkdir -p "$OUT"
 OUT=$(cd "$OUT" && pwd)
@@ -24,11 +25,20 @@ if [[ -f "$DEPENDENCY_PATCH" ]]; then
 fi
 PRIVATE="$WORK/private"
 cd "$FFMPEG"
-# Keep native codecs, demuxers and filters. Only external optional libraries
-# and tools disappear. GStreamer provides the platform hardware codecs.
+# Decode arbitrary input media, but build only FFmpeg encoders the public
+# catalogue can select. Other encoders come from their GStreamer plugins.
+ENCODERS=$(python3 - "$REPO/codecs.toml" <<'PYCODE'
+from pathlib import Path
+import re
+import sys
+text = Path(sys.argv[1]).read_text()
+print(",".join(sorted(set(re.findall(r'^encoder\s*=\s*"avenc_(\w+)"', text, re.M)))))
+PYCODE
+)
 ./configure --prefix="$PRIVATE" --disable-autodetect --disable-programs \
     --disable-doc --disable-debug --enable-pic --disable-shared --enable-static \
-    --enable-zlib --enable-bzlib --enable-lzma
+    --enable-zlib --enable-bzlib --enable-lzma \
+    --disable-encoders --enable-encoder="$ENCODERS"
 make -j"$(nproc)"
 make install
 # Distribution compression archives need not be PIC. Keep these small
