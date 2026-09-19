@@ -9,12 +9,11 @@
     it first is the same as telling them to use something else. The budget for
     the whole GodwinMix installer is 150 MB.
 
-    This downloads the official MSVC runtime MSI (not the development one,
-    which is the larger half of the 527 MB, and not MinGW), extracts it
-    without installing anything, and hands it to dev/gst_trim.py. The trimmer
-    is the same one dev/bundle-gstreamer.sh calls on macOS and Linux, so the
-    keep list follows codecs.toml on every platform and only the fetching
-    differs.
+    This uses an installed MSVC runtime, or a prefix passed with -From, and
+    hands it to dev/gst_trim.py. Releases before 1.28 can also be downloaded
+    and extracted from their MSI without installation. GStreamer 1.28 uses
+    Inno Setup; install it first and point -From at that prefix.
+    The shared trimmer keeps the same codec catalogue on every platform.
 
     The result goes in tauri-app\gstreamer\windows\, which tauri.conf.json
     lists under bundle.resources and which the shell finds at
@@ -25,7 +24,8 @@
     "C:\gstreamer\1.0\msvc_x86_64". Skips the download.
 
 .PARAMETER Version
-    Which release to download. Defaults to the one the project is tested on.
+    Which release to download when no installed prefix is found. Direct MSI
+    extraction supports releases before 1.28; newer releases need -From.
 
 .PARAMETER Out
     Where to write the trimmed tree.
@@ -42,7 +42,7 @@
 .EXAMPLE
     dev\bundle-gstreamer.ps1
     dev\bundle-gstreamer.ps1 -From C:\gstreamer\1.0\msvc_x86_64
-    dev\bundle-gstreamer.ps1 -Version 1.28.7 -BudgetMb 130
+    dev\bundle-gstreamer.ps1 -From "C:\Program Files\gstreamer\1.0\msvc_x86_64" -BudgetMb 130
 #>
 [CmdletBinding()]
 param(
@@ -73,6 +73,10 @@ function Find-Python {
 
 function Get-Runtime {
     param([string]$Release, [string]$Arch)
+
+    if ([version]$Release -ge [version]"1.28") {
+        throw "GStreamer $Release uses an Inno Setup executable, not an extractable MSI. Install the official MSVC runtime from https://gstreamer.freedesktop.org/download/ and run this script with -From pointing to its prefix."
+    }
 
     $work = Join-Path ([System.IO.Path]::GetTempPath()) ("gmx-gst-" + [guid]::NewGuid().ToString("N").Substring(0, 8))
     New-Item -ItemType Directory -Path $work -Force | Out-Null
@@ -112,6 +116,8 @@ if (-not $From) {
     $programFiles = "C:\Program Files\gstreamer\1.0\msvc_$arch"
     if ($env:GSTREAMER_1_0_ROOT_MSVC_X86_64 -and (Test-Path $env:GSTREAMER_1_0_ROOT_MSVC_X86_64)) {
         $From = $env:GSTREAMER_1_0_ROOT_MSVC_X86_64
+    } elseif (Test-Path "$env:LOCALAPPDATA\Programs\gstreamer\1.0\msvc_$arch") {
+        $From = "$env:LOCALAPPDATA\Programs\gstreamer\1.0\msvc_$arch"
     } elseif (Test-Path $installed) {
         $From = $installed
     } elseif (Test-Path $programFiles) {
