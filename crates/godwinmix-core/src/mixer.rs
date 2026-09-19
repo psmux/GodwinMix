@@ -1789,20 +1789,11 @@ impl Mixer {
         // things writing the same pad offset fight: the ad lost a second and a
         // half and opened with a gap.
         //
-        // Not a superimposed source either. Its layers are composited on this
-        // pipeline's own clock and base time, so what it emits is already at
-        // the programme's running time; shifting that by the programme's age
-        // again put a source rebuilt two minutes in two minutes into the
-        // future, where the compositor's queue held its frames unconsumed,
-        // the push into that queue never returned, and every teardown that
-        // needed the pad's stream lock afterwards waited on it for good.
-        // An `alpha` source composites its own layers on this pipeline's clock
-        // and base time, so what it emits is already at the programme's running
-        // time. Shifting that by the programme's age again put a source rebuilt
-        // two minutes in two minutes into the future, where the compositor's
-        // queue held its frames unconsumed and every later teardown waited on
-        // the pad's stream lock for good.
-        let aligner = if is_ad || input.composites_its_own_timeline() {
+        // Sources declaring programme-timeline already timestamp from the
+        // adopted clock and base time. Alpha compositors use the same rule.
+        // Adding programme age again puts their frames in the future, fills
+        // every input queue and eventually triggers false stall recovery.
+        let aligner = if is_ad || input.uses_programme_timeline() {
             None
         } else {
             Some(TimelineAligner::install(
@@ -4877,6 +4868,7 @@ pub fn spawn(
 mod tests {
     mod endurance;
     mod restart;
+    mod preview_churn;
     use crate::plugin::branch::meter_name;
     use super::*;
 

@@ -1264,10 +1264,11 @@ impl InputPipeline {
 
     /// Whether this source puts its own output on the programme's timeline
     /// already, in which case the aligner must leave it alone. A source with
-    /// its own compositor does, because that compositor runs on the clock and
-    /// base time the mixer gave this pipeline.
-    pub fn composites_its_own_timeline(&self) -> bool {
+    /// its own compositor does, as do live generators that timestamp from the
+    /// clock and base time the mixer gave this pipeline.
+    pub fn uses_programme_timeline(&self) -> bool {
         self.capabilities.has(crate::plugin::Capability::Alpha)
+            || self.capabilities.has(crate::plugin::Capability::ProgrammeTimeline)
     }
 
     /// Whether this source can be scrubbed at all, before asking the pipeline.

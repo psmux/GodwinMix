@@ -35,6 +35,7 @@ pub const MANIFEST: Manifest = Manifest {
     },
     capabilities: CapabilitySet::new()
         .with(Capability::RestartInPlace)
+        .with(Capability::ProgrammeTimeline)
         .with(Capability::Health),
     latency_ms: 0,
     tier: Tier::Core,
