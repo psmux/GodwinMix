@@ -23,7 +23,8 @@ Stop with `output.remove` and the recording's id. The output is detached
 immediately. File finalisation runs on a worker so a slow disk cannot hold the
 mixer's command loop. Allow up to five seconds for finalisation before moving
 the file. MP4 uses one second fragments to preserve completed fragments if the
-process ends before finalisation completes.
+process ends before finalisation completes. Normal mixer shutdown waits up to
+six seconds for outstanding recording finalisers.
 
 Recording has the programme's resolution, codec, bitrate and audio mix.
 Independent recording quality, separate audio tracks and replay buffers are

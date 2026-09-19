@@ -1,5 +1,7 @@
 //! Portable recording behind the same output contract as network destinations.
 mod files;
+mod finalize;
+pub use finalize::wait as wait_for_recordings;
 mod pipeline;
 
 use crate::config::Params;
@@ -126,6 +128,6 @@ impl Output for Recording {
 
     fn shutdown(&mut self, pipeline: gst::Pipeline) {
         // Finalising a file can wait on the disk. It must never hold the mixer.
-        pipeline::finish(pipeline);
+        finalize::finish(pipeline);
     }
 }

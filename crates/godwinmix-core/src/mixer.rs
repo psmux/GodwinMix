@@ -4590,6 +4590,7 @@ impl Mixer {
         for out in &self.outputs {
             out.shutdown();
         }
+        crate::plugin::outputs::record::wait_for_recordings();
         for slot in &self.sources {
             slot.input.stop();
         }
