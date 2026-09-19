@@ -303,7 +303,9 @@ The 130 MB runtime budget has not changed. Linux release jobs run
 `dev/build-linux-libav.sh <prefix>` first, then pass that prefix to the trimmer.
 The builder uses distribution source packages authenticated by apt, compiles
 FFmpeg without optional external libraries, and statically links it into a
-fresh gst-libav plugin. Native codecs, demuxers and filters remain available;
+fresh gst-libav plugin. Native decoders and demuxers remain available. The
+filters used by gst-libav deinterlacing and video comparison are retained.
+FFmpeg encoders are selected from `avenc_` entries in the codec catalogue; other encoders and
 platform hardware codecs still come from their GStreamer plugins. This avoids
 shipping the distribution FFmpeg's unrelated speech and rendering libraries.
 
@@ -320,6 +322,11 @@ per user installations. Automatic MSI extraction remains available for older
 releases; it does not run an installer into a temporary directory.
 
 ### Measured
+
+The latest [runtime measurements](../explanation/footprint.md#packaged-media-runtimes)
+are 111.7 MiB on Windows, 127.1 MiB on Linux and 84.5 MiB on macOS, with runtime
+versions and validation limits recorded beside each result. The table below
+is the earlier macOS baseline.
 
 Homebrew GStreamer 1.28.7 on an Apple M4 Pro, trimmed:
 

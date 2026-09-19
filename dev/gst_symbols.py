@@ -12,6 +12,14 @@ def strip_tool(platform: str) -> str | None:
     explicit = os.environ.get("GST_STRIP")
     if explicit:
         return explicit
+    if platform == "windows":
+        # MinGW DLLs can contain GNU COFF auxiliary symbols that LLVM rejects
+        # as invalid SymbolTableIndex. GNU strip understands its own format.
+        for directory in ("C:/mingw64/bin", "C:/msys64/mingw64/bin",
+                          "C:/msys64/ucrt64/bin", "C:/msys64/usr/bin"):
+            candidate = Path(directory) / "strip.exe"
+            if candidate.is_file():
+                return str(candidate)
     if platform == "windows" and shutil.which("rustc"):
         root = subprocess.run(["rustc", "--print", "sysroot"], check=True,
                               capture_output=True, text=True).stdout.strip()
