@@ -3,6 +3,7 @@
 # optional speech, rendering and scientific dependency stacks in an AppImage.
 set -euo pipefail
 [[ $(uname -s) == Linux ]] || { echo 'This builder requires Linux.' >&2; exit 1; }
+REPO=$(cd "$(dirname "$0")/.." && pwd)
 OUT=${1:?usage: build-linux-libav.sh output-prefix}
 mkdir -p "$OUT"
 OUT=$(cd "$OUT" && pwd)
@@ -24,13 +25,42 @@ if [[ -f "$DEPENDENCY_PATCH" ]]; then
 fi
 PRIVATE="$WORK/private"
 cd "$FFMPEG"
-# Keep native codecs, demuxers and filters. Only external optional libraries
-# and tools disappear. GStreamer provides the platform hardware codecs.
+# Decode arbitrary input media, but build only FFmpeg encoders the public
+# catalogue can select. Other encoders come from their GStreamer plugins.
+# gst-libav exposes deinterlacing and video comparison, not the FFmpeg filter
+# catalogue. Keep their graphs and automatic format conversion dependencies.
+ENCODERS=$(python3 - "$REPO/codecs.toml" <<'PYCODE'
+from pathlib import Path
+import re
+import sys
+text = Path(sys.argv[1]).read_text()
+print(",".join(sorted(set(re.findall(r'^encoder\s*=\s*"avenc_(\w+)"', text, re.M)))))
+PYCODE
+)
 ./configure --prefix="$PRIVATE" --disable-autodetect --disable-programs \
     --disable-doc --disable-debug --enable-pic --disable-shared --enable-static \
-    --enable-zlib --enable-bzlib --enable-lzma
+    --enable-zlib --enable-bzlib --enable-lzma \
+    --disable-encoders --enable-encoder="$ENCODERS" \
+    --disable-filters --enable-filter=buffer,buffersink,yadif,scale,format,ssim,psnr
 make -j"$(nproc)"
 make install
+# Distribution compression archives need not be PIC. Keep these small
+# dependencies shared even though FFmpeg itself is embedded in the plugin.
+python3 - "$PRIVATE/lib/pkgconfig" <<'PYCODE'
+from pathlib import Path
+import re
+import subprocess
+import sys
+for pc in Path(sys.argv[1]).glob("*.pc"):
+    text = pc.read_text()
+    for name in ("z", "bz2", "lzma"):
+        library = subprocess.check_output(
+            ["gcc", f"-print-file-name=lib{name}.so"], text=True).strip()
+        if not Path(library).is_file():
+            raise SystemExit(f"install the development package for lib{name}")
+        text = re.sub(rf"(?<!\S)-l{name}(?=\s|$)", str(Path(library).resolve()), text)
+    pc.write_text(text)
+PYCODE
 export PKG_CONFIG_PATH="$PRIVATE/lib/pkgconfig${PKG_CONFIG_PATH:+:$PKG_CONFIG_PATH}"
 # Only FFmpeg is private. A global prefer_static would also copy GLib into
 # the plugin, producing a second type registry in the host process.

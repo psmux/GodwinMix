@@ -7,6 +7,9 @@ on:
       - 'dev/gst_*.py'
       - 'dev/bundle-gstreamer.sh'
       - '.github/workflows/runtime.yml'
+concurrency:
+  group: runtime-${{ github.ref }}
+  cancel-in-progress: true
 permissions:
   contents: read
 jobs:
@@ -41,6 +44,9 @@ jobs:
           done
           tauri-app/gstreamer/linux/bin/gst-launch-1.0 -q \
             audiotestsrc num-buffers=32 ! audioconvert ! avenc_aac ! avdec_aac ! fakesink
+          tauri-app/gstreamer/linux/bin/gst-launch-1.0 -q \
+            videotestsrc num-buffers=8 ! video/x-raw,format=I420,interlace-mode=interleaved \
+            ! avdeinterlace ! fakesink
   windows:
     runs-on: windows-latest
     timeout-minutes: 20
