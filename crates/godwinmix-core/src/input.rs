@@ -1142,9 +1142,9 @@ impl InputPipeline {
     /// into a programme or a mosaic that has stopped reading, and a pipeline
     /// going to NULL joins every one of its threads: a Linux runner held the
     /// mixer thread inside `source.restart` for thirty seconds that way. A
-    /// flush start is the one event that reaches a parked thread. Nothing is
-    /// put back: NULL and the start that follows it activate the pads afresh,
-    /// which clears the flushing flag.
+    /// flush start is the one event that reaches a parked thread. NULL and
+    /// PLAYING reactivate this pipeline's pads. A restart also sends flush
+    /// stop across the proxies because their receiving pipelines stay up.
     fn wake_branches(&self) {
         for tee in [&self.vtee, &self.atee] {
             if let Some(sink) = tee.static_pad("sink") {
@@ -1226,15 +1226,24 @@ impl InputPipeline {
         self.has_video.store(false, Ordering::Relaxed);
         self.has_audio.store(false, Ordering::Relaxed);
         self.failed.store(false, Ordering::Relaxed);
-        self.start()
+        self.start()?;
+        // The source pads were reactivated by NULL to PLAYING, but the
+        // programme and mosaic are separate pipelines and stayed running.
+        // End the flush across those proxy boundaries as well.
+        for tee in [&self.vtee, &self.atee] {
+            if let Some(sink) = tee.static_pad("sink") {
+                gstutil::resume_chain(&sink);
+            }
+        }
+        Ok(())
     }
 
     pub fn has_video(&self) -> bool {
-        self.has_video.load(Ordering::Relaxed)
+        self.has_video.load(Ordering::Relaxed) || self.health.saw_video()
     }
 
     pub fn has_audio(&self) -> bool {
-        self.has_audio.load(Ordering::Relaxed)
+        self.has_audio.load(Ordering::Relaxed) || self.health.saw_audio()
     }
 
     /// True when this source is running with the page's media decoded here

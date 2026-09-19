@@ -1155,6 +1155,10 @@ impl SlotPool {
         // is still on air against it.
         if let Some(pad) = &chain {
             crate::slow_step!("slot flush stop", index, gstutil::resume_chain(pad));
+            // An empty slot has no next buffer to wait for. End this input
+            // after its flush so the live compositor can ignore it immediately.
+            // The next binding sends stream-start, which clears the pad's EOS.
+            self.slots[index].pad.send_event(gst::event::Eos::new());
         }
     }
 
