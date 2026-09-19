@@ -107,6 +107,7 @@ const ASSETS: &[(&str, &str)] = &[
     ("shell/palette.js", include_str!("../../../ui/shell/palette.js")),
     ("shell/lazy-action.js", include_str!("../../../ui/shell/lazy-action.js")),
     ("shell/scene-session.js", include_str!("../../../ui/shell/scene-session.js")),
+    ("shell/source-files.js", include_str!("../../../ui/shell/source-files.js")),
     ("shell/picker-loader.js", include_str!("../../../ui/shell/picker-loader.js")),
     ("shell/picker.js", include_str!("../../../ui/shell/picker.js")),
     ("shell/pointer.js", include_str!("../../../ui/shell/pointer.js")),
@@ -139,6 +140,7 @@ const LEGACY: &str = include_str!("../../../ui/legacy/index.html");
 const DEV_ASSETS: &[(&str, &str)] = &[
     ("test/index.html", include_str!("../../../ui/test/index.html")),
     ("test/run.js", include_str!("../../../ui/test/run.js")),
+    ("test/source-files.js", include_str!("../../../ui/test/source-files.js")),
     ("test/source-chooser.js", include_str!("../../../ui/test/source-chooser.js")),
     ("test/studio.js", include_str!("../../../ui/test/studio.js")),
     ("test/monitor-resize.js", include_str!("../../../ui/test/monitor-resize.js")),

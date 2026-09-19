@@ -10,28 +10,28 @@ first, and the page does that for you.
 ## From the UI
 
 Choose a scene, then press the large **+ Add sources** tile in its Sources
-panel, or Ctrl+N. Scene tiles also have a **+** button. The chooser lists the
-sources already available on the mixer. Search by name, press **Preview** to
-see one without changing the programme, then press **Add**. A source already
-in the scene says **In scene**. You can add several sources before pressing
-**Done**.
+panel, or Ctrl+N. Scene tiles also have a **+** button. Cameras, screens,
+microphones, files and existing sources are categories in the same chooser.
+There is no separate Create new source step.
 
-Preview is optional. Opening the chooser alone starts no picture subscription;
-closing it releases the preview. Reusing a source adds a scene reference and
-does not open another camera or decoder. Removing it from the scene leaves it
-available in the chooser and in other scenes.
+**Existing sources** lists sources already available on the mixer. Search by
+name, press **Preview** to see one without changing the programme, then press
+**Add**. A source already in the scene says **In scene**. You can add several
+sources before pressing **Close**. Preview is optional; closing the chooser or
+leaving that category releases it.
 
-Press **Create new source** for a camera, file or feed that has not been added
-to the mixer. The new source goes into the scene that opened the chooser, even
-if another scene is selected while setup is open. Its picker has categories
-down the left side:
+Reusing a source adds a scene reference and does not open another camera or
+decoder. Removing it from the scene leaves it available to other scenes. New
+sources go into the scene that opened the chooser, even if another scene is
+selected while setup is open.
 
 | Category | What is in it |
 | --- | --- |
 | Cameras | Every camera this machine can see, one row each |
 | Screens and windows | Monitors and what can be captured from them |
 | Microphones and audio | Microphones, line inputs, sound cards |
-| Video and images | The media library, and a path for anything else |
+| Video and images | Browse local files, the media library, or enter a path on the mixer |
+| Existing sources | Reuse and optionally preview a source already on the mixer |
 | Web pages | A URL rendered by the browser sidecar |
 | Streams and feeds | RTMP, SRT, RTSP and HLS coming in, and NDI when it is installed |
 | Test patterns | Bars and a tone out of the mixer itself |
@@ -44,8 +44,9 @@ are drawn before that call comes back, so a slow camera never holds the modal
 shut, and the row says "Looking for devices" while it waits. **Rescan** asks
 again, which is what to press after plugging something in.
 
-A device that is already a source says **Added** and its button is off. It is
-matched by name, because that is the name it was added under.
+A device already used by another scene can be reused with **Add**. A device
+already in the current scene says **In scene**. Device matching uses its name
+or its specific URI.
 
 The search box at the top searches everything at once, categories included, so
 typing `bars` finds the colour bars and typing `rtmp` finds the address box.
@@ -73,9 +74,15 @@ plugin's kinds as well: the picker reads the schema from `plugin.describe` when
 you open the form, so a plugin that ships a settings schema gets a real form
 without writing any HTML.
 
-A file that is not in the media library has a path rather than an address.
-**Browse** under Video and images opens the box for it. The path is read on the
-machine the mixer runs on, which is often not the machine the browser is on.
+Under **Video and images**, **Browse files** opens this computer's file selector.
+Select one or several videos, audio files or images. Each file is uploaded to
+the mixer, added as a source, and placed in the current scene. Progress and
+errors are shown in the chooser. Uploaded names are unique so an existing clip
+is not replaced. Closing the chooser leaves an already requested batch running.
+
+**Enter path** is a separate option for a file already on the mixer. That path
+is read on the mixer's machine, which may be different from this browser's
+computer.
 
 ## From the command line
 

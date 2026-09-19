@@ -1,4 +1,5 @@
 import { recordingState } from "../panels/outputs/recording.js";
+import { sourceFileTests } from "./source-files.js";
 import { sourceChooserTests } from "./source-chooser.js";
 import { studioTests } from "./studio.js";
 import { dockTests } from "./dock.js";
@@ -894,9 +895,10 @@ async function addSourcePickerSuite() {
   const files = await openPicker(withMedia, "source", { category: "files" });
   await waitFor(() => panelText(files).includes("opener.mp4"), 2000, "the library listing");
 
-  test("the files category offers the library and a way to a path", () => {
-    ok(panelText(files).includes("A file somewhere else"), "the file that is not in the library");
-    ok(buttonSaying(files, "Browse"), "which is the file kind's own form");
+  test("the files category has a real browser picker and a separate mixer path option", () => {
+    ok(files.el.querySelector('input[type="file"]'), "a real local file input");
+    ok(buttonSaying(files, "Browse files"), "the browser file chooser");
+    ok(buttonSaying(files, "Enter path"), "a separate existing mixer path form");
   });
 
   buttonSaying(files, "Add").click();
@@ -2193,6 +2195,7 @@ legacySuite()
   })
   .then(scopedSourcesSuite)
   .then(() => sourceChooserTests(test, eq, ok))
+  .then(() => sourceFileTests(test, eq, ok))
   .catch((e) => {
     failed += 1;
     line("fail", "the scoped sources suite threw: " + e.message);
