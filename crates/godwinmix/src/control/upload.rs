@@ -14,6 +14,10 @@ fn collision(name: &str) -> RpcError {
 }
 
 pub(super) async fn store(dir: &Path, name: &str, body: Body) -> Result<u64, RpcError> {
+    tokio::fs::create_dir_all(dir).await.map_err(|e| RpcError::internal(format!(
+        "creating media directory {}: {e}. Choose a writable directory in [media].dir and retry.",
+        dir.display()
+    )))?;
     let part = dir.join(format!(".{name}.part"));
     let final_path = dir.join(name);
     match tokio::fs::symlink_metadata(&final_path).await {
