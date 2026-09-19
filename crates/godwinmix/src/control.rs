@@ -26,6 +26,7 @@ pub mod methods;
 pub mod push;
 pub mod rest;
 pub mod streams;
+mod upload;
 pub mod ws;
 
 use godwinmix_protocol::error::{ErrorCode, RpcError};
@@ -792,11 +793,9 @@ fn slug(text: &str) -> String {
 
 /// Stream an uploaded file to disk. Never buffered: a large clip must cost a
 /// chunk of memory, not its whole size, and the process has a live programme
-/// in it. Written under a dotted `.part` name and renamed on success so a half
+/// in it. Written under a dotted `.part` name and published on success so a half
 /// uploaded file never appears in the listing and never gets taken to air.
 pub async fn store_upload(app: &AppState, name: &str, body: Body) -> Result<Value, RpcError> {
-    use futures_util::StreamExt;
-    use tokio::io::AsyncWriteExt;
     if !app.library.cfg().allow_upload {
         return Err(RpcError::not_in_state(
             "uploads are disabled on this server. Set `allow_upload = true` under [media] \
@@ -806,36 +805,8 @@ pub async fn store_upload(app: &AppState, name: &str, body: Body) -> Result<Valu
     let name = godwinmix_core::media::safe_upload_name(name)
         .map_err(|e| RpcError::invalid_params(e.to_string()))?;
     let dir = app.library.dir().to_path_buf();
-    let part = dir.join(format!(".{name}.part"));
     let final_path = dir.join(&name);
-
-    let mut file = tokio::fs::File::create(&part)
-        .await
-        .map_err(|e| RpcError::internal(format!("creating {}: {e}", part.display())))?;
-    let mut stream = body.into_data_stream();
-    let mut written: u64 = 0;
-    while let Some(chunk) = stream.next().await {
-        let chunk = match chunk {
-            Ok(c) => c,
-            Err(e) => {
-                drop(file);
-                let _ = tokio::fs::remove_file(&part).await;
-                return Err(RpcError::internal(format!("upload interrupted: {e}")));
-            }
-        };
-        written += chunk.len() as u64;
-        if let Err(e) = file.write_all(&chunk).await {
-            drop(file);
-            let _ = tokio::fs::remove_file(&part).await;
-            return Err(RpcError::internal(format!("writing upload: {e}")));
-        }
-    }
-    file.flush().await.ok();
-    file.sync_all().await.ok();
-    drop(file);
-    tokio::fs::rename(&part, &final_path)
-        .await
-        .map_err(|e| RpcError::internal(format!("finishing upload: {e}")))?;
+    let written = upload::store(&dir, &name, body).await?;
 
     info!(%name, bytes = written, "media uploaded");
     app.mixer.emit(Event::MediaChanged { name: name.clone(), conversion: None });
