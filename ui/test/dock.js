@@ -1,8 +1,16 @@
 import * as model from '../shell/dock-model.js';
 import { Workspace } from '../shell/dock.js';
 import { registerElement } from '../shell/registry.js';
+import { decodeLayout } from '../shell/dock-presets.js';
 
 export function dockTests(test, eq, ok) {
+  test('workspace imports validate versions and normalize visible and hidden panels', () => {
+    const loaded = decodeLayout({ version: 1, tree: model.leaf(['a', 'a']), hidden: ['a', 'b', 'b', null] });
+    eq(loaded.tree.tabs, ['a']); eq(loaded.hidden, ['b']);
+    let rejected = false;
+    try { decodeLayout({ version: 9, tree: null }); } catch { rejected = true; }
+    ok(rejected);
+  });
   test('dock splits nest and retain exactly one copy of each panel', () => {
     let tree = model.leaf(['a', 'b', 'c']);
     tree = model.dock(tree, 'b', 'a', 'left');
