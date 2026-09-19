@@ -517,3 +517,8 @@ gmx-program .monitor-pane canvas, gmx-program .monitor-pane img { width: 100%; h
 .monitor-controls select { max-width: 80px; }
 @container (max-width: 500px) { .monitor-stage { flex-direction: column; } .monitor-controls > .grow { flex-basis: 100%; } }
 .recording-row { border-left: 2px solid var(--live); padding-left: 10px; }
+gmx-program .monitor-pane { align-items: stretch; justify-content: flex-start; }
+gmx-program .monitor-pane canvas { flex: 0 0 auto; }
+@container (max-width: 500px) {
+  gmx-program .monitor-pane { flex: 0 0 auto; width: 100%; }
+}
