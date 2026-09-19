@@ -4,3 +4,5 @@
 
 pub mod rtmp;
 pub mod srt;
+
+pub mod record;

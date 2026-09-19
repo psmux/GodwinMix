@@ -48,6 +48,15 @@ pub trait Output: Send {
     /// answered.
     fn connected(&self) -> bool;
 
+    /// Additional public status fields, without secrets or blocking I/O.
+    fn status(&self) -> godwinmix_protocol::types::Extra { Default::default() }
+
+    /// Retire this pipeline. A recorder may finalise it on its own worker.
+    fn shutdown(&mut self, pipeline: gst::Pipeline) {
+        use gstreamer::prelude::*;
+        let _ = pipeline.set_state(gst::State::Null);
+    }
+
     fn configure(&mut self, params: &Params) -> Result<Configure>;
 
     fn health(&self) -> Health;
@@ -62,7 +71,7 @@ pub struct OutputProvide {
     pub make: fn(&OutputConfig) -> Result<Box<dyn Output>>,
 }
 
-static REGISTRY: &[OutputProvide] = &[super::outputs::rtmp::PROVIDE, super::outputs::srt::PROVIDE];
+static REGISTRY: &[OutputProvide] = &[super::outputs::rtmp::PROVIDE, super::outputs::srt::PROVIDE, super::outputs::record::PROVIDE];
 
 pub fn registry() -> &'static [OutputProvide] {
     REGISTRY

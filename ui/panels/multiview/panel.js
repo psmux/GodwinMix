@@ -11,7 +11,7 @@
 
 import { el, on } from "../../shell/dom.js";
 import { sheetWidthFor } from "../../client/frames.js";
-import { settings, onSettingsChanged } from "../../shell/settings.js";
+import { settings, setSetting, onSettingsChanged } from "../../shell/settings.js";
 import { toast, errorToast } from "../../shell/toast.js";
 import { register } from "../../shell/commands.js";
 import { mosaicWanted } from "./wanted.js";
@@ -34,19 +34,31 @@ class ProgramPanel extends HTMLElement {
     this.still = el("img", { alt: "", hidden: true, style: { width: "100%", display: "block", background: "#000" } });
     this.note = el("div.empty", { hidden: true }, [el("div.dim", { text: "Multiview is switched off, so there is no picture here. The programme is still going out." })]);
 
-    this.previewWrap = el("div", { hidden: true, style: { flex: "1 1 0", minWidth: "0" } });
+    this.previewWrap = el("div.monitor-pane.preview-pane", { hidden: true });
     this.previewCanvas = el("canvas", { width: 320, height: 180, style: { width: "100%", display: "block", background: "#000" } });
-    this.previewWrap.append(el("div.sm.dim.pad", { text: "Preview" }), this.previewCanvas);
+    this.previewTitle = el("strong", { text: "PREVIEW" });
+    this.previewName = el("span.ellipsis", { text: "Choose a scene" });
+    this.previewWrap.append(el("div.monitor-label", {}, [this.previewTitle, this.previewName]), this.previewCanvas);
 
-    const monitor = el("div.program.grow", { style: { minWidth: "0" } }, [this.canvas, this.still, this.note]);
-    this.row = el("div.row", { style: { alignItems: "stretch", gap: "0" } }, [monitor, this.previewWrap]);
+    this.programName = el("span.ellipsis", { text: "Black" });
+    const monitor = el("div.program.monitor-pane", {}, [el("div.monitor-label", {}, [
+      el("strong", { text: "PROGRAMME" }), this.programName,
+    ]), this.canvas, this.still, this.note]);
+    this.row = el("div.monitor-stage", {}, [this.previewWrap, monitor]);
 
-    this.takeBtn = el("button.btn.primary", { text: "Take", hidden: true, onclick: () => this.take(0) });
-    this.autoBtn = el("button.btn", { text: "Auto", hidden: true, onclick: () => this.take(500) });
+    this.takeBtn = el("button.btn.primary", { text: "Cut", title: "Take the preview immediately", hidden: true, onclick: () => this.take(0) });
+    this.autoBtn = el("button.btn", { text: "Fade", hidden: true, onclick: () => this.take(Number(this.fadeDuration.value)) });
+    this.fadeDuration = el("select", { "aria-label": "Fade duration", title: "Fade duration" }, [
+      el("option", { value: "250", text: "0.25 s" }), el("option", { value: "500", text: "0.5 s", selected: true }),
+      el("option", { value: "1000", text: "1 s" }), el("option", { value: "2000", text: "2 s" }),
+    ]);
+    this.studioButton = el("button.btn", { text: "Studio mode", onclick: () => setSetting("producer", !settings().producer) });
     this.streamState = el("span.sm.dim", { text: "Waiting for preview frames", role: "status" });
-    this.bar = el("div.row.pad", {}, [
+    this.bar = el("div.row.pad.monitor-controls", {}, [
       el("span.sm.dim.grow", { text: "What your audience is seeing" }),
       this.streamState,
+      this.studioButton,
+      this.fadeDuration,
       this.takeBtn,
       this.autoBtn,
     ]);
@@ -76,7 +88,7 @@ class ProgramPanel extends HTMLElement {
         this.streamState.textContent = "Waiting for preview frames";
       }
     }, 1000);
-    this.ro = new ResizeObserver(() => this.retune());
+    this.ro = new ResizeObserver(() => this.scheduleRetune());
     this.ro.observe(this);
     this.io = new IntersectionObserver((entries) => {
       this.visible = entries.some((e) => e.isIntersecting);
@@ -91,6 +103,7 @@ class ProgramPanel extends HTMLElement {
 
   disconnectedCallback() {
     clearInterval(this.frameTimer);
+    cancelAnimationFrame(this.resizeFrame);
     for (const off of this.offs || []) off();
     this.offs = [];
     if (this.ro) this.ro.disconnect();
@@ -103,6 +116,11 @@ class ProgramPanel extends HTMLElement {
     const cells = (s.layout && s.layout.cells) || (s.multiview && s.multiview.cells) || [];
     const cell = cells.find((c) => c.source === null || c.source === undefined);
     return cell ? cell.index : null;
+  }
+
+  scheduleRetune() {
+    if (this.resizeFrame) return;
+    this.resizeFrame = requestAnimationFrame(() => { this.resizeFrame = null; this.retune(); });
   }
 
   retune() {
@@ -204,7 +222,11 @@ class ProgramPanel extends HTMLElement {
     const producer = settings().producer;
     this.takeBtn.hidden = !producer;
     this.autoBtn.hidden = !producer;
+    this.fadeDuration.hidden = !producer;
+    this.studioButton.setAttribute("aria-pressed", String(producer));
+    this.previewWrap.hidden = !producer;
     document.body.classList.toggle("producer", producer);
+    this.render(this.client.state);
   }
 
   /** In producer mode a tap arms; this is what puts the armed tile on air. */
@@ -215,7 +237,9 @@ class ProgramPanel extends HTMLElement {
       return;
     }
     try {
-      await this.client.call("program.take", durationMs ? { source: target, transition: "fade", duration_ms: durationMs } : { source: target });
+      const request = this.client.state.preview === target ? { scene: target } : { source: target };
+      if (durationMs) request.transition = { type: "fade", duration_ms: durationMs };
+      await this.client.call("program.take", request);
       this.armed = null;
       document.body.dataset.armed = "";
     } catch (e) {
@@ -229,7 +253,10 @@ class ProgramPanel extends HTMLElement {
     // the source said "black" under a live two box.
     const onAir = s.program || s.scene;
     this.row.querySelector(".program").classList.toggle("on", !!onAir);
-    this.previewWrap.hidden = !(settings().producer && s.preview);
+    this.previewWrap.hidden = !settings().producer;
+    this.programName.textContent = (s.sources.find((x) => x.id === s.program) || {}).name || onAir || "Black";
+    this.previewName.textContent = this.armed || "Choose a scene";
+    this.takeBtn.disabled = this.autoBtn.disabled = !this.armed;
     this.bar.firstChild.textContent = onAir
       ? `Audience sees ${(s.sources.find((x) => x.id === s.program) || {}).name || onAir}`
       : "Audience sees black";
