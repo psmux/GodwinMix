@@ -633,13 +633,13 @@ thread_growth = last["threads"] - warm["threads"]
 checks = [
     {
         "name": "programme stall",
-        "warm": f'{warm["stall_ms"]:.1f}' if warm["stall_ms"] >= 0 else "-",
-        "last": f'{scraped[-1]["stall_ms"]:.1f}',
-        "worst": f"{worst_stall:.1f}",
+        "warm": f'{warm["stall_ms"]:.6f}' if warm["stall_ms"] >= 0 else "-",
+        "last": f'{scraped[-1]["stall_ms"]:.6f}',
+        "worst": f"{worst_stall:.6f}",
         "bar": f"at most {stall_bar:.0f} ms",
         "ok": worst_stall <= stall_bar,
         "why": f'round {worst_row["round"]}, {worst_row["elapsed_s"]} s in, '
-               f"{worst_stall:.1f} ms",
+               f"{worst_stall:.6f} ms",
     },
     {
         "name": "resident memory (MB)",
