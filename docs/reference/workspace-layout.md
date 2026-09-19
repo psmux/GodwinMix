@@ -52,3 +52,7 @@ only what the current view requests. Keep form values and selection in the
 element if they should survive a tab switch. The hook is synchronous. If
 suspension throws, the workspace destroys the panel as a safe fallback.
 Panels without the hook use the normal destroy and instantiate lifecycle.
+
+The Programme panel retains its controls between tab switches and releases both
+its programme mosaic and preview requests when suspended. The Outputs panel
+also retains its instance, so switching tabs does not reset its local controls.

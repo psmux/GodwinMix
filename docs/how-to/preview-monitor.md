@@ -1,6 +1,16 @@
 # Use the mixer controls
 
-The programme monitor has its own fixed area. Only the controls below it scroll. Sources, Scenes, Outputs and Media have collapsible headings. Their open state is remembered in this browser.
+The programme monitor starts above the scene and source controls. Drag a panel
+heading to dock it beside another panel or group them as tabs. Drag the dividers
+to resize. **Panels and layout** reopens panels and resets the workspace. The
+arrangement is remembered in this browser. See
+[Customize the workspace](customize-the-workspace.md).
+
+Choose **Studio mode** in Programme to prepare a scene in Preview before taking
+it live. **Cut** takes immediately; **Fade** uses the duration selected beside
+it. Preview appears to the left of Programme on a wide panel and above it when
+the panel is narrow. These controls use the same public commands as the CLI.
+Closing or hiding the monitor releases its preview subscriptions.
 
 Sources are shared inputs. A scene arranges those inputs on screen, and the same source can be used in several scenes. A new empty collection starts with a Default scene, containing the configured sources when available. Drag sources onto a scene to add them, then double click the scene to edit its layout. Creating a scene does not put it on air.
 

@@ -83,6 +83,10 @@ class OutputsPanel extends HTMLElement {
     this.offs = [];
   }
 
+  setWorkspaceActive(active) {
+    if (active) this.render(this.client.state);
+  }
+
   add() {
     return addDestination(this.client);
   }
