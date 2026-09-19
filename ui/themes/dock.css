@@ -54,3 +54,7 @@ gmx-shell.has-workspace {
 .dock-manager .row { flex-wrap: wrap; }
 .dock-manager input, .dock-manager select { min-width: 0; max-width: 100%; flex: 1; }
 .dock-manager h3 { margin: 14px 0 0; }
+.dock-content .monitor-controls select { width: 80px; max-width: 80px; flex: 0 0 80px; }
+@media (max-width: 760px) {
+  .dock-frame[data-dock-panel="core/program"] .dock-content { max-height: none; }
+}
