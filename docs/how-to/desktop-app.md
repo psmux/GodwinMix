@@ -242,7 +242,7 @@ dev/bundle-gstreamer.sh                    # macOS and Linux
 dev\bundle-gstreamer.ps1                   # Windows
 ```
 
-Each fetches or finds the official runtime for the platform, trims it, writes
+Each finds the runtime for the platform, trims it, writes
 the result to `tauri-app/gstreamer/<platform>/`, prints the size, and refuses
 to finish if the tree is over budget. Then it asks the trimmed tree for
 `compositor`, `rtmp2sink`, `srtsink` and a software H.264 encoder, out of its
@@ -312,6 +312,12 @@ nasm and GStreamer development headers. It changes no installed runtime and
 writes only the requested prefix. The runtime CI job checks H.264, HEVC and
 AAC elements, runs an AAC encode/decode pipeline and enforces the size budget.
 A failed budget or codec check blocks packaging.
+
+GStreamer 1.28 Windows downloads use Inno Setup instead of MSI. Install the
+[official MSVC runtime](https://gstreamer.freedesktop.org/download/) before
+bundling, or pass its prefix with `-From`. The helper detects both system and
+per user installations. Automatic MSI extraction remains available for older
+releases; it does not run an installer into a temporary directory.
 
 ### Measured
 

@@ -27,7 +27,8 @@ cd "$FFMPEG"
 # Keep native codecs, demuxers and filters. Only external optional libraries
 # and tools disappear. GStreamer provides the platform hardware codecs.
 ./configure --prefix="$PRIVATE" --disable-autodetect --disable-programs \
-    --disable-doc --disable-debug --enable-pic --disable-shared --enable-static
+    --disable-doc --disable-debug --enable-pic --disable-shared --enable-static \
+    --enable-zlib --enable-bzlib --enable-lzma
 make -j"$(nproc)"
 make install
 export PKG_CONFIG_PATH="$PRIVATE/lib/pkgconfig${PKG_CONFIG_PATH:+:$PKG_CONFIG_PATH}"
