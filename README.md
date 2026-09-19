@@ -343,15 +343,15 @@ at most once a year, and the previous level is supported for a year after that.
 That promise is here on the front page rather than in a changelog, because it is
 the thing you are trusting when you write against this.
 
-**Extension points, honestly labelled.** Today they are `exec:` sources (any
-process that writes a container to stdout) and the browser sidecar protocol.
-The full plugin model, where a plugin runs in process, beside the core or on
-another machine without being rewritten, is being built: `gmx plugin new`,
-`gmx plugin test` and `gmx plugin add` are the commands it lands as. Presets
-(a scene layout and a set of defaults, shared as a file) and themes (the UI
-restyled without forking it) are planned behind `gmx preset` and the UI's
-theme directory. Nothing in this paragraph exists yet, and the pages under
-[docs/](docs/) say so where they describe it.
+Plugins run beside the core through the public
+[plugin protocol](docs/reference/plugin-protocol.md). Start with
+[Your first plugin](docs/tutorials/your-first-plugin.md), use `gmx plugin new`
+to scaffold one, and check it with `gmx plugin test` before installation.
+The [manifest reference](docs/reference/plugin-manifest.md) describes transports,
+capabilities and configuration. [Presets](docs/reference/presets.md) package a
+setup; [themes](docs/how-to/add-a-theme.md) change the UI through CSS variables.
+The optional WebAssembly host has its own
+[SDK and component contract](docs/how-to/write-a-wasm-plugin.md).
 
 Where to start reading: [CONTRIBUTING.md](CONTRIBUTING.md) for the build and
 the house style, [docs/explanation/architecture.md](docs/explanation/architecture.md)
@@ -385,8 +385,9 @@ Stated up front, because finding out later is worse.
 
 * **No game capture on Windows.** Not in the first year. Capturing a fullscreen
   exclusive game is a hooking problem with a decade of OBS work behind it, and
-  pretending otherwise would waste your afternoon. Desktop and window capture
-  are planned; game capture is not.
+  pretending otherwise would waste your afternoon. The screen plugin captures
+  a desktop or region; capture by window handle is not implemented. See
+  [screen capture](docs/how-to/capture-the-screen.md).
 * **A browser source with H.264 or AAC inside the page needs a codec enabled
   CEF build.** The official CEF binaries omit both. Linux has prebuilt ones;
   macOS and Windows do not, and the project is building and publishing one.
