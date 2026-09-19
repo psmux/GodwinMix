@@ -25,6 +25,11 @@ export class Workspace {
     this.root.append(this.live);
   }
   sync() {
+    for (const spec of registry.list()) {
+      if (!spec.slots.some(s => s === 'header' || s === 'modal')) continue;
+      this.state.tree = model.remove(this.state.tree, spec.id);
+      this.state.hidden = this.state.hidden.filter(id => id !== spec.id);
+    }
     const known = new Set([...model.leaves(this.state.tree).flatMap(n => n.tabs), ...this.state.hidden]);
     for (const spec of registry.list()) {
       if (spec.slots.includes('header') || spec.slots.includes('modal') || known.has(spec.id)) continue;
@@ -56,6 +61,8 @@ export class Workspace {
     }
     for (const group of groups) {
       const id = group.active;
+      const stale = this.frames.get(id);
+      if (stale?.made.unavailable && registry.get(id)) { stale.made.destroy(); stale.element.remove(); this.frames.delete(id); }
       if (!this.frames.has(id)) this.create(id);
       const frame = this.frames.get(id);
       if (!frame) continue;
@@ -83,8 +90,10 @@ export class Workspace {
     this.frames.get(id)?.tabs.querySelector('[aria-selected="true"]')?.focus();
   }
   create(id) {
-    const made = registry.instantiate(id, this.client, {});
-    if (!made) return;
+    const made = registry.instantiate(id, this.client, {}) || {
+      node: el('p.dim.pad', { text: 'This panel is unavailable. Reload plugin panels or close it here.' }),
+      unavailable: true, destroy() { this.node.remove(); },
+    };
     const title = registry.get(id)?.title || id;
     const handle = el('button.dock-handle', { text: title, title: 'Drag to dock ' + title, 'aria-label': 'Move ' + title });
     const tabs = el('div.dock-tabs', { role: 'tablist', 'aria-label': title + ' group' });

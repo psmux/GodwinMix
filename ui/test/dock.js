@@ -97,4 +97,29 @@ export function dockTests(test, eq, ok) {
       if (saved === null) localStorage.removeItem(model.KEY); else localStorage.setItem(model.KEY, saved);
     }
   });
+  test('imported fixed panels stay fixed and unavailable plugins can recover', () => {
+    class Fixed extends HTMLElement {
+      static get panel() { return { id: 'test/fixed', title: 'Fixed', slots: ['header'] }; }
+    }
+    class Late extends HTMLElement {
+      static get panel() { return { id: 'test/late', title: 'Late', slots: ['main'] }; }
+    }
+    registerElement(Fixed);
+    const saved = localStorage.getItem(model.KEY);
+    const host = document.createElement('div'); document.body.append(host);
+    const workspace = new Workspace(host, {}, {});
+    workspace.state.tree = { axis: 'x', ratio: .5, a: model.leaf(['test/fixed']), b: model.leaf(['test/late']) };
+    try {
+      workspace.sync();
+      ok(!workspace.frames.has('test/fixed'));
+      ok(workspace.frames.get('test/late').made.unavailable);
+      registerElement(Late);
+      workspace.sync();
+      ok(workspace.frames.get('test/late').made.node instanceof Late);
+      eq(host.querySelectorAll('[data-panel="test/late"]').length, 1);
+    } finally {
+      workspace.destroy(); host.remove();
+      if (saved === null) localStorage.removeItem(model.KEY); else localStorage.setItem(model.KEY, saved);
+    }
+  });
 }

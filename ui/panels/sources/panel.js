@@ -19,7 +19,7 @@ import { toast, errorToast } from "../../shell/toast.js";
 import { confirmModal } from "../../shell/modal.js";
 import { openPicker } from "../../shell/picker.js";
 import { settings, setSetting, onSettingsChanged, GALLERY_MODES } from "../../shell/settings.js";
-import { AudioGestures, ScrubGestures } from "../../shell/fader.js";
+import { audioFor, ScrubGestures } from "../../shell/fader.js";
 import { addView, dropViews, takeMeters } from "../../shell/meter.js";
 import { sheetWidthFor } from "../../client/frames.js";
 import { SOURCE_KINDS, kindOfUri } from "../../client/kinds.js";
@@ -47,7 +47,7 @@ class SourcesPanel extends HTMLElement {
 
   setClient(client) {
     this.client = client;
-    this.audio = new AudioGestures(client);
+    this.audio = audioFor(client);
     this.scrub = new ScrubGestures(client);
   }
 
