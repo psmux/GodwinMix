@@ -15,17 +15,39 @@ apt-get source ffmpeg gst-libav1.0
 FFMPEG=$(find "$WORK" -maxdepth 1 -type d -name 'ffmpeg-*' | head -n 1)
 LIBAV=$(find "$WORK" -maxdepth 1 -type d -name 'gst-libav1.0-*' | head -n 1)
 [[ -n "$FFMPEG" && -n "$LIBAV" ]] || { echo 'Source packages were not extracted.' >&2; exit 1; }
+# The Debian patch tracks shared FFmpeg files for registry invalidation and
+# expects a macro supplied by debian/rules. This plugin embeds FFmpeg instead,
+# so remove only that packaging patch while retaining all security patches.
+DEPENDENCY_PATCH="$LIBAV/debian/patches/00_plugin-dependencies.patch"
+if [[ -f "$DEPENDENCY_PATCH" ]]; then
+    patch -d "$LIBAV" -p1 -R < "$DEPENDENCY_PATCH"
+fi
 PRIVATE="$WORK/private"
 cd "$FFMPEG"
 # Keep native codecs, demuxers and filters. Only external optional libraries
 # and tools disappear. GStreamer provides the platform hardware codecs.
 ./configure --prefix="$PRIVATE" --disable-autodetect --disable-programs \
-    --disable-doc --disable-debug --enable-pic --disable-shared --enable-static
+    --disable-doc --disable-debug --enable-pic --disable-shared --enable-static \
+    --enable-zlib --enable-bzlib --enable-lzma
 make -j"$(nproc)"
 make install
 export PKG_CONFIG_PATH="$PRIVATE/lib/pkgconfig${PKG_CONFIG_PATH:+:$PKG_CONFIG_PATH}"
+# Only FFmpeg is private. A global prefer_static would also copy GLib into
+# the plugin, producing a second type registry in the host process.
+python3 - "$LIBAV/meson.build" <<'PYCODE'
+from pathlib import Path
+import sys
+path = Path(sys.argv[1])
+text = path.read_text()
+for name in ("libavfilter", "libavformat", "libavcodec", "libavutil"):
+    old = f"dependency('{name}',"
+    if text.count(old) != 1:
+        raise SystemExit(f"expected one dependency declaration for {name}")
+    text = text.replace(old, old + " static: true,")
+path.write_text(text)
+PYCODE
 meson setup "$WORK/plugin-build" "$LIBAV" --prefix="$OUT" --libdir=lib \
-    --buildtype=release -Ddefault_library=shared -Dprefer_static=true \
+    --buildtype=release -Ddefault_library=shared \
     -Dtests=disabled -Ddoc=disabled --wrap-mode=nofallback
 meson compile -C "$WORK/plugin-build"
 meson install -C "$WORK/plugin-build"
