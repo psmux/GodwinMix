@@ -130,3 +130,19 @@ print([s["rss_kb"] for s in d["samples"]])'
 `bench/results/`, next to the eval suite and the footprint bench. An hour is
 long enough for a per round leak to be obvious and short enough that the
 nightly still finishes.
+
+## Testing an existing release build
+
+Set `GODWINMIX_SOAK_BIN_DIR` to a directory containing the release `gmx` and
+`godwinmix` executables to skip compilation. This is useful when testing an
+isolated build while another checkout uses the shared Cargo target directory.
+Without that override, the script builds normally and respects `CARGO_TARGET_DIR`.
+
+Do not attach a heap scanner during a run used to judge frame timing. The macOS
+`leaks` tool suspends the process while inspecting it, which creates an artificial
+programme stall. Keep diagnostic runs separate from acceptance measurements.
+
+Preview branches retain at most two pending buffers. Those queues sit before
+thumbnail scaling, where a full second of canvas frames can occupy hundreds of
+megabytes. A reopened thumbnail also starts at the first arriving timestamp,
+without duplicating the source's history from the start of its segment.

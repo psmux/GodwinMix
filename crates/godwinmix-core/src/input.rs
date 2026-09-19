@@ -902,7 +902,7 @@ impl InputPipeline {
         }
         let id = &self.id;
         let queue = gstutil::queue_preview(&format!("{id}-vthumb-q"))?;
-        let rate = make("videorate", &format!("{id}-trate"))?;
+        let rate = crate::plugin::kinds::normalise::thumbnail_rate(&format!("{id}-trate"))?;
         let scale = make("videoscale", &format!("{id}-tscale"))?;
         let caps = gstutil::capsfilter(
             &format!("{id}-tcaps"),
