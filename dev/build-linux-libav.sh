@@ -31,6 +31,23 @@ cd "$FFMPEG"
     --enable-zlib --enable-bzlib --enable-lzma
 make -j"$(nproc)"
 make install
+# Distribution compression archives need not be PIC. Keep these small
+# dependencies shared even though FFmpeg itself is embedded in the plugin.
+python3 - "$PRIVATE/lib/pkgconfig" <<'PYCODE'
+from pathlib import Path
+import re
+import subprocess
+import sys
+for pc in Path(sys.argv[1]).glob("*.pc"):
+    text = pc.read_text()
+    for name in ("z", "bz2", "lzma"):
+        library = subprocess.check_output(
+            ["gcc", f"-print-file-name=lib{name}.so"], text=True).strip()
+        if not Path(library).is_file():
+            raise SystemExit(f"install the development package for lib{name}")
+        text = re.sub(rf"(?<!\S)-l{name}(?=\s|$)", str(Path(library).resolve()), text)
+    pc.write_text(text)
+PYCODE
 export PKG_CONFIG_PATH="$PRIVATE/lib/pkgconfig${PKG_CONFIG_PATH:+:$PKG_CONFIG_PATH}"
 # Only FFmpeg is private. A global prefer_static would also copy GLib into
 # the plugin, producing a second type registry in the host process.
