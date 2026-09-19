@@ -9,11 +9,22 @@ first, and the page does that for you.
 
 ## From the UI
 
-Press **+ Add source** in the Sources bar, or Ctrl+N. On a mixer with nothing
-in it yet the tray says so and has the same button. A scene tab's **+** opens
-the same picker and puts what you add into that scene.
+Choose a scene, then press the large **+ Add sources** tile in its Sources
+panel, or Ctrl+N. Scene tiles also have a **+** button. The chooser lists the
+sources already available on the mixer. Search by name, press **Preview** to
+see one without changing the programme, then press **Add**. A source already
+in the scene says **In scene**. You can add several sources before pressing
+**Done**.
 
-The picker has the categories down the left side:
+Preview is optional. Opening the chooser alone starts no picture subscription;
+closing it releases the preview. Reusing a source adds a scene reference and
+does not open another camera or decoder. Removing it from the scene leaves it
+available in the chooser and in other scenes.
+
+Press **Create new source** for a camera, file or feed that has not been added
+to the mixer. The new source goes into the scene that opened the chooser, even
+if another scene is selected while setup is open. Its picker has categories
+down the left side:
 
 | Category | What is in it |
 | --- | --- |

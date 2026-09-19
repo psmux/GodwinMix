@@ -29,7 +29,8 @@ import { focusedScene, setFocusedScene, onFocusChanged } from "../../shell/focus
 import { shell } from "../../shell/shell.js";
 import { toast, errorToast } from "../../shell/toast.js";
 import { settings } from "../../shell/settings.js";
-import { SceneClient } from "../../kits/protocol/index.js";
+import { openSceneSources } from "../sources/chooser-loader.js";
+import { acquireScenes } from "../../shell/scene-session.js";
 
 /** Colours a scene can be given, matching the swatches in the tile menu. */
 const DEFAULT_COLOUR = "var(--kind-stream)";
@@ -58,7 +59,8 @@ class ScenesPanel extends HTMLElement {
 
   setClient(client) {
     this.client = client;
-    this.scenes = new SceneClient(client, { undo: shell.undo });
+    this.sceneSession = acquireScenes(client, shell.undo);
+    this.scenes = this.sceneSession.scenes;
   }
 
   connectedCallback() {
@@ -111,7 +113,7 @@ class ScenesPanel extends HTMLElement {
       style: { minHeight: "96px" },
     });
     this.hint = el("div.dim.sm.pad", {
-      text: "Scenes arrange sources from the shared Sources library. Drag sources onto a scene to add them. Double click a scene to edit its layout. Outputs send the programme and are shared by every scene.",
+      text: "Choose a scene, then use + in Sources to add existing sources or create new ones. Double click a scene to edit its layout. Outputs send the programme and are shared by every scene.",
       style: { maxWidth: "56ch" },
     });
     this.append(this.bar, this.strip, this.grid, this.hint);
@@ -141,8 +143,8 @@ class ScenesPanel extends HTMLElement {
       onFocusChanged(() => this.paintTally()),
     ];
 
-    this.scenes.onChange(() => this.render());
-    this.scenes.start().catch((e) => console.error("the scene server did not answer", e));
+    this.offs.push(this.scenes.onChange(() => this.render()));
+    this.sceneSession.ready.catch((e) => console.error("the scene server did not answer", e));
     this.render();
   }
 
@@ -156,7 +158,7 @@ class ScenesPanel extends HTMLElement {
     for (const off of this.offs || []) off();
     this.offs = [];
     if (this.drag) this.drag.destroy();
-    if (this.scenes) this.scenes.stop();
+    if (this.sceneSession) this.sceneSession.release();
   }
 
   // ---------------------------------------------------------------- render
@@ -255,7 +257,10 @@ class ScenesPanel extends HTMLElement {
     });
     const face = el("div.kindbox", { style: { position: "relative", aspectRatio: "16 / 9", display: "grid", placeItems: "center" } });
     const items = el("span.num.dim", { style: { fontSize: "var(--fs-lg)" } });
-    face.appendChild(items);
+    face.append(items, el("button.scene-add-source", { text: "+", "data-nodrag": "",
+      title: `Add sources to ${summary.name}`, "aria-label": `Add sources to ${summary.name}`,
+      onclick: event => { event.stopPropagation(); setFocusedScene(summary.id); openSceneSources(this.client, this.scenes, this.scenes.summary(summary.id)); },
+    }));
     const name = el("span.name.grow.ellipsis");
     const dot = el("span.dot");
     const bar = el("div.bar", {}, [dot, name]);

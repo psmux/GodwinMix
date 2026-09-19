@@ -56,3 +56,17 @@ Panels without the hook use the normal destroy and instantiate lifecycle.
 The Programme panel retains its controls between tab switches and releases both
 its programme mosaic and preview requests when suspended. The Outputs panel
 also retains its instance, so switching tabs does not reset its local controls.
+
+## Shared scene data and source selection
+
+Scenes and Sources acquire the same `SceneClient` through
+`ui/shell/scene-session.js`. The last panel releases its protocol listeners,
+so closing the Scenes dock does not turn the Sources dock into a global list.
+The focused scene selects the gallery. Older `gmx.sources.scope` preferences
+are ignored.
+
+The source chooser is loaded from `panels/sources/chooser.js` on demand. It
+reuses `scene.item.add` and the existing source picker for creation. Its preview
+component requests the shared multiview only after the operator selects
+Preview, attaches one source cell, and releases it when closed or hidden.
+Scene removal uses `scene.item.remove`; it does not delete the mixer source.

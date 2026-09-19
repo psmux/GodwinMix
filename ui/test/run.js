@@ -1,4 +1,5 @@
 import { recordingState } from "../panels/outputs/recording.js";
+import { sourceChooserTests } from "./source-chooser.js";
 import { studioTests } from "./studio.js";
 import { dockTests } from "./dock.js";
 // The test runner: forty lines, no dependencies, no toolchain. Open the page,
@@ -975,15 +976,15 @@ async function scopedSourcesSuite() {
     tray.filter = "";
   });
 
-  test("the other tab is every source the mixer has", () => {
+  test("an old all sources preference cannot bypass the selected scene", () => {
     tray.scope = "all";
-    eq(shown(), ["cam1", "cam2", "slides"]);
+    eq(shown(), ["cam1", "slides"]);
     tray.scope = "scene";
   });
 
-  test("a focus on a scene that has since been removed falls back to all", () => {
+  test("a deleted scene focus falls back to the first remaining scene", () => {
     setFocusedScene("deleted");
-    eq(shown(), ["cam1", "cam2", "slides"]);
+    eq(shown(), ["cam1", "slides"]);
   });
 
   test("a collection with no scenes in it falls back to all", () => {
@@ -1918,6 +1919,17 @@ async function liveSuite() {
   test("dropping a source into an existing scene uses the content schema", () => {
     eq(addedView.records.filter((record) => record.kind === "item").length, 1);
   });
+  const { openSceneSources } = await import("../panels/sources/chooser.js");
+  const choose = openSceneSources(client, panel.scenes, panel.scenes.summary(addCheck.id));
+  const nextSource = client.state.sources.find(source => source.id === sources[1]);
+  const addButton = choose.el.querySelector(`[aria-label="Add ${nextSource.name || nextSource.id}"]`);
+  addButton.click();
+  await waitFor(() => panel.scenes.mirror.items(addCheck.id).length === 2, 3000, "the chooser to add an existing source");
+  test("the scene chooser reuses an existing source through scene.item.add", () => {
+    eq(panel.scenes.mirror.items(addCheck.id).length, 2);
+    ok(choose.el.querySelector(`[aria-label="Already in scene: ${nextSource.name || nextSource.id}"]`).disabled);
+  });
+  choose.close();
   await panel.scenes.remove(addCheck.id);
 
   const before = panel.scenes.scenes().length;
@@ -2164,6 +2176,7 @@ legacySuite()
     console.error(e);
   })
   .then(scopedSourcesSuite)
+  .then(() => sourceChooserTests(test, eq, ok))
   .catch((e) => {
     failed += 1;
     line("fail", "the scoped sources suite threw: " + e.message);

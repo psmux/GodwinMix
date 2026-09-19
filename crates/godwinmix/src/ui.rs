@@ -77,6 +77,9 @@ const ASSETS: &[(&str, &str)] = &[
     ("panels/scenes/more.js", include_str!("../../../ui/panels/scenes/more.js")),
     ("panels/scenes/panel.js", include_str!("../../../ui/panels/scenes/panel.js")),
     ("panels/sources/local.js", include_str!("../../../ui/panels/sources/local.js")),
+    ("panels/sources/chooser-loader.js", include_str!("../../../ui/panels/sources/chooser-loader.js")),
+    ("panels/sources/chooser.js", include_str!("../../../ui/panels/sources/chooser.js")),
+    ("panels/sources/chooser-preview.js", include_str!("../../../ui/panels/sources/chooser-preview.js")),
     ("panels/sources/panel.js", include_str!("../../../ui/panels/sources/panel.js")),
     ("panels/sources/setreq.js", include_str!("../../../ui/panels/sources/setreq.js")),
     ("panels/sources/tile.js", include_str!("../../../ui/panels/sources/tile.js")),
@@ -102,6 +105,7 @@ const ASSETS: &[(&str, &str)] = &[
     ("shell/modal.js", include_str!("../../../ui/shell/modal.js")),
     ("shell/palette.js", include_str!("../../../ui/shell/palette.js")),
     ("shell/lazy-action.js", include_str!("../../../ui/shell/lazy-action.js")),
+    ("shell/scene-session.js", include_str!("../../../ui/shell/scene-session.js")),
     ("shell/picker-loader.js", include_str!("../../../ui/shell/picker-loader.js")),
     ("shell/picker.js", include_str!("../../../ui/shell/picker.js")),
     ("shell/pointer.js", include_str!("../../../ui/shell/pointer.js")),
@@ -134,6 +138,7 @@ const LEGACY: &str = include_str!("../../../ui/legacy/index.html");
 const DEV_ASSETS: &[(&str, &str)] = &[
     ("test/index.html", include_str!("../../../ui/test/index.html")),
     ("test/run.js", include_str!("../../../ui/test/run.js")),
+    ("test/source-chooser.js", include_str!("../../../ui/test/source-chooser.js")),
     ("test/studio.js", include_str!("../../../ui/test/studio.js")),
     ("test/dock.js", include_str!("../../../ui/test/dock.js")),
     // The designer kits' behaviour, as the reference implementation answered
@@ -638,6 +643,7 @@ mod tests {
         reachable.extend(closure_of("shell/palette.js"));
         reachable.extend(closure_of("shell/dock-menu.js"));
         reachable.extend(closure_of("shell/picker.js"));
+        reachable.extend(closure_of("panels/sources/chooser.js"));
         reachable.extend(closure_of("panels/outputs/destination.js"));
         reachable.extend(closure_of("shell/sandbox.js"));
         reachable.extend(closure_of("panels/welcome/tiles.js"));
@@ -662,6 +668,7 @@ mod tests {
             ("panels/composer/composer.js", "a double tap on a scene tile"),
             ("shell/dock-menu.js", "workspace or panel actions"),
             ("shell/picker.js", "adding a source or dropping a URI"),
+            ("panels/sources/chooser.js", "adding sources to a scene"),
             ("panels/outputs/destination.js", "adding or editing a destination"),
             ("panels/composer/canvas.js", "the composer"),
             ("panels/composer/inspector.js", "the composer"),

@@ -58,3 +58,15 @@ gmx-shell.has-workspace {
 @media (max-width: 760px) {
   .dock-frame[data-dock-panel="core/program"] .dock-content { max-height: none; }
 }
+.source-add-tile { min-height: 150px; display: flex; flex-direction: column; justify-content: center; align-items: center; gap: 8px; border: 1px dashed var(--dim); background: transparent; color: var(--dim); }
+.source-add-tile:hover, .source-add-tile:focus-visible { color: var(--accent); border-color: var(--accent); background: var(--select-fill); }
+.source-add-icon { font-size: 48px; line-height: 1; font-weight: 300; }
+.scene-add-source { position: absolute; right: 8px; bottom: 8px; font-size: 28px; width: 44px; height: 44px; padding: 0; background: var(--panel); }
+.source-chooser { display: grid; grid-template-columns: minmax(0, 1fr) minmax(240px, .8fr); gap: 20px; }
+.source-chooser-library { min-width: 0; }
+.source-chooser-list { max-height: 50vh; overflow: auto; }
+.source-choice { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 12px 0; border-bottom: 1px solid var(--line); }
+.source-choice > .grow { min-width: 100px; overflow-wrap: anywhere; }
+.source-chooser-preview { display: flex; flex-direction: column; align-items: stretch; gap: 12px; min-width: 0; }
+.source-chooser-preview canvas { width: 100%; aspect-ratio: 16 / 9; background: #000; object-fit: contain; }
+@media (max-width: 650px) { .source-chooser { grid-template-columns: minmax(0, 1fr); } }
