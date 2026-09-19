@@ -5,23 +5,40 @@ mod pipeline;
 use crate::config::Params;
 use crate::plugin::output::{Output, OutputCtx, OutputProvide};
 use crate::plugin::source::unknown_method;
-use crate::plugin::{CapabilitySet, Configure, Health, Hello, Manifest, MediaDecl, PluginState,
-    ProvideKind, Ready, StreamMode, Tier, API_LEVEL};
+use crate::plugin::{
+    CapabilitySet, Configure, Health, Hello, Manifest, MediaDecl, PluginState, ProvideKind, Ready,
+    StreamMode, Tier, API_LEVEL,
+};
 use anyhow::Result;
 use gstreamer as gst;
 use serde_json::{json, Value};
 use std::path::PathBuf;
-use std::sync::{Arc, atomic::{AtomicU64, Ordering}};
+use std::sync::{
+    atomic::{AtomicU64, Ordering},
+    Arc,
+};
 
 pub const MANIFEST: Manifest = Manifest {
-    plugin: "record", id: "output", kind: ProvideKind::Output, api: API_LEVEL,
+    plugin: "record",
+    id: "output",
+    kind: ProvideKind::Output,
+    api: API_LEVEL,
     description: "Record the encoded programme to a new MP4 or Matroska file",
-    uri_schemes: &["record://"], rank: 250,
-    media: MediaDecl { video: StreamMode::Container, audio: StreamMode::Container, alpha: false, thumb: false },
-    capabilities: CapabilitySet::new(), latency_ms: 0, tier: Tier::Core,
+    uri_schemes: &["record://"],
+    rank: 250,
+    media: MediaDecl {
+        video: StreamMode::Container,
+        audio: StreamMode::Container,
+        alpha: false,
+        thumb: false,
+    },
+    capabilities: CapabilitySet::new(),
+    latency_ms: 0,
+    tier: Tier::Core,
 };
 pub const PROVIDE: OutputProvide = OutputProvide {
-    manifest: MANIFEST, claims: |uri| uri.starts_with("record://").then_some(250),
+    manifest: MANIFEST,
+    claims: |uri| uri.starts_with("record://").then_some(250),
     make: |_| Ok(Box::new(Recording::default())),
 };
 
@@ -34,17 +51,35 @@ struct Recording {
 }
 
 impl Output for Recording {
-    fn manifest(&self) -> &Manifest { &MANIFEST }
+    fn manifest(&self) -> &Manifest {
+        &MANIFEST
+    }
 
     fn initialize(&mut self, hello: Hello) -> Result<Ready> {
         (self.folder, self.format) = files::settings(&hello.params)?;
-        Ok(Ready { manifest: MANIFEST, latency_ms: 0, capabilities: MANIFEST.capabilities })
+        Ok(Ready {
+            manifest: MANIFEST,
+            latency_ms: 0,
+            capabilities: MANIFEST.capabilities,
+        })
     }
 
-    fn build(&mut self, ctx: &OutputCtx<'_>, video: &gst::Element, audio: &gst::Element) -> Result<()> {
+    fn build(
+        &mut self,
+        ctx: &OutputCtx<'_>,
+        video: &gst::Element,
+        audio: &gst::Element,
+    ) -> Result<()> {
         let path = files::reserve(&self.folder, ctx.id, &self.format)?;
         self.bytes = Arc::new(AtomicU64::new(0));
-        if let Err(error) = pipeline::build(ctx.pipeline, video, audio, &path, &self.format, self.bytes.clone()) {
+        if let Err(error) = pipeline::build(
+            ctx.pipeline,
+            video,
+            audio,
+            &path,
+            &self.format,
+            self.bytes.clone(),
+        ) {
             let _ = std::fs::remove_file(&path);
             return Err(error);
         }
@@ -52,15 +87,23 @@ impl Output for Recording {
         Ok(())
     }
 
-    fn connected(&self) -> bool { self.bytes.load(Ordering::Relaxed) > 0 }
+    fn connected(&self) -> bool {
+        self.bytes.load(Ordering::Relaxed) > 0
+    }
 
     fn configure(&mut self, params: &Params) -> Result<Configure> {
         files::settings(params)?;
-        Ok(Configure::RestartRequired("Stop this recording and start another to change its folder or format".into()))
+        Ok(Configure::RestartRequired(
+            "Stop this recording and start another to change its folder or format".into(),
+        ))
     }
 
     fn health(&self) -> Health {
-        Health::of(if self.connected() { PluginState::Running } else { PluginState::Starting })
+        Health::of(if self.connected() {
+            PluginState::Running
+        } else {
+            PluginState::Starting
+        })
     }
 
     fn call(&mut self, method: &str, _: Value) -> Result<Value> {
@@ -74,7 +117,10 @@ impl Output for Recording {
         let mut status = godwinmix_protocol::types::Extra::new();
         status.insert("type".into(), json!("record/output"));
         status.insert("recording_path".into(), json!(self.path));
-        status.insert("bytes_muxed".into(), json!(self.bytes.load(Ordering::Relaxed)));
+        status.insert(
+            "bytes_muxed".into(),
+            json!(self.bytes.load(Ordering::Relaxed)),
+        );
         status
     }
 

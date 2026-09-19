@@ -118,6 +118,12 @@ class ProgramPanel extends HTMLElement {
     return cell ? cell.index : null;
   }
 
+  setWorkspaceActive(active) {
+    this.workspaceActive = active;
+    if (active) this.render(this.client.state);
+    else this.release();
+  }
+
   scheduleRetune() {
     if (this.resizeFrame) return;
     this.resizeFrame = requestAnimationFrame(() => { this.resizeFrame = null; this.retune(); });
@@ -127,7 +133,7 @@ class ProgramPanel extends HTMLElement {
     const s = this.client.state;
     const cell = this.programCell(s);
     this.retunePreview(s);
-    if (!mosaicWanted(s, this.visible)) {
+    if (!mosaicWanted(s, this.visible && this.workspaceActive !== false)) {
       this.release();
       this.canvas.hidden = true;
       this.note.hidden = !(s.multiview && !s.multiview.enabled);
@@ -154,11 +160,11 @@ class ProgramPanel extends HTMLElement {
       this.canvas.width = w;
       this.canvas.height = h;
     }
-    if (this.detach) this.detach();
-    // The programme cell exists only once the mosaic is up, and the mosaic
-    // comes up because somebody subscribed. Subscribe first, attach when the
-    // layout names the cell: the next render brings it here.
-    this.detach = cell === null ? null : this.client.sheet.attach(this.canvas, cell);
+    if (cell !== this.attachedCell || (!this.detach && cell !== null)) {
+      if (this.detach) this.detach();
+      this.detach = cell === null ? null : this.client.sheet.attach(this.canvas, cell);
+      this.attachedCell = cell;
+    }
   }
 
   /**
@@ -169,7 +175,7 @@ class ProgramPanel extends HTMLElement {
    * somebody can see it, which is the rule the monitor above follows too.
    */
   retunePreview(s) {
-    const wanted = !!(settings().producer && s.preview && this.visible && !document.hidden);
+    const wanted = !!(settings().producer && s.preview && this.visible && this.workspaceActive !== false && !document.hidden);
     if (!wanted) {
       this.releasePreview();
       return;

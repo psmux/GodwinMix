@@ -128,6 +128,7 @@ const LEGACY: &str = include_str!("../../../ui/legacy/index.html");
 const DEV_ASSETS: &[(&str, &str)] = &[
     ("test/index.html", include_str!("../../../ui/test/index.html")),
     ("test/run.js", include_str!("../../../ui/test/run.js")),
+    ("test/studio.js", include_str!("../../../ui/test/studio.js")),
     ("test/dock.js", include_str!("../../../ui/test/dock.js")),
     // The designer kits' behaviour, as the reference implementation answered
     // it. The TypeScript and Python suites read the same file from the
