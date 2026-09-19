@@ -79,13 +79,15 @@ export function addView(viewId, key, node, orient, readout) {
 }
 
 export function dropView(viewId) {
+  const view = views.get(viewId);
   views.delete(viewId);
+  if (view && ![...views.values()].some(other => other.key === view.key)) levels.delete(view.key);
 }
 
 /** Remove every view whose id starts with the prefix. Used on a cell rebuild. */
 export function dropViews(prefix, keep) {
   for (const id of [...views.keys()]) {
-    if (id.startsWith(prefix) && !(keep && keep.has(id))) views.delete(id);
+    if (id.startsWith(prefix) && !(keep && keep.has(id))) dropView(id);
   }
 }
 
