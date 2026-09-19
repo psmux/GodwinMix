@@ -131,6 +131,10 @@ there too. The core derives the id from the name.
 * A source appears in the tray and never goes live. `gmx ctl status` says what
   state it is in, and the alerts panel says why.
 
+If the supervisor restarts a source, its programme and preview branches resume
+with it. The source status reports video and audio again once buffers return,
+including kinds with fixed pads such as test patterns.
+
 ## Next
 
 * [Compose a scene](compose-a-scene.md) with what you just added.
