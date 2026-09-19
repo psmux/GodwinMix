@@ -11,8 +11,11 @@ Stream resolution changes wait 150 ms after resizing settles; geometry moves
 immediately.
 
 Sources are selected from each scene through a large + tile. Its chooser can
-reuse existing sources, preview one on demand, or create a new source. There is
-no All sources tab. Removing a source from a scene keeps the mixer source for
+reuse existing sources, preview one on demand, or create a new source. Cameras,
+screens, microphones and media are direct categories. Browse files opens the
+browser file selector, uploads video, audio or images with progress, and inserts
+each source into the chosen scene. The first upload creates the media directory;
+concurrent uploads cannot overwrite existing files. There is no All sources tab. Removing a source from a scene keeps the mixer source for
 reuse. Scenes and Sources share a client model independent of dock visibility.
 
 The studio surface has Preview and Programme, Cut and timed Fade controls, a

@@ -101,3 +101,11 @@ async fn interrupted_upload_never_publishes_a_partial_file() {
     assert!(store(&dir.0, "tone.wav", body).await.is_err());
     assert_eq!(std::fs::read_dir(&dir.0).unwrap().count(), 0);
 }
+
+#[tokio::test]
+async fn first_upload_creates_the_configured_media_directory() {
+    let dir = Directory::new();
+    let library = dir.0.join("new").join("media");
+    assert_eq!(store(&library, "tone.wav", Body::from(wav())).await.unwrap(), 16044);
+    assert_eq!(tokio::fs::read(library.join("tone.wav")).await.unwrap(), wav());
+}

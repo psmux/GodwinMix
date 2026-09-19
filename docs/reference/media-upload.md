@@ -18,6 +18,7 @@ characters are refused. Extension checks are case insensitive.
 | Audio | mp3, wav, wave, flac, ogg, oga, opus, m4a, aac, aiff, aif |
 | Images | png, jpg, jpeg, bmp, gif, webp, tif, tiff |
 
+The first upload creates the configured media directory if it does not exist.
 The library scan uses the same extension list. Stream metadata comes from
 GStreamer discovery, so codec availability depends on the installed runtime.
 
