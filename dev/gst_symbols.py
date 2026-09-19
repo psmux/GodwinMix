@@ -12,15 +12,15 @@ def strip_tool(platform: str) -> str | None:
     explicit = os.environ.get("GST_STRIP")
     if explicit:
         return explicit
-    for name in ("llvm-strip", "llvm-objcopy"):
-        if tool := shutil.which(name):
-            return tool
     if platform == "windows" and shutil.which("rustc"):
         root = subprocess.run(["rustc", "--print", "sysroot"], check=True,
                               capture_output=True, text=True).stdout.strip()
         tools = sorted(Path(root).glob("lib/rustlib/*/bin/llvm-objcopy.exe"))
         if tools:
             return str(tools[0])
+    for name in ("llvm-strip", "llvm-objcopy"):
+        if tool := shutil.which(name):
+            return tool
     return shutil.which("strip") if platform == "linux" else None
 
 
@@ -38,7 +38,9 @@ def strip_debug(root: Path, platform: str) -> None:
         if not (magic.startswith(b"MZ") or magic == b"\x7fELF"):
             continue
         before = path.stat().st_size
-        subprocess.run([tool, "--strip-debug", str(path)], check=True,
-                       capture_output=True, text=True)
+        result = subprocess.run([tool, "--strip-debug", str(path)],
+                                capture_output=True, text=True)
+        if result.returncode:
+            raise RuntimeError(f"cannot strip debug sections from {path}: {result.stderr.strip()}")
         saved += before - path.stat().st_size
     print(f"removed {saved / (1024 * 1024):.1f} MB of debug sections")
