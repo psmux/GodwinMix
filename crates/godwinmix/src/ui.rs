@@ -89,6 +89,10 @@ const ASSETS: &[(&str, &str)] = &[
     ("shell/firstrun.js", include_str!("../../../ui/shell/firstrun.js")),
     ("shell/keymap.js", include_str!("../../../ui/shell/keymap.js")),
     ("shell/layout.js", include_str!("../../../ui/shell/layout.js")),
+    ("shell/dock.js", include_str!("../../../ui/shell/dock.js")),
+    ("shell/dock-model.js", include_str!("../../../ui/shell/dock-model.js")),
+    ("shell/dock-pointer.js", include_str!("../../../ui/shell/dock-pointer.js")),
+    ("shell/dock-menu.js", include_str!("../../../ui/shell/dock-menu.js")),
     ("shell/menu.js", include_str!("../../../ui/shell/menu.js")),
     ("shell/meter.js", include_str!("../../../ui/shell/meter.js")),
     ("shell/modal.js", include_str!("../../../ui/shell/modal.js")),
@@ -104,6 +108,7 @@ const ASSETS: &[(&str, &str)] = &[
     ("shell/toast.js", include_str!("../../../ui/shell/toast.js")),
     ("shell/undo.js", include_str!("../../../ui/shell/undo.js")),
     ("themes/base.css", include_str!("../../../ui/themes/base.css")),
+    ("themes/dock.css", include_str!("../../../ui/themes/dock.css")),
     ("themes/dark.css", include_str!("../../../ui/themes/dark.css")),
     ("themes/high-contrast.css", include_str!("../../../ui/themes/high-contrast.css")),
     ("themes/light.css", include_str!("../../../ui/themes/light.css")),
@@ -123,6 +128,7 @@ const LEGACY: &str = include_str!("../../../ui/legacy/index.html");
 const DEV_ASSETS: &[(&str, &str)] = &[
     ("test/index.html", include_str!("../../../ui/test/index.html")),
     ("test/run.js", include_str!("../../../ui/test/run.js")),
+    ("test/dock.js", include_str!("../../../ui/test/dock.js")),
     // The designer kits' behaviour, as the reference implementation answered
     // it. The TypeScript and Python suites read the same file from the
     // repository; the browser reads it from here, because the page has no file
