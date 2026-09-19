@@ -1,3 +1,4 @@
+import { studioTests } from "./studio.js";
 import { dockTests } from "./dock.js";
 // The test runner: forty lines, no dependencies, no toolchain. Open the page,
 // read the console, or read the list. Everything testable without a mixer is
@@ -2112,6 +2113,7 @@ legacySuite()
     line("fail", "the legacy suite threw: " + e.message);
     console.error(e);
   })
+  .then(() => studioTests(test, eq, ok))
   .then(welcomeSuite)
   .catch((e) => {
     failed += 1;
