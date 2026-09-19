@@ -6,7 +6,7 @@ import { dockTests } from "./dock.js";
 
 import { Selection, overlaps, rectFrom } from "../shell/selection.js";
 import { dbToPos, FLOOR } from "../shell/meter.js";
-import { posToGain, gainToPos, gainLabel, UNITY, AudioGestures, ScrubGestures } from "../shell/fader.js";
+import { posToGain, gainToPos, gainLabel, UNITY, AudioGestures, ScrubGestures, audioFor } from "../shell/fader.js";
 import {
   parseFrame,
   sheetWidthFor,
@@ -199,6 +199,16 @@ test("audio controls and seeking send the API source id", () => {
   scrub._post("cam1", 500);
   eq(calls.map((call) => call.params.id), ["cam1", "cam1", "cam1"]);
   ok(calls.every((call) => !("source" in call.params)));
+});
+
+test("audio panels share one gesture state and display local gain in gain units", () => {
+  const client = { call: async () => ({}) };
+  const audio = audioFor(client);
+  eq(audio === audioFor(client), true);
+  audio.active.add("camera/gain");
+  eq(audio.shown("camera/gain", 1), 1);
+  audio.local.set("camera/gain", UNITY);
+  eq(audio.shown("camera/gain", 0.5), 1);
 });
 
 test("saved layouts keep control panels outside the monitor", () => {

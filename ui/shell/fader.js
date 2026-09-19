@@ -59,9 +59,11 @@ export class AudioGestures {
 
   /** What the control should show: the local value while it is in play. */
   shown(key, serverValue) {
-    if (this.active.has(key)) return this.local.get(key);
     const until = this.settle.get(key) || 0;
-    if (performance.now() < until && this.local.has(key)) return this.local.get(key);
+    if (this.local.has(key) && (this.active.has(key) || performance.now() < until)) {
+      const value = this.local.get(key);
+      return key.endsWith("/gain") ? posToGain(value) : value;
+    }
     return serverValue;
   }
 
@@ -221,4 +223,11 @@ export function fmtPosition(ms) {
   const m = Math.floor(s / 60);
   const r = s % 60;
   return `${m}:${String(r).padStart(2, "0")}`;
+}
+
+// Keep gestures shared when the same source appears in several dock panels.
+const audioSessions = new WeakMap();
+export function audioFor(client) {
+  if (!audioSessions.has(client)) audioSessions.set(client, new AudioGestures(client));
+  return audioSessions.get(client);
 }

@@ -6080,6 +6080,13 @@
         "schemes": [
           "srt://"
         ]
+      },
+      {
+        "description": "Record the encoded programme to a new MP4 or Matroska file",
+        "id": "record/output",
+        "schemes": [
+          "record://"
+        ]
       }
     ],
     "source": [
