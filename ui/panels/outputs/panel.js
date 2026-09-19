@@ -84,6 +84,7 @@ class OutputsPanel extends HTMLElement {
   }
 
   setWorkspaceActive(active) {
+    this.workspaceActive = active;
     if (active) this.render(this.client.state);
   }
 
@@ -92,6 +93,7 @@ class OutputsPanel extends HTMLElement {
   }
 
   render(s) {
+    if (this.workspaceActive === false) return;
     const outputs = s.outputs || [];
     this.count.textContent = outputs.length ? String(outputs.length) : "";
     clear(this.list);

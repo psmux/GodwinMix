@@ -1,3 +1,4 @@
+import { recordingState } from "../panels/outputs/recording.js";
 import { studioTests } from "./studio.js";
 import { dockTests } from "./dock.js";
 // The test runner: forty lines, no dependencies, no toolchain. Open the page,
@@ -165,6 +166,26 @@ test("the meter scale gives the working range most of the travel", () => {
   near(dbToPos(-20), 0.35, 0.001, "-20 dBFS");
   ok(dbToPos(-20) > 0.3 && dbToPos(-20) < 0.4, "-20 dBFS is about a third up");
   ok(dbToPos(-6) > dbToPos(-12), "louder is higher");
+});
+
+test("recording startup is shown as preparing rather than a failure", () => {
+  eq(recordingState({ state: "connecting" }), { label: "Preparing recording", dot: "connecting" });
+  eq(recordingState({ state: "live" }).label, "Recording");
+  eq(recordingState({ state: "failed" }).dot, "failed");
+});
+
+test("releasing an unchanged fader unblocks shared panel rendering", () => {
+  const audio = new AudioGestures({ call: () => Promise.resolve({}) });
+  const input = document.createElement("input");
+  input.type = "range";
+  audio.bindFader(input, "cam-wide", "gain");
+  input.dispatchEvent(new PointerEvent("pointerdown", { detail: 1 }));
+  ok(audio.busy);
+  let rendered = false;
+  audio.defer(() => { rendered = true; });
+  input.dispatchEvent(new PointerEvent("pointerup"));
+  ok(!audio.busy);
+  ok(rendered);
 });
 
 // ---------------------------------------------------------------- faders
