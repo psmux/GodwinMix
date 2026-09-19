@@ -242,7 +242,7 @@ dev/bundle-gstreamer.sh                    # macOS and Linux
 dev\bundle-gstreamer.ps1                   # Windows
 ```
 
-Each fetches or finds the official runtime for the platform, trims it, writes
+Each finds the runtime for the platform, trims it, writes
 the result to `tauri-app/gstreamer/<platform>/`, prints the size, and refuses
 to finish if the tree is over budget. Then it asks the trimmed tree for
 `compositor`, `rtmp2sink`, `srtsink` and a software H.264 encoder, out of its
@@ -290,6 +290,34 @@ again with an ad hoc signature, because editing a Mach-O breaks its signature
 and Apple silicon refuses to load a library that claims to be signed and is
 not. That is what lets the same tree work inside `/Applications` without any
 `DYLD_LIBRARY_PATH`.
+
+Linux libraries retain the SONAME requested by their importers, including
+versioned aliases. Copying only the resolved filename would leave the bundle
+loading a system library or failing on a clean machine.
+
+Windows and Linux bundles remove debug sections before measuring the budget.
+Windows needs `rustup component add llvm-tools`; Linux needs binutils. Set
+`GST_STRIP` to an explicit compatible stripping tool if necessary. Exported
+symbols and code remain in the runtime, and the element checks still run.
+The 130 MB runtime budget has not changed. Linux release jobs run
+`dev/build-linux-libav.sh <prefix>` first, then pass that prefix to the trimmer.
+The builder uses distribution source packages authenticated by apt, compiles
+FFmpeg without optional external libraries, and statically links it into a
+fresh gst-libav plugin. Native codecs, demuxers and filters remain available;
+platform hardware codecs still come from their GStreamer plugins. This avoids
+shipping the distribution FFmpeg's unrelated speech and rendering libraries.
+
+The builder needs source repositories enabled, a C toolchain, meson, ninja,
+nasm and GStreamer development headers. It changes no installed runtime and
+writes only the requested prefix. The runtime CI job checks H.264, HEVC and
+AAC elements, runs an AAC encode/decode pipeline and enforces the size budget.
+A failed budget or codec check blocks packaging.
+
+GStreamer 1.28 Windows downloads use Inno Setup instead of MSI. Install the
+[official MSVC runtime](https://gstreamer.freedesktop.org/download/) before
+bundling, or pass its prefix with `-From`. The helper detects both system and
+per user installations. Automatic MSI extraction remains available for older
+releases; it does not run an installer into a temporary directory.
 
 ### Measured
 

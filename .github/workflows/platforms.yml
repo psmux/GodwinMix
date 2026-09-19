@@ -72,6 +72,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: llvm-tools
       - uses: Swatinem/rust-cache@v2
         with:
           key: platforms-${{ matrix.platform }}
@@ -175,11 +177,28 @@ jobs:
         shell: pwsh
         run: ./dev/smoke.ps1
 
+      - name: Packaging regression tests
+        shell: bash
+        run: python3 -m unittest discover -s dev -p test_gst_trim.py
+
       # --------------------------------------------- 3. the bundled runtime --
+
+      - name: Build private FFmpeg for the Linux runtime
+        if: runner.os == 'Linux'
+        run: |
+          sudo sed -i 's/^Types: deb$/Types: deb deb-src/' /etc/apt/sources.list.d/ubuntu.sources
+          sudo apt-get update
+          sudo apt-get install -y build-essential dpkg-dev meson ninja-build nasm zlib1g-dev libbz2-dev liblzma-dev
+          ./dev/build-linux-libav.sh "$RUNNER_TEMP/gst-prefix"
 
       - name: Trim GStreamer (Unix)
         if: runner.os != 'Windows'
-        run: ./dev/bundle-gstreamer.sh --budget-mb "$RUNTIME_BUDGET_MB"
+        run: |
+          if [ "${{ runner.os }}" = Linux ]; then
+            ./dev/bundle-gstreamer.sh --from "$RUNNER_TEMP/gst-prefix" --budget-mb "$RUNTIME_BUDGET_MB"
+          else
+            ./dev/bundle-gstreamer.sh --budget-mb "$RUNTIME_BUDGET_MB"
+          fi
 
       - name: Trim GStreamer (Windows)
         if: runner.os == 'Windows'

@@ -1,0 +1,57 @@
+name: runtime
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'dev/build-linux-libav.sh'
+      - 'dev/gst_*.py'
+      - 'dev/bundle-gstreamer.sh'
+      - '.github/workflows/runtime.yml'
+permissions:
+  contents: read
+jobs:
+  linux:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build tools and GStreamer
+        run: |
+          sudo sed -i 's/^Types: deb$/Types: deb deb-src/' /etc/apt/sources.list.d/ubuntu.sources
+          sudo apt-get update
+          sudo apt-get install -y build-essential dpkg-dev meson ninja-build nasm zlib1g-dev libbz2-dev liblzma-dev \
+            libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev \
+            gstreamer1.0-tools gstreamer1.0-plugins-base gstreamer1.0-plugins-good \
+            gstreamer1.0-plugins-bad gstreamer1.0-plugins-ugly gstreamer1.0-libav
+      - name: Build private FFmpeg and plugin
+        run: ./dev/build-linux-libav.sh "$RUNNER_TEMP/gst-prefix"
+      - name: Test packaging and validate the runtime budget
+        run: |
+          python3 -m unittest discover -s dev -p test_gst_trim.py
+          ./dev/bundle-gstreamer.sh --from "$RUNNER_TEMP/gst-prefix" --budget-mb 130
+      - name: Prove catalogue libav codecs are present
+        env:
+          GST_PLUGIN_PATH: ${{ github.workspace }}/tauri-app/gstreamer/linux/lib/gstreamer-1.0
+          GST_PLUGIN_SYSTEM_PATH: ${{ github.workspace }}/tauri-app/gstreamer/linux/lib/gstreamer-1.0
+          LD_LIBRARY_PATH: ${{ github.workspace }}/tauri-app/gstreamer/linux/lib
+          GST_REGISTRY: ${{ runner.temp }}/private-registry.bin
+        run: |
+          for element in avdec_h264 avdec_h265 avdec_aac avenc_aac; do
+            tauri-app/gstreamer/linux/bin/gst-inspect-1.0 "$element" >/dev/null
+          done
+          tauri-app/gstreamer/linux/bin/gst-launch-1.0 -q \
+            audiotestsrc num-buffers=32 ! audioconvert ! avenc_aac ! avdec_aac ! fakesink
+  windows:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: llvm-tools
+      - name: Install the Windows media runtime
+        shell: pwsh
+        run: choco install -y --no-progress gstreamer gstreamer-devel
+      - name: Validate the stripped runtime budget and elements
+        shell: pwsh
+        run: ./dev/bundle-gstreamer.ps1 -BudgetMb 130

@@ -1,10 +1,13 @@
+import { recordingState } from "../panels/outputs/recording.js";
+import { studioTests } from "./studio.js";
+import { dockTests } from "./dock.js";
 // The test runner: forty lines, no dependencies, no toolchain. Open the page,
 // read the console, or read the list. Everything testable without a mixer is
 // here, including the legacy adapter against a stubbed server.
 
 import { Selection, overlaps, rectFrom } from "../shell/selection.js";
 import { dbToPos, FLOOR } from "../shell/meter.js";
-import { posToGain, gainToPos, gainLabel, UNITY, AudioGestures, ScrubGestures } from "../shell/fader.js";
+import { posToGain, gainToPos, gainLabel, UNITY, AudioGestures, ScrubGestures, audioFor } from "../shell/fader.js";
 import {
   parseFrame,
   sheetWidthFor,
@@ -78,6 +81,8 @@ function ok(v, what) {
 function near(a, b, tol, what) {
   if (Math.abs(a - b) > tol) throw new Error(`${what || "value"}: ${a} is not within ${tol} of ${b}`);
 }
+
+dockTests(test, eq, ok);
 
 // ---------------------------------------------------------------- selection
 
@@ -163,6 +168,26 @@ test("the meter scale gives the working range most of the travel", () => {
   ok(dbToPos(-6) > dbToPos(-12), "louder is higher");
 });
 
+test("recording startup is shown as preparing rather than a failure", () => {
+  eq(recordingState({ state: "connecting" }), { label: "Preparing recording", dot: "connecting" });
+  eq(recordingState({ state: "live" }).label, "Recording");
+  eq(recordingState({ state: "failed" }).dot, "failed");
+});
+
+test("releasing an unchanged fader unblocks shared panel rendering", () => {
+  const audio = new AudioGestures({ call: () => Promise.resolve({}) });
+  const input = document.createElement("input");
+  input.type = "range";
+  audio.bindFader(input, "cam-wide", "gain");
+  input.dispatchEvent(new PointerEvent("pointerdown", { detail: 1 }));
+  ok(audio.busy);
+  let rendered = false;
+  audio.defer(() => { rendered = true; });
+  input.dispatchEvent(new PointerEvent("pointerup"));
+  ok(!audio.busy);
+  ok(rendered);
+});
+
 // ---------------------------------------------------------------- faders
 
 test("the fader is a straight line in dB with unity at three quarters", () => {
@@ -195,6 +220,16 @@ test("audio controls and seeking send the API source id", () => {
   scrub._post("cam1", 500);
   eq(calls.map((call) => call.params.id), ["cam1", "cam1", "cam1"]);
   ok(calls.every((call) => !("source" in call.params)));
+});
+
+test("audio panels share one gesture state and display local gain in gain units", () => {
+  const client = { call: async () => ({}) };
+  const audio = audioFor(client);
+  eq(audio === audioFor(client), true);
+  audio.active.add("camera/gain");
+  eq(audio.shown("camera/gain", 1), 1);
+  audio.local.set("camera/gain", UNITY);
+  eq(audio.shown("camera/gain", 0.5), 1);
 });
 
 test("saved layouts keep control panels outside the monitor", () => {
@@ -618,7 +653,7 @@ test("a method that takes nothing still gets an empty form, not a broken one", (
  * whose plugin is missing offers to install it rather than naming a command.
  */
 async function addSourcePickerSuite() {
-  const { openPicker } = await import("../shell/picker.js");
+  const { openPicker } = await import("../shell/picker-loader.js");
   const kinds = await import("../client/kinds.js");
 
   /** A client that answers from a table and remembers what it was asked. */
@@ -887,7 +922,7 @@ async function addSourcePickerSuite() {
 async function scopedSourcesSuite() {
   window.godwinmixPanels = window.godwinmixPanels || [];
   const { default: SourcesPanel } = await import("../panels/sources/panel.js");
-  const { openForm } = await import("../shell/picker.js");
+  const { openForm } = await import("../shell/picker-loader.js");
   const { setFocusedScene } = await import("../shell/focus.js");
   const { setSetting } = await import("../shell/settings.js");
 
@@ -2109,6 +2144,7 @@ legacySuite()
     line("fail", "the legacy suite threw: " + e.message);
     console.error(e);
   })
+  .then(() => studioTests(test, eq, ok))
   .then(welcomeSuite)
   .catch((e) => {
     failed += 1;

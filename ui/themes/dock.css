@@ -1,0 +1,56 @@
+gmx-shell.has-workspace {
+  grid-template-rows: auto auto minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-areas: "header header" "toolbar toolbar" "workspace sidebar";
+}
+.has-workspace > .slot-monitor, .has-workspace > .slot-main,
+.has-workspace > .slot-strip, .has-workspace > .slot-footer { display: none; }
+.dock-toolbar { grid-area: toolbar; display: flex; align-items: center; gap: 14px; padding: 6px 12px; border-bottom: 1px solid var(--line); background: var(--panel); }
+.dock-toolbar > span:first-child { font-size: 10px; letter-spacing: .12em; color: var(--dim); }
+.dock-hint { color: var(--dim); font-size: 11px; }
+.dock-workspace { grid-area: workspace; position: relative; min-width: 0; min-height: 0; overflow: hidden; margin: 6px; }
+.dock-frame { position: absolute; display: flex; flex-direction: column; min-width: 0; min-height: 0; border: 1px solid var(--line); border-radius: 5px; background: var(--panel); overflow: hidden; }
+.dock-title { display: flex; align-items: center; min-height: 30px; border-bottom: 1px solid var(--line); padding: 0 5px; gap: 3px; }
+.dock-title button { border: 0; background: transparent; padding: 3px 7px; }
+.dock-title .dock-handle { flex: 1; text-align: left; cursor: grab; touch-action: none; font-size: 11px; font-weight: 600; }
+.dock-tabs { display: flex; flex-shrink: 0; overflow-x: auto; border-bottom: 1px solid var(--line); }
+.dock-tabs:has(> :only-child) { display: none; }
+.dock-tab { flex-shrink: 0; border: 0; border-radius: 0; background: transparent; font-size: 11px; }
+.dock-tab[aria-selected="true"] { box-shadow: inset 0 -2px var(--accent); background: var(--bg); }
+.dock-content { flex: 1; min-height: 0; overflow: auto; }
+.dock-content > * { display: block; }
+.dock-content .panel-section { margin: 0; }
+.dock-splitter { position: absolute; z-index: 4; touch-action: none; }
+.dock-splitter[data-axis="x"] { cursor: col-resize; }
+.dock-splitter[data-axis="y"] { cursor: row-resize; }
+.dock-splitter:hover, .dock-splitter:focus-visible { background: var(--accent); }
+.dock-target { position: absolute; z-index: 8; pointer-events: none; display: grid; place-items: center; border: 2px solid var(--accent); border-radius: 5px; background: color-mix(in srgb, var(--accent) 24%, transparent); font-weight: 600; }
+.dock-dragging, .dock-dragging * { user-select: none !important; }
+.dock-dragging iframe { pointer-events: none; }
+@media (max-width: 760px) {
+  gmx-shell.has-workspace { grid-template-columns: minmax(0, 1fr); grid-template-areas: "header" "toolbar" "workspace"; }
+  .dock-workspace { overflow: auto; display: flex; flex-direction: column; gap: 8px; }
+  .dock-frame { position: relative; top: auto !important; left: auto !important; width: 100% !important; height: auto !important; min-height: 220px; flex-shrink: 0; }
+  .dock-content { max-height: 65vh; }
+  .dock-splitter, .dock-hint { display: none; }
+  .dock-title .dock-handle { cursor: default; }
+}
+/* Pane controls wrap at the pane's width, independently of the window. */
+.dock-content > :is(gmx-sources, gmx-scenes, gmx-outputs, gmx-media, gmx-alerts) > .row { flex-wrap: wrap; }
+.dock-content > :is(gmx-sources, gmx-scenes, gmx-outputs, gmx-media, gmx-alerts) > .row > strong:first-child { display: none; }
+.dock-content input, .dock-content select { max-width: 100%; min-width: 0; }
+.dock-content .empty { min-width: 0; padding: 22px 12px; }
+.dock-content .empty > * { min-width: 0; max-width: 100%; overflow-wrap: anywhere; }
+.dock-content .empty button { max-width: 100%; white-space: normal; }
+.dock-content .gallery { grid-template-columns: repeat(auto-fill, minmax(min(100%, var(--tile-w)), 1fr)); }
+@media (max-width: 760px) {
+  .has-workspace .header { flex-wrap: wrap; height: auto; min-height: var(--header-h); padding: 8px; gap: 6px; }
+  .has-workspace .header > .grow { flex-basis: 100%; }
+  .has-workspace .header > .ellipsis { max-width: 130px; }
+  .dock-toolbar { flex-wrap: wrap; gap: 8px; }
+}
+.dock-tab { padding: 7px 11px; min-height: 30px; }
+.dock-manager > button { text-align: left; }
+.dock-manager .row { flex-wrap: wrap; }
+.dock-manager input, .dock-manager select { min-width: 0; max-width: 100%; flex: 1; }
+.dock-manager h3 { margin: 14px 0 0; }

@@ -12,7 +12,7 @@ export const SLOTS = ["header", "monitor", "main", "sidebar", "strip", "footer",
 let fallback = {
   header: ["core/header"],
   monitor: ["core/program"],
-  main: ["core/scenes", "core/sources", "core/outputs", "core/media", "core/alerts"],
+  main: ["core/scenes", "core/sources", "core/outputs", "core/audio", "core/media", "core/alerts"],
   sidebar: [],
   strip: [],
   footer: [],

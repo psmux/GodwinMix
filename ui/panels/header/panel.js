@@ -29,12 +29,16 @@ class HeaderPanel extends HTMLElement {
     this.peak = el("span.num.sm.dim", { style: { minWidth: "3.2em" } });
     this.uptime = el("span.num.sm.dim");
     this.backend = el("span.sm.faint.ellipsis");
+    this.destinations = el("span.pill", { text: "No destinations", role: "status" });
+    this.recording = el("span.pill.live", { text: "REC", hidden: true, role: "status" });
     this.ad = el("span.pill.live", { text: "AD BREAK", hidden: true });
 
     this.append(
       el("strong", { text: "GodwinMix" }),
       this.tally,
       this.ad,
+      this.destinations,
+      this.recording,
       el("div.row", { style: { width: "110px" } }, [this.meter]),
       this.peak,
       el("span.grow"),
@@ -79,6 +83,12 @@ class HeaderPanel extends HTMLElement {
     this.uptime.textContent = fmtDuration(s.uptime_secs);
     const b = s.backend;
     this.backend.textContent = b ? `${b.video_encoder} · ${b.hardware_accelerated ? "hardware" : "software"}` : "";
+    const outputs = s.outputs || [];
+    const streams = outputs.filter(o => o.type !== "record/output");
+    const live = streams.filter(o => o.state === "live").length;
+    this.destinations.textContent = !streams.length ? "No destinations" : live ? `${live} destination${live === 1 ? "" : "s"} live` : "Destinations connecting";
+    this.destinations.classList.toggle("live", live > 0);
+    this.recording.hidden = !outputs.some(o => o.type === "record/output" && o.state === "live");
     this.ad.hidden = !(s.ad && s.ad.on_air);
   }
 }

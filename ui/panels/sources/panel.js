@@ -17,9 +17,9 @@ import { registerAll } from "../../shell/commands.js";
 import { shell } from "../../shell/shell.js";
 import { toast, errorToast } from "../../shell/toast.js";
 import { confirmModal } from "../../shell/modal.js";
-import { openPicker } from "../../shell/picker.js";
+import { openPicker } from "../../shell/picker-loader.js";
 import { settings, setSetting, onSettingsChanged, GALLERY_MODES } from "../../shell/settings.js";
-import { AudioGestures, ScrubGestures } from "../../shell/fader.js";
+import { audioFor, ScrubGestures } from "../../shell/fader.js";
 import { addView, dropViews, takeMeters } from "../../shell/meter.js";
 import { sheetWidthFor } from "../../client/frames.js";
 import { SOURCE_KINDS, kindOfUri } from "../../client/kinds.js";
@@ -28,6 +28,7 @@ import { setLocal, nameOf } from "./local.js";
 import { settableOnly, setRequest } from "./setreq.js";
 import { emptyState } from "../../shell/firstrun.js";
 import { focusedScene, onFocusChanged } from "../../shell/focus.js";
+import { setWorkspaceActive } from "./workspace.js";
 
 const SCOPE_KEY = "gmx.sources.scope";
 
@@ -46,7 +47,7 @@ class SourcesPanel extends HTMLElement {
 
   setClient(client) {
     this.client = client;
-    this.audio = new AudioGestures(client);
+    this.audio = audioFor(client);
     this.scrub = new ScrubGestures(client);
   }
 
@@ -101,7 +102,7 @@ class SourcesPanel extends HTMLElement {
 
     this.offs = [
       this.client.onRender((s) => this.render(s)),
-      this.client.on("meters", (p) => takeMeters(p)),
+      this.client.on("meters", (p) => { if (this.workspaceActive !== false) takeMeters(p); }),
       this.client.on("position", (p) => this.scrub.take(p.source, p.position_ms, p.duration_ms)),
       onSettingsChanged((s, key) => {
         if (key === "gallery") {
@@ -110,7 +111,7 @@ class SourcesPanel extends HTMLElement {
         }
         if (key === "tileWidth" || key === "multiviewFps") this.retune();
       }),
-      on(document, "visibilitychange", () => this.retune()),
+      on(document, "visibilitychange", () => { this.retune(); this.refreshStills(!document.hidden); }),
       onFocusChanged(() => this.render(this.client.state)),
       this.client.on("event", ({ name }) => {
         // A scene edit never touches the mixer's own state, so nothing else
@@ -123,6 +124,7 @@ class SourcesPanel extends HTMLElement {
     this.io = new IntersectionObserver((entries) => {
       this.visible = entries.some((e) => e.isIntersecting);
       this.retune();
+      this.refreshStills(this.visible);
     }, { threshold: 0.01 });
     this.io.observe(this);
     this.visible = true;
@@ -132,7 +134,12 @@ class SourcesPanel extends HTMLElement {
     this.render(this.client.state);
   }
 
+  setWorkspaceActive(active) {
+    setWorkspaceActive(this, active);
+  }
+
   disconnectedCallback() {
+    clearInterval(this.stillTimer);
     for (const off of this.offs || []) off();
     this.offs = [];
     if (this.drag) this.drag.destroy();
@@ -193,6 +200,7 @@ class SourcesPanel extends HTMLElement {
 
   /** A scene changed under us. Debounced, because a drag is a patch a frame. */
   sceneChanged() {
+    if (this.workspaceActive === false) return;
     if (this.sceneTimer) return;
     this.sceneTimer = setTimeout(() => {
       this.sceneTimer = null;
@@ -211,6 +219,7 @@ class SourcesPanel extends HTMLElement {
   // ---------------------------------------------------------------- render
 
   render(s) {
+    if (this.workspaceActive === false) return;
     if (this.audio.busy || this.scrub.busy) {
       // Replacing a node mid drag ends the browser's pointer capture with no
       // way to resume, so the rebuild waits for the hand to come off.
@@ -340,6 +349,7 @@ class SourcesPanel extends HTMLElement {
    * mode releases the subscription entirely, which is the whole point.
    */
   retune() {
+    if (this.workspaceActive === false) return;
     const s = this.client.state;
     const positions = this.visible && !document.hidden && s.sources.some((source) => source.seekable);
     if (positions && !this.positionWant) this.positionWant = this.client.want("positions", true);
@@ -391,6 +401,7 @@ class SourcesPanel extends HTMLElement {
   refreshStills(force) {
     if (this.stillTimer) clearInterval(this.stillTimer);
     this.stillTimer = null;
+    if (this.workspaceActive === false || !this.visible || document.hidden) return;
     const still = [...this.tiles.entries()].filter(([id]) => this.mode(id) === "snapshot");
     if (!still.length) return;
     const load = () => {

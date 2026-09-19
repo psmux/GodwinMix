@@ -12,8 +12,9 @@ import { registerAll, register, addProtocolCommands } from "./commands.js";
 import { openSettings, settings, onSettingsChanged } from "./settings.js";
 import { initTheme } from "./theme.js";
 import { toast, errorToast } from "./toast.js";
-import { openPicker, pickFromDrop } from "./picker.js";
+import { openPicker, pickFromDrop } from "./picker-loader.js";
 import { modal } from "./modal.js";
+import { Workspace } from "./dock.js";
 
 /** Everything a panel might want that is not the client. One object, one import. */
 export const shell = {
@@ -50,29 +51,19 @@ export class GmxShell extends HTMLElement {
 
   /** Build every panel the layout names, in the slot it names. */
   mountPanels(client) {
-    for (const [slot, ids] of Object.entries(this.layout)) {
-      const host = this.slots[slot];
-      if (!host) continue;
-      for (const id of ids) {
-        if (this.mounted.has(id)) continue;
-        const made = registry.instantiate(id, client, {});
-        if (!made) continue;
-        host.appendChild(panelSection(id, made.node));
-        this.mounted.set(id, made);
-      }
-    }
-    // A panel that registered for a slot the layout does not mention, which is
-    // every plugin panel on a first run, goes into the first slot it declares.
     for (const spec of registry.list()) {
-      if (this.mounted.has(spec.id)) continue;
-      const slot = spec.slots.find((s) => this.slots[s]) || "sidebar";
+      const slot = spec.slots.find(s => s === "header" || s === "modal");
+      if (!slot || this.mounted.has(spec.id)) continue;
       const made = registry.instantiate(spec.id, client, {});
       if (!made) continue;
-      this.slots[slot].appendChild(panelSection(spec.id, made.node));
+      this.slots[slot].appendChild(made.node);
       this.mounted.set(spec.id, made);
-      this.layout = layout.place(this.layout, slot, spec.id);
     }
-    layout.save(this.layout);
+    if (!this.workspace) {
+      this.classList.add("has-workspace");
+      this.workspace = new Workspace(this, client, this.layout);
+    }
+    this.workspace.sync();
   }
 
   unmount(id) {
@@ -124,6 +115,8 @@ export async function mountShell(client, root) {
   shellCommands(client, node);
   shell.keymap.attach(window);
   connectionBanner(client);
+  // Notifications belong to the window, including when Alerts is closed.
+  client.on("alert", a => toast({ kind: a.severity, text: a.message, ms: a.severity === "info" ? 6000 : 12000 }));
   fileDrop(client);
   applyTileWidth();
   onSettingsChanged((s, key) => {
