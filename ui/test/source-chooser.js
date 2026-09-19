@@ -14,6 +14,10 @@ export async function sourceChooserTests(test, eq, ok) {
   const calls = [];
   const scenes = { itemAdd: async (...args) => calls.push(args), reread: async () => {}, undo: { record() {} } };
   const dialog = await openSceneSources(client, scenes, { id: 'wide', name: 'Wide', sources: [] });
+  test('scene source setup exposes cameras devices and files without a create step', () => {
+    const titles = [...dialog.el.querySelectorAll('[role="tab"]')].map(tab => tab.textContent);
+    ok(titles.includes('Cameras')); ok(titles.includes('Microphones and audio')); ok(titles.includes('Video and images'));
+  });
   [...dialog.el.querySelectorAll('[role="tab"]')].find(tab => tab.textContent.includes('Existing sources')).click();
   test('opening the source library requests no preview work', () => eq(wants, 0));
   dialog.el.querySelector('[aria-label="Preview Camera"]').click();

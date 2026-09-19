@@ -16,6 +16,7 @@
 // a rail for its own sake.
 
 import { el, clear, svg, on, fmtBytes } from "./dom.js";
+import { sourceFiles } from "./source-files.js";
 import { modal } from "./modal.js";
 import { toast, errorToast } from "./toast.js";
 import {
@@ -88,6 +89,7 @@ function openSourcePicker(client, kinds, plugins, opts) {
     created: new Map(),
   };
 
+  const files = sourceFiles(client, { onAdded: opts.onAdded });
   const search = el("input", {
     type: "search",
     placeholder: "Search everything",
@@ -122,7 +124,7 @@ function openSourcePicker(client, kinds, plugins, opts) {
   const m = modal({
     title: opts.title || "Add a source",
     body,
-    onClose: () => { closed = true; opts.existing?.deactivate(); opts.onClose?.(); },
+    onClose: () => { closed = true; files.destroy(); opts.existing?.deactivate(); opts.onClose?.(); },
     footer: [el("button.btn", { text: "Close", onclick: () => m.close() })],
     wide: true,
   });
@@ -165,6 +167,7 @@ function openSourcePicker(client, kinds, plugins, opts) {
     }
     if (cat.media) head.appendChild(el("button.btn", { text: "Rescan", onclick: () => loadMedia() }));
     panel.appendChild(head);
+    if (cat.media) panel.append(files.node);
 
     if (cat.plugin && !hasPlugin(state.plugins, cat.plugin.name)) {
       panel.appendChild(installBlock(cat));
@@ -212,7 +215,7 @@ function openSourcePicker(client, kinds, plugins, opts) {
     if (cat.media) {
       if (state.media === "looking") return "Reading the media library.";
       if (state.media === "failed") return state.mediaError || "The media library could not be read.";
-      return "Nothing in the media library yet. Drop a file on the window to upload one.";
+      return "Nothing in the media library yet. Browse files or drop a file on the window to upload one.";
     }
     return "";
   }
@@ -281,18 +284,17 @@ function openSourcePicker(client, kinds, plugins, opts) {
   /**
    * The file that is not in the library.
    *
-   * A page cannot open the mixer's file dialogue: the mixer is usually another
-   * machine and its disk is not this browser's. So Browse is the file kind's
-   * own form, with the path box in it.
+   * Browse files uploads from the browser. This separate path form is for a
+   * file that is already present on the mixer and needs no upload.
    */
   function browseEntry() {
     const kind = kinds.find((k) => k.id === "file") || kinds[0];
     return {
       icon: "file",
-      name: "A file somewhere else",
+      name: "A file already on the mixer",
       note: "A path on the machine the mixer runs on",
       open: kind || null,
-      label: "Browse",
+      label: "Enter path",
       added: () => false,
     };
   }
