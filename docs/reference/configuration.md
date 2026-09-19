@@ -85,9 +85,10 @@ want on a server you control. See
 
 ## `[media]`
 
-The ad clip library, on the machine running the mixer. The UI lists it, which
-is why it is a server side directory rather than a browser file picker: an
-operator in another city cannot hand the mixer a file from their own laptop.
+The media library, on the machine running the mixer. It lists video, audio and
+still images. Browser file selection uploads a copy into this directory before
+adding it as a source, including when the operator is on another machine.
+See [media upload](media-upload.md) for accepted formats and collision handling.
 
 | Key | Default | Meaning |
 |---|---|---|

@@ -17,10 +17,12 @@ use std::path::{Path, PathBuf};
 use std::time::SystemTime;
 use tracing::{debug, warn};
 
-/// Containers worth offering as an ad. Anything else in the directory is
-/// ignored rather than listed and then failing when someone clicks it.
+/// Common media containers and still images accepted by file sources.
+/// Actual decoding depends on the installed GStreamer plugins.
 const EXTENSIONS: &[&str] = &[
     "mp4", "mov", "m4v", "mkv", "webm", "avi", "ts", "mpg", "mpeg", "flv", "wmv",
+    "mp3", "wav", "wave", "flac", "ogg", "oga", "opus", "m4a", "aac", "aiff", "aif",
+    "png", "jpg", "jpeg", "bmp", "gif", "webp", "tif", "tiff",
 ];
 
 #[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
@@ -337,14 +339,14 @@ pub fn safe_upload_name(raw: &str) -> Result<String> {
     anyhow::ensure!(!name.is_empty(), "an upload needs a file name");
     anyhow::ensure!(name.len() <= 200, "that file name is too long");
     anyhow::ensure!(
-        !name.contains(['/', '\\', '\0']) && name != "." && name != "..",
-        "a file name is one segment: no slashes, no ..",
+        !name.contains(['/', '\\', '\0', ':']) && name != "." && name != "..",
+        "a file name is one segment: no slashes, colons or ..",
     );
     anyhow::ensure!(!name.starts_with('.'), "a name starting with a dot is hidden from the library");
     anyhow::ensure!(!name.chars().any(|c| c.is_control()), "a file name cannot contain control characters");
     anyhow::ensure!(
         is_media(Path::new(name)),
-        "only video containers are accepted here: {}",
+        "choose a supported video, audio or image file: {}",
         EXTENSIONS.join(", "),
     );
     Ok(name.to_string())
@@ -356,13 +358,16 @@ mod tests {
 
     #[test]
     fn an_upload_name_is_one_segment_with_a_known_extension() {
-        assert!(safe_upload_name("clip.mp4").is_ok());
+        for name in ["clip.mp4", "sound.wav", "track.MP3", "photo.png", "still.JPEG"] {
+            assert!(safe_upload_name(name).is_ok(), "{name}");
+        }
         assert!(safe_upload_name("  Sting.MOV  ").is_ok(), "trimmed and case insensitive");
         assert!(safe_upload_name("../clip.mp4").is_err());
+        assert!(safe_upload_name("clip.mp4:other.mp4").is_err());
         assert!(safe_upload_name("a/b.mp4").is_err(), "no subdirectories on upload");
         assert!(safe_upload_name("a\\b.mp4").is_err());
         assert!(safe_upload_name(".hidden.mp4").is_err());
-        assert!(safe_upload_name("notes.txt").is_err(), "not a video container");
+        assert!(safe_upload_name("notes.txt").is_err(), "not a supported media file");
         assert!(safe_upload_name("").is_err());
     }
 
