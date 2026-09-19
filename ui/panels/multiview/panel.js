@@ -103,7 +103,7 @@ class ProgramPanel extends HTMLElement {
 
   disconnectedCallback() {
     clearInterval(this.frameTimer);
-    cancelAnimationFrame(this.resizeFrame);
+    clearTimeout(this.resizeTimer);
     for (const off of this.offs || []) off();
     this.offs = [];
     if (this.ro) this.ro.disconnect();
@@ -125,8 +125,12 @@ class ProgramPanel extends HTMLElement {
   }
 
   scheduleRetune() {
-    if (this.resizeFrame) return;
-    this.resizeFrame = requestAnimationFrame(() => { this.resizeFrame = null; this.retune(); });
+    if (!this.visible || this.workspaceActive === false || document.hidden) {
+      this.retune();
+      return;
+    }
+    clearTimeout(this.resizeTimer);
+    this.resizeTimer = setTimeout(() => { this.resizeTimer = null; this.retune(); }, 150);
   }
 
   retune() {
@@ -144,7 +148,8 @@ class ProgramPanel extends HTMLElement {
 
     const box = this.canvas.getBoundingClientRect();
     const cols = (s.multiview && s.multiview.cols) || 1;
-    const width = sheetWidthFor(box.width || 640, cols);
+    // State flushes during dragging must not renegotiate an intermediate size.
+    const width = this.resizeTimer && this.want ? this.lastWidth : sheetWidthFor(box.width || 640, cols);
     const fps = settings().multiviewFps;
     if (!this.want) this.want = this.client.want("multiview", { fps, width });
     else if (width !== this.lastWidth || fps !== this.lastFps) this.want.update({ fps, width });
@@ -156,7 +161,7 @@ class ProgramPanel extends HTMLElement {
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
     const w = Math.round((box.width || 640) * dpr);
     const h = Math.round((w * 9) / 16);
-    if (w > 0 && (this.canvas.width !== w || this.canvas.height !== h)) {
+    if (!this.resizeTimer && w > 0 && (this.canvas.width !== w || this.canvas.height !== h)) {
       this.canvas.width = w;
       this.canvas.height = h;
     }
@@ -183,7 +188,7 @@ class ProgramPanel extends HTMLElement {
     const box = this.previewCanvas.getBoundingClientRect();
     const fps = settings().multiviewFps;
     // One picture rather than a sheet, so one cell across.
-    const width = sheetWidthFor(box.width || 320, 1);
+    const width = this.resizeTimer && this.previewWant ? this.lastPreviewWidth : sheetWidthFor(box.width || 320, 1);
     if (!this.previewWant) this.previewWant = this.client.want("preview", { fps, width });
     else if (width !== this.lastPreviewWidth || fps !== this.lastPreviewFps) {
       this.previewWant.update({ fps, width });
@@ -194,7 +199,7 @@ class ProgramPanel extends HTMLElement {
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
     const w = Math.round((box.width || 320) * dpr);
     const h = Math.round((w * 9) / 16);
-    if (w > 0 && (this.previewCanvas.width !== w || this.previewCanvas.height !== h)) {
+    if (!this.resizeTimer && w > 0 && (this.previewCanvas.width !== w || this.previewCanvas.height !== h)) {
       this.previewCanvas.width = w;
       this.previewCanvas.height = h;
     }
@@ -213,6 +218,8 @@ class ProgramPanel extends HTMLElement {
   }
 
   release() {
+    clearTimeout(this.resizeTimer);
+    this.resizeTimer = null;
     if (this.want) {
       this.want.release();
       this.want = null;
