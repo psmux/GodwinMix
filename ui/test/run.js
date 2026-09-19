@@ -653,7 +653,7 @@ test("a method that takes nothing still gets an empty form, not a broken one", (
  * whose plugin is missing offers to install it rather than naming a command.
  */
 async function addSourcePickerSuite() {
-  const { openPicker } = await import("../shell/picker.js");
+  const { openPicker } = await import("../shell/picker-loader.js");
   const kinds = await import("../client/kinds.js");
 
   /** A client that answers from a table and remembers what it was asked. */
@@ -922,7 +922,7 @@ async function addSourcePickerSuite() {
 async function scopedSourcesSuite() {
   window.godwinmixPanels = window.godwinmixPanels || [];
   const { default: SourcesPanel } = await import("../panels/sources/panel.js");
-  const { openForm } = await import("../shell/picker.js");
+  const { openForm } = await import("../shell/picker-loader.js");
   const { setFocusedScene } = await import("../shell/focus.js");
   const { setSetting } = await import("../shell/settings.js");
 

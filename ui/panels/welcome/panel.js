@@ -12,7 +12,7 @@
 import { el } from "../../shell/dom.js";
 import { errorToast } from "../../shell/toast.js";
 import { modal } from "../../shell/modal.js";
-import { openPicker } from "../../shell/picker.js";
+import { openPicker } from "../../shell/picker-loader.js";
 import { pluginSourceFor, listPlugins, hasPlugin } from "../../client/kinds.js";
 import { applyCoreDefaults, forgetPreset } from "./defaults.js";
 

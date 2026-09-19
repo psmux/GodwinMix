@@ -12,7 +12,7 @@ import { registerAll, register, addProtocolCommands } from "./commands.js";
 import { openSettings, settings, onSettingsChanged } from "./settings.js";
 import { initTheme } from "./theme.js";
 import { toast, errorToast } from "./toast.js";
-import { openPicker, pickFromDrop } from "./picker.js";
+import { openPicker, pickFromDrop } from "./picker-loader.js";
 import { modal } from "./modal.js";
 import { Workspace } from "./dock.js";
 

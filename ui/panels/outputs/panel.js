@@ -16,7 +16,10 @@ import { errorToast, toast } from "../../shell/toast.js";
 import { registerAll } from "../../shell/commands.js";
 import { settings } from "../../shell/settings.js";
 import { startRecording, recordingRow, isRecording } from "./recording.js";
-import { addDestination, editDestination } from "./destination.js";
+// Destination setup is needed only when adding or editing an output.
+import { lazyAction } from "../../shell/lazy-action.js";
+const addDestination = lazyAction(() => import("./destination.js").then(m => m.addDestination), "Add destination");
+const editDestination = lazyAction(() => import("./destination.js").then(m => m.editDestination), "Edit destination");
 
 /** The state of one destination, in words that say what to do about it. */
 export function stateLabel(output) {

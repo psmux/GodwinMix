@@ -19,9 +19,11 @@ export function initial(layout) {
   const program = ids.includes('core/program') ? ['core/program'] : [];
   const scenes = ids.filter(id => ['core/scenes', 'core/sources'].includes(id));
   const other = ids.filter(id => !program.includes(id) && !scenes.includes(id));
-  const controls = scenes.length > 1 ? { axis: 'x', ratio: .5, a: leaf([scenes[0]]), b: leaf(scenes.slice(1)) } : leaf(scenes);
-  const center = program.length ? { axis: 'y', ratio: .65, a: leaf(program), b: controls } : controls;
-  return clean({ axis: 'x', ratio: .72, a: center, b: leaf(other) });
+  const sources = scenes.filter(id => id === 'core/sources');
+  const sceneList = scenes.filter(id => id !== 'core/sources');
+  const desk = { axis: 'x', ratio: .65, a: leaf(sources), b: leaf(other) };
+  const controls = { axis: 'x', ratio: .2, a: leaf(sceneList), b: desk };
+  return clean(program.length ? { axis: 'y', ratio: .6, a: leaf(program), b: controls } : controls);
 }
 export function load(layout) {
   try {

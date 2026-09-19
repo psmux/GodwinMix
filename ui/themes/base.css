@@ -530,3 +530,12 @@ gmx-program .monitor-pane canvas { flex: 0 0 auto; }
 .audio-channel input { width: 100%; accent-color: var(--accent); }
 .audio-channel.muted .meter { opacity: .4; }
 .audio-channel [aria-pressed="true"] { color: var(--warn); }
+/* Keep studio controls reachable when the monitor dock is resized. */
+@media (min-width: 761px) {
+  .dock-frame[data-dock-panel="core/program"] .dock-content { overflow: hidden; }
+  .dock-content > gmx-program { display: flex !important; flex-direction: column; height: 100%; min-height: 0; }
+  .dock-content > gmx-program .monitor-stage { flex: 1 1 auto; min-height: 0; overflow: auto; }
+  .dock-content > gmx-program .monitor-pane { min-height: 120px; flex: 1 1 0; }
+  .dock-content > gmx-program .monitor-pane canvas { flex: 1 1 auto; min-height: 0; height: 100%; max-height: none; }
+  .dock-content > gmx-program .monitor-controls { flex: 0 0 auto; }
+}

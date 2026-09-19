@@ -17,7 +17,7 @@ import { registerAll } from "../../shell/commands.js";
 import { shell } from "../../shell/shell.js";
 import { toast, errorToast } from "../../shell/toast.js";
 import { confirmModal } from "../../shell/modal.js";
-import { openPicker } from "../../shell/picker.js";
+import { openPicker } from "../../shell/picker-loader.js";
 import { settings, setSetting, onSettingsChanged, GALLERY_MODES } from "../../shell/settings.js";
 import { audioFor, ScrubGestures } from "../../shell/fader.js";
 import { addView, dropViews, takeMeters } from "../../shell/meter.js";
