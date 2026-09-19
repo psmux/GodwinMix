@@ -49,6 +49,7 @@ const ASSETS: &[(&str, &str)] = &[
     ("kits/canvas/gizmos.js", include_str!("../../../ui/kits/canvas/gizmos.js")),
     ("kits/canvas/safe.js", include_str!("../../../ui/kits/canvas/safe.js")),
     ("kits/canvas/snap.js", include_str!("../../../ui/kits/canvas/snap.js")),
+    ("kits/protocol/source-membership.js", include_str!("../../../ui/kits/protocol/source-membership.js")),
     ("kits/protocol/index.js", include_str!("../../../ui/kits/protocol/index.js")),
     ("kits/protocol/mirror.js", include_str!("../../../ui/kits/protocol/mirror.js")),
     ("kits/protocol/predict.js", include_str!("../../../ui/kits/protocol/predict.js")),

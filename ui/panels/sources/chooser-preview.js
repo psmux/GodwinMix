@@ -15,6 +15,8 @@ export function sourcePreview(client) {
     if (want) want.release();
     detach = want = null;
     cell = width = null;
+    canvas.getContext("2d").clearRect(0, 0, canvas.width, canvas.height);
+    canvas.hidden = true;
   }
   function render(state) {
     const source = (state.sources || []).find(s => s.id === selected);
@@ -33,7 +35,7 @@ export function sourcePreview(client) {
       detach = source.cell == null ? null : client.sheet.attach(canvas, source.cell);
       cell = source.cell;
     }
-    canvas.hidden = false;
+    canvas.hidden = source.cell == null;
     note.textContent = source.cell == null ? 'Waiting for a preview picture.' : 'Preview only. The programme is unchanged.';
   }
   function select(source) {
