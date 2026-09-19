@@ -291,6 +291,19 @@ and Apple silicon refuses to load a library that claims to be signed and is
 not. That is what lets the same tree work inside `/Applications` without any
 `DYLD_LIBRARY_PATH`.
 
+Linux libraries retain the SONAME requested by their importers, including
+versioned aliases. Copying only the resolved filename would leave the bundle
+loading a system library or failing on a clean machine.
+
+Windows and Linux bundles remove debug sections before measuring the budget.
+Windows needs `rustup component add llvm-tools`; Linux needs binutils. Set
+`GST_STRIP` to an explicit compatible stripping tool if necessary. Exported
+symbols and code remain in the runtime, and the element checks still run.
+The 130 MB runtime budget has not changed. A distribution FFmpeg can pull in
+large optional libraries through `libavfilter`; stripping symbols alone does
+not guarantee that a Linux runtime fits. A failing budget is still a release
+blocker, not a reason to publish an incomplete dependency tree.
+
 ### Measured
 
 Homebrew GStreamer 1.28.7 on an Apple M4 Pro, trimmed:

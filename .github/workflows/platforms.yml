@@ -72,6 +72,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: llvm-tools
       - uses: Swatinem/rust-cache@v2
         with:
           key: platforms-${{ matrix.platform }}
@@ -174,6 +176,10 @@ jobs:
         if: runner.os == 'Windows'
         shell: pwsh
         run: ./dev/smoke.ps1
+
+      - name: Packaging regression tests
+        shell: bash
+        run: python3 -m unittest discover -s dev -p test_gst_trim.py
 
       # --------------------------------------------- 3. the bundled runtime --
 
