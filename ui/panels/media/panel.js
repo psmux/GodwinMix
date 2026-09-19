@@ -78,6 +78,17 @@ class MediaPanel extends HTMLElement {
     this.load();
   }
 
+  setWorkspaceActive(active) {
+    this.workspaceActive = active;
+    if (!active) {
+      clearTimeout(this.soon);
+      this.soon = null;
+      return;
+    }
+    this.paintAd();
+    this.load();
+  }
+
   disconnectedCallback() {
     for (const off of this.offs || []) off();
     this.offs = [];
@@ -86,12 +97,14 @@ class MediaPanel extends HTMLElement {
   }
 
   loadSoon() {
+    if (this.workspaceActive === false) return;
     // A conversion sends one event per percent. Coalesce.
     if (this.soon) clearTimeout(this.soon);
     this.soon = setTimeout(() => this.load(), REFRESH_MS);
   }
 
   async load() {
+    if (this.workspaceActive === false) return;
     try {
       const listing = await this.client.call("media.list", {});
       this.items = listing.items || [];
@@ -203,6 +216,7 @@ class MediaPanel extends HTMLElement {
   }
 
   paintAd() {
+    if (this.workspaceActive === false) return;
     const ad = this.client.state.ad;
     this.hint.textContent = ad
       ? ad.on_air

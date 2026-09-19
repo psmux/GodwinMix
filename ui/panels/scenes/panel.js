@@ -146,6 +146,12 @@ class ScenesPanel extends HTMLElement {
     this.render();
   }
 
+  setWorkspaceActive(active) {
+    this.workspaceActive = active;
+    // Sources shares this mirror; only the hidden surface stops painting.
+    if (active) this.render();
+  }
+
   disconnectedCallback() {
     for (const off of this.offs || []) off();
     this.offs = [];
@@ -156,6 +162,7 @@ class ScenesPanel extends HTMLElement {
   // ---------------------------------------------------------------- render
 
   render() {
+    if (this.workspaceActive === false) return;
     const list = this.scenes.scenes();
     this.count.textContent = list.length ? String(list.length) : "";
     this.hint.hidden = false;
@@ -298,6 +305,7 @@ class ScenesPanel extends HTMLElement {
 
   /** The red frame on air and the amber one armed, from the core's own view. */
   paintTally() {
+    if (this.workspaceActive === false) return;
     // The live scene is `scene`; `program` carries a source id when the
     // programme is a single source, which is a one item scene's shorthand.
     const program = this.client.state.scene || this.client.state.program;
