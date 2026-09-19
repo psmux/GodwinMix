@@ -1,5 +1,41 @@
 # Where GodwinMix stands
 
+## Current implementation, 2026-09-20
+
+The broadcast workspace now has draggable split panes, grouped tabs, keyboard
+layout controls, saved workspaces and JSON import and export. Narrow screens
+stack the panes without replacing the saved desktop arrangement. Trusted panels
+can preserve local controls while suspending preview work through the documented
+`setWorkspaceActive` hook. Moving or resizing a pane keeps its instance alive.
+
+The studio surface has Preview and Programme, Cut and timed Fade controls, a
+dockable audio desk, destination status and local MP4 or Matroska recording.
+Recording uses the existing encoder through the public output contract. A new
+file is reserved on each start, and normal shutdown waits for file finalization.
+Real media tests cover decoding completed files and adding or removing a
+recording while the mixer continues running.
+
+The source restart path now restores programme frames after recovery. Retired
+compositor slots no longer impose the reproducible roughly 50 ms stall. Preview
+queues are bounded by frame count; ten minute stress runs have stable resident
+memory, thread counts and descriptor counts. The strict 34 ms timing gate still
+has occasional small misses. An intermittent slow preview subscription is also
+under investigation against the integrated startup ordering fix. These are open
+release checks, not a clean endurance result.
+
+This is a stronger foundation for an OBS alternative, but it is not yet a claim
+of production parity with OBS, Wirecast or vMix. Native installer and endurance
+validation must finish before a release is recommended for unattended shows.
+The desktop bundles are not published. The capture, graphics and other product
+limitations documented below and in the README still need to be considered for
+a particular show.
+
+See [Customize the workspace](docs/how-to/customize-the-workspace.md),
+[Workspace layout](docs/reference/workspace-layout.md), and
+[Recording](docs/reference/recording.md) for the shipped contracts.
+
+## Earlier handoff and investigation record
+
 Written 2026-09-15 at the v0.2.0 tag. Read this first if you are picking the
 work up fresh. The product requirements live outside this repository, in the
 private `~/workspace/modulargodwinmix` (remote `psmux/modulargodwinmix`), and
