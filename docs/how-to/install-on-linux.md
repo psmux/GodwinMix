@@ -1,5 +1,9 @@
 # Install on Linux
 
+No public installers are published yet. Use the source build instructions in
+[CONTRIBUTING.md](../../CONTRIBUTING.md) for now. The installer instructions
+below apply once a validated release is available.
+
 Three ways in, depending on what you are doing: the `.deb` on a desktop that
 runs Debian or Ubuntu, the AppImage on anything else, and the plain binary or
 the container on a server with no screen.

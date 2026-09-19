@@ -1,5 +1,9 @@
 # Install on macOS
 
+No public installers are published yet. Use the source build instructions in
+[CONTRIBUTING.md](../../CONTRIBUTING.md) for now. The installer instructions
+below apply once a validated release is available.
+
 Open the disk image, drag the app to Applications, right click it the first
 time. The media stack travels inside the app, so there is nothing else to
 install.

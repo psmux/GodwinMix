@@ -1,5 +1,9 @@
 # Install on Windows
 
+No public installers are published yet. Use the source build instructions in
+[CONTRIBUTING.md](../../CONTRIBUTING.md) for now. The installer instructions
+below apply once a validated release is available.
+
 Download the installer, run it, click past the warning, open the app. There is
 nothing else to install: the media stack travels inside the app.
 

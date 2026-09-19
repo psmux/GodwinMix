@@ -64,10 +64,11 @@ TLS, and the firewall, before that port is reachable from anywhere else.
 
 ### The desktop app
 
-Download the installer for your platform from the
-[latest release](https://github.com/psmux/GodwinMix/releases/latest): `.dmg` on
-macOS, `.msi` on Windows, `.deb` on Debian and Ubuntu. Every tag builds all
-three.
+Desktop installers are not published yet. Build from source using
+[CONTRIBUTING.md](CONTRIBUTING.md). The release workflow produces `.dmg` on
+macOS, `.msi` on Windows and `.deb` on Debian and Ubuntu when its checks pass.
+Published artifacts will appear on the
+[releases page](https://github.com/psmux/GodwinMix/releases).
 
 GStreamer travels inside the Windows and macOS installers and inside the
 AppImage, trimmed to what the codec catalogue and the pipelines actually name,
@@ -309,9 +310,9 @@ gmx ctl golive https://example.com/event/42 --rtmp rtmp://a.rtmp.youtube.com/liv
 
 The whole surface is in [docs/reference/http-api.md](docs/reference/http-api.md)
 and every `ctl` subcommand is in [docs/reference/cli.md](docs/reference/cli.md).
-A generated `protocol.md` and `openapi.json` are planned, from
-`godwinmix --api-info`, so that reference is produced from the code rather than
-typed twice.
+Generate the current contract with `godwinmix --api-info --markdown` or
+`godwinmix --api-info --openapi`. Plain `--api-info` returns the protocol as
+JSON. These descriptions come from the same method registry as the server.
 
 ## For developers
 
