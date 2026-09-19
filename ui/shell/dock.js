@@ -1,7 +1,8 @@
 import { el } from './dom.js';
 import * as model from './dock-model.js';
 import * as registry from './registry.js';
-import { gestures, splitter } from './dock-pointer.js';
+import { gestures } from './dock-pointer.js';
+import { positionWorkspace } from './dock-geometry.js';
 import { workspaceMenu, panelMenu } from './dock-menu.js';
 
 export class Workspace {
@@ -14,7 +15,7 @@ export class Workspace {
     this.root = el('section.dock-workspace', { 'aria-label': 'Broadcast workspace' });
     this.toolbar = el('nav.dock-toolbar', { 'aria-label': 'Workspace controls' }, [
       el('span', { text: 'WORKSPACE' }),
-      el('button', { text: 'Panels and layout', onclick: () => workspaceMenu(this) }),
+      el('button.btn.sm', { text: 'Panels and layout', onclick: () => workspaceMenu(this) }),
       el('span.dock-hint', { text: 'Drag a panel title to split or group. Use its menu for keyboard controls.' }),
     ]);
     host.append(this.toolbar, this.root);
@@ -24,10 +25,17 @@ export class Workspace {
     this.root.append(this.live);
   }
   sync() {
+    for (const spec of registry.list()) {
+      if (!spec.slots.some(s => s === 'header' || s === 'modal')) continue;
+      this.state.tree = model.remove(this.state.tree, spec.id);
+      this.state.hidden = this.state.hidden.filter(id => id !== spec.id);
+    }
     const known = new Set([...model.leaves(this.state.tree).flatMap(n => n.tabs), ...this.state.hidden]);
     for (const spec of registry.list()) {
       if (spec.slots.includes('header') || spec.slots.includes('modal') || known.has(spec.id)) continue;
-      this.state.tree = this.state.tree ? { axis: 'x', ratio: .75, a: this.state.tree, b: model.leaf([spec.id]) } : model.leaf([spec.id]);
+      const utility = model.leaves(this.state.tree).find(n => n.tabs.includes('core/outputs'));
+      if (utility) utility.tabs.push(spec.id);
+      else this.state.tree = this.state.tree ? { axis: 'x', ratio: .75, a: this.state.tree, b: model.leaf([spec.id]) } : model.leaf([spec.id]);
     }
     this.render();
   }
@@ -53,6 +61,8 @@ export class Workspace {
     }
     for (const group of groups) {
       const id = group.active;
+      const stale = this.frames.get(id);
+      if (stale?.made.unavailable && registry.get(id)) { stale.made.destroy(); stale.element.remove(); this.frames.delete(id); }
       if (!this.frames.has(id)) this.create(id);
       const frame = this.frames.get(id);
       if (!frame) continue;
@@ -80,8 +90,10 @@ export class Workspace {
     this.frames.get(id)?.tabs.querySelector('[aria-selected="true"]')?.focus();
   }
   create(id) {
-    const made = registry.instantiate(id, this.client, {});
-    if (!made) return;
+    const made = registry.instantiate(id, this.client, {}) || {
+      node: el('p.dim.pad', { text: 'This panel is unavailable. Reload plugin panels or close it here.' }),
+      unavailable: true, destroy() { this.node.remove(); },
+    };
     const title = registry.get(id)?.title || id;
     const handle = el('button.dock-handle', { text: title, title: 'Drag to dock ' + title, 'aria-label': 'Move ' + title });
     const tabs = el('div.dock-tabs', { role: 'tablist', 'aria-label': title + ' group' });
@@ -95,24 +107,9 @@ export class Workspace {
     gestures(this, handle, id);
   }
   position() {
-    const box = { x: 0, y: 0, w: this.root.clientWidth, h: this.root.clientHeight };
-    const result = model.rectangles(this.state.tree, box);
-    for (const rect of result.panels) {
-      const frame = this.frames.get(rect.node.active);
-      if (frame) place(frame.element, rect);
-    }
-    const current = new Set(result.splits.map(r => r.node));
-    for (const [tree, entry] of this.splits) {
-      if (!current.has(tree)) { entry.element.remove(); this.splits.delete(tree); }
-    }
-    for (const rect of result.splits) {
-      let entry = this.splits.get(rect.node);
-      if (!entry) { entry = { element: splitter(this, rect), rect }; this.splits.set(rect.node, entry); }
-      Object.assign(entry.rect, rect);
-      place(entry.element, rect);
-      entry.element.setAttribute('aria-valuenow', Math.round(rect.node.ratio * 100));
-    }
+    positionWorkspace(this);
   }
+
   move(id, target, edge) {
     this.state.tree = model.dock(this.state.tree, id, target, edge);
     this.live.textContent = `${registry.get(id)?.title || id} moved ${edge === 'center' ? 'into group' : 'to ' + edge}`;
