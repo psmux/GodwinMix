@@ -323,6 +323,11 @@ releases; it does not run an installer into a temporary directory.
 
 ### Measured
 
+The latest [runtime measurements](../explanation/footprint.md#packaged-media-runtimes)
+are 111.7 MiB on Windows, 127.1 MiB on Linux and 84.5 MiB on macOS, with runtime
+versions and validation limits recorded beside each result. The table below
+is the earlier macOS baseline.
+
 Homebrew GStreamer 1.28.7 on an Apple M4 Pro, trimmed:
 
 | | Plugins | Libraries | Size |
