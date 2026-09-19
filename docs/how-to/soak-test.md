@@ -137,6 +137,8 @@ Set `GODWINMIX_SOAK_BIN_DIR` to a directory containing the release `gmx` and
 `godwinmix` executables to skip compilation. This is useful when testing an
 isolated build while another checkout uses the shared Cargo target directory.
 Without that override, the script builds normally and respects `CARGO_TARGET_DIR`.
+Set `GODWINMIX_SOAK_COMMIT` to the revision of a prebuilt binary. Otherwise the
+record uses the checkout revision captured before the run begins.
 
 Do not attach a heap scanner during a run used to judge frame timing. The macOS
 `leaks` tool suspends the process while inspecting it, which creates an artificial
@@ -146,3 +148,14 @@ Preview branches retain at most two pending buffers. Those queues sit before
 thumbnail scaling, where a full second of canvas frames can occupy hundreds of
 megabytes. A reopened thumbnail also starts at the first arriving timestamp,
 without duplicating the source's history from the start of its segment.
+
+A retired compositor slot receives EOS after its local flush. Otherwise the
+compositor waits for the empty input's first frame again. Rebinding sends a new
+stream-start event, which lets that slot carry its next source. The dedicated
+`source_churn_keeps_the_sixty_frame_programme_budget` test exercises this with
+repeated source replacement. Run it alone in an optimized build because it
+measures wall clock timing:
+
+```sh
+cargo test --profile ci -p godwinmix-core --lib source_churn_keeps_the_sixty_frame_programme_budget -- --ignored --test-threads=1 --nocapture
+```
