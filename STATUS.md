@@ -7,6 +7,13 @@ layout controls, saved workspaces and JSON import and export. Narrow screens
 stack the panes without replacing the saved desktop arrangement. Trusted panels
 can preserve local controls while suspending preview work through the documented
 `setWorkspaceActive` hook. Moving or resizing a pane keeps its instance alive.
+Stream resolution changes wait 150 ms after resizing settles; geometry moves
+immediately.
+
+Sources are selected from each scene through a large + tile. Its chooser can
+reuse existing sources, preview one on demand, or create a new source. There is
+no All sources tab. Removing a source from a scene keeps the mixer source for
+reuse. Scenes and Sources share a client model independent of dock visibility.
 
 The studio surface has Preview and Programme, Cut and timed Fade controls, a
 dockable audio desk, destination status and local MP4 or Matroska recording.
@@ -18,14 +25,21 @@ recording while the mixer continues running.
 The source restart path now restores programme frames after recovery. Retired
 compositor slots no longer impose the reproducible roughly 50 ms stall. Preview
 queues are bounded by frame count; ten minute stress runs have stable resident
-memory, thread counts and descriptor counts. The strict 34 ms timing gate still
-has occasional small misses. An intermittent slow preview subscription is also
-under investigation against the integrated startup ordering fix. These are open
-release checks, not a clean endurance result.
+memory, thread counts and descriptor counts. A second timestamp offset that
+stalled later test sources is fixed, as is a preview backdrop teardown error
+seen when resizing. The integrated three minute run completed 36 rounds with
+0.05 percent RSS growth, flat thread and descriptor counts, and a slowest
+preview subscription of 317 ms. The strict timing gate still fails at
+34.028375 ms against 34 ms. One negotiation warning remains. Full one hour and
+cross platform endurance acceptance are outstanding; the exact evidence is in
+[the reliability record](bench/results/reliability-2026-09-19.md).
 
 This is a stronger foundation for an OBS alternative, but it is not yet a claim
 of production parity with OBS, Wirecast or vMix. Native installer and endurance
 validation must finish before a release is recommended for unattended shows.
+Trimmed runtime checks pass at 84.5 MiB on macOS, 127.1 MiB on Linux and
+111.7 MiB on Windows. These are runtime measurements, not installer sizes;
+[the footprint record](docs/explanation/footprint.md) names the tested versions.
 The desktop bundles are not published. The capture, graphics and other product
 limitations documented below and in the README still need to be considered for
 a particular show.

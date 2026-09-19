@@ -6,13 +6,15 @@ export async function sourceChooserTests(test, eq, ok) {
   let wants = 0, releases = 0, attached = 0, detached = 0;
   const client = {
     state: { sources: [{ id: 'cam', name: 'Camera', cell: 0, has_video: true }], multiview: { enabled: true, cols: 1 } },
+    call: async method => method === 'plugin.list' ? { plugins: [] } : method === 'device.discover' ? { candidates: [] } : method === 'media.list' ? { items: [] } : {},
     onRender(fn) { listeners.add(fn); return () => listeners.delete(fn); },
     want() { wants++; return { update() {}, release() { releases++; } }; },
     sheet: { attach() { attached++; return () => detached++; } },
   };
   const calls = [];
   const scenes = { itemAdd: async (...args) => calls.push(args), reread: async () => {}, undo: { record() {} } };
-  const dialog = openSceneSources(client, scenes, { id: 'wide', name: 'Wide', sources: [] });
+  const dialog = await openSceneSources(client, scenes, { id: 'wide', name: 'Wide', sources: [] });
+  [...dialog.el.querySelectorAll('[role="tab"]')].find(tab => tab.textContent.includes('Existing sources')).click();
   test('opening the source library requests no preview work', () => eq(wants, 0));
   dialog.el.querySelector('[aria-label="Preview Camera"]').click();
   test('preview is explicit and attaches only the selected source', () => { eq(wants, 1); eq(attached, 1); });

@@ -1,14 +1,13 @@
 import { el, clear } from '../../shell/dom.js';
-import { modal } from '../../shell/modal.js';
 import { errorToast } from '../../shell/toast.js';
-import { openPicker } from '../../shell/picker-loader.js';
+import { openPicker } from '../../shell/picker.js';
 import { nameOf } from './local.js';
 import { sourcePreview } from './chooser-preview.js';
 
 /** Reuse a mixer source in a scene without creating another capture pipeline. */
-export function openSceneSources(client, scenes, scene) {
+export async function openSceneSources(client, scenes, scene) {
   const preview = sourcePreview(client);
-  const search = el('input', { type: 'search', placeholder: 'Find a source', 'aria-label': 'Find an available source' });
+  let query = '';
   const list = el('div.source-chooser-list', { role: 'list', 'aria-label': 'Available sources' });
   const added = new Set(scene.sources || []);
   const pending = new Set();
@@ -40,29 +39,25 @@ export function openSceneSources(client, scenes, scene) {
   function render(force = false) {
     if (closed) return;
     const sources = client.state.sources || [];
-    const next = sources.map(s => `${s.id}/${nameOf(s)}/${s.state}`).join('|') + search.value;
+    const next = sources.map(s => `${s.id}/${nameOf(s)}/${s.state}`).join('|') + query;
     if (!force && next === signature) return;
     signature = next;
-    const query = search.value.trim().toLowerCase();
     const shown = sources.filter(s => `${nameOf(s)} ${s.id} ${s.type || ''}`.toLowerCase().includes(query));
     clear(list);
     list.append(...shown.map(row));
-    if (!shown.length) list.append(el('p.dim', { text: query ? 'No matching sources.' : 'No sources yet. Create one to add it to this scene.' }));
+    if (!shown.length) list.append(el('p.dim', { text: query ? 'No matching sources.' : 'No existing sources. Choose a camera, device or file from the categories.' }));
   }
-  search.oninput = () => render(true);
-  const create = el('button.btn.primary', { text: 'Create new source', onclick: () => {
-    dialog.close();
-    openPicker(client, 'source', { onAdded: source => add(source).catch(error => errorToast(error, `Source created, but could not add it to ${scene.name}. Open Add sources to retry`)) });
-  } });
   const body = el('div.source-chooser', {}, [
-    el('div.col.source-chooser-library', {}, [search, list]), preview.node,
+    el('div.col.source-chooser-library', {}, [list]), preview.node,
   ]);
   const off = client.onRender(() => render());
-  const dialog = modal({ title: `Add sources to ${scene.name}`, wide: true, body,
-    footer: [create, el('button.btn', { text: 'Done', onclick: () => dialog.close() })],
-    onClose: () => { closed = true; off(); preview.destroy(); },
-  });
-  render(true);
-  search.focus();
-  return dialog;
+  const close = () => { closed = true; off(); preview.destroy(); };
+  try {
+    return await openPicker(client, 'source', {
+      title: `Add sources to ${scene.name}`, category: 'cameras',
+      existing: { node: body, draw(value) { query = value.trim().toLowerCase(); render(true); }, deactivate() { preview.select(null); } },
+      contains: source => added.has(source.id) || (scenes.summary?.(scene.id)?.sources || []).includes(source.id),
+      onExisting: add, onAdded: add, onClose: close,
+    });
+  } catch (error) { close(); throw error; }
 }

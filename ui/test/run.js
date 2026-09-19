@@ -1920,7 +1920,8 @@ async function liveSuite() {
     eq(addedView.records.filter((record) => record.kind === "item").length, 1);
   });
   const { openSceneSources } = await import("../panels/sources/chooser.js");
-  const choose = openSceneSources(client, panel.scenes, panel.scenes.summary(addCheck.id));
+  const choose = await openSceneSources(client, panel.scenes, panel.scenes.summary(addCheck.id));
+  [...choose.el.querySelectorAll('[role="tab"]')].find(tab => tab.textContent.includes("Existing sources")).click();
   const nextSource = client.state.sources.find(source => source.id === sources[1]);
   const { nameOf } = await import("../panels/sources/local.js");
   const addButton = choose.el.querySelector(`[aria-label="Add ${nameOf(nextSource)}"]`);

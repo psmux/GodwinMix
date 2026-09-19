@@ -68,8 +68,10 @@ export async function openPicker(client, what, opts = {}) {
 // ------------------------------------------------------------ the source picker
 
 function openSourcePicker(client, kinds, plugins, opts) {
+  const categories = opts.existing ? [{ id: "existing", title: "Existing sources", icon: "sources" }, ...CATEGORIES] : CATEGORIES;
+  let closed = false;
   const state = {
-    category: CATEGORIES.some((c) => c.id === opts.category) ? opts.category : CATEGORIES[0].id,
+    category: categories.some((c) => c.id === opts.category) ? opts.category : CATEGORIES[0].id,
     plugins,
     // Discovery and the media listing both fill in after the modal is up. Each
     // one is idle, looking, done or failed, and the panel says which.
@@ -83,6 +85,7 @@ function openSourcePicker(client, kinds, plugins, opts) {
     // over the event stream a moment later, and a row that still said Add the
     // instant after it was pressed reads as a button that did nothing.
     added: new Set(),
+    created: new Map(),
   };
 
   const search = el("input", {
@@ -98,7 +101,7 @@ function openSourcePicker(client, kinds, plugins, opts) {
   ]);
 
   const tabs = new Map();
-  for (const cat of CATEGORIES) {
+  for (const cat of categories) {
     const tab = el(
       "button",
       {
@@ -117,8 +120,9 @@ function openSourcePicker(client, kinds, plugins, opts) {
   }
 
   const m = modal({
-    title: "Add a source",
+    title: opts.title || "Add a source",
     body,
+    onClose: () => { closed = true; opts.existing?.deactivate(); opts.onClose?.(); },
     footer: [el("button.btn", { text: "Close", onclick: () => m.close() })],
     wide: true,
   });
@@ -133,7 +137,9 @@ function openSourcePicker(client, kinds, plugins, opts) {
   // ---------------------------------------------------------------- drawing
 
   function draw() {
+    if (closed) return;
     const query = search.value.trim().toLowerCase();
+    if (!query && state.category !== "existing") opts.existing?.deactivate();
     for (const [id, tab] of tabs) {
       const active = !query && id === state.category;
       tab.classList.toggle("on", active);
@@ -141,11 +147,16 @@ function openSourcePicker(client, kinds, plugins, opts) {
     }
     clear(panel);
     if (query) return drawSearch(query);
-    drawCategory(CATEGORIES.find((c) => c.id === state.category) || CATEGORIES[0]);
+    drawCategory(categories.find((c) => c.id === state.category) || CATEGORIES[0]);
   }
 
   /** One category, with its own heading and whatever it has to offer. */
   function drawCategory(cat) {
+    if (cat.id === "existing") {
+      opts.existing.draw("");
+      panel.append(opts.existing.node);
+      return;
+    }
     const head = el("div.row", {}, [el("strong.grow", { text: cat.title })]);
     if (cat.devices) {
       head.appendChild(
@@ -174,6 +185,11 @@ function openSourcePicker(client, kinds, plugins, opts) {
   /** Every category at once, keeping only what the typing matches. */
   function drawSearch(query) {
     let found = 0;
+    if (opts.existing) {
+      opts.existing.draw(query);
+      panel.append(el("div.group-title", { text: "Existing sources" }), opts.existing.node);
+      found++;
+    }
     for (const cat of CATEGORIES) {
       const rows = rowsFor(cat, query).concat(extraRowsFor(cat, query));
       const tiles = kindsFor(cat, query);
@@ -244,6 +260,7 @@ function openSourcePicker(client, kinds, plugins, opts) {
       note: size || params.type,
       title: params.type,
       params: () => params,
+      existing: () => sources().find(source => alreadyAdded([source], candidate)),
       added: () => state.added.has(key(candidate.name)) || alreadyAdded(sources(), candidate),
     };
   }
@@ -256,6 +273,7 @@ function openSourcePicker(client, kinds, plugins, opts) {
       note: item.size_bytes ? fmtBytes(item.size_bytes) : item.path,
       title: item.path,
       params: () => ({ uri, name: item.name }),
+      existing: () => sources().find(source => source.uri === uri),
       added: () => state.added.has(key(item.name)) || sources().some((s) => s.uri === uri),
     };
   }
@@ -286,6 +304,7 @@ function openSourcePicker(client, kinds, plugins, opts) {
       note: pattern.note,
       title: pattern.uri,
       params: () => ({ uri: pattern.uri, name: pattern.name }),
+      existing: () => sources().find(source => source.uri === pattern.uri),
       added: () => state.added.has(key(pattern.name)) || sources().some((s) => s.uri === pattern.uri),
     };
   }
@@ -306,9 +325,11 @@ function openSourcePicker(client, kinds, plugins, opts) {
   // ---------------------------------------------------------------- pieces
 
   function row(entry) {
-    const done = entry.added();
+    const existing = entry.existing?.() || state.created.get(key(entry.name));
+    const reusable = existing && opts.onExisting;
+    const done = reusable ? opts.contains?.(existing) || state.added.has(key(entry.name)) : entry.added();
     const button = el("button.btn.primary", {
-      text: done ? "Added" : entry.label || "Add",
+      text: done ? (opts.onExisting ? "In scene" : "Added") : entry.label || "Add",
       disabled: done,
     });
     button.onclick = async () => {
@@ -321,20 +342,17 @@ function openSourcePicker(client, kinds, plugins, opts) {
       button.textContent = "Adding";
       let answer;
       try {
-        answer = await client.call("source.add", entry.params());
+        answer = reusable ? existing : await client.call("source.add", entry.params());
+        state.created.set(key(entry.name), answer);
+        if (reusable) await opts.onExisting(answer);
+        else if (opts.onAdded) await opts.onAdded(answer);
+        state.added.add(key(entry.name));
+        toast({ text: `${entry.name} added.` });
+        draw();
       } catch (e) {
-        errorToast(e, entry.name);
-        button.disabled = false;
-        button.textContent = "Add";
-        return;
+        errorToast(e, answer ? `Source available, but could not add ${entry.name} to the scene` : entry.name);
+        draw();
       }
-      state.added.add(key(entry.name));
-      toast({ text: `${entry.name} added.` });
-      draw();
-      // Outside the try, and after the row has been redrawn: the source
-      // exists, and whatever the caller does with it is the caller's to
-      // explain if it fails.
-      if (opts.onAdded) await opts.onAdded(answer);
     };
     return el("div.picker-row", { title: entry.title || "" }, [
       icon(entry.icon),
