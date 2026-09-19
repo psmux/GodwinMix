@@ -2,7 +2,6 @@
 // again after the toast has gone.
 
 import { el, clear } from "../../shell/dom.js";
-import { toast } from "../../shell/toast.js";
 import { registerAll } from "../../shell/commands.js";
 
 class AlertsPanel extends HTMLElement {
@@ -30,12 +29,14 @@ class AlertsPanel extends HTMLElement {
     );
     this.offs = [
       this.client.onRender((s) => this.render(s)),
-      // Every alert also becomes a toast, because an error nobody looks at is
-      // an error nobody fixes.
-      this.client.on("alert", (a) => toast({ kind: a.severity === "info" ? "info" : a.severity, text: a.message, ms: a.severity === "info" ? 6000 : 12000 })),
       registerAll([{ id: "alerts.clear", title: "Clear alerts", group: "Shell", run: () => this.clear() }]),
     ];
     this.render(this.client.state);
+  }
+
+  setWorkspaceActive(active) {
+    this.workspaceActive = active;
+    if (active) this.render(this.client.state);
   }
 
   disconnectedCallback() {
@@ -49,6 +50,7 @@ class AlertsPanel extends HTMLElement {
   }
 
   render(s) {
+    if (this.workspaceActive === false) return;
     const alerts = s.alerts || [];
     this.count.textContent = alerts.length ? String(alerts.length) : "";
     clear(this.list);

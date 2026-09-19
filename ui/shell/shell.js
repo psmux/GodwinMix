@@ -115,6 +115,8 @@ export async function mountShell(client, root) {
   shellCommands(client, node);
   shell.keymap.attach(window);
   connectionBanner(client);
+  // Notifications belong to the window, including when Alerts is closed.
+  client.on("alert", a => toast({ kind: a.severity, text: a.message, ms: a.severity === "info" ? 6000 : 12000 }));
   fileDrop(client);
   applyTileWidth();
   onSettingsChanged((s, key) => {

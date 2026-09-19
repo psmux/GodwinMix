@@ -1,8 +1,16 @@
 import * as model from '../shell/dock-model.js';
 import { Workspace } from '../shell/dock.js';
 import { registerElement } from '../shell/registry.js';
+import { decodeLayout } from '../shell/dock-presets.js';
 
 export function dockTests(test, eq, ok) {
+  test('workspace imports validate versions and normalize visible and hidden panels', () => {
+    const loaded = decodeLayout({ version: 1, tree: model.leaf(['a', 'a']), hidden: ['a', 'b', 'b', null] });
+    eq(loaded.tree.tabs, ['a']); eq(loaded.hidden, ['b']);
+    let rejected = false;
+    try { decodeLayout({ version: 9, tree: null }); } catch { rejected = true; }
+    ok(rejected);
+  });
   test('dock splits nest and retain exactly one copy of each panel', () => {
     let tree = model.leaf(['a', 'b', 'c']);
     tree = model.dock(tree, 'b', 'a', 'left');
@@ -84,6 +92,31 @@ export function dockTests(test, eq, ok) {
       eq(workspace.frames.get('test/dock-suspend').made.node.formValue, 'unfinished');
       workspace.hide('test/dock-suspend');
       ok(!original.isConnected);
+    } finally {
+      workspace.destroy(); host.remove();
+      if (saved === null) localStorage.removeItem(model.KEY); else localStorage.setItem(model.KEY, saved);
+    }
+  });
+  test('imported fixed panels stay fixed and unavailable plugins can recover', () => {
+    class Fixed extends HTMLElement {
+      static get panel() { return { id: 'test/fixed', title: 'Fixed', slots: ['header'] }; }
+    }
+    class Late extends HTMLElement {
+      static get panel() { return { id: 'test/late', title: 'Late', slots: ['main'] }; }
+    }
+    registerElement(Fixed);
+    const saved = localStorage.getItem(model.KEY);
+    const host = document.createElement('div'); document.body.append(host);
+    const workspace = new Workspace(host, {}, {});
+    workspace.state.tree = { axis: 'x', ratio: .5, a: model.leaf(['test/fixed']), b: model.leaf(['test/late']) };
+    try {
+      workspace.sync();
+      ok(!workspace.frames.has('test/fixed'));
+      ok(workspace.frames.get('test/late').made.unavailable);
+      registerElement(Late);
+      workspace.sync();
+      ok(workspace.frames.get('test/late').made.node instanceof Late);
+      eq(host.querySelectorAll('[data-panel="test/late"]').length, 1);
     } finally {
       workspace.destroy(); host.remove();
       if (saved === null) localStorage.removeItem(model.KEY); else localStorage.setItem(model.KEY, saved);

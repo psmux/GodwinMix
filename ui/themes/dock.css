@@ -35,3 +35,22 @@ gmx-shell.has-workspace {
   .dock-splitter, .dock-hint { display: none; }
   .dock-title .dock-handle { cursor: default; }
 }
+/* Pane controls wrap at the pane's width, independently of the window. */
+.dock-content > :is(gmx-sources, gmx-scenes, gmx-outputs, gmx-media, gmx-alerts) > .row { flex-wrap: wrap; }
+.dock-content > :is(gmx-sources, gmx-scenes, gmx-outputs, gmx-media, gmx-alerts) > .row > strong:first-child { display: none; }
+.dock-content input, .dock-content select { max-width: 100%; min-width: 0; }
+.dock-content .empty { min-width: 0; padding: 22px 12px; }
+.dock-content .empty > * { min-width: 0; max-width: 100%; overflow-wrap: anywhere; }
+.dock-content .empty button { max-width: 100%; white-space: normal; }
+.dock-content .gallery { grid-template-columns: repeat(auto-fill, minmax(min(100%, var(--tile-w)), 1fr)); }
+@media (max-width: 760px) {
+  .has-workspace .header { flex-wrap: wrap; height: auto; min-height: var(--header-h); padding: 8px; gap: 6px; }
+  .has-workspace .header > .grow { flex-basis: 100%; }
+  .has-workspace .header > .ellipsis { max-width: 130px; }
+  .dock-toolbar { flex-wrap: wrap; gap: 8px; }
+}
+.dock-tab { padding: 7px 11px; min-height: 30px; }
+.dock-manager > button { text-align: left; }
+.dock-manager .row { flex-wrap: wrap; }
+.dock-manager input, .dock-manager select { min-width: 0; max-width: 100%; flex: 1; }
+.dock-manager h3 { margin: 14px 0 0; }
