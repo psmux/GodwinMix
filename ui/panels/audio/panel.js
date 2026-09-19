@@ -10,6 +10,7 @@ class AudioPanel extends HTMLElement {
   connectedCallback() {
     this.rows = new Map();
     this.active = true;
+    this.metered = false;
     this.master = meterElement('h');
     this.peak = el('span.num.sm.dim');
     this.list = el('div.audio-channels');
@@ -50,7 +51,10 @@ class AudioPanel extends HTMLElement {
       const key = source.id + '/gain';
       const gain = this.audio.shown(key, source.gain === undefined ? 1 : source.gain);
       if (!this.audio.active.has(key)) row.fader.value = String(gainToPos(gain));
-      row.level.textContent = gainLabel(gain) + ' dB';
+      const label = gainLabel(gain);
+      row.level.textContent = label === 'off' ? 'Off' : label + ' dB';
+      row.fader.setAttribute('aria-label', `${source.name || source.id} level`);
+      row.fader.setAttribute('aria-valuetext', row.level.textContent);
       if (!row.metered) { addView('audio:' + source.id + ':meter', 'src:' + source.id, row.meter, 'h'); row.metered = true; }
     }
   }
