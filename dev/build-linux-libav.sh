@@ -27,6 +27,8 @@ PRIVATE="$WORK/private"
 cd "$FFMPEG"
 # Decode arbitrary input media, but build only FFmpeg encoders the public
 # catalogue can select. Other encoders come from their GStreamer plugins.
+# gst-libav exposes deinterlacing and video comparison, not the FFmpeg filter
+# catalogue. Keep their graphs and automatic format conversion dependencies.
 ENCODERS=$(python3 - "$REPO/codecs.toml" <<'PYCODE'
 from pathlib import Path
 import re
@@ -38,7 +40,8 @@ PYCODE
 ./configure --prefix="$PRIVATE" --disable-autodetect --disable-programs \
     --disable-doc --disable-debug --enable-pic --disable-shared --enable-static \
     --enable-zlib --enable-bzlib --enable-lzma \
-    --disable-encoders --enable-encoder="$ENCODERS"
+    --disable-encoders --enable-encoder="$ENCODERS" \
+    --disable-filters --enable-filter=buffer,buffersink,yadif,scale,format,ssim,psnr
 make -j"$(nproc)"
 make install
 # Distribution compression archives need not be PIC. Keep these small
