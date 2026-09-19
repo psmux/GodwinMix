@@ -3,7 +3,10 @@ import * as model from './dock-model.js';
 import * as registry from './registry.js';
 import { gestures } from './dock-pointer.js';
 import { positionWorkspace } from './dock-geometry.js';
-import { workspaceMenu, panelMenu } from './dock-menu.js';
+// Layout dialogs load only when an operator opens them.
+import { lazyAction } from './lazy-action.js';
+const workspaceMenu = lazyAction(() => import('./dock-menu.js').then(m => m.workspaceMenu), 'Open workspace controls');
+const panelMenu = lazyAction(() => import('./dock-menu.js').then(m => m.panelMenu), 'Open panel controls');
 
 export class Workspace {
   constructor(host, client, layout) {

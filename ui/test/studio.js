@@ -1,5 +1,16 @@
 // Exercise the studio controls against the public request shape.
 export async function studioTests(test, eq, ok) {
+  const { lazyAction } = await import('../shell/lazy-action.js');
+  let release, opened = 0;
+  const load = new Promise(resolve => { release = resolve; });
+  const open = lazyAction(() => load, 'Open test dialog');
+  const first = open();
+  const second = open();
+  release(() => ++opened);
+  await Promise.all([first, second]);
+  test('repeated clicks during a lazy dialog download open one dialog', () => eq(opened, 1));
+  await open();
+  test('a completed lazy action can be opened again', () => eq(opened, 2));
   window.godwinmixPanels ||= [];
   const { default: ProgramPanel } = await import('../panels/multiview/panel.js');
   const panel = new ProgramPanel();

@@ -48,3 +48,8 @@ workspace from another browser or machine. These files contain panel ids,
 split positions and closed panels. They do not contain mixer settings,
 source addresses, stream keys or other credentials. Up to twenty named layouts
 can be kept in browser storage.
+
+The default desk puts Programme across the top, with Scenes, Sources and the
+utility tabs below. Sources gets more width than Scenes so a camera gallery has
+room to work. Reset workspace applies this arrangement; existing saved layouts
+keep their positions.
