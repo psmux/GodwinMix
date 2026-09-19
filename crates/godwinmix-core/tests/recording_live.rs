@@ -5,6 +5,7 @@ use std::time::{Duration, Instant};
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn removing_a_recording_finishes_a_playable_file_without_stopping_the_mixer() {
+    gstreamer::init().unwrap();
     let mut cfg = Config::from_toml("", "recording test").unwrap();
     cfg.canvas.width = 320;
     cfg.canvas.height = 180;
