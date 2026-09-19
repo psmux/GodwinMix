@@ -427,11 +427,13 @@ def resolve(name: str, dirs: list[Path]) -> Path | None:
     for d in dirs:
         candidate = d / leaf
         if candidate.is_file():
-            return candidate.resolve()
+            # Keep the loader's requested name, such as libfoo.so.1, rather
+            # than replacing it with the symlink target libfoo.so.1.2.3.
+            return candidate.absolute()
     # Some macOS imports are absolute and outside the prefix entirely, which is
     # what a Homebrew cellar looks like from inside another cellar.
     if name.startswith("/") and Path(name).is_file():
-        return Path(name).resolve()
+        return Path(name).absolute()
     return None
 
 
@@ -448,9 +450,9 @@ def closure(seeds: list[Path], dirs: list[Path], platform: str) -> list[Path]:
     missing: set[str] = set()
     while queue:
         item = queue.pop()
-        if item in seen:
+        if item.resolve() in seen:
             continue
-        seen.add(item)
+        seen.add(item.resolve())
         for name in imports(item, platform):
             if is_system(name, platform):
                 continue
@@ -471,7 +473,7 @@ def closure(seeds: list[Path], dirs: list[Path], platform: str) -> list[Path]:
     for leaf in sorted(missing):
         warn(f"{leaf} is imported but is not in the source prefix; "
              "the machine is expected to have it")
-    return sorted(found.values())
+    return sorted(set(found.values()))
 
 
 def copy(src: Path, dst: Path) -> None:
@@ -626,6 +628,9 @@ def build(args: argparse.Namespace) -> int:
 
     if platform == "macos":
         relocate_macos(out)
+    else:
+        from gst_symbols import strip_debug
+        strip_debug(out, platform)
 
     size = megabytes(out)
     print(f"{len(files)} plugins, {len(set(libs) | set(again))} libraries")

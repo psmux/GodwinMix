@@ -30,8 +30,9 @@ over the built in one, so editing `presets/church/` needs no rebuild.
 Some of the plugins named do not exist yet. That is not a mistake in the
 preset: `gmx preset apply` reports what is missing and applies the rest, so a
 preset is a working target the plugins are written towards. `church` and
-`classroom` use built in kinds for everything they can, which is why they put a
-picture on air today with the camera plugin still missing.
+`classroom` use built in kinds for everything they can. The camera, screen and
+microphone plugins are implemented and bundled with desktop builds; optional
+integrations named by other presets may still need installation.
 
 ## Where a preset is found
 

@@ -46,6 +46,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: llvm-tools
       - uses: Swatinem/rust-cache@v2
 
       - name: GStreamer (Linux)
@@ -182,6 +184,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: llvm-tools
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: tauri-app
@@ -241,9 +245,22 @@ jobs:
       # bundle.resources. Without this step the installers go out expecting
       # the operator to install a 527 MB GStreamer first, which is the thing
       # this whole arrangement exists to avoid.
+      - name: Build private FFmpeg for the Linux runtime
+        if: runner.os == 'Linux'
+        run: |
+          sudo sed -i 's/^Types: deb$/Types: deb deb-src/' /etc/apt/sources.list.d/ubuntu.sources
+          sudo apt-get update
+          sudo apt-get install -y build-essential dpkg-dev meson ninja-build nasm
+          ./dev/build-linux-libav.sh "$RUNNER_TEMP/gst-prefix"
+
       - name: The bundled GStreamer (Unix)
         if: runner.os != 'Windows'
-        run: ./dev/bundle-gstreamer.sh --budget-mb "$RUNTIME_BUDGET_MB"
+        run: |
+          if [ "${{ runner.os }}" = Linux ]; then
+            ./dev/bundle-gstreamer.sh --from "$RUNNER_TEMP/gst-prefix" --budget-mb "$RUNTIME_BUDGET_MB"
+          else
+            ./dev/bundle-gstreamer.sh --budget-mb "$RUNTIME_BUDGET_MB"
+          fi
 
       - name: The bundled GStreamer (Windows)
         if: runner.os == 'Windows'

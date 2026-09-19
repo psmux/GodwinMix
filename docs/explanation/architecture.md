@@ -1,6 +1,6 @@
 # The crate map
 
-GodwinMix is one repository, six crates and one binary. This page says what
+GodwinMix is one repository with a core library, plugin hosts and two command names. This page says what
 belongs in each crate, what does not, and where a new module goes.
 
 The rule underneath all of it: a dependency points one way only, from the thing
@@ -73,9 +73,10 @@ names is in the binary.
 
 The tier 2 plugin host: the manifest reader, the handshake that picks a
 transport, the transports themselves and the loader that starts, supervises,
-restarts and kills a sidecar. None of it is written yet; the crate exists so
-the layout is settled before the code arrives, and so the engine can be
-embedded without a plugin loader linked in. See its `README.md`.
+restarts and kills a sidecar. It also implements resource budgets, process
+sampling, signature verification and offline conformance testing. The core
+owns media wiring and process teardown; the host owns the lifecycle decisions
+and wire conversation. See its `README.md`.
 
 ## godwinmix-wasm
 

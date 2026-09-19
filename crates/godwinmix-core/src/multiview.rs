@@ -862,8 +862,8 @@ impl Multiview {
         }
         self.shared.fed.lock().push(fed.clone());
 
-        for el in &branch {
-            el.sync_state_with_parent().ok();
+        for el in branch.iter().rev() {
+            el.sync_state_with_parent().context("starting a multiview branch")?;
         }
 
         self.tiles.push(Tile { source, pad, branch, tee, fed });
@@ -984,8 +984,6 @@ impl Multiview {
             .output()
             .request_pad_simple("src_%u")
             .context("the preview tee refused a pad for the mosaic")?;
-        out.link(&queue.static_pad("sink").context("the preview tile queue has no sink pad")?)
-            .context("linking the preview into its mosaic tile")?;
         queue.link(&tee).context("linking the preview tile")?;
         let pad = self
             .compositor
@@ -994,9 +992,14 @@ impl Multiview {
         pad.set_property_from_str("sizing-policy", "keep-aspect-ratio");
         let tee_pad = tee.request_pad_simple("src_%u").context("the preview tee refused a pad")?;
         tee_pad.link(&pad).context("linking the preview into the mosaic")?;
-        for el in &branch {
-            el.sync_state_with_parent().ok();
+        for el in branch.iter().rev() {
+            el.sync_state_with_parent().context("starting a multiview branch")?;
         }
+        // Publish the branch only once every downstream pad is active. A
+        // running preview can push immediately when linked; a NULL queue
+        // returns Flushing and stops the preview compositor's streaming task.
+        out.link(&queue.static_pad("sink").context("the preview tile queue has no sink pad")?)
+            .context("linking the preview into its mosaic tile")?;
         // Not part of `warm`: this tile exists only while a scene is armed,
         // and a still with nothing armed must not wait on it. Raised from the
         // start so the drop and remove paths can treat every tile alike.
