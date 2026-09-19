@@ -4875,6 +4875,8 @@ pub fn spawn(
 
 #[cfg(test)]
 mod tests {
+    mod endurance;
+    mod restart;
     use crate::plugin::branch::meter_name;
     use super::*;
 
