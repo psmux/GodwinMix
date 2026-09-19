@@ -40,3 +40,7 @@ The Audio panel stops painting its meters when hidden. It does not add a
 second mix or a second media pipeline. These controls call `source.audio.set`
 through the public client, and use the shared meter and fader modules that
 plugin panels can import.
+
+Resizing the preview stops its live backdrop before removing the compositor.
+The replacement branch starts its consumers before its producers, so repeated
+size changes do not send a live source into a missing downstream branch.
