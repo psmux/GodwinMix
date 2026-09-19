@@ -522,3 +522,11 @@ gmx-program .monitor-pane canvas { flex: 0 0 auto; }
 @container (max-width: 500px) {
   gmx-program .monitor-pane { flex: 0 0 auto; width: 100%; }
 }
+
+.audio-master { display: grid; grid-template-columns: auto minmax(50px, 1fr) auto; align-items: center; gap: 12px; padding: 12px; border-bottom: 1px solid var(--line); }
+.audio-master .meter, .audio-channel .meter { width: 100%; height: 12px; }
+.audio-channels { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(240px, 100%), 1fr)); }
+.audio-channel { min-width: 0; display: flex; flex-direction: column; gap: 9px; padding: 12px; border-bottom: 1px solid var(--line-soft); }
+.audio-channel input { width: 100%; accent-color: var(--accent); }
+.audio-channel.muted .meter { opacity: .4; }
+.audio-channel [aria-pressed="true"] { color: var(--warn); }

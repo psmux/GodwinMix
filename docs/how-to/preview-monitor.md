@@ -28,3 +28,15 @@ max_takes_per_minute = 120
 A configured shot hold still applies to sources, scenes and media takes. Automation installations may choose a longer hold. Set `flash_guard = true` to retain the separate brightness based cut hold.
 
 The audio slider changes volume. Mute is independent of volume, and unmuting restores that level. Seekable clips have a position slider. Test generators, cameras and live streams show "Continuous live source" because they have no end position or loop setting.
+
+## Audio desk
+
+Open **Audio** from **Panels and layout** for programme meters and a level and
+mute control for each audio source. The same source controls in Sources and
+Audio share their gesture state. Moving between panels does not change the
+mix. Double click a fader to return it to unity gain.
+
+The Audio panel stops painting its meters when hidden. It does not add a
+second mix or a second media pipeline. These controls call `source.audio.set`
+through the public client, and use the shared meter and fader modules that
+plugin panels can import.
