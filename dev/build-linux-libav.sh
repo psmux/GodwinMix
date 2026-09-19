@@ -32,8 +32,22 @@ cd "$FFMPEG"
 make -j"$(nproc)"
 make install
 export PKG_CONFIG_PATH="$PRIVATE/lib/pkgconfig${PKG_CONFIG_PATH:+:$PKG_CONFIG_PATH}"
+# Only FFmpeg is private. A global prefer_static would also copy GLib into
+# the plugin, producing a second type registry in the host process.
+python3 - "$LIBAV/meson.build" <<'PYCODE'
+from pathlib import Path
+import sys
+path = Path(sys.argv[1])
+text = path.read_text()
+for name in ("libavfilter", "libavformat", "libavcodec", "libavutil"):
+    old = f"dependency('{name}',"
+    if text.count(old) != 1:
+        raise SystemExit(f"expected one dependency declaration for {name}")
+    text = text.replace(old, old + " static: true,")
+path.write_text(text)
+PYCODE
 meson setup "$WORK/plugin-build" "$LIBAV" --prefix="$OUT" --libdir=lib \
-    --buildtype=release -Ddefault_library=shared -Dprefer_static=true \
+    --buildtype=release -Ddefault_library=shared \
     -Dtests=disabled -Ddoc=disabled --wrap-mode=nofallback
 meson compile -C "$WORK/plugin-build"
 meson install -C "$WORK/plugin-build"
