@@ -299,10 +299,19 @@ Windows and Linux bundles remove debug sections before measuring the budget.
 Windows needs `rustup component add llvm-tools`; Linux needs binutils. Set
 `GST_STRIP` to an explicit compatible stripping tool if necessary. Exported
 symbols and code remain in the runtime, and the element checks still run.
-The 130 MB runtime budget has not changed. A distribution FFmpeg can pull in
-large optional libraries through `libavfilter`; stripping symbols alone does
-not guarantee that a Linux runtime fits. A failing budget is still a release
-blocker, not a reason to publish an incomplete dependency tree.
+The 130 MB runtime budget has not changed. Linux release jobs run
+`dev/build-linux-libav.sh <prefix>` first, then pass that prefix to the trimmer.
+The builder uses distribution source packages authenticated by apt, compiles
+FFmpeg without optional external libraries, and statically links it into a
+fresh gst-libav plugin. Native codecs, demuxers and filters remain available;
+platform hardware codecs still come from their GStreamer plugins. This avoids
+shipping the distribution FFmpeg's unrelated speech and rendering libraries.
+
+The builder needs source repositories enabled, a C toolchain, meson, ninja,
+nasm and GStreamer development headers. It changes no installed runtime and
+writes only the requested prefix. The runtime CI job checks H.264, HEVC and
+AAC elements, runs an AAC encode/decode pipeline and enforces the size budget.
+A failed budget or codec check blocks packaging.
 
 ### Measured
 
