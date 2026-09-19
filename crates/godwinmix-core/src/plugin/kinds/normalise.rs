@@ -18,6 +18,14 @@ use anyhow::{Context, Result};
 use gstreamer as gst;
 use gstreamer::prelude::*;
 
+/// A thumbnail starts at the first frame a viewer actually requested.
+/// Reopening it must not duplicate the source segment from time zero.
+pub(crate) fn thumbnail_rate(name: &str) -> Result<gst::Element> {
+    let rate = make("videorate", name)?;
+    crate::probe::set_bool(&rate, "skip-to-first", true);
+    Ok(rate)
+}
+
 /// The thumbnail end. Built only when `start(.., thumb = true)` asked for one.
 pub struct ThumbEnd {
     pub queue: gst::Element,
@@ -32,7 +40,7 @@ impl ThumbEnd {
         Ok(Self {
             queue: gstutil::queue_preview(&format!("{id}-vthumb-q"))?,
             scale: make("videoscale", &format!("{id}-tscale"))?,
-            rate: make("videorate", &format!("{id}-trate"))?,
+            rate: thumbnail_rate(&format!("{id}-trate"))?,
             caps: gstutil::capsfilter(
                 &format!("{id}-tcaps"),
                 &CanvasCaps::video_at(
@@ -187,5 +195,45 @@ impl Normaliser {
 
     pub fn thumb_proxy(&self) -> Option<gst::Element> {
         self.thumb.as_ref().map(|t| t.proxy.clone())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_late_thumbnail_does_not_replay_the_source_history() {
+        gst::init().unwrap();
+        let pipeline = gst::Pipeline::new();
+        let source = gstreamer_app::AppSrc::builder()
+            .format(gst::Format::Time)
+            .caps(&CanvasCaps::video_at(16, 16, gst::Fraction::new(30, 1)))
+            .build();
+        let rate = thumbnail_rate("late-thumbnail-rate").unwrap();
+        let caps = gstutil::capsfilter(
+            "late-thumbnail-caps",
+            &CanvasCaps::video_at(16, 16, gst::Fraction::new(8, 1)),
+        ).unwrap();
+        let sink = gstreamer_app::AppSink::builder().sync(false).build();
+        pipeline.add_many([source.upcast_ref(), &rate, &caps, sink.upcast_ref()]).unwrap();
+        gst::Element::link_many([source.upcast_ref(), &rate, &caps, sink.upcast_ref()]).unwrap();
+        pipeline.set_state(gst::State::Playing).unwrap();
+        for frame in 0..4 {
+            let mut buffer = gst::Buffer::with_size(16 * 16 * 4).unwrap();
+            {
+                let buffer = buffer.get_mut().unwrap();
+                buffer.set_pts(gst::ClockTime::from_seconds(600)
+                    + gst::ClockTime::from_nseconds(frame * 33_333_333));
+                buffer.set_duration(gst::ClockTime::from_nseconds(33_333_333));
+            }
+            source.push_buffer(buffer).unwrap();
+        }
+        source.end_of_stream().unwrap();
+        let sample = sink.try_pull_sample(gst::ClockTime::from_seconds(2));
+        pipeline.set_state(gst::State::Null).unwrap();
+        let first_pts = sample.unwrap().buffer().unwrap().pts().unwrap();
+        assert!(first_pts >= gst::ClockTime::from_seconds(600),
+            "a reopened thumbnail replayed frames from {first_pts}");
     }
 }

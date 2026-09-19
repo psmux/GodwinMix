@@ -127,7 +127,7 @@ pub fn queue_thread(name: &str) -> Result<gst::Element> {
     queue_time(name, 1.0, false)
 }
 
-/// The queue at the head of a preview branch: a second deep and leaky.
+/// The queue at the head of a preview branch: two buffers deep and leaky.
 ///
 /// Every preview branch hangs off a tee that the programme also hangs off: the
 /// thumbnail end hangs off a source's `vtee` beside that source's programme
@@ -147,7 +147,12 @@ pub fn queue_thread(name: &str) -> Result<gst::Element> {
 /// rest go. This is the same reasoning as the output feed queues, applied to
 /// the other side of the mixer.
 pub fn queue_preview(name: &str) -> Result<gst::Element> {
-    queue_time(name, 1.0, true)
+    let queue = queue_time(name, 1.0, true)?;
+    // Full canvas frames reach this queue before the thumbnail scaler.
+    // A second at 1080p can retain hundreds of MB for one hidden preview.
+    // Two pending frames cover handoff jitter without retaining stale video.
+    queue.set_property("max-size-buffers", 2u32);
+    Ok(queue)
 }
 
 /// Current fill level of a queue, in seconds.
@@ -929,6 +934,38 @@ mod tests {
         assert_eq!(q.property::<u64>("max-size-time"), 5_000_000_000);
         assert_eq!(q.property::<u32>("max-size-buffers"), 0);
         assert_eq!(queue_level_secs(&q), 0.0);
+    }
+
+    #[test]
+    fn a_blocked_preview_keeps_only_two_pending_frames() {
+        init();
+        let pipeline = gst::Pipeline::new();
+        let source = gstreamer_app::AppSrc::builder().format(gst::Format::Time).build();
+        let queue = queue_preview("bounded-preview").unwrap();
+        let sink = make("fakesink", "slow-preview").unwrap();
+        sink.set_property("async", false);
+        let (release, wait) = std::sync::mpsc::channel();
+        let wait = std::sync::Mutex::new(wait);
+        sink.static_pad("sink").unwrap().add_probe(gst::PadProbeType::BUFFER, move |_, _| {
+            let _ = wait.lock().unwrap().recv_timeout(Duration::from_secs(3));
+            gst::PadProbeReturn::Remove
+        });
+        pipeline.add_many([source.upcast_ref(), &queue, &sink]).unwrap();
+        gst::Element::link_many([source.upcast_ref(), &queue, &sink]).unwrap();
+        pipeline.set_state(gst::State::Playing).unwrap();
+        for n in 0..100 {
+            let mut buffer = gst::Buffer::with_size(1024).unwrap();
+            buffer.get_mut().unwrap().set_pts(gst::ClockTime::from_mseconds(n));
+            source.push_buffer(buffer).unwrap();
+        }
+        let until = std::time::Instant::now() + Duration::from_secs(2);
+        while source.current_level_bytes() != 0 && std::time::Instant::now() < until {
+            std::thread::sleep(Duration::from_millis(5));
+        }
+        let queued = queue.property::<u32>("current-level-buffers");
+        release.send(()).unwrap();
+        pipeline.set_state(gst::State::Null).unwrap();
+        assert_eq!(queued, 2, "a slow preview retained a backlog of full canvas frames");
     }
 
     #[test]

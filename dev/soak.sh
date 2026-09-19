@@ -198,15 +198,24 @@ echo
 # Release, unlike dev/smoke.sh. A debug core misses a 34 ms frame bar on its
 # own, before anything has leaked, so a soak built that way measures the
 # compiler rather than the mixer.
-step "build --release"
-if ! (cd "$REPO" && cargo build --release --quiet) >"$WORK/build.log" 2>&1; then
-    bad "cargo build --release failed, see $WORK/build.log"
-    KEEP=1
+if [[ -n "${GODWINMIX_SOAK_BIN_DIR:-}" ]]; then
+    GMX="$GODWINMIX_SOAK_BIN_DIR/gmx"
+    CORE="$GODWINMIX_SOAK_BIN_DIR/godwinmix"
+else
+    step "build --release"
+    if ! (cd "$REPO" && cargo build --release --quiet) >"$WORK/build.log" 2>&1; then
+        bad "cargo build --release failed, see $WORK/build.log"
+        KEEP=1
+        exit 1
+    fi
+    ok
+    GMX="${CARGO_TARGET_DIR:-$REPO/target}/release/gmx"
+    CORE="${CARGO_TARGET_DIR:-$REPO/target}/release/godwinmix"
+fi
+if [[ ! -x "$GMX" || ! -x "$CORE" ]]; then
+    bad "release binaries are missing; build them or set GODWINMIX_SOAK_BIN_DIR"
     exit 1
 fi
-ok
-GMX="$REPO/target/release/gmx"
-CORE="$REPO/target/release/godwinmix"
 
 step "config from --example-config"
 "$CORE" --example-config >"$WORK/example.toml" 2>/dev/null
