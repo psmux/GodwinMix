@@ -15,6 +15,7 @@ import { confirmModal } from "../../shell/modal.js";
 import { errorToast, toast } from "../../shell/toast.js";
 import { registerAll } from "../../shell/commands.js";
 import { settings } from "../../shell/settings.js";
+import { startRecording, recordingRow, isRecording } from "./recording.js";
 import { addDestination, editDestination } from "./destination.js";
 
 /** The state of one destination, in words that say what to do about it. */
@@ -63,6 +64,7 @@ class OutputsPanel extends HTMLElement {
         el("strong", { text: "Outputs" }),
         this.count,
         el("span.grow"),
+        el("button.btn", { text: "Record", onclick: () => startRecording(this.client) }),
         el("button.btn", { text: "Add destination", onclick: () => this.add() }),
       ]),
       this.list
@@ -102,6 +104,7 @@ class OutputsPanel extends HTMLElement {
   }
 
   row(output) {
+    if (isRecording(output)) return recordingRow(this.client, output);
     const needsKey = output.has_key === false;
     return el("div.output-row", {}, [
       el("div.row", {}, [

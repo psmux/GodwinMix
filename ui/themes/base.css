@@ -502,3 +502,18 @@ gmx-program canvas, gmx-program img {
 .panel-section:not([open]) > :not(summary) { display: none; }
 .panel-section > :not(summary) > .row.pad:first-child > strong:first-child { display: none; }
 gmx-program canvas, gmx-program img { height: min(32vh, 300px); }
+
+/* The studio panes fit their dock, with preview before programme. */
+gmx-program { min-width: 0; container-type: inline-size; }
+.monitor-stage { display: flex; min-width: 0; gap: 8px; padding: 8px; }
+gmx-program .monitor-pane { display: flex; flex-direction: column; flex: 1 1 0; min-width: 0; background: #000; border: 1px solid var(--line); border-radius: 4px; overflow: hidden; }
+.monitor-label { display: flex; align-items: center; gap: 10px; height: 30px; padding: 0 10px; flex: 0 0 auto; background: var(--panel2); font-size: var(--fs-sm); }
+.monitor-label strong { font-size: 10px; letter-spacing: 0.1em; }
+.program .monitor-label strong { color: var(--live); }
+.preview-pane .monitor-label strong { color: var(--ok); }
+gmx-program .monitor-pane canvas, gmx-program .monitor-pane img { width: 100%; height: auto; max-height: 45vh; aspect-ratio: 16 / 9; object-fit: contain; }
+.monitor-controls { flex-wrap: wrap; border-top: 1px solid var(--line); }
+.monitor-controls [aria-pressed="true"] { color: var(--accent); background: var(--select-fill); }
+.monitor-controls select { max-width: 80px; }
+@container (max-width: 500px) { .monitor-stage { flex-direction: column; } .monitor-controls > .grow { flex-basis: 100%; } }
+.recording-row { border-left: 2px solid var(--live); padding-left: 10px; }
