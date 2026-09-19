@@ -52,39 +52,3 @@ pub fn build(
         });
     Ok(())
 }
-
-pub fn finish(pipeline: gst::Pipeline) {
-    let fallback = pipeline.clone();
-    let result = std::thread::Builder::new()
-        .name("record-finalize".into())
-        .spawn(move || {
-            // Stop accepting programme data before EOS so only this file ends.
-            for element in pipeline.children() {
-                if element.factory().is_some_and(|f| f.name() == "proxysrc") {
-                    if let Some(pad) = element.static_pad("src") {
-                        if let Some(peer) = pad.peer() {
-                            let _ = pad.unlink(&peer);
-                            peer.send_event(gst::event::Eos::new());
-                        }
-                    }
-                }
-            }
-            let bus = pipeline.bus();
-            if let Some(bus) = bus {
-                if let Some(message) = bus.timed_pop_filtered(
-                    gst::ClockTime::from_seconds(5),
-                    &[gst::MessageType::Eos, gst::MessageType::Error],
-                ) {
-                    if let gst::MessageView::Error(error) = message.view() {
-                        tracing::warn!(error = %error.error(), "recording finalisation failed");
-                    }
-                } else {
-                    tracing::warn!("recording finalisation timed out; inspect the last file");
-                }
-            }
-            let _ = pipeline.set_state(gst::State::Null);
-        });
-    if result.is_err() {
-        let _ = fallback.set_state(gst::State::Null);
-    }
-}
