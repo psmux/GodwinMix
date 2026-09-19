@@ -104,6 +104,9 @@ export class AudioGestures {
       send();
       this._release(key);
     });
+    input.addEventListener("pointerup", () => this._release(key));
+    input.addEventListener("lostpointercapture", () => this._release(key));
+    input.addEventListener("blur", () => this._release(key));
     input.addEventListener("pointercancel", () => this._release(key));
     return key;
   }
