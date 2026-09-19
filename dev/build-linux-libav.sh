@@ -15,6 +15,13 @@ apt-get source ffmpeg gst-libav1.0
 FFMPEG=$(find "$WORK" -maxdepth 1 -type d -name 'ffmpeg-*' | head -n 1)
 LIBAV=$(find "$WORK" -maxdepth 1 -type d -name 'gst-libav1.0-*' | head -n 1)
 [[ -n "$FFMPEG" && -n "$LIBAV" ]] || { echo 'Source packages were not extracted.' >&2; exit 1; }
+# The Debian patch tracks shared FFmpeg files for registry invalidation and
+# expects a macro supplied by debian/rules. This plugin embeds FFmpeg instead,
+# so remove only that packaging patch while retaining all security patches.
+DEPENDENCY_PATCH="$LIBAV/debian/patches/00_plugin-dependencies.patch"
+if [[ -f "$DEPENDENCY_PATCH" ]]; then
+    patch -d "$LIBAV" -p1 -R < "$DEPENDENCY_PATCH"
+fi
 PRIVATE="$WORK/private"
 cd "$FFMPEG"
 # Keep native codecs, demuxers and filters. Only external optional libraries
