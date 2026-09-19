@@ -16,6 +16,8 @@
 set -uo pipefail
 
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+TARGET="${CARGO_TARGET_DIR:-$REPO/target}"
+[[ "$TARGET" = /* ]] || TARGET="$REPO/$TARGET"
 KEEP=0
 [[ "${1:-}" == "--keep" ]] && KEEP=1
 
@@ -94,12 +96,12 @@ if ! (cd "$REPO" && cargo build --quiet) >"$WORK/build.log" 2>&1; then
     exit 1
 fi
 ok
-GMX="$REPO/target/debug/gmx"
+GMX="$TARGET/debug/gmx"
 
 # The example config, with every source and output commented out: the point is
 # a core that starts clean and is driven entirely through the API.
 step "config from --example-config"
-"$REPO/target/debug/godwinmix" --example-config >"$WORK/example.toml" 2>/dev/null
+"$TARGET/debug/godwinmix" --example-config >"$WORK/example.toml" 2>/dev/null
 python3 - "$WORK/example.toml" "$WORK/godwinmix.toml" "$PORT" "$TOKEN" "$NODE_PORT" <<'PY'
 import os, re, sys
 src, dst, port, token = sys.argv[1:5]
@@ -159,7 +161,7 @@ step "core starts"
 # is its child, `$!` names the subshell, and the cleanup below kills the
 # subshell and leaves the core running: two orphaned mixers at forty percent
 # of a core each were found on this machine after a few runs of this script.
-(cd "$WORK" && exec "$REPO/target/debug/godwinmix" --config "$WORK/godwinmix.toml") >"$LOG" 2>&1 &
+(cd "$WORK" && exec "$TARGET/debug/godwinmix" --config "$WORK/godwinmix.toml") >"$LOG" 2>&1 &
 CORE_PID=$!
 for _ in $(seq 1 100); do
     curl -fsS --max-time 30 "$BASE/api/v1/core/info" "${AUTH[@]}" >/dev/null 2>&1 && break
@@ -684,7 +686,7 @@ path, port = sys.argv[1], sys.argv[2]
 text = open(path).read()
 open(path, "w").write(re.sub(r'bind = "[^"]*"', f'bind = "127.0.0.1:{port}"', text))
 PYEOF
-"$REPO/target/debug/godwinmix" --config "$PWORK/godwinmix.toml" >"$WORK/preset-core.log" 2>&1 &
+"$TARGET/debug/godwinmix" --config "$PWORK/godwinmix.toml" >"$WORK/preset-core.log" 2>&1 &
 PRESET_PID=$!
 PUP=0
 for _ in $(seq 1 80); do
@@ -956,7 +958,7 @@ if [[ -n "$NODE_TOKEN" ]]; then ok; else bad "no token: $(tail -3 "$WORK/node.lo
 NODE_PID=""
 if [[ -n "$NODE_TOKEN" ]]; then
     step "godwinmix node enrols and joins"
-    GODWINMIX_HOME="$WORK/node-home" "$REPO/target/debug/godwinmix" node \
+    GODWINMIX_HOME="$WORK/node-home" "$TARGET/debug/godwinmix" node \
         --core "127.0.0.1:$NODE_PORT" --name smoke-node --enrol-token "$NODE_TOKEN" \
         --media-host 127.0.0.1 >"$WORK/node-daemon.log" 2>&1 &
     NODE_PID=$!
@@ -1014,7 +1016,7 @@ if [[ -n "$NODE_TOKEN" ]]; then
     fi
 
     step "an enrolment token works only once"
-    SECOND="$(GODWINMIX_HOME="$WORK/node-home-2" "$REPO/target/debug/godwinmix" node \
+    SECOND="$(GODWINMIX_HOME="$WORK/node-home-2" "$TARGET/debug/godwinmix" node \
         --core "127.0.0.1:$NODE_PORT" --name smoke-node --enrol-token "$NODE_TOKEN" \
         --enrol-only 2>&1 || true)"
     if grep -qi "already used" <<<"$SECOND"; then ok; else bad "$SECOND"; fi

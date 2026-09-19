@@ -1,5 +1,24 @@
 # Record to a file
 
+Open **Outputs**, choose **Record**, select a folder and format, then choose
+**Start recording**. The folder is on the mixer, including when the UI is on
+another computer. The output row shows the filename, status and amount of
+muxed data. Choose **Stop recording** when the programme is finished.
+
+This built in recording path works on Windows, macOS and Linux without a
+plugin or restart. It keeps the same quality and audio mix as the stream.
+MP4 is fragmented. Matroska is also available. Each start creates a new file.
+Allow up to five seconds after stopping for the file to finish.
+
+The public API is in [Recording outputs](../reference/recording.md).
+
+## Optional file recording sidecar
+
+The remaining instructions describe `file-record/output`, the separate plugin
+with timed splitting and recording discovery tools. Its FIFO transport is
+limited to Linux and macOS. These limits do not apply to `record/output` above.
+
+
 Keep a copy of the service on the disk, at the same quality that went out, for
 almost no extra CPU.
 

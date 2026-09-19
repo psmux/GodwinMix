@@ -71,6 +71,8 @@ const ASSETS: &[(&str, &str)] = &[
     ("panels/multiview/panel.js", include_str!("../../../ui/panels/multiview/panel.js")),
     ("panels/multiview/wanted.js", include_str!("../../../ui/panels/multiview/wanted.js")),
     ("panels/outputs/destination.js", include_str!("../../../ui/panels/outputs/destination.js")),
+    ("panels/audio/panel.js", include_str!("../../../ui/panels/audio/panel.js")),
+    ("panels/outputs/recording.js", include_str!("../../../ui/panels/outputs/recording.js")),
     ("panels/outputs/panel.js", include_str!("../../../ui/panels/outputs/panel.js")),
     ("panels/scenes/more.js", include_str!("../../../ui/panels/scenes/more.js")),
     ("panels/scenes/panel.js", include_str!("../../../ui/panels/scenes/panel.js")),
@@ -88,10 +90,19 @@ const ASSETS: &[(&str, &str)] = &[
     ("shell/firstrun.js", include_str!("../../../ui/shell/firstrun.js")),
     ("shell/keymap.js", include_str!("../../../ui/shell/keymap.js")),
     ("shell/layout.js", include_str!("../../../ui/shell/layout.js")),
+    ("panels/sources/workspace.js", include_str!("../../../ui/panels/sources/workspace.js")),
+    ("shell/dock-presets.js", include_str!("../../../ui/shell/dock-presets.js")),
+    ("shell/dock-geometry.js", include_str!("../../../ui/shell/dock-geometry.js")),
+    ("shell/dock.js", include_str!("../../../ui/shell/dock.js")),
+    ("shell/dock-model.js", include_str!("../../../ui/shell/dock-model.js")),
+    ("shell/dock-pointer.js", include_str!("../../../ui/shell/dock-pointer.js")),
+    ("shell/dock-menu.js", include_str!("../../../ui/shell/dock-menu.js")),
     ("shell/menu.js", include_str!("../../../ui/shell/menu.js")),
     ("shell/meter.js", include_str!("../../../ui/shell/meter.js")),
     ("shell/modal.js", include_str!("../../../ui/shell/modal.js")),
     ("shell/palette.js", include_str!("../../../ui/shell/palette.js")),
+    ("shell/lazy-action.js", include_str!("../../../ui/shell/lazy-action.js")),
+    ("shell/picker-loader.js", include_str!("../../../ui/shell/picker-loader.js")),
     ("shell/picker.js", include_str!("../../../ui/shell/picker.js")),
     ("shell/pointer.js", include_str!("../../../ui/shell/pointer.js")),
     ("shell/registry.js", include_str!("../../../ui/shell/registry.js")),
@@ -103,6 +114,7 @@ const ASSETS: &[(&str, &str)] = &[
     ("shell/toast.js", include_str!("../../../ui/shell/toast.js")),
     ("shell/undo.js", include_str!("../../../ui/shell/undo.js")),
     ("themes/base.css", include_str!("../../../ui/themes/base.css")),
+    ("themes/dock.css", include_str!("../../../ui/themes/dock.css")),
     ("themes/dark.css", include_str!("../../../ui/themes/dark.css")),
     ("themes/high-contrast.css", include_str!("../../../ui/themes/high-contrast.css")),
     ("themes/light.css", include_str!("../../../ui/themes/light.css")),
@@ -122,6 +134,8 @@ const LEGACY: &str = include_str!("../../../ui/legacy/index.html");
 const DEV_ASSETS: &[(&str, &str)] = &[
     ("test/index.html", include_str!("../../../ui/test/index.html")),
     ("test/run.js", include_str!("../../../ui/test/run.js")),
+    ("test/studio.js", include_str!("../../../ui/test/studio.js")),
+    ("test/dock.js", include_str!("../../../ui/test/dock.js")),
     // The designer kits' behaviour, as the reference implementation answered
     // it. The TypeScript and Python suites read the same file from the
     // repository; the browser reads it from here, because the page has no file
@@ -556,8 +570,8 @@ mod tests {
         //
         // Raised again to 350 kB when the add source picker grew its device
         // rail and the outputs panel its platform flow: measured at 324 kB.
-        // Those are the two things a person does before a show starts, and
-        // they belong on the first paint. Raised from 250 to 300 kB before
+        // Source and destination setup now load when opened, leaving room
+        // for dock controls without raising the budget. Raised from 250 to 300 kB before
         // that, when the scene strip and the scoped tray landed. Those are the page a volunteer opens now: a scene is a tab,
         // the tray shows what that scene draws, and adding a source puts it
         // there. Measured at 272 kB with them in. The next bytes to take back
@@ -565,9 +579,9 @@ mod tests {
         // the designer does, when the section is first opened.
         let eager = eager_set();
         let mut bytes: usize = eager.iter().filter_map(|p| source_of(p)).map(|b| b.len()).sum();
-        // The page itself and the two stylesheets it links, which no module
+        // The page itself and the stylesheets it links, which no module
         // imports and every browser fetches.
-        for extra in ["index.html", "themes/base.css", "themes/dark.css"] {
+        for extra in ["index.html", "themes/base.css", "themes/dock.css", "themes/dark.css"] {
             bytes += source_of(extra).map(|b| b.len()).unwrap_or(0);
         }
         assert!(
@@ -604,7 +618,7 @@ mod tests {
         let mut everything = eager_set();
         everything.extend(closure_of("panels/composer/composer.js"));
         let mut bytes: usize = everything.iter().filter_map(|p| source_of(p)).map(|b| b.len()).sum();
-        for extra in ["index.html", "themes/base.css", "themes/dark.css", "panels/composer/composer.css"] {
+        for extra in ["index.html", "themes/base.css", "themes/dock.css", "themes/dark.css", "panels/composer/composer.css"] {
             bytes += source_of(extra).map(|b| b.len()).unwrap_or(0);
         }
         assert!(bytes < 450 * 1024, "the page with the composer open is {bytes} bytes, over the 450 kB budget");
@@ -622,6 +636,9 @@ mod tests {
         reachable.extend(closure_of("client/transport-legacy.js"));
         reachable.extend(closure_of("client/schema-form.js"));
         reachable.extend(closure_of("shell/palette.js"));
+        reachable.extend(closure_of("shell/dock-menu.js"));
+        reachable.extend(closure_of("shell/picker.js"));
+        reachable.extend(closure_of("panels/outputs/destination.js"));
         reachable.extend(closure_of("shell/sandbox.js"));
         reachable.extend(closure_of("panels/welcome/tiles.js"));
         // Not imported by this page at all: it is what a sandboxed panel's own
@@ -643,6 +660,9 @@ mod tests {
         let eager = eager_set();
         for (path, who) in [
             ("panels/composer/composer.js", "a double tap on a scene tile"),
+            ("shell/dock-menu.js", "workspace or panel actions"),
+            ("shell/picker.js", "adding a source or dropping a URI"),
+            ("panels/outputs/destination.js", "adding or editing a destination"),
             ("panels/composer/canvas.js", "the composer"),
             ("panels/composer/inspector.js", "the composer"),
             ("kits/canvas/gizmos.js", "the composer's canvas"),

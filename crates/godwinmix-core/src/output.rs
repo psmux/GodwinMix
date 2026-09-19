@@ -170,7 +170,7 @@ impl OutputSlot {
         // encoder's output throughout.
         if let Some(old) = self.pipeline.lock().take() {
             drop(old.watch);
-            let _ = old.pipeline.set_state(gst::State::Null);
+            self.kind.lock().shutdown(old.pipeline);
         }
 
         // Give this generation a brand new proxy pair.
@@ -407,7 +407,7 @@ impl OutputSlot {
             queue_secs: gstutil::queue_level_secs(&self.feed_video),
             // Per kind data, for an output built by a plugin rather than by
             // the core. Nothing the core builds itself has any.
-            extra: Default::default(),
+            extra: self.kind.lock().status(),
         }
     }
 
@@ -418,7 +418,7 @@ impl OutputSlot {
     pub fn shutdown(&self) {
         if let Some(live) = self.pipeline.lock().take() {
             drop(live.watch);
-            let _ = live.pipeline.set_state(gst::State::Null);
+            self.kind.lock().shutdown(live.pipeline);
         }
     }
 

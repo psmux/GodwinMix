@@ -3,7 +3,7 @@
 #
 #   godwinmix-protocol  the wire contract, types and schema, no media stack
 #   godwinmix-core      the mixing engine as a library, no server
-#   godwinmix-host      the tier 2 sidecar host (empty for now)
+#   godwinmix-host      the tier 2 sidecar host
 #   godwinmix           the binaries, the control server, the CLI
 #
 # See docs/explanation/architecture.md for what belongs in each.

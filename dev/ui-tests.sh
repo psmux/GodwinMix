@@ -24,6 +24,8 @@
 set -uo pipefail
 
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+TARGET="${CARGO_TARGET_DIR:-$REPO/target}"
+[[ "$TARGET" = /* ]] || TARGET="$REPO/$TARGET"
 KEEP=0
 HEADLESS="--headless=new"
 for arg in "$@"; do
@@ -98,7 +100,7 @@ echo "starting a core on $BASE"
 # is its child, `$!` names the subshell, and the cleanup below kills the
 # subshell and leaves the core running: two orphaned mixers at forty percent
 # of a core each were found on this machine after a few runs of this script.
-(cd "$WORK" && GMX_UI_DEV=1 exec "$REPO/target/debug/godwinmix" --config "$WORK/godwinmix.toml") >"$LOG" 2>&1 &
+(cd "$WORK" && GMX_UI_DEV=1 exec "$TARGET/debug/godwinmix" --config "$WORK/godwinmix.toml") >"$LOG" 2>&1 &
 CORE_PID=$!
 for _ in $(seq 1 120); do
     curl -fsS -H "Authorization: Bearer $TOKEN" "$BASE/api/v1/core/info" >/dev/null 2>&1 && break

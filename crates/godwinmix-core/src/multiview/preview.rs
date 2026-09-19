@@ -169,8 +169,10 @@ impl ScenePreview {
             Ok(mut els) => chain.append(&mut els),
             Err(e) => warn!(?e, "the preview has no backdrop, so its first frame waits on a source"),
         }
-        for el in &chain {
-            el.sync_state_with_parent().ok();
+        // Start consumers before producers. The backdrop occupies the tail
+        // of the ownership list, but belongs upstream of the compositor.
+        for el in chain[..7].iter().rev().chain(chain[7..].iter().rev()) {
+            el.sync_state_with_parent().context("starting the preview branch")?;
         }
         info!(?shape, "preview compositor built");
         Ok(ScenePreview { pipeline: pipeline.clone(), comp, chain, slots: Vec::new(), shape, tile_pad: None })
@@ -266,11 +268,6 @@ impl ScenePreview {
             .request_pad_simple("src_%u")
             .with_context(|| format!("the tile tee of {source} refused a pad"))?;
         let sink = queue.static_pad("sink").context("a preview queue has no sink pad")?;
-        if let Err(e) = tee_pad.link(&sink) {
-            tee.release_request_pad(&tee_pad);
-            let _ = self.pipeline.remove(&queue);
-            return Err(e.into());
-        }
         let pad = self
             .comp
             .request_pad_simple("sink_%u")
@@ -282,7 +279,15 @@ impl ScenePreview {
             .context("a preview queue has no src pad")?
             .link(&pad)
             .context("linking a preview slot into the compositor")?;
-        queue.sync_state_with_parent().ok();
+        queue.sync_state_with_parent().context("starting a preview slot")?;
+        if let Err(e) = tee_pad.link(&sink) {
+            tee.release_request_pad(&tee_pad);
+            self.comp.release_request_pad(&pad);
+            queue.set_locked_state(true);
+            let _ = queue.set_state(gst::State::Null);
+            let _ = self.pipeline.remove(&queue);
+            return Err(e.into());
+        }
         self.slots.push(Slot {
             source: source.clone(),
             tee_pad,
