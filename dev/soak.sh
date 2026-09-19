@@ -36,6 +36,8 @@
 set -uo pipefail
 
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# Capture before the run: another worktree may commit while a soak is running.
+COMMIT="${GODWINMIX_SOAK_COMMIT:-$(cd "$REPO" && git rev-parse --short HEAD 2>/dev/null || echo unknown)}"
 MINUTES=10
 MACHINE="$(hostname -s 2>/dev/null || hostname)"
 KEEP=0
@@ -574,7 +576,6 @@ echo
 DATE="$(date -u +%Y-%m-%d)"
 RECORD="$REPO/bench/results/soak-$MACHINE-$DATE.json"
 [[ -n "$SKIPPED" ]] && RECORD="$REPO/bench/results/soak-$MACHINE-$DATE${SKIPPED// /-no}.json"
-COMMIT="$(cd "$REPO" && git rev-parse --short HEAD 2>/dev/null || echo unknown)"
 
 python3 - "$SAMPLES" "$RECORD" "$MACHINE" "$COMMIT" "$MINUTES" "$PERIOD" \
     "$STALL_BAR" "$RSS_GROWTH_PCT" "$WARMUP_SECS" "$FD_SLACK" "$THREAD_SLACK" \
