@@ -1,3 +1,4 @@
+import { monitorResizeTests } from './monitor-resize.js';
 // Exercise the studio controls against the public request shape.
 export async function studioTests(test, eq, ok) {
   const { lazyAction } = await import('../shell/lazy-action.js');
@@ -13,6 +14,7 @@ export async function studioTests(test, eq, ok) {
   test('a completed lazy action can be opened again', () => eq(opened, 2));
   window.godwinmixPanels ||= [];
   const { default: ProgramPanel } = await import('../panels/multiview/panel.js');
+  await monitorResizeTests(test, eq, ok, ProgramPanel);
   const panel = new ProgramPanel();
   const calls = [];
   panel.setClient({ state: { preview: 'wide-scene' }, call: async (method, params) => calls.push({ method, params }) });

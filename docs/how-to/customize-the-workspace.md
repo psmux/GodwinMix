@@ -6,7 +6,10 @@ near an edge creates a split; the centre groups the panels as tabs. Release to
 apply the change. Press Escape while dragging to cancel.
 
 Drag a divider to resize adjacent panes. Layout changes affect the control
-surface only. The mixer keeps sending the programme.
+surface only. The mixer keeps sending the programme. Monitor geometry follows
+your pointer immediately; stream resolution and sharp canvas sizing update
+once resizing has been still for 150 milliseconds. Hiding a monitor releases
+its streams immediately.
 
 ## Use the keyboard
 
