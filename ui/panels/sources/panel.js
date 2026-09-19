@@ -153,15 +153,7 @@ class SourcesPanel extends HTMLElement {
     return list.filter((x) => (nameOf(x) + " " + x.id + " " + x.uri).toLowerCase().includes(this.filter));
   }
 
-  /**
-   * The focused scene's summary, whatever the scope is, or null.
-   *
-   * Null covers more than an unfocused mixer: a core with no scene server, a
-   * collection with no scenes in it and a remembered focus that points at a
-   * scene somebody has since removed all answer null here, and every one of
-   * them means the panel shows every source the mixer has. A tray that hides
-   * everything helps nobody.
-   */
+  /** The focused scene, or the first remaining scene after one is removed. */
   focusedSummary() {
     const scenes = this.sceneClient();
     if (!scenes) return null;
@@ -371,14 +363,7 @@ class SourcesPanel extends HTMLElement {
 
   // ------------------------------------------------------------ actions
 
-  /**
-   * The Add button, the Ctrl+N chord and both empty states.
-   *
-   * `source.add` never touches a scene, so on its own it leaves a first time
-   * user with a full tray and an empty Default scene. The picker hands back
-   * the source it made and the placing happens here, in the order the
-   * protocol needs: the mixer has to own a source before a scene can draw it.
-   */
+  /** The scene add tile and Ctrl+N share the existing-source chooser. */
   addSource(opts) {
     const scene = this.scopedTo();
     if (scene && !opts?.category) return openSceneSources(this.client, this.sceneClient(), scene);
@@ -483,14 +468,7 @@ class SourcesPanel extends HTMLElement {
     return node.scenes.scenes().length ? node : null;
   }
 
-  /**
-   * The same panel's scene client, with no scene in it required.
-   *
-   * `scenesPanel` answers null for an empty collection because the number keys
-   * fall back to the sources then. The scope has the opposite need: a mixer
-   * with one empty Default scene is exactly the case that has to be placed in,
-   * so this one answers whenever the panel is there and its core supports it.
-   */
+  /** Shared scene data stays available when the Scenes dock is closed. */
   sceneClient() {
     if (this.scenes) return this.scenes.supported ? this.scenes : null;
     const node = document.querySelector("gmx-scenes");

@@ -1922,14 +1922,29 @@ async function liveSuite() {
   const { openSceneSources } = await import("../panels/sources/chooser.js");
   const choose = openSceneSources(client, panel.scenes, panel.scenes.summary(addCheck.id));
   const nextSource = client.state.sources.find(source => source.id === sources[1]);
-  const addButton = choose.el.querySelector(`[aria-label="Add ${nextSource.name || nextSource.id}"]`);
+  const { nameOf } = await import("../panels/sources/local.js");
+  const addButton = choose.el.querySelector(`[aria-label="Add ${nameOf(nextSource)}"]`);
   addButton.click();
   await waitFor(() => panel.scenes.mirror.items(addCheck.id).length === 2, 3000, "the chooser to add an existing source");
   test("the scene chooser reuses an existing source through scene.item.add", () => {
     eq(panel.scenes.mirror.items(addCheck.id).length, 2);
-    ok(choose.el.querySelector(`[aria-label="Already in scene: ${nextSource.name || nextSource.id}"]`).disabled);
+    eq(panel.scenes.summary(addCheck.id).sources.slice().sort(), sources.slice().sort());
+    ok(choose.el.querySelector(`[aria-label="Already in scene: ${nameOf(nextSource)}"]`).disabled);
   });
   choose.close();
+  const { default: SourcesPanel } = await import("../panels/sources/panel.js");
+  const { settings: sourceSettings, setSetting: setSourceSetting } = await import("../shell/settings.js");
+  const confirmBefore = sourceSettings().confirmRemove;
+  setSourceSetting("confirmRemove", false);
+  try {
+    await SourcesPanel.prototype.remove.call({ scopedTo: () => panel.scenes.summary(addCheck.id), sceneClient: () => panel.scenes }, [sources[1]]);
+  } finally { setSourceSetting("confirmRemove", confirmBefore); }
+  const retainedSource = await client.call("source.get", { id: sources[1] });
+  test("removing a scene source preserves the reusable mixer source", () => {
+    eq(panel.scenes.mirror.items(addCheck.id).length, 1);
+    eq(panel.scenes.summary(addCheck.id).sources, [sources[0]]);
+    eq(retainedSource.id, sources[1]);
+  });
   await panel.scenes.remove(addCheck.id);
 
   const before = panel.scenes.scenes().length;

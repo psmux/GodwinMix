@@ -31,7 +31,7 @@ export function openSceneSources(client, scenes, scene) {
     const present = added.has(source.id);
     return el('div.source-choice', { role: 'listitem' }, [
       el('div.grow', {}, [el('strong', { text: nameOf(source) }), el('div.sm.dim', { text: source.type || source.state || source.id })]),
-      el('button.btn', { text: 'Preview', 'aria-label': `Preview ${nameOf(source)}`, onclick: () => preview.select(source) }),
+      el('button.btn', { text: 'Preview', 'aria-label': `Preview ${nameOf(source)}`, onclick: () => { preview.select(source); preview.node.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); } }),
       el('button.btn.primary', { text: pending.has(source.id) ? 'Adding…' : present ? 'In scene' : 'Add',
         'aria-label': `${present ? 'Already in scene:' : 'Add'} ${nameOf(source)}`, disabled: present || pending.has(source.id),
         onclick: () => add(source).catch(error => errorToast(error, `Add to ${scene.name}`)) }),

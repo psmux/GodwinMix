@@ -1,3 +1,4 @@
+import { sourceMembership } from "./source-membership.js";
 // The protocol kit: one object a scene surface talks to.
 //
 // It holds the mirror (mirror.js), the undo proxy (undo.js) and the small set
@@ -154,7 +155,9 @@ export class SceneClient {
   }
 
   summary(id) {
-    return this.summaries.find((s) => s.id === id || s.name === id) || null;
+    const summary = this.summaries.find((s) => s.id === id || s.name === id) || null;
+    if (summary && this.mirror.record(summary.id)) summary.sources = sourceMembership(this.mirror, summary.id);
+    return summary;
   }
 
   view(id) {
