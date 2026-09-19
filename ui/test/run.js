@@ -1,3 +1,4 @@
+import { dockTests } from "./dock.js";
 // The test runner: forty lines, no dependencies, no toolchain. Open the page,
 // read the console, or read the list. Everything testable without a mixer is
 // here, including the legacy adapter against a stubbed server.
@@ -78,6 +79,8 @@ function ok(v, what) {
 function near(a, b, tol, what) {
   if (Math.abs(a - b) > tol) throw new Error(`${what || "value"}: ${a} is not within ${tol} of ${b}`);
 }
+
+dockTests(test, eq, ok);
 
 // ---------------------------------------------------------------- selection
 
