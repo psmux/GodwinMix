@@ -28,6 +28,15 @@ mod tools;
 use godwinmix_sdk::prelude::*;
 
 fn main() {
+    // AVFoundation permission callbacks need the macOS main run loop.
+    // The protocol reader must not occupy that thread while capture starts.
+    #[cfg(target_os = "macos")]
+    gstreamer::macos_main(run);
+    #[cfg(not(target_os = "macos"))]
+    run();
+}
+
+fn run() {
     let env = PluginEnv::from_env();
     let manifest = match Manifest::load(env.root.join("gmx-plugin.toml")) {
         Ok(manifest) => manifest,

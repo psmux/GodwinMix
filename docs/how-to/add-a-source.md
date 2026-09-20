@@ -166,3 +166,14 @@ a show keeps its buffers on the current programme timeline, without adding the
 show age a second time. In-process source plugins with the same timestamp
 contract declare `programme-timeline`; independently timestamped media leaves
 that capability unset.
+
+### Camera startup on macOS
+
+Choose the discovered camera row so GStreamer's device provider selects the
+correct device. The manual Capture element setting is for driver workarounds.
+Read only device properties are never used to select a camera.
+
+macOS may ask for camera access under the application that launched the mixer,
+such as a terminal. Until permission is granted, the source can be connecting
+without delivering frames. The camera plugin runs the macOS main event loop
+while its protocol reader runs separately, so permission callbacks can complete.

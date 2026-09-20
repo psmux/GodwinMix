@@ -57,6 +57,9 @@ pub fn set_if_present(element: &gst::Element, name: &str, value: &glib::Value) -
     let Some(spec) = element.find_property(name) else {
         return false;
     };
+    if !spec.flags().contains(glib::ParamFlags::WRITABLE) {
+        return false;
+    }
     if spec.value_type() == value.type_() {
         element.set_property_from_value(name, value);
         return true;
@@ -157,6 +160,23 @@ mod tests {
             .expect("videotestsrc");
         assert!(set_flag(&e, "is-live", true));
         assert!(!set_flag(&e, "there-is-no-such-property", true));
+    }
+
+    #[test]
+    fn read_only_properties_are_declined_without_panicking() {
+        gst();
+        let e = gst::ElementFactory::make("queue").build().unwrap();
+        assert!(!set_number(&e, "current-level-buffers", 1));
+        assert_eq!(e.property::<u32>("current-level-buffers"), 0);
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn avfoundation_read_only_device_name_is_not_a_selector() {
+        gst();
+        let Ok(e) = gst::ElementFactory::make("avfvideosrc").build() else { return; };
+        assert!(!set_text(&e, "device-name", "Camera"));
+        assert_eq!(point_at(&e, "Camera"), None);
     }
 
     #[test]

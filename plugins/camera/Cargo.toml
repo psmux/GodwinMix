@@ -19,3 +19,6 @@ godwinmix-sdk = { path = "../../crates/godwinmix-sdk", version = "0.1.0" }
 godwinmix-capture-common = { path = "../capture-common", version = "0.1.0" }
 gstreamer = { workspace = true }
 serde_json = { workspace = true }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+gstreamer = { workspace = true, features = ["v1_22"] }
