@@ -516,3 +516,12 @@ The Rust side of this is `godwinmix_sdk::transcript`: `steps` parses the file,
 * [The plugin manifest](plugin-manifest.md), every key of `gmx-plugin.toml`.
 * [Write a source plugin in Rust](../how-to/write-a-source-plugin.md).
 * [Your first plugin](../tutorials/your-first-plugin.md).
+
+### Rust callback panics
+
+The Rust SDK answers a request whose callback unwinds with `PLUGIN_DIED` and
+error data containing `method`, `retryable: false` and `restart_required: true`.
+It marks cached health `failing`. Later requests receive an error without
+calling the damaged handler; shutdown is acknowledged. The instance must be
+restarted before another operation can run. The crash hook still records the
+original panic. This does not intercept process aborts or native crashes.
