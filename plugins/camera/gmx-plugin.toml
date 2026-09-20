@@ -28,11 +28,16 @@ media = { video = "raw", audio = "none", alpha = false, thumb = true }
 # unixfd costs the core nothing per frame and exists on Linux and macOS. The
 # container is the fallback and is what Windows gets.
 transports = ["unixfd", "container"]
-capabilities = ["restart-in-place", "health"]
-# Not declared with `latency-report`, so the core treats it as 0 and the
-# aligner absorbs whatever the device really adds. A camera's latency is the
-# device's, it differs between two cameras on one machine, and a number we
-# guessed would be worse than no number at all.
+capabilities = ["restart-in-place", "health", "programme-timeline"]
+# `programme-timeline` because the capture element stamps every frame from the
+# clock and base time the core handed this pipeline, so the frames are already
+# on programme time. Without it the mixer adds the show's age on top, which
+# puts a camera added mid show that far into the future: the input queue fills,
+# nothing reaches the compositor, and the stall watchdog restarts the source in
+# a loop that never recovers because each restart adds a larger offset.
+# Not declared with `latency-report`, so the core treats it as 0. A camera's
+# latency is the device's, it differs between two cameras on one machine, and a
+# number we guessed would be worse than no number at all.
 latency_ms = 0
 settings = "schemas/source.json"
 skill = "skills/source/SKILL.md"

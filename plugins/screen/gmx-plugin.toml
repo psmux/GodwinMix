@@ -26,9 +26,12 @@ kind = "source"
 id = "source"
 media = { video = "raw", audio = "none", alpha = false, thumb = true }
 transports = ["unixfd", "container"]
-capabilities = ["restart-in-place", "health"]
+capabilities = ["restart-in-place", "health", "programme-timeline"]
+# `programme-timeline` because the capture element stamps frames from the clock
+# and base time the core handed this pipeline. See the camera plugin for what
+# leaving it off does to a source added part way through a show.
 # A screen capture's latency is the compositor's and differs by desktop, so no
-# number is declared and the aligner absorbs what arrives.
+# number is declared.
 latency_ms = 0
 settings = "schemas/source.json"
 skill = "skills/source/SKILL.md"
