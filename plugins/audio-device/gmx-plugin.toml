@@ -35,10 +35,14 @@ media = { video = "none", audio = "raw", alpha = false, thumb = false }
 # costs one memcpy per buffer, works on Windows too, and is the cheaper of the
 # two at this rate.
 transports = ["container"]
-capabilities = ["restart-in-place", "health"]
+capabilities = ["restart-in-place", "health", "programme-timeline"]
+# `programme-timeline` because the capture element stamps samples from the clock
+# and base time the core handed this pipeline. Without it a microphone added
+# part way through a show is shifted by the show's age and drifts out of sync
+# with the picture. See the camera plugin for the same fault on the video side.
 # The device's own buffer is its latency and it differs per driver, so the
-# number is left at 0 and the aligner absorbs what arrives. `latency-report`
-# is not declared, so the core does not trust this.
+# number is left at 0. `latency-report` is not declared, so the core does not
+# trust this.
 latency_ms = 0
 settings = "schemas/source.json"
 skill = "skills/source/SKILL.md"
