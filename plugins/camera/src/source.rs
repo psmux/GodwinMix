@@ -12,9 +12,9 @@ use crate::tools;
 
 /// How long `start` waits for the camera's first frame before carrying on.
 ///
-/// The core allows a plugin five seconds to answer `start`. A camera on macOS
-/// takes about two to wake up; this leaves the rest of the budget alone.
-const FIRST_FRAME_WITHIN: Duration = Duration::from_millis(2_500);
+/// Capture already waits for the pipeline state. Leave room for the host to
+/// attach it within the command deadline; health reports pending frames.
+const FIRST_FRAME_WITHIN: Duration = Duration::from_millis(100);
 
 /// How many times to ask for the camera before giving up.
 ///
