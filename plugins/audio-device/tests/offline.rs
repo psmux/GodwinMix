@@ -122,3 +122,33 @@ fn said(lines: &[String]) -> String {
     }
     out
 }
+
+/// The manifest must keep `programme-timeline`.
+///
+/// This audio device captures with osxaudiosrc, pulsesrc and the WASAPI sources, and every one of them stamps its
+/// buffers from the clock and base time the core hands the source pipeline. The
+/// timestamps are therefore already on programme time, and the mixer's
+/// `TimelineAligner` must leave them alone.
+///
+/// Dropping the capability does not fail anything at startup, which is why it
+/// wants a test. It fails later, and only for a source added part way through a
+/// show: the mixer adds the show's age on top, the frames land that far in the
+/// future, the input queue fills and blocks, and the stall watchdog restarts the
+/// source every ten seconds for as long as the show runs. Each restart re-aligns
+/// against an older programme, so the offset grows and it never recovers.
+#[test]
+fn the_manifest_declares_programme_timeline() {
+    let root = env!("CARGO_MANIFEST_DIR");
+    let manifest = godwinmix_sdk::manifest::Manifest::load(format!("{root}/gmx-plugin.toml"))
+        .expect("gmx-plugin.toml does not load");
+    let source = manifest
+        .provides
+        .iter()
+        .find(|p| p.kind == "source")
+        .expect("this plugin provides a source");
+    assert!(
+        source.capabilities.iter().any(|c| c == "programme-timeline"),
+        "the source provide must declare programme-timeline, it declares {:?}",
+        source.capabilities
+    );
+}
