@@ -232,3 +232,12 @@ replay does that before the first line.
 Both need a core built with `--features wasm`. `gmx doctor` says whether yours
 is, on the `wasm host` line. See
 [write a WASM plugin](write-a-wasm-plugin.md).
+
+The Rust SDK catches unwinding panics from plugin callbacks. A panicking
+`start` receives a `PLUGIN_DIED` error immediately after unwinding, with the
+method name and `restart_required: true`. Cached health becomes `failing`, and
+the worker refuses further callbacks against the partially updated instance.
+Restart the plugin before retrying and inspect its crash report. Shutdown is
+still acknowledged so the host can dispose of the failed process. Panics built
+with `panic = "abort"` and process crashes instead follow the host's process
+exit recovery path.

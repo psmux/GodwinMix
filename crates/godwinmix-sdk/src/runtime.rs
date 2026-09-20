@@ -84,8 +84,8 @@ pub fn run_on<H: Handler + 'static, R: std::io::BufRead>(
 
     let health = Arc::new(Mutex::new(Health::ok()));
     let reporter = Reporter::new(Arc::clone(&writer), Arc::clone(&health));
-    let result = handler
-        .on_initialize(&ready, reporter)
+    let result = guarded("initialize", || handler.on_initialize(&ready, reporter))
+        .map_err(RunError::Refused)?
         .map_err(RunError::Refused)?;
     if let Some(latency) = result.latency_ms {
         let _ = writer.notify("media.report", serde_json::json!({"latency_ms": latency}));
@@ -193,21 +193,49 @@ fn spawn_worker<H: Handler + 'static>(
     let thread = std::thread::Builder::new()
         .name("gmx-plugin".into())
         .spawn(move || {
+            let mut failure: Option<String> = None;
             while let Ok(job) = rx.recv() {
                 match job {
                     Job::Call { id, method, params } => {
-                        let outcome = handler.on_call(&method, params);
+                        let outcome = if let Some(detail) = &failure {
+                            Err(callback_error(&method, format!(
+                                "plugin callback '{method}' was not run after an earlier panic. {detail}"
+                            )))
+                        } else {
+                            match guarded(&method, || handler.on_call(&method, params)) {
+                                Ok(outcome) => outcome,
+                                Err(error) => {
+                                    failure = Some(error.message.clone());
+                                    *health.lock().unwrap_or_else(|e| e.into_inner()) =
+                                        Health::failing(error.message.clone());
+                                    Err(error)
+                                }
+                            }
+                        };
                         if outcome.is_err() && method == "start" {
                             // The reader moved us to running optimistically.
                             machine.lock().unwrap_or_else(|e| e.into_inner()).stopped();
                         }
                         respond(&writer, id, outcome);
-                        let fresh = handler.on_health();
-                        *health.lock().unwrap_or_else(|e| e.into_inner()) = fresh;
+                        if failure.is_none() {
+                            let fresh = match guarded("health", || handler.on_health()) {
+                                Ok(fresh) => fresh,
+                                Err(error) => {
+                                    failure = Some(error.message.clone());
+                                    Health::failing(error.message)
+                                }
+                            };
+                            *health.lock().unwrap_or_else(|e| e.into_inner()) = fresh;
+                        }
                     }
                     Job::Shutdown { id, reason } => {
-                        handler.on_shutdown(&reason);
-                        respond(&writer, id, Ok(serde_json::json!({})));
+                        let outcome = if failure.is_none() {
+                            guarded("shutdown", || handler.on_shutdown(&reason))
+                                .map(|()| serde_json::json!({}))
+                        } else {
+                            Ok(serde_json::json!({}))
+                        };
+                        respond(&writer, id, outcome);
                         break;
                     }
                 }
@@ -215,6 +243,31 @@ fn spawn_worker<H: Handler + 'static>(
         })
         .expect("could not start the plugin worker thread");
     (tx, thread)
+}
+
+/// A caught callback panic leaves the handler unusable. The worker retains
+/// the channel solely to answer queued requests and shutdown, never to retry
+/// against state that may have been only partly updated.
+fn guarded<T>(method: &str, call: impl FnOnce() -> T) -> Result<T, RpcError> {
+    std::panic::catch_unwind(std::panic::AssertUnwindSafe(call)).map_err(|payload| {
+        let detail = payload.downcast_ref::<String>().map(String::as_str)
+            .or_else(|| payload.downcast_ref::<&str>().copied())
+            .unwrap_or("non-string panic payload");
+        panic_error(method, detail)
+    })
+}
+
+fn panic_error(method: &str, detail: &str) -> RpcError {
+    callback_error(method, format!(
+        "plugin callback '{method}' panicked: {detail}. Restart this plugin instance \
+         before retrying; check its crash report for the failing callback."
+    ))
+}
+
+fn callback_error(method: &str, message: String) -> RpcError {
+    RpcError::new(codes::PLUGIN_DIED, message).with_data(serde_json::json!({
+        "method": method, "retryable": false, "restart_required": true
+    }))
 }
 
 fn respond(writer: &Arc<Writer>, id: Option<Id>, outcome: Result<Value, RpcError>) {
@@ -369,6 +422,67 @@ media = { video = "raw", audio = "none" }
 transports = ["container"]
 settings = "settings.json"
 "#;
+
+    struct Panicking {
+        calls: Arc<AtomicUsize>,
+    }
+
+    impl Source for Panicking {
+        fn initialize(&mut self, _: &Ready, _: Reporter) -> Result<InitializeResult, RpcError> {
+            Ok(InitializeResult::default())
+        }
+        fn configure(&mut self, _: Value) -> Result<Configure, RpcError> {
+            self.calls.fetch_add(1, Ordering::SeqCst);
+            Ok(Configure::applied())
+        }
+        fn start(&mut self, _: &StartParams) -> Result<StartResult, RpcError> {
+            self.calls.fetch_add(1, Ordering::SeqCst);
+            panic!("device-name is read only");
+        }
+        fn stop(&mut self) -> Result<(), RpcError> {
+            self.calls.fetch_add(1, Ordering::SeqCst);
+            Ok(())
+        }
+    }
+
+    #[test]
+    fn a_start_panic_replies_promptly_and_does_not_reenter_the_handler() {
+        let calls = Arc::new(AtomicUsize::new(0));
+        let sink = Sink::default();
+        let writer = Writer::new(Box::new(sink.clone()));
+        let health = Arc::new(Mutex::new(Health::ok()));
+        let machine = Arc::new(Mutex::new(Machine::new()));
+        machine.lock().unwrap().initialized();
+        machine.lock().unwrap().started();
+        let (jobs, worker) = spawn_worker(
+            SourceHandler(Panicking { calls: calls.clone() }), writer,
+            health.clone(), machine,
+        );
+        jobs.send(Job::Call {
+            id: Some(Id::Num(41)), method: "start".into(),
+            params: serde_json::to_value(StartParams { canvas: Canvas::new(1280, 720, 30), transport: Transport::Container, media: String::new() }).unwrap(),
+        }).unwrap();
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(1);
+        let response = loop {
+            if let Some(reply) = sink.lines().into_iter().find(|r| r["id"] == 41) {
+                break reply;
+            }
+            assert!(std::time::Instant::now() < deadline, "start panic left its request unanswered");
+            std::thread::sleep(std::time::Duration::from_millis(1));
+        };
+        assert_eq!(response["error"]["code"], codes::PLUGIN_DIED);
+        assert_eq!(response["error"]["data"]["method"], "start");
+        assert_eq!(response["error"]["data"]["restart_required"], true);
+        assert!(response["error"]["message"].as_str().unwrap().contains("device-name is read only"));
+        assert_eq!(health.lock().unwrap().state, crate::wire::HealthState::Failing);
+        jobs.send(Job::Call { id: Some(Id::Num(42)), method: "stop".into(), params: Value::Null }).unwrap();
+        jobs.send(Job::Shutdown { id: Some(Id::Num(43)), reason: "test".into() }).unwrap();
+        worker.join().unwrap();
+        let lines = sink.lines();
+        assert!(lines.iter().any(|r| r["id"] == 42 && r["error"]["code"] == codes::PLUGIN_DIED));
+        assert!(lines.iter().any(|r| r["id"] == 43 && r.get("result").is_some()));
+        assert_eq!(calls.load(Ordering::SeqCst), 1, "panicked handler was called again");
+    }
 
     #[derive(Clone, Default)]
     struct Sink(Arc<Mutex<Vec<u8>>>);
