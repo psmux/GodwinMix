@@ -79,3 +79,7 @@ examples/*/target/
 /.godwinmix/
 /*.runtime.toml
 /*.runtime.scenes.json
+
+# Runtime state an opencode plugin writes at the repository root, even when it
+# was started inside a worktree somewhere else.
+/.omo/

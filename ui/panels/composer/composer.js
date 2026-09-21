@@ -70,7 +70,11 @@ export class Composer {
       scenes: this.scenes,
       catalogue: this.catalogue,
       context: () => ({ scene: this.scene, draft: this.draft, items: this.selection }),
-      onChanged: () => this.reread(),
+      // The box an item sits in, for the numbers in the inspector.
+      geometry: (id) => this.canvas.boxes.get(id),
+      // With the answer when there is one: see `useView`. A draft's new
+      // state is only ever in the answer to the call that changed it.
+      onChanged: (answer) => (answer && Array.isArray(answer.records) ? this.useView(answer) : this.reread()),
     });
 
     this.dialog = modal({

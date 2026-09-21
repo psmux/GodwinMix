@@ -113,6 +113,18 @@
   gap: 2px;
 }
 
+/* A number input carries an intrinsic width of about twenty digits and a flex
+ * item will not shrink past it without this, so two to a row needs it. */
+.composer-inspector input[type="number"] {
+  min-width: 0;
+}
+
+/* The three rotate buttons and the angle beside them wrap in a narrow panel
+ * rather than run off the side. */
+.composer-inspector .composer-rotate {
+  flex-wrap: wrap;
+}
+
 .composer-sep {
   height: var(--border);
   background: var(--line);

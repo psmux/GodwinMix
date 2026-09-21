@@ -11,11 +11,13 @@
 import { el, clear, on } from "../../shell/dom.js";
 import { errorToast } from "../../shell/toast.js";
 import { editorFor } from "../../kits/schema/index.js";
+import { rectToTransform } from "../../kits/canvas/geometry.js";
 import { itemProps, filters, filterTypes, BLENDS, AUDIO, FITS } from "./ops.js";
 
 export class Inspector {
   /**
    * @param {{client, scenes, catalogue, context: () => object,
+   *          geometry?: (itemId: string) => ({x, y, width, height}|undefined),
    *          onChanged?: Function}} opts
    */
   constructor(opts) {
@@ -54,7 +56,11 @@ export class Inspector {
 
   itemSection(record) {
     const props = itemProps(this.o.scenes, this.o.context);
-    const guard = (fn) => (value) => Promise.resolve(fn(value)).then(() => this.changed()).catch((e) => errorToast(e, "Change"));
+    // The answer goes on to the composer. A change to a draft is in nothing
+    // but its answer, which carries the new records and geometry, and this
+    // used to drop it: a number typed here reached the mixer and the canvas
+    // went on drawing the old box.
+    const guard = (fn) => (value) => Promise.resolve(fn(value)).then((answer) => this.changed(answer)).catch((e) => errorToast(e, "Change"));
 
     const name = el("input", { type: "text", value: record.name || "" });
     on(name, "change", () => guard(props.name)(name.value));
@@ -71,8 +77,16 @@ export class Inspector {
     const locked = el("input", { type: "checkbox", checked: !!record.locked });
     on(locked, "change", () => guard(props.locked)(locked.checked));
 
+    // The box an item sits in is not on the record. It is flattened geometry
+    // the core answers with, so a mixer without it gets no group rather than a
+    // guess. A null child is skipped by `el`, which keeps the row below it in
+    // place either way.
+    const box = this.o.geometry ? this.o.geometry(record.id) : null;
+    const geometry = box ? field("Position and size", this.geometrySection(record, box, guard)) : null;
+
     return el("div.form.pad", {}, [
       field("Name", name),
+      geometry,
       field("Opacity", el("div.row", {}, [opacity, opacityOut])),
       field("Fit", choice(FITS, (record.transform && record.transform.fit) || "none", guard(props.fit))),
       field("Blend", choice(BLENDS, record.blend || "normal", guard(props.blend))),
@@ -80,6 +94,96 @@ export class Inspector {
       el("div.row", {}, [
         el("label.inline", {}, [visible, el("span.sm", { text: "Visible" })]),
         el("label.inline", {}, [locked, el("span.sm", { text: "Locked" })]),
+      ]),
+    ]);
+  }
+
+  // position and size
+
+  /**
+   * The item's box in canvas pixels, and the quarter turns the mixer can make,
+   * because those are the only turns `videoflip` offers (see `set_rotation` in
+   * the core). One `scene.item.set` per edit, from all four numbers at once, so
+   * the rectangle is never half of one edit and half of another.
+   *
+   * The box arrives from the caller, taken from the flattened geometry, and the
+   * change goes back through `rectToTransform` with the item's own scale and
+   * anchor so the numbers round trip. There is nothing here that a mixer
+   * without geometry can draw, which is why absence is handled by not being
+   * called.
+   */
+  geometrySection(record, box, guard) {
+    const inputs = {
+      x: numberInput("X", box.x),
+      y: numberInput("Y", box.y),
+      w: numberInput("W", box.width),
+      h: numberInput("H", box.height),
+    };
+    const wanted = () => ({
+      x: whole(inputs.x.value, whole(box.x, 0)),
+      y: whole(inputs.y.value, whole(box.y, 0)),
+      width: whole(inputs.w.value, whole(box.width, 0)),
+      height: whole(inputs.h.value, whole(box.height, 0)),
+    });
+    const restore = () => {
+      inputs.x.value = String(whole(box.x, 0));
+      inputs.y.value = String(whole(box.y, 0));
+      inputs.w.value = String(whole(box.width, 0));
+      inputs.h.value = String(whole(box.height, 0));
+    };
+    const commit = () => {
+      const rect = wanted();
+      // The core refuses a box below this and would answer with an error. The
+      // old value goes back instead, which is the state that is actually true.
+      if (rect.width < 8 || rect.height < 8) {
+        restore();
+        return;
+      }
+      guard(() => {
+        const c = this.o.context();
+        return this.o.scenes.itemSet(
+          c.scene,
+          c.items[0],
+          { transform: rectToTransform(rect, record.transform || {}) },
+          { duration_ms: 0, draft: c.draft }
+        ).then((answer) => {
+          // What was sent is the box now, so a later refusal puts back these
+          // numbers and not the ones the panel opened with.
+          Object.assign(box, rect);
+          return answer;
+        });
+      })();
+    };
+    for (const input of Object.values(inputs)) on(input, "change", commit);
+
+    // The panel does not rebuild while the hand is still in it, so the angle
+    // beside the buttons is kept here as well as on the record.
+    let current = quarter(rotationOf(record));
+    const shown = el("span.num.sm", { text: degrees(current) });
+    const turn = (value) => {
+      guard(() => {
+        const c = this.o.context();
+        return this.o.scenes.itemSet(
+          c.scene,
+          c.items[0],
+          { transform: { rotation: value } },
+          { duration_ms: 0, draft: c.draft }
+        ).then((answer) => {
+          current = value;
+          shown.textContent = degrees(value);
+          return answer;
+        });
+      })();
+    };
+
+    return el("div.col", {}, [
+      el("div.row", {}, [numberField("X", inputs.x), numberField("Y", inputs.y)]),
+      el("div.row", {}, [numberField("W", inputs.w), numberField("H", inputs.h)]),
+      el("div.row.composer-rotate", {}, [
+        el("button.btn.sm", { text: "Rotate left", title: "A quarter turn anticlockwise", onclick: () => turn(quarter(current - 90)) }),
+        el("button.btn.sm", { text: "Rotate right", title: "A quarter turn clockwise", onclick: () => turn(quarter(current + 90)) }),
+        el("button.btn.sm", { text: "Reset rotation", onclick: () => turn(0) }),
+        shown,
       ]),
     ]);
   }
@@ -177,8 +281,8 @@ export class Inspector {
     return el("div.col", {}, [el("div.row.pad", {}, [el("strong.sm.grow", { text: "Filters" }), picker]), list]);
   }
 
-  changed() {
-    if (this.o.onChanged) this.o.onChanged();
+  changed(answer) {
+    if (this.o.onChanged) this.o.onChanged(answer);
   }
 }
 
@@ -196,4 +300,32 @@ function choice(values, current, onPick) {
 
 function pct(v) {
   return `${Math.round(v * 100)}%`;
+}
+
+function numberInput(label, value) {
+  return el("input", { type: "number", step: "1", value: String(whole(value, 0)), "aria-label": label });
+}
+
+function numberField(label, input) {
+  return el("label.inline.grow", {}, [el("span.sm.faint", { text: label }), input]);
+}
+
+/** A whole number, or the fallback when the box holds something else. */
+function whole(value, fallback) {
+  const n = Math.round(Number(value));
+  return isFinite(n) ? n : fallback === undefined ? 0 : fallback;
+}
+
+/** The nearest quarter turn, kept on 0, 90, 180 or 270. */
+function quarter(value) {
+  return (((Math.round(value / 90) % 4) + 4) % 4) * 90;
+}
+
+function rotationOf(record) {
+  const rotation = record.transform && record.transform.rotation;
+  return typeof rotation === "number" && isFinite(rotation) ? rotation : 0;
+}
+
+function degrees(value) {
+  return `${Math.round(value)}°`;
 }
