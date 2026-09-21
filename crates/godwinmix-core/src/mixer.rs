@@ -3512,17 +3512,7 @@ impl Mixer {
                     if let Some(a) = &slot.aligner {
                         a.reset();
                     }
-                    // The restart ends with a flush stop that reaches this
-                    // source's slots, which are held on air and so cannot be
-                    // hidden first. Sent just after a frame, it lands while
-                    // the compositor sleeps until its next one.
-                    let pad = self.pool.pad_of(&id).cloned();
-                    let barrier = move || {
-                        if let Some(pad) = &pad {
-                            gstutil::after_next_frame(pad);
-                        }
-                    };
-                    if let Err(e) = slot.input.restart_then(&barrier) {
+                    if let Err(e) = slot.input.restart() {
                         error!(source = %id, ?e, "restart failed");
                     }
                 }
