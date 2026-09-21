@@ -839,6 +839,56 @@ async function addSourcePickerSuite() {
     eq(picked.properties.monitor["x-gmx-labels"], ["The whole screen", "Second display"]);
   });
 
+  test("a camera's sizes are a list with Automatic first", () => {
+    const schema = {
+      properties: {
+        device: { type: "string", title: "Camera" },
+        resolution: { type: "string", title: "Size", "x-gmx-group": "Advanced" },
+      },
+    };
+    const found = [
+      { type: "camera/source", name: "MacBook Pro Camera", params: { device: "6C70", label: "MacBook Pro Camera", sizes: ["1920x1080", "1280x720", "1080x1920", "1552x1552"] } },
+      { type: "camera/source", name: "Other Camera", params: { device: "other", label: "Other Camera", sizes: ["640x480"] } },
+    ];
+    const made = kinds.withDeviceChoices(schema, "camera/source", found);
+    eq(made.properties.resolution.enum, ["", "1920x1080", "1280x720", "1080x1920", "1552x1552"]);
+    eq(made.properties.resolution["x-gmx-labels"], ["Automatic (recommended)", "1920 x 1080, wide", "1280 x 720, wide", "1080 x 1920, tall", "1552 x 1552, square"]);
+    eq(made.properties.resolution.description, "Automatic takes the wide size closest to the canvas.");
+    ok(!("x-gmx-group" in made.properties.resolution), "the list sits on the form, not in Advanced");
+    // The sizes follow the current device, not the first one found.
+    const other = kinds.withDeviceChoices(schema, "camera/source", found, { device: "other" });
+    eq(other.properties.resolution.enum, ["", "640x480"]);
+    eq(other.properties.resolution["x-gmx-labels"], ["Automatic (recommended)", "640 x 480, wide"]);
+    // A resolution the camera no longer offers is kept, under its own name.
+    const kept = kinds.withDeviceChoices(schema, "camera/source", found, { device: "6C70", resolution: "800x600" });
+    eq(kept.properties.resolution.enum[kept.properties.resolution.enum.length - 1], "800x600");
+    eq(kept.properties.resolution["x-gmx-labels"][kept.properties.resolution["x-gmx-labels"].length - 1], "800x600");
+    // Without a resolution box there is nothing to list.
+    const plain = kinds.withDeviceChoices({ properties: { device: { type: "string" } } }, "camera/source", found);
+    ok(!plain.properties.resolution, "no resolution box means no resolution list");
+  });
+
+  test("a schema that marks nothing advanced still opens on what a first visit needs", () => {
+    // An older installed plugin's schema has no `x-gmx-group` at all, and its
+    // list of GStreamer element names stood beside the camera on the form.
+    const old = { properties: { device: { type: "string" }, element: { type: "string", enum: ["", "avfvideosrc"] }, framerate: { type: "integer" }, name: { type: "string" } } };
+    const folded = kinds.foldAdvanced(JSON.parse(JSON.stringify(old)));
+    eq(folded.properties.element["x-gmx-group"], "Advanced");
+    eq(folded.properties.framerate["x-gmx-group"], "Advanced");
+    ok(!folded.properties.device["x-gmx-group"], "which camera is never advanced");
+    ok(!folded.properties.name["x-gmx-group"], "nor is what to call it");
+    // A plugin that has said which are advanced is believed, all of it.
+    const said = { properties: { device: { type: "string" }, gain: { type: "number" }, element: { type: "string", "x-gmx-group": "Advanced" } } };
+    ok(!kinds.foldAdvanced(said).properties.gain["x-gmx-group"], "a plugin's own grouping was overruled");
+    // A required field stays in view whatever it is called.
+    const must = { required: ["bitrate"], properties: { bitrate: { type: "integer" }, tune: { type: "string" } } };
+    const kept = kinds.foldAdvanced(must);
+    ok(!kept.properties.bitrate["x-gmx-group"] && kept.properties.tune["x-gmx-group"] === "Advanced");
+    // The sizes a camera offers are for the form, never part of the request.
+    const req = kinds.addRequestFor({ type: "camera/source", name: "Cam", params: { device: "d", sizes: ["1920x1080"] } });
+    ok(!("sizes" in req), "sizes were sent to source.add");
+  });
+
   test("the size a device advertises is read wherever it put it", () => {
     eq(kinds.candidateSize({ params: { width: 1920, height: 1080 } }), "1920 x 1080");
     eq(kinds.candidateSize({ params: { best_size: [1280, 720] } }), "1280 x 720");
