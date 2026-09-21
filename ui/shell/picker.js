@@ -38,7 +38,7 @@ import {
   addRequestFor,
   pluginSourceFor,
 } from "../client/kinds.js";
-import { alreadyAdded, sameAddress, withDeviceChoices } from "../client/devices.js";
+import { alreadyAdded, sameAddress, easeSchema, unease } from "../client/devices.js";
 
 const LIST_KEY = "gmx.picker.list";
 
@@ -570,7 +570,7 @@ export async function openForm(client, what, kind, preset, opts = {}) {
   if (what === "source" && kind.plugin && schema?.properties) {
     // Short, and its failure is nothing: the box stays a box.
     const found = await discoverDevices(client, 1500).catch(() => []);
-    schema = withDeviceChoices(schema, kind.id, found, preset || {});
+    schema = easeSchema(schema, kind.id, found, preset || {});
   }
   const form = new SchemaForm(schema, preset || {});
   const add = el("button.btn.primary", { text: what === "output" ? "Start sending" : "Add" });
@@ -596,7 +596,7 @@ export async function openForm(client, what, kind, preset, opts = {}) {
     add.disabled = true;
     let answer;
     try {
-      const params = kind.build(form.read());
+      const params = kind.build(unease(form.read()));
       // One box asks what to call it. A plugin that also takes a `label` gets
       // the same words, which is what its own box used to be for.
       if (schema["x-gmx-name-is-label"] && params.name && params.label === undefined) params.label = params.name;

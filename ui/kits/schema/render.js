@@ -49,7 +49,9 @@ export class SchemaInspector {
       this.nodes.set(n, body);
       return body;
     }
-    const box = el("details", { open: true }, [el("summary", { text: n.label }), body]);
+    // Advanced is closed until somebody wants it. Every other group is part of
+    // what the form is for and opens with it.
+    const box = el("details", { open: n.label !== "Advanced" }, [el("summary", { text: n.label }), body]);
     this.nodes.set(n, box);
     return box;
   }

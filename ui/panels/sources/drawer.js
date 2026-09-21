@@ -9,7 +9,7 @@ import { toast, errorToast } from "../../shell/toast.js";
 import { shell } from "../../shell/shell.js";
 import { SchemaForm } from "../../client/schema-form.js";
 import { SOURCE_KINDS, kindOfUri, discoverDevices } from "../../client/kinds.js";
-import { schemaForSource, withDeviceChoices } from "../../client/devices.js";
+import { schemaForSource, easeSchema, unease } from "../../client/devices.js";
 import { settableOnly, setRequest } from "./setreq.js";
 import { nameOf, setLocal } from "./local.js";
 
@@ -25,15 +25,15 @@ export async function openSourceDrawer(panel, source) {
   // no address to tell it by.
   let schema = (await schemaForSource(client, source).catch(() => null)) || kind.schema;
   const found = await discoverDevices(client, 1500).catch(() => []);
-  schema = withDeviceChoices(schema, source.type || "", found, {});
+  schema = easeSchema(schema, source.type || "", found, {});
   const form = new SchemaForm(settableOnly(schema), { name: nameOf(source) });
   // What the form says before anybody has touched it. Only what differs
   // from this is sent. The mixer does not publish a source's settings, so
   // the boxes open at their defaults, and sending every one of them would
   // quietly put a second camera back to the first and its size back to auto.
-  const untouched = form.read();
+  const untouched = unease(form.read());
   const changed = () => {
-    const now = form.read();
+    const now = unease(form.read());
     const out = {};
     for (const [key, value] of Object.entries(now)) {
       if (JSON.stringify(value) !== JSON.stringify(untouched[key])) out[key] = value;

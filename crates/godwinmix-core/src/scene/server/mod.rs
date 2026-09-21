@@ -299,6 +299,8 @@ impl SceneServer {
                 alpha: p.alpha,
                 rotation: p.rotation,
                 crop: p.crop,
+                fit: p.sizing.name().to_string(),
+                additive: p.additive,
             })
             .collect();
         Some(PreviewLayout { scene: id, name: scene.name.clone(), width, height, cells })
@@ -352,6 +354,8 @@ impl SceneServer {
                 alpha: p.alpha,
                 rotation: p.rotation,
                 crop: p.crop,
+                fit: p.sizing.name().to_string(),
+                additive: p.additive,
             })
             .collect();
         Some(PreviewLayout { scene: draft.of, name: draft.name.clone(), width, height, cells })
@@ -708,6 +712,10 @@ pub struct PreviewCell {
     pub rotation: f64,
     /// Fractions of the source's picture to trim: left, top, right, bottom.
     pub crop: (f64, f64, f64, f64),
+    /// `fill`, `contain` or `cover`: how the picture sits in its box.
+    pub fit: String,
+    /// True for the one blend besides normal the compositor draws, add.
+    pub additive: bool,
 }
 
 impl Inner {
