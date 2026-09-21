@@ -21,7 +21,11 @@ sources before pressing **Close**. Preview is optional; closing the chooser or
 leaving that category releases it.
 
 Reusing a source adds a scene reference and does not open another camera or
-decoder. Removing it from the scene leaves it available to other scenes. New
+decoder. Removing it from the scene leaves it available to other scenes, and
+leaves it running. To close a camera or a capture, open the chooser on
+**Existing sources** and press **Remove** on its row: that takes it out of the
+mixer and out of every scene, and the toast that follows has **Undo**. A scene
+that lacks a source the mixer has opens the chooser on that list. New
 sources go into the scene that opened the chooser, even if another scene is
 selected while setup is open.
 
