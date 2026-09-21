@@ -52,9 +52,13 @@ export async function openSceneSources(client, scenes, scene) {
   ]);
   const off = client.onRender(() => render());
   const close = () => { closed = true; off(); preview.destroy(); };
+  // Open on what the mixer already has when some of it is not in this scene.
+  // A second scene nearly always wants a camera the first one uses, and the
+  // list of cameras to set up from nothing is the wrong page to start on.
+  const unused = (client.state.sources || []).some(source => !added.has(source.id));
   try {
     return await openPicker(client, 'source', {
-      title: `Add sources to ${scene.name}`, category: 'cameras',
+      title: `Add sources to ${scene.name}`, category: unused ? 'existing' : 'cameras',
       existing: { node: body, draw(value) { query = value.trim().toLowerCase(); render(true); }, deactivate() { preview.select(null); } },
       contains: source => added.has(source.id) || (scenes.summary?.(scene.id)?.sources || []).includes(source.id),
       onExisting: add, onAdded: add, onClose: close,
