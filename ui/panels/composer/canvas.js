@@ -22,6 +22,23 @@ import { paint, grabRadius } from "../../kits/canvas/draw.js";
 /** Travel in CSS pixels before a press becomes a drag rather than a click. */
 const THRESHOLD = 4;
 
+/**
+ * Whatever a plugin lists, its item can still be moved, resized and turned.
+ *
+ * Where an item sits, how big it is and which way up are the scene's business
+ * and not the plugin's, so a plugin's list adds handles and never takes these
+ * away. The camera plugin lists `["move", "resize", "crop"]`. `resize` is not a
+ * name this kit knows, so it was dropped without a word, and `rotate` was not
+ * listed at all: a camera in the composer had a cage and four crop edges, no
+ * corner to drag and nothing to turn it by. A default handle is added wherever
+ * the plugin put nothing of its own, so a plugin's crop edge keeps its edge.
+ */
+function everyItemTransforms(declared) {
+  const taken = new Set(declared.map((g) => `${g.anchor[0]},${g.anchor[1]}`));
+  const missing = gizmosFor(null).filter((g) => g.kind !== "cage" && !taken.has(`${g.anchor[0]},${g.anchor[1]}`));
+  return declared.concat(missing);
+}
+
 export class ComposerCanvas {
   /**
    * @param {{scenes: object, onSelect: Function, designerFor: Function,
@@ -172,7 +189,7 @@ export class ComposerCanvas {
     const box = this.boxes.get(id);
     if (!box) return [];
     const designer = this.o.designerFor ? this.o.designerFor(this.record(id)) : null;
-    return handlesFor(box, gizmosFor(designer));
+    return handlesFor(box, everyItemTransforms(gizmosFor(designer)));
   }
 
   // --------------------------------------------------------------- pointer
