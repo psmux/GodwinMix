@@ -60,6 +60,9 @@ fn drafts(reg: &mut Registry<Call>) {
                 let outcome = server(&call)
                     .edit_apply(client(&call).as_deref(), &req.draft)
                     .map_err(|e| scene_error(&call, e))?;
+                // The draft is gone, so a preview that was drawing it goes
+                // back to the armed scene, which may be the one just changed.
+                push_preview(&call);
                 super::answered(outcome)
             }),
         )
@@ -76,6 +79,8 @@ fn drafts(reg: &mut Registry<Call>) {
                 let req: DraftRequest = call.params(&params)?;
                 let draft =
                     server(&call).edit_discard(&req.draft).map_err(|e| scene_error(&call, e))?;
+                // As above: the preview falls back to what is armed.
+                push_preview(&call);
                 body(json!({ "discarded": draft.id.to_string(), "scene": draft.name }))
             }),
         )
@@ -190,6 +195,12 @@ fn preview(reg: &mut Registry<Call>) {
              takes it.",
             handler(|call: Call, params| async move {
                 let req: PreviewRequest = call.params(&params)?;
+                if let Some(draft) = req.draft.as_deref().map(str::trim) {
+                    let shown = (!draft.is_empty()).then_some(draft);
+                    server(&call).show_draft(shown).map_err(|e| scene_error(&call, e))?;
+                    push_preview(&call);
+                    return body(json!({ "preview": server(&call).armed(), "draft": shown }));
+                }
                 let armed = server(&call)
                     .arm(req.scene.as_deref())
                     .map_err(|e| scene_error(&call, e))?;

@@ -223,6 +223,9 @@ async fn apply(
         // A draft is nobody else's business until it is applied, so nothing
         // moves on air and a duration has nothing to animate.
         let view = server(call).edit_draft(draft, f).map_err(|e| scene_error(call, e))?;
+        // Nothing moves on air, but the preview may be drawing this draft for
+        // the designer that is editing it, and that picture has to follow.
+        super::edit::push_preview(call);
         return body(view);
     }
     let outcome = server(call)

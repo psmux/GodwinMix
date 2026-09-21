@@ -1083,6 +1083,8 @@ class PreviewOpenRequest(TypedDict, total=False):
 class PreviewRequest(TypedDict, total=False):
     """`scene.preview.set`."""
 
+    draft: Optional[str]
+    # A draft from `scene.edit.begin` for the preview to draw in place of the armed scene, which is how a designer sees what it is laying out. What is armed is left as it is, and `scene` is ignored. An empty string goes back to the armed scene; so does applying or discarding the draft.
     scene: Optional[str]
     # The scene to arm. Null or omitted disarms.
 
@@ -3269,10 +3271,13 @@ class GeneratedMethods:
     async def scene_preview_set(
         self,
         *,
+        draft: Optional[str] = None,
         scene: Optional[str] = None,
     ) -> Dict[str, Any]:
         """Arm a scene. The armed scene is the preview, and program.take with no argument takes it."""
         params: Dict[str, Any] = {}
+        if draft is not None:
+            params["draft"] = draft
         if scene is not None:
             params["scene"] = scene
         return await self._call("scene.preview.set", params)

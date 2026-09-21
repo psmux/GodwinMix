@@ -104,6 +104,9 @@ struct Inner {
     drafts: Vec<Draft>,
     /// The scene that is armed. `program.take {}` with no argument takes it.
     preview: Option<Id>,
+    /// A draft the preview draws in place of the armed scene, while a designer
+    /// has it open. See `SceneServer::show_draft`.
+    preview_draft: Option<Id>,
 }
 
 impl SceneServer {
@@ -128,6 +131,7 @@ impl SceneServer {
                 pending: Vec::new(),
                 drafts: Vec::new(),
                 preview: None,
+                preview_draft: None,
             }),
             patches: broadcast::channel(PATCH_QUEUE).0,
             seq: AtomicU64::new(0),
@@ -277,6 +281,9 @@ impl SceneServer {
     /// armed, which is what "preview is on demand, not permanent" means.
     pub fn preview_layout(&self, width: i32, height: i32) -> Option<PreviewLayout> {
         let inner = self.inner.lock();
+        if let Some(layout) = Self::draft_layout(&inner, width, height) {
+            return Some(layout);
+        }
         let id = inner.preview?;
         let scene = inner.doc.scene(&id)?;
         let canvas = inner.doc.canvas;
@@ -293,6 +300,57 @@ impl SceneServer {
             })
             .collect();
         Some(PreviewLayout { scene: id, name: scene.name.clone(), width, height, cells })
+    }
+
+    /// Have the preview draw a draft in place of the armed scene, or stop.
+    ///
+    /// A designer moves boxes on a draft, and a draft is in no picture the
+    /// core makes: the armed scene's preview shows the scene as saved and the
+    /// programme shows what is on air, so the boxes moved and the video under
+    /// them stayed where it was, and nobody could lay a scene out by eye. This
+    /// points the one preview compositor at the draft, through the same
+    /// placements the programme would get, so what is seen is what Apply
+    /// gives.
+    ///
+    /// What is armed is left alone, because `program.take` with no argument
+    /// takes it and a designer opening must not change what a take does. The
+    /// draft going, applied or discarded, ends this by itself.
+    pub fn show_draft(&self, draft: Option<&str>) -> Result<()> {
+        let mut inner = self.inner.lock();
+        inner.preview_draft = match draft {
+            Some(id) => Some(find_draft(&inner.drafts, id)?.id),
+            None => None,
+        };
+        Ok(())
+    }
+
+    /// The draft the preview is showing, laid out, when there is one.
+    fn draft_layout(inner: &Inner, width: i32, height: i32) -> Option<PreviewLayout> {
+        let shown = inner.preview_draft?;
+        let draft = inner.drafts.iter().find(|d| d.id == shown)?;
+        // Composed inside a copy of the document with the draft in its scene's
+        // place, the way `edit_draft` edits it, so a reference to another
+        // scene resolves against the collection the draft belongs to.
+        let mut working = inner.doc.clone();
+        match working.scenes.iter().position(|s| s.id == draft.of) {
+            Some(index) => working.scenes[index] = draft.scene.clone(),
+            None => working.scenes.push(draft.scene.clone()),
+        }
+        let scene = working.scene(&draft.of)?;
+        let canvas = working.canvas;
+        let (sx, sy) = (width as f64 / canvas.width as f64, height as f64 / canvas.height as f64);
+        let cells = compose::placements(&working, scene, &inner.canvas)
+            .into_iter()
+            .map(|p| PreviewCell {
+                source: p.source,
+                x: (p.xpos as f64 * sx).round() as i32,
+                y: (p.ypos as f64 * sy).round() as i32,
+                width: (p.width as f64 * sx).round() as i32,
+                height: (p.height as f64 * sy).round() as i32,
+                alpha: p.alpha,
+            })
+            .collect();
+        Some(PreviewLayout { scene: draft.of, name: draft.name.clone(), width, height, cells })
     }
 
     // -- editing -------------------------------------------------------
