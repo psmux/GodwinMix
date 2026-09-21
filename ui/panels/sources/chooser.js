@@ -33,7 +33,13 @@ export async function openSceneSources(client, scenes, scene) {
   // open until the mixer stopped. The core puts it back: `source.restore`.
   const discard = async source => {
     const name = nameOf(source);
-    const question = `Remove ${name} from the mixer? It leaves every scene that draws it, and a camera or capture it holds is closed. Nothing else on air is interrupted.`;
+    // Said plainly when it is on air, because then this is what takes the
+    // picture away: the core cuts to the slate before it lets a source go.
+    const state = client.state || {};
+    const drawn = (state.scene && scenes.summary?.(state.scene)?.sources) || [];
+    const airing = state.program === source.id || drawn.includes(source.id);
+    const question = `Remove ${name} from the mixer? It leaves every scene that draws it, and a camera or capture it holds is closed. `
+      + (airing ? `${name} is on air now, so the audience will see the slate until you take something else.` : 'Nothing on air is interrupted.');
     if (!(await confirmModal(question, 'Remove'))) return;
     await client.call('source.remove', { id: source.id });
     added.delete(source.id);
