@@ -809,6 +809,8 @@ impl Multiview {
         // adds nothing and there is nothing here to negotiate.
         gstutil::answer_latency_here(&src)?;
         let queue = gstutil::queue_preview(&format!("mv-q-{tag}"))?;
+        // The mosaic is a compositor too, and its tiles are scaled on its pads.
+        gstutil::stop_flushes_here(&queue)?;
         let rate = make("videorate", &format!("mv-rate-{tag}"))?;
         // Start at the first buffer that arrives, not at the start of the
         // segment. The mosaic is built when a client asks for it, which may be
