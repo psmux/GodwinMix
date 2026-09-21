@@ -81,6 +81,11 @@ pub fn open(settings: &Settings) -> Result<gst::Element, String> {
     match devices::find(devices::CAMERA, &settings.device) {
         Ok(found) => found.element(SOURCE),
         Err(from_monitor) => {
+            // The monitor works and this is not one of its devices. It has
+            // said which ones there are, and no element by name will do better.
+            if devices::lists_any(devices::CAMERA) {
+                return Err(from_monitor);
+            }
             let factory = elements::require(
                 "capturing a camera",
                 CANDIDATES,

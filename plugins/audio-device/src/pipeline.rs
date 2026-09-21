@@ -98,6 +98,11 @@ pub fn open(settings: &Settings) -> Result<gst::Element, String> {
             Ok(element)
         }
         Err(from_monitor) => {
+            // The monitor works and this is not one of its devices. It has
+            // said which ones there are, and no element by name will do better.
+            if devices::lists_any(devices::MICROPHONE) {
+                return Err(from_monitor);
+            }
             let factory = elements::require(
                 "capturing sound",
                 CANDIDATES,

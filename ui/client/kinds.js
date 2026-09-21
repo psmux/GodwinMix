@@ -603,6 +603,35 @@ export async function discoverDevices(client, timeoutMs) {
   return (answer && answer.candidates) || [];
 }
 
+/**
+ * A kind's schema with its `device` box turned into a choice of the devices
+ * this machine has.
+ *
+ * The box is titled "Camera" and sits at the top of the form, and what it
+ * wants is an id, a name exactly as the operating system spells it, or a
+ * number. Somebody who typed a name of their own there was refused by the
+ * plugin after the form had gone. What `device.discover` found is what can be
+ * chosen, by name, with the first one found as the empty choice it always
+ * was. Nothing found, or nothing of this kind, leaves the box as it is, so a
+ * device the monitor cannot see can still be typed in.
+ */
+export function withDeviceChoices(schema, kindId, candidates, current) {
+  const field = schema && schema.properties && schema.properties.device;
+  if (!field || Array.isArray(field.enum)) return schema;
+  const mine = (candidates || []).filter(
+    (c) => (c.type || c.kind) === kindId && c.params && typeof c.params.device === "string" && c.params.device
+  );
+  if (!mine.length) return schema;
+  const values = [""].concat(mine.map((c) => c.params.device));
+  const labels = ["The first one found"].concat(mine.map((c) => c.name || c.params.device));
+  if (current && !values.includes(current)) {
+    values.push(current);
+    labels.push(current);
+  }
+  const device = Object.assign({}, field, { enum: values, "x-gmx-labels": labels });
+  return Object.assign({}, schema, { properties: Object.assign({}, schema.properties, { device }) });
+}
+
 /** The size a candidate advertises, when it advertises one. */
 export function candidateSize(candidate) {
   const params = (candidate && candidate.params) || {};
