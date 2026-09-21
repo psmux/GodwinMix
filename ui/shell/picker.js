@@ -37,6 +37,7 @@ import {
   candidateSize,
   addRequestFor,
   alreadyAdded,
+  sameAddress,
   pluginSourceFor,
 } from "../client/kinds.js";
 
@@ -276,8 +277,8 @@ function openSourcePicker(client, kinds, plugins, opts) {
       note: item.size_bytes ? fmtBytes(item.size_bytes) : item.path,
       title: item.path,
       params: () => ({ uri, name: item.name }),
-      existing: () => sources().find(source => source.uri === uri),
-      added: () => state.added.has(key(item.name)) || sources().some((s) => s.uri === uri),
+      existing: () => sources().find(source => sameAddress(source.uri, uri)),
+      added: () => state.added.has(key(item.name)) || sources().some((s) => sameAddress(s.uri, uri)),
     };
   }
 
@@ -306,8 +307,8 @@ function openSourcePicker(client, kinds, plugins, opts) {
       note: pattern.note,
       title: pattern.uri,
       params: () => ({ uri: pattern.uri, name: pattern.name }),
-      existing: () => sources().find(source => source.uri === pattern.uri),
-      added: () => state.added.has(key(pattern.name)) || sources().some((s) => s.uri === pattern.uri),
+      existing: () => sources().find(source => sameAddress(source.uri, pattern.uri)),
+      added: () => state.added.has(key(pattern.name)) || sources().some((s) => sameAddress(s.uri, pattern.uri)),
     };
   }
 

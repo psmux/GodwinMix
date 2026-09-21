@@ -625,6 +625,42 @@ export function addRequestFor(candidate) {
 }
 
 /**
+ * Whether a source's published address is the address we would add.
+ *
+ * The core cuts everything after the host off an address before it publishes
+ * it, because that is where a stream key lives, so `test://smpte` comes back
+ * as `test://smpte/…` and an exact comparison never matches: the picker added
+ * a second colour bars every time it was asked for the one the mixer had. An
+ * address that is only a scheme and a host loses nothing to the cut, so the
+ * cut form identifies it. One with a path does not, and two files would both
+ * read `file:///…`, so those only ever match exactly.
+ */
+export function sameAddress(published, wanted) {
+  const have = String(published || "").trim().toLowerCase();
+  const want = String(wanted || "").trim().toLowerCase();
+  if (!have || !want) return false;
+  if (have === want) return true;
+  const bare = /^([a-z][a-z0-9+.-]*):\/\/([^/@]+)\/?$/.exec(want);
+  return !!bare && have === `${bare[1]}://${bare[2]}/…`;
+}
+
+/**
+ * The address to add a published source again under, or null when the mixer
+ * has not told us enough to.
+ *
+ * What the core cut off is gone: `file:///…` is not a file and `rtmp://host/…`
+ * has no stream in it, and adding either makes a source that fails to start. A
+ * bare scheme and host comes back whole. Anything else cannot be added again
+ * from here, and the caller says so rather than trying.
+ */
+export function readdAddress(source) {
+  const uri = String((source && source.uri) || "").trim();
+  if (!uri.includes("…")) return uri || null;
+  const bare = /^([a-z][a-z0-9+.-]*:\/\/[^/]+)\/…$/i.exec(uri);
+  return bare && /^test:/i.test(uri) ? bare[1] : null;
+}
+
+/**
  * Whether this mixer already has the thing a candidate offers.
  *
  * A source record carries an id, a name and a URI and nothing else, and every
@@ -641,7 +677,7 @@ export function alreadyAdded(sources, candidate) {
     if (want && name === want) return true;
     // A URI that is only the type id names the kind, not this device, so it
     // proves nothing on its own.
-    return !!uri && uri !== typed && String(s.uri || "").toLowerCase() === uri;
+    return !!uri && uri !== typed && sameAddress(s.uri, uri);
   });
 }
 
