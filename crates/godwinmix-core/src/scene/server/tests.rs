@@ -248,6 +248,37 @@ fn arming_a_scene_makes_it_the_preview_and_gives_a_layout_for_it() {
     assert!(s.preview_layout(320, 180).is_none());
 }
 
+/// A designer lays a scene out on a draft, and the draft was in no picture:
+/// the boxes moved and the video under them did not.
+#[test]
+fn the_preview_draws_a_draft_while_it_is_shown_and_what_is_armed_is_left_alone() {
+    let s = server();
+    two_box(&s);
+    let draft = s.edit_begin("two", false).unwrap();
+    let id = draft.id.to_string();
+    assert!(s.preview_layout(320, 180).is_none(), "a draft nobody asked to see is not drawn");
+
+    s.show_draft(Some(&id)).expect("showing the draft");
+    assert!(s.armed().is_none(), "showing a draft must not change what a take would take");
+    assert_eq!(s.preview_layout(320, 180).expect("the draft is laid out").cells.len(), 2);
+
+    // The edit is in the very next layout, which is the point of the thing.
+    s.edit_draft(&id, |doc, i| {
+        doc.scenes[i].items.truncate(1);
+        Ok(())
+    })
+    .unwrap();
+    assert_eq!(s.preview_layout(320, 180).unwrap().cells.len(), 1, "the preview did not follow the edit");
+    assert_eq!(s.scene("two").unwrap().geometry.len(), 2, "and the scene itself is untouched");
+
+    // The draft going ends it, with nothing left to clear.
+    s.edit_discard(&id).unwrap();
+    assert!(s.preview_layout(320, 180).is_none(), "a discarded draft is still being drawn");
+
+    let err = s.show_draft(Some("nope")).expect_err("no such draft");
+    assert!(format!("{err}").contains("scene.edit.begin"), "{err}");
+}
+
 #[test]
 fn every_source_a_scene_draws_is_named_so_tally_can_light_them_all() {
     let s = server();

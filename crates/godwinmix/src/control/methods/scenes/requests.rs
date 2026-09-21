@@ -277,6 +277,12 @@ pub struct PreviewRequest {
     /// The scene to arm. Null or omitted disarms.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub scene: Option<String>,
+    /// A draft from `scene.edit.begin` for the preview to draw in place of
+    /// the armed scene, which is how a designer sees what it is laying out.
+    /// What is armed is left as it is, and `scene` is ignored. An empty string
+    /// goes back to the armed scene; so does applying or discarding the draft.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub draft: Option<String>,
 }
 
 /// `scene.preview.frame`.

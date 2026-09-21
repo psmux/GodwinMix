@@ -1014,6 +1014,7 @@ export interface PreviewOpenRequest {
 
 /** `scene.preview.set`. */
 export interface PreviewRequest {
+  draft?: string | null;
   scene?: string | null;
 }
 

@@ -3770,6 +3770,13 @@
     "PreviewRequest": {
       "description": "`scene.preview.set`.",
       "properties": {
+        "draft": {
+          "description": "A draft from `scene.edit.begin` for the preview to draw in place of\nthe armed scene, which is how a designer sees what it is laying out.\nWhat is armed is left as it is, and `scene` is ignored. An empty string\ngoes back to the armed scene; so does applying or discarding the draft.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
         "scene": {
           "description": "The scene to arm. Null or omitted disarms.",
           "type": [
