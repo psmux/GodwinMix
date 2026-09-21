@@ -150,6 +150,14 @@ impl MediaLibrary {
 
         match self.walk(&dir, &dir, 0, &mut items) {
             Ok(()) => {}
+            // A folder nobody has made yet is an empty library, and saying how
+            // to fill it is more use than "os error 2" on a first run.
+            Err(_) if !dir.exists() => {
+                error = Some(format!(
+                    "The media folder {} does not exist yet. Create it and put files in it, or upload one here, then press Rescan.",
+                    dir.display()
+                ));
+            }
             Err(e) => {
                 warn!(dir = %dir.display(), ?e, "could not read the media library");
                 error = Some(format!("{e:#}"));
