@@ -1,5 +1,6 @@
 import { el, clear } from '../../shell/dom.js';
-import { errorToast } from '../../shell/toast.js';
+import { errorToast, undoToast } from '../../shell/toast.js';
+import { confirmModal } from '../../shell/modal.js';
 import { openPicker } from '../../shell/picker.js';
 import { nameOf } from './local.js';
 import { sourcePreview } from './chooser-preview.js';
@@ -26,6 +27,21 @@ export async function openSceneSources(client, scenes, scene) {
       if (!closed) render(true);
     }
   };
+  // Out of the mixer altogether, which is the only thing that closes a camera
+  // or a capture. Delete on a tile means out of this scene and leaves the
+  // source running for the others, so without this a camera once added stayed
+  // open until the mixer stopped. The core puts it back: `source.restore`.
+  const discard = async source => {
+    const name = nameOf(source);
+    const question = `Remove ${name} from the mixer? It leaves every scene that draws it, and a camera or capture it holds is closed. Nothing else on air is interrupted.`;
+    if (!(await confirmModal(question, 'Remove'))) return;
+    await client.call('source.remove', { id: source.id });
+    added.delete(source.id);
+    preview.select(null);
+    await scenes.reread([scene.id]);
+    undoToast(`${name} removed from the mixer.`, () =>
+      client.call('source.restore', { id: source.id }).catch(error => errorToast(error, `Restore ${name}`)));
+  };
   function row(source) {
     const present = added.has(source.id);
     return el('div.source-choice', { role: 'listitem' }, [
@@ -34,6 +50,8 @@ export async function openSceneSources(client, scenes, scene) {
       el('button.btn.primary', { text: pending.has(source.id) ? 'Adding…' : present ? 'In scene' : 'Add',
         'aria-label': `${present ? 'Already in scene:' : 'Add'} ${nameOf(source)}`, disabled: present || pending.has(source.id),
         onclick: () => add(source).catch(error => errorToast(error, `Add to ${scene.name}`)) }),
+      el('button.btn', { text: 'Remove', 'aria-label': `Remove ${nameOf(source)} from the mixer`, disabled: pending.has(source.id),
+        onclick: () => discard(source).catch(error => errorToast(error, `Remove ${nameOf(source)}`)) }),
     ]);
   }
   function render(force = false) {
