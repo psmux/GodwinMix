@@ -80,7 +80,13 @@
   place-items: center;
 }
 
+/* Pinned to the canvas rather than sized as a grid item. `height: 100%` on a
+ * grid item in an auto row is its natural height, so the picture grew past the
+ * canvas and was cropped, while the outlines over it were fitted inside: the
+ * boxes and the video they stand for were a few percent apart. */
 .composer-picture img {
+  position: absolute;
+  inset: 0;
   width: 100%;
   height: 100%;
   object-fit: contain;
