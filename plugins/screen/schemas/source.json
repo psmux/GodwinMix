@@ -19,7 +19,8 @@
       "description": "Capture part of the screen instead of all of it, as X,Y,WIDTH,HEIGHT in screen pixels from the top left. Empty captures the whole monitor.",
       "default": "",
       "pattern": "^$|^[0-9]{1,5},[0-9]{1,5},[1-9][0-9]{0,4},[1-9][0-9]{0,4}$",
-      "examples": ["", "0,0,1920,1080", "640,0,1280,720"]
+      "examples": ["", "0,0,1920,1080", "640,0,1280,720"],
+      "x-gmx-group": "Advanced"
     },
     "show_cursor": {
       "type": "boolean",
@@ -34,7 +35,8 @@
       "description": "Linux with X11 only: which X display to capture, such as ':0'. Empty uses DISPLAY from the environment. Ignored everywhere else.",
       "default": "",
       "maxLength": 64,
-      "examples": ["", ":0", ":0.1"]
+      "examples": ["", ":0", ":0.1"],
+      "x-gmx-group": "Advanced"
     },
     "node_id": {
       "type": "string",
@@ -42,7 +44,8 @@
       "description": "Linux with Wayland only: the PipeWire node id of a screen cast the desktop portal has already granted. Leave it empty on X11 and on every other platform. See the plugin's README for how to get one and why it is not asked for automatically yet.",
       "default": "",
       "maxLength": 64,
-      "examples": ["", "42"]
+      "examples": ["", "42"],
+      "x-gmx-group": "Advanced"
     },
     "label": {
       "type": "string",
@@ -58,7 +61,8 @@
       "description": "Force one GStreamer capture element instead of letting the plugin choose. Empty is the right answer almost always.",
       "default": "",
       "enum": ["", "pipewiresrc", "ximagesrc", "avfvideosrc", "d3d11screencapturesrc", "dxgiscreencapsrc", "gdiscreencapsrc", "videotestsrc"],
-      "examples": ["", "ximagesrc", "videotestsrc"]
+      "examples": ["", "ximagesrc", "videotestsrc"],
+      "x-gmx-group": "Advanced"
     }
   },
   "additionalProperties": false

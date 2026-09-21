@@ -32,7 +32,8 @@
       "minimum": 0,
       "maximum": 3600,
       "x-gmx-unit": "s",
-      "examples": [45, 0, 120]
+      "examples": [45, 0, 120],
+      "x-gmx-group": "Advanced"
     },
     "motion_delta": {
       "type": "number",
@@ -41,7 +42,8 @@
       "default": 0.15,
       "minimum": 0,
       "maximum": 1,
-      "examples": [0.15, 0.3, 0.05]
+      "examples": [0.15, 0.3, 0.05],
+      "x-gmx-group": "Advanced"
     },
     "idle_ms": {
       "type": "integer",
@@ -51,7 +53,8 @@
       "minimum": 100,
       "maximum": 60000,
       "x-gmx-unit": "ms",
-      "examples": [2000, 5000]
+      "examples": [2000, 5000],
+      "x-gmx-group": "Advanced"
     },
     "sources": {
       "type": "array",
@@ -85,14 +88,16 @@
       "minimum": 500,
       "maximum": 120000,
       "x-gmx-unit": "ms",
-      "examples": [10000, 3000]
+      "examples": [10000, 3000],
+      "x-gmx-group": "Advanced"
     },
     "dry_run": {
       "type": "boolean",
       "title": "Dry run",
       "description": "Decide and log, take nothing. The way to watch a director for ten minutes before letting it near a show.",
       "default": false,
-      "examples": [false, true]
+      "examples": [false, true],
+      "x-gmx-group": "Advanced"
     }
   },
   "additionalProperties": false

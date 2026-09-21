@@ -9,7 +9,8 @@
       "title": "Include monitor inputs",
       "description": "PipeWire and PulseAudio present the output of every sound card as an input too, so a machine with four outputs lists four extra devices nobody wants. Off by default.",
       "default": false,
-      "examples": [false, true]
+      "examples": [false, true],
+      "x-gmx-group": "Advanced"
     }
   },
   "additionalProperties": false

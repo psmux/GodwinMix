@@ -35,7 +35,8 @@
       "default": 0,
       "minimum": 0,
       "maximum": 1440,
-      "examples": [0, 30, 60]
+      "examples": [0, 30, 60],
+      "x-gmx-group": "Advanced"
     },
     "min_free_gb": {
       "type": "number",
@@ -44,7 +45,8 @@
       "default": 1.0,
       "minimum": 0,
       "maximum": 1024,
-      "examples": [1.0, 5.0, 0.5]
+      "examples": [1.0, 5.0, 0.5],
+      "x-gmx-group": "Advanced"
     },
     "label": {
       "type": "string",

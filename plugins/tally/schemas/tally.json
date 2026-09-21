@@ -26,7 +26,8 @@
       "default": 0,
       "minimum": 0,
       "maximum": 65535,
-      "examples": [0, 1]
+      "examples": [0, 1],
+      "x-gmx-group": "Advanced"
     },
     "lamps": {
       "type": "array",
@@ -54,7 +55,8 @@
       "description": "What a source on air shows. Red everywhere except the rigs that do not.",
       "enum": ["red", "green", "amber", "off"],
       "default": "red",
-      "examples": ["red", "amber"]
+      "examples": ["red", "amber"],
+      "x-gmx-group": "Advanced"
     },
     "preview_colour": {
       "type": "string",
@@ -62,7 +64,8 @@
       "description": "What a source on preview shows.",
       "enum": ["red", "green", "amber", "off"],
       "default": "green",
-      "examples": ["green", "off"]
+      "examples": ["green", "off"],
+      "x-gmx-group": "Advanced"
     },
     "brightness": {
       "type": "integer",
@@ -71,14 +74,16 @@
       "default": 3,
       "minimum": 0,
       "maximum": 3,
-      "examples": [3, 1]
+      "examples": [3, 1],
+      "x-gmx-group": "Advanced"
     },
     "unicode": {
       "type": "boolean",
       "title": "UTF-16 labels",
       "description": "Write labels as UTF-16LE, which a lamp needs for anything outside ASCII. Off halves the packet and is right for an English rig.",
       "default": false,
-      "examples": [false, true]
+      "examples": [false, true],
+      "x-gmx-group": "Advanced"
     },
     "refresh_secs": {
       "type": "integer",
@@ -88,7 +93,8 @@
       "minimum": 0,
       "maximum": 3600,
       "x-gmx-unit": "s",
-      "examples": [10, 0, 30]
+      "examples": [10, 0, 30],
+      "x-gmx-group": "Advanced"
     }
   },
   "additionalProperties": false

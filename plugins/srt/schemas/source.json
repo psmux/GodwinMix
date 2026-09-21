@@ -44,7 +44,8 @@
       "maximum": 10000,
       "default": 125,
       "x-gmx-unit": "ms",
-      "examples": [125, 200, 1000]
+      "examples": [125, 200, 1000],
+      "x-gmx-group": "Advanced"
     },
     "passphrase": {
       "title": "Passphrase",

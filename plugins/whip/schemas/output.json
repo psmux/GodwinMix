@@ -25,7 +25,8 @@
       "description": "How the sender learns its own public address. stun://host:port. Leave empty to use the element's default, which is usually enough on an ordinary network.",
       "type": "string",
       "default": "",
-      "examples": ["", "stun://stun.l.google.com:19302"]
+      "examples": ["", "stun://stun.l.google.com:19302"],
+      "x-gmx-group": "Advanced"
     },
     "turn_server": {
       "title": "TURN server",
@@ -33,7 +34,8 @@
       "type": "string",
       "format": "secret",
       "default": "",
-      "examples": ["", "turn://user:password@turn.example.com:3478"]
+      "examples": ["", "turn://user:password@turn.example.com:3478"],
+      "x-gmx-group": "Advanced"
     },
     "timeout_secs": {
       "title": "Endpoint timeout",
@@ -42,7 +44,8 @@
       "minimum": 0,
       "maximum": 300,
       "default": 15,
-      "examples": [15, 5]
+      "examples": [15, 5],
+      "x-gmx-group": "Advanced"
     },
     "reconnect_first_ms": {
       "title": "First reconnect wait",
@@ -52,7 +55,8 @@
       "maximum": 60000,
       "default": 500,
       "x-gmx-unit": "ms",
-      "examples": [500, 2000]
+      "examples": [500, 2000],
+      "x-gmx-group": "Advanced"
     },
     "reconnect_max_ms": {
       "title": "Longest reconnect wait",
@@ -62,7 +66,8 @@
       "maximum": 300000,
       "default": 15000,
       "x-gmx-unit": "ms",
-      "examples": [15000, 60000]
+      "examples": [15000, 60000],
+      "x-gmx-group": "Advanced"
     }
   }
 }

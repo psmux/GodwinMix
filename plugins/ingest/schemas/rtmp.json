@@ -41,7 +41,8 @@
       "description": "Filled in by ingest/discover when it, rather than this source, owns the listening port. Leave it empty and this source listens for itself.",
       "type": "string",
       "default": "",
-      "examples": ["", "127.0.0.1:54321"]
+      "examples": ["", "127.0.0.1:54321"],
+      "x-gmx-group": "Advanced"
     }
   }
 }

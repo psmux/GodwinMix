@@ -9,7 +9,8 @@
       "title": "Include screen capture devices",
       "description": "Some platforms present a screen as a video device. Off by default, because the screen plugin captures a screen better than a camera driver pretending to be one.",
       "default": false,
-      "examples": [false, true]
+      "examples": [false, true],
+      "x-gmx-group": "Advanced"
     }
   },
   "additionalProperties": false
