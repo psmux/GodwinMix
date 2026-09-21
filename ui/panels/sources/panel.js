@@ -353,11 +353,31 @@ class SourcesPanel extends HTMLElement {
     const still = [...this.tiles.entries()].filter(([id]) => this.mode(id) === "snapshot");
     if (!still.length) return;
     const load = () => {
-      for (const [id, tile] of still) tile.still.src = this.client.snapshotUrl(id, tile.still.clientWidth * 2 || 320);
+      for (const [id, tile] of still) this.loadStill(id, tile);
     };
     if (force) load();
     const secs = settings().snapshotSecs;
     if (secs > 0) this.stillTimer = setInterval(load, secs * 1000);
+  }
+
+  /**
+   * Fetch a still and show it only when the core really sent one. A refusal
+   * (the mosaic still being built, the rate limit) leaves the last good picture
+   * where it was, instead of the browser's broken image mark.
+   */
+  async loadStill(id, tile) {
+    try {
+      const res = await fetch(this.client.snapshotUrl(id, tile.still.clientWidth * 2 || 320));
+      if (!res.ok || this.tiles.get(id) !== tile) return;
+      const url = URL.createObjectURL(await res.blob());
+      // The answer is not cacheable, so the bytes are shown from a blob: giving
+      // the address to the img would ask a second time and be refused.
+      if (tile.stillUrl) URL.revokeObjectURL(tile.stillUrl);
+      tile.stillUrl = url;
+      tile.still.src = url;
+    } catch {
+      /* the core went away; the last picture stays */
+    }
   }
 
   // ------------------------------------------------------------ actions
@@ -411,7 +431,7 @@ class SourcesPanel extends HTMLElement {
   activate(id) {
     const tile = this.tiles.get(id);
     if (settings().gallery === "snapshot" && tile) {
-      tile.still.src = this.client.snapshotUrl(id, tile.still.clientWidth * 2 || 320);
+      this.loadStill(id, tile);
     }
     // Inside a scene the scene is what goes to air, and its tab is what takes
     // it. A tap on one of the pieces it is built from selects that piece, the

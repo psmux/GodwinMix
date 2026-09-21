@@ -895,7 +895,10 @@ pub async fn snapshot_bytes(
     }
     // The width the limits allow for this client, which is also what says no
     // when one client asks too often.
-    let width = match snapshots.resolve(client, ask) {
+    // The limit is per client and per picture. A gallery asks for one still
+    // per tile in the same instant, and with one bucket per client every tile
+    // but the first was refused and drew as a broken image.
+    let width = match snapshots.resolve(&format!("{client} {with_suffix}"), ask) {
         Ok(w) => w,
         Err(refusal @ snapshot::Refusal::TooWide { .. }) => {
             return Err(RpcError::invalid_params(refusal.message()))
