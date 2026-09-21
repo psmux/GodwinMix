@@ -1110,6 +1110,17 @@ impl SlotPool {
         // valve this function is about to close goes in and never comes out:
         // the slot stays flushing, the next bind cannot send its sticky events
         // down it, and the programme loses the picture for good.
+        //
+        // Out of the picture before any of it, and one frame let out. A pad
+        // at alpha 0 is one the compositor does not convert, and a frame
+        // pushed since proves nothing older is in flight, which is what makes
+        // the flush stop at the end of this safe to send: see
+        // `gstutil::after_next_frame`. The wait is here and not beside the
+        // flush stop because a compositor cycle run on a pad that is between
+        // the two is its own trouble: a whole frame of that window aborted
+        // this crate's tests in `gst_video_aggregator_fill_queues`.
+        set_f64(&self.slots[index].pad, "alpha", 0.0);
+        crate::slow_step!("slot frame barrier", index, gstutil::after_next_frame(&self.slots[index].pad));
         let chain = self.slots[index].queue.static_pad("sink");
         if let Some(pad) = &chain {
             crate::slow_step!("slot flush", index, gstutil::wake_chain(pad));

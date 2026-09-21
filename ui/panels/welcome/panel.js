@@ -13,6 +13,7 @@ import { el } from "../../shell/dom.js";
 import { errorToast } from "../../shell/toast.js";
 import { modal } from "../../shell/modal.js";
 import { openPicker } from "../../shell/picker-loader.js";
+import { run } from "../../shell/commands.js";
 import { pluginSourceFor, listPlugins, hasPlugin } from "../../client/kinds.js";
 import { applyCoreDefaults, forgetPreset } from "./defaults.js";
 
@@ -131,6 +132,11 @@ export class WelcomePanel extends HTMLElement {
     }
     if (!choice.id) {
       this.close();
+      // The Sources panel's own door, the one Ctrl+N uses, because it puts
+      // what is added into the focused scene. The bare picker adds to the
+      // mixer and to no scene, and a first source nobody can see reads as a
+      // mixer that does not work. It is the fallback for a closed panel.
+      if (await run("tray.add")) return;
       return openPicker(this.client, "source");
     }
     const tile = this.dialog && this.dialog.el.querySelector(".welcome-tile:focus");

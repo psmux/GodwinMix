@@ -284,6 +284,17 @@ Everything an instance is given lives in one directory under the core's runtime
 directory, and that directory is removed when the instance goes. That is what
 makes `plugin.add` then `plugin.remove` leave no sockets behind.
 
+A Unix socket's address has a fixed length: 104 bytes on macOS and the BSDs,
+108 on Linux. The runtime directory sits beside the config, so a deep config
+path and a long instance id can pass it, and a path that is too long is cut
+with nothing said. When the base would not leave room for `.programme`, the
+longest thing appended to it, the directory is made under the system's
+temporary directory instead, as `gmx-<core pid>/<eight hex digits>`. A plugin
+never has to care: it opens what `GMX_MEDIA` says. If that is too long as well
+the instance is refused, with the two paths and the limit in the message.
+Whatever a core that was killed left at an instance's address is cleared
+before the next one binds.
+
 ## Framing
 
 * UTF-8, one JSON object per line, terminated by `\n`.

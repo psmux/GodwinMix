@@ -1126,6 +1126,33 @@
       ],
       "type": "object"
     },
+    "DuplicateSourceRequest": {
+      "description": "`source.duplicate`.",
+      "properties": {
+        "id": {
+          "description": "The source to copy.",
+          "type": "string"
+        },
+        "name": {
+          "description": "Name for the copy. The original's name and \" copy\" when omitted.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "new_id": {
+          "description": "Id for the copy. Derived from its name when omitted, with a numeric\nsuffix if that is taken.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "type": "object"
+    },
     "EditBeginRequest": {
       "description": "`scene.edit.begin`.",
       "properties": {
@@ -8815,6 +8842,25 @@
     {
       "destructive": false,
       "idempotent": true,
+      "mutating": true,
+      "name": "source.duplicate",
+      "params": {
+        "$ref": "#/$defs/DuplicateSourceRequest"
+      },
+      "rest": {
+        "method": "POST",
+        "path": "/api/v1/sources/{id}/duplicate"
+      },
+      "result": {
+        "$ref": "#/$defs/SourceStatus"
+      },
+      "scope": "operate",
+      "since": "1",
+      "summary": "Add another source like one the mixer has: the same address and settings under a new id. A client cannot do this with source.add, because the address it is shown has everything after the host cut off."
+    },
+    {
+      "destructive": false,
+      "idempotent": true,
       "mutating": false,
       "name": "source.get",
       "params": {
@@ -8906,6 +8952,25 @@
       "scope": "operate",
       "since": "1",
       "summary": "Remove a source. If it is on programme the mixer cuts to the slate first."
+    },
+    {
+      "destructive": false,
+      "idempotent": true,
+      "mutating": true,
+      "name": "source.restore",
+      "params": {
+        "$ref": "#/$defs/IdRequest"
+      },
+      "rest": {
+        "method": "POST",
+        "path": "/api/v1/sources/{id}/restore"
+      },
+      "result": {
+        "$ref": "#/$defs/SourceStatus"
+      },
+      "scope": "operate",
+      "since": "1",
+      "summary": "Put back a source that source.remove took away, as it was: same id, address, settings, fader and mute. The mixer remembers the last sixteen it removed, until it restarts."
     },
     {
       "destructive": false,

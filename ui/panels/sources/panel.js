@@ -686,10 +686,11 @@ class SourcesPanel extends HTMLElement {
         return;
       }
     }
+    // The core puts back what it removed. The address a client is shown has
+    // everything after the host cut off, so adding it again from here made a
+    // file source that could not start.
     const restore = async () => {
-      for (const s of removed) {
-        await this.client.call("source.add", { id: s.id, name: s.name, uri: s.uri });
-      }
+      for (const s of removed) await this.client.call("source.restore", { id: s.id });
     };
     shell.undo.push({
       label: ids.length === 1 ? `Removed ${ids[0]}` : `Removed ${ids.length} sources`,
@@ -761,8 +762,12 @@ class SourcesPanel extends HTMLElement {
   async paste() {
     if (!this.clipboard || !this.clipboard.length) return;
     for (const s of this.clipboard) {
+      // A copy of a source the mixer has, or after a cut the source itself
+      // back. Either way the core supplies the address: see `remove`.
+      const live = !!this.client.store.source(s.id);
       try {
-        await this.client.call("source.add", { name: nameOf(s) + " copy", uri: s.uri });
+        if (live) await this.client.call("source.duplicate", { id: s.id, name: nameOf(s) + " copy" });
+        else await this.client.call("source.restore", { id: s.id });
       } catch (e) {
         errorToast(e, "Paste");
         return;
