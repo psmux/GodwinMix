@@ -18,7 +18,8 @@
       "description": "What to ask the camera for, as WIDTHxHEIGHT. Empty lets the camera choose, which is usually its best. The picture is scaled to the canvas afterwards either way, so this is about what the camera sends, not about what the programme shows.",
       "default": "",
       "pattern": "^$|^[0-9]{2,5}x[0-9]{2,5}$",
-      "examples": ["", "1920x1080", "1280x720", "640x480"]
+      "examples": ["", "1920x1080", "1280x720", "640x480"],
+      "x-gmx-group": "Advanced"
     },
     "framerate": {
       "type": "integer",
@@ -27,7 +28,8 @@
       "default": 0,
       "minimum": 0,
       "maximum": 240,
-      "examples": [0, 30, 25, 60]
+      "examples": [0, 30, 25, 60],
+      "x-gmx-group": "Advanced"
     },
     "label": {
       "type": "string",
@@ -43,7 +45,8 @@
       "description": "Force one GStreamer capture element instead of letting the plugin choose. Only for working around a driver bug: on Windows, `ksvideosrc` is the fallback for mfvideosrc's startup bug. Empty is the right answer almost always.",
       "default": "",
       "enum": ["", "v4l2src", "avfvideosrc", "mfvideosrc", "ksvideosrc", "videotestsrc"],
-      "examples": ["", "ksvideosrc", "videotestsrc"]
+      "examples": ["", "ksvideosrc", "videotestsrc"],
+      "x-gmx-group": "Advanced"
     }
   },
   "additionalProperties": false

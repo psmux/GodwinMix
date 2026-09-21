@@ -20,14 +20,16 @@
       "minimum": -60,
       "maximum": 12,
       "x-gmx-unit": "db",
-      "examples": [0, -6, 3.5]
+      "examples": [0, -6, 3.5],
+      "x-gmx-group": "Advanced"
     },
     "muted": {
       "type": "boolean",
       "title": "Muted",
       "description": "Silence this input without stopping it. The device stays open, so unmuting is instant.",
       "default": false,
-      "examples": [false, true]
+      "examples": [false, true],
+      "x-gmx-group": "Advanced"
     },
     "label": {
       "type": "string",
@@ -43,7 +45,8 @@
       "description": "Force one GStreamer capture element instead of letting the plugin choose. On Windows, `directsoundsrc` is the fallback for wasapi2src's stutter. Empty is the right answer almost always.",
       "default": "",
       "enum": ["", "pipewiresrc", "pulsesrc", "alsasrc", "osxaudiosrc", "wasapi2src", "directsoundsrc", "audiotestsrc"],
-      "examples": ["", "directsoundsrc", "audiotestsrc"]
+      "examples": ["", "directsoundsrc", "audiotestsrc"],
+      "x-gmx-group": "Advanced"
     }
   },
   "additionalProperties": false

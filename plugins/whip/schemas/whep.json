@@ -34,7 +34,8 @@
       "examples": [
         "",
         "stun://stun.l.google.com:19302"
-      ]
+      ],
+      "x-gmx-group": "Advanced"
     },
     "turn_server": {
       "title": "TURN server",
@@ -45,7 +46,8 @@
       "examples": [
         "",
         "turn://user:password@turn.example.com:3478"
-      ]
+      ],
+      "x-gmx-group": "Advanced"
     },
     "timeout_secs": {
       "title": "Endpoint timeout",
@@ -57,7 +59,8 @@
       "examples": [
         15,
         5
-      ]
+      ],
+      "x-gmx-group": "Advanced"
     }
   }
 }

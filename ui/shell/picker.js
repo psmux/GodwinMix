@@ -567,10 +567,10 @@ function tile(client, what, kind, opts, close) {
 export async function openForm(client, what, kind, preset, opts = {}) {
   const { SchemaForm } = await import("../client/schema-form.js");
   let schema = typeof kind.schema === "function" ? await kind.schema() : kind.schema;
-  if (what === "source" && schema?.properties?.device) {
+  if (what === "source" && schema?.properties) {
     // Short, and its failure is nothing: the box stays a box.
     const found = await discoverDevices(client, 1500).catch(() => []);
-    schema = withDeviceChoices(schema, kind.id, found, preset && preset.device);
+    schema = withDeviceChoices(schema, kind.id, found, preset || {});
   }
   const form = new SchemaForm(schema, preset || {});
   const add = el("button.btn.primary", { text: what === "output" ? "Start sending" : "Add" });

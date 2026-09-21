@@ -828,6 +828,14 @@ async function addSourcePickerSuite() {
     ok(!kinds.withDeviceChoices(schema, "ndi/source", found).properties.device.enum);
     // A device already set that is not plugged in now is still in the list.
     eq(kinds.withDeviceChoices(schema, "camera/source", found, "old-cam").properties.device.enum, ["", "6C70-0001", "old-cam"]);
+    eq(kinds.withDeviceChoices(schema, "camera/source", found, { device: "old-cam" }).properties.device.enum, ["", "6C70-0001", "old-cam"]);
+    ok(!made.properties.label.enum, "a label is a name for the person, never a list");
+    // A screen is picked by a number, which has no empty choice.
+    const screen = { properties: { monitor: { type: "integer", title: "Monitor" }, label: { type: "string" } } };
+    const screens = [{ type: "screen/source", name: "The whole screen", params: { monitor: 0 } }, { type: "screen/source", name: "Second display", params: { monitor: 1 } }];
+    const picked = kinds.withDeviceChoices(screen, "screen/source", screens);
+    eq(picked.properties.monitor.enum, [0, 1]);
+    eq(picked.properties.monitor["x-gmx-labels"], ["The whole screen", "Second display"]);
   });
 
   test("the size a device advertises is read wherever it put it", () => {

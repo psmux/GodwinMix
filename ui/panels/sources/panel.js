@@ -20,7 +20,7 @@ import { settings, setSetting, onSettingsChanged, GALLERY_MODES } from "../../sh
 import { audioFor, ScrubGestures } from "../../shell/fader.js";
 import { addView, dropViews, takeMeters } from "../../shell/meter.js";
 import { sheetWidthFor } from "../../client/frames.js";
-import { SOURCE_KINDS, kindOfUri } from "../../client/kinds.js";
+import { SOURCE_KINDS, kindOfUri, schemaForSource, discoverDevices, withDeviceChoices } from "../../client/kinds.js";
 import { buildTile, syncTile, setTileMode } from "./tile.js";
 import { setLocal, nameOf } from "./local.js";
 import { settableOnly, setRequest } from "./setreq.js";
@@ -502,19 +502,38 @@ class SourcesPanel extends HTMLElement {
     // Fetched on the first gear click rather than with the page.
     const { SchemaForm } = await import("../../client/schema-form.js");
     const kind = SOURCE_KINDS.find((k) => k.id === kindOfUri(source.uri)) || SOURCE_KINDS[0];
-    let schema = kind.schema;
-    try {
-      const described = await this.client.call("plugin.describe", { instance: id });
-      if (described && described.schema) schema = described.schema;
-    } catch {
-      /* no plugin.describe on this core: the built in schema stands in */
-    }
+    // The plugin's own form for this kind of source, with the box that picks
+    // a device offered as a list of the devices there are. It used to ask
+    // `plugin.describe` for an instance, which that method does not take, so
+    // every source got the built in form for its address, and a camera has
+    // no address to tell it by.
+    let schema = (await schemaForSource(this.client, source).catch(() => null)) || kind.schema;
+    const found = await discoverDevices(this.client, 1500).catch(() => []);
+    schema = withDeviceChoices(schema, source.type || "", found, {});
     const form = new SchemaForm(settableOnly(schema), { name: nameOf(source) });
+    // What the form says before anybody has touched it. Only what differs
+    // from this is sent. The mixer does not publish a source's settings, so
+    // the boxes open at their defaults, and sending every one of them would
+    // quietly put a second camera back to the first and its size back to auto.
+    const untouched = form.read();
+    const changed = () => {
+      const now = form.read();
+      const out = {};
+      for (const [key, value] of Object.entries(now)) {
+        if (JSON.stringify(value) !== JSON.stringify(untouched[key])) out[key] = value;
+      }
+      return out;
+    };
     const apply = el("button.btn.primary", {
       text: "Apply",
       onclick: async () => {
+        const wanted = changed();
+        if (!Object.keys(wanted).length) {
+          toast({ text: "Nothing was changed." });
+          return;
+        }
         try {
-          await this.client.call("source.set", setRequest(id, form.read()));
+          await this.client.call("source.set", setRequest(id, wanted));
           toast({ text: "Saved." });
         } catch (e) {
           if (e.code === -32601) {

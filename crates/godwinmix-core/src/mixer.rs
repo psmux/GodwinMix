@@ -4141,6 +4141,15 @@ impl Mixer {
                 // What only this kind has. The keys are the same ones the JSON
                 // always carried, written from the extras rather than from
                 // fields on the universal shape.
+                // Which kind it is, by the id its plugin provides it under:
+                // `camera/source`, `test/source`. A client needs it to find the
+                // settings form, and the address cannot stand in for it: a
+                // camera's address is cut down to an ellipsis, so its settings
+                // opened as the form of whatever kind came first in the list.
+                let kind = s.input.type_id();
+                if !kind.is_empty() {
+                    status.put_extra("type", kind);
+                }
                 if s.input.superimposed() {
                     status.put_extra("superimposed", true);
                 }

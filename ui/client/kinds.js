@@ -591,6 +591,29 @@ async function provideSchema(client, pluginName, id) {
   return schema;
 }
 
+/**
+ * The settings schema of a source that already exists, or null.
+ *
+ * Found by the type the core publishes for it, through the plugin that
+ * provides that type. The address cannot stand in: a camera's is cut down to
+ * an ellipsis, and its settings used to open as the form of whatever kind came
+ * first in the table, with boxes for a file path.
+ */
+export async function schemaForSource(client, source) {
+  const type = String((source && source.type) || "");
+  if (!type) return null;
+  const plugins = await listPlugins(client);
+  const owner = plugins.find((p) =>
+    (p.provides || []).some((entry) => {
+      const id = typeof entry === "string" ? entry : (entry && (entry.id || entry.type)) || "";
+      return id === type || `${p.name}/${id}` === type;
+    })
+  );
+  if (!owner) return null;
+  const schema = await provideSchema(client, owner.name, type);
+  return Object.keys(schema.properties || {}).length > 1 ? schema : null;
+}
+
 // ------------------------------------------------------------- devices
 
 /**
@@ -607,8 +630,8 @@ export async function discoverDevices(client, timeoutMs) {
 }
 
 /**
- * A kind's schema with its `device` box turned into a choice of the devices
- * this machine has.
+ * A kind's schema with the box that picks a device turned into a choice of
+ * the devices this machine has: a camera, a microphone, a monitor.
  *
  * The box is titled "Camera" and sits at the top of the form, and what it
  * wants is an id, a name exactly as the operating system spells it, or a
@@ -619,20 +642,33 @@ export async function discoverDevices(client, timeoutMs) {
  * device the monitor cannot see can still be typed in.
  */
 export function withDeviceChoices(schema, kindId, candidates, current) {
-  const field = schema && schema.properties && schema.properties.device;
-  if (!field || Array.isArray(field.enum)) return schema;
-  const mine = (candidates || []).filter(
-    (c) => (c.type || c.kind) === kindId && c.params && typeof c.params.device === "string" && c.params.device
-  );
+  const props = schema && schema.properties;
+  if (!props) return schema;
+  const mine = (candidates || []).filter((c) => (c.type || c.kind) === kindId && c.params);
   if (!mine.length) return schema;
-  const values = [""].concat(mine.map((c) => c.params.device));
-  const labels = ["The first one found"].concat(mine.map((c) => c.name || c.params.device));
-  if (current && !values.includes(current)) {
-    values.push(current);
-    labels.push(current);
+  // Whatever a candidate carries that the form also asks for is the thing that
+  // picks the device: `device` for a camera or a microphone, `monitor` for a
+  // screen. Not the label, which is a name for the person and not a choice.
+  const keys = Object.keys(props).filter(
+    (key) => key !== "label" && key !== "name" && !Array.isArray(props[key].enum) && mine.some((c) => c.params[key] !== undefined && c.params[key] !== "")
+  );
+  if (!keys.length) return schema;
+  const next = Object.assign({}, props);
+  for (const key of keys) {
+    const having = mine.filter((c) => c.params[key] !== undefined && c.params[key] !== "");
+    const text = (props[key].type || "string") === "string";
+    // A text setting has always taken empty to mean the first one found, so
+    // that stays on offer. A number has no empty, and its first is its 0.
+    const values = (text ? [""] : []).concat(having.map((c) => c.params[key]));
+    const labels = (text ? ["The first one found"] : []).concat(having.map((c) => c.name || String(c.params[key])));
+    const was = current && typeof current === "object" ? current[key] : key === "device" ? current : undefined;
+    if (was !== undefined && was !== "" && !values.includes(was)) {
+      values.push(was);
+      labels.push(String(was));
+    }
+    next[key] = Object.assign({}, props[key], { enum: values, "x-gmx-labels": labels });
   }
-  const device = Object.assign({}, field, { enum: values, "x-gmx-labels": labels });
-  return Object.assign({}, schema, { properties: Object.assign({}, schema.properties, { device }) });
+  return Object.assign({}, schema, { properties: next });
 }
 
 /** The size a candidate advertises, when it advertises one. */

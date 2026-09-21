@@ -25,7 +25,8 @@
       "type": "string",
       "enum": ["high", "low", "audio-only"],
       "default": "high",
-      "examples": ["high", "low", "audio-only"]
+      "examples": ["high", "low", "audio-only"],
+      "x-gmx-group": "Advanced"
     },
     "timestamp_mode": {
       "title": "Timestamps",
@@ -33,7 +34,8 @@
       "type": "string",
       "enum": ["receive-time-vs-timecode", "receive-time-vs-timestamp", "timecode", "timestamp", "receive-time"],
       "default": "receive-time-vs-timecode",
-      "examples": ["receive-time-vs-timecode", "timecode"]
+      "examples": ["receive-time-vs-timecode", "timecode"],
+      "x-gmx-group": "Advanced"
     }
   }
 }
