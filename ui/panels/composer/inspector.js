@@ -83,12 +83,13 @@ export class Inspector {
       geometry,
       field("Opacity", el("div.row", {}, [opacity, opacityOut])),
       field("Fit", choice(FITS, (record.transform && record.transform.fit) || "none", guard(props.fit))),
-      field(
-        "Blend",
-        // A blend this mixer cannot draw stays listed, so it is not lost.
-        choice(undrawnBlend(record.blend) ? BLENDS.concat([record.blend]) : BLENDS, record.blend || "normal", guard(props.blend))
-      ),
-      undrawnBlend(record.blend) ? el("div.sm.faint", { text: `"${record.blend}" is kept in the scene but drawn as normal: this mixer draws normal and add.` }) : null,
+      // Shown only for an item that came in with a blend, to put it back.
+      undrawnBlend(record.blend)
+        ? field("Blend", choice(BLENDS.concat([record.blend]), record.blend, guard(props.blend)))
+        : null,
+      undrawnBlend(record.blend)
+        ? el("div.sm.faint", { text: `"${record.blend}" is kept in the scene and drawn as normal: this mixer has no blends.` })
+        : null,
       field("Sound", choice(AUDIO, record.audio || "follow", guard(props.audio))),
       el("div.row", {}, [
         el("label.inline", {}, [visible, el("span.sm", { text: "Visible" })]),

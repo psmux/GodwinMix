@@ -180,8 +180,12 @@ mod tests {
     fn the_runtime_directory_sits_beside_the_config() {
         let dir = runtime_dir(Path::new("/etc/godwinmix/godwinmix.toml"));
         assert_eq!(dir, Path::new("/etc/godwinmix/.godwinmix"));
-        // A bare file name still answers a usable relative path.
-        assert_eq!(runtime_dir(Path::new("godwinmix.toml")), Path::new(".godwinmix"));
+        // A bare file name, which is how a mixer is started from the folder
+        // its config is in, answers an absolute path: a plugin is handed
+        // socket addresses under here and does not stand where the mixer does.
+        let bare = runtime_dir(Path::new("godwinmix.toml"));
+        assert!(bare.is_absolute(), "{}", bare.display());
+        assert_eq!(bare, std::env::current_dir().unwrap().join(".godwinmix"));
     }
 
     #[test]

@@ -268,7 +268,6 @@ impl ScenePreview {
             pad.set_property("alpha", cell.alpha.clamp(0.0, 1.0));
             pad.set_property("zorder", z as u32);
             crate::mixer::slots::set_sizing(&self.slots[index].pad, cell.sizing);
-            crate::mixer::slots::set_operator(&self.slots[index].pad, cell.additive);
             self.slots[index].shape(cell);
             kept.push(index);
         }
@@ -426,12 +425,9 @@ pub struct Cell {
     pub rotation: f64,
     /// Fractions of the source's own picture to trim: left, top, right, bottom.
     pub crop: (f64, f64, f64, f64),
-    /// How the picture is fitted into its box, and whether it covers what is
-    /// under it or adds to it. The programme's own two settings, so Fit and
-    /// Blend change the picture a designer is looking at and not only the
-    /// document behind it.
+    /// How the picture is fitted into its box: the programme's own setting,
+    /// so Fit changes the picture a designer is looking at.
     pub sizing: crate::mixer::slots::Sizing,
-    pub additive: bool,
 }
 
 /// A tiny black source on a compositor pad of its own.
