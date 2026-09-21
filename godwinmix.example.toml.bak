@@ -1,0 +1,506 @@
+# GodwinMix configuration.
+#
+# The canvas section is the contract every source is normalised to. It cannot
+# change while a broadcast is running, because the output encoder is started
+# once and never restarted. Pick it deliberately.
+
+[canvas]
+width = 1920
+height = 1080
+fps = 30
+sample_rate = 48000
+channels = 2
+
+[program]
+video_bitrate_kbps = 6000
+audio_bitrate_kbps = 160
+# Two seconds is what every CDN asks for.
+keyframe_interval_secs = 2
+# Audio crossfade on a take. Zero gives you an audible click.
+audio_ramp_ms = 180
+# Milliseconds to hold video back relative to audio at the encoders. Unset
+# means the known priming delay of the AAC encoder in use (fdkaacenc 43 ms,
+# avenc_aac 21 ms), which puts a page's beep on its flash to within a frame.
+# av_offset_ms = 43
+
+# The operator's mosaic. Nothing here runs until a client subscribes: the
+# pipeline is built for the first subscriber and taken down after the last one
+# leaves, so a mixer nobody is watching pays nothing for it. false removes it
+# altogether, including the thumbnail branch on every source, and makes the
+# snapshot routes answer 404. Every field has a default, so `enabled = false`
+# on its own is a complete section.
+[multiview]
+enabled = true
+# Size of the whole mosaic, not of one cell. This costs roughly
+# width * height * fps * quality in bandwidth to each connected operator. A
+# client may ask for more; the mosaic follows the highest request among the
+# clients connected.
+width = 960
+height = 540
+fps = 8
+jpeg_quality = 60
+# Show what is going out as one of the cells.
+include_program = true
+# Seconds to keep the mosaic up after the last client leaves, so that a browser
+# reloading its page does not pay for a rebuild.
+linger_secs = 2
+
+# Stills for agents, and the motion score that usually saves them from needing
+# one. The tracker decodes a mosaic frame per tick, so it runs only while
+# something is asking: a snapshot request, an agent.state read, or a client
+# watching thresholds. false removes it, and then the snapshot routes answer
+# 404 naming this switch and agent.state reports motion: null.
+[snapshot]
+enabled = true
+# What a request without ?width= gets. 320x180 is 84 tokens to a vision model
+# against 2,691 for a 1080p frame, and answers "is anybody in the shot" about
+# as well.
+default_width = 320
+# Seconds between snapshots for one client, unless the request says force=true.
+# Zero turns the limit off.
+min_interval_secs = 5
+# Wider than this is refused unless the request says allow_large=true.
+max_width = 1280
+# Seconds the tracker keeps following the mosaic after the last request.
+idle_secs = 15
+
+# Ad clips available to the operator. Listed by the control server and shown as
+# a clickable library in the UI, so it works the same whether the operator is at
+# this machine or somewhere else: a browser file picker would hand back a file
+# from *their* machine, which the mixer cannot open.
+# The rules that stand in front of every take, whoever is calling. See
+# docs/reference/safety.md. Enforced in program.take, not in a plugin and not
+# in an agent's prompt, because a prompt is a suggestion.
+[safety]
+# A take within this window of the last one is refused with error -32003 and
+# data.retry_after_ms, and the message says how long is left. Not a standard:
+# no standards body publishes a minimum shot length, and the three second rule
+# people quote is folklore.
+#
+# Zero, because a vision mixer cuts on a word or on a beat, and a desk that
+# will not let its operator cut is not a desk. Set it if the house wants a
+# minimum shot: a locked off lecture might use 30000. A token marked
+# `agent = true` is held to eight seconds whatever this says, which is what
+# these rules were written for.
+min_hold_ms = 0
+# Takes allowed in any rolling minute, counted per core. High enough never to
+# meet a person cutting a song, low enough to stop a loop taking on every
+# pass. An agent token is held to twelve.
+max_takes_per_minute = 120
+# ITU-R BT.1702-3, which Ofcom rule 2.12 gives the force of a rule in the UK:
+# a cut that changes the picture's luminance by 20 candela per square metre or
+# more over more than a quarter of the frame is held 360 ms from the next one
+# (334 above 50 Hz), and at most three of those are allowed in any second.
+# This is the one hold time here that is not a matter of taste.
+#
+# It acts on luminance the core has actually measured, which means telemetry
+# has to be running for it to see anything. A cut nothing measured is not
+# refused: a guard that stops cuts it has no evidence about gives false
+# assurance rather than compliance.
+flash_guard = true
+# What happens when whoever made the last take stops calling. The core raises
+# a critical alert and then does this. "alert" changes nothing, which is the
+# safe state for a programme that is already running; "hold" refuses further
+# takes until somebody calls; "slate" cuts to the slate; "fallback:cam1" cuts
+# to that source. Any call from any token clears it.
+on_operator_silence = { after_secs = 120, action = "alert" }
+
+# A token may carry its own numbers. A person at a desk may move them in either
+# direction; a token marked `agent = true` may only make them harder, so an
+# agent told to raise its own limits finds that it cannot.
+#
+# [[tokens]]
+# id = "vision-desk"
+# secret = "..."
+# scopes = ["read", "operate"]
+# safety = { min_hold_ms = 1500 }
+#
+# [[tokens]]
+# id = "studio-agent"
+# secret = "..."
+# scopes = ["read", "operate"]
+# agent = true
+# confirm = "required"
+# profile = "minimal"
+
+# Hooks: your code, called when something happens. One [[hooks]] block each.
+# A plugin asks for its own hooks in its manifest and does not appear here.
+#
+# `take.before` is the only one that can delay anything, and only by its own
+# timeout_ms (default 20, maximum 100). A hook that does not answer in time is
+# skipped, the take goes ahead, and event/hook.blocked says so. Nothing a hook
+# does ever reaches the encoder. See docs/how-to/hooks.md.
+#
+# [[hooks]]
+# event = "take.after"
+# http = "https://tally.example/on-take"
+#
+# [[hooks]]
+# event = "output.state"
+# command = "/usr/local/bin/page-the-duty-engineer"
+#
+# [[hooks]]
+# event = "take.before"
+# http = "http://127.0.0.1:8787/policy"
+# timeout_ms = 19
+
+# Other machines hosting plugins for this one. Nothing here and the core makes
+# no certificate authority, opens no port and puts no clock on the network.
+#
+# `gmx node token --name studio-b` on this machine prints the one command to
+# run on the other. See docs/how-to/add-a-node.md.
+#
+# [nodes]
+# listen = "0.0.0.0:8443"
+# # Every name a node might dial this core by. They go in the core's own
+# # certificate, and a name that is not in it fails the TLS handshake.
+# server_names = ["mixer.local", "10.0.0.1"]
+# # `net` is the GstNetTimeProvider every node slaves to. `ptp` wants a wired
+# # LAN, a card that will timestamp, and the gst-ptp-helper.
+# clock = "net"
+# clock_port = 8447
+# # Nodes this core expects. One that has never dialled in shows as `expected`,
+# # which is different from one that connected and went.
+# "studio-b" = { address = "10.0.0.21:8443" }
+# "graphics-pc" = { address = "10.0.0.22:8443", clock = "ptp", transport = "rtp" }
+#
+# Then on a source:
+#
+# [[sources]]
+# id = "cam1"
+# type = "ndi/source"
+# place = "node:studio-b"     # core, in-process, sidecar, or node:<name>
+# transport = "srt"           # rtp, srt or whip. Only read for a node
+# latency_ms = 150            # the budget, answered on the LATENCY query
+
+# Running a command line as a source is arbitrary code execution for anyone who
+# can reach the control port. Off unless you turn it on deliberately.
+[security]
+allow_exec_sources = false
+
+# How `web+` sources are rendered. The CEF sidecar (`godwinmix-browser`, see
+# browser/) is used when found: here, next to this executable, or on PATH.
+# Without one, `web+` falls back to GStreamer's wpesrc. Not gated by
+# allow_exec_sources: the program is ours and the URL never meets a shell.
+[browser]
+# sidecar = "/opt/godwinmix/godwinmix-browser"
+# args = ["--audio-offset-ms", "0"]
+# env = { GMX_BROWSER_SWITCHES = "enable-gpu" }
+#
+# How fast the browser draws when a source is superimposing, which is when it
+# is only drawing the page over video the mixer decodes itself. Those frames
+# carry an alpha channel and cross raw, at 4 bytes a pixel against I420's 1.5,
+# so a 720p page at the full canvas rate is 110 MB/s where an ordinary source
+# is 41. The compositor holds the last page frame between updates, so the
+# picture still leaves at the canvas rate with the video moving underneath.
+# Raise it for a page with real animation and expect to pay for it.
+# overlay_fps = 10
+
+# What the supervisor does with a source that has stopped delivering. The
+# defaults are here; none of it has to be written out.
+[stall]
+# Seconds a source may deliver nothing before its pipeline is rebuilt.
+# restart_after_secs = 10
+#
+# A superimposed source is not restarted in place, it is built again from
+# nothing: a page probe, a clip fetch and a browser start, about ten seconds of
+# it. Doing that on a loop is what happened on air on 2026-09-11 and
+# 2026-09-12, 485 rebuilds one night and 1174 the next. The first few attempts
+# still go at full speed, because some failures really do heal on a retry;
+# after that the delay doubles to the ceiling and an alert goes to the UI on
+# every wait. The count is cleared the moment the source delivers a frame.
+# rebuild_attempts = 3
+# rebuild_backoff_secs = 30
+# rebuild_backoff_max_secs = 300
+#
+# Keep the last frame of a source being rebuilt on programme instead of cutting
+# to the slate for as long as the rebuild takes. Its branch is left in the
+# programme pipeline with its compositor pad still drawing, which costs nothing
+# and is released as soon as the replacement is on air.
+# hold_last_frame = true
+
+[media]
+dir = "media"
+# Only `dir` is required; the rest have defaults.
+# max_depth = 3
+# max_files = 500
+# probe_timeout_secs = 3
+
+[control]
+bind = "0.0.0.0:8080"
+# Bearer token for the API and the WebSocket. Leave it unset and the control
+# port is open to whoever can reach it, exactly as before; that is fine on a
+# LAN behind a firewall and wrong on anything a customer's server talks to.
+# With a token set, every /api/* request needs `Authorization: Bearer <token>`
+# (a GET, and so the WebSocket, may send `?token=<token>` instead), and a
+# missing or wrong one is a 401. The UI asks for it once and remembers it in
+# the browser. The GODWINMIX_TOKEN environment variable overrides this line,
+# for deployments that keep secrets out of config files.
+# token = "change-me"
+#
+# Where plugins live. One directory per plugin, one per version inside it:
+# <plugins_dir>/<name>/<version>/gmx-plugin.toml. Everything under it is read
+# at startup and on `plugin.add`; a manifest that does not validate is listed
+# by `gmx plugin list` with the reason rather than dropped in silence.
+#
+# The same directory serves panels: `<plugins_dir>/<name>/<version>/ui/` is
+# published at `/plugins/<name>/ui/`, which is how a plugin adds a panel to the
+# web UI. See docs/how-to/install-a-plugin.md and docs/how-to/write-a-panel.md.
+# plugins_dir = "~/.godwinmix/plugins"
+#
+# Read the web UI from this directory instead of from the copy built into the
+# binary. For editing the page without rebuilding; leave it unset in production.
+# ui_dir = "/opt/godwinmix/ui"
+
+[hardware]
+# auto, nvidia, va, qsv, amf, videotoolbox, mediafoundation, d3d11, d3d12,
+# v4l2, vulkan, software.
+# `auto` picks the highest ranked catalogue entry whose elements are installed.
+# Naming one makes startup fail, with the list of the entries that were
+# available, if it is missing. That is what you want on a server you control.
+# `godwinmix --probe` prints the whole decision.
+decode = "auto"
+encode = "auto"
+# Which compositor and conversion backend the canvas is drawn on: auto, cuda,
+# gl, va, d3d11, d3d12, software. `auto` keeps the software compositor until a
+# GPU entry carries a `verified` record for this platform, because every GPU
+# compositor is rank none upstream and the ones with open bugs on dynamic pad
+# add and remove are exactly the ones a mixer exercises. Pin one to run the
+# soak that earns it a promotion.
+graphics = "auto"
+
+# --- codecs ----------------------------------------------------------------
+# Which codec the programme is encoded in, which element does it, and what that
+# element wants set, all live in codecs.toml, which ships inside the binary.
+# This table adds entries or replaces shipped ones by id; nothing here needs a
+# rebuild. `gmx codec list` prints the merged result and `gmx codec test <id>`
+# proves an entry actually encodes on this machine.
+#
+# See docs/how-to/add-a-codec-entry.md.
+#
+# [codecs]
+# # The container the programme is muxed into, which decides what codecs are
+# # eligible. RTMP is flv, and flv carries H.264 and AAC only.
+# programme_container = "mpegts"
+#
+# [[codecs.video]]
+# id = "av1-house"
+# codec = "av1"
+# accel = "software"
+# rank = 900
+# encoder = "svtav1enc"
+# decoder = "dav1ddec"
+# parser = "av1parse"
+# license = "BSD-3-Clause"
+# container = ["mpegts", "matroska"]
+# keyframe = { property = "intra-period-length", unit = "frames" }
+# properties = { preset = 10, "target-bitrate" = { unit = "kbit", from = "video.bitrate_kbps" } }
+
+# --- sources ---------------------------------------------------------------
+# Each source runs in its own pipeline. One dying cannot disturb the output.
+#
+# The protocol is worked out from the URL: rtmp:// and rtmps:// are demuxed
+# explicitly, .m3u8 is HLS, .mpd is DASH, rtsp/srt/udp/rtp are continuous
+# streams, and anything else is treated as a file.
+#
+# A page can also be a source, rendered headlessly with its audio:
+#   uri = "web+https://example.com/live-game"
+# That needs GStreamer's wpesrc (gstreamer1.0-wpe), which is Linux only. If the
+# page merely plays an HLS stream, adding that .m3u8 directly is cheaper and
+# looks better.
+#
+# Sources added or removed from the UI are saved to <config>.sources.toml
+# beside this file, and that list then takes precedence over the one here.
+
+[[sources]]
+id = "cam1"
+name = "Camera 1"
+uri = "rtmp://127.0.0.1:1935/live/cam1"
+# Seconds without a frame before the source is treated as dead and faded to
+# the slate rather than frozen on its last picture.
+stall_timeout_secs = 2.0
+# Which RTMP client pulls this source: auto, rtmp2, or librtmp.
+#
+# GStreamer ships two and they do not talk to the same servers. rtmp2src is the
+# modern one and works with mediamtx. Against node-media-server it connects, is
+# accepted, and then silently delivers nothing at all: no error, no data. The
+# older librtmp based rtmpsrc works with both.
+#
+# "auto" starts with rtmp2src and switches once, after six seconds without
+# media, so an unfamiliar server recovers on its own. Pin a client here to skip
+# that wait once you know which one your server needs.
+rtmp_client = "auto"
+# What to do about the video a website plays. Websites only: it is accepted
+# here on any source and never read by one that is not a web+ page, so it is
+# shown on this camera only because this is where the per-source options are
+# documented.
+#
+# A page that plays a video normally costs about a whole CPU core. Chromium
+# decodes every frame in software and repaints the page around it, and all of
+# that crosses to the mixer as raw frames. When the media has an address a
+# decoder can open on its own, "auto" has the mixer decode it on the GPU like
+# any other source and leaves the browser drawing only the page over the top,
+# transparent where the video was.
+#
+# It cannot always be done. A page that feeds its player from JavaScript, which
+# is what YouTube and most streaming sites do, has no address to hand over, and
+# neither has anything behind DRM. "auto" looks, takes it when it is there, and
+# renders the whole page in the browser when it is not, without complaining.
+# `godwinmix ctl source list` marks the sources where it actually happened.
+#
+# The page's own player UI freezes when this applies, because the element the
+# mixer took over is paused: a progress bar stops filling, a running time stops
+# counting. The video itself is the mixer's now and plays normally.
+superimpose = "off"
+
+[[sources]]
+id = "cam2"
+name = "Camera 2"
+uri = "rtmp://127.0.0.1:1935/live/cam2"
+
+# --- outputs ---------------------------------------------------------------
+# Each output is supervised separately and has its own reconnect policy.
+
+[[outputs]]
+id = "primary"
+uri = "rtmp://127.0.0.1:1935/live/program"
+# "own" reconnects fast. Use it for an RTMP server you control.
+policy = "own"
+# Seconds of encoded data held before the muxer. This is the buffer that makes
+# a short network hiccup invisible to the viewer.
+queue_secs = 5.0
+
+# [[outputs]]
+# id = "youtube"
+# uri = "rtmp://a.rtmp.youtube.com/live2/YOUR-STREAM-KEY"
+# # "cdn" backs off much harder. Public ingests throttle aggressive reconnects.
+# policy = "cdn"
+# queue_secs = 6.0
+#
+# # Or override the preset outright:
+# [outputs.reconnect]
+# initial_delay_ms = 1000
+# max_delay_ms = 30000
+# multiplier = 2.0
+
+# --- naming a kind outright ------------------------------------------------
+# Every source and output above is written as a bare URI, and that still works:
+# the address is matched against every kind this build has and the highest
+# ranked one that claims it wins. `type` says which one to use instead, which is
+# what you want when the address is ambiguous, when two plugins claim the same
+# scheme, or when the kind has no address at all.
+#
+# `godwinmix --test-core` prints the kinds this build has.
+#
+# [[sources]]
+# id = "bars"
+# type = "test/source"
+# params = { uri = "test://smpte" }
+#
+# [[outputs]]
+# id = "contribution"
+# type = "srt/output"
+# params = { uri = "srt://receiver.example.com:9000?mode=caller", latency_ms = 200 }
+
+# --- filters ---------------------------------------------------------------
+# A filter is dropped between two points that already carry the canvas format,
+# so it can go on one source or on the whole programme without knowing what is
+# upstream of it. Filters can also be added and removed while live; these are
+# the ones in place at startup.
+#
+# On one source. `side = "input"` puts it before the proxy boundary, where the
+# multiview thumbnail sees it too; `side = "programme"` puts it on that source's
+# programme branch only.
+#
+# [[filters]]
+# id = "key"
+# type = "chroma/filter"
+# attach = { source = "cam2", side = "programme" }
+# params = { method = "green", angle = 20.0, noise = 2.0 }
+#
+# On the programme, before the tee every consumer reads, so the encoder and the
+# multiview both see it.
+#
+# [[filters]]
+# id = "pgm-key"
+# type = "chroma/filter"
+# attach = { programme = true }
+# params = { method = "blue" }
+
+# --- plugin settings -------------------------------------------------------
+# A table per plugin name. The core never reads inside one: `[plugins.ndi]` is
+# handed to the plugin called `ndi` and nothing else sees it. Sections this
+# build does not recognise are kept rather than dropped, so a config written for
+# a build with more plugins than this one still loads.
+#
+# [plugins.ndi]
+# discovery_interval_secs = 5
+#
+# Three keys in that table are the core's, not the plugin's, and are the only
+# ones it reads: a budget for the plugin's own processes, and what to do when
+# one goes over it. Watch a plugin's real numbers with `gmx plugin stats`
+# before setting these, because a limit below what a plugin honestly needs is a
+# source that restarts every few seconds.
+#
+# [plugins.ndi]
+# max_rss_mb = 512
+# max_cpu_percent = 60
+# on_over_budget = "restart"   # or "disable", or "alert" (the default)
+#
+# A plugin that runs as a WebAssembly component (placements = ["wasm"]) reads
+# two more keys from the same table, and one switch from [plugins] itself.
+# `place` picks the placement when a plugin declares more than one. `wasm_fuel`
+# and `wasm_deadline_ms` are what one call into the component may spend; both
+# are ceilings, and lowering either makes a slow component fail sooner rather
+# than letting it run longer. `max_rss_mb` above is its memory ceiling too.
+#
+# [plugins]
+# allow_wasi = []              # which plugins may have the WASI their manifest asks for
+#
+# [plugins.min-hold]
+# min_hold_ms = 8000           # the plugin's own setting
+# place = "wasm"               # only needed when the plugin has another placement too
+# wasm_fuel = 500000000        # operations per call
+# wasm_deadline_ms = 500       # wall clock per call
+#
+# `allow_wasi` is half of a grant and the manifest's `wasi` key is the other
+# half. Neither works alone: the author says what the plugin needs and the
+# operator says whether this machine gives it. Empty, which is the default,
+# means a component gets no filesystem and no sockets at all.
+#
+# None of this does anything unless the binary was built with `--features
+# wasm`. `gmx doctor` says whether yours was, on the `wasm host` line.
+#
+# A breach has to hold for three samples, which is three seconds, before
+# anything happens: one busy second while a plugin opens a file is not a plugin
+# that is broken. When it does, the core logs it, emits
+# `event/plugin.state {state: "over-budget"}` and acts on that instance alone.
+# It never acts on itself, and the programme output never stops.
+
+# --- what a surface starts with --------------------------------------------
+# The `[ui]` table is the layout, the theme and the gallery mode a client opens
+# with. Nothing here changes what the core does: it is what `core.info` answers
+# so that the first page a volunteer sees is the one their setup chose, rather
+# than the one the last person to use that browser chose.
+#
+# `gmx preset apply <name>` writes this for you, into the runtime store beside
+# this file (`godwinmix.runtime.toml`), which takes precedence over what is
+# here. Set it by hand when you are not using a preset.
+#
+# `gallery` is what the input tiles show: "live" is the picture moving and costs
+# the multiview stream; "snapshot" is a still refreshed on a click; "icon" and
+# "label" cost nothing and are what a Pi class machine wants. Leave it out and
+# the page asks the machine, which is what `gmx doctor` proposes.
+#
+# `theme` is "dark", "light", "high-contrast", "system", or a name a preset
+# ships a stylesheet for.
+#
+# [ui]
+# theme = "dark"
+# gallery = "live"
+#
+# [ui.layout]
+# header = ["header"]
+# main = ["scenes", "multiview"]
+# sidebar = ["sources"]
+# footer = ["alerts", "outputs"]
