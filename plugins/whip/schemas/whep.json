@@ -50,6 +50,7 @@
       "x-gmx-group": "Advanced"
     },
     "timeout_secs": {
+      "x-gmx-zero": "Wait for ever",
       "title": "Endpoint timeout",
       "description": "How long to wait for the endpoint to answer the POST. 0 waits forever.",
       "type": "integer",

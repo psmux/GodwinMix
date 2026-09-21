@@ -23,15 +23,10 @@ import { paint, grabRadius } from "../../kits/canvas/draw.js";
 const THRESHOLD = 4;
 
 /**
- * Whatever a plugin lists, its item can still be moved, resized and turned.
- *
- * Where an item sits, how big it is and which way up are the scene's business
- * and not the plugin's, so a plugin's list adds handles and never takes these
- * away. The camera plugin lists `["move", "resize", "crop"]`. `resize` is not a
- * name this kit knows, so it was dropped without a word, and `rotate` was not
- * listed at all: a camera in the composer had a cage and four crop edges, no
- * corner to drag and nothing to turn it by. A default handle is added wherever
- * the plugin put nothing of its own, so a plugin's crop edge keeps its edge.
+ * Whatever a plugin lists, its item can still be moved, resized and turned:
+ * those are the scene's business. The camera lists "resize", a name this kit
+ * does not know, and no "rotate", so it had neither. A default handle goes
+ * wherever the plugin put none of its own, so a crop edge keeps its edge.
  */
 function everyItemTransforms(declared) {
   const taken = new Set(declared.map((g) => `${g.anchor[0]},${g.anchor[1]}`));
@@ -114,12 +109,8 @@ export class ComposerCanvas {
 
   /**
    * Room round the picture for the handles of an item that fills the canvas.
-   *
-   * The rotate handle stands 12 percent of an item's height above its top
-   * edge, so the margin is a tenth of the surface and a little, which clears
-   * it for a full canvas item at any window size. The picture is given the
-   * same margin through a custom property, or the video and its outlines
-   * would part company again.
+   * The rotate handle stands 12 percent of an item's height above it. The
+   * picture takes the same margin through a custom property.
    */
   margin() {
     const m = Math.round(this.surface().height * 0.1) + 10;

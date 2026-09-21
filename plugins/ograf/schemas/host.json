@@ -6,6 +6,7 @@
   "additionalProperties": false,
   "properties": {
     "port": {
+      "x-gmx-zero": "Any free port",
       "type": "integer",
       "title": "Port",
       "description": "The port on 127.0.0.1 to ask for. 0 takes any free one, which is what to use when two mixers share a machine. If the port asked for is taken, a free one is used and the log says which.",

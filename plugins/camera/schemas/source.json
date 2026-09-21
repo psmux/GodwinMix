@@ -22,6 +22,7 @@
       "x-gmx-group": "Advanced"
     },
     "framerate": {
+      "x-gmx-zero": "Automatic",
       "type": "integer",
       "title": "Frame rate",
       "description": "What to ask the camera for, in frames per second. 0 lets the camera choose. A camera slower than the canvas has its frames repeated; a faster one has them dropped.",

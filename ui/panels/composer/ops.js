@@ -84,10 +84,8 @@ export function itemProps(scenes, context) {
 }
 
 /** Blend modes and audio modes, as the document spells them. */
-// Only the blends the mixer draws. The document knows five more, which an
-// OBS import can carry in, but `compositor` has an operator for these two and
-// no other, and a list of seven of which five changed nothing was the reason
-// Blend looked broken. See `undrawnBlend` for one that arrives anyway.
+// Only the blends the mixer draws: `compositor` has these two operators. The
+// document knows five more, which an OBS import can carry in.
 export const BLENDS = ["normal", "add"];
 
 /** A blend the document holds that this mixer draws as normal, or null. */

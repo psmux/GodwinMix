@@ -56,10 +56,7 @@ export class Inspector {
 
   itemSection(record) {
     const props = itemProps(this.o.scenes, this.o.context);
-    // The answer goes on to the composer. A change to a draft is in nothing
-    // but its answer, which carries the new records and geometry, and this
-    // used to drop it: a number typed here reached the mixer and the canvas
-    // went on drawing the old box.
+    // The answer goes on to the composer: a draft's new state is nowhere else.
     const guard = (fn) => (value) => Promise.resolve(fn(value)).then((answer) => this.changed(answer)).catch((e) => errorToast(e, "Change"));
 
     const name = el("input", { type: "text", value: record.name || "" });
@@ -77,10 +74,7 @@ export class Inspector {
     const locked = el("input", { type: "checkbox", checked: !!record.locked });
     on(locked, "change", () => guard(props.locked)(locked.checked));
 
-    // The box an item sits in is not on the record. It is flattened geometry
-    // the core answers with, so a mixer without it gets no group rather than a
-    // guess. A null child is skipped by `el`, which keeps the row below it in
-    // place either way.
+    // The box is flattened geometry, not on the record. Without it, no group.
     const box = this.o.geometry ? this.o.geometry(record.id) : null;
     const geometry = box ? field("Position and size", this.geometrySection(record, box, guard)) : null;
 
@@ -91,8 +85,7 @@ export class Inspector {
       field("Fit", choice(FITS, (record.transform && record.transform.fit) || "none", guard(props.fit))),
       field(
         "Blend",
-        // An imported scene may hold a blend this mixer cannot draw. It stays
-        // in the list so opening the item does not quietly change it.
+        // A blend this mixer cannot draw stays listed, so it is not lost.
         choice(undrawnBlend(record.blend) ? BLENDS.concat([record.blend]) : BLENDS, record.blend || "normal", guard(props.blend))
       ),
       undrawnBlend(record.blend) ? el("div.sm.faint", { text: `"${record.blend}" is kept in the scene but drawn as normal: this mixer draws normal and add.` }) : null,
@@ -107,16 +100,8 @@ export class Inspector {
   // position and size
 
   /**
-   * The item's box in canvas pixels, and the quarter turns the mixer can make,
-   * because those are the only turns `videoflip` offers (see `set_rotation` in
-   * the core). One `scene.item.set` per edit, from all four numbers at once, so
-   * the rectangle is never half of one edit and half of another.
-   *
-   * The box arrives from the caller, taken from the flattened geometry, and the
-   * change goes back through `rectToTransform` with the item's own scale and
-   * anchor so the numbers round trip. There is nothing here that a mixer
-   * without geometry can draw, which is why absence is handled by not being
-   * called.
+   * The item's box in canvas pixels, and the quarter turns `videoflip` makes.
+   * One `scene.item.set` per edit, from all four numbers at once.
    */
   geometrySection(record, box, guard) {
     const inputs = {
@@ -139,8 +124,7 @@ export class Inspector {
     };
     const commit = () => {
       const rect = wanted();
-      // The core refuses a box below this and would answer with an error. The
-      // old value goes back instead, which is the state that is actually true.
+      // Too small to be a box: the old numbers go back.
       if (rect.width < 8 || rect.height < 8) {
         restore();
         return;
@@ -162,8 +146,7 @@ export class Inspector {
     };
     for (const input of Object.values(inputs)) on(input, "change", commit);
 
-    // The panel does not rebuild while the hand is still in it, so the angle
-    // beside the buttons is kept here as well as on the record.
+    // Kept here too: the panel does not rebuild under the hand.
     let current = quarter(rotationOf(record));
     const shown = el("span.num.sm", { text: degrees(current) });
     const turn = (value) => {
@@ -211,11 +194,8 @@ export class Inspector {
     }
     const content = record.content || {};
     const value = content.params || {};
-    // A source's settings belong to the source, and the mixer reads an item's
-    // own params for a graphic and for nothing else. This panel used to write
-    // a camera's settings into the scene item, where they changed nothing at
-    // all, through a form that asked for "the id from `list_cameras`". It now
-    // shows the form every other door shows and sends it to `source.set`.
+    // A source's settings go to `source.set`. The mixer reads an item's own
+    // params for a graphic only, so writing a camera's there changed nothing.
     const ofSource = !!content.source;
     let schema = type.schema;
     let helpers = null;
@@ -238,8 +218,7 @@ export class Inspector {
       value,
       onChange: null,
     });
-    // The mixer does not publish a source's settings, so the form opens at its
-    // defaults and only what is changed from them is sent.
+    // A source's settings are not published, so only what is changed is sent.
     const untouched = ofSource ? JSON.stringify(helpers.unease(editor.read())) : null;
     const apply = el("button.btn.primary", {
       text: "Apply settings",

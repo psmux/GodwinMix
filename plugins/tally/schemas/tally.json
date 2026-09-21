@@ -86,6 +86,7 @@
       "x-gmx-group": "Advanced"
     },
     "refresh_secs": {
+      "x-gmx-zero": "Off",
       "type": "integer",
       "title": "Refresh every",
       "description": "Send every lamp again this often, so one that was power cycled catches up without anybody taking a source. 0 turns it off.",
