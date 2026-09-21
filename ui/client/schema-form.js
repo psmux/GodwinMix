@@ -80,12 +80,12 @@ export class SchemaForm {
       groups.get(group).push(field.wrap);
     }
     // Ungrouped first, then a collapsible section per group, in the order the
-    // schema introduced them.
+    // schema introduced them. The comment said so before the code did: a Map
+    // keeps the order its keys arrived in, so a schema whose first property
+    // was grouped put Advanced above everything a person came to fill in.
+    for (const w of this._inOrder(groups.get("") || [])) this.el.appendChild(w);
     for (const [group, wraps] of groups) {
-      if (group === "") {
-        for (const w of wraps) this.el.appendChild(w);
-        continue;
-      }
+      if (group === "") continue;
       const details = document.createElement("details");
       const summary = document.createElement("summary");
       summary.textContent = group;
@@ -98,6 +98,26 @@ export class SchemaForm {
       this.el.appendChild(details);
     }
     this._applyConditions();
+  }
+
+  /**
+   * What a person fills in first, first. A schema that came through a JSON
+   * object arrives with its keys sorted, so "Label" stood above "Monitor".
+   * Required fields lead, then a choice of named things (a camera, a screen),
+   * then the name, then the rest as the schema had them.
+   */
+  _inOrder(wraps) {
+    const required = new Set(this.schema.required || []);
+    const rank = (wrap) => {
+      const field = this.fields.find((f) => f.wrap === wrap);
+      if (!field) return 3;
+      if (required.has(field.name)) return 0;
+      const sub = this._resolve((this.schema.properties || {})[field.name]);
+      if (Array.isArray(sub["x-gmx-labels"])) return 1;
+      if (field.name === "name") return 2;
+      return 3;
+    };
+    return wraps.map((wrap, i) => ({ wrap, i, r: rank(wrap) })).sort((a, b) => a.r - b.r || a.i - b.i).map((x) => x.wrap);
   }
 
   _resolve(node) {

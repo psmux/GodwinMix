@@ -567,7 +567,9 @@ function tile(client, what, kind, opts, close) {
 export async function openForm(client, what, kind, preset, opts = {}) {
   const { SchemaForm } = await import("../client/schema-form.js");
   let schema = typeof kind.schema === "function" ? await kind.schema() : kind.schema;
-  if (what === "source" && schema?.properties) {
+  // Only for a kind a plugin provides. A file, a page and a stream have no
+  // devices behind them, and asking would hold their forms for nothing.
+  if (what === "source" && kind.plugin && schema?.properties) {
     // Short, and its failure is nothing: the box stays a box.
     const found = await discoverDevices(client, 1500).catch(() => []);
     schema = withDeviceChoices(schema, kind.id, found, preset || {});

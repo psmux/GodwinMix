@@ -588,6 +588,11 @@ async function provideSchema(client, pluginName, id) {
   schema.type = "object";
   schema.properties = schema.properties || {};
   if (!schema.properties.name) schema.properties.name = { type: "string", title: "Name" };
+  // A plugin's own `label` and the core's `name` ask the same question twice
+  // on one form. The name is the one shown on the tile, so it stays in view
+  // and the label goes with the other settings nobody needs on a first visit.
+  const label = schema.properties.label;
+  if (label && !label["x-gmx-group"]) schema.properties.label = Object.assign({}, label, { "x-gmx-group": "Advanced" });
   return schema;
 }
 
@@ -666,7 +671,11 @@ export function withDeviceChoices(schema, kindId, candidates, current) {
       values.push(was);
       labels.push(String(was));
     }
-    next[key] = Object.assign({}, props[key], { enum: values, "x-gmx-labels": labels });
+    // The schema's own words are about what to type: an id, a name, a number
+    // counting from 0. Under a list they are instructions for a box that is
+    // no longer there.
+    const description = text ? "Pick one. The first one found is whichever the system lists first." : "Pick one.";
+    next[key] = Object.assign({}, props[key], { enum: values, "x-gmx-labels": labels, description });
   }
   return Object.assign({}, schema, { properties: next });
 }
