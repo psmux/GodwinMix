@@ -268,6 +268,9 @@ export const PLATFORMS = [
     key: true,
     policy: "own",
     hosts: [],
+    // Said in `where`, and the form has to mean it: a whole address pasted
+    // into the server box, with nothing in the key box, is a whole address.
+    keyOptional: true,
     where: "Your own server, or a platform that is not on this list. The key may be blank.",
   },
   {

@@ -557,6 +557,23 @@ test("a server changed on its own says what else it needs", () => {
   eq(asked.params, undefined);
 });
 
+  test("a custom RTMP server takes a whole address with no key, on an add and on an edit", () => {
+    const custom = PLATFORMS.find((x) => x.id === "custom");
+    const add = paramsFor(custom, null, { id: "mine", server: "rtmp://127.0.0.1:1935/live/test2", key: "" });
+    eq(add.params && add.params.uri, "rtmp://127.0.0.1:1935/live/test2");
+    ok(!schemaFor(custom, null).required.includes("key"), "the form says the key may be blank, so it may");
+    const split = paramsFor(custom, null, { id: "mine", server: "rtmp://127.0.0.1:1935/live", key: "test2" });
+    eq(split.params.uri, "rtmp://127.0.0.1:1935/live/test2");
+    const output = { id: "mine", uri_host: "rtmp://127.0.0.1:1935/…", has_key: true };
+    const edit = paramsFor(custom, output, { server: "rtmp://127.0.0.1:1935/live/edited" });
+    eq(edit.params && edit.params.uri, "rtmp://127.0.0.1:1935/live/edited");
+    const untouched = paramsFor(custom, output, { queue_secs: 6 });
+    ok(untouched.params && untouched.params.uri === undefined, "an edit that names no address keeps the one in force");
+    // A platform with a published ingest still needs its key.
+    const yt = PLATFORMS.find((x) => x.id === "youtube");
+    ok(paramsFor(yt, null, { id: "yt", server: yt.server, key: "" }).error, "YouTube with no key is still refused");
+  });
+
 test("an SRT destination has an address and no key at all", () => {
   const srt = PLATFORMS.find((p) => p.id === "srt");
   const form = new SchemaForm(schemaFor(srt, null), {});
@@ -567,6 +584,35 @@ test("an SRT destination has an address and no key at all", () => {
   const asked = paramsFor(srt, null, form.read());
   eq(asked.params.uri, "srt://192.168.1.50:9000");
   eq(asked.params.policy, "own");
+});
+
+test("an output's row stands through a status, so a button held for a moment is still there", () => {
+  // A click is a press and a release on one element. The panel used to make
+  // every row again on each render, thirty times a second with a destination
+  // reconnecting, and nothing a person pressed ever fired.
+  const state = { outputs: [{ id: "primary", state: "reconnecting", reconnects: 1, queue_secs: 0, has_key: true, uri_host: "rtmp://h/\u2026" }] };
+  const panel = document.createElement("gmx-outputs");
+  panel.setClient({ state, onRender: () => () => {}, call: async () => ({}) });
+  document.body.appendChild(panel);
+  const edit = () => [...panel.querySelectorAll(".output-row button")].find((b) => b.textContent === "Edit");
+  const before = edit();
+  ok(before, "no Edit button was drawn");
+  state.outputs = [Object.assign({}, state.outputs[0], { reconnects: 2, queue_secs: 1.5 })];
+  panel.render(state);
+  ok(edit() === before, "the Edit button was made again by a status that changed only numbers");
+  ok(panel.textContent.includes("attempt 2"), "and the row still has to say the new number");
+  state.outputs = state.outputs.concat([{ id: "second", state: "live", reconnects: 0, queue_secs: 2, has_key: true, uri_host: "rtmp://i/\u2026" }]);
+  panel.render(state);
+  ok(edit() === before, "adding a second destination remade the first one's row");
+  eq(panel.querySelectorAll(".output-row").length, 2);
+  state.outputs = [state.outputs[1]];
+  panel.render(state);
+  eq(panel.querySelectorAll(".output-row").length, 1);
+  ok(!panel.textContent.includes("primary"), "a removed destination is still drawn");
+  state.outputs = [];
+  panel.render(state);
+  ok(panel.textContent.includes("Nothing is being sent"), panel.textContent);
+  panel.remove();
 });
 
 test("an output's state is spelled out as the next thing to do about it", () => {
