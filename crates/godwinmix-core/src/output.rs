@@ -107,6 +107,12 @@ impl OutputSlot {
         // below, and the start time for `--startup-report`.
         let _observe = crate::observe::output_span(id);
 
+        // Asked first, because this is the step an operator's typing can fail:
+        // an address nothing in this build sends to. Refused after the feed was
+        // built, it left two queues on the encoder tees under this id, and the
+        // same id with a good address could then never be added.
+        let (kind, ready) = crate::plugin::output::open(cfg)?;
+
         let feed_video = gstutil::queue_time(&format!("out-{id}-vq"), cfg.queue_secs, true)?;
         let feed_audio = gstutil::queue_time(&format!("out-{id}-aq"), cfg.queue_secs, true)?;
         let vproxy = make("proxysink", &format!("out-{id}-vproxy"))?;
@@ -130,7 +136,6 @@ impl OutputSlot {
             (audio_tee.clone(), link_tee_to(audio_tee, &feed_audio).context("linking audio tee")?),
         ];
 
-        let (kind, ready) = crate::plugin::output::open(cfg)?;
         let slot = Arc::new(Self {
             cfg: cfg.clone(),
             feed_video,
@@ -151,7 +156,11 @@ impl OutputSlot {
             manifest: ready.manifest,
             capabilities: ready.capabilities,
         });
-        slot.spin_up(false)?;
+        // A destination that cannot be built takes its feed back out with it.
+        if let Err(e) = slot.spin_up(false) {
+            slot.detach(program);
+            return Err(e);
+        }
         Ok(slot)
     }
 
@@ -573,6 +582,16 @@ mod tests {
 
         slot.shutdown();
         let _ = program.set_state(gst::State::Null);
+    }
+
+    #[test]
+    fn a_refused_address_leaves_the_id_free_for_a_good_one() {
+        init();
+        let (program, vtee, atee, tx) = harness();
+        let bad = OutputConfig::bare("retry", "127.0.0.1:1935/live");
+        assert!(OutputSlot::attach(&program, &vtee, &atee, &bad, tx.clone()).is_err());
+        assert!(program.by_name("out-retry-vq").is_none(), "the refused add left its feed behind");
+        OutputSlot::attach(&program, &vtee, &atee, &cfg("retry"), tx).expect("the same id, a good address");
     }
 
     #[test]
