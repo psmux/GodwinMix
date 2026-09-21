@@ -242,6 +242,16 @@ export class Composer {
    */
   async picture() {
     clear(this.canvas.picture);
+    // The draft itself, composited by the mixer and streamed. This is what
+    // makes the composer a place to design in: the boxes are drawn here and
+    // the video under them comes from the same placements the programme would
+    // get, so a drag moves the picture and not only its outline. It used to
+    // show the armed scene or the programme, neither of which is the draft.
+    if (this.draft && (await this.showDraft())) {
+      this.canvas.picture.appendChild(el("img", { src: this.streamUrl("/mjpeg/preview"), alt: "" }));
+      this.note.textContent = "This draft, live. Nothing reaches air until Apply.";
+      return;
+    }
     const armed = this.client.state.preview || this.scenes.armed();
     const summary = this.scenes.summary(this.scene);
     const isArmed = summary && (armed === summary.id || armed === summary.name);
@@ -268,6 +278,16 @@ export class Composer {
     this.note.textContent = "The programme, with this scene's layout drawn over it.";
   }
 
+  /** Ask the preview to draw this draft. False on a mixer that cannot. */
+  async showDraft() {
+    try {
+      const answer = await this.client.call("scene.preview.set", { draft: this.draft });
+      return !!(answer && answer.draft);
+    } catch {
+      return false;
+    }
+  }
+
   streamUrl(path) {
     const transport = this.client.transport || {};
     const url = new URL(path, transport.base || location.origin);
@@ -285,6 +305,8 @@ export class Composer {
       const begun = await this.begin();
       this.canvas.draft = this.draft;
       this.useView(begun.view || (await this.read()));
+      // A new draft, or none: the picture has to be pointed at it again.
+      await this.picture();
       toast({
         text: wanted
           ? "Editing on air. Every change goes out as you make it."
