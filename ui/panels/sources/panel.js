@@ -20,7 +20,7 @@ import { settings, setSetting, onSettingsChanged, GALLERY_MODES } from "../../sh
 import { audioFor, ScrubGestures } from "../../shell/fader.js";
 import { addView, dropViews, takeMeters } from "../../shell/meter.js";
 import { sheetWidthFor } from "../../client/frames.js";
-import { SOURCE_KINDS, kindOfUri, readdAddress } from "../../client/kinds.js";
+import { SOURCE_KINDS, kindOfUri } from "../../client/kinds.js";
 import { buildTile, syncTile, setTileMode } from "./tile.js";
 import { setLocal, nameOf } from "./local.js";
 import { settableOnly, setRequest } from "./setreq.js";
@@ -673,15 +673,11 @@ class SourcesPanel extends HTMLElement {
       } catch (error) { errorToast(error, "Remove from scene"); }
       return;
     }
-    const removed = ids.map((id) => this.client.store.source(id)).filter(Boolean);
-    // Asked even with confirmation off when there will be no undo, because the
-    // undo is what makes an unasked removal safe.
-    const final = removed.some((s) => !readdAddress(s));
-    if (settings().confirmRemove || final) {
+    if (settings().confirmRemove) {
       const what = ids.length === 1 ? `"${ids[0]}"` : `${ids.length} sources`;
-      const tail = final ? " This cannot be undone from here." : "";
-      if (!(await confirmModal(`Remove ${what}? Nothing that is on air is interrupted.${tail}`, "Remove"))) return;
+      if (!(await confirmModal(`Remove ${what}? Nothing that is on air is interrupted.`, "Remove"))) return;
     }
+    const removed = ids.map((id) => this.client.store.source(id)).filter(Boolean);
     for (const id of ids) {
       try {
         await this.client.call("source.remove", { id });
@@ -690,16 +686,11 @@ class SourcesPanel extends HTMLElement {
         return;
       }
     }
-    // A source whose address the core keeps to itself cannot be put back from
-    // here, so no undo is offered that would fail when it was pressed.
-    if (final) {
-      toast({ text: "Removed. To have it back, add it again from + in Sources: the mixer does not publish a source's full address." });
-      return;
-    }
+    // The core puts back what it removed. The address a client is shown has
+    // everything after the host cut off, so adding it again from here made a
+    // file source that could not start.
     const restore = async () => {
-      for (const s of removed) {
-        await this.client.call("source.add", { id: s.id, name: s.name, uri: readdAddress(s) });
-      }
+      for (const s of removed) await this.client.call("source.restore", { id: s.id });
     };
     shell.undo.push({
       label: ids.length === 1 ? `Removed ${ids[0]}` : `Removed ${ids.length} sources`,
@@ -771,13 +762,12 @@ class SourcesPanel extends HTMLElement {
   async paste() {
     if (!this.clipboard || !this.clipboard.length) return;
     for (const s of this.clipboard) {
-      const uri = readdAddress(s);
-      if (!uri) {
-        toast({ text: `${nameOf(s)} cannot be pasted: the mixer does not publish a source's full address. Add it again from + in Sources.` });
-        return;
-      }
+      // A copy of a source the mixer has, or after a cut the source itself
+      // back. Either way the core supplies the address: see `remove`.
+      const live = !!this.client.store.source(s.id);
       try {
-        await this.client.call("source.add", { name: nameOf(s) + " copy", uri });
+        if (live) await this.client.call("source.duplicate", { id: s.id, name: nameOf(s) + " copy" });
+        else await this.client.call("source.restore", { id: s.id });
       } catch (e) {
         errorToast(e, "Paste");
         return;

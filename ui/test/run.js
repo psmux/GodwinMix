@@ -767,14 +767,6 @@ async function addSourcePickerSuite() {
     ok(!kinds.sameAddress("rtmp://host/…", "rtmp://host/live/key"), "nor a stream");
   });
 
-  test("a source is only added again from an address that survived the cut", () => {
-    eq(kinds.readdAddress({ uri: "test://smpte/…" }), "test://smpte");
-    eq(kinds.readdAddress({ uri: "camera/source" }), "camera/source");
-    eq(kinds.readdAddress({ uri: "file:///…" }), null);
-    eq(kinds.readdAddress({ uri: "rtmp://host/…" }), null);
-    eq(kinds.readdAddress({ uri: "…" }), null);
-  });
-
   test("the size a device advertises is read wherever it put it", () => {
     eq(kinds.candidateSize({ params: { width: 1920, height: 1080 } }), "1920 x 1080");
     eq(kinds.candidateSize({ params: { best_size: [1280, 720] } }), "1280 x 720");

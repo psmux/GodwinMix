@@ -597,6 +597,59 @@ pub async fn add_source_now(app: &AppState, req: AddSourceRequest) -> Result<Str
     create_source(app, base_id, uri, name, &superimpose, &req.params).await
 }
 
+/// `source.restore`: a removed source back under its own id, from the config
+/// the mixer kept. The address never goes through a client.
+pub async fn restore_source(app: &AppState, id: &str) -> Result<String> {
+    let configs = app.mixer.configs().await?;
+    if configs.sources.iter().any(|c| c.id == id) {
+        anyhow::bail!("source {id} already exists, so there is nothing to restore. Call source.list.");
+    }
+    let Some(cfg) = configs.removed.iter().rev().find(|c| c.id == id).cloned() else {
+        let known: Vec<&str> = configs.removed.iter().map(|c| c.id.as_str()).collect();
+        anyhow::bail!(
+            "no removed source {id} is remembered. The mixer keeps the last {} it removed, until \
+             it restarts, and has: {}. Add it again with source.add and its uri.",
+            godwinmix_core::mixer::REMOVED_KEPT,
+            if known.is_empty() { "none".to_string() } else { known.join(", ") }
+        );
+    };
+    app.mixer.request(|ack| Command::AddSource(Box::new(cfg), Some(ack))).await?;
+    Ok(id.to_string())
+}
+
+/// `source.duplicate`: another source with a live one's address and settings,
+/// under the first free id.
+pub async fn copy_source(
+    app: &AppState,
+    like: &str,
+    id: Option<String>,
+    name: Option<String>,
+) -> Result<String> {
+    let configs = app.mixer.configs().await?;
+    let Some(original) = configs.sources.iter().find(|c| c.id == like) else {
+        let known: Vec<&str> = configs.sources.iter().map(|c| c.id.as_str()).collect();
+        anyhow::bail!("no source {like} to copy. This mixer has: {}.", known.join(", "));
+    };
+    let name = name
+        .filter(|n| !n.trim().is_empty())
+        .or_else(|| original.name.as_ref().map(|n| format!("{n} copy")));
+    let base_id = id.filter(|i| !i.trim().is_empty()).unwrap_or_else(|| match &name {
+        Some(n) => slug(n),
+        None => format!("{like}-copy"),
+    });
+    for id in id_candidates(&base_id) {
+        let mut cfg = original.clone();
+        cfg.id = id.clone();
+        cfg.name = name.clone();
+        match app.mixer.request(|ack| Command::AddSource(Box::new(cfg), Some(ack))).await {
+            Ok(()) => return Ok(id),
+            Err(e) if e.to_string().contains("already exists") => continue,
+            Err(e) => return Err(e),
+        }
+    }
+    anyhow::bail!("could not find a free id for {base_id}")
+}
+
 /// Add a source under `base_id` or the first free suffix of it, and say which
 /// id it got. A derived id can easily collide: two pages on the same host
 /// both want to be called after it.

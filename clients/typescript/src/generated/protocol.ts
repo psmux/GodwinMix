@@ -304,6 +304,13 @@ export interface DuplicateSceneRequest {
   scene: string;
 }
 
+/** `source.duplicate`. */
+export interface DuplicateSourceRequest {
+  id: string;
+  name?: string | null;
+  new_id?: string | null;
+}
+
 /** `scene.edit.begin`. */
 export interface EditBeginRequest {
   live?: boolean;
@@ -1649,10 +1656,12 @@ export interface MethodParams {
   "snapshot.get": SnapshotRequest;
   "source.add": AddSourceRequest;
   "source.audio.set": AudioSetParams;
+  "source.duplicate": DuplicateSourceRequest;
   "source.get": IdRequest;
   "source.group": GroupSourcesRequest;
   "source.list": Record<string, never>;
   "source.remove": IdRequest;
+  "source.restore": IdRequest;
   "source.seek": SeekParams;
   "source.set": SetSourceRequest;
   "task.cancel": TaskRequest;
@@ -1777,10 +1786,12 @@ export interface MethodResults {
   "snapshot.get": Record<string, unknown>;
   "source.add": SourceStatus;
   "source.audio.set": SourceAudioState;
+  "source.duplicate": SourceStatus;
   "source.get": SourceStatus;
   "source.group": Record<string, unknown>;
   "source.list": SourceStatus[];
   "source.remove": Record<string, unknown>;
+  "source.restore": SourceStatus;
   "source.seek": SourcePositionState;
   "source.set": SourceStatus;
   "task.cancel": Record<string, unknown>;
@@ -1943,10 +1954,12 @@ export const METHODS: readonly MethodInfo[] = [
   { name: "snapshot.get", summary: "One JPEG: the whole contact sheet, the programme, or one source cut out of the mosaic.", scope: "read", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/snapshot/{id}" } },
   { name: "source.add", summary: "Add a source while the mixer runs. Answers with the id it got and the whole source record.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/sources" } },
   { name: "source.audio.set", summary: "Move a source's audio: the fader, the mute, and for a superimposed page the balance between its own sound and the videos under it.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/sources/{id}/audio" } },
+  { name: "source.duplicate", summary: "Add another source like one the mixer has: the same address and settings under a new id. A client cannot do this with source.add, because the address it is shown has everything after the host cut off.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/sources/{id}/duplicate" } },
   { name: "source.get", summary: "One source. Refused with the ids that exist when there is no such source.", scope: "read", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/sources/{id}" } },
   { name: "source.group", summary: "Put sources in a tray folder. A tag for finding things, not a group on the canvas.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/sources/{id}/group" } },
   { name: "source.list", summary: "Every source, with its state, whether it has video and audio, and its fader.", scope: "read", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/sources" } },
   { name: "source.remove", summary: "Remove a source. If it is on programme the mixer cuts to the slate first.", scope: "operate", mutating: true, destructive: true, rest: { method: "DELETE", path: "/api/v1/sources/{id}" } },
+  { name: "source.restore", summary: "Put back a source that source.remove took away, as it was: same id, address, settings, fader and mute. The mixer remembers the last sixteen it removed, until it restarts.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/sources/{id}/restore" } },
   { name: "source.seek", summary: "Move a seekable source to a position. Answers with where it actually landed.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/sources/{id}/seek" } },
   { name: "source.set", summary: "Change a running source: its name and colour, its params, or where it runs. The name and colour live on the scene document. Moving a source between the core, a sidecar and a node is `place`; the programme keeps its frame rate across the move and the compositor covers the swap.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/sources/{id}/set" } },
   { name: "task.cancel", summary: "Ask a piece of long running work to stop. Cooperative: the answer says the request landed, not that the work has stopped yet.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/task/cancel" } },
@@ -2574,6 +2587,11 @@ export class GeneratedMethods {
     return this._call("source.audio.set", params as unknown as Record<string, unknown>) as Promise<SourceAudioState>;
   }
 
+  /** Add another source like one the mixer has: the same address and settings under a new id. A client cannot do this with source.add, because the address it is shown has everything after the host cut off. */
+  sourceDuplicate(params: DuplicateSourceRequest): Promise<SourceStatus> {
+    return this._call("source.duplicate", params as unknown as Record<string, unknown>) as Promise<SourceStatus>;
+  }
+
   /** One source. Refused with the ids that exist when there is no such source. */
   sourceGet(params: IdRequest): Promise<SourceStatus> {
     return this._call("source.get", params as unknown as Record<string, unknown>) as Promise<SourceStatus>;
@@ -2592,6 +2610,11 @@ export class GeneratedMethods {
   /** Remove a source. If it is on programme the mixer cuts to the slate first. */
   sourceRemove(params: IdRequest): Promise<Record<string, unknown>> {
     return this._call("source.remove", params as unknown as Record<string, unknown>) as Promise<Record<string, unknown>>;
+  }
+
+  /** Put back a source that source.remove took away, as it was: same id, address, settings, fader and mute. The mixer remembers the last sixteen it removed, until it restarts. */
+  sourceRestore(params: IdRequest): Promise<SourceStatus> {
+    return this._call("source.restore", params as unknown as Record<string, unknown>) as Promise<SourceStatus>;
   }
 
   /** Move a seekable source to a position. Answers with where it actually landed. */

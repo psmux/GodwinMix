@@ -5,7 +5,8 @@
 * Fixed a segfault in the programme compositor when a source that was on air was removed. A flush stop sent into a slot could free a frame the compositor's scaler threads were still writing. It took about eighty removals to hit on an M4 Pro. A slot is now hidden, and one frame let out, before its flush is ended.
 * "Start empty" on the first run screen opens the Default scene's own source chooser. It used to add the source to the mixer and to no scene, so the toast said added and nothing appeared.
 * The source chooser reuses a test pattern or media file the mixer already has. It compared against the full address while the core publishes a shortened one, so every scene got its own copy of colour bars.
-* Undo after removing a source, and paste, no longer add a source back from its shortened address, which for a file cannot start. Where the address is not recoverable the UI says so, and asks before a removal it cannot undo.
+* Two new methods. `source.duplicate` copies a source the mixer has, and `source.restore` puts back one of the last sixteen it removed, with its id, fader and mute. Undo after removing a source, and paste, use them. They used to send back the shortened address the core publishes, which for a file is `file:///…` and cannot start.
+* A source restarting in place no longer sends its flush into the compositor. The flush stops at the first queue past the proxy, which is all it has to wake, so the same segfault cannot be reached that way either, and the last frame stays up until the first new one.
 * The uptime in the header counts on between snapshots.
 
 ## 0.2.0 (2026-09-15)

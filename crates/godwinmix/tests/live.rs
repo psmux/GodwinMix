@@ -328,6 +328,8 @@ async fn every_refusal_carries_data_retryable_and_a_way_forward() {
         ("confirmation required", "source.remove", json!({ "id": "cam2" }), &careful, "confirm"),
         ("an unknown method", "source.destroy", json!({}), &token, "source.remove"),
         ("params that do not parse", "source.add", json!({}), &token, "core.api"),
+        ("a restore of nothing", "source.restore", json!({ "id": "nope" }), &token, "source.add"),
+        ("a copy of nothing", "source.duplicate", json!({ "id": "nope" }), &token, "cam1"),
         ("an unknown task", "task.get", json!({ "task_id": "nope" }), &token, "task"),
         ("an unknown output", "output.remove", json!({ "id": "nope" }), &token, "output"),
         ("an unknown filter", "filter.remove", json!({ "id": "nope" }), &token, "filter"),
@@ -374,6 +376,35 @@ async fn every_refusal_carries_data_retryable_and_a_way_forward() {
     if let Err(e) = refusal {
         assert_ne!(e.data.get("rehearsal"), Some(&json!(true)), "this is a live core");
     }
+}
+
+/// A client is shown a source's address with everything after the host cut
+/// off, so it cannot copy a source or put a removed one back by sending the
+/// address again: for a file that is `file:///…`, which does not start. The
+/// core does both from the config it holds.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_source_is_copied_and_a_removed_one_restored_without_its_address() {
+    let core = Core::start(godwinmix_core::safety::SafetyConfig::default()).await;
+    let token = desk();
+
+    let copy = core.call(&token, "source.duplicate", json!({ "id": "cam1" })).await.unwrap();
+    let copy_id = copy["id"].as_str().unwrap().to_string();
+    assert_ne!(copy_id, "cam1", "a copy needs an id of its own: {copy}");
+
+    core.call(&token, "source.audio.set", json!({ "id": "cam2", "gain": 0.5, "muted": true }))
+        .await
+        .unwrap();
+    core.call(&token, "source.remove", json!({ "id": "cam2" })).await.unwrap();
+    let back = core.call(&token, "source.restore", json!({ "id": "cam2" })).await.unwrap();
+    assert_eq!(back["id"], "cam2", "a restored source keeps its id, so scenes still find it");
+    assert_eq!(back["gain"], 0.5, "and its fader: {back}");
+    assert_eq!(back["muted"], true, "and its mute: {back}");
+
+    let twice = core
+        .call(&token, "source.restore", json!({ "id": "cam2" }))
+        .await
+        .expect_err("it is live again, so there is nothing left to restore");
+    assert!(twice.message.contains("already exists"), "{}", twice.message);
 }
 
 /// 09 section 5 item 14, the method half: a core started with `--rehearsal`

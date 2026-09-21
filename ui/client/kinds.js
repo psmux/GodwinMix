@@ -645,22 +645,6 @@ export function sameAddress(published, wanted) {
 }
 
 /**
- * The address to add a published source again under, or null when the mixer
- * has not told us enough to.
- *
- * What the core cut off is gone: `file:///…` is not a file and `rtmp://host/…`
- * has no stream in it, and adding either makes a source that fails to start. A
- * bare scheme and host comes back whole. Anything else cannot be added again
- * from here, and the caller says so rather than trying.
- */
-export function readdAddress(source) {
-  const uri = String((source && source.uri) || "").trim();
-  if (!uri.includes("…")) return uri || null;
-  const bare = /^([a-z][a-z0-9+.-]*:\/\/[^/]+)\/…$/i.exec(uri);
-  return bare && /^test:/i.test(uri) ? bare[1] : null;
-}
-
-/**
  * Whether this mixer already has the thing a candidate offers.
  *
  * A source record carries an id, a name and a URI and nothing else, and every
