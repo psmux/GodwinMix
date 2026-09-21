@@ -113,7 +113,7 @@ fn about_metadata() -> AboutMetadata<'static> {
         comments: Some(
             "A live video mixer. This window is a shell: the operator UI comes from the mixer it is connected to, so a mixer on a server looks the same as one on this computer.".into(),
         ),
-        website: Some("https://github.com/godwin/godwinmix".into()),
+        website: Some("https://github.com/psmux/GodwinMix".into()),
         ..Default::default()
     }
 }

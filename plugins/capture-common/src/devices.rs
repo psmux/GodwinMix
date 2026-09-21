@@ -174,14 +174,27 @@ pub fn find(classes: &[&str], wanted: &str) -> Result<Found, String> {
         }
     }
     Err(format!(
-        "no device matches '{wanted}'. This machine has: {}. Put one of those in the \
-         `device` setting, or leave it empty for the first one.",
+        "no device matches '{wanted}'. This machine has: {}. Choose one of those, or leave \
+         the device empty for the first one. A name for the source goes in its label.",
         devices
             .iter()
             .map(|d| format!("'{}' ({})", d.name, d.id))
             .collect::<Vec<_>>()
             .join(", ")
     ))
+}
+
+/// Whether the platform's monitor lists any device under these classes.
+///
+/// What a plugin asks before it falls back from [`find`] to a capture element
+/// by name. The fallback is for a machine whose monitor is missing or sees
+/// nothing. When the monitor does list devices and the one asked for is not
+/// among them, `find` has already said so and named the ones there are, and
+/// trying the bare element instead buried that under a complaint about an
+/// `element` setting nobody had touched: somebody typed a name into the
+/// camera box and was told to clear a field that was empty.
+pub fn lists_any(classes: &[&str]) -> bool {
+    list(classes).map(|found| !found.is_empty()).unwrap_or(false)
 }
 
 /// Every device under these classes as a `discover` answer.

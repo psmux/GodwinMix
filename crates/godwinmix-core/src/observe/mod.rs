@@ -53,14 +53,18 @@ use std::path::{Path, PathBuf};
 /// directory beside the config, which puts it next to the runtime store the
 /// mixer already writes and needs no home directory, no XDG variable and no
 /// platform special case. Works unchanged on Windows, macOS and Linux.
+///
+/// Always absolute. A plugin is a process with a working directory of its own,
+/// and it is handed addresses under here: `--config godwinmix.toml`, which is
+/// how anybody starts a mixer from the folder the config is in, made this
+/// `.godwinmix`, and every camera then failed to bind a socket at a path that
+/// only existed from where the mixer stood.
 pub fn runtime_dir(config_path: &Path) -> PathBuf {
-    if let Some(dir) = crate::config::env_var("RUNTIME_DIR") {
-        let dir = dir.trim();
-        if !dir.is_empty() {
-            return PathBuf::from(dir);
-        }
-    }
-    config_path.parent().unwrap_or(Path::new(".")).join(".godwinmix")
+    let chosen = match crate::config::env_var("RUNTIME_DIR") {
+        Some(dir) if !dir.trim().is_empty() => PathBuf::from(dir.trim()),
+        _ => config_path.parent().unwrap_or(Path::new(".")).join(".godwinmix"),
+    };
+    std::path::absolute(&chosen).unwrap_or(chosen)
 }
 
 /// What `start` needs to know.

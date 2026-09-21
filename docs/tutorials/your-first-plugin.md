@@ -142,7 +142,7 @@ ls -l bars.mkv
 ```
 
 ```
--rw-r--r--  1 godwin  wheel  5098218 14 Sep 21:36 bars.mkv
+-rw-r--r--  1 user    wheel  5098218 14 Sep 21:36 bars.mkv
 ```
 
 Five megabytes for two seconds of 320x180. That is what raw video costs: no

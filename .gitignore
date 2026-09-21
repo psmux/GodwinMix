@@ -73,3 +73,9 @@ examples/*/target/
 
 # Agent worktrees, made by Claude Code while it works in parallel
 .claude/worktrees/
+
+# What a mixer run from the repository root writes beside its config: the
+# runtime directory and the two runtime documents. State, not source.
+/.godwinmix/
+/*.runtime.toml
+/*.runtime.scenes.json
