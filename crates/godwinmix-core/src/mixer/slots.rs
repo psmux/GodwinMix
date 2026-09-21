@@ -219,11 +219,6 @@ pub struct Placement {
     /// Degrees clockwise. Snapped to the nearest right angle on the software
     /// path, which is all `videoflip` can do.
     pub rotation: f64,
-    /// Add this item's light to what is under it, in place of covering it.
-    /// The one blend besides normal that `compositor` can draw: its pads take
-    /// an operator of source, over or add. Screen, multiply and the rest of
-    /// the document's list need the frame on a GPU and are drawn as normal.
-    pub additive: bool,
     pub sizing: Sizing,
     /// 0 to 1 each, where the picture sits inside its frame when the sizing
     /// policy leaves room.
@@ -246,7 +241,6 @@ impl Placement {
             alpha: 1.0,
             crop: (0.0, 0.0, 0.0, 0.0),
             rotation: 0.0,
-            additive: false,
             sizing: Sizing::Contain,
             align: (0.5, 0.5),
             audio: PlacementAudio::Follow,
@@ -437,7 +431,6 @@ impl Slot {
             Write::Enter => PadState { alpha: 0.0, ..to }.write(&self.pad),
         }
         set_sizing(&self.pad, p.sizing);
-        set_operator(&self.pad, p.additive);
         for (name, v) in [("xalign", p.align.0), ("yalign", p.align.1)] {
             if self.pad.has_property(name) {
                 set_f64(&self.pad, name, v.clamp(0.0, 1.0));
@@ -845,6 +838,10 @@ impl SlotPool {
                 // filter that will not build is a refused change, not a black
                 // frame, and the message names the item's own filter.
                 warn!(slot = index, source = %p.source, ?e, "a scene item's filter could not go on");
+                // Once, not twice a second. The shape is remembered as it was
+                // asked for, so the next apply finds nothing new to build and
+                // leaves the pad alone until the item's filters change.
+                self.slots[index].filter_shape = p.filters.to_vec();
             }
             ramps.push(self.slots[index].draw(p, Z_LIVE + i as u32, write));
             self.slots[index].drawn = p.item;
@@ -1419,19 +1416,6 @@ pub(crate) fn write_pad(
 /// a converter per pad twice a second and put the programme's frame interval
 /// over 34 ms on an idle mixer. Comparing first is the difference between a
 /// late frame every half second and none.
-/// Cover what is under this pad, or add to it. See `Placement::additive`.
-pub(crate) fn set_operator(pad: &gst::Pad, additive: bool) {
-    if !pad.has_property("operator") {
-        return;
-    }
-    let want = if additive { "add" } else { "over" };
-    let held = pad.property_value("operator");
-    let now = glib::EnumValue::from_value(&held).map(|(_, v)| v.nick().to_string());
-    if now.as_deref() != Some(want) {
-        pad.set_property_from_str("operator", want);
-    }
-}
-
 pub(crate) fn set_sizing(pad: &gst::Pad, sizing: Sizing) {
     let Some(pspec) = pad.find_property("sizing-policy") else { return };
     let class = glib::EnumClass::with_type(pspec.value_type());

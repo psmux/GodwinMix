@@ -1135,6 +1135,23 @@ fn encoder_vars(cfg: &Config) -> crate::catalogue::apply::Vars {
     }
 }
 
+/// Whether a picture with transparency can be put into the programme.
+///
+/// Not on the software path. Its compositor's output is pinned to I420, which
+/// has no alpha plane, and a `compositor` whose output has none refuses every
+/// input that has one: a chroma key on a scene item would not link, the call
+/// that added it answered ok, and the slot pool tried again twice a second.
+/// Compositing in a format that keeps alpha and converting afterwards works
+/// and was measured here at 2.6 times the CPU for 1080p30 (2.8 s against 7.1 s
+/// of CPU for ten seconds of picture), which is not something to switch on for
+/// everybody. Until it is an option, a key is refused with the reason.
+static PROGRAMME_KEEPS_ALPHA: AtomicBool = AtomicBool::new(false);
+
+/// See [`PROGRAMME_KEEPS_ALPHA`].
+pub fn programme_keeps_alpha() -> bool {
+    PROGRAMME_KEEPS_ALPHA.load(Ordering::Relaxed)
+}
+
 /// The caps the compositor's output is pinned to.
 ///
 /// With the software entry this is the canvas contract unchanged: I420 at
@@ -1146,8 +1163,10 @@ fn encoder_vars(cfg: &Config) -> crate::catalogue::apply::Vars {
 /// needed.
 fn programme_caps(canvas: &CanvasCaps, gfx: &crate::catalogue::select::GraphicsChoice) -> gst::Caps {
     let Some(feature) = memory_feature(&gfx.memory) else {
+        PROGRAMME_KEEPS_ALPHA.store(false, Ordering::Relaxed);
         return canvas.video();
     };
+    PROGRAMME_KEEPS_ALPHA.store(true, Ordering::Relaxed);
     gst::Caps::builder("video/x-raw")
         .features([feature])
         .field("width", canvas.width)
@@ -5978,7 +5997,7 @@ mod tests {
                 width: canvas.width / 2,
                 height: canvas.height / 2,
                 alpha: 1.0,
-                rotation: 0.0, crop: (0.0, 0.0, 0.0, 0.0), sizing: Default::default(), additive: false,
+                rotation: 0.0, crop: (0.0, 0.0, 0.0, 0.0), sizing: Default::default(),
             },
             crate::multiview::preview::Cell {
                 source: "cam2".into(),
@@ -5987,7 +6006,7 @@ mod tests {
                 width: canvas.width / 2,
                 height: canvas.height / 2,
                 alpha: 1.0,
-                rotation: 0.0, crop: (0.0, 0.0, 0.0, 0.0), sizing: Default::default(), additive: false,
+                rotation: 0.0, crop: (0.0, 0.0, 0.0, 0.0), sizing: Default::default(),
             },
         ]);
         let drawn = mix.multiview.as_ref().map(|mv| mv.preview_drawn()).unwrap_or(0);

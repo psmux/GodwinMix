@@ -84,9 +84,10 @@ export function itemProps(scenes, context) {
 }
 
 /** Blend modes and audio modes, as the document spells them. */
-// Only the blends the mixer draws: `compositor` has these two operators. The
-// document knows five more, which an OBS import can carry in.
-export const BLENDS = ["normal", "add"];
+// The mixer draws normal and nothing else. It composites video with no alpha
+// plane, where GStreamer's `add` operator is the same as `over`, and the rest
+// of the document's blends need a GPU. An OBS import can still carry one in.
+export const BLENDS = ["normal"];
 
 /** A blend the document holds that this mixer draws as normal, or null. */
 export function undrawnBlend(value) {

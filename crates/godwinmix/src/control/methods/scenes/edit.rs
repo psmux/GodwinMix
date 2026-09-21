@@ -280,7 +280,6 @@ pub(crate) fn push_preview_for(app: &crate::control::AppState) {
                     rotation: c.rotation,
                     crop: c.crop,
                     sizing: godwinmix_core::mixer::slots::Sizing::named(&c.fit),
-                    additive: c.additive,
                 })
                 .collect()
         })

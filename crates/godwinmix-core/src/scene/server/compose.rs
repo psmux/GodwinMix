@@ -98,13 +98,45 @@ pub fn placements(doc: &Collection, scene: &Scene, canvas: &CanvasCaps) -> Vec<P
     if !has_filtered_group(&resolved) {
         for p in geometry::flatten(&resolved, &doc.canvas) {
             if let Some(placement) = leaf(&p) {
-                out.push(clamp(placement, canvas));
+                out.push(cover(clamp(placement, canvas), canvas));
             }
         }
         return out;
     }
     walk(&resolved, &Transform::default(), 1.0, doc, canvas, &mut out);
     out
+}
+
+/// Make `cover` mean cover: trim the picture to the shape of its box.
+///
+/// `compositor` has two sizing policies before GStreamer 1.30, fill the box or
+/// fit inside it, and no third that fills it and lets the overflow go. The
+/// slot pool asked for one by name and fell back to fitting inside, so Cover
+/// drew exactly what Contain drew and nobody could tell the two apart. The
+/// trim is worked out here, where a scene item becomes a placement, because
+/// the programme and the preview are both fed from this and both already have
+/// a crop on every slot. A source arrives in the shape of the canvas, whatever
+/// it was, so that is the shape being trimmed. `align` says which side gives.
+fn cover(mut p: Placement, canvas: &CanvasCaps) -> Placement {
+    if p.sizing != Sizing::Cover || p.width <= 0 || p.height <= 0 || canvas.height == 0 {
+        return p;
+    }
+    let (l, t, r, b) = p.crop;
+    let (seen_w, seen_h) = ((1.0 - l - r).max(0.01), (1.0 - t - b).max(0.01));
+    let picture = (canvas.width as f64 / canvas.height as f64) * seen_w / seen_h;
+    let frame = p.width as f64 / p.height as f64;
+    if picture > frame {
+        let extra = seen_w - seen_w * frame / picture;
+        p.crop.0 = l + extra * p.align.0;
+        p.crop.2 = r + extra * (1.0 - p.align.0);
+    } else {
+        let extra = seen_h - seen_h * picture / frame;
+        p.crop.1 = t + extra * p.align.1;
+        p.crop.3 = b + extra * (1.0 - p.align.1);
+    }
+    // The shapes match now, so filling the box distorts nothing.
+    p.sizing = Sizing::Fill;
+    p
 }
 
 /// Is there a group here that carries a filter?
@@ -168,7 +200,6 @@ fn walk(
                     alpha: 1.0,
                     crop: (0.0, 0.0, 0.0, 0.0),
                     rotation: 0.0,
-                    additive: false,
                     sizing: Sizing::Fill,
                     align: (0.5, 0.5),
                     audio: PlacementAudio::Never,
@@ -217,7 +248,6 @@ fn leaf(p: &geometry::Placement<'_>) -> Option<Placement> {
         alpha: p.opacity.clamp(0.0, 1.0),
         crop: (p.item.crop.left, p.item.crop.top, p.item.crop.right, p.item.crop.bottom),
         rotation: p.transform.rotation,
-        additive: matches!(p.item.blend, crate::scene::document::Blend::Add),
         sizing: sizing(p.transform.fit),
         align: align(p.transform.align),
         audio: audio(p.item.audio),
@@ -308,6 +338,37 @@ mod tests {
 
     fn source(id: &str) -> Item {
         Item::new(Content::Source { source: id.into() })
+    }
+
+    /// Cover and Contain drew the same picture, because the compositor has no
+    /// policy for the first and was given the second in its place.
+    #[test]
+    fn cover_trims_the_picture_to_the_shape_of_its_box() {
+        let mut p = Placement::full_canvas("cam".into(), &canvas());
+        // Half the canvas wide and all of it high: a 16:9 picture has to lose
+        // half its width to fill that.
+        p.width = 960;
+        p.sizing = Sizing::Cover;
+        p.align = (0.5, 0.5);
+        let covered = cover(p.clone(), &canvas());
+        assert_eq!(covered.sizing, Sizing::Fill, "the shapes match, so the box is simply filled");
+        assert!((covered.crop.0 - 0.25).abs() < 1e-9 && (covered.crop.2 - 0.25).abs() < 1e-9, "{:?}", covered.crop);
+        assert_eq!((covered.crop.1, covered.crop.3), (0.0, 0.0));
+        // Aligned left, the right side gives all of it.
+        p.align = (0.0, 0.5);
+        let left = cover(p.clone(), &canvas());
+        assert!(left.crop.0.abs() < 1e-9 && (left.crop.2 - 0.5).abs() < 1e-9, "{:?}", left.crop);
+        // A box wider than the picture loses top and bottom.
+        let mut wide = Placement::full_canvas("cam".into(), &canvas());
+        wide.height = 540;
+        wide.sizing = Sizing::Cover;
+        wide.align = (0.5, 0.5);
+        let wide = cover(wide, &canvas());
+        assert!((wide.crop.1 - 0.25).abs() < 1e-9 && (wide.crop.3 - 0.25).abs() < 1e-9, "{:?}", wide.crop);
+        // Contain is left exactly as it was.
+        let mut fitted = p.clone();
+        fitted.sizing = Sizing::Contain;
+        assert_eq!(cover(fitted.clone(), &canvas()), fitted);
     }
 
     fn doc_with(items: Vec<Item>) -> Collection {
