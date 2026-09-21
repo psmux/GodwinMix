@@ -108,8 +108,12 @@ export function schemaFor(p, output) {
     default: p.fixed ? p.server : editing ? undefined : p.server || undefined,
     examples: [editing && !p.fixed ? output.uri_host : p.server || "rtmp://your.server/live"],
     description: editing
-      ? "Kept as it is unless you change the key, which rebuilds the whole address."
-      : "Where the platform takes the stream. Paste a different one over it if you were given one.",
+      ? p.keyOptional
+        ? "Kept as it is when left empty. To change it, type the whole address here, with the key on the end if it has one, or press Replace key and give the two halves."
+        : "Kept as it is unless you change the key, which rebuilds the whole address."
+      : p.keyOptional
+        ? "Where the server takes the stream. The whole address can go here, with the key box left empty."
+        : "Where the platform takes the stream. Paste a different one over it if you were given one.",
   };
   if (p.key) {
     props.key = {
@@ -147,7 +151,7 @@ export function schemaFor(p, output) {
     "x-gmx-group": "Advanced",
     description: "How much encoded video to hold, so a short drop is invisible to the viewer.",
   };
-  const required = editing ? [] : p.key ? ["id", "server", "key"] : ["id", "server"];
+  const required = editing ? [] : p.key && !p.keyOptional ? ["id", "server", "key"] : ["id", "server"];
   return { type: "object", required, properties: props };
 }
 
@@ -172,13 +176,18 @@ export function paramsFor(p, output, values) {
 
   if (!editing) {
     if (!server) return { error: p.key ? "Fill in the server address." : "Fill in the address." };
-    if (p.key && !key) return { error: "Paste the stream key." };
+    if (p.key && !key && !p.keyOptional) return { error: "Paste the stream key." };
     params.uri = p.key ? joinKey(server, key) : server;
   } else if (p.key && key !== undefined) {
     if (!server) {
       return { error: "Fill in the server address as well, so the whole address can be rebuilt." };
     }
     params.uri = joinKey(server, key);
+  } else if (p.keyOptional && server && server !== prefilledServer(p)) {
+    // A server of one's own, where the key may be blank or already on the end
+    // of what was typed: the box holds a whole address, so it is sent as one.
+    // The form used to refuse this and ask for a key that may not exist.
+    params.uri = server;
   } else if (p.key && server !== prefilledServer(p)) {
     // A server changed on its own, a regional Twitch ingest for instance. The
     // key is half of the address and this form cannot read it back, so say

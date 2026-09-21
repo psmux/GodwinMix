@@ -3,7 +3,8 @@
 // A UI never hardcodes a plugin's settings: it asks for the schema and renders
 // it. Covered: objects, scalars, enums, arrays of scalars, `if`/`then`
 // visibility, `format: "secret"` (a password field, never echoed back, sent
-// only when retyped), `x-gmx-unit` (a suffix beside the control) and
+// only when retyped), `x-gmx-labels` (names for an enum's options, in its
+// order), `x-gmx-unit` (a suffix beside the control) and
 // `x-gmx-group` (a collapsible section, so common fields sit above advanced
 // ones without a second schema).
 //
@@ -163,12 +164,15 @@ export class SchemaForm {
 
     if (Array.isArray(sub.enum)) {
       const select = document.createElement("select");
-      for (const option of sub.enum) {
+      // `x-gmx-labels` names the options, in the enum's order, for a value
+      // nobody should have to read: a camera's id is a UUID on macOS.
+      const labels = Array.isArray(sub["x-gmx-labels"]) ? sub["x-gmx-labels"] : [];
+      sub.enum.forEach((option, i) => {
         const o = document.createElement("option");
         o.value = String(option);
-        o.textContent = String(option);
+        o.textContent = String(labels[i] ?? option);
         select.appendChild(o);
-      }
+      });
       if (current !== undefined) select.value = String(current);
       return { input: select, read: () => coerce(select.value, type) };
     }
