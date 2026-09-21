@@ -2082,10 +2082,18 @@ async function liveSuite() {
   const startY = rect.top + centre.y;
 
   const wasX = item.box.x;
-  point(live.canvas.overlay, "pointerdown", startX, startY);
-  for (let i = 1; i <= 12; i += 1) point(live.canvas.overlay, "pointermove", startX + i * 6, startY + i * 2);
-  point(live.canvas.overlay, "pointerup", startX + 72, startY + 24);
-  await waitFor(() => !live.canvas.prediction.busy, 5000, "the core to catch up with the drag");
+  // Four drags, out and back twice, for forty eight samples. With the twelve
+  // of one drag the 95th percentile is the worst sample, and one late echo on
+  // a busy machine failed a run that had nothing wrong with it.
+  for (let pass = 0; pass < 4; pass += 1) {
+    const back = pass % 2 === 1;
+    const at = (i) => [startX + (back ? 72 - i * 6 : i * 6), startY + (back ? 24 - i * 2 : i * 2)];
+    point(live.canvas.overlay, "pointerdown", ...at(0));
+    const steps = pass === 3 ? 11 : 12;
+    for (let i = 1; i <= steps; i += 1) point(live.canvas.overlay, "pointermove", ...at(i));
+    point(live.canvas.overlay, "pointerup", ...at(steps));
+    await waitFor(() => !live.canvas.prediction.busy, 5000, "the core to catch up with the drag");
+  }
 
   test("a drag moves the item, locally first and in the core after", () => {
     const now = live.canvas.boxes.get(item.id);
