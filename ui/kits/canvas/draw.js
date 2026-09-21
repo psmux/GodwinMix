@@ -149,5 +149,7 @@ function label(ctx, box, text, c) {
 
 /** The pixel size a handle wants, in canvas units, for hit testing. */
 export function grabRadius(view) {
-  return view.lengthFromSurface(HANDLE + 4);
+  // Sixteen pixels across the screen whatever the zoom. Twelve was the size of
+  // the square itself plus a hair, and a corner took two or three tries.
+  return view.lengthFromSurface(HANDLE + 8);
 }

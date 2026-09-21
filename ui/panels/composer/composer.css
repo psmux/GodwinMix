@@ -86,9 +86,9 @@
  * boxes and the video they stand for were a few percent apart. */
 .composer-picture img {
   position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
+  inset: var(--composer-margin, 0px);
+  width: calc(100% - 2 * var(--composer-margin, 0px));
+  height: calc(100% - 2 * var(--composer-margin, 0px));
   object-fit: contain;
   display: block;
 }

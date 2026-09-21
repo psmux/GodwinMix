@@ -244,7 +244,11 @@ function rotated(handle, box, mods) {
   const cy = box.y + box.height / 2;
   const p = mods.pointer || { x: handle.x, y: handle.y };
   const at = Math.atan2(p.y - cy, p.x - cx) * (180 / Math.PI) + 90;
-  let deg = mods.aspect ? Math.round(at / 15) * 15 : at;
+  // `rotateStep` is for a renderer that cannot turn freely. A mixer that turns
+  // by quarter turns only says 90, and the handle then shows what will be
+  // drawn, where a free angle showed a tilted outline over a level picture.
+  const step = mods.rotateStep || (mods.aspect ? 15 : 0);
+  let deg = step ? Math.round(at / step) * step : at;
   deg = ((deg % 360) + 360) % 360;
   return { props: { transform: { rotation: round(deg, 2) } }, box };
 }

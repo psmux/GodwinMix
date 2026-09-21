@@ -86,7 +86,34 @@ struct Slot {
     tee_pad: gst::Pad,
     tee: gst::Element,
     queue: gst::Element,
+    /// Trim and quarter turn, between the queue and the pad. Both pass the
+    /// picture through untouched until an item asks for either.
+    crop: gst::Element,
+    flip: gst::Element,
     pad: gst::Pad,
+}
+
+impl Slot {
+    /// The trim and the turn a cell asks for. Written only when they change,
+    /// because a crop written on every layout renegotiates the branch.
+    fn shape(&self, cell: &Cell) {
+        let (w, h) = (crate::input::THUMB_WIDTH as f64, crate::input::THUMB_HEIGHT as f64);
+        let (l, t, r, b) = cell.crop;
+        for (name, px) in [("left", l * w), ("top", t * h), ("right", r * w), ("bottom", b * h)] {
+            let px = (px.clamp(0.0, w.max(h)).round() as i32).max(0);
+            if self.crop.property::<i32>(name) != px {
+                self.crop.set_property(name, px);
+            }
+        }
+        let quarters = (cell.rotation.rem_euclid(360.0) / 90.0).round() as i64 % 4;
+        let method = match quarters {
+            1 => "clockwise",
+            2 => "rotate-180",
+            3 => "counterclockwise",
+            _ => "none",
+        };
+        self.flip.set_property_from_str("method", method);
+    }
 }
 
 /// The preview compositor and everything hanging off it.
@@ -240,6 +267,7 @@ impl ScenePreview {
             set_i32(pad, "height", ((cell.height as f64 * sy).round() as i32).max(1));
             pad.set_property("alpha", cell.alpha.clamp(0.0, 1.0));
             pad.set_property("zorder", z as u32);
+            self.slots[index].shape(cell);
             kept.push(index);
         }
         let stale: Vec<usize> =
@@ -263,7 +291,10 @@ impl ScenePreview {
     /// Take a branch off a tile's tee and give it a pad on the preview.
     fn bind(&mut self, source: &SourceId, tee: &gst::Element) -> Result<usize> {
         let queue = gstutil::queue_preview(&format!("pv-q-{source}"))?;
-        self.pipeline.add(&queue).context("adding a preview slot")?;
+        let crop = gstutil::make("videocrop", &format!("pv-crop-{source}"))?;
+        let flip = gstutil::make("videoflip", &format!("pv-flip-{source}"))?;
+        self.pipeline.add_many([&queue, &crop, &flip]).context("adding a preview slot")?;
+        gst::Element::link_many([&queue, &crop, &flip]).context("linking a preview slot")?;
         let tee_pad = tee
             .request_pad_simple("src_%u")
             .with_context(|| format!("the tile tee of {source} refused a pad"))?;
@@ -274,18 +305,21 @@ impl ScenePreview {
             .context("the preview compositor refused a pad")?;
         pad.set_property_from_str("sizing-policy", "keep-aspect-ratio");
         pad.set_property("alpha", 0.0f64);
-        queue
-            .static_pad("src")
-            .context("a preview queue has no src pad")?
+        flip.static_pad("src")
+            .context("a preview flip has no src pad")?
             .link(&pad)
             .context("linking a preview slot into the compositor")?;
-        queue.sync_state_with_parent().context("starting a preview slot")?;
+        for el in [&flip, &crop, &queue] {
+            el.sync_state_with_parent().context("starting a preview slot")?;
+        }
         if let Err(e) = tee_pad.link(&sink) {
             tee.release_request_pad(&tee_pad);
             self.comp.release_request_pad(&pad);
-            queue.set_locked_state(true);
-            let _ = queue.set_state(gst::State::Null);
-            let _ = self.pipeline.remove(&queue);
+            for el in [&queue, &crop, &flip] {
+                el.set_locked_state(true);
+                let _ = el.set_state(gst::State::Null);
+                let _ = self.pipeline.remove(el);
+            }
             return Err(e.into());
         }
         self.slots.push(Slot {
@@ -293,6 +327,8 @@ impl ScenePreview {
             tee_pad,
             tee: tee.clone(),
             queue,
+            crop,
+            flip,
             pad,
         });
         debug!(%source, "a source joined the preview");
@@ -323,9 +359,11 @@ impl ScenePreview {
         self.comp.release_request_pad(&slot.pad);
         // Locked first, so the bin's own state walk cannot put it back to
         // PLAYING before the remove. See `Encoder::detach`.
-        slot.queue.set_locked_state(true);
-        let _ = slot.queue.set_state(gst::State::Null);
-        let _ = self.pipeline.remove(&slot.queue);
+        for el in [&slot.queue, &slot.crop, &slot.flip] {
+            el.set_locked_state(true);
+            let _ = el.set_state(gst::State::Null);
+            let _ = self.pipeline.remove(el);
+        }
         debug!(source = %slot.source, "a source left the preview");
     }
 
@@ -380,6 +418,12 @@ pub struct Cell {
     pub width: i32,
     pub height: i32,
     pub alpha: f64,
+    /// Degrees clockwise, drawn to the nearest quarter turn, which is what the
+    /// programme's software path draws too. A designer looking at the preview
+    /// has to see the turn it will get.
+    pub rotation: f64,
+    /// Fractions of the source's own picture to trim: left, top, right, bottom.
+    pub crop: (f64, f64, f64, f64),
 }
 
 /// A tiny black source on a compositor pad of its own.

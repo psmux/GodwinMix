@@ -277,6 +277,8 @@ pub(crate) fn push_preview_for(app: &crate::control::AppState) {
                     width: c.width,
                     height: c.height,
                     alpha: c.alpha,
+                    rotation: c.rotation,
+                    crop: c.crop,
                 })
                 .collect()
         })

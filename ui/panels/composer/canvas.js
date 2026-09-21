@@ -65,7 +65,7 @@ export class ComposerCanvas {
   /** A fresh view of the draft: the records and the flattened geometry. */
   setView(view) {
     this.view = view;
-    if (view && view.canvas) this.viewport.set(view.canvas, this.surface());
+    if (view && view.canvas) this.viewport.set(view.canvas, this.surface(), this.margin());
     for (const box of (view && view.geometry) || []) {
       // An item this client is still dragging keeps the box it drew: the
       // core's older answer would pull the handle backwards under the hand.
@@ -91,8 +91,23 @@ export class ComposerCanvas {
     this.overlay.style.height = box.height + "px";
     this.ctx = this.overlay.getContext("2d");
     this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    if (this.view && this.view.canvas) this.viewport.set(this.view.canvas, box);
+    if (this.view && this.view.canvas) this.viewport.set(this.view.canvas, box, this.margin());
     this.draw();
+  }
+
+  /**
+   * Room round the picture for the handles of an item that fills the canvas.
+   *
+   * The rotate handle stands 12 percent of an item's height above its top
+   * edge, so the margin is a tenth of the surface and a little, which clears
+   * it for a full canvas item at any window size. The picture is given the
+   * same margin through a custom property, or the video and its outlines
+   * would part company again.
+   */
+  margin() {
+    const m = Math.round(this.surface().height * 0.1) + 10;
+    this.el.style.setProperty("--composer-margin", m + "px");
+    return m;
   }
 
   surface() {
@@ -290,6 +305,9 @@ export class ComposerCanvas {
       aspect: e.shiftKey,
       centre: e.altKey,
       pointer: p,
+      // Quarter turns, because that is all this mixer's software path draws
+      // (`videoflip`). See `Slot::set_rotation` in the core.
+      rotateStep: 90,
       min: s.handle.min,
       max: s.handle.max,
       from: s.handle.from,
