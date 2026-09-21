@@ -62,8 +62,10 @@ and touches nothing else.
 
 ## The composer
 
-Double tap a scene tile. The composer opens as a modal, on a copy of the scene,
-and Full screen makes it fill the window.
+Press the pencil on a scene: it is beside each tab in the tab view and on the
+face of each tile in the tile view. A double tap on either opens it too. The
+composer opens as a modal, on a copy of the scene, and Full screen makes it
+fill the window.
 
 Nothing you do in it reaches air. You are editing a draft (`scene.edit.begin`),
 and Apply writes it back; Discard throws it away; closing the window discards
@@ -71,7 +73,16 @@ it too. If you want your changes to go out as you make them, the Edit on air
 switch at the bottom says so in as many words, and it is off by default because
 the usual mistake in OBS is editing the scene that is currently going out.
 
-What you see behind the handles, in the order the composer tries them:
+What you see behind the handles is the draft you are editing, composited by the
+mixer and streamed at 960 wide: drag an item and the video moves with it, which
+is what makes this a place to design in. The composer asks the preview to draw
+its draft (`scene.preview.set` with `draft`), through the same placements the
+programme would get, so what you see is what Apply gives. What is armed stays
+armed, so a take with no argument does what it did, and applying or discarding
+the draft hands the preview back. It costs a preview compositor for as long as
+the composer is open and nothing after.
+
+On a mixer that cannot draw a draft, the composer falls back, in this order:
 
 1. **The armed scene, live.** Arm this scene, and the picture is the scene
    itself, composited, at preview rate.
