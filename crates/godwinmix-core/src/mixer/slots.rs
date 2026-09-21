@@ -1110,6 +1110,11 @@ impl SlotPool {
         // valve this function is about to close goes in and never comes out:
         // the slot stays flushing, the next bind cannot send its sticky events
         // down it, and the programme loses the picture for good.
+        //
+        // Out of the picture before any of it. A pad at alpha 0 is one the
+        // compositor does not convert, which is what makes the flush stop at
+        // the end of this safe to send: see `gstutil::after_next_frame`.
+        set_f64(&self.slots[index].pad, "alpha", 0.0);
         let chain = self.slots[index].queue.static_pad("sink");
         if let Some(pad) = &chain {
             crate::slow_step!("slot flush", index, gstutil::wake_chain(pad));
@@ -1120,6 +1125,7 @@ impl SlotPool {
         crate::slow_step!("slot clear_filters", index, self.clear_filters(index));
         let Some(bound) = self.slots[index].bound.take() else {
             if let Some(pad) = &chain {
+                gstutil::after_next_frame(&self.slots[index].pad);
                 gstutil::resume_chain(pad);
             }
             return;
@@ -1154,6 +1160,9 @@ impl SlotPool {
         // Back in service. The running time is kept, because every other slot
         // is still on air against it.
         if let Some(pad) = &chain {
+            // Hidden at the top of this function, and a frame has gone out
+            // since, so the compositor has nothing of this pad's in flight.
+            gstutil::after_next_frame(&self.slots[index].pad);
             crate::slow_step!("slot flush stop", index, gstutil::resume_chain(pad));
             // An empty slot has no next buffer to wait for. End this input
             // after its flush so the live compositor can ignore it immediately.
@@ -1188,6 +1197,13 @@ impl SlotPool {
             held.push(slot.index);
         }
         held
+    }
+
+    /// A compositor pad one of this source's slots draws on, if it has any.
+    /// What `gstutil::after_next_frame` wants when the flush is not the
+    /// pool's own.
+    pub fn pad_of(&self, source: &SourceId) -> Option<&gst::Pad> {
+        self.slots.iter().find(|s| s.holds(source)).map(|s| &s.pad)
     }
 
     /// Let go of held slots: unbind them and put them back in the pool.

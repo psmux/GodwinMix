@@ -47,6 +47,49 @@ pub fn resume_chain(sink: &gst::Pad) {
     sink.send_event(gst::event::FlushStop::new(false));
 }
 
+/// How long [`after_next_frame`] waits for a compositor that is not pushing.
+pub const FRAME_BARRIER: Duration = Duration::from_millis(150);
+
+/// Wait until a compositor has pushed one more frame, so a flush stop can be
+/// sent into one of its pads without freeing a frame under its scaler threads.
+///
+/// `compositor` converts each pad's frame on a pool of worker threads, started
+/// for every pad and then waited for, once per output frame. The wait is
+/// skipped for a pad with no buffer, and a `FLUSH_STOP` arriving on a pad
+/// clears that pad's buffer from the sender's thread with no lock held
+/// (`_flush_pad` in gstvideoaggregator.c, GStreamer 1.28). Land it between the
+/// start and the wait and the compositor blends and frees the converted frame
+/// while the workers are still writing it. That was a segfault in
+/// `video_scale_h_ntap_u8` about once in eighty source removals on this Mac,
+/// 2026-09-21, and a segfault is the programme stopping.
+///
+/// A frame pushed after a point in time proves every conversion begun before
+/// it has been waited for. So a caller that first makes the pad one the
+/// compositor does not convert (alpha 0) and then calls this has closed the
+/// race. A caller that cannot hide the pad still gains: a live compositor
+/// sleeps until its next deadline after a push, which is when the flush lands.
+///
+/// The probe only signals. It never holds the streaming thread, and it is
+/// there for one frame. Answers false when no frame came, which is a
+/// compositor that is not running and so has nothing in flight either.
+pub fn after_next_frame(compositor_pad: &gst::Pad) -> bool {
+    let Some(comp) = compositor_pad.parent_element() else { return false };
+    if comp.current_state() != gst::State::Playing {
+        return false;
+    }
+    let Some(src) = comp.static_pad("src") else { return false };
+    let (tx, rx) = sync_channel::<()>(1);
+    let Some(probe) = src.add_probe(gst::PadProbeType::BUFFER, move |_, _| {
+        let _ = tx.try_send(());
+        gst::PadProbeReturn::Ok
+    }) else {
+        return false;
+    };
+    let pushed = rx.recv_timeout(FRAME_BARRIER).is_ok();
+    src.remove_probe(probe);
+    pushed
+}
+
 /// A graph step that held its caller for longer than this is worth a line.
 ///
 /// Two hundred milliseconds is six frames at 30 fps: long enough that no
