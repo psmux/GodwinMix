@@ -362,6 +362,20 @@ pub struct IdRequest {
     pub id: String,
 }
 
+/// `source.duplicate`.
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+pub struct DuplicateSourceRequest {
+    /// The source to copy.
+    pub id: String,
+    /// Name for the copy. The original's name and " copy" when omitted.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+    /// Id for the copy. Derived from its name when omitted, with a numeric
+    /// suffix if that is taken.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub new_id: Option<String>,
+}
+
 /// `media.convert` and `media.remove` name a file rather than an id.
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 pub struct NameRequest {

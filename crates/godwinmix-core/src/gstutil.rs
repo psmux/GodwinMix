@@ -47,6 +47,53 @@ pub fn resume_chain(sink: &gst::Pad) {
     sink.send_event(gst::event::FlushStop::new(false));
 }
 
+/// How long [`after_next_frame`] waits for a compositor that is not pushing.
+pub const FRAME_BARRIER: Duration = Duration::from_millis(150);
+
+/// Wait until a compositor has pushed one more frame, so a flush stop can be
+/// sent into one of its pads without freeing a frame under its scaler threads.
+///
+/// `compositor` converts each pad's frame on a pool of worker threads, started
+/// for every pad and then waited for, once per output frame. The wait is
+/// skipped for a pad with no buffer, and a `FLUSH_STOP` arriving on a pad
+/// clears that pad's buffer from the sender's thread with no lock held
+/// (`_flush_pad` in gstvideoaggregator.c, GStreamer 1.28). Land it between the
+/// start and the wait and the compositor blends and frees the converted frame
+/// while the workers are still writing it. That was a segfault in
+/// `video_scale_h_ntap_u8` about once in eighty source removals on this Mac,
+/// 2026-09-21, and a segfault is the programme stopping.
+///
+/// A frame pushed after a point in time proves every conversion begun before
+/// it has been waited for. So a caller that first makes the pad one the
+/// compositor does not convert (alpha 0) and then calls this has closed the
+/// race.
+///
+/// `Input::restart` ends a flush across the proxy into slots that are on air,
+/// which cannot be hidden, and its flush stop has to follow the restart at
+/// once. That one is kept away from the compositor altogether: see
+/// [`stop_flushes_here`].
+///
+/// The probe only signals. It never holds the streaming thread, and it is
+/// there for one frame. Answers false when no frame came, which is a
+/// compositor that is not running and so has nothing in flight either.
+pub fn after_next_frame(compositor_pad: &gst::Pad) -> bool {
+    let Some(comp) = compositor_pad.parent_element() else { return false };
+    if comp.current_state() != gst::State::Playing {
+        return false;
+    }
+    let Some(src) = comp.static_pad("src") else { return false };
+    let (tx, rx) = sync_channel::<()>(1);
+    let Some(probe) = src.add_probe(gst::PadProbeType::BUFFER, move |_, _| {
+        let _ = tx.try_send(());
+        gst::PadProbeReturn::Ok
+    }) else {
+        return false;
+    };
+    let pushed = rx.recv_timeout(FRAME_BARRIER).is_ok();
+    src.remove_probe(probe);
+    pushed
+}
+
 /// A graph step that held its caller for longer than this is worth a line.
 ///
 /// Two hundred milliseconds is six frames at 30 fps: long enough that no
@@ -358,6 +405,38 @@ pub fn answer_latency_here(element: &gst::Element) -> Result<()> {
         gst::PadProbeReturn::Handled
     })
     .context("installing the latency answer on a proxy source")?;
+    Ok(())
+}
+
+/// Let a flush go no further than this queue.
+///
+/// A source's pipeline sends a flush across its proxies before it goes to
+/// NULL, because that is the one event that reaches a thread of its own that
+/// is parked pushing into the queue on the far side (`Input::wake_branches`).
+/// That queue is all it has to reach. Left to travel it ends at a compositor
+/// pad, and a `FLUSH_STOP` there clears the pad's buffer from the sender's
+/// thread with no lock held, which frees a frame under the compositor's scaler
+/// threads when it lands mid cycle: see [`after_next_frame`]. A restart in
+/// place cannot hide the slot first the way the slot pool does, because the
+/// slot is on air, and it cannot wait for a quiet moment either, because its
+/// flush stop has to follow the restart at once.
+///
+/// So the flush is dropped at the queue's src pad. The pad's own flushing flag
+/// is set and cleared before a probe is asked, and the queue empties itself
+/// and restarts its task whatever becomes of the event, so the queue flushes
+/// exactly as it did. What is below keeps running, and the compositor keeps
+/// the source's last frame up until the first new one, which is the freeze a
+/// restart wants.
+pub fn stop_flushes_here(queue: &gst::Element) -> Result<()> {
+    let pad = queue
+        .static_pad("src")
+        .with_context(|| format!("{} has no src pad", queue.name()))?;
+    let kinds = gst::PadProbeType::EVENT_FLUSH | gst::PadProbeType::EVENT_DOWNSTREAM;
+    pad.add_probe(kinds, |_pad, info| match info.event().map(|e| e.type_()) {
+        Some(gst::EventType::FlushStart | gst::EventType::FlushStop) => gst::PadProbeReturn::Drop,
+        _ => gst::PadProbeReturn::Ok,
+    })
+    .with_context(|| format!("stopping flushes at {}", queue.name()))?;
     Ok(())
 }
 
@@ -966,6 +1045,67 @@ mod tests {
         release.send(()).unwrap();
         pipeline.set_state(gst::State::Null).unwrap();
         assert_eq!(queued, 2, "a slow preview retained a backlog of full canvas frames");
+    }
+
+    /// The flush a restarting source sends across its proxy has to flush the
+    /// queue it lands in and go no further, and the queue has to carry
+    /// buffers again after it. If the first half fails a `FLUSH_STOP` reaches
+    /// a compositor pad again; if the second fails a restarted source stays
+    /// black.
+    #[test]
+    fn a_flush_stops_at_the_queue_and_the_queue_carries_on() {
+        init();
+        let pipeline = gst::Pipeline::new();
+        let source = gstreamer_app::AppSrc::builder().format(gst::Format::Time).build();
+        let queue = queue_thread("flush-boundary").unwrap();
+        stop_flushes_here(&queue).unwrap();
+        let sink = make("fakesink", "below-the-boundary").unwrap();
+        sink.set_property("async", false);
+        sink.set_property("sync", false);
+        let flushes = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let buffers = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let (saw_flush, saw_buffer) = (flushes.clone(), buffers.clone());
+        let kinds = gst::PadProbeType::EVENT_FLUSH | gst::PadProbeType::EVENT_DOWNSTREAM | gst::PadProbeType::BUFFER;
+        sink.static_pad("sink").unwrap().add_probe(kinds, move |_, info| {
+            match info.event().map(|e| e.type_()) {
+                Some(gst::EventType::FlushStart | gst::EventType::FlushStop) => {
+                    saw_flush.fetch_add(1, Ordering::SeqCst);
+                }
+                None => {
+                    saw_buffer.fetch_add(1, Ordering::SeqCst);
+                }
+                _ => {}
+            }
+            gst::PadProbeReturn::Ok
+        });
+        pipeline.add_many([source.upcast_ref(), &queue, &sink]).unwrap();
+        gst::Element::link_many([source.upcast_ref(), &queue, &sink]).unwrap();
+        pipeline.set_state(gst::State::Playing).unwrap();
+        let push = |n: u64| {
+            let mut buffer = gst::Buffer::with_size(16).unwrap();
+            buffer.get_mut().unwrap().set_pts(gst::ClockTime::from_mseconds(n));
+            let _ = source.push_buffer(buffer);
+        };
+        let settle = |want: usize| {
+            let until = std::time::Instant::now() + Duration::from_secs(2);
+            while buffers.load(Ordering::SeqCst) < want && std::time::Instant::now() < until {
+                std::thread::sleep(Duration::from_millis(5));
+            }
+        };
+        push(0);
+        settle(1);
+        let entry = queue.static_pad("sink").unwrap();
+        wake_chain(&entry);
+        let flushing = queue.static_pad("src").unwrap().pad_flags().contains(gst::PadFlags::FLUSHING);
+        resume_chain(&entry);
+        let before = buffers.load(Ordering::SeqCst);
+        push(40);
+        settle(before + 1);
+        let after = buffers.load(Ordering::SeqCst);
+        pipeline.set_state(gst::State::Null).unwrap();
+        assert!(flushing, "the queue's own src pad did not go flushing, so the queue was not flushed");
+        assert_eq!(flushes.load(Ordering::SeqCst), 0, "a flush event got below the queue");
+        assert!(after > before, "nothing came through the queue after the flush was ended");
     }
 
     #[test]

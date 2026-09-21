@@ -35,13 +35,59 @@ pub struct MediaDir {
     path: PathBuf,
 }
 
+/// The longest base address a socket can be bound under.
+///
+/// A Unix socket's path is a fixed array in `sockaddr_un`: 104 bytes on macOS
+/// and the BSDs, 108 on Linux, the terminator included. Past that the path is
+/// cut, silently, and the socket is bound under whatever is left. The runtime
+/// directory sits beside the config, so this is a real length: a desktop
+/// install puts `macbook-pro-camera` at 101 bytes. One camera with a longer
+/// name and its socket landed outside its own directory, where nothing removes
+/// it, and every later start of that source failed with "Address already in
+/// use", across restarts of the mixer too. Cut early enough, `.video` and
+/// `.audio` become the same name.
+///
+/// `.programme` is the longest thing appended to a base, at ten bytes.
+const LONGEST_BASE: usize = 104 - 1 - ".programme".len();
+
 impl MediaDir {
     /// Make the directory for one instance.
+    ///
+    /// Under the runtime directory when the addresses fit there, which is
+    /// where a person looks. Otherwise under the system's temporary directory
+    /// with the instance's name hashed short, and refused with the numbers if
+    /// even that is too long. Whatever a process that was killed left at the
+    /// path goes first: an instance id belongs to one live instance, so nothing
+    /// there is anybody's.
     pub fn create(runtime: &Path, instance: &str) -> Result<Self> {
-        let path = runtime.join("plugins").join(instance);
+        let path = Self::place(runtime, instance)?;
+        let _ = std::fs::remove_dir_all(&path);
         std::fs::create_dir_all(&path)
             .with_context(|| format!("making the media directory {}", path.display()))?;
         Ok(Self { path })
+    }
+
+    fn place(runtime: &Path, instance: &str) -> Result<PathBuf> {
+        let fits = |dir: &Path| dir.join("media").as_os_str().len() <= LONGEST_BASE;
+        let wanted = runtime.join("plugins").join(instance);
+        if fits(&wanted) {
+            return Ok(wanted);
+        }
+        use std::hash::{Hash, Hasher};
+        let mut hasher = std::collections::hash_map::DefaultHasher::new();
+        (runtime, instance).hash(&mut hasher);
+        let short = std::env::temp_dir()
+            .join(format!("gmx-{}", std::process::id()))
+            .join(format!("{:08x}", hasher.finish() as u32));
+        anyhow::ensure!(
+            fits(&short),
+            "a media socket for {instance} needs an address of at most {LONGEST_BASE} bytes, and \
+             neither {} nor {} is short enough. Move the config to a shorter path, or set TMPDIR \
+             to one, or have the plugin declare the 'container' transport, which uses no socket.",
+            wanted.display(),
+            short.display()
+        );
+        Ok(short)
     }
 
     /// The base address handed to the plugin in `GMX_MEDIA` and in the
@@ -74,6 +120,14 @@ impl Drop for MediaDir {
         // Every socket in it went with the process. Removing the directory is
         // what makes the leak count come back to zero.
         let _ = std::fs::remove_dir_all(&self.path);
+        // And the folder around it when this was the last one in it, which is
+        // the per process one `place` makes under the temporary directory.
+        // `remove_dir` refuses a directory that still has something in it.
+        if let Some(parent) = self.path.parent() {
+            if parent.parent() == Some(std::env::temp_dir().as_path()) {
+                let _ = std::fs::remove_dir(parent);
+            }
+        }
     }
 }
 
@@ -187,6 +241,8 @@ mod tests {
 
     #[test]
     fn a_container_is_always_usable_and_is_in_the_list() {
+        // Its own, so the test passes when it is the only one run.
+        let _ = gst::init();
         usable(Transport::Container).expect("a pipe works everywhere");
         assert!(available().contains(&Transport::Container));
     }
@@ -212,6 +268,37 @@ mod tests {
             dir.path().to_path_buf()
         };
         assert!(!path.exists(), "dropping the instance takes its sockets with it");
+        let _ = std::fs::remove_dir_all(&runtime);
+    }
+
+    /// A socket path is cut at 104 bytes on macOS with nothing said, and a cut
+    /// path is a socket outside its directory that nothing ever removes.
+    #[test]
+    fn an_address_too_long_for_a_socket_is_moved_somewhere_short() {
+        let deep = std::env::temp_dir().join("x".repeat(90)).join("runtime");
+        let dir = MediaDir::create(&deep, "a-camera-with-quite-a-long-name").expect("placed");
+        for address in [dir.video(), dir.audio(), dir.programme()] {
+            assert!(address.len() < 104, "{} bytes: {address}", address.len());
+        }
+        assert!(!dir.path().starts_with(&deep), "it stayed where it cannot fit");
+        let again = MediaDir::place(&deep, "a-camera-with-quite-a-long-name").unwrap();
+        assert_eq!(again, dir.path(), "the same instance gets the same place");
+        let other = MediaDir::place(&deep, "another-camera-with-a-long-name").unwrap();
+        assert_ne!(other, dir.path(), "and another instance another");
+    }
+
+    /// A mixer that was killed leaves its sockets, and the next bind on one
+    /// fails with "Address already in use".
+    #[test]
+    fn what_a_killed_process_left_is_cleared_before_the_next_one_binds() {
+        let runtime = std::env::temp_dir().join(format!("gmx-stale-{}", std::process::id()));
+        let first = MediaDir::create(&runtime, "cam1").unwrap();
+        let stale = PathBuf::from(first.video());
+        std::fs::write(&stale, b"left behind").unwrap();
+        std::mem::forget(first);
+        let second = MediaDir::create(&runtime, "cam1").unwrap();
+        assert!(!stale.exists(), "the stale address is still there");
+        drop(second);
         let _ = std::fs::remove_dir_all(&runtime);
     }
 }

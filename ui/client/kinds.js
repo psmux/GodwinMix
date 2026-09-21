@@ -625,6 +625,26 @@ export function addRequestFor(candidate) {
 }
 
 /**
+ * Whether a source's published address is the address we would add.
+ *
+ * The core cuts everything after the host off an address before it publishes
+ * it, because that is where a stream key lives, so `test://smpte` comes back
+ * as `test://smpte/…` and an exact comparison never matches: the picker added
+ * a second colour bars every time it was asked for the one the mixer had. An
+ * address that is only a scheme and a host loses nothing to the cut, so the
+ * cut form identifies it. One with a path does not, and two files would both
+ * read `file:///…`, so those only ever match exactly.
+ */
+export function sameAddress(published, wanted) {
+  const have = String(published || "").trim().toLowerCase();
+  const want = String(wanted || "").trim().toLowerCase();
+  if (!have || !want) return false;
+  if (have === want) return true;
+  const bare = /^([a-z][a-z0-9+.-]*):\/\/([^/@]+)\/?$/.exec(want);
+  return !!bare && have === `${bare[1]}://${bare[2]}/…`;
+}
+
+/**
  * Whether this mixer already has the thing a candidate offers.
  *
  * A source record carries an id, a name and a URI and nothing else, and every
@@ -641,7 +661,7 @@ export function alreadyAdded(sources, candidate) {
     if (want && name === want) return true;
     // A URI that is only the type id names the kind, not this device, so it
     // proves nothing on its own.
-    return !!uri && uri !== typed && String(s.uri || "").toLowerCase() === uri;
+    return !!uri && uri !== typed && sameAddress(s.uri, uri);
   });
 }
 

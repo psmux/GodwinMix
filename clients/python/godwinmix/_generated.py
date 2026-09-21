@@ -344,6 +344,16 @@ class DuplicateSceneRequest(TypedDict, total=False):
     # What to call the copy. A name already in use gets a number after it.
     scene: str
 
+class DuplicateSourceRequest(TypedDict, total=False):
+    """`source.duplicate`."""
+
+    id: str
+    # The source to copy.
+    name: Optional[str]
+    # Name for the copy. The original's name and " copy" when omitted.
+    new_id: Optional[str]
+    # Id for the copy. Derived from its name when omitted, with a numeric suffix if that is taken.
+
 class EditBeginRequest(TypedDict, total=False):
     """`scene.edit.begin`."""
 
@@ -1792,10 +1802,12 @@ METHODS = (
     {"name": "snapshot.get", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/snapshot/{id}"), "summary": 'One JPEG: the whole contact sheet, the programme, or one source cut out of the mosaic.'},
     {"name": "source.add", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/sources"), "summary": 'Add a source while the mixer runs. Answers with the id it got and the whole source record.'},
     {"name": "source.audio.set", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/sources/{id}/audio"), "summary": "Move a source's audio: the fader, the mute, and for a superimposed page the balance between its own sound and the videos under it."},
+    {"name": "source.duplicate", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/sources/{id}/duplicate"), "summary": 'Add another source like one the mixer has: the same address and settings under a new id. A client cannot do this with source.add, because the address it is shown has everything after the host cut off.'},
     {"name": "source.get", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/sources/{id}"), "summary": 'One source. Refused with the ids that exist when there is no such source.'},
     {"name": "source.group", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/sources/{id}/group"), "summary": 'Put sources in a tray folder. A tag for finding things, not a group on the canvas.'},
     {"name": "source.list", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/sources"), "summary": 'Every source, with its state, whether it has video and audio, and its fader.'},
     {"name": "source.remove", "scope": "operate", "mutating": True, "destructive": True, "rest": ("DELETE", "/api/v1/sources/{id}"), "summary": 'Remove a source. If it is on programme the mixer cuts to the slate first.'},
+    {"name": "source.restore", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/sources/{id}/restore"), "summary": 'Put back a source that source.remove took away, as it was: same id, address, settings, fader and mute. The mixer remembers the last sixteen it removed, until it restarts.'},
     {"name": "source.seek", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/sources/{id}/seek"), "summary": 'Move a seekable source to a position. Answers with where it actually landed.'},
     {"name": "source.set", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/sources/{id}/set"), "summary": 'Change a running source: its name and colour, its params, or where it runs. The name and colour live on the scene document. Moving a source between the core, a sidecar and a node is `place`; the programme keeps its frame rate across the move and the compositor covers the swap.'},
     {"name": "task.cancel", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/task/cancel"), "summary": 'Ask a piece of long running work to stop. Cooperative: the answer says the request landed, not that the work has stopped yet.'},
@@ -3401,6 +3413,22 @@ class GeneratedMethods:
             params["page"] = page
         return await self._call("source.audio.set", params)
 
+    async def source_duplicate(
+        self,
+        id: str,
+        *,
+        name: Optional[str] = None,
+        new_id: Optional[str] = None,
+    ) -> SourceStatus:
+        """Add another source like one the mixer has: the same address and settings under a new id. A client cannot do this with source.add, because the address it is shown has everything after the host cut off."""
+        params: Dict[str, Any] = {}
+        params["id"] = id
+        if name is not None:
+            params["name"] = name
+        if new_id is not None:
+            params["new_id"] = new_id
+        return await self._call("source.duplicate", params)
+
     async def source_get(
         self,
         id: str,
@@ -3438,6 +3466,15 @@ class GeneratedMethods:
         params: Dict[str, Any] = {}
         params["id"] = id
         return await self._call("source.remove", params)
+
+    async def source_restore(
+        self,
+        id: str,
+    ) -> SourceStatus:
+        """Put back a source that source.remove took away, as it was: same id, address, settings, fader and mute. The mixer remembers the last sixteen it removed, until it restarts."""
+        params: Dict[str, Any] = {}
+        params["id"] = id
+        return await self._call("source.restore", params)
 
     async def source_seek(
         self,

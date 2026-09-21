@@ -153,6 +153,9 @@ impl ProgrammeBranch {
         let vsrc = make("proxysrc", &format!("pgm-vsrc-{id}"))?;
         vsrc.set_property("proxysink", video_proxy);
         let vq = gstutil::queue_thread(&format!("pgm-vq-{id}"))?;
+        // A flush from the source's pipeline ends here and not at a
+        // compositor pad.
+        gstutil::stop_flushes_here(&vq)?;
         // `allow-not-linked` is what makes a source in no scene free and a
         // source in two scenes one more slot. Without it, a tee with no branch
         // errors the pipeline the moment the first frame arrives.

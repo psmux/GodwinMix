@@ -756,6 +756,17 @@ async function addSourcePickerSuite() {
     ok(!kinds.alreadyAdded(sources, other), "a second camera is still on offer");
   });
 
+  test("a source is matched by the address the core publishes, which is cut after the host", () => {
+    // `safe_uri_label` in the protocol crate: what a client is ever shown.
+    ok(kinds.sameAddress("test://smpte/…", "test://smpte"), "a pattern is found under its cut address");
+    ok(kinds.sameAddress("test://smpte", "test://smpte"), "and under its whole one");
+    ok(!kinds.sameAddress("test://ball/…", "test://smpte"), "another pattern is another source");
+    // Two files both read file:///… and two streams on one host read the same,
+    // so the cut form must never be taken for either.
+    ok(!kinds.sameAddress("file:///…", "file:///media/a.mp4"), "a file is not matched by its cut address");
+    ok(!kinds.sameAddress("rtmp://host/…", "rtmp://host/live/key"), "nor a stream");
+  });
+
   test("the size a device advertises is read wherever it put it", () => {
     eq(kinds.candidateSize({ params: { width: 1920, height: 1080 } }), "1920 x 1080");
     eq(kinds.candidateSize({ params: { best_size: [1280, 720] } }), "1280 x 720");
@@ -2071,10 +2082,18 @@ async function liveSuite() {
   const startY = rect.top + centre.y;
 
   const wasX = item.box.x;
-  point(live.canvas.overlay, "pointerdown", startX, startY);
-  for (let i = 1; i <= 12; i += 1) point(live.canvas.overlay, "pointermove", startX + i * 6, startY + i * 2);
-  point(live.canvas.overlay, "pointerup", startX + 72, startY + 24);
-  await waitFor(() => !live.canvas.prediction.busy, 5000, "the core to catch up with the drag");
+  // Four drags, out and back twice, for forty eight samples. With the twelve
+  // of one drag the 95th percentile is the worst sample, and one late echo on
+  // a busy machine failed a run that had nothing wrong with it.
+  for (let pass = 0; pass < 4; pass += 1) {
+    const back = pass % 2 === 1;
+    const at = (i) => [startX + (back ? 72 - i * 6 : i * 6), startY + (back ? 24 - i * 2 : i * 2)];
+    point(live.canvas.overlay, "pointerdown", ...at(0));
+    const steps = pass === 3 ? 11 : 12;
+    for (let i = 1; i <= steps; i += 1) point(live.canvas.overlay, "pointermove", ...at(i));
+    point(live.canvas.overlay, "pointerup", ...at(steps));
+    await waitFor(() => !live.canvas.prediction.busy, 5000, "the core to catch up with the drag");
+  }
 
   test("a drag moves the item, locally first and in the core after", () => {
     const now = live.canvas.boxes.get(item.id);

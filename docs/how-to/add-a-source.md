@@ -21,7 +21,11 @@ sources before pressing **Close**. Preview is optional; closing the chooser or
 leaving that category releases it.
 
 Reusing a source adds a scene reference and does not open another camera or
-decoder. Removing it from the scene leaves it available to other scenes. New
+decoder. Removing it from the scene leaves it available to other scenes, and
+leaves it running. To close a camera or a capture, open the chooser on
+**Existing sources** and press **Remove** on its row: that takes it out of the
+mixer and out of every scene, and the toast that follows has **Undo**. A scene
+that lacks a source the mixer has opens the chooser on that list. New
 sources go into the scene that opened the chooser, even if another scene is
 selected while setup is open.
 
@@ -133,6 +137,30 @@ curl -sX POST localhost:8080/api/v1/sources \
 
 `uri` is required and a kind named outright has no address, so the type goes
 there too. The core derives the id from the name.
+
+### Copy a source, or put a removed one back
+
+`source.list` shows an address with everything after the host cut off, because
+that is where a stream key lives: a file reads `file:///…`. So a client cannot
+copy a source, or undo a removal, by sending the address back to `source.add`.
+The core does both from the configuration it holds.
+
+```sh
+# another source like cam1: same address and settings, a new id
+curl -sX POST localhost:8080/api/v1/sources/cam1/duplicate \
+  -H "Authorization: Bearer $GODWINMIX_TOKEN" -d '{"name": "Camera 1 close"}'
+
+# the source that source.remove took away, as it was
+curl -sX POST localhost:8080/api/v1/sources/opener/restore \
+  -H "Authorization: Bearer $GODWINMIX_TOKEN"
+```
+
+Those are `source.duplicate` and `source.restore`. A restored source keeps its
+id, so the scenes that drew it find it again, and it comes back with its fader
+and mute where they were. The mixer remembers the last sixteen sources it
+removed, in memory, until it restarts. Asked for one it does not have, it
+answers with the ids it does. Undo after a removal, and paste, use these two in
+the web UI. Neither is an MCP tool: the agent tool lists are held to a size.
 
 ## When nothing turns up
 
