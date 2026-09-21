@@ -203,7 +203,11 @@ label { display: block; }
 }
 .tile:hover { border-color: var(--dim); }
 .tile.selected { border-color: var(--select); background: var(--select-fill); }
-.tile.program { border-color: var(--live); }
+/* `display` is here because `.program` further down is the programme monitor's
+   rule, a centred grid, and a tile on air carries the same class name: its face
+   shrank to the size of the number in it, 9 by 22 px, the moment it was taken.
+   `place-items` as well: a browser that aligns block children honours it. */
+.tile.program { border-color: var(--live); display: block; place-items: normal; }
 .tile.program.took { animation: took var(--anim-take) ease-out; }
 .tile.armed { border-color: var(--warn); }
 .tile.dragging { opacity: 0.5; }

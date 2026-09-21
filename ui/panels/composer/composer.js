@@ -331,7 +331,11 @@ export class Composer {
       }
       await this.scenes.reread([this.scene]);
       this.dialog.close();
-      toast({ text: "Applied. Tap the scene to put it on air." });
+      // A scene that is on air has already changed: the core applies it on
+      // the next frame. Telling that person to tap the scene would be wrong.
+      const name = this.scenes.summary(this.scene)?.name;
+      const onAir = !!name && this.client.state.scene === name;
+      toast({ text: onAir ? "Applied. It is on air now." : "Applied. Tap the scene to put it on air." });
     } catch (e) {
       errorToast(e, "Apply");
     }
