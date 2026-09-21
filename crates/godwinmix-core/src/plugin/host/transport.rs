@@ -68,6 +68,9 @@ impl MediaDir {
     }
 
     fn place(runtime: &Path, instance: &str) -> Result<PathBuf> {
+        // Absolute, whatever it was given: the address goes to another
+        // process, which does not stand where this one does.
+        let runtime = &std::path::absolute(runtime).unwrap_or_else(|_| runtime.to_path_buf());
         let fits = |dir: &Path| dir.join("media").as_os_str().len() <= LONGEST_BASE;
         let wanted = runtime.join("plugins").join(instance);
         if fits(&wanted) {
@@ -285,6 +288,16 @@ mod tests {
         assert_eq!(again, dir.path(), "the same instance gets the same place");
         let other = MediaDir::place(&deep, "another-camera-with-a-long-name").unwrap();
         assert_ne!(other, dir.path(), "and another instance another");
+    }
+
+    /// `--config godwinmix.toml` makes the runtime directory relative, and a
+    /// relative address means nothing to a plugin, which runs somewhere else.
+    #[test]
+    fn a_relative_runtime_directory_still_gives_an_absolute_address() {
+        let dir = MediaDir::create(Path::new("target/gmx-relative-runtime"), "cam1").unwrap();
+        assert!(Path::new(&dir.video()).is_absolute(), "{}", dir.video());
+        drop(dir);
+        let _ = std::fs::remove_dir_all("target/gmx-relative-runtime");
     }
 
     /// A mixer that was killed leaves its sockets, and the next bind on one

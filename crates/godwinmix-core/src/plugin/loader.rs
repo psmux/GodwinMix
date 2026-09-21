@@ -674,8 +674,10 @@ pub fn runtime_dir() -> PathBuf {
     RUNTIME.get().cloned().unwrap_or_else(std::env::temp_dir)
 }
 
+/// Kept absolute, because everything under it is an address given to another
+/// process. See `observe::runtime_dir`.
 pub fn set_runtime_dir(dir: PathBuf) {
-    let _ = RUNTIME.set(dir);
+    let _ = RUNTIME.set(std::path::absolute(&dir).unwrap_or(dir));
 }
 
 static RUNTIME: OnceLock<PathBuf> = OnceLock::new();
