@@ -25,6 +25,7 @@
       "examples": [8, 4, 20]
     },
     "slow_look_secs": {
+      "x-gmx-zero": "Off",
       "type": "number",
       "title": "Move on after",
       "description": "Seconds after which the programme moves to the next live source even though nothing has changed, so a service does not sit on one camera for an hour. 0 turns it off.",

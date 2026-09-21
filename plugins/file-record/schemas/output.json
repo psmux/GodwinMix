@@ -29,6 +29,7 @@
       "examples": ["mp4", "mkv"]
     },
     "split_after_minutes": {
+      "x-gmx-zero": "One file",
       "type": "integer",
       "title": "Split after",
       "description": "Start a new file every so many minutes. 0 keeps one file however long the service runs. Splits land on the next keyframe, so the number is approximate by a second or two.",

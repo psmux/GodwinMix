@@ -72,8 +72,7 @@ export class Composer {
       context: () => ({ scene: this.scene, draft: this.draft, items: this.selection }),
       // The box an item sits in, for the numbers in the inspector.
       geometry: (id) => this.canvas.boxes.get(id),
-      // With the answer when there is one: see `useView`. A draft's new
-      // state is only ever in the answer to the call that changed it.
+      // With the answer when there is one: a draft's state is only there.
       onChanged: (answer) => (answer && Array.isArray(answer.records) ? this.useView(answer) : this.reread()),
     });
 
@@ -248,14 +247,10 @@ export class Composer {
    */
   async picture() {
     clear(this.canvas.picture);
-    // The draft itself, composited by the mixer and streamed. This is what
-    // makes the composer a place to design in: the boxes are drawn here and
-    // the video under them comes from the same placements the programme would
-    // get, so a drag moves the picture and not only its outline. It used to
-    // show the armed scene or the programme, neither of which is the draft.
+    // The draft itself, composited by the mixer from the programme's own
+    // placements, so a drag moves the picture and not only its outline.
     if (this.draft && (await this.showDraft())) {
-      // Asked for at a size worth laying out on, and only while this is open:
-      // the stream stops with the image, and the preview with the stream.
+      // Only while this is open: the stream stops with the image.
       const stream = this.streamUrl("/mjpeg/preview?width=960&fps=15");
       this.canvas.picture.appendChild(el("img", { src: stream, alt: "" }));
       this.note.textContent = "This draft, live. Nothing reaches air until Apply.";
@@ -335,8 +330,7 @@ export class Composer {
       }
       await this.scenes.reread([this.scene]);
       this.dialog.close();
-      // A scene that is on air has already changed: the core applies it on
-      // the next frame. Telling that person to tap the scene would be wrong.
+      // A scene on air has already changed: the core applied it.
       const name = this.scenes.summary(this.scene)?.name;
       const onAir = !!name && this.client.state.scene === name;
       toast({ text: onAir ? "Applied. It is on air now." : "Applied. Tap the scene to put it on air." });

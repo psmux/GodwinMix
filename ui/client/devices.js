@@ -68,7 +68,9 @@ export function withDeviceChoices(schema, kindId, candidates, current) {
   // picks the device: `device` for a camera or a microphone, `monitor` for a
   // screen. Not the label, which is a name for the person and not a choice.
   const keys = Object.keys(props).filter(
-    (key) => key !== "label" && key !== "name" && key !== "sizes" && !Array.isArray(props[key].enum) && mine.some((c) => c.params[key] !== undefined && c.params[key] !== "")
+    // `name` stays in: an NDI sender is picked by its name, and a camera's
+    // candidate carries none, so nothing of a camera's is caught by it.
+    (key) => key !== "label" && key !== "sizes" && !Array.isArray(props[key].enum) && mine.some((c) => c.params[key] !== undefined && c.params[key] !== "")
   );
   if (!keys.length) return schema;
   const next = Object.assign({}, props);
@@ -159,7 +161,28 @@ export async function schemaForSource(client, source) {
  */
 const ESSENTIAL = /^(name|label|device|monitor|window|screen|display_index|uri|url|address|host|port|path|file|folder|key|stream_key|passphrase|password|text|title|message|mode|app|channel|source|input|output|resolution)$/;
 
+/**
+ * Show the word a nought stands for.
+ *
+ * A plugin writes `"x-gmx-zero": "Automatic"` on a number whose 0 means
+ * something: let the camera choose, off, wait for ever, any free port. The
+ * box then opens empty with that word in it, where it used to open on a bare
+ * 0 that a person had to read the small print to understand. Both form
+ * generators already show a schema's first example as the hint in an empty
+ * box, and both leave an empty number out of what they send, so the plugin
+ * falls back to its own default, which is that same 0.
+ */
+export function zeroWords(schema) {
+  for (const prop of Object.values((schema && schema.properties) || {})) {
+    if (!prop || typeof prop["x-gmx-zero"] !== "string" || Array.isArray(prop.enum)) continue;
+    prop.examples = [prop["x-gmx-zero"]];
+    if (prop.default === 0) delete prop.default;
+  }
+  return schema;
+}
+
 export function foldAdvanced(schema) {
+  zeroWords(schema);
   const props = (schema && schema.properties) || {};
   const declared = Object.values(props).some((p) => p && p["x-gmx-group"]);
   if (declared) return schema;

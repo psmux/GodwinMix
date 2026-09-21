@@ -122,7 +122,15 @@ export const SOURCE_KINDS = [
       type: "object",
       required: ["uri"],
       properties: {
-        uri: { type: "string", title: "Pattern", examples: ["test://smpte"], description: "test:// and the name of a videotestsrc pattern." },
+        // A list, as the description above promises. It asked for `test://`
+        // and "the name of a videotestsrc pattern" in a text box.
+        uri: {
+          type: "string",
+          title: "Pattern",
+          default: "test://smpte",
+          enum: ["test://smpte", "test://ball", "test://black", "test://snow"],
+          "x-gmx-labels": ["Colour bars", "Moving ball", "Black", "Snow"],
+        },
         name: { type: "string", title: "Name" },
       },
     },
