@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+* Fixed a segfault in the programme compositor when a source that was on air was removed. A flush stop sent into a slot could free a frame the compositor's scaler threads were still writing. It took about eighty removals to hit on an M4 Pro. A slot is now hidden, and one frame let out, before its flush is ended.
+* "Start empty" on the first run screen opens the Default scene's own source chooser. It used to add the source to the mixer and to no scene, so the toast said added and nothing appeared.
+* The source chooser reuses a test pattern or media file the mixer already has. It compared against the full address while the core publishes a shortened one, so every scene got its own copy of colour bars.
+* Undo after removing a source, and paste, no longer add a source back from its shortened address, which for a file cannot start. Where the address is not recoverable the UI says so, and asks before a removal it cannot undo.
+* The uptime in the header counts on between snapshots.
+
 ## 0.2.0 (2026-09-15)
 
 The first GodwinMix release, grown from LiveboxMix 0.1.0.
