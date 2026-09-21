@@ -134,6 +134,24 @@ pub enum Sizing {
 }
 
 impl Sizing {
+    /// The word for it on the wire: `fill`, `contain` or `cover`.
+    pub fn name(self) -> &'static str {
+        match self {
+            Sizing::Fill => "fill",
+            Sizing::Contain => "contain",
+            Sizing::Cover => "cover",
+        }
+    }
+
+    /// The other way. Anything unknown is `contain`, which distorts nothing.
+    pub fn named(name: &str) -> Sizing {
+        match name {
+            "fill" => Sizing::Fill,
+            "cover" => Sizing::Cover,
+            _ => Sizing::Contain,
+        }
+    }
+
     /// The nicks to try, best first.
     pub fn nicks(self) -> &'static [&'static str] {
         match self {
@@ -201,6 +219,11 @@ pub struct Placement {
     /// Degrees clockwise. Snapped to the nearest right angle on the software
     /// path, which is all `videoflip` can do.
     pub rotation: f64,
+    /// Add this item's light to what is under it, in place of covering it.
+    /// The one blend besides normal that `compositor` can draw: its pads take
+    /// an operator of source, over or add. Screen, multiply and the rest of
+    /// the document's list need the frame on a GPU and are drawn as normal.
+    pub additive: bool,
     pub sizing: Sizing,
     /// 0 to 1 each, where the picture sits inside its frame when the sizing
     /// policy leaves room.
@@ -223,6 +246,7 @@ impl Placement {
             alpha: 1.0,
             crop: (0.0, 0.0, 0.0, 0.0),
             rotation: 0.0,
+            additive: false,
             sizing: Sizing::Contain,
             align: (0.5, 0.5),
             audio: PlacementAudio::Follow,
@@ -413,6 +437,7 @@ impl Slot {
             Write::Enter => PadState { alpha: 0.0, ..to }.write(&self.pad),
         }
         set_sizing(&self.pad, p.sizing);
+        set_operator(&self.pad, p.additive);
         for (name, v) in [("xalign", p.align.0), ("yalign", p.align.1)] {
             if self.pad.has_property(name) {
                 set_f64(&self.pad, name, v.clamp(0.0, 1.0));
@@ -1394,7 +1419,20 @@ pub(crate) fn write_pad(
 /// a converter per pad twice a second and put the programme's frame interval
 /// over 34 ms on an idle mixer. Comparing first is the difference between a
 /// late frame every half second and none.
-fn set_sizing(pad: &gst::Pad, sizing: Sizing) {
+/// Cover what is under this pad, or add to it. See `Placement::additive`.
+pub(crate) fn set_operator(pad: &gst::Pad, additive: bool) {
+    if !pad.has_property("operator") {
+        return;
+    }
+    let want = if additive { "add" } else { "over" };
+    let held = pad.property_value("operator");
+    let now = glib::EnumValue::from_value(&held).map(|(_, v)| v.nick().to_string());
+    if now.as_deref() != Some(want) {
+        pad.set_property_from_str("operator", want);
+    }
+}
+
+pub(crate) fn set_sizing(pad: &gst::Pad, sizing: Sizing) {
     let Some(pspec) = pad.find_property("sizing-policy") else { return };
     let class = glib::EnumClass::with_type(pspec.value_type());
     let held = pad.property_value("sizing-policy");

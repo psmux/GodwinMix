@@ -197,3 +197,68 @@ export async function provideSchema(client, pluginName, id) {
   }
   return foldAdvanced(schema);
 }
+
+/** Frame rates worth offering. Anything else is typed under Advanced. */
+const RATES = [15, 24, 25, 30, 50, 60];
+
+/**
+ * A plugin's settings schema as a person should meet it.
+ *
+ * One function, because there are three places a source's settings are asked
+ * for (the add form, the settings drawer, the composer's inspector) and they
+ * had drifted: the first offered a list of cameras while the third still asked
+ * for "the id from `list_cameras`". In order: devices and their sizes become
+ * lists, a frame rate of 0 reads Automatic, a size nobody listed can still be
+ * typed under Advanced, and whatever the plugin did not group is folded.
+ */
+export function easeSchema(schema, kindId, candidates, current) {
+  let out = withDeviceChoices(JSON.parse(JSON.stringify(schema || {})), kindId, candidates, current || {});
+  const props = out.properties || {};
+  const rate = props.framerate || props.fps;
+  if (rate && (rate.type === "integer" || rate.type === "number") && !Array.isArray(rate.enum)) {
+    const key = props.framerate ? "framerate" : "fps";
+    const was = current && Number(current[key]);
+    const values = [0].concat(RATES);
+    if (was && !values.includes(was)) values.push(was);
+    // 0 is the plugin's own word for "let the device choose", and a box with a
+    // nought in it says nothing of the kind.
+    props[key] = Object.assign({}, rate, {
+      enum: values,
+      "x-gmx-labels": values.map((v) => (v === 0 ? "Automatic" : `${v} frames a second`)),
+      description: "Automatic takes what the device prefers.",
+    });
+  }
+  if (props.resolution && Array.isArray(props.resolution.enum) && !props.resolution_custom) {
+    props.resolution_custom = {
+      type: "string",
+      title: "Custom size",
+      description: "A size that is not in the list, as WIDTHxHEIGHT. Filled in, it is used in place of the list.",
+      examples: ["1600x900"],
+      "x-gmx-group": "Advanced",
+    };
+  }
+  out.properties = props;
+  return foldAdvanced(out);
+}
+
+/** The values of an eased form, as the plugin expects them. */
+export function unease(values) {
+  const out = Object.assign({}, values);
+  const custom = String(out.resolution_custom || "").trim();
+  if (custom) out.resolution = custom;
+  delete out.resolution_custom;
+  return out;
+}
+
+/** The same schema for the designer kit, which names a choice with `oneOf`. */
+export function forKit(schema) {
+  const out = JSON.parse(JSON.stringify(schema || {}));
+  for (const prop of Object.values(out.properties || {})) {
+    const labels = prop["x-gmx-labels"];
+    if (!Array.isArray(prop.enum) || !Array.isArray(labels)) continue;
+    prop.oneOf = prop.enum.map((value, i) => ({ const: value, title: String(labels[i] ?? value) }));
+    delete prop.enum;
+    delete prop["x-gmx-labels"];
+  }
+  return out;
+}

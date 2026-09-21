@@ -12,7 +12,7 @@ import { el, clear, on } from "../../shell/dom.js";
 import { errorToast } from "../../shell/toast.js";
 import { editorFor } from "../../kits/schema/index.js";
 import { rectToTransform } from "../../kits/canvas/geometry.js";
-import { itemProps, filters, filterTypes, BLENDS, AUDIO, FITS } from "./ops.js";
+import { itemProps, filters, filterTypes, BLENDS, AUDIO, FITS, undrawnBlend } from "./ops.js";
 
 export class Inspector {
   /**
@@ -89,7 +89,13 @@ export class Inspector {
       geometry,
       field("Opacity", el("div.row", {}, [opacity, opacityOut])),
       field("Fit", choice(FITS, (record.transform && record.transform.fit) || "none", guard(props.fit))),
-      field("Blend", choice(BLENDS, record.blend || "normal", guard(props.blend))),
+      field(
+        "Blend",
+        // An imported scene may hold a blend this mixer cannot draw. It stays
+        // in the list so opening the item does not quietly change it.
+        choice(undrawnBlend(record.blend) ? BLENDS.concat([record.blend]) : BLENDS, record.blend || "normal", guard(props.blend))
+      ),
+      undrawnBlend(record.blend) ? el("div.sm.faint", { text: `"${record.blend}" is kept in the scene but drawn as normal: this mixer draws normal and add.` }) : null,
       field("Sound", choice(AUDIO, record.audio || "follow", guard(props.audio))),
       el("div.row", {}, [
         el("label.inline", {}, [visible, el("span.sm", { text: "Visible" })]),
@@ -205,21 +211,53 @@ export class Inspector {
     }
     const content = record.content || {};
     const value = content.params || {};
+    // A source's settings belong to the source, and the mixer reads an item's
+    // own params for a graphic and for nothing else. This panel used to write
+    // a camera's settings into the scene item, where they changed nothing at
+    // all, through a form that asked for "the id from `list_cameras`". It now
+    // shows the form every other door shows and sends it to `source.set`.
+    const ofSource = !!content.source;
+    let schema = type.schema;
+    let helpers = null;
+    if (ofSource) {
+      helpers = await import("../../client/devices.js");
+      const { discoverDevices } = await import("../../client/kinds.js");
+      const found = await discoverDevices(this.o.client, 1500).catch(() => []);
+      const eased = helpers.easeSchema(schema, `${type.plugin}/${type.provide || "source"}`, found, value);
+      // Named on the item above, so not asked for again here.
+      if (eased.properties) {
+        delete eased.properties.label;
+        delete eased.properties.name;
+      }
+      schema = helpers.forKit(eased);
+    }
     const editor = await editorFor({
       plugin: type.plugin,
-      designer: type.designer,
-      schema: type.schema,
+      designer: ofSource ? Object.assign({}, type.designer, { ui: undefined }) : type.designer,
+      schema,
       value,
       onChange: null,
     });
+    // The mixer does not publish a source's settings, so the form opens at its
+    // defaults and only what is changed from them is sent.
+    const untouched = ofSource ? JSON.stringify(helpers.unease(editor.read())) : null;
     const apply = el("button.btn.primary", {
       text: "Apply settings",
       onclick: async () => {
         try {
-          await this.o.scenes.itemSet(this.o.context().scene, record.id, { content: Object.assign({}, content, { params: editor.read() }) }, {
-            duration_ms: 0,
-            draft: this.o.context().draft,
-          });
+          if (ofSource) {
+            const now = helpers.unease(editor.read());
+            const before = JSON.parse(untouched);
+            const params = {};
+            for (const [key, v] of Object.entries(now)) if (JSON.stringify(v) !== JSON.stringify(before[key])) params[key] = v;
+            if (!Object.keys(params).length) return;
+            await this.o.client.call("source.set", { id: content.source, params });
+          } else {
+            await this.o.scenes.itemSet(this.o.context().scene, record.id, { content: Object.assign({}, content, { params: editor.read() }) }, {
+              duration_ms: 0,
+              draft: this.o.context().draft,
+            });
+          }
           this.changed();
         } catch (e) {
           errorToast(e, "Settings");
