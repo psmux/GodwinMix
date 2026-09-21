@@ -63,6 +63,11 @@ class HeaderPanel extends HTMLElement {
       this.client.onRender((s) => this.render(s)),
       this.client.on("meters", (p) => takeMeters(p)),
     ];
+    // The core's uptime arrives with a snapshot and with nothing else, so the
+    // clock counts on from the last one by itself. A number that stands still
+    // on a live mixer reads as a page that has hung.
+    const clock = setInterval(() => this.tick(), 1000);
+    this.offs.push(() => clearInterval(clock));
     this.render(this.client.state);
   }
 
@@ -70,6 +75,13 @@ class HeaderPanel extends HTMLElement {
     dropView("header");
     for (const off of this.offs || []) off();
     this.offs = [];
+  }
+
+  /** The uptime the core last said, plus what has passed here since. */
+  tick() {
+    if (this.uptimeAt === undefined) return;
+    const since = this.connected ? (performance.now() - this.uptimeAt) / 1000 : 0;
+    this.uptime.textContent = fmtDuration(Math.floor((this.uptimeSaid || 0) + since));
   }
 
   render(s) {
@@ -80,7 +92,12 @@ class HeaderPanel extends HTMLElement {
     this.tally.classList.toggle("on", on);
     this.tally.lastChild.textContent = source ? source.name : s.program || s.scene || "black";
     document.body.classList.toggle("onair", on);
-    this.uptime.textContent = fmtDuration(s.uptime_secs);
+    if (s.uptime_secs !== this.uptimeSaid) {
+      this.uptimeSaid = s.uptime_secs;
+      this.uptimeAt = performance.now();
+    }
+    this.connected = s.connected;
+    this.tick();
     const b = s.backend;
     this.backend.textContent = b ? `${b.video_encoder} · ${b.hardware_accelerated ? "hardware" : "software"}` : "";
     const outputs = s.outputs || [];
