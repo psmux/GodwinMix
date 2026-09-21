@@ -43,11 +43,18 @@ pub const CANDIDATES: &[&str] = if cfg!(target_os = "linux") {
 };
 
 /// The chain from the device caps to the canvas caps, without its sink.
+// Only the tests ask without a device to consult.
+#[cfg(test)]
 pub fn chain(settings: &Settings, canvas: Canvas) -> String {
+    chain_for(settings, canvas, None)
+}
+
+/// The chain, asking for `auto` when the settings name no size of their own.
+pub fn chain_for(settings: &Settings, canvas: Canvas, auto: Option<(u32, u32)>) -> String {
     format!(
         "capsfilter name={HEAD} caps=\"{}\" ! decodebin name=gmx-decode ! \
          videoconvert ! videoscale ! videorate ! {}",
-        settings.device_caps(canvas).replace('"', ""),
+        settings.device_caps_with(canvas, auto).replace('"', ""),
         wiring::canvas_video_caps(canvas.width, canvas.height, canvas.fps)
     )
 }
@@ -59,12 +66,24 @@ pub fn build(
     transport: Transport,
     address: &str,
 ) -> Result<gst::Pipeline, String> {
-    let description = wiring::Wiring::video_only(chain(settings, canvas)).description(transport)?;
+    let description = wiring::Wiring::video_only(chain_for(settings, canvas, auto_size(settings, canvas)))
+        .description(transport)?;
     let pipeline = capture::build(&description)?;
     wiring::bind(&pipeline, transport, address)?;
     let source = open(settings)?;
     attach(&pipeline, &source)?;
     Ok(pipeline)
+}
+
+/// The size to ask for when the settings name none: chosen from what the
+/// camera says it can do. None for a forced element, which has no device to
+/// ask, and for a camera the monitor cannot see.
+fn auto_size(settings: &Settings, canvas: Canvas) -> Option<(u32, u32)> {
+    if settings.size.is_some() || !settings.element.is_empty() {
+        return None;
+    }
+    let found = devices::find(devices::CAMERA, &settings.device).ok()?;
+    devices::pick_size(&found.sizes(), (canvas.width, canvas.height))
 }
 
 /// Open the camera the settings name.

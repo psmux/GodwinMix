@@ -63,6 +63,31 @@ pub struct Found {
 
 impl Found {
     /// A source element already pointed at this device.
+    /// Every picture size the device says it can deliver, widest pictures
+    /// first and largest first among those, each size once.
+    ///
+    /// For the picker's list, and for choosing one when nobody has: see
+    /// [`pick_size`]. Sizes given as ranges are left out, because a range is
+    /// not something to offer in a list.
+    pub fn sizes(&self) -> Vec<(u32, u32)> {
+        let Some(caps) = self.device.caps() else { return Vec::new() };
+        let mut out: Vec<(u32, u32)> = Vec::new();
+        for structure in caps.iter() {
+            let (Ok(w), Ok(h)) = (structure.get::<i32>("width"), structure.get::<i32>("height")) else {
+                continue;
+            };
+            if w <= 0 || h <= 0 || out.contains(&(w as u32, h as u32)) {
+                continue;
+            }
+            out.push((w as u32, h as u32));
+        }
+        out.sort_by(|a, b| {
+            let wide = |s: &(u32, u32)| s.0 >= s.1;
+            wide(b).cmp(&wide(a)).then((b.0 as u64 * b.1 as u64).cmp(&(a.0 as u64 * a.1 as u64)))
+        });
+        out
+    }
+
     pub fn element(&self, name: &str) -> Result<gst::Element, String> {
         self.device
             .create_element(Some(name))
@@ -74,13 +99,58 @@ impl Found {
         Candidate {
             kind: provide.to_string(),
             name: self.name.clone(),
-            params: serde_json::json!({ "device": self.id, "label": self.name }),
+            params: self.params(),
             // Something the operating system is telling us about is really
             // there. The number is here for finders that guess; this one does
             // not.
             confidence: 1.0,
         }
     }
+}
+
+impl Found {
+    /// What `source.add` needs to open this device, and `sizes`, which is for
+    /// the form that offers them and is not a setting: a client takes it out
+    /// before it adds the source.
+    fn params(&self) -> serde_json::Value {
+        let mut params = serde_json::json!({ "device": self.id, "label": self.name });
+        let sizes: Vec<String> = self.sizes().iter().map(|(w, h)| format!("{w}x{h}")).collect();
+        if !sizes.is_empty() {
+            params["sizes"] = serde_json::json!(sizes);
+        }
+        params
+    }
+}
+
+/// The size to ask a device for when nobody chose one.
+///
+/// A capture element asked for "anything" settles on the first mode its device
+/// lists, whatever order the request was written in, and a MacBook Pro camera
+/// lists 1080x1920 first: a picture that Photo Booth shows wide arrived as a
+/// tall strip in the middle of a wide canvas. So one size is chosen here and
+/// asked for by name. The shape of the canvas first, because a picture of
+/// another shape is letterboxed; then the smallest that is at least the
+/// canvas, because nothing is gained by scaling down from more; then the
+/// largest there is. A device whose every mode is the wrong shape gets its
+/// widest, which is still the right way up.
+pub fn pick_size(sizes: &[(u32, u32)], canvas: (u32, u32)) -> Option<(u32, u32)> {
+    let shape = |s: &(u32, u32)| s.0 as f64 / s.1.max(1) as f64;
+    let wanted = shape(&canvas);
+    let area = |s: &(u32, u32)| s.0 as u64 * s.1 as u64;
+    let best_of = |pool: Vec<(u32, u32)>| -> Option<(u32, u32)> {
+        let enough: Vec<_> = pool.iter().copied().filter(|s| s.0 >= canvas.0 && s.1 >= canvas.1).collect();
+        enough.iter().copied().min_by_key(area).or_else(|| pool.iter().copied().max_by_key(area))
+    };
+    let same_shape: Vec<_> = sizes.iter().copied().filter(|s| (shape(s) - wanted).abs() < 0.02).collect();
+    if !same_shape.is_empty() {
+        return best_of(same_shape);
+    }
+    let upright = wanted >= 1.0;
+    let same_way: Vec<_> = sizes.iter().copied().filter(|s| (s.0 >= s.1) == upright).collect();
+    if !same_way.is_empty() {
+        return best_of(same_way);
+    }
+    best_of(sizes.to_vec())
 }
 
 /// Everything plugged in under these classes, in the order the platform gives.
@@ -208,6 +278,23 @@ pub fn candidates(classes: &[&str], provide: &str) -> Result<Vec<Candidate>, Str
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The modes of the MacBook Pro camera this was found on, in its own order.
+    const MACBOOK: &[(u32, u32)] =
+        &[(1080, 1920), (1920, 1080), (1328, 1760), (1760, 1328), (1552, 1552), (1280, 720), (640, 480)];
+
+    #[test]
+    fn a_camera_that_lists_a_tall_mode_first_is_still_opened_wide() {
+        assert_eq!(pick_size(MACBOOK, (1920, 1080)), Some((1920, 1080)));
+        assert_eq!(pick_size(MACBOOK, (1280, 720)), Some((1280, 720)));
+        // A canvas larger than anything on offer takes the largest of its shape.
+        assert_eq!(pick_size(MACBOOK, (3840, 2160)), Some((1920, 1080)));
+        // An upright canvas is a choice somebody made, and gets an upright picture.
+        assert_eq!(pick_size(MACBOOK, (1080, 1920)), Some((1080, 1920)));
+        // No mode of the canvas's shape: the right way up, and enough of it.
+        assert_eq!(pick_size(&[(1080, 1920), (1600, 1200), (640, 480)], (1280, 720)), Some((1600, 1200)));
+        assert_eq!(pick_size(&[], (1920, 1080)), None);
+    }
 
     #[test]
     fn listing_a_class_that_exists_nowhere_is_empty_and_not_an_error() {
