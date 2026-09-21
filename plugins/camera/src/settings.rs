@@ -62,12 +62,24 @@ impl Settings {
     /// gets a tall strip in the middle of a wide canvas. Asking for the canvas
     /// size first is what makes the common case land the right way up, and it
     /// is cheaper too, because nothing is scaled that did not have to be.
+    // Only the tests ask without a device to consult.
+    #[cfg(test)]
     pub fn device_caps(&self, canvas: Canvas) -> String {
+        self.device_caps_with(canvas, None)
+    }
+
+    /// The same, with the size chosen for a device that was asked what it can
+    /// do. `auto` is `devices::pick_size` over the device's own modes, and
+    /// when there is one it is the only size asked for. The ordered list below
+    /// is what is left for a device that could not be asked, and on macOS it
+    /// does not do what its comment hopes: `avfvideosrc` takes its own first
+    /// mode whenever the request ends in "anything at all".
+    pub fn device_caps_with(&self, canvas: Canvas, auto: Option<(u32, u32)>) -> String {
         let mut rate = String::new();
         if let Some(fps) = self.framerate {
             rate.push_str(&format!(",framerate={fps}/1"));
         }
-        let sizes: Vec<Option<(u32, u32)>> = match self.size {
+        let sizes: Vec<Option<(u32, u32)>> = match self.size.or(auto) {
             Some(size) => vec![Some(size)],
             None => {
                 let mut wanted = vec![Some((canvas.width, canvas.height))];

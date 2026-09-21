@@ -118,7 +118,14 @@ impl Grid {
         let rows = tiles.div_ceil(cols);
         // Round cell dimensions down to even numbers for 4:2:0 chroma.
         let cell_w = ((width / cols as i32) / 2) * 2;
-        let cell_h = ((height / rows as i32) / 2) * 2;
+        // A cell is the shape of the sheet, never taller. Dividing the height
+        // by the rows gave two tiles, one source and the programme, a cell of
+        // 480 by 540 each on a 960 by 540 sheet, and a client that fits a cell
+        // into a 16:9 tile drew a wide camera as a narrow upright strip. The
+        // rows that are not needed stay empty at the bottom of the sheet.
+        let by_rows = height / rows as i32;
+        let by_shape = (cell_w as i64 * height as i64 / width.max(1) as i64) as i32;
+        let cell_h = (by_rows.min(by_shape) / 2) * 2;
         Self { cols, rows, cell_w, cell_h }
     }
 
@@ -142,6 +149,20 @@ mod tests {
         assert_eq!(Grid::for_tiles(5, 1280, 720).cols, 3);
         assert_eq!(Grid::for_tiles(5, 1280, 720).rows, 2);
         assert_eq!(Grid::for_tiles(9, 1280, 720).cols, 3);
+    }
+
+    /// One source and the programme is two tiles, and two tiles used to be
+    /// two cells taller than they were wide.
+    #[test]
+    fn a_cell_is_the_shape_of_the_sheet_however_many_tiles_there_are() {
+        for tiles in 1..=12 {
+            let g = Grid::for_tiles(tiles, 960, 540);
+            let shape = g.cell_w as f64 / g.cell_h as f64;
+            assert!((shape - 16.0 / 9.0).abs() < 0.03, "{tiles} tiles gave {} by {}", g.cell_w, g.cell_h);
+            assert!(g.cell_h * g.rows as i32 <= 540, "{tiles} tiles overflow the sheet");
+        }
+        let two = Grid::for_tiles(2, 960, 540);
+        assert_eq!((two.cell_w, two.cell_h), (480, 270));
     }
 
     #[test]
