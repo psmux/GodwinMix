@@ -126,7 +126,18 @@ impl Capture {
     }
 
     /// The fault the bus reported, with a lead in, or the lead in alone.
+    ///
+    /// Waited for, briefly. A state change that fails returns at once, and the
+    /// element's error reaches the bus at the same moment but reaches `fault`
+    /// through the watch thread, which looks every hundred milliseconds. Read
+    /// straight away it was never there: a camera whose socket could not be
+    /// bound answered "said nothing about why" while GStreamer had said
+    /// "Address already in use". This only runs on a start that has failed.
     fn why(&self, lead: &str) -> String {
+        let until = Instant::now() + Duration::from_millis(400);
+        while self.fault().is_none() && Instant::now() < until {
+            std::thread::sleep(Duration::from_millis(20));
+        }
         match self.fault() {
             Some(detail) => format!("{lead}: {detail}"),
             None => format!("{lead}, and said nothing about why"),
