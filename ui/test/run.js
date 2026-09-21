@@ -767,6 +767,23 @@ async function addSourcePickerSuite() {
     ok(!kinds.sameAddress("rtmp://host/…", "rtmp://host/live/key"), "nor a stream");
   });
 
+  test("the by hand form offers the cameras this machine has, by name", () => {
+    const schema = { properties: { device: { type: "string", title: "Camera" }, label: { type: "string" } } };
+    const found = [
+      { type: "camera/source", name: "MacBook Pro Camera", params: { device: "6C70-0001" } },
+      { type: "audio-device/source", name: "Microphone", params: { device: "BuiltIn" } },
+    ];
+    const made = kinds.withDeviceChoices(schema, "camera/source", found);
+    eq(made.properties.device.enum, ["", "6C70-0001"]);
+    eq(made.properties.device["x-gmx-labels"], ["The first one found", "MacBook Pro Camera"]);
+    ok(!schema.properties.device.enum, "the plugin's own schema is left as it was");
+    // Nothing of this kind found: the box stays a box, so an id can be typed.
+    ok(!kinds.withDeviceChoices(schema, "camera/source", []).properties.device.enum);
+    ok(!kinds.withDeviceChoices(schema, "ndi/source", found).properties.device.enum);
+    // A device already set that is not plugged in now is still in the list.
+    eq(kinds.withDeviceChoices(schema, "camera/source", found, "old-cam").properties.device.enum, ["", "6C70-0001", "old-cam"]);
+  });
+
   test("the size a device advertises is read wherever it put it", () => {
     eq(kinds.candidateSize({ params: { width: 1920, height: 1080 } }), "1920 x 1080");
     eq(kinds.candidateSize({ params: { best_size: [1280, 720] } }), "1280 x 720");
