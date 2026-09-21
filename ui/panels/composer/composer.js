@@ -74,7 +74,9 @@ export class Composer {
     });
 
     this.dialog = modal({
-      title: `Composer: ${begun.name || this.scene}`,
+      // The name, from wherever it can be had. `this.scene` is an id, and an
+      // id in a title bar tells the person at the desk nothing.
+      title: `Composer: ${begun.name || this.scenes.summary(this.scene)?.name || this.scene}`,
       wide: true,
       body: this.body(),
       footer: this.footer(),
@@ -248,7 +250,10 @@ export class Composer {
     // get, so a drag moves the picture and not only its outline. It used to
     // show the armed scene or the programme, neither of which is the draft.
     if (this.draft && (await this.showDraft())) {
-      this.canvas.picture.appendChild(el("img", { src: this.streamUrl("/mjpeg/preview"), alt: "" }));
+      // Asked for at a size worth laying out on, and only while this is open:
+      // the stream stops with the image, and the preview with the stream.
+      const stream = this.streamUrl("/mjpeg/preview?width=960&fps=15");
+      this.canvas.picture.appendChild(el("img", { src: stream, alt: "" }));
       this.note.textContent = "This draft, live. Nothing reaches air until Apply.";
       return;
     }
