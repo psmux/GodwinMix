@@ -297,6 +297,8 @@ impl SceneServer {
                 width: (p.width as f64 * sx).round() as i32,
                 height: (p.height as f64 * sy).round() as i32,
                 alpha: p.alpha,
+                rotation: p.rotation,
+                crop: p.crop,
             })
             .collect();
         Some(PreviewLayout { scene: id, name: scene.name.clone(), width, height, cells })
@@ -348,6 +350,8 @@ impl SceneServer {
                 width: (p.width as f64 * sx).round() as i32,
                 height: (p.height as f64 * sy).round() as i32,
                 alpha: p.alpha,
+                rotation: p.rotation,
+                crop: p.crop,
             })
             .collect();
         Some(PreviewLayout { scene: draft.of, name: draft.name.clone(), width, height, cells })
@@ -700,6 +704,10 @@ pub struct PreviewCell {
     pub width: i32,
     pub height: i32,
     pub alpha: f64,
+    /// Degrees clockwise, as the item asks. Whoever draws it snaps it.
+    pub rotation: f64,
+    /// Fractions of the source's picture to trim: left, top, right, bottom.
+    pub crop: (f64, f64, f64, f64),
 }
 
 impl Inner {

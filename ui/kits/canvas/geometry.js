@@ -86,12 +86,23 @@ export class View {
     this.set(canvas, surface);
   }
 
-  set(canvas, surface) {
+  /**
+   * `margin` is surface pixels kept clear all round the picture. None by
+   * default. A designer wants one: a source dropped into a scene fills the
+   * canvas, so its corner handles sat on the very edge of the surface and its
+   * rotate handle, which stands above the top edge, was outside it and could
+   * not be reached at all. Left out, the margin in force is kept.
+   */
+  set(canvas, surface, margin) {
     this.canvas = canvas || { width: 1920, height: 1080 };
     this.surface = surface || { width: 1, height: 1 };
+    if (margin !== undefined) this.margin = Math.max(0, n(margin));
+    const m = this.margin || 0;
     // The picture is letterboxed inside the surface, the way `object-fit:
     // contain` draws it, so the handles sit on the picture and not beside it.
-    const scale = Math.min(this.surface.width / this.canvas.width, this.surface.height / this.canvas.height);
+    const roomW = Math.max(1, this.surface.width - 2 * m);
+    const roomH = Math.max(1, this.surface.height - 2 * m);
+    const scale = Math.min(roomW / this.canvas.width, roomH / this.canvas.height);
     this.scale = isFinite(scale) && scale > 0 ? scale : 1;
     this.offsetX = (this.surface.width - this.canvas.width * this.scale) / 2;
     this.offsetY = (this.surface.height - this.canvas.height * this.scale) / 2;

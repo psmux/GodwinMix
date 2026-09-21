@@ -1301,6 +1301,7 @@ mod tests {
             width: 960,
             height: 540,
             alpha: 1.0,
+            rotation: 0.0, crop: (0.0, 0.0, 0.0, 0.0),
         };
         mv.apply_preview(&canvas, &[cell("cam1", 0), cell("cam2", 960)]).unwrap();
         assert_eq!(mv.preview_drawn(), 2);
@@ -1338,6 +1339,7 @@ mod tests {
                 width: 1920,
                 height: 1080,
                 alpha: 1.0,
+                rotation: 0.0, crop: (0.0, 0.0, 0.0, 0.0),
             }],
         )
         .unwrap();
@@ -2168,6 +2170,7 @@ mod tests {
             width: canvas.width,
             height: canvas.height,
             alpha: 1.0,
+            rotation: 0.0, crop: (0.0, 0.0, 0.0, 0.0),
         }]);
 
         for round in 0..40u64 {
@@ -2240,6 +2243,7 @@ mod tests {
                 width: canvas.width / 2,
                 height: canvas.height,
                 alpha: 1.0,
+                rotation: 0.0, crop: (0.0, 0.0, 0.0, 0.0),
             },
             preview::Cell {
                 source: "cam2".into(),
@@ -2248,6 +2252,7 @@ mod tests {
                 width: canvas.width / 2,
                 height: canvas.height,
                 alpha: 1.0,
+                rotation: 0.0, crop: (0.0, 0.0, 0.0, 0.0),
             },
         ]);
 
@@ -2335,6 +2340,7 @@ mod tests {
             width: canvas.width,
             height: canvas.height,
             alpha: 1.0,
+            rotation: 0.0, crop: (0.0, 0.0, 0.0, 0.0),
         }]);
         let asked = Instant::now();
         let mut sub = mv.subscribe_preview(PreviewRequest { fps: 8, width: 320, full: false });
