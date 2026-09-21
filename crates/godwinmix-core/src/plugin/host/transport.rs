@@ -120,6 +120,14 @@ impl Drop for MediaDir {
         // Every socket in it went with the process. Removing the directory is
         // what makes the leak count come back to zero.
         let _ = std::fs::remove_dir_all(&self.path);
+        // And the folder around it when this was the last one in it, which is
+        // the per process one `place` makes under the temporary directory.
+        // `remove_dir` refuses a directory that still has something in it.
+        if let Some(parent) = self.path.parent() {
+            if parent.parent() == Some(std::env::temp_dir().as_path()) {
+                let _ = std::fs::remove_dir(parent);
+            }
+        }
     }
 }
 
