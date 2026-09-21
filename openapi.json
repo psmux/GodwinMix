@@ -1132,6 +1132,33 @@
         ],
         "type": "object"
       },
+      "DuplicateSourceRequest": {
+        "description": "`source.duplicate`.",
+        "properties": {
+          "id": {
+            "description": "The source to copy.",
+            "type": "string"
+          },
+          "name": {
+            "description": "Name for the copy. The original's name and \" copy\" when omitted.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "new_id": {
+            "description": "Id for the copy. Derived from its name when omitted, with a numeric\nsuffix if that is taken.",
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "type": "object"
+      },
       "EditBeginRequest": {
         "description": "`scene.edit.begin`.",
         "properties": {
@@ -9460,6 +9487,55 @@
         "x-scope": "operate"
       }
     },
+    "/api/v1/sources/{id}/duplicate": {
+      "post": {
+        "description": "JSON-RPC method `source.duplicate`. Needs the `operate` scope. Accepts `idempotency_key`, honoured for 24 hours.",
+        "operationId": "source.duplicate",
+        "parameters": [
+          {
+            "description": "The id, as listed by the matching list call.",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DuplicateSourceRequest"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SourceStatus"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Add another source like one the mixer has: the same address and settings under a new id. A client cannot do this with source.add, because the address it is shown has everything after the host cut off.",
+        "tags": [
+          "source"
+        ],
+        "x-destructive": false,
+        "x-idempotent": true,
+        "x-scope": "operate"
+      }
+    },
     "/api/v1/sources/{id}/group": {
       "post": {
         "description": "JSON-RPC method `source.group`. Needs the `operate` scope. Accepts `idempotency_key`, honoured for 24 hours.",
@@ -9501,6 +9577,55 @@
           }
         },
         "summary": "Put sources in a tray folder. A tag for finding things, not a group on the canvas.",
+        "tags": [
+          "source"
+        ],
+        "x-destructive": false,
+        "x-idempotent": true,
+        "x-scope": "operate"
+      }
+    },
+    "/api/v1/sources/{id}/restore": {
+      "post": {
+        "description": "JSON-RPC method `source.restore`. Needs the `operate` scope. Accepts `idempotency_key`, honoured for 24 hours.",
+        "operationId": "source.restore",
+        "parameters": [
+          {
+            "description": "The id, as listed by the matching list call.",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/IdRequest"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SourceStatus"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Put back a source that source.remove took away, as it was: same id, address, settings, fader and mute. The mixer remembers the last sixteen it removed, until it restarts.",
         "tags": [
           "source"
         ],

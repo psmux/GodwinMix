@@ -274,7 +274,18 @@ fn reply(ack: Option<Ack>, outcome: &Result<()>) {
 pub struct RuntimeConfigs {
     pub sources: Vec<SourceConfig>,
     pub outputs: Vec<OutputConfig>,
+    /// Sources a caller removed, newest last, as they stood when they went.
+    /// What `source.add` with `restore` puts back. See `REMOVED_KEPT`.
+    pub removed: Vec<SourceConfig>,
 }
+
+/// How many removed sources are remembered for `source.add` with `restore`.
+///
+/// A client cannot put a removed source back by itself: the address it was
+/// shown had everything after the host cut off, because that is where a stream
+/// key lives. So the core keeps what it removed, in memory and nowhere else.
+/// Sixteen is more undo than a desk gives anyone and costs a few kilobytes.
+pub const REMOVED_KEPT: usize = 16;
 
 /// What `Command::SetAudio` answers with.
 ///
@@ -962,6 +973,8 @@ pub struct Mixer {
     pending_ad_end: Option<gst::SingleShotClockId>,
     output_attempts: HashMap<OutputId, u32>,
     source_attempts: HashMap<SourceId, u32>,
+    /// See `REMOVED_KEPT`.
+    removed: Vec<SourceConfig>,
 
     handle: MixerHandle,
     events: EventBus,
@@ -1561,6 +1574,7 @@ impl Mixer {
             pending_ad_end: None,
             output_attempts: HashMap::new(),
             source_attempts: HashMap::new(),
+            removed: Vec::new(),
             handle: handle.clone(),
             events,
             rt,
@@ -1874,6 +1888,8 @@ impl Mixer {
             }
         }
         info!(source = %cfg.id, kind = %self.sources.last().map(|s| s.input.type_id()).unwrap_or_default(), "source added");
+        // An id that is live again has nothing left to restore under it.
+        self.removed.retain(|c| c.id != cfg.id);
         self.broadcast_status();
         Ok(())
     }
@@ -2644,7 +2660,27 @@ impl Mixer {
             }
         }
         let outputs: Vec<OutputConfig> = self.outputs.iter().map(|o| o.cfg.clone()).collect();
-        RuntimeConfigs { sources, outputs }
+        RuntimeConfigs { sources, outputs, removed: self.removed.clone() }
+    }
+
+    /// Keep a source's config as it stands, for `source.add` with `restore`.
+    ///
+    /// Only on a caller's `source.remove`. A rebuild detaches a source too and
+    /// puts it straight back, and an ad is not anybody's to restore. One entry
+    /// an id: the source removed last is the one a person means.
+    fn remember_removed(&mut self, id: &SourceId) {
+        if id.as_str() == AD_ID {
+            return;
+        }
+        let Some(slot) = self.sources.iter().find(|s| &s.input.id == id) else { return };
+        let mut cfg = slot.input.config.clone();
+        cfg.gain = slot.gain();
+        cfg.muted = slot.muted();
+        self.removed.retain(|c| c.id != cfg.id);
+        self.removed.push(cfg);
+        if self.removed.len() > REMOVED_KEPT {
+            self.removed.remove(0);
+        }
     }
 
     /// Write the current source list beside the config file.
@@ -2655,7 +2691,7 @@ impl Mixer {
     /// keeps "where do sources come from" a question with a single answer.
     fn persist_runtime(&self) {
         let Some(path) = &self.runtime_store else { return };
-        let RuntimeConfigs { sources: live, outputs } = self.runtime_configs();
+        let RuntimeConfigs { sources: live, outputs, .. } = self.runtime_configs();
 
         #[derive(serde::Serialize)]
         struct Stored<'a> {
@@ -3496,6 +3532,7 @@ impl Mixer {
                 r?;
             }
             Command::RemoveSource(id, ack) => {
+                self.remember_removed(&id);
                 let r = self.remove_source(&id);
                 reply(ack, &r);
                 r?;

@@ -90,6 +90,34 @@ pub fn register(reg: &mut Registry<Call>) {
         ),
     );
 
+    // No tools on these two. They are what a desk's paste and undo need, and
+    // the agent tool lists are held to a byte budget that has no room for them.
+    reg.register(
+        MethodDef::new(
+            "source.duplicate",
+            Scope::Operate,
+            "Add another source like one the mixer has: the same address and settings under \
+             a new id. A client cannot do this with source.add, because the address it is \
+             shown has everything after the host cut off.",
+            handler(duplicate),
+        )
+        .params(schema_of::<DuplicateSourceRequest>)
+        .result(schema_of::<SourceStatus>),
+    );
+
+    reg.register(
+        MethodDef::new(
+            "source.restore",
+            Scope::Operate,
+            "Put back a source that source.remove took away, as it was: same id, address, \
+             settings, fader and mute. The mixer remembers the last sixteen it removed, until \
+             it restarts.",
+            handler(restore),
+        )
+        .params(schema_of::<IdRequest>)
+        .result(schema_of::<SourceStatus>),
+    );
+
     reg.register(
         MethodDef::new(
             "source.audio.set",
@@ -172,6 +200,32 @@ async fn add(call: Call, params: Value) -> Result<Value, RpcError> {
     // The whole resulting object, so no follow up read is needed (AIP-134).
     let record = find(&call, &id).await?;
     // The hook call site. Nothing waits on it; see `control/hooks/`.
+    call.app.hooks.fire(godwinmix_core::hooks::name::SOURCE_ADDED, || {
+        serde_json::json!({ "source": record.id, "uri": record.uri, "state": record.state })
+    });
+    body(record)
+}
+
+async fn duplicate(call: Call, params: Value) -> Result<Value, RpcError> {
+    let req: DuplicateSourceRequest = call.params(&params)?;
+    let id = crate::control::copy_source(&call.app, req.id.trim(), req.new_id, req.name)
+        .await
+        .map_err(|e| call.mixer_error(e))?;
+    added(&call, &id).await
+}
+
+async fn restore(call: Call, params: Value) -> Result<Value, RpcError> {
+    let req: IdRequest = call.params(&params)?;
+    crate::control::restore_source(&call.app, req.id.trim())
+        .await
+        .map_err(|e| call.mixer_error(e))?;
+    added(&call, req.id.trim()).await
+}
+
+/// The record of a source that has just arrived, with the hook every arrival
+/// fires. See `add`.
+async fn added(call: &Call, id: &str) -> Result<Value, RpcError> {
+    let record = find(call, id).await?;
     call.app.hooks.fire(godwinmix_core::hooks::name::SOURCE_ADDED, || {
         serde_json::json!({ "source": record.id, "uri": record.uri, "state": record.state })
     });
