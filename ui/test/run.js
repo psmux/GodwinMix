@@ -756,6 +756,25 @@ async function addSourcePickerSuite() {
     ok(!kinds.alreadyAdded(sources, other), "a second camera is still on offer");
   });
 
+  test("a source is matched by the address the core publishes, which is cut after the host", () => {
+    // `safe_uri_label` in the protocol crate: what a client is ever shown.
+    ok(kinds.sameAddress("test://smpte/…", "test://smpte"), "a pattern is found under its cut address");
+    ok(kinds.sameAddress("test://smpte", "test://smpte"), "and under its whole one");
+    ok(!kinds.sameAddress("test://ball/…", "test://smpte"), "another pattern is another source");
+    // Two files both read file:///… and two streams on one host read the same,
+    // so the cut form must never be taken for either.
+    ok(!kinds.sameAddress("file:///…", "file:///media/a.mp4"), "a file is not matched by its cut address");
+    ok(!kinds.sameAddress("rtmp://host/…", "rtmp://host/live/key"), "nor a stream");
+  });
+
+  test("a source is only added again from an address that survived the cut", () => {
+    eq(kinds.readdAddress({ uri: "test://smpte/…" }), "test://smpte");
+    eq(kinds.readdAddress({ uri: "camera/source" }), "camera/source");
+    eq(kinds.readdAddress({ uri: "file:///…" }), null);
+    eq(kinds.readdAddress({ uri: "rtmp://host/…" }), null);
+    eq(kinds.readdAddress({ uri: "…" }), null);
+  });
+
   test("the size a device advertises is read wherever it put it", () => {
     eq(kinds.candidateSize({ params: { width: 1920, height: 1080 } }), "1920 x 1080");
     eq(kinds.candidateSize({ params: { best_size: [1280, 720] } }), "1280 x 720");
