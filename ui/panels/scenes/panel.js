@@ -232,8 +232,12 @@ class ScenesPanel extends HTMLElement {
           },
           [el("span.ellipsis", { text: summary.name }), el("span.num.dim", { text: String(summary.items || 0) })]
         );
+        // The way in to the composer that can be seen. A double click opens
+        // it too, but nobody finds a double click. Beside the tab and not in
+        // it, because a button may not hold another button.
+        const edit = this.editButton(summary);
         this.tabs.set(summary.id, tab);
-        this.strip.appendChild(tab);
+        this.strip.appendChild(el("span.scene-tab", {}, [tab, edit]));
       }
       this.strip.appendChild(this.take);
     }
@@ -248,6 +252,23 @@ class ScenesPanel extends HTMLElement {
     setFocusedScene(this.scenes.armed() || (ids.includes(live) ? live : null) || ids[0]);
   }
 
+  /** The pencil on a scene, in either view: open the composer on it. */
+  editButton(summary) {
+    const label = `Edit the layout of ${summary.name}`;
+    return el("button.scene-edit", {
+      text: "\u270E",
+      "data-nodrag": "",
+      title: label,
+      "aria-label": label,
+      onclick: (event) => {
+        // Not a tap on the tile underneath, which would put the scene on air.
+        event.stopPropagation();
+        this.open(summary.id);
+      },
+      ondblclick: (event) => event.stopPropagation(),
+    });
+  }
+
   buildTile(summary) {
     const node = el("div.tile", {
       "data-id": summary.id,
@@ -260,7 +281,7 @@ class ScenesPanel extends HTMLElement {
     face.append(items, el("button.scene-add-source", { text: "+", "data-nodrag": "",
       title: `Add sources to ${summary.name}`, "aria-label": `Add sources to ${summary.name}`,
       onclick: event => { event.stopPropagation(); setFocusedScene(summary.id); openSceneSources(this.client, this.scenes, this.scenes.summary(summary.id)); },
-    }));
+    }), this.editButton(summary));
     const name = el("span.name.grow.ellipsis");
     const dot = el("span.dot");
     const bar = el("div.bar", {}, [dot, name]);

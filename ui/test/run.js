@@ -1365,6 +1365,25 @@ async function sceneTabsSuite() {
     eq(opened, ["wide"]);
   });
 
+  test("every scene has a pencil beside its tab that opens the composer and takes nothing", () => {
+    const opened = [];
+    panel.open = (id) => opened.push(id);
+    calls.length = 0;
+    const tab = panel.tabs.get("wide");
+    ok(tab.textContent.includes("Wide"), "the tab kept its name: " + tab.textContent);
+    const pencil = tab.parentElement.querySelector("button.scene-edit");
+    ok(pencil, "no pencil beside the tab");
+    ok(!tab.contains(pencil), "a button inside a button is not valid and does not click");
+    ok(/Wide/.test(pencil.getAttribute("aria-label") || ""), "the pencil has to say which scene it edits");
+    pencil.click();
+    eq(opened, ["wide"]);
+    eq(calls.filter((c) => c.method === "program.take").length, 0, "the pencil put something on air");
+    // And on a tile, beside the add button it must not have displaced.
+    const made = panel.buildTile({ id: "wide", name: "Wide" });
+    ok(made.face.querySelector("button.scene-edit"), "no pencil on the tile");
+    ok(made.face.querySelector("button.scene-add-source"), "the tile lost its add button");
+  });
+
   test("the Take button puts the focused scene on air", () => {
     calls.length = 0;
     setFocusedScene("two-box");

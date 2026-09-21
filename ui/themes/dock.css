@@ -62,6 +62,10 @@ gmx-shell.has-workspace {
 .source-add-tile:hover, .source-add-tile:focus-visible { color: var(--accent); border-color: var(--accent); background: var(--select-fill); }
 .source-add-icon { font-size: 48px; line-height: 1; font-weight: 300; }
 .scene-add-source { position: absolute; right: 8px; bottom: 8px; font-size: 28px; width: 44px; height: 44px; padding: 0; background: var(--panel); }
+.scene-tab { display: inline-flex; align-items: center; gap: 0; }
+.scene-tabs button.scene-edit:not(.btn), .tile .scene-edit { border: 0; border-radius: var(--radius-sm); background: transparent; color: var(--dim); cursor: pointer; line-height: 1; padding: 0; width: 28px; height: 28px; font-size: 16px; }
+.scene-tabs button.scene-edit:not(.btn):hover, .scene-tabs button.scene-edit:not(.btn):focus-visible, .tile .scene-edit:hover, .tile .scene-edit:focus-visible { color: var(--accent); background: var(--select-fill); }
+.tile .scene-edit { position: absolute; left: 8px; top: 8px; width: 36px; height: 36px; font-size: 20px; background: var(--panel); color: var(--text); }
 .source-chooser { display: grid; grid-template-columns: minmax(0, 1fr) minmax(240px, .8fr); gap: 20px; }
 .source-chooser-library { min-width: 0; }
 .source-chooser-list { max-height: 50vh; overflow: auto; }
