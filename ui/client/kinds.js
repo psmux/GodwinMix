@@ -290,6 +290,9 @@ export const PLATFORMS = [
     key: false,
     policy: "own",
     hosts: [],
+    // What the empty address box shows. Without it the form fell back to the
+    // RTMP example, which is the wrong kind of address for this tile.
+    example: "srt://192.168.1.50:9000",
     where: "A receiver that expects MPEG-TS over SRT. There is no stream key.",
   },
 ];

@@ -106,7 +106,7 @@ export function schemaFor(p, output) {
     // A server nobody published is not knowable from `uri_host`: the part that
     // is masked is exactly the part that would be needed.
     default: p.fixed ? p.server : editing ? undefined : p.server || undefined,
-    examples: [editing && !p.fixed ? output.uri_host : p.server || "rtmp://your.server/live"],
+    examples: [editing && !p.fixed ? output.uri_host : p.server || p.example || "rtmp://your.server/live"],
     description: editing
       ? p.keyOptional
         ? "Kept as it is when left empty. To change it, type the whole address here, with the key on the end if it has one, or press Replace key and give the two halves."
