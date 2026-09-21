@@ -60,6 +60,14 @@ fn drafts(reg: &mut Registry<Call>) {
                 let outcome = server(&call)
                     .edit_apply(client(&call).as_deref(), &req.draft)
                     .map_err(|e| scene_error(&call, e))?;
+                // Apply means now. A scene that is on air takes its new layout
+                // on the next frame, as it does for an edit made straight to
+                // it. It used to sit in the document until somebody took the
+                // scene again, so the picture going out and the scene saved
+                // were two different things with nothing on screen to say so.
+                if let Some(view) = outcome.scene.as_ref() {
+                    reapply_if_on_air(&call, view).await;
+                }
                 // The draft is gone, so a preview that was drawing it goes
                 // back to the armed scene, which may be the one just changed.
                 push_preview(&call);
