@@ -472,8 +472,8 @@ pub struct SnapshotConfig {
     /// anybody in the shot" about as well.
     #[serde(default = "default_snapshot_width")]
     pub default_width: u32,
-    /// Seconds a client must wait between snapshots unless it passes
-    /// `?force=true`. Zero turns the limit off.
+    /// Seconds a client must wait between snapshots of the same picture
+    /// unless it passes `?force=true`. Zero turns the limit off.
     #[serde(default = "default_snapshot_min_interval_secs")]
     pub min_interval_secs: u64,
     /// Widths above this are refused unless the request passes
