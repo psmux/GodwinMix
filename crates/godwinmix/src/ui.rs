@@ -34,6 +34,7 @@ use std::sync::OnceLock;
 const ASSETS: &[(&str, &str)] = &[
     ("boot.js", include_str!("../../../ui/boot.js")),
     ("client/errors.js", include_str!("../../../ui/client/errors.js")),
+    ("client/devices.js", include_str!("../../../ui/client/devices.js")),
     ("client/frames.js", include_str!("../../../ui/client/frames.js")),
     ("client/index.js", include_str!("../../../ui/client/index.js")),
     ("client/kinds.js", include_str!("../../../ui/client/kinds.js")),
@@ -80,6 +81,7 @@ const ASSETS: &[(&str, &str)] = &[
     ("panels/sources/local.js", include_str!("../../../ui/panels/sources/local.js")),
     ("panels/sources/chooser-loader.js", include_str!("../../../ui/panels/sources/chooser-loader.js")),
     ("panels/sources/chooser.js", include_str!("../../../ui/panels/sources/chooser.js")),
+    ("panels/sources/drawer.js", include_str!("../../../ui/panels/sources/drawer.js")),
     ("panels/sources/chooser-preview.js", include_str!("../../../ui/panels/sources/chooser-preview.js")),
     ("panels/sources/panel.js", include_str!("../../../ui/panels/sources/panel.js")),
     ("panels/sources/setreq.js", include_str!("../../../ui/panels/sources/setreq.js")),
@@ -648,6 +650,7 @@ mod tests {
         reachable.extend(closure_of("shell/dock-menu.js"));
         reachable.extend(closure_of("shell/picker.js"));
         reachable.extend(closure_of("panels/sources/chooser.js"));
+        reachable.extend(closure_of("panels/sources/drawer.js"));
         reachable.extend(closure_of("panels/outputs/destination.js"));
         reachable.extend(closure_of("shell/sandbox.js"));
         reachable.extend(closure_of("panels/welcome/tiles.js"));

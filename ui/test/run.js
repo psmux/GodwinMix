@@ -702,7 +702,8 @@ test("a method that takes nothing still gets an empty form, not a broken one", (
  */
 async function addSourcePickerSuite() {
   const { openPicker } = await import("../shell/picker-loader.js");
-  const kinds = await import("../client/kinds.js");
+  // The device and address helpers live beside `kinds.js`, off the eager path.
+  const kinds = Object.assign({}, await import("../client/kinds.js"), await import("../client/devices.js"));
 
   /** A client that answers from a table and remembers what it was asked. */
   function stub(over) {

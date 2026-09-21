@@ -36,11 +36,9 @@ import {
   discoverDevices,
   candidateSize,
   addRequestFor,
-  alreadyAdded,
-  sameAddress,
-  withDeviceChoices,
   pluginSourceFor,
 } from "../client/kinds.js";
+import { alreadyAdded, sameAddress, withDeviceChoices } from "../client/devices.js";
 
 const LIST_KEY = "gmx.picker.list";
 
