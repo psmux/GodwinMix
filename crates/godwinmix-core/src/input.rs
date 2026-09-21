@@ -1211,14 +1211,6 @@ impl InputPipeline {
     /// that before it gets here; a kind without it is built again from
     /// nothing.
     pub fn restart(&self) -> Result<()> {
-        self.restart_then(&|| {})
-    }
-
-    /// [`Input::restart`], with something to run just before the flush that
-    /// was sent across the proxy boundaries is ended. The mixer uses it to
-    /// time that flush stop against the programme compositor, which this
-    /// module knows nothing about: see `gstutil::after_next_frame`.
-    pub fn restart_then(&self, before_resume: &dyn Fn()) -> Result<()> {
         info!(source = %self.id, "restarting input pipeline");
         self.restart_armed.store(false, Ordering::SeqCst);
         self.wake_branches();
@@ -1238,7 +1230,6 @@ impl InputPipeline {
         // The source pads were reactivated by NULL to PLAYING, but the
         // programme and mosaic are separate pipelines and stayed running.
         // End the flush across those proxy boundaries as well.
-        before_resume();
         for tee in [&self.vtee, &self.atee] {
             if let Some(sink) = tee.static_pad("sink") {
                 gstutil::resume_chain(&sink);

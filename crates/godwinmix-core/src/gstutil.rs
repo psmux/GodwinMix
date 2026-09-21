@@ -66,8 +66,14 @@ pub const FRAME_BARRIER: Duration = Duration::from_millis(150);
 /// A frame pushed after a point in time proves every conversion begun before
 /// it has been waited for. So a caller that first makes the pad one the
 /// compositor does not convert (alpha 0) and then calls this has closed the
-/// race. A caller that cannot hide the pad still gains: a live compositor
-/// sleeps until its next deadline after a push, which is when the flush lands.
+/// race.
+///
+/// `Input::restart` ends a flush across the proxy into slots that are held on
+/// air, which cannot be hidden, and it is not helped by this: its flush stop
+/// has to follow the restart at once, or the source's first segment reaches a
+/// pad that is still flushing and the compositor asserts on the buffers after
+/// it. That path keeps the race until `_flush_pad` takes the aggregator's lock
+/// upstream.
 ///
 /// The probe only signals. It never holds the streaming thread, and it is
 /// there for one frame. Answers false when no frame came, which is a
