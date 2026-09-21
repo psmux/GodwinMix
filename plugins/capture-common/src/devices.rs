@@ -63,8 +63,8 @@ pub struct Found {
 
 impl Found {
     /// A source element already pointed at this device.
-    /// Every picture size the device says it can deliver, widest pictures
-    /// first and largest first among those, each size once.
+    /// Every picture size the device says it can deliver, each size once, in
+    /// the order a person would want to read them.
     ///
     /// For the picker's list, and for choosing one when nobody has: see
     /// [`pick_size`]. Sizes given as ranges are left out, because a range is
@@ -81,10 +81,7 @@ impl Found {
             }
             out.push((w as u32, h as u32));
         }
-        out.sort_by(|a, b| {
-            let wide = |s: &(u32, u32)| s.0 >= s.1;
-            wide(b).cmp(&wide(a)).then((b.0 as u64 * b.1 as u64).cmp(&(a.0 as u64 * a.1 as u64)))
-        });
+        order_sizes(&mut out);
         out
     }
 
@@ -120,6 +117,28 @@ impl Found {
         }
         params
     }
+}
+
+/// Put sizes in the order a person reads a list of them.
+///
+/// Wide before square before tall, and among the wide ones the shape of a
+/// television first: 1920x1080 and 1280x720 are what nearly everybody is
+/// looking for, and a MacBook Pro camera's own order starts at 1080x1920.
+pub fn order_sizes(out: &mut [(u32, u32)]) {
+    let rank = |s: &(u32, u32)| match s.0.cmp(&s.1) {
+        std::cmp::Ordering::Greater => 0,
+        std::cmp::Ordering::Equal => 1,
+        std::cmp::Ordering::Less => 2,
+    };
+    // In tenths, so two sizes of all but the same shape count as one shape and
+    // the larger of them leads.
+    let off_tv = |s: &(u32, u32)| ((s.0 as f64 / s.1.max(1) as f64 - 16.0 / 9.0).abs() * 10.0) as u32;
+    out.sort_by(|a, b| {
+        rank(a)
+            .cmp(&rank(b))
+            .then(off_tv(a).cmp(&off_tv(b)))
+            .then((b.0 as u64 * b.1 as u64).cmp(&(a.0 as u64 * a.1 as u64)))
+    });
 }
 
 /// The size to ask a device for when nobody chose one.
@@ -282,6 +301,16 @@ mod tests {
     /// The modes of the MacBook Pro camera this was found on, in its own order.
     const MACBOOK: &[(u32, u32)] =
         &[(1080, 1920), (1920, 1080), (1328, 1760), (1760, 1328), (1552, 1552), (1280, 720), (640, 480)];
+
+    #[test]
+    fn sizes_read_wide_first_with_the_television_shapes_on_top() {
+        let mut sizes = MACBOOK.to_vec();
+        order_sizes(&mut sizes);
+        assert_eq!(
+            sizes,
+            vec![(1920, 1080), (1280, 720), (1760, 1328), (640, 480), (1552, 1552), (1328, 1760), (1080, 1920)]
+        );
+    }
 
     #[test]
     fn a_camera_that_lists_a_tall_mode_first_is_still_opened_wide() {

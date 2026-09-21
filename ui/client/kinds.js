@@ -533,7 +533,8 @@ function pluginKinds(client, plugins, what, already) {
         icon: entry.icon || iconFor(id, what),
         description: entry.description || plugin.description || "",
         plugin: plugin.name,
-        schema: entry.schema || (() => provideSchema(client, plugin.name, id)),
+        // Fetched with the form and not before: see `devices.js`.
+        schema: entry.schema || (() => import("./devices.js").then((m) => m.provideSchema(client, plugin.name, id))),
         build: buildFor(id),
       });
     }
@@ -575,27 +576,6 @@ function buildFor(id) {
   };
 }
 
-/** A provide's settings schema, with a Name field the core always takes. */
-export async function provideSchema(client, pluginName, id) {
-  let found = null;
-  try {
-    const described = await client.call("plugin.describe", { id: pluginName });
-    found = (described && described.schemas && described.schemas[id]) || null;
-  } catch {
-    /* an older core, or a plugin that went away between two calls */
-  }
-  const schema = found && typeof found === "object" ? JSON.parse(JSON.stringify(found)) : {};
-  schema.type = "object";
-  schema.properties = schema.properties || {};
-  if (!schema.properties.name) schema.properties.name = { type: "string", title: "Name" };
-  // A plugin's own `label` and the core's `name` ask the same question twice
-  // on one form. The name is the one shown on the tile, so it stays in view
-  // and the label goes with the other settings nobody needs on a first visit.
-  const label = schema.properties.label;
-  if (label && !label["x-gmx-group"]) schema.properties.label = Object.assign({}, label, { "x-gmx-group": "Advanced" });
-  return schema;
-}
-
 // ------------------------------------------------------------- devices
 
 /**
@@ -629,6 +609,9 @@ export function addRequestFor(candidate) {
   const uri = String(rest.uri || type).trim();
   delete rest.uri;
   delete rest.name;
+  // The sizes a camera can deliver ride on its candidate for the form to
+  // offer. They are a list to choose from and not a setting to send.
+  delete rest.sizes;
   return Object.assign({ type, uri, name: (candidate && candidate.name) || null }, rest);
 }
 

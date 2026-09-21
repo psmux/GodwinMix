@@ -4,7 +4,7 @@
 // and the settings drawer ask these questions and both are fetched on demand.
 // The page has a byte budget, and this is five kilobytes it never needed.
 
-import { addRequestFor, listPlugins, provideSchema } from "./kinds.js";
+import { addRequestFor, listPlugins } from "./kinds.js";
 
 /**
  * Whether a source's published address is the address we would add.
@@ -68,7 +68,7 @@ export function withDeviceChoices(schema, kindId, candidates, current) {
   // picks the device: `device` for a camera or a microphone, `monitor` for a
   // screen. Not the label, which is a name for the person and not a choice.
   const keys = Object.keys(props).filter(
-    (key) => key !== "label" && key !== "name" && !Array.isArray(props[key].enum) && mine.some((c) => c.params[key] !== undefined && c.params[key] !== "")
+    (key) => key !== "label" && key !== "name" && key !== "sizes" && !Array.isArray(props[key].enum) && mine.some((c) => c.params[key] !== undefined && c.params[key] !== "")
   );
   if (!keys.length) return schema;
   const next = Object.assign({}, props);
@@ -89,6 +89,38 @@ export function withDeviceChoices(schema, kindId, candidates, current) {
     // no longer there.
     const description = text ? "Pick one. The first one found is whichever the system lists first." : "Pick one.";
     next[key] = Object.assign({}, props[key], { enum: values, "x-gmx-labels": labels, description });
+  }
+  // The sizes a camera offers belong to the resolution list, not to a box of
+  // their own, so they are read off the chosen device here.
+  const resolution = next.resolution;
+  const sized = mine.filter((c) => Array.isArray(c.params.sizes) && c.params.sizes.length > 0);
+  if (resolution && (resolution.type || "string") === "string" && !Array.isArray(resolution.enum) && sized.length > 0) {
+    const wanted = current && typeof current === "object" ? current.device : current;
+    const chosen = sized.find((c) => c.params.device === wanted) || sized[0];
+    const sizes = chosen.params.sizes;
+    const picked = [""].concat(sizes);
+    const names = ["Automatic (recommended)"].concat(
+      sizes.map((size) => {
+        const parts = String(size).split("x");
+        const width = Number(parts[0]);
+        const height = Number(parts[1]);
+        const shape = width > height ? "wide" : width < height ? "tall" : "square";
+        return `${parts[0]} x ${parts[1]}, ${shape}`;
+      })
+    );
+    const kept = current && typeof current === "object" ? current.resolution : undefined;
+    if (typeof kept === "string" && kept !== "" && !picked.includes(kept)) {
+      picked.push(kept);
+      names.push(kept);
+    }
+    // Automatic picks for the person, so the words say what it will do.
+    next.resolution = Object.assign({}, resolution, {
+      enum: picked,
+      "x-gmx-labels": names,
+      description: "Automatic takes the wide size closest to the canvas.",
+    });
+    // The list belongs on the form, not inside the Advanced fold.
+    delete next.resolution["x-gmx-group"];
   }
   return Object.assign({}, schema, { properties: next });
 }
@@ -114,4 +146,54 @@ export async function schemaForSource(client, source) {
   if (!owner) return null;
   const schema = await provideSchema(client, owner.name, type);
   return Object.keys(schema.properties || {}).length > 1 ? schema : null;
+}
+
+/**
+ * What a first visit needs is named here. Everything else folds away.
+ *
+ * A plugin says which of its settings are advanced with `x-gmx-group`, and
+ * one that says so is left exactly as it is. This is for the ones that do
+ * not: an older copy of a first party plugin, or somebody else's. Without it
+ * "Capture element", a list of GStreamer element names, stood on the camera
+ * form beside the camera itself.
+ */
+const ESSENTIAL = /^(name|label|device|monitor|window|screen|display_index|uri|url|address|host|port|path|file|folder|key|stream_key|passphrase|password|text|title|message|mode|app|channel|source|input|output|resolution)$/;
+
+export function foldAdvanced(schema) {
+  const props = (schema && schema.properties) || {};
+  const declared = Object.values(props).some((p) => p && p["x-gmx-group"]);
+  if (declared) return schema;
+  const required = new Set(schema.required || []);
+  for (const [key, prop] of Object.entries(props)) {
+    if (!prop || required.has(key) || ESSENTIAL.test(key)) continue;
+    props[key] = Object.assign({}, prop, { "x-gmx-group": "Advanced" });
+  }
+  return schema;
+}
+
+/** A provide's settings schema, with a Name field the core always takes. */
+export async function provideSchema(client, pluginName, id) {
+  let found = null;
+  try {
+    const described = await client.call("plugin.describe", { id: pluginName });
+    found = (described && described.schemas && described.schemas[id]) || null;
+  } catch {
+    /* an older core, or a plugin that went away between two calls */
+  }
+  const schema = found && typeof found === "object" ? JSON.parse(JSON.stringify(found)) : {};
+  schema.type = "object";
+  schema.properties = schema.properties || {};
+  if (!schema.properties.name) schema.properties.name = { type: "string", title: "Name" };
+  // One box for what to call it, in plain view and marked optional. A plugin's
+  // own `label` asks the same question a second time, so it is taken off the
+  // form and filled from the name when the source is added: see `openForm`.
+  schema.properties.name = Object.assign({}, schema.properties.name, {
+    title: "Name (optional)",
+    description: "What to call it on its tile. Left empty, it takes the device's own name.",
+  });
+  if (schema.properties.label) {
+    delete schema.properties.label;
+    schema["x-gmx-name-is-label"] = true;
+  }
+  return foldAdvanced(schema);
 }

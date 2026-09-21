@@ -597,6 +597,9 @@ export async function openForm(client, what, kind, preset, opts = {}) {
     let answer;
     try {
       const params = kind.build(form.read());
+      // One box asks what to call it. A plugin that also takes a `label` gets
+      // the same words, which is what its own box used to be for.
+      if (schema["x-gmx-name-is-label"] && params.name && params.label === undefined) params.label = params.name;
       answer = await client.call(what === "output" ? "output.add" : "source.add", params);
     } catch (e) {
       errorToast(e, kind.title);
