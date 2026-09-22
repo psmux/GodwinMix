@@ -117,6 +117,14 @@ struct Args {
     #[arg(long)]
     rehearsal: bool,
 
+    /// Say that something starts this mixer again when it exits: a service
+    /// manager, a container restart policy or the desktop app. Only then does
+    /// `core.restart` exit, and `core.info` offer a restart to a page. Also
+    /// read from `GODWINMIX_SUPERVISED` (1, true, yes or on), which is what the
+    /// systemd unit and the compose file set.
+    #[arg(long, env = "GODWINMIX_SUPERVISED", value_parser = clap::builder::FalseyValueParser::new())]
+    supervised: bool,
+
     #[command(subcommand)]
     command: Option<Command>,
 }
@@ -641,6 +649,10 @@ pub async fn run() -> Result<()> {
     let cfg = Config::load(&config_path)
         .with_context(|| format!("could not load {}", config_path.display()))?;
     let bind = args.bind.unwrap_or_else(|| cfg.control.bind.clone());
+    control::methods::lifecycle::set_supervised(args.supervised);
+    if args.supervised {
+        info!("supervised: core.restart exits and something starts this mixer again");
+    }
     let tokens = cfg.tokens(args.rehearsal);
     match tokens.entries().len() {
         0 => info!("control API is open: no token configured"),
@@ -923,5 +935,30 @@ pub async fn run() -> Result<()> {
     let _ = handle.send(mixer::Command::Shutdown);
     server.abort();
     let _ = tokio::task::spawn_blocking(move || mixer_thread.join()).await;
+    if control::methods::lifecycle::restart_asked() {
+        // Not a clean zero: the desktop app starts its mixer again on this
+        // status only, and every supervisor reads it as "start me again".
+        info!(code = control::methods::lifecycle::RESTART_EXIT_CODE, "exiting to be restarted");
+        std::process::exit(control::methods::lifecycle::RESTART_EXIT_CODE);
+    }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// One test owns `GODWINMIX_SUPERVISED`, so nothing else in this binary
+    /// reads it while it is set.
+    #[test]
+    fn supervised_comes_from_the_flag_or_the_environment_and_is_off_otherwise() {
+        std::env::remove_var("GODWINMIX_SUPERVISED");
+        assert!(!Args::try_parse_from(["godwinmix"]).unwrap().supervised);
+        assert!(Args::try_parse_from(["godwinmix", "--supervised"]).unwrap().supervised);
+        for (value, want) in [("1", true), ("true", true), ("yes", true), ("on", true), ("0", false), ("false", false)] {
+            std::env::set_var("GODWINMIX_SUPERVISED", value);
+            assert_eq!(Args::try_parse_from(["godwinmix"]).unwrap().supervised, want, "{value}");
+        }
+        std::env::remove_var("GODWINMIX_SUPERVISED");
+    }
 }

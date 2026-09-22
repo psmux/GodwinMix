@@ -31,6 +31,7 @@ Start here if you have never run it.
 * [Start the mixer for the first time](how-to/first-run.md)
 * [Add a source](how-to/add-a-source.md): cameras, screens, microphones, files, pages and feeds
 * [Run it on a headless server](how-to/headless-server.md)
+* [Restart the mixer from the page](how-to/restart-the-mixer.md)
 * [Put it behind a reverse proxy with TLS](how-to/reverse-proxy.md)
 * [Run it on a Raspberry Pi](how-to/raspberry-pi.md)
 * [Choose a hardware encoder](how-to/choose-a-hardware-encoder.md)

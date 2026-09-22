@@ -20,6 +20,7 @@ use std::sync::Arc;
 
 pub mod agent;
 mod filters;
+pub mod lifecycle;
 mod media;
 mod nodes;
 mod outputs;
@@ -54,6 +55,7 @@ pub fn registry() -> Registry<Call> {
     let mut reg = Registry::new();
     register_core(&mut reg);
     register_introspection(&mut reg);
+    lifecycle::register(&mut reg);
     program::register(&mut reg);
     sources::register(&mut reg);
     outputs::register(&mut reg);
@@ -91,6 +93,8 @@ fn register_core(reg: &mut Registry<Call>) {
                     token: Some(call.token.info()),
                     rehearsal: call.app.rehearsal,
                     ui: presets::ui_defaults(),
+                    supervised: lifecycle::supervised(),
+                    restart: lifecycle::restart_info(),
                 })
             }),
         )

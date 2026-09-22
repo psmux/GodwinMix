@@ -923,6 +923,19 @@
           "description": "True when the core was started with `--rehearsal`, which refuses\n`output.add` and accepts rehearsal tokens.",
           "type": "boolean"
         },
+        "restart": {
+          "$ref": "#/$defs/RestartInfo",
+          "default": {
+            "how": "none",
+            "possible": false
+          },
+          "description": "Whether `core.restart` brings this core back, so a page can decide\nbetween a Restart button and a sentence."
+        },
+        "supervised": {
+          "default": false,
+          "description": "True when the core was started with `--supervised` (or\n`GODWINMIX_SUPERVISED=1`): a service manager, a container runtime or\nthe desktop app starts it again after it exits.",
+          "type": "boolean"
+        },
         "token": {
           "anyOf": [
             {
@@ -4059,6 +4072,60 @@
       ],
       "type": "string"
     },
+    "RestartAnswer": {
+      "description": "`core.restart`: what happened.",
+      "properties": {
+        "how": {
+          "$ref": "#/$defs/RestartHow"
+        },
+        "message": {
+          "description": "One sentence for a person: what happens now, or how to restart it.",
+          "type": "string"
+        },
+        "restarting": {
+          "description": "True when the core is on its way out and will be started again. False\nwhen nothing would start it again, in which case it keeps running.",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "restarting",
+        "how",
+        "message"
+      ],
+      "type": "object"
+    },
+    "RestartHow": {
+      "description": "How a core that exits gets started again.",
+      "oneOf": [
+        {
+          "const": "supervised",
+          "description": "Something watches the process and starts it again: systemd, a\ncontainer restart policy, or the desktop app.",
+          "type": "string"
+        },
+        {
+          "const": "none",
+          "description": "Nothing does. It was started by hand, and has to be started again the\nsame way.",
+          "type": "string"
+        }
+      ]
+    },
+    "RestartInfo": {
+      "description": "`core.info.restart`: can this core be restarted from a client.",
+      "properties": {
+        "how": {
+          "$ref": "#/$defs/RestartHow"
+        },
+        "possible": {
+          "description": "True when `core.restart` will bring the core back by itself.",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "possible",
+        "how"
+      ],
+      "type": "object"
+    },
     "Resync": {
       "description": "`event/resync`: the client fell behind and the stream has a hole in it.",
       "properties": {
@@ -6473,6 +6540,27 @@
       "scope": "read",
       "since": "1",
       "summary": "What this core is, what it can do, and where its edges are."
+    },
+    {
+      "destructive": true,
+      "idempotent": false,
+      "mutating": true,
+      "name": "core.restart",
+      "params": {
+        "additionalProperties": false,
+        "properties": {},
+        "type": "object"
+      },
+      "rest": {
+        "method": "POST",
+        "path": "/api/v1/core/restart"
+      },
+      "result": {
+        "$ref": "#/$defs/RestartAnswer"
+      },
+      "scope": "admin",
+      "since": "1",
+      "summary": "Stop the mixer and have it started again, when something will start it again. On a supervised core (core.info restart.possible) it answers restarting: true and exits; the programme is off air until it is back. On a core started by hand it answers restarting: false, says how to restart it, and keeps running."
     },
     {
       "destructive": false,
