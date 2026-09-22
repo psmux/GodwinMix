@@ -11,7 +11,8 @@ import { CODES } from "../client/errors.js";
 
 /**
  * @param {object} client
- * @param {{start?: string, title?: string}} opts
+ * @param {{start?: string, root?: string, title?: string}} opts
+ *   `root` names the root a relative `start` is inside, as `path.list` labels it
  * @returns {Promise<string|null>} the chosen folder, or null when cancelled
  */
 export function pickFolder(client, opts = {}) {
@@ -86,6 +87,16 @@ export function pickFolder(client, opts = {}) {
       footer: [el("button.btn", { text: "Cancel", onclick: () => m.close() }), use],
       onClose: () => resolve(chosen),
     });
-    load(opts.start || null);
+    // A relative start (the media folder is "media" in a fresh config) means
+    // relative to the mixer's own folder, not home, so it opens at that root.
+    const absolute = (p) => /^([a-zA-Z]:)?[\\/]/.test(p || "");
+    if (opts.start && !absolute(opts.start) && opts.root) {
+      load(null).then(() => {
+        const root = current && (current.roots || []).find((r) => r.label === opts.root);
+        if (root) load(root.path);
+      });
+    } else {
+      load(opts.start || null);
+    }
   });
 }

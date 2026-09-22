@@ -47,6 +47,7 @@ export function decorate(client, key, wrap, entry, onReset) {
     error(text) {
       error.textContent = text || "";
       error.hidden = !text;
+      wrap.classList.toggle("bad", !!text);
     },
     status(text) {
       status.textContent = text || "";
@@ -78,7 +79,7 @@ function folderTool(client, wrap) {
     onclick: async () => {
       const { pickFolder } = await import("./folder-picker.js");
       const input = wrap.querySelector("input");
-      const chosen = await pickFolder(client, { start: input && input.value, title: "The media folder" });
+      const chosen = await pickFolder(client, { start: input && input.value, root: "Media folder", title: "The media folder" });
       if (chosen) putValue(wrap, chosen);
     },
   });
