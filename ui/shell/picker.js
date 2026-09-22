@@ -23,7 +23,6 @@ import {
   ICONS,
   KIND_COLOUR,
   SOURCE_KINDS,
-  OUTPUT_KINDS,
   CATEGORIES,
   TEST_PATTERNS,
   loadKinds,
@@ -38,6 +37,7 @@ import {
   addRequestFor,
   pluginSourceFor,
 } from "../client/kinds.js";
+import { OUTPUT_KINDS } from "../client/destinations.js";
 import { alreadyAdded, sameAddress, easeSchema, unease } from "../client/devices.js";
 
 const LIST_KEY = "gmx.picker.list";
@@ -55,7 +55,7 @@ const LIST_KEY = "gmx.picker.list";
  */
 export async function openPicker(client, what, opts = {}) {
   const plugins = await listPlugins(client);
-  const kinds = await loadKinds(client, what, plugins).catch(
+  const kinds = await loadKinds(client, what, plugins, what === "output" ? OUTPUT_KINDS : SOURCE_KINDS).catch(
     () => (what === "output" ? OUTPUT_KINDS : SOURCE_KINDS)
   );
   if (opts.kind) {

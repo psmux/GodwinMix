@@ -10,7 +10,6 @@
 
 import { el, clear, on } from "../../shell/dom.js";
 import { errorToast } from "../../shell/toast.js";
-import { editorFor } from "../../kits/schema/index.js";
 import { rectToTransform } from "../../kits/canvas/geometry.js";
 import { itemProps, filters, filterTypes, BLENDS, AUDIO, FITS, undrawnBlend } from "./ops.js";
 
@@ -212,6 +211,9 @@ export class Inspector {
       }
       schema = helpers.forKit(eased);
     }
+    // The schema kit is a third of the composer's weight and only an item with
+    // a plugin form needs it, so it arrives with the first such item.
+    const { editorFor } = await import("../../kits/schema/index.js");
     const editor = await editorFor({
       plugin: type.plugin,
       designer: ofSource ? Object.assign({}, type.designer, { ui: undefined }) : type.designer,

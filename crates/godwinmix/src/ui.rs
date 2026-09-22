@@ -34,6 +34,7 @@ use std::sync::OnceLock;
 const ASSETS: &[(&str, &str)] = &[
     ("boot.js", include_str!("../../../ui/boot.js")),
     ("client/errors.js", include_str!("../../../ui/client/errors.js")),
+    ("client/destinations.js", include_str!("../../../ui/client/destinations.js")),
     ("client/devices.js", include_str!("../../../ui/client/devices.js")),
     ("client/frames.js", include_str!("../../../ui/client/frames.js")),
     ("client/index.js", include_str!("../../../ui/client/index.js")),
@@ -86,6 +87,7 @@ const ASSETS: &[(&str, &str)] = &[
     ("panels/sources/panel.js", include_str!("../../../ui/panels/sources/panel.js")),
     ("panels/sources/setreq.js", include_str!("../../../ui/panels/sources/setreq.js")),
     ("panels/sources/tile.js", include_str!("../../../ui/panels/sources/tile.js")),
+    ("panels/welcome/after.js", include_str!("../../../ui/panels/welcome/after.js")),
     ("panels/welcome/defaults.js", include_str!("../../../ui/panels/welcome/defaults.js")),
     ("panels/welcome/panel.js", include_str!("../../../ui/panels/welcome/panel.js")),
     ("panels/welcome/tiles.js", include_str!("../../../ui/panels/welcome/tiles.js")),
@@ -654,6 +656,8 @@ mod tests {
         reachable.extend(closure_of("panels/outputs/destination.js"));
         reachable.extend(closure_of("shell/sandbox.js"));
         reachable.extend(closure_of("panels/welcome/tiles.js"));
+        reachable.extend(closure_of("panels/welcome/after.js"));
+        reachable.extend(closure_of("kits/schema/index.js"));
         // Not imported by this page at all: it is what a sandboxed panel's own
         // HTML imports, inside the iframe, to talk the same protocol back.
         reachable.extend(closure_of("client/sandbox-client.js"));

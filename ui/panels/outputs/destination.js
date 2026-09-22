@@ -6,7 +6,7 @@
 // config and the only way to put a real key in was a text editor on the box.
 //
 // So: pick the platform, paste the key. The server address comes from the
-// table in kinds.js, the id defaults to the platform's slug, and the key is a
+// table in destinations.js, the id defaults to the platform's slug, and the key is a
 // `format: "secret"` field, which the schema form renders as a password input
 // and leaves out of its answer unless somebody retyped it.
 //
@@ -19,7 +19,7 @@
 import { el, on } from "../../shell/dom.js";
 import { modal } from "../../shell/modal.js";
 import { toast, errorToast } from "../../shell/toast.js";
-import { PLATFORMS, platform, platformOfHost, joinKey } from "../../client/kinds.js";
+import { PLATFORMS, platform, platformOfHost, joinKey } from "../../client/destinations.js";
 
 /** What the two reconnect policies are called where somebody has to pick one. */
 const OWN_LABEL = "Retry quickly (a server you run)";
