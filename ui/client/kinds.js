@@ -153,6 +153,34 @@ export const TEST_PATTERNS = [
   { uri: "test://snow", name: "Snow", note: "Noise, which never looks frozen" },
 ];
 
+/**
+ * The two fields every destination form has, written once. Both are jargon
+ * without a hint: "own" and "cdn" are the protocol's words and a buffer in
+ * seconds says nothing about what it is for. The labels name what is being
+ * chosen; the values stay as the wire has them.
+ */
+const POLICY_FIELD = {
+  type: "string",
+  title: "When it drops",
+  enum: ["own", "cdn"],
+  "x-gmx-labels": ["Retry quickly (a server you run)", "Back off (a platform that penalises hammering)"],
+  default: "own",
+  description:
+    "own retries quickly, for a server you run; cdn backs off harder, for a platform that " +
+    "penalises hammering.",
+};
+
+const QUEUE_FIELD = {
+  type: "number",
+  title: "Outage buffer",
+  default: 4,
+  minimum: 0,
+  maximum: 60,
+  "x-gmx-unit": "s",
+  "x-gmx-group": "Advanced",
+  description: "How much encoded video to hold, so a short drop is invisible to the viewer.",
+};
+
 export const OUTPUT_KINDS = [
   {
     id: "rtmp",
@@ -168,14 +196,8 @@ export const OUTPUT_KINDS = [
       properties: {
         id: { type: "string", title: "Name", examples: ["youtube"], description: "A short id. It appears in alerts and in the outputs list." },
         uri: { type: "string", title: "Address and key", examples: ["rtmp://a.rtmp.youtube.com/live2/xxxx-xxxx"] },
-        policy: {
-          type: "string",
-          title: "When it drops",
-          enum: ["own", "cdn"],
-          default: "own",
-          description: "own: reconnect on our schedule, for a server you run. cdn: back off the way the big platforms want.",
-        },
-        queue_secs: { type: "number", title: "Outage buffer", default: 4, minimum: 0, maximum: 60, "x-gmx-unit": "s", "x-gmx-group": "Advanced" },
+        policy: POLICY_FIELD,
+        queue_secs: QUEUE_FIELD,
       },
     },
     build: (v) => ({ id: v.id, uri: v.uri, policy: v.policy || "own", queue_secs: v.queue_secs ?? 4 }),
@@ -194,15 +216,9 @@ export const OUTPUT_KINDS = [
       properties: {
         id: { type: "string", title: "Name", examples: ["studio"], description: "A short id. It appears in alerts and in the outputs list." },
         uri: { type: "string", title: "Address", examples: ["srt://192.168.1.50:9000"], description: "Caller mode unless the address says otherwise." },
-        latency_ms: { type: "integer", title: "Receive buffer", default: 125, minimum: 0, maximum: 10000, "x-gmx-unit": "ms", "x-gmx-group": "Advanced" },
-        policy: {
-          type: "string",
-          title: "When it drops",
-          enum: ["own", "cdn"],
-          default: "own",
-          description: "own: reconnect on our schedule, for a server you run. cdn: back off the way the big platforms want.",
-        },
-        queue_secs: { type: "number", title: "Outage buffer", default: 4, minimum: 0, maximum: 60, "x-gmx-unit": "s", "x-gmx-group": "Advanced" },
+        latency_ms: { type: "integer", title: "Receive buffer", default: 125, minimum: 0, maximum: 10000, "x-gmx-unit": "ms", "x-gmx-group": "Advanced", description: "How much the receiver is asked to hold, which is what an SRT link trades for a lossy network." },
+        policy: POLICY_FIELD,
+        queue_secs: QUEUE_FIELD,
       },
     },
     build: (v) => ({

@@ -46,6 +46,27 @@ export function stateLabel(output) {
   }
 }
 
+/** Goes before the count stops being the news. The `own` policy settles at
+    one every two seconds, so this is about twenty seconds of trying. */
+export const ADVICE_AFTER = 10;
+
+/**
+ * "Reconnecting, attempt 152" is the truth and it is not the next step. A
+ * destination that has never answered is a wrong address or a server that is
+ * not running, and both are fixed away from this page.
+ */
+export function stalledAdvice(output) {
+  if (output.has_key === false) return "";
+  if (output.state !== "reconnecting") return "";
+  if ((output.reconnects || 0) < ADVICE_AFTER) return "";
+  // The core cuts an address off after the host and puts an ellipsis there,
+  // which reads badly in front of a full stop. The host is the part worth
+  // naming anyway: it is what nothing answered at.
+  const host = String(output.uri_host || "").replace(/\/?…$/, "");
+  const where = host ? ` at ${host}` : "";
+  return `Nothing answered${where}. Check the address and that the server is up.`;
+}
+
 /** Which dot a destination gets. A missing key is a fault, not a warning. */
 export function dotClass(output) {
   if (output.state === "live") return "live";
@@ -200,6 +221,7 @@ class OutputsPanel extends HTMLElement {
     const label = el("span.sm" + (needsKey ? ".needs-key" : ".dim"));
     const host = el("span.ellipsis.grow");
     const numbers = el("span.num");
+    const advice = el("div.sm.output-advice", { hidden: true });
     const node = el("div.output-row", {}, [
       el("div.row", {}, [
         dot,
@@ -234,9 +256,15 @@ class OutputsPanel extends HTMLElement {
         }),
       ]),
       el("div.row.sm.faint.output-detail", {}, [host, numbers]),
+      advice,
     ]);
     const update = (next) => {
       current = next;
+      // A line of its own rather than a longer label: the label shares a row
+      // with three buttons, and a sentence in there wraps them.
+      const say = stalledAdvice(next);
+      write(advice, "textContent", say);
+      write(advice, "hidden", !say);
       write(dot, "className", "dot " + dotClass(next));
       write(dot, "title", next.state || "");
       write(label, "textContent", stateLabel(next));
