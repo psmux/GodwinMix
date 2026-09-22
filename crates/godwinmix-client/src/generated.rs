@@ -916,16 +916,26 @@ pub struct IdRequest {
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct ImportObsRequest {
+    /// Add the sources the scenes draw, each through `source.add`. Left out,
+    /// only the scenes are added and the answer carries a `[[sources]]` block
+    /// in `config_toml` instead.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub add_sources: Option<bool>,
+    /// The collection JSON itself, as text: what a page reads from the file
+    /// the person picked. Give this or `path`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub content: Option<String>,
     /// The collection JSON exported from OBS (Scene Collection, Export), as a
-    /// path on the machine the core is running on.
-    pub path: String,
+    /// path on the machine the core is running on. Give this or `content`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub path: Option<String>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct ImportReport {
-    /// The `[[sources]]` block to paste into a config, so the sources the
-    /// scenes draw can be added in one edit rather than one call each.
+    /// The `[[sources]]` block for a config file. Only for an import that did
+    /// not add the sources itself, which is what the command line wants.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub config_toml: Option<String>,
     /// OBS attaches a filter to a source, so a camera keyed in one scene is
@@ -942,8 +952,15 @@ pub struct ImportReport {
     /// Every OBS source and what became of it: carried across, needing a
     /// plugin that is not installed, or skipped with the reason.
     pub source_report: Vec<SourceReport>,
-    /// The sources the collection needs, which have to be added separately.
+    /// The sources the collection needs, by id. Without `add_sources` they
+    /// have to be added separately.
     pub sources: Vec<String>,
+    /// With `add_sources`: the sources added to the mixer, by id.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub sources_added: Option<Vec<String>>,
+    /// With `add_sources`: the sources that were not added, each with why.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub sources_not_added: Option<Vec<SourceNotAdded>>,
 }
 
 /// `scene.import`.
@@ -2189,6 +2206,18 @@ pub struct SourceMeta {
     pub name: Option<String>,
 }
 
+/// A source the import found and did not add, and why.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct SourceNotAdded {
+    pub id: String,
+    /// The plugin that plays it, when that is what is missing, so a page can
+    /// offer to install it.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub plugin: Option<String>,
+    pub reason: String,
+}
+
 /// Where a seekable source has got to, which is what the seek endpoint answers
 /// with.
 ///
@@ -2757,7 +2786,7 @@ pub const METHODS: [MethodInfo; 127] = [
     MethodInfo { name: "scene.graphic.list", summary: "Every graphic template this core can place, with what each one takes.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/scenes/graphic/list")) },
     MethodInfo { name: "scene.history.mark", summary: "Group the changes that follow into one undo step, until the next mark. This is what makes a drag of forty moves one Ctrl+Z.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/scenes/history/mark")) },
     MethodInfo { name: "scene.import", summary: "Read a collection bundle, a zip or the directory it unpacks to, and add its scenes to this one. Answers with a relink report for any asset that did not come across.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/scenes/import")) },
-    MethodInfo { name: "scene.import.obs", summary: "Read an OBS Studio scene collection and add its scenes to this one.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/scenes/import/obs")) },
+    MethodInfo { name: "scene.import.obs", summary: "Read an OBS Studio scene collection and add its scenes to this one. Send the file's text as `content` (what a page's file picker reads) or a `path` on the mixer's machine. With `add_sources: true` the sources the scenes draw are added through source.add, and the answer says which were added and why any were not.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/scenes/import/obs")) },
     MethodInfo { name: "scene.item.add", summary: "Put something on a scene's canvas. With no transform it lands in the next free cell, so a drop never needs a dialog.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/scenes/item/add")) },
     MethodInfo { name: "scene.item.align", summary: "Line items up on an edge: left, right, top, bottom, center-x or center-y.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/scenes/item/align")) },
     MethodInfo { name: "scene.item.arrange_grid", summary: "Lay items out in a grid of `cols` columns.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/scenes/item/arrange_grid")) },
@@ -3395,7 +3424,7 @@ impl Client {
         self.call("scene.import", params).await
     }
 
-    /// Read an OBS Studio scene collection and add its scenes to this one.
+    /// Read an OBS Studio scene collection and add its scenes to this one. Send the file's text as `content` (what a page's file picker reads) or a `path` on the mixer's machine. With `add_sources: true` the sources the scenes draw are added through source.add, and the answer says which were added and why any were not.
     pub async fn scene_import_obs(&self, params: &ImportObsRequest) -> Result<ImportReport> {
         self.call("scene.import.obs", params).await
     }

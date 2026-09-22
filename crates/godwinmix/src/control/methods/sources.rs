@@ -192,7 +192,9 @@ async fn find(call: &Call, id: &str) -> Result<SourceStatus, RpcError> {
         })
 }
 
-async fn add(call: Call, params: Value) -> Result<Value, RpcError> {
+/// Also what `scene.import.obs` adds its sources through, so an imported
+/// source arrives exactly as one added by hand.
+pub(super) async fn add(call: Call, params: Value) -> Result<Value, RpcError> {
     let req: AddSourceRequest = call.params(&params)?;
     let id = crate::control::add_source_now(&call.app, req)
         .await

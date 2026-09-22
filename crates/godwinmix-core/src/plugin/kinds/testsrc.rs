@@ -47,9 +47,15 @@ fn claims(uri: &str) -> Option<u16> {
     uri.trim().to_lowercase().starts_with("test://").then_some(MANIFEST.rank)
 }
 
-/// The pattern after `test://`, defaulting to colour bars.
+/// The pattern after `test://`, defaulting to colour bars. An address that
+/// is not a `test://` one at all, such as the type id `test/source` that
+/// `source.add` is given for a source with no address of its own, is bars too.
 fn pattern(uri: &str) -> String {
-    let rest = uri.trim().trim_start_matches("test://").trim_start_matches("TEST://");
+    let uri = uri.trim();
+    if !uri.to_ascii_lowercase().starts_with("test://") {
+        return "smpte".to_string();
+    }
+    let rest = uri.trim_start_matches("test://").trim_start_matches("TEST://");
     let name = rest.split(['?', '#', '/']).next().unwrap_or("");
     if name.is_empty() { "smpte".to_string() } else { name.to_string() }
 }
@@ -176,6 +182,8 @@ mod tests {
         assert_eq!(pattern("test://"), "smpte");
         assert_eq!(pattern("test://ball"), "ball");
         assert_eq!(pattern("test://snow?x=1"), "snow");
+        assert_eq!(pattern("test/source"), "smpte", "the type id given as the address");
+        assert_eq!(pattern(""), "smpte");
     }
 
     fn params_for(uri: &str) -> Params {
