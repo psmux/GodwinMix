@@ -2,7 +2,18 @@
 
 Open **Outputs**, choose **Record**, select a folder and format, then choose
 **Start recording**. The folder is on the mixer, including when the UI is on
-another computer. The output row shows the filename, status and amount of
+another computer. The dialog opens with the default filled in, `Videos/GodwinMix`
+in the mixer's home folder, so Start recording works on the first press.
+
+To record somewhere else, press **Choose** beside the folder. That walks the
+folders on the mixer: its home folder, its media folder and the folder its
+config is in, and nothing outside them. Each folder the mixer cannot write
+into is marked read only, and **Use this folder** stays off while you are in
+one. To make a new folder, type its name and press **New folder**. A script
+does the same with `path.list` and `path.create`, described in the
+[HTTP API reference](../reference/http-api.md).
+
+The output row shows the filename, status and amount of
 muxed data. Choose **Stop recording** when the programme is finished.
 
 This built in recording path works on Windows, macOS and Linux without a

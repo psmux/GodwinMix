@@ -2,14 +2,56 @@
 
 The canvas size, the programme bitrate, the multiview and snapshot switches,
 the media folder, the safety rules and the rest of the mixer's own settings
-live in its config file, `godwinmix.toml`. You can change them over the
-control API without opening the file, and the file keeps every comment you
-wrote in it.
+live in its config file, `godwinmix.toml`. You change them from the web UI
+or over the control API, never by opening the file, and the file keeps every
+comment you wrote in it.
 
-The web UI does not have a Mixer settings dialog yet. It will be built on the
-methods below; until then, use the API from a terminal as shown here.
+## In the web UI
 
-## See what is set
+Press the gear at the top right. That opens **Settings for this page**: the
+theme, the tile pictures, the confirms, all kept in this browser and nothing
+to do with the mixer. The **Mixer settings** button at its top opens the
+mixer's own settings. The palette has it too (Ctrl+K, then type "mixer
+settings"). It needs a token with admin scope; with a lesser one the dialog
+says so and who to ask.
+
+The settings are grouped the way the config file is: Picture, Programme
+stream, Hardware, Multiview, Snapshots, Files, This mixer, Security, Safety
+and the rest. Each field has its range and unit, and the sentence from the
+config file under it. Change what you want and press **Save**. Only the
+fields you changed are sent.
+
+When the mixer refuses a value, nothing is saved, and the reason appears in
+red under the field it is about, with the range that would work. Fix it and
+press Save again.
+
+After a save each field you changed says when it takes effect: in force now,
+used by the next source added, or waiting for the mixer to restart. A change
+still waiting for a restart says so the next time you open the dialog, and a
+line at the top counts them. [Restart the mixer](restart-the-mixer.md) to
+apply them.
+
+**Default** under a field takes that key out of the file so the built in
+default applies. It only shows for keys the file sets.
+
+Two fields have a helper. The media folder has **Choose a folder**, which
+walks the folders on the mixer (see [record to a file](record-to-a-file.md)
+for the same picker). The control token has **Generate a new token**. The
+mixer never shows a token it has, so the field is always empty: type or
+generate a new one, copy it somewhere safe, and Save. It takes effect when the
+mixer restarts, and from then on every page asks for the new one.
+
+Two switches also sit where the refusal used to be. With multiview off, the
+Programme monitor shows a **Multiview on** switch, which takes effect when the
+mixer restarts. The Command source in Add
+sources shows **Allow command sources on this mixer** above its fields, and
+that one is in force at once, so the add that follows works.
+
+## From a terminal
+
+The dialog is built on these methods, and a script can use them the same way.
+
+### See what is set
 
 ```sh
 curl -s -H "authorization: Bearer $GODWINMIX_TOKEN" \
@@ -21,7 +63,7 @@ does not set it), where the value came from, and `applies`: when a change to
 it takes effect. The control token is never sent back; its row only says
 whether one is set.
 
-## Change one
+### Change one
 
 ```sh
 curl -s -X POST -H "authorization: Bearer $GODWINMIX_TOKEN" \
@@ -49,7 +91,7 @@ Look at the answer before you walk away:
 
 Add `"dry_run": true` to see that split without writing anything.
 
-## Put one back to its default
+### Put one back to its default
 
 ```sh
 curl -s -X POST -H "authorization: Bearer $GODWINMIX_TOKEN" \
@@ -60,7 +102,7 @@ curl -s -X POST -H "authorization: Bearer $GODWINMIX_TOKEN" \
 
 This takes the key out of the file, so the built in default applies.
 
-## Change the control token
+### Change the control token
 
 Send the new token as `control.token`. It is written to the file and takes
 effect on the next start, so keep a copy before you restart or you will not
