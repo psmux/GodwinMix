@@ -734,6 +734,7 @@ export interface MediaItem {
 }
 
 export interface MediaListing {
+  created?: boolean;
   dir: string;
   error?: string | null;
   items: MediaItem[];

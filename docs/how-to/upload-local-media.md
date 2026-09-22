@@ -19,6 +19,11 @@ or another upload is using it, choose a different name and retry. The server
 also refuses a collision created while an upload is in progress. A partial
 upload remains hidden until all bytes have been written and saved.
 
+You never have to make the media folder (`[media] dir`, `media` beside where
+the mixer runs by default). The mixer makes it when it starts, and again the
+next time `media.list` finds it gone, when the answer carries `"created": true`
+once. Only a folder it cannot make comes back as an `error`, with the reason.
+
 Uploads require `allow_upload = true` under `[media]` and must fit within
 `max_upload_bytes`. The media directory must support hard links, which are used
 to publish a completed file atomically without replacing existing work. NTFS,

@@ -71,3 +71,20 @@ pub fn reserve(folder: &Path, id: &str, format: &str) -> Result<PathBuf> {
     }
     anyhow::bail!("cannot reserve a new recording name; choose another folder and start again")
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A recording folder that is not there yet is made, nested folders and
+    /// all, before the first file is reserved in it.
+    #[test]
+    fn a_missing_recording_folder_is_made() {
+        let base = std::env::temp_dir().join(format!("gmx-record-folder-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&base);
+        let folder = base.join("show").join("tonight");
+        let path = reserve(&folder, "rec", "mkv").expect("the folder is made");
+        assert!(path.starts_with(&folder) && path.is_file());
+        let _ = std::fs::remove_dir_all(&base);
+    }
+}

@@ -8,7 +8,7 @@ these and nothing else. A generated `openapi.json` and a `protocol.md` from
 | | |
 |---|---|
 | `GET /api/status` | full snapshot |
-| `GET /api/media` | ad clips found in the configured library |
+| `GET /api/media` | ad clips found in the configured library. `GET /api/v1/media` is `media.list`: `{dir, items, error}`, plus `"created": true` on the listing that had to make a missing folder. `error` is set only when the folder could not be read or made |
 | `POST /api/take` | `{"source": "cam1"}`, or `{"source": null}` for black |
 | `POST /api/sources` | add a source at runtime: `{"id","uri","name","kind","superimpose"}` |
 | `DELETE /api/sources/{id}` | remove one |

@@ -837,6 +837,13 @@ pub async fn run() -> Result<()> {
     let mixer_thread = mixer::spawn(mix, cmd_rx, handle.clone());
 
     let library = Arc::new(media::MediaLibrary::new(cfg_media));
+    // Made now rather than when somebody first opens the Media tab, so the
+    // folder is there to drop files into by hand as well.
+    match library.ensure_dir() {
+        Ok(true) => info!(dir = %library.dir().display(), "made the media folder"),
+        Ok(false) => {}
+        Err(e) => warn!(dir = %library.dir().display(), error = %e, "could not make the media folder; clips cannot be uploaded until it can be"),
+    }
     let converter = Arc::new(convert::Converter::new(
         handle.clone(),
         library.cfg().convert_threads,

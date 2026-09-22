@@ -77,6 +77,10 @@ pub struct MediaListing {
     /// Set when the directory itself could not be read, so the UI can say why
     /// the list is empty instead of just showing nothing.
     pub error: Option<String>,
+    /// True when the folder was not there and this listing made it, so a
+    /// client can say "made the media folder" once instead of nothing.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub created: bool,
 }
 
 /// Cached probe result, keyed by path and invalidated when the file changes.
@@ -114,6 +118,18 @@ impl MediaLibrary {
         &self.cfg
     }
 
+    /// Make the library's folder when it is not there. `Ok(true)` when it was
+    /// made now. Called at start and on every listing, because nobody should
+    /// have to make a folder by hand for a mixer that can make it itself;
+    /// uploading already did.
+    pub fn ensure_dir(&self) -> std::io::Result<bool> {
+        if self.dir().is_dir() {
+            return Ok(false);
+        }
+        std::fs::create_dir_all(self.dir())?;
+        Ok(true)
+    }
+
     /// The real path a listed name refers to, or an error. Names come back
     /// from `list` with `/` separators and may name a subdirectory, so this
     /// cannot simply refuse every slash the way an upload does. It checks each
@@ -147,17 +163,23 @@ impl MediaLibrary {
         let dir = self.dir().to_path_buf();
         let mut items = Vec::new();
         let mut error = None;
+        let created = match self.ensure_dir() {
+            Ok(made) => made,
+            Err(e) => {
+                warn!(dir = %dir.display(), ?e, "could not make the media folder");
+                error = Some(format!(
+                    "The media folder {} is not there and could not be made: {e}. The mixer \
+                     needs a folder it can write to for clips; until then nothing can be \
+                     uploaded or listed.",
+                    dir.display()
+                ));
+                false
+            }
+        };
 
         match self.walk(&dir, &dir, 0, &mut items) {
             Ok(()) => {}
-            // A folder nobody has made yet is an empty library, and saying how
-            // to fill it is more use than "os error 2" on a first run.
-            Err(_) if !dir.exists() => {
-                error = Some(format!(
-                    "The media folder {} does not exist yet. Create it and put files in it, or upload one here, then press Rescan.",
-                    dir.display()
-                ));
-            }
+            Err(_) if error.is_some() => {}
             Err(e) => {
                 warn!(dir = %dir.display(), ?e, "could not read the media library");
                 error = Some(format!("{e:#}"));
@@ -188,7 +210,7 @@ impl MediaLibrary {
                 it.conversion = conv.state(&it.name);
             }
         }
-        MediaListing { dir: dir.display().to_string(), items, error }
+        MediaListing { dir: dir.display().to_string(), items, error, created }
     }
 
     fn walk(
@@ -377,6 +399,37 @@ mod tests {
         assert!(safe_upload_name(".hidden.mp4").is_err());
         assert!(safe_upload_name("notes.txt").is_err(), "not a supported media file");
         assert!(safe_upload_name("").is_err());
+    }
+
+    #[test]
+    fn listing_a_library_whose_folder_is_missing_makes_it() {
+        let dir = std::env::temp_dir().join(format!("gmx-media-made-{}", std::process::id())).join("clips");
+        let _ = std::fs::remove_dir_all(dir.parent().unwrap());
+        let lib = MediaLibrary::new(MediaConfig { dir: dir.display().to_string(), ..Default::default() });
+        let first = lib.list_with(None);
+        assert!(first.created, "made on the first listing");
+        assert!(first.error.is_none(), "an empty folder is not an error: {:?}", first.error);
+        assert!(dir.is_dir());
+        let second = lib.list_with(None);
+        assert!(!second.created, "and said only once");
+        let text = serde_json::to_string(&second).unwrap();
+        assert!(!text.contains("created"), "absent when nothing was made: {text}");
+        let _ = std::fs::remove_dir_all(dir.parent().unwrap());
+    }
+
+    #[test]
+    fn a_folder_that_cannot_be_made_says_so_without_an_errno_code() {
+        let base = std::env::temp_dir().join(format!("gmx-media-blocked-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&base);
+        std::fs::create_dir_all(&base).unwrap();
+        // A file where the parent folder would be: nothing can be made under it.
+        std::fs::write(base.join("file"), b"x").unwrap();
+        let lib = MediaLibrary::new(MediaConfig { dir: base.join("file/clips").display().to_string(), ..Default::default() });
+        let listing = lib.list_with(None);
+        let error = listing.error.expect("it says why the list is empty");
+        assert!(error.contains("could not be made"), "{error}");
+        assert!(!listing.created);
+        let _ = std::fs::remove_dir_all(&base);
     }
 
     #[test]
