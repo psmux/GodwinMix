@@ -93,6 +93,7 @@ const ASSETS: &[(&str, &str)] = &[
     ("panels/welcome/tiles.js", include_str!("../../../ui/panels/welcome/tiles.js")),
     ("shell/commands.js", include_str!("../../../ui/shell/commands.js")),
     ("shell/dom.js", include_str!("../../../ui/shell/dom.js")),
+    ("shell/error-actions.js", include_str!("../../../ui/shell/error-actions.js")),
     ("shell/focus.js", include_str!("../../../ui/shell/focus.js")),
     ("shell/fader.js", include_str!("../../../ui/shell/fader.js")),
     ("shell/firstrun.js", include_str!("../../../ui/shell/firstrun.js")),
@@ -145,6 +146,7 @@ const DEV_ASSETS: &[(&str, &str)] = &[
     ("test/index.html", include_str!("../../../ui/test/index.html")),
     ("test/run.js", include_str!("../../../ui/test/run.js")),
     ("test/source-files.js", include_str!("../../../ui/test/source-files.js")),
+    ("test/error-actions.js", include_str!("../../../ui/test/error-actions.js")),
     ("test/source-chooser.js", include_str!("../../../ui/test/source-chooser.js")),
     ("test/studio.js", include_str!("../../../ui/test/studio.js")),
     ("test/monitor-resize.js", include_str!("../../../ui/test/monitor-resize.js")),
@@ -657,6 +659,7 @@ mod tests {
         reachable.extend(closure_of("shell/sandbox.js"));
         reachable.extend(closure_of("panels/welcome/tiles.js"));
         reachable.extend(closure_of("panels/welcome/after.js"));
+        reachable.extend(closure_of("shell/error-actions.js"));
         reachable.extend(closure_of("kits/schema/index.js"));
         // Not imported by this page at all: it is what a sandboxed panel's own
         // HTML imports, inside the iframe, to talk the same protocol back.
@@ -694,6 +697,7 @@ mod tests {
             ("shell/palette.js", "Ctrl+K"),
             ("shell/sandbox.js", "a sandboxed plugin panel"),
             ("panels/welcome/tiles.js", "the welcome dialog"),
+            ("shell/error-actions.js", "a button pressed on an error toast"),
         ] {
             assert!(known(path).is_some(), "{path} is not served at all");
             assert!(!eager.contains(path), "{path} is fetched at load, but only {who} needs it");

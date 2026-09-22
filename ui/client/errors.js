@@ -62,6 +62,15 @@ export class RpcError extends Error {
     return Number.isFinite(ms) ? ms : null;
   }
 
+  /**
+   * The button the core offers for this refusal, `data.action`, or null.
+   * `{kind, label, ...}`; the kinds are in docs/reference/errors.md.
+   */
+  get action() {
+    const a = this.data.action;
+    return a && typeof a.kind === "string" && typeof a.label === "string" ? a : null;
+  }
+
   /** The sentence after the last full stop is the next step, by convention. */
   get nextStep() {
     const parts = String(this.message).split(/(?<=\.)\s+/).filter(Boolean);
