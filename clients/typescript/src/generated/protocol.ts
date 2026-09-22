@@ -101,6 +101,9 @@ export interface AgentStateRequest {
 /** The nine alignment keywords, used to place content inside its frame. */
 export type Align = "top-left" | "top-center" | "top-right" | "center-left" | "center" | "center-right" | "bottom-left" | "bottom-center" | "bottom-right";
 
+/** When a change to a key takes effect. */
+export type Applies = "live" | "next_source" | "restart";
+
 /** `scene.apply_graphic`. */
 export interface ApplyGraphicRequest {
   frame?: boolean;
@@ -229,6 +232,57 @@ export interface CellAssignment {
   w: number;
   x: number;
   y: number;
+}
+
+/** One key this call changed, and when the change takes effect. */
+export interface ConfigChanged {
+  applies: Applies;
+  key: string;
+  note?: string | null;
+}
+
+export interface ConfigGetRequest {
+  keys?: string[];
+}
+
+export interface ConfigGetResult {
+  keys: ConfigKey[];
+  needs_restart: string[];
+  path: string;
+}
+
+/** One setting as `config.get` reports it. */
+export interface ConfigKey {
+  applies: Applies;
+  default: unknown;
+  key: string;
+  overridden_by?: string | null;
+  pending: boolean;
+  secret: boolean;
+  set?: boolean | null;
+  source: string;
+  value: unknown;
+}
+
+export interface ConfigResetRequest {
+  dry_run?: boolean;
+  keys: string[];
+}
+
+export interface ConfigSetRequest {
+  dry_run?: boolean;
+  values: Record<string, unknown>;
+}
+
+/** What `config.set` and `config.reset` answer with. */
+export interface ConfigSetResult {
+  applied: string[];
+  changed: ConfigChanged[];
+  dry_run: boolean;
+  needs_restart: string[];
+  next_source: string[];
+  path: string;
+  unchanged: string[];
 }
 
 export type ConversionPhase = "running" | "done" | "failed";
@@ -1547,6 +1601,10 @@ export interface MethodParams {
   "adbreak.start": AdBreakRequest;
   "agent.state": AgentStateRequest;
   "codec.list": Record<string, never>;
+  "config.get": ConfigGetRequest;
+  "config.reset": ConfigResetRequest;
+  "config.schema": Record<string, never>;
+  "config.set": ConfigSetRequest;
   "core.api": Record<string, never>;
   "core.doctor": Record<string, never>;
   "core.info": Record<string, never>;
@@ -1677,6 +1735,10 @@ export interface MethodResults {
   "adbreak.start": Record<string, unknown>;
   "agent.state": Record<string, unknown>;
   "codec.list": Record<string, unknown>;
+  "config.get": ConfigGetResult;
+  "config.reset": ConfigSetResult;
+  "config.schema": Record<string, unknown>;
+  "config.set": ConfigSetResult;
   "core.api": Record<string, unknown>;
   "core.doctor": Record<string, unknown>;
   "core.info": CoreInfo;
@@ -1845,6 +1907,10 @@ export const METHODS: readonly MethodInfo[] = [
   { name: "adbreak.start", summary: "Interrupt the programme with a clip, then rejoin live when it ends.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/adbreak/start" } },
   { name: "agent.state", summary: "The compact document written for agents: the programme, each source's state and a motion score saying how much its picture is changing.", scope: "read", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/agent/state" } },
   { name: "codec.list", summary: "Every codec and element in the catalogue, which of them this machine actually has, and what it would pick.", scope: "read", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/codecs" } },
+  { name: "config.get", summary: "The mixer's settings: each key's value in the config file, its default, when a change to it takes effect, and which keys are waiting for a restart. Secrets say only whether one is set.", scope: "admin", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/config" } },
+  { name: "config.reset", summary: "Put settings back to their defaults by taking them out of the config file. Answers like config.set.", scope: "admin", mutating: true, destructive: true, rest: { method: "POST", path: "/api/v1/config/reset" } },
+  { name: "config.schema", summary: "Every setting config.set takes, as one JSON Schema: type, title, description, default, range or choices, and x-gmx-applies (live, next_source or restart).", scope: "read", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/config/schema" } },
+  { name: "config.set", summary: "Change settings in the config file, keeping its comments. Every value is checked first and nothing is written unless all of them fit. Live keys take effect at once; the answer says which wait for the next source or a restart.", scope: "admin", mutating: true, destructive: true, rest: { method: "POST", path: "/api/v1/config/set" } },
   { name: "core.api", summary: "Every method, event and type as JSON Schema. The same document as protocol.json and `godwinmix --api-info`.", scope: "read", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/core/api" } },
   { name: "core.doctor", summary: "The environment checks: GStreamer, the elements, the config, the disk and the ports. The same list `gmx doctor` prints.", scope: "read", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/core/doctor" } },
   { name: "core.info", summary: "What this core is, what it can do, and where its edges are.", scope: "read", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/core/info" } },
@@ -2036,6 +2102,26 @@ export class GeneratedMethods {
   /** Every codec and element in the catalogue, which of them this machine actually has, and what it would pick. */
   codecList(): Promise<Record<string, unknown>> {
     return this._call("codec.list", {}) as Promise<Record<string, unknown>>;
+  }
+
+  /** The mixer's settings: each key's value in the config file, its default, when a change to it takes effect, and which keys are waiting for a restart. Secrets say only whether one is set. */
+  configGet(params: ConfigGetRequest = {}): Promise<ConfigGetResult> {
+    return this._call("config.get", params as unknown as Record<string, unknown>) as Promise<ConfigGetResult>;
+  }
+
+  /** Put settings back to their defaults by taking them out of the config file. Answers like config.set. */
+  configReset(params: ConfigResetRequest): Promise<ConfigSetResult> {
+    return this._call("config.reset", params as unknown as Record<string, unknown>) as Promise<ConfigSetResult>;
+  }
+
+  /** Every setting config.set takes, as one JSON Schema: type, title, description, default, range or choices, and x-gmx-applies (live, next_source or restart). */
+  configSchema(): Promise<Record<string, unknown>> {
+    return this._call("config.schema", {}) as Promise<Record<string, unknown>>;
+  }
+
+  /** Change settings in the config file, keeping its comments. Every value is checked first and nothing is written unless all of them fit. Live keys take effect at once; the answer says which wait for the next source or a restart. */
+  configSet(params: ConfigSetRequest): Promise<ConfigSetResult> {
+    return this._call("config.set", params as unknown as Record<string, unknown>) as Promise<ConfigSetResult>;
   }
 
   /** Every method, event and type as JSON Schema. The same document as protocol.json and `godwinmix --api-info`. */

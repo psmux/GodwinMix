@@ -351,6 +351,8 @@ pub fn rest_transform(method: &str) -> Option<Rest> {
             | "doctor"
             | "startup_report"
             | "session_log"
+            // `config.schema` describes the settings and changes nothing.
+            | "schema"
     ) {
         "GET"
     } else {

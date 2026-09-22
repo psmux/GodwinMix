@@ -37,6 +37,10 @@ Keys accepted on every method, handled before a method runs.
 | `adbreak.start` | `POST /api/v1/adbreak/start` | operate |  | 1 | Interrupt the programme with a clip, then rejoin live when it ends. |
 | `agent.state` | `GET /api/v1/agent/state` | read |  | 1 | The compact document written for agents: the programme, each source's state and a motion score saying how much its picture is changing. |
 | `codec.list` | `GET /api/v1/codecs` | read |  | 1 | Every codec and element in the catalogue, which of them this machine actually has, and what it would pick. |
+| `config.get` | `GET /api/v1/config` | admin |  | 1 | The mixer's settings: each key's value in the config file, its default, when a change to it takes effect, and which keys are waiting for a restart. Secrets say only whether one is set. |
+| `config.reset` | `POST /api/v1/config/reset` | admin | yes | 1 | Put settings back to their defaults by taking them out of the config file. Answers like config.set. |
+| `config.schema` | `GET /api/v1/config/schema` | read |  | 1 | Every setting config.set takes, as one JSON Schema: type, title, description, default, range or choices, and x-gmx-applies (live, next_source or restart). |
+| `config.set` | `POST /api/v1/config/set` | admin | yes | 1 | Change settings in the config file, keeping its comments. Every value is checked first and nothing is written unless all of them fit. Live keys take effect at once; the answer says which wait for the next source or a restart. |
 | `core.api` | `GET /api/v1/core/api` | read |  | 1 | Every method, event and type as JSON Schema. The same document as protocol.json and `godwinmix --api-info`. |
 | `core.doctor` | `GET /api/v1/core/doctor` | read |  | 1 | The environment checks: GStreamer, the elements, the config, the disk and the ports. The same list `gmx doctor` prints. |
 | `core.info` | `GET /api/v1/core/info` | read |  | 1 | What this core is, what it can do, and where its edges are. |
@@ -230,6 +234,68 @@ MCP tool `list_codecs` in the `search` profile: readOnlyHint true, destructiveHi
   },
   "result": {
     "type": "object"
+  }
+}
+```
+
+#### `config.get`
+
+The mixer's settings: each key's value in the config file, its default, when a change to it takes effect, and which keys are waiting for a restart. Secrets say only whether one is set.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/ConfigGetRequest"
+  },
+  "result": {
+    "$ref": "#/$defs/ConfigGetResult"
+  }
+}
+```
+
+#### `config.reset`
+
+Put settings back to their defaults by taking them out of the config file. Answers like config.set.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/ConfigResetRequest"
+  },
+  "result": {
+    "$ref": "#/$defs/ConfigSetResult"
+  }
+}
+```
+
+#### `config.schema`
+
+Every setting config.set takes, as one JSON Schema: type, title, description, default, range or choices, and x-gmx-applies (live, next_source or restart).
+
+```json
+{
+  "params": {
+    "additionalProperties": false,
+    "properties": {},
+    "type": "object"
+  },
+  "result": {
+    "type": "object"
+  }
+}
+```
+
+#### `config.set`
+
+Change settings in the config file, keeping its comments. Every value is checked first and nothing is written unless all of them fit. Live keys take effect at once; the answer says which wait for the next source or a restart.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/ConfigSetRequest"
+  },
+  "result": {
+    "$ref": "#/$defs/ConfigSetResult"
   }
 }
 ```
