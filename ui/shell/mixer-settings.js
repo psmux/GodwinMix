@@ -70,7 +70,7 @@ export async function openMixerSettings(client) {
       const d = wraps.get(key).closest("details");
       if (d) d.open = true;
       wraps.get(key).scrollIntoView({ block: "nearest" });
-      summary.textContent = "Nothing was saved. The field marked below says why.";
+      summary.textContent = "Nothing was saved. The field marked in red says why.";
     } else {
       summary.textContent = e.message || String(e);
     }
