@@ -48,6 +48,10 @@ services:
       GODWINMIX_TOKEN: "${GODWINMIX_TOKEN:-change-me}"
       # GStreamer logging, when something is wrong: GST_DEBUG=3
       GST_DEBUG: "${GST_DEBUG:-1}"
+      # `restart: unless-stopped` below starts the mixer again whenever it
+      # exits, so core.restart may exit and the page may offer a Restart
+      # button. Take this out if you remove the restart policy.
+      GODWINMIX_SUPERVISED: "1"
     ports:
       # Bound to loopback. Put a reverse proxy with TLS in front of it before
       # it answers the internet (deploy/README.md).

@@ -459,6 +459,47 @@ pub struct CoreInfo {
     /// panel up in the reference UI.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub ui: Option<UiDefaults>,
+    /// True when the core was started with `--supervised` (or
+    /// `GODWINMIX_SUPERVISED=1`): a service manager, a container runtime or
+    /// the desktop app starts it again after it exits.
+    #[serde(default)]
+    pub supervised: bool,
+    /// Whether `core.restart` brings this core back, so a page can decide
+    /// between a Restart button and a sentence.
+    #[serde(default)]
+    pub restart: RestartInfo,
+}
+
+/// How a core that exits gets started again.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "lowercase")]
+pub enum RestartHow {
+    /// Something watches the process and starts it again: systemd, a
+    /// container restart policy, or the desktop app.
+    Supervised,
+    /// Nothing does. It was started by hand, and has to be started again the
+    /// same way.
+    #[default]
+    None,
+}
+
+/// `core.info.restart`: can this core be restarted from a client.
+#[derive(Debug, Clone, Default, Serialize, Deserialize, JsonSchema)]
+pub struct RestartInfo {
+    /// True when `core.restart` will bring the core back by itself.
+    pub possible: bool,
+    pub how: RestartHow,
+}
+
+/// `core.restart`: what happened.
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+pub struct RestartAnswer {
+    /// True when the core is on its way out and will be started again. False
+    /// when nothing would start it again, in which case it keeps running.
+    pub restarting: bool,
+    pub how: RestartHow,
+    /// One sentence for a person: what happens now, or how to restart it.
+    pub message: String,
 }
 
 /// What every mutating method answers with alongside its result object.

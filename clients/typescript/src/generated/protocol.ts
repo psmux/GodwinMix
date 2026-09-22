@@ -250,6 +250,8 @@ export interface CoreInfo {
   features: string[];
   limits: Limits;
   rehearsal: boolean;
+  restart?: RestartInfo;
+  supervised?: boolean;
   token?: TokenInfo | null;
   ui?: UiDefaults | null;
   version: string;
@@ -1079,6 +1081,22 @@ export interface Requirement {
 
 export type ResponseFormat = "concise" | "detailed";
 
+/** `core.restart`: what happened. */
+export interface RestartAnswer {
+  how: RestartHow;
+  message: string;
+  restarting: boolean;
+}
+
+/** How a core that exits gets started again. */
+export type RestartHow = "supervised" | "none";
+
+/** `core.info.restart`: can this core be restarted from a client. */
+export interface RestartInfo {
+  how: RestartHow;
+  possible: boolean;
+}
+
 /** `event/resync`: the client fell behind and the stream has a hole in it. */
 export interface Resync {
   dropped: number;
@@ -1550,6 +1568,7 @@ export interface MethodParams {
   "core.api": Record<string, never>;
   "core.doctor": Record<string, never>;
   "core.info": Record<string, never>;
+  "core.restart": Record<string, never>;
   "core.session_log": SessionLogRequest;
   "core.shutdown": Record<string, never>;
   "core.startup_report": Record<string, never>;
@@ -1680,6 +1699,7 @@ export interface MethodResults {
   "core.api": Record<string, unknown>;
   "core.doctor": Record<string, unknown>;
   "core.info": CoreInfo;
+  "core.restart": RestartAnswer;
   "core.session_log": Record<string, unknown>;
   "core.shutdown": Record<string, unknown>;
   "core.startup_report": Record<string, unknown>;
@@ -1848,6 +1868,7 @@ export const METHODS: readonly MethodInfo[] = [
   { name: "core.api", summary: "Every method, event and type as JSON Schema. The same document as protocol.json and `godwinmix --api-info`.", scope: "read", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/core/api" } },
   { name: "core.doctor", summary: "The environment checks: GStreamer, the elements, the config, the disk and the ports. The same list `gmx doctor` prints.", scope: "read", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/core/doctor" } },
   { name: "core.info", summary: "What this core is, what it can do, and where its edges are.", scope: "read", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/core/info" } },
+  { name: "core.restart", summary: "Stop the mixer and have it started again, when something will start it again. On a supervised core (core.info restart.possible) it answers restarting: true and exits; the programme is off air until it is back. On a core started by hand it answers restarting: false, says how to restart it, and keeps running.", scope: "admin", mutating: true, destructive: true, rest: { method: "POST", path: "/api/v1/core/restart" } },
   { name: "core.session_log", summary: "The append only record of everything that happened, back as far as you ask.", scope: "admin", mutating: true, destructive: false, rest: { method: "GET", path: "/api/v1/core/session_log" } },
   { name: "core.shutdown", summary: "Stop the mixer, and with it the programme. Nothing else takes the show off air, so this is deliberately its own call.", scope: "admin", mutating: true, destructive: true, rest: { method: "POST", path: "/api/v1/core/shutdown" } },
   { name: "core.startup_report", summary: "How long each stage of the start took, and what was over the 250 ms mark.", scope: "read", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/core/startup_report" } },
@@ -2051,6 +2072,11 @@ export class GeneratedMethods {
   /** What this core is, what it can do, and where its edges are. */
   coreInfo(): Promise<CoreInfo> {
     return this._call("core.info", {}) as Promise<CoreInfo>;
+  }
+
+  /** Stop the mixer and have it started again, when something will start it again. On a supervised core (core.info restart.possible) it answers restarting: true and exits; the programme is off air until it is back. On a core started by hand it answers restarting: false, says how to restart it, and keeps running. */
+  coreRestart(): Promise<RestartAnswer> {
+    return this._call("core.restart", {}) as Promise<RestartAnswer>;
   }
 
   /** The append only record of everything that happened, back as far as you ask. */

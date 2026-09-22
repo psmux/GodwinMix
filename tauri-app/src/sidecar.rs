@@ -40,6 +40,9 @@ const LOG_MAX_BYTES: u64 = 4 * 1024 * 1024;
 /// it started in an earlier run and has found again.
 pub struct Local {
     pub target: Target,
+    /// The port it answers on, kept so a restart can use the same one and
+    /// the page already open on it reconnects by itself.
+    pub port: u16,
     pub log: PathBuf,
     /// `None` for a mixer adopted from an earlier run of the app. It can
     /// still be asked to stop over the API; it cannot be killed, because this
@@ -72,9 +75,16 @@ pub async fn ensure(app: &AppHandle) -> Result<Local, String> {
 
 /// Start the mixer on this computer and wait until it answers.
 pub async fn start(app: &AppHandle) -> Result<Local, String> {
-    let config = crate::settings::config_path(app).map_err(|e| format!("could not write the config file: {e}"))?;
-    let token = crate::settings::local_token(app).map_err(|e| format!("could not make a token: {e}"))?;
     let port = free_port().map_err(|e| format!("no free port to give the mixer: {e}"))?;
+    start_on(app, port).await
+}
+
+/// The same, on a port chosen by the caller: a restart gives the new mixer
+/// the old one's port, so the page open on it reconnects without being sent
+/// anywhere.
+pub async fn start_on(app: &AppHandle, port: u16) -> Result<Local, String> {
+    let config = crate::settings::config_path(app).map_err(|e| format!("could not find the config folder: {e}"))?;
+    let token = crate::settings::local_token(app).map_err(|e| format!("could not make a token: {e}"))?;
     let log = log_file(app)?;
 
     let target = Target::new(format!("http://127.0.0.1:{port}"), token.clone());
@@ -94,13 +104,16 @@ pub async fn start(app: &AppHandle) -> Result<Local, String> {
             config.as_os_str(),
             "--bind".as_ref(),
             format!("127.0.0.1:{port}").as_ref(),
+            // This app starts the mixer again when it exits asking for a
+            // restart (see `record`), so core.restart may exit.
+            "--supervised".as_ref(),
         ])
         .envs(env);
 
     let (rx, child) = command.spawn().map_err(|e| format!("the mixer would not start: {e}"))?;
     let stopped = Arc::new(AtomicBool::new(false));
-    record(rx, log.clone(), stopped.clone());
-    let local = Local { target, log, child: Some(child), stopped };
+    record(app.clone(), rx, log.clone(), stopped.clone());
+    let local = Local { target, port, log, child: Some(child), stopped };
 
     match wait_until_answering(app, &local).await {
         Ok(()) => {
@@ -132,7 +145,7 @@ pub async fn adopt_existing(app: &AppHandle) -> Option<Local> {
     let http = app.state::<crate::Shell>().http.clone();
     core_link::info(&http, &target, "this computer").await.ok()?;
     eprintln!("[desktop] found the mixer from an earlier run on {}", target.base);
-    Some(Local { target, log: log_file(app).ok()?, child: None, stopped: Arc::new(AtomicBool::new(false)) })
+    Some(Local { target, port, log: log_file(app).ok()?, child: None, stopped: Arc::new(AtomicBool::new(false)) })
 }
 
 /// Stop the mixer this app started: ask over the API first, so it closes its
@@ -223,10 +236,12 @@ fn log_file(app: &AppHandle) -> Result<PathBuf, String> {
 }
 
 /// Pipe the daemon's output into the log file, and notice when it exits.
+/// An exit with `RESTART_EXIT_CODE` is the mixer asking to be started again
+/// (`core.restart`), and it is.
 ///
 /// A task rather than the main thread: the daemon writes a line per source
 /// event and the shell must never be the reason a write blocks.
-fn record(mut rx: tauri::async_runtime::Receiver<CommandEvent>, path: PathBuf, stopped: Arc<AtomicBool>) {
+fn record(app: AppHandle, mut rx: tauri::async_runtime::Receiver<CommandEvent>, path: PathBuf, stopped: Arc<AtomicBool>) {
     tauri::async_runtime::spawn(async move {
         let mut file = OpenOptions::new().create(true).append(true).open(&path).ok();
         let mut put = |bytes: &[u8]| {
@@ -250,6 +265,9 @@ fn record(mut rx: tauri::async_runtime::Receiver<CommandEvent>, path: PathBuf, s
                 CommandEvent::Terminated(end) => {
                     put(format!("--- mixer exited with {:?} ---\n", end.code).as_bytes());
                     stopped.store(true, Ordering::Relaxed);
+                    if end.code == Some(crate::restart::RESTART_EXIT_CODE) {
+                        crate::restart::after_exit(app.clone());
+                    }
                     break;
                 }
                 _ => {}

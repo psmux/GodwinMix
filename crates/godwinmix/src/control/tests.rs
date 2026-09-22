@@ -196,6 +196,7 @@ fn the_table_matches_the_scopes_in_the_protocol_document() {
     assert_eq!(scope("source.add"), Scope::Operate);
     assert_eq!(scope("source.remove"), Scope::Operate);
     assert_eq!(scope("core.shutdown"), Scope::Admin);
+    assert_eq!(scope("core.restart"), Scope::Admin);
     assert_eq!(scope("filter.add"), Scope::Operate);
     assert_eq!(scope("filter.list"), Scope::Read);
     // The observability methods. Reading what a pipeline is doing is a read;
@@ -210,6 +211,7 @@ fn the_table_matches_the_scopes_in_the_protocol_document() {
     assert_eq!(
         destructive,
         vec![
+            "core.restart",
             "core.shutdown",
             "filter.remove",
             "media.remove",
@@ -229,7 +231,8 @@ fn the_table_matches_the_scopes_in_the_protocol_document() {
         "the destructive set is the one 03 section 6 marks, plus filter.remove (taking a \
          filter out changes the picture and cannot be undone by repeating it), \
          plugin.update (it replaces a running plugin, and rolls back rather than undoes), \
-         preset.apply (it rewrites the operator's configuration file) and the two scene \
+         preset.apply (it rewrites the operator's configuration file), core.restart \
+         (the programme goes off air until the mixer is back) and the two scene \
          removals (a deleted composition does not come back)"
     );
 }

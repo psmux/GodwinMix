@@ -1,5 +1,20 @@
 # The command line
 
+## Starting the mixer
+
+`godwinmix` with no subcommand is the mixer. The flags a deployment reaches for:
+
+| Flag | Environment | What it does |
+|---|---|---|
+| `--config <path>` | `GODWINMIX_CONFIG` | the config file, `godwinmix.toml` by default. When it is not there a first run config is written at that path and the mixer starts on it; see [first run](../how-to/first-run.md) |
+| `--bind <addr>` | | the control address, over the config's `[control] bind` |
+| `--supervised` | `GODWINMIX_SUPERVISED` (`1`, `true`, `yes` or `on`) | something starts this mixer again when it exits. Only then does `core.restart` exit, and `core.info` answers `restart: {possible: true, how: "supervised"}`. The systemd unit, the compose file and the desktop app set it. Off by default, because a restart that never comes back is worse than none |
+| `--example-config` | | print the first run config and exit |
+| `--rehearsal` | | refuse `output.add` and accept only rehearsal tokens |
+
+A mixer leaving because of `core.restart` exits with status 75. The desktop app
+starts its mixer again on that status and on no other, so its Quit stays a quit.
+
 
 The daemon is headless and controlled entirely over HTTP. `godwinmix ctl` is a
 thin client for that same API, so scripting it does not mean assembling JSON by

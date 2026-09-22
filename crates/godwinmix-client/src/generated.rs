@@ -452,6 +452,15 @@ pub struct CoreInfo {
     /// True when the core was started with `--rehearsal`, which refuses
     /// `output.add` and accepts rehearsal tokens.
     pub rehearsal: bool,
+    /// Whether `core.restart` brings this core back, so a page can decide
+    /// between a Restart button and a sentence.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub restart: Option<RestartInfo>,
+    /// True when the core was started with `--supervised` (or
+    /// `GODWINMIX_SUPERVISED=1`): a service manager, a container runtime or
+    /// the desktop app starts it again after it exits.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub supervised: Option<bool>,
     /// Present when the request carried a token the core recognises.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub token: Option<TokenInfo>,
@@ -1836,6 +1845,32 @@ pub type ResponseFormat = String;
 /// The values api_level 1 knows for [`ResponseFormat`].
 pub const RESPONSE_FORMAT_VALUES: &[&str] = &["concise", "detailed"];
 
+/// `core.restart`: what happened.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct RestartAnswer {
+    pub how: RestartHow,
+    /// One sentence for a person: what happens now, or how to restart it.
+    pub message: String,
+    /// True when the core is on its way out and will be started again. False
+    /// when nothing would start it again, in which case it keeps running.
+    pub restarting: bool,
+}
+
+/// How a core that exits gets started again.
+pub type RestartHow = String;
+/// The values api_level 1 knows for [`RestartHow`].
+pub const RESTART_HOW_VALUES: &[&str] = &["supervised", "none"];
+
+/// `core.info.restart`: can this core be restarted from a client.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct RestartInfo {
+    pub how: RestartHow,
+    /// True when `core.restart` will bring the core back by itself.
+    pub possible: bool,
+}
+
 /// `event/resync`: the client fell behind and the stream has a hole in it.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
@@ -2641,7 +2676,7 @@ pub struct MethodInfo {
     pub rest: Option<(&'static str, &'static str)>,
 }
 
-pub const METHODS: [MethodInfo; 126] = [
+pub const METHODS: [MethodInfo; 127] = [
     MethodInfo { name: "adbreak.end", summary: "Cut a running ad short, or disarm one that is scheduled.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/adbreak/end")) },
     MethodInfo { name: "adbreak.start", summary: "Interrupt the programme with a clip, then rejoin live when it ends.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/adbreak/start")) },
     MethodInfo { name: "agent.state", summary: "The compact document written for agents: the programme, each source's state and a motion score saying how much its picture is changing.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/agent/state")) },
@@ -2649,6 +2684,7 @@ pub const METHODS: [MethodInfo; 126] = [
     MethodInfo { name: "core.api", summary: "Every method, event and type as JSON Schema. The same document as protocol.json and `godwinmix --api-info`.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/core/api")) },
     MethodInfo { name: "core.doctor", summary: "The environment checks: GStreamer, the elements, the config, the disk and the ports. The same list `gmx doctor` prints.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/core/doctor")) },
     MethodInfo { name: "core.info", summary: "What this core is, what it can do, and where its edges are.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/core/info")) },
+    MethodInfo { name: "core.restart", summary: "Stop the mixer and have it started again, when something will start it again. On a supervised core (core.info restart.possible) it answers restarting: true and exits; the programme is off air until it is back. On a core started by hand it answers restarting: false, says how to restart it, and keeps running.", scope: "admin", mutating: true, destructive: true, rest: Some(("POST", "/api/v1/core/restart")) },
     MethodInfo { name: "core.session_log", summary: "The append only record of everything that happened, back as far as you ask.", scope: "admin", mutating: true, destructive: false, rest: Some(("GET", "/api/v1/core/session_log")) },
     MethodInfo { name: "core.shutdown", summary: "Stop the mixer, and with it the programme. Nothing else takes the show off air, so this is deliberately its own call.", scope: "admin", mutating: true, destructive: true, rest: Some(("POST", "/api/v1/core/shutdown")) },
     MethodInfo { name: "core.startup_report", summary: "How long each stage of the start took, and what was over the 250 ms mark.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/core/startup_report")) },
@@ -3008,6 +3044,11 @@ impl Client {
     /// What this core is, what it can do, and where its edges are.
     pub async fn core_info(&self) -> Result<CoreInfo> {
         self.call("core.info", &serde_json::json!({})).await
+    }
+
+    /// Stop the mixer and have it started again, when something will start it again. On a supervised core (core.info restart.possible) it answers restarting: true and exits; the programme is off air until it is back. On a core started by hand it answers restarting: false, says how to restart it, and keeps running.
+    pub async fn core_restart(&self) -> Result<RestartAnswer> {
+        self.call("core.restart", &serde_json::json!({})).await
     }
 
     /// The append only record of everything that happened, back as far as you ask.
