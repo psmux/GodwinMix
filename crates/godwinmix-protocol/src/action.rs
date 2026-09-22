@@ -100,6 +100,10 @@ impl ErrorAction {
         }
     }
 
+    pub fn open_panel(label: &str, panel: &str) -> Self {
+        Self { panel: Some(panel.into()), ..Self::new(label, ActionKind::Open) }
+    }
+
     pub fn restart() -> Self {
         Self::new("Restart the mixer", ActionKind::Restart)
     }
