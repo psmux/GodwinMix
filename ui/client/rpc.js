@@ -64,14 +64,15 @@ export class RpcSocket {
     };
 
     ws.onclose = (ev) => {
-      // One line per close, at debug. The banner says the page is blind and
-      // nothing said why; a close code and whatever the server put in the
-      // reason is what tells a clean hang up from a dropped socket, and the
-      // core logs its own side of the same event.
-      console.debug(
-        "gmx: control socket closed",
-        JSON.stringify({ code: ev && ev.code, reason: (ev && ev.reason) || "", clean: !!(ev && ev.wasClean), attempt: this.attempt })
-      );
+      // One line per close. The banner says the page is blind and never said
+      // why; the code tells a clean hang up from a dropped socket, and the
+      // core now logs its own side of the same event.
+      console.debug("gmx: control socket closed", {
+        code: ev && ev.code,
+        reason: (ev && ev.reason) || "",
+        clean: !!(ev && ev.wasClean),
+        attempt: this.attempt,
+      });
       this.ready = false;
       this._failPending("the connection to the mixer closed. It will be retried.");
       this.hooks.onClose && this.hooks.onClose();

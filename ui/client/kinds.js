@@ -154,12 +154,10 @@ export const TEST_PATTERNS = [
 ];
 
 /**
- * The two fields every destination form has, written once.
- *
- * Both are jargon without their hint: "own" and "cdn" are the protocol's
- * words, and a buffer measured in seconds says nothing about what it is for.
- * The labels name what is being chosen and the values stay as the wire has
- * them.
+ * The two fields every destination form has, written once. Both are jargon
+ * without a hint: "own" and "cdn" are the protocol's words and a buffer in
+ * seconds says nothing about what it is for. The labels name what is being
+ * chosen; the values stay as the wire has them.
  */
 const POLICY_FIELD = {
   type: "string",
