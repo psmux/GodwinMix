@@ -248,18 +248,17 @@ class ScenesPanel extends HTMLElement {
   seedFocus(list) {
     const ids = list.map((s) => s.id);
     if (!ids.length || focusedScene(ids)) return;
-    const live = this.client.state.scene;
+    const live = this.scenes.live();
     setFocusedScene(this.scenes.armed() || (ids.includes(live) ? live : null) || ids[0]);
   }
 
   /** The pencil on a scene, in either view: open the composer on it. */
   editButton(summary) {
-    const label = `Edit the layout of ${summary.name}`;
     return el("button.scene-edit", {
       text: "\u270E",
       "data-nodrag": "",
-      title: label,
-      "aria-label": label,
+      title: editLabel(summary.name),
+      "aria-label": editLabel(summary.name),
       onclick: (event) => {
         // Not a tap on the tile underneath, which would put the scene on air.
         event.stopPropagation();
@@ -278,23 +277,41 @@ class ScenesPanel extends HTMLElement {
     });
     const face = el("div.kindbox", { style: { position: "relative", aspectRatio: "16 / 9", display: "grid", placeItems: "center" } });
     const items = el("span.num.dim", { style: { fontSize: "var(--fs-lg)" } });
-    face.append(items, el("button.scene-add-source", { text: "+", "data-nodrag": "",
-      title: `Add sources to ${summary.name}`, "aria-label": `Add sources to ${summary.name}`,
+    const add = el("button.scene-add-source", { text: "+", "data-nodrag": "",
       onclick: event => { event.stopPropagation(); setFocusedScene(summary.id); openSceneSources(this.client, this.scenes, this.scenes.summary(summary.id)); },
-    }), this.editButton(summary));
-    const name = el("span.name.grow.ellipsis");
+    });
+    const edit = this.editButton(summary);
+    face.append(items, add, edit);
+    // The rename is on the name itself, which is where a file manager puts it,
+    // because the pencil beside it opens the composer and everyone reads a
+    // pencil as rename. F2 and the tile's menu do the same thing.
+    const name = el("span.name.grow.ellipsis", {
+      title: "Double click to rename this scene. F2 renames the selected one.",
+      ondblclick: (event) => {
+        event.stopPropagation();
+        this.beginRename(summary.id);
+      },
+    });
     const dot = el("span.dot");
     const bar = el("div.bar", {}, [dot, name]);
     const chips = el("div.row", {
       style: { flexWrap: "wrap", gap: "3px", padding: "0 6px 6px", minHeight: "0" },
     });
     node.append(face, bar, chips);
-    return { id: summary.id, node, face, items, name, dot, chips, chipIds: "" };
+    return { id: summary.id, node, face, items, add, edit, name, dot, chips, chipIds: "", labelled: "" };
   }
 
   syncTile(tile, summary) {
     if (!tile) return;
     if (!tile.name.isContentEditable && tile.name.textContent !== summary.name) tile.name.textContent = summary.name;
+    // Both buttons say which scene they act on, so both follow a rename. One
+    // place rather than one per button, because the next button added to a
+    // tile will want the same thing.
+    if (tile.labelled !== summary.name) {
+      tile.labelled = summary.name;
+      label(tile.add, `Add sources to ${summary.name}`);
+      label(tile.edit, editLabel(summary.name));
+    }
     tile.node.style.setProperty("--tile-color", summary.color || DEFAULT_COLOUR);
     tile.face.style.background = "color-mix(in srgb, var(--tile-color) 22%, transparent)";
     tile.items.textContent = summary.items ? String(summary.items) : "";
@@ -334,7 +351,9 @@ class ScenesPanel extends HTMLElement {
     if (this.workspaceActive === false) return;
     // The live scene is `scene`; `program` carries a source id when the
     // programme is a single source, which is a one item scene's shorthand.
-    const program = this.client.state.scene || this.client.state.program;
+    // `live()` resolves the name the core froze at take time back to an id, or
+    // the red frame falls off the scene the moment somebody renames it.
+    const program = this.scenes.live() || this.client.state.scene || this.client.state.program;
     const armed = this.client.state.preview || this.scenes.armed();
     // The core names a scene by id or by name, depending on which command put
     // it there, so both are worth comparing.
@@ -398,9 +417,16 @@ class ScenesPanel extends HTMLElement {
     }
   }
 
+  /**
+   * Edit a scene's name in place. Answers whether there was a tile to edit.
+   *
+   * The name is edited on the tile, so a page showing the tab strip is turned
+   * back to tiles first: nothing in a strip of tabs can hold a caret.
+   */
   beginRename(id) {
     const tile = this.tiles.get(id);
-    if (!tile) return;
+    if (!tile) return false;
+    if (this.grid.hidden) this.setView("tiles");
     const before = tile.name.textContent;
     tile.name.contentEditable = "true";
     tile.name.focus();
@@ -410,7 +436,13 @@ class ScenesPanel extends HTMLElement {
     sel.removeAllRanges();
     sel.addRange(range);
 
+    // Escape ends the edit but the blur that follows it is still to come, and
+    // a second finish wrote the old name back over a rename that had already
+    // landed. Whichever of the two arrives first is the one that counts.
+    let done = false;
     const finish = async (commit) => {
+      if (done) return;
+      done = true;
       tile.name.contentEditable = "false";
       const after = tile.name.textContent.trim();
       if (!commit || !after || after === before) {
@@ -442,6 +474,31 @@ class ScenesPanel extends HTMLElement {
       off();
       finish(true);
     }, { once: true });
+    return true;
+  }
+
+  /**
+   * The scene F2 would rename, for a caller that has no tile under its hand.
+   *
+   * The selected one first, then the scene the operator says they are working
+   * on, then the one on air. The tab strip has no selection at all, which is
+   * why the palette's own entry did nothing on the view this page opens in.
+   */
+  renameTarget() {
+    const ids = [...this.tiles.keys()];
+    return this.selected()[0] || focusedScene(ids) || this.scenes.live() || null;
+  }
+
+  /** The palette's "Rename a scene": find one, select it, edit its name. */
+  renameScene() {
+    const id = this.renameTarget();
+    if (!id || !this.tiles.has(id)) {
+      toast({ text: "There is no scene to rename. Make one with New scene, then rename it with F2." });
+      return;
+    }
+    this.selection.set([id]);
+    this.paintSelection();
+    this.beginRename(id);
   }
 
   async setColour(ids, colour) {
@@ -620,7 +677,9 @@ class ScenesPanel extends HTMLElement {
     return [
       { id: "scenes.new", title: "New scene", group: "Scenes", run: () => this.newScene() },
       { id: "scenes.open", title: "Open the composer", group: "Scenes", enabled: () => !!one(), run: () => this.open(one()) },
-      { id: "scenes.rename", title: "Rename a scene", group: "Scenes", key: "F2", enabled: () => !!one(), run: () => this.beginRename(one()) },
+      // No `enabled`: it finds a scene for itself, and says so in a toast when
+      // there is none. A row that reads as available has to do something.
+      { id: "scenes.rename", title: "Rename a scene", group: "Scenes", key: "F2", run: () => this.renameScene() },
       { id: "scenes.remove", title: "Remove the selected scenes", group: "Scenes", key: "Delete", enabled: () => this.selected().length > 0, run: () => this.remove(this.selected()) },
       { id: "scenes.duplicate", title: "Duplicate a scene", group: "Scenes", enabled: () => !!one(), run: () => this.more().then((m) => m.duplicate(this, this.selected())) },
       { id: "scenes.copy-layout", title: "Copy a scene's layout", group: "Scenes", enabled: () => !!one(), run: () => this.more().then((m) => m.copyLayout(this, one())) },
@@ -630,6 +689,22 @@ class ScenesPanel extends HTMLElement {
       { id: "scenes.redo", title: "Redo the last scene change", group: "Scenes", run: () => this.scenes.undo.redo().catch((e) => errorToast(e, "Redo")) },
     ];
   }
+}
+
+/**
+ * What the pencil does, said in the composer's own words.
+ *
+ * It sits beside the name and reads as rename to nearly everyone, so the
+ * tooltip and the label a screen reader announces both have to say layout.
+ */
+function editLabel(name) {
+  return `Edit the layout of ${name} in the composer`;
+}
+
+/** A tooltip and the label a screen reader reads, kept the same on purpose. */
+function label(node, text) {
+  node.title = text;
+  node.setAttribute("aria-label", text);
 }
 
 /** An item's name, or the source it draws, or something legible either way. */

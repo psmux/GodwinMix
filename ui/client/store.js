@@ -14,6 +14,11 @@ export function emptyState() {
     // The scene on air, by name. The core sends both in its status document
     // and only one of them is ever set.
     scene: null,
+    // What that scene is called now. The core names it by the name it had when
+    // it was taken and never revises it, so a rename leaves `scene` reading
+    // the old one. The scene session fills this in from the document, and it
+    // is null on a mixer that has no scenes.
+    sceneName: null,
     preview: null,
     sources: [],
     outputs: [],
@@ -53,11 +58,15 @@ export class Store {
     // moment after it arrived: asking for the preview stream re-subscribes,
     // and a re-subscribe brings a fresh snapshot with it. The pane beside the
     // programme appeared and went dark again on that one.
+    // The scene's current name is kept for the same reason: it comes from the
+    // scene document rather than the status, and a re-subscribe brings a fresh
+    // snapshot that would otherwise put the stale name back in the header.
     const keep = {
       media: this.state.media,
       meters: this.state.meters,
       alerts: this.state.alerts,
       preview: this.state.preview,
+      sceneName: this.state.sceneName,
     };
     this.state = Object.assign(emptyState(), keep, status, {
       seq: seq ?? this.state.seq,

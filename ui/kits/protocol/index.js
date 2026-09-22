@@ -34,6 +34,9 @@ export class SceneClient {
     this.dirty = false;
     this.offs = [];
     this.supported = true;
+    /** The last thing the core called the scene on air, and what it resolved to. */
+    this.liveSaid = undefined;
+    this.liveId = null;
   }
 
   // ------------------------------------------------------------- lifecycle
@@ -162,6 +165,27 @@ export class SceneClient {
 
   view(id) {
     return this.views.get(id) || null;
+  }
+
+  /**
+   * The id of the scene on air, or null.
+   *
+   * The core names the programme's scene by the name it had when it was taken
+   * and never revises it, so `state.scene` still reads "Scene 3" for as long
+   * as that scene stays up after somebody renames it. The name is resolved to
+   * an id here, once, whenever the core says a different one, and the id is
+   * what a caller compares against and looks the current name up by.
+   */
+  live() {
+    const said = this.client.state.scene || null;
+    // Resolved again while it is unresolved, because the summaries can arrive
+    // after the snapshot that named the scene on air.
+    if (said !== this.liveSaid || (said && !this.liveId)) {
+      this.liveSaid = said;
+      const found = said ? this.summaries.find((s) => s.id === said || s.name === said) : null;
+      this.liveId = found ? found.id : null;
+    }
+    return this.liveId;
   }
 
   /** The armed scene's id, from the summaries, or null. */
