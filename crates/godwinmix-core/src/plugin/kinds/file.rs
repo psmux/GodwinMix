@@ -81,6 +81,9 @@ impl Source for FileSource {
 
     fn start(&mut self, canvas: &CanvasCaps, thumb: bool) -> Result<MediaEnds> {
         self.ctx.canvas = canvas.clone();
+        if let Some(missing) = missing_file(&self.ctx.cfg.uri) {
+            return Err(missing.into());
+        }
         let ends = uridecode(&self.ctx, thumb, false)?;
         self.pipeline = Some(ends.pipeline.clone());
         Ok(ends)
@@ -112,4 +115,45 @@ pub fn validate(params: &Params) -> Result<()> {
         anyhow::ensure!(v.is_str(), "file/source params.uri must be a string");
     }
     Ok(())
+}
+
+/// A path with nothing at it, said before the pipeline is built. Left to
+/// GStreamer the answer was "Element failed to change its state", which a
+/// preset's placeholder clip ("media/slides.mp4", to be dropped in later)
+/// turned into the first thing a person read after picking a tile.
+fn missing_file(uri: &str) -> Option<godwinmix_protocol::Actionable> {
+    if uri.contains("://") && !uri.starts_with("file://") {
+        return None;
+    }
+    let path = match gst::glib::filename_from_uri(uri) {
+        Ok((path, _)) => path,
+        Err(_) => std::path::PathBuf::from(uri),
+    };
+    if path.exists() {
+        return None;
+    }
+    Some(godwinmix_protocol::Actionable::new(
+        format!(
+            "there is no file at {} yet. Upload one with that name in the Media tab, or drop \
+             it on the window, and the mixer tries this source again.",
+            path.display()
+        ),
+        godwinmix_protocol::ErrorAction::open_panel("Open Media", "core/media"),
+    ))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_clip_that_is_not_there_yet_says_so_and_opens_media() {
+        let refusal = missing_file("media/definitely-not-here.mp4").expect("refused");
+        assert!(refusal.message.contains("no file at"), "{}", refusal.message);
+        assert_eq!(refusal.action.panel.as_deref(), Some("core/media"));
+        assert!(missing_file("https://example.com/a.m3u8").is_none(), "a stream is not a file");
+        let here = std::env::current_dir().unwrap().join("Cargo.toml");
+        assert!(missing_file(&here.to_string_lossy()).is_none());
+        assert!(missing_file(&crate::input::file_uri(&here)).is_none());
+    }
 }
