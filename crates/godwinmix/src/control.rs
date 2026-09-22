@@ -1510,7 +1510,9 @@ fn observe_state(state: &AppState) -> crate::observe::ObserveState {
         tokens: Some(state.tokens.clone()),
         // Prometheus scrapes with no credentials. See the field's own note.
         metrics_open: true,
-        config_path: godwinmix_core::config::path_in_force(std::path::Path::new("godwinmix.toml")),
+        // The file the core was started with, as `core.doctor` over /rpc
+        // reads, so the two doors answer the same.
+        config_path: crate::observe::doctor_config_path(&state.config_path),
     }
 }
 
