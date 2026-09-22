@@ -1669,6 +1669,62 @@ pub struct Patch {
     pub updated: Vec<Update>,
 }
 
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct PathCreateRequest {
+    /// The new folder's name: one folder, no separators, not hidden.
+    pub name: String,
+    /// The folder to make it in, as `path.list` names it.
+    pub parent: String,
+}
+
+/// One folder inside the one listed.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct PathEntry {
+    pub name: String,
+    /// Absolute, ready to pass back as `path`.
+    pub path: String,
+    /// Whether the mixer can write into it.
+    pub writable: bool,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct PathListRequest {
+    /// The folder to list. Absent, empty or `~` is the mixer's home folder; a
+    /// relative path is taken from there.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub path: Option<String>,
+}
+
+/// What `path.list` and `path.create` answer with.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct PathListing {
+    /// The folders in it, sorted by name. Files are never listed.
+    pub dirs: Vec<PathEntry>,
+    /// One level up, or null at the top of a root.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub parent: Option<String>,
+    /// The folder listed, absolute and with links resolved.
+    pub path: String,
+    pub roots: Vec<PathRoot>,
+    /// True when there were more than 500 and the rest were left out.
+    pub truncated: bool,
+    /// Whether the mixer can write into this folder.
+    pub writable: bool,
+}
+
+/// A place the picker may start from.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct PathRoot {
+    /// `Home`, `Media folder` or `Config folder`.
+    pub label: String,
+    pub path: String,
+}
+
 /// What `pipeline.dot` answers with on `/rpc`. The REST route serves the same
 /// graph as `text/vnd.graphviz`, so `gmx dot | dot -Tsvg` needs no unwrapping.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
@@ -2810,7 +2866,7 @@ pub struct MethodInfo {
     pub rest: Option<(&'static str, &'static str)>,
 }
 
-pub const METHODS: [MethodInfo; 131] = [
+pub const METHODS: [MethodInfo; 133] = [
     MethodInfo { name: "adbreak.end", summary: "Cut a running ad short, or disarm one that is scheduled.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/adbreak/end")) },
     MethodInfo { name: "adbreak.start", summary: "Interrupt the programme with a clip, then rejoin live when it ends.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/adbreak/start")) },
     MethodInfo { name: "agent.state", summary: "The compact document written for agents: the programme, each source's state and a motion score saying how much its picture is changing.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/agent/state")) },
@@ -2851,6 +2907,8 @@ pub const METHODS: [MethodInfo; 131] = [
     MethodInfo { name: "output.reconnect", summary: "Drop and re-establish one destination's connection now, without waiting for its reconnect policy.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/outputs/{id}/reconnect")) },
     MethodInfo { name: "output.remove", summary: "Stop sending to a destination and forget it. Other outputs are unaffected.", scope: "operate", mutating: true, destructive: true, rest: Some(("DELETE", "/api/v1/outputs/{id}")) },
     MethodInfo { name: "output.set", summary: "Change a destination in place: a new address with a new stream key, a new reconnect policy, a deeper outage buffer. The address is write only, so a client that only wants the buffer never has to hold the key.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/outputs/{id}/set")) },
+    MethodInfo { name: "path.create", summary: "Make one new folder inside a folder path.list shows, and list it. A folder that is already there is listed rather than refused.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/path/create")) },
+    MethodInfo { name: "path.list", summary: "The folders in one folder on the mixer, and whether each is writable, for a folder picker. Only the home folder and the mixer's own folders are shown; files never are.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/path/list")) },
     MethodInfo { name: "pipeline.clock", summary: "The clock every pipeline is running against, and how far each one has got.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/pipeline/clock")) },
     MethodInfo { name: "pipeline.dot", summary: "One pipeline as a graphviz graph: every element, every pad and the caps negotiated between them.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/pipeline/dot")) },
     MethodInfo { name: "pipeline.latency", summary: "How much delay one pipeline is carrying, and which stage put it there.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/pipeline/latency")) },
@@ -3347,6 +3405,16 @@ impl Client {
     /// Change a destination in place: a new address with a new stream key, a new reconnect policy, a deeper outage buffer. The address is write only, so a client that only wants the buffer never has to hold the key.
     pub async fn output_set(&self, params: &SetOutputRequest) -> Result<OutputStatus> {
         self.call("output.set", params).await
+    }
+
+    /// Make one new folder inside a folder path.list shows, and list it. A folder that is already there is listed rather than refused.
+    pub async fn path_create(&self, params: &PathCreateRequest) -> Result<PathListing> {
+        self.call("path.create", params).await
+    }
+
+    /// The folders in one folder on the mixer, and whether each is writable, for a folder picker. Only the home folder and the mixer's own folders are shown; files never are.
+    pub async fn path_list(&self, params: &PathListRequest) -> Result<PathListing> {
+        self.call("path.list", params).await
     }
 
     /// The clock every pipeline is running against, and how far each one has got.

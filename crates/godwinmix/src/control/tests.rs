@@ -197,6 +197,8 @@ fn the_table_matches_the_scopes_in_the_protocol_document() {
     assert_eq!(scope("source.remove"), Scope::Operate);
     assert_eq!(scope("core.shutdown"), Scope::Admin);
     assert_eq!(scope("core.restart"), Scope::Admin);
+    assert_eq!(scope("path.list"), Scope::Read);
+    assert_eq!(scope("path.create"), Scope::Operate);
     assert_eq!(scope("filter.add"), Scope::Operate);
     assert_eq!(scope("filter.list"), Scope::Read);
     // The observability methods. Reading what a pipeline is doing is a read;

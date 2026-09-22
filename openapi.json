@@ -3485,6 +3485,120 @@
         ],
         "type": "object"
       },
+      "PathCreateRequest": {
+        "properties": {
+          "name": {
+            "description": "The new folder's name: one folder, no separators, not hidden.",
+            "type": "string"
+          },
+          "parent": {
+            "description": "The folder to make it in, as `path.list` names it.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "parent",
+          "name"
+        ],
+        "type": "object"
+      },
+      "PathEntry": {
+        "description": "One folder inside the one listed.",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "path": {
+            "description": "Absolute, ready to pass back as `path`.",
+            "type": "string"
+          },
+          "writable": {
+            "description": "Whether the mixer can write into it.",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "name",
+          "path",
+          "writable"
+        ],
+        "type": "object"
+      },
+      "PathListRequest": {
+        "properties": {
+          "path": {
+            "default": null,
+            "description": "The folder to list. Absent, empty or `~` is the mixer's home folder; a\nrelative path is taken from there.",
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "type": "object"
+      },
+      "PathListing": {
+        "description": "What `path.list` and `path.create` answer with.",
+        "properties": {
+          "dirs": {
+            "description": "The folders in it, sorted by name. Files are never listed.",
+            "items": {
+              "$ref": "#/components/schemas/PathEntry"
+            },
+            "type": "array"
+          },
+          "parent": {
+            "description": "One level up, or null at the top of a root.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "path": {
+            "description": "The folder listed, absolute and with links resolved.",
+            "type": "string"
+          },
+          "roots": {
+            "items": {
+              "$ref": "#/components/schemas/PathRoot"
+            },
+            "type": "array"
+          },
+          "truncated": {
+            "description": "True when there were more than 500 and the rest were left out.",
+            "type": "boolean"
+          },
+          "writable": {
+            "description": "Whether the mixer can write into this folder.",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "path",
+          "writable",
+          "dirs",
+          "truncated",
+          "roots"
+        ],
+        "type": "object"
+      },
+      "PathRoot": {
+        "description": "A place the picker may start from.",
+        "properties": {
+          "label": {
+            "description": "`Home`, `Media folder` or `Config folder`.",
+            "type": "string"
+          },
+          "path": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "label",
+          "path"
+        ],
+        "type": "object"
+      },
       "PipelineDot": {
         "description": "What `pipeline.dot` answers with on `/rpc`. The REST route serves the same\ngraph as `text/vnd.graphviz`, so `gmx dot | dot -Tsvg` needs no unwrapping.",
         "properties": {
@@ -6937,6 +7051,72 @@
         "x-destructive": false,
         "x-idempotent": true,
         "x-scope": "operate"
+      }
+    },
+    "/api/v1/path/create": {
+      "post": {
+        "description": "JSON-RPC method `path.create`. Needs the `operate` scope. Accepts `idempotency_key`, honoured for 24 hours.",
+        "operationId": "path.create",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PathCreateRequest"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PathListing"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Make one new folder inside a folder path.list shows, and list it. A folder that is already there is listed rather than refused.",
+        "tags": [
+          "path"
+        ],
+        "x-destructive": false,
+        "x-idempotent": true,
+        "x-scope": "operate"
+      }
+    },
+    "/api/v1/path/list": {
+      "get": {
+        "description": "JSON-RPC method `path.list`. Needs the `read` scope.",
+        "operationId": "path.list",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PathListing"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "The folders in one folder on the mixer, and whether each is writable, for a folder picker. Only the home folder and the mixer's own folders are shown; files never are.",
+        "tags": [
+          "path"
+        ],
+        "x-destructive": false,
+        "x-idempotent": true,
+        "x-scope": "read"
       }
     },
     "/api/v1/pipeline/clock": {

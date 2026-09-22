@@ -1047,6 +1047,47 @@ class Patch(TypedDict, total=False):
     # Whoever asked for the change, so a client can suppress the echo of its own edits and not fight its own optimistic drawing.
     updated: List[Update]
 
+class PathCreateRequest(TypedDict, total=False):
+    name: str
+    # The new folder's name: one folder, no separators, not hidden.
+    parent: str
+    # The folder to make it in, as `path.list` names it.
+
+class PathEntry(TypedDict, total=False):
+    """One folder inside the one listed."""
+
+    name: str
+    path: str
+    # Absolute, ready to pass back as `path`.
+    writable: bool
+    # Whether the mixer can write into it.
+
+class PathListRequest(TypedDict, total=False):
+    path: Optional[str]
+    # The folder to list. Absent, empty or `~` is the mixer's home folder; a relative path is taken from there.
+
+class PathListing(TypedDict, total=False):
+    """What `path.list` and `path.create` answer with."""
+
+    dirs: List[PathEntry]
+    # The folders in it, sorted by name. Files are never listed.
+    parent: Optional[str]
+    # One level up, or null at the top of a root.
+    path: str
+    # The folder listed, absolute and with links resolved.
+    roots: List[PathRoot]
+    truncated: bool
+    # True when there were more than 500 and the rest were left out.
+    writable: bool
+    # Whether the mixer can write into this folder.
+
+class PathRoot(TypedDict, total=False):
+    """A place the picker may start from."""
+
+    label: str
+    # `Home`, `Media folder` or `Config folder`.
+    path: str
+
 class PipelineDot(TypedDict, total=False):
     """What `pipeline.dot` answers with on `/rpc`. The REST route serves the same graph as `text/vnd.graphviz`, so `gmx dot | dot -Tsvg` needs no unwrapping."""
 
@@ -1841,6 +1882,8 @@ METHODS = (
     {"name": "output.reconnect", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/outputs/{id}/reconnect"), "summary": "Drop and re-establish one destination's connection now, without waiting for its reconnect policy."},
     {"name": "output.remove", "scope": "operate", "mutating": True, "destructive": True, "rest": ("DELETE", "/api/v1/outputs/{id}"), "summary": 'Stop sending to a destination and forget it. Other outputs are unaffected.'},
     {"name": "output.set", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/outputs/{id}/set"), "summary": 'Change a destination in place: a new address with a new stream key, a new reconnect policy, a deeper outage buffer. The address is write only, so a client that only wants the buffer never has to hold the key.'},
+    {"name": "path.create", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/path/create"), "summary": 'Make one new folder inside a folder path.list shows, and list it. A folder that is already there is listed rather than refused.'},
+    {"name": "path.list", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/path/list"), "summary": "The folders in one folder on the mixer, and whether each is writable, for a folder picker. Only the home folder and the mixer's own folders are shown; files never are."},
     {"name": "pipeline.clock", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/pipeline/clock"), "summary": 'The clock every pipeline is running against, and how far each one has got.'},
     {"name": "pipeline.dot", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/pipeline/dot"), "summary": 'One pipeline as a graphviz graph: every element, every pad and the caps negotiated between them.'},
     {"name": "pipeline.latency", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/pipeline/latency"), "summary": 'How much delay one pipeline is carrying, and which stage put it there.'},
@@ -2399,6 +2442,28 @@ class GeneratedMethods:
             params["uri"] = uri
         params.update(extra)
         return await self._call("output.set", params)
+
+    async def path_create(
+        self,
+        name: str,
+        parent: str,
+    ) -> PathListing:
+        """Make one new folder inside a folder path.list shows, and list it. A folder that is already there is listed rather than refused."""
+        params: Dict[str, Any] = {}
+        params["name"] = name
+        params["parent"] = parent
+        return await self._call("path.create", params)
+
+    async def path_list(
+        self,
+        *,
+        path: Optional[str] = None,
+    ) -> PathListing:
+        """The folders in one folder on the mixer, and whether each is writable, for a folder picker. Only the home folder and the mixer's own folders are shown; files never are."""
+        params: Dict[str, Any] = {}
+        if path is not None:
+            params["path"] = path
+        return await self._call("path.list", params)
 
     async def pipeline_clock(
         self,

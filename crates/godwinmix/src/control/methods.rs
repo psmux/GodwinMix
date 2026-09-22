@@ -23,6 +23,7 @@ pub mod config;
 mod filters;
 pub mod lifecycle;
 mod media;
+mod paths;
 mod nodes;
 mod outputs;
 mod preview;
@@ -57,6 +58,7 @@ pub fn registry() -> Registry<Call> {
     register_core(&mut reg);
     register_introspection(&mut reg);
     lifecycle::register(&mut reg);
+    paths::register(&mut reg);
     program::register(&mut reg);
     sources::register(&mut reg);
     outputs::register(&mut reg);
