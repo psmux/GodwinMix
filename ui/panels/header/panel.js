@@ -89,8 +89,11 @@ class HeaderPanel extends HTMLElement {
     // said "black" over a live programme.
     const on = !!(s.program || s.scene);
     const source = s.program ? s.sources.find((x) => x.id === s.program) : null;
+    // `scene` is the name that scene had when it was taken, which a rename
+    // does not reach. `sceneName` is what the document calls it now.
+    const scene = s.scene ? s.sceneName || s.scene : null;
     this.tally.classList.toggle("on", on);
-    this.tally.lastChild.textContent = source ? source.name : s.program || s.scene || "black";
+    this.tally.lastChild.textContent = source ? source.name : s.program || scene || "black";
     document.body.classList.toggle("onair", on);
     if (s.uptime_secs !== this.uptimeSaid) {
       this.uptimeSaid = s.uptime_secs;
