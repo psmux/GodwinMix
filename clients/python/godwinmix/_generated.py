@@ -578,12 +578,16 @@ class IdRequest(TypedDict, total=False):
     id: str
 
 class ImportObsRequest(TypedDict, total=False):
-    path: str
-    # The collection JSON exported from OBS (Scene Collection, Export), as a path on the machine the core is running on.
+    add_sources: bool
+    # Add the sources the scenes draw, each through `source.add`. Left out, only the scenes are added and the answer carries a `[[sources]]` block in `config_toml` instead.
+    content: Optional[str]
+    # The collection JSON itself, as text: what a page reads from the file the person picked. Give this or `path`.
+    path: Optional[str]
+    # The collection JSON exported from OBS (Scene Collection, Export), as a path on the machine the core is running on. Give this or `content`.
 
 class ImportReport(TypedDict, total=False):
     config_toml: Optional[str]
-    # The `[[sources]]` block to paste into a config, so the sources the scenes draw can be added in one edit rather than one call each.
+    # The `[[sources]]` block for a config file. Only for an import that did not add the sources itself, which is what the command line wants.
     filters_duplicated: List[FilterReport]
     # OBS attaches a filter to a source, so a camera keyed in one scene is keyed in all of them. Here filters belong to the item, so a source filter is copied onto each placement and each copy is named here. This is the one thing an import changes the meaning of, so it is reported rather than left for somebody to find on air.
     items: int
@@ -594,7 +598,11 @@ class ImportReport(TypedDict, total=False):
     source_report: List[SourceReport]
     # Every OBS source and what became of it: carried across, needing a plugin that is not installed, or skipped with the reason.
     sources: List[str]
-    # The sources the collection needs, which have to be added separately.
+    # The sources the collection needs, by id. Without `add_sources` they have to be added separately.
+    sources_added: Optional[List[str]]
+    # With `add_sources`: the sources added to the mixer, by id.
+    sources_not_added: Optional[List[SourceNotAdded]]
+    # With `add_sources`: the sources that were not added, each with why.
 
 class ImportRequest(TypedDict, total=False):
     """`scene.import`."""
@@ -1376,6 +1384,14 @@ class SourceMeta(TypedDict, total=False):
     # A tray folder: a tag on the source, purely for finding things. Not a scene group, which is a thing on the canvas.
     name: Optional[str]
 
+class SourceNotAdded(TypedDict, total=False):
+    """A source the import found and did not add, and why."""
+
+    id: str
+    plugin: Optional[str]
+    # The plugin that plays it, when that is what is missing, so a page can offer to install it.
+    reason: str
+
 class SourcePositionState(TypedDict, total=False):
     """Where a seekable source has got to, which is what the seek endpoint answers with. Both numbers are read back off the pipeline after the seek has landed, not taken from the request. A seek snaps to a key unit, so the frame an operator asked for and the frame they got are rarely the same millisecond, and a scrubber drawn from the request would sit a little away from the picture."""
 
@@ -1791,7 +1807,7 @@ METHODS = (
     {"name": "scene.graphic.list", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/scenes/graphic/list"), "summary": 'Every graphic template this core can place, with what each one takes.'},
     {"name": "scene.history.mark", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/scenes/history/mark"), "summary": 'Group the changes that follow into one undo step, until the next mark. This is what makes a drag of forty moves one Ctrl+Z.'},
     {"name": "scene.import", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/scenes/import"), "summary": 'Read a collection bundle, a zip or the directory it unpacks to, and add its scenes to this one. Answers with a relink report for any asset that did not come across.'},
-    {"name": "scene.import.obs", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/scenes/import/obs"), "summary": 'Read an OBS Studio scene collection and add its scenes to this one.'},
+    {"name": "scene.import.obs", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/scenes/import/obs"), "summary": "Read an OBS Studio scene collection and add its scenes to this one. Send the file's text as `content` (what a page's file picker reads) or a `path` on the mixer's machine. With `add_sources: true` the sources the scenes draw are added through source.add, and the answer says which were added and why any were not."},
     {"name": "scene.item.add", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/scenes/item/add"), "summary": "Put something on a scene's canvas. With no transform it lands in the next free cell, so a drop never needs a dialog."},
     {"name": "scene.item.align", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/scenes/item/align"), "summary": 'Line items up on an edge: left, right, top, bottom, center-x or center-y.'},
     {"name": "scene.item.arrange_grid", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/scenes/item/arrange_grid"), "summary": 'Lay items out in a grid of `cols` columns.'},
@@ -2726,11 +2742,19 @@ class GeneratedMethods:
 
     async def scene_import_obs(
         self,
-        path: str,
+        *,
+        add_sources: Optional[bool] = None,
+        content: Optional[str] = None,
+        path: Optional[str] = None,
     ) -> ImportReport:
-        """Read an OBS Studio scene collection and add its scenes to this one."""
+        """Read an OBS Studio scene collection and add its scenes to this one. Send the file's text as `content` (what a page's file picker reads) or a `path` on the mixer's machine. With `add_sources: true` the sources the scenes draw are added through source.add, and the answer says which were added and why any were not."""
         params: Dict[str, Any] = {}
-        params["path"] = path
+        if add_sources is not None:
+            params["add_sources"] = add_sources
+        if content is not None:
+            params["content"] = content
+        if path is not None:
+            params["path"] = path
         return await self._call("scene.import.obs", params)
 
     async def scene_item_add(

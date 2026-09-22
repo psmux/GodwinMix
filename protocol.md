@@ -109,7 +109,7 @@ Keys accepted on every method, handled before a method runs.
 | `scene.graphic.list` | `GET /api/v1/scenes/graphic/list` | read |  | 1 | Every graphic template this core can place, with what each one takes. |
 | `scene.history.mark` | `POST /api/v1/scenes/history/mark` | operate |  | 1 | Group the changes that follow into one undo step, until the next mark. This is what makes a drag of forty moves one Ctrl+Z. |
 | `scene.import` | `POST /api/v1/scenes/import` | operate |  | 1 | Read a collection bundle, a zip or the directory it unpacks to, and add its scenes to this one. Answers with a relink report for any asset that did not come across. |
-| `scene.import.obs` | `POST /api/v1/scenes/import/obs` | operate |  | 1 | Read an OBS Studio scene collection and add its scenes to this one. |
+| `scene.import.obs` | `POST /api/v1/scenes/import/obs` | operate |  | 1 | Read an OBS Studio scene collection and add its scenes to this one. Send the file's text as `content` (what a page's file picker reads) or a `path` on the mixer's machine. With `add_sources: true` the sources the scenes draw are added through source.add, and the answer says which were added and why any were not. |
 | `scene.item.add` | `POST /api/v1/scenes/item/add` | operate |  | 1 | Put something on a scene's canvas. With no transform it lands in the next free cell, so a drop never needs a dialog. |
 | `scene.item.align` | `POST /api/v1/scenes/item/align` | operate |  | 1 | Line items up on an edge: left, right, top, bottom, center-x or center-y. |
 | `scene.item.arrange_grid` | `POST /api/v1/scenes/item/arrange_grid` | operate |  | 1 | Lay items out in a grid of `cols` columns. |
@@ -1427,7 +1427,7 @@ MCP tool `import_collection` in the `search` profile: readOnlyHint false, destru
 
 #### `scene.import.obs`
 
-Read an OBS Studio scene collection and add its scenes to this one.
+Read an OBS Studio scene collection and add its scenes to this one. Send the file's text as `content` (what a page's file picker reads) or a `path` on the mixer's machine. With `add_sources: true` the sources the scenes draw are added through source.add, and the answer says which were added and why any were not.
 
 ```json
 {

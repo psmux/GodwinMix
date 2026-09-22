@@ -541,7 +541,9 @@ export interface IdRequest {
 }
 
 export interface ImportObsRequest {
-  path: string;
+  add_sources?: boolean;
+  content?: string | null;
+  path?: string | null;
 }
 
 export interface ImportReport {
@@ -552,6 +554,8 @@ export interface ImportReport {
   skipped: string[];
   source_report?: SourceReport[];
   sources: string[];
+  sources_added?: string[] | null;
+  sources_not_added?: SourceNotAdded[] | null;
 }
 
 /** `scene.import`. */
@@ -1283,6 +1287,13 @@ export interface SourceMeta {
   name?: string | null;
 }
 
+/** A source the import found and did not add, and why. */
+export interface SourceNotAdded {
+  id: string;
+  plugin?: string | null;
+  reason: string;
+}
+
 /**
  * Where a seekable source has got to, which is what the seek endpoint answers
  * with.
@@ -1938,7 +1949,7 @@ export const METHODS: readonly MethodInfo[] = [
   { name: "scene.graphic.list", summary: "Every graphic template this core can place, with what each one takes.", scope: "read", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/scenes/graphic/list" } },
   { name: "scene.history.mark", summary: "Group the changes that follow into one undo step, until the next mark. This is what makes a drag of forty moves one Ctrl+Z.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/scenes/history/mark" } },
   { name: "scene.import", summary: "Read a collection bundle, a zip or the directory it unpacks to, and add its scenes to this one. Answers with a relink report for any asset that did not come across.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/scenes/import" } },
-  { name: "scene.import.obs", summary: "Read an OBS Studio scene collection and add its scenes to this one.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/scenes/import/obs" } },
+  { name: "scene.import.obs", summary: "Read an OBS Studio scene collection and add its scenes to this one. Send the file's text as `content` (what a page's file picker reads) or a `path` on the mixer's machine. With `add_sources: true` the sources the scenes draw are added through source.add, and the answer says which were added and why any were not.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/scenes/import/obs" } },
   { name: "scene.item.add", summary: "Put something on a scene's canvas. With no transform it lands in the next free cell, so a drop never needs a dialog.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/scenes/item/add" } },
   { name: "scene.item.align", summary: "Line items up on an edge: left, right, top, bottom, center-x or center-y.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/scenes/item/align" } },
   { name: "scene.item.arrange_grid", summary: "Lay items out in a grid of `cols` columns.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/scenes/item/arrange_grid" } },
@@ -2420,8 +2431,8 @@ export class GeneratedMethods {
     return this._call("scene.import", params as unknown as Record<string, unknown>) as Promise<ImportedReport>;
   }
 
-  /** Read an OBS Studio scene collection and add its scenes to this one. */
-  sceneImportObs(params: ImportObsRequest): Promise<ImportReport> {
+  /** Read an OBS Studio scene collection and add its scenes to this one. Send the file's text as `content` (what a page's file picker reads) or a `path` on the mixer's machine. With `add_sources: true` the sources the scenes draw are added through source.add, and the answer says which were added and why any were not. */
+  sceneImportObs(params: ImportObsRequest = {}): Promise<ImportReport> {
     return this._call("scene.import.obs", params as unknown as Record<string, unknown>) as Promise<ImportReport>;
   }
 

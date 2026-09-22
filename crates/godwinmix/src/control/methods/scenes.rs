@@ -25,6 +25,7 @@ use std::sync::Arc;
 pub(crate) mod edit;
 mod graphics;
 mod items;
+mod obs;
 pub(crate) mod layout;
 mod requests;
 mod share;
@@ -205,11 +206,14 @@ fn scenes(reg: &mut Registry<Call>) {
         MethodDef::new(
             "scene.import.obs",
             Scope::Operate,
-            "Read an OBS Studio scene collection and add its scenes to this one.",
-            handler(import_obs),
+            "Read an OBS Studio scene collection and add its scenes to this one. Send the \
+             file's text as `content` (what a page's file picker reads) or a `path` on the \
+             mixer's machine. With `add_sources: true` the sources the scenes draw are added \
+             through source.add, and the answer says which were added and why any were not.",
+            handler(obs::import_obs),
         )
         .params(schema_of::<ImportObsRequest>)
-        .result(schema_of::<ImportReport>),
+        .result(schema_of::<obs::ImportReport>),
     );
 }
 
@@ -334,52 +338,6 @@ async fn duplicate(call: Call, params: Value) -> Result<Value, RpcError> {
     body(server(&call).scene(&id.to_string()).map_err(|e| scene_error(&call, e))?)
 }
 
-async fn import_obs(call: Call, params: Value) -> Result<Value, RpcError> {
-    let req: ImportObsRequest = call.params(&params)?;
-    let text = std::fs::read_to_string(&req.path).map_err(|e| {
-        RpcError::new(
-            ErrorCode::NotFound,
-            format!(
-                "could not read {}: {e}. Export the collection from OBS with Scene \
-                 Collection, Export, and give the path to the file it writes.",
-                req.path
-            ),
-        )
-    })?;
-    let canvas = server(&call).canvas();
-    let options = godwinmix_core::scene::obs_import::Options {
-        canvas: Some(canvas),
-        ..Default::default()
-    };
-    let imported = godwinmix_core::scene::obs_import::import(&text, &options)
-        .map_err(|e| scene_error(&call, e))?;
-    // The names the scenes end up with, not the ones they came with: a core
-    // that already has a "Main" gives the incoming one "Main 2", and a report
-    // that said "Main" would name a scene the caller cannot then address.
-    let incoming = imported.document.scenes.clone();
-    let (added, _) = server(&call)
-        .edit(client(&call).as_deref(), |doc| {
-            let mut names = Vec::new();
-            for scene in &incoming {
-                let mut scene = scene.clone();
-                scene.name = godwinmix_core::scene::server::find::free_scene_name(doc, &scene.name);
-                names.push(scene.name.clone());
-                doc.scenes.push(scene);
-            }
-            Ok(names)
-        })
-        .map_err(|e| scene_error(&call, e))?;
-    body(ImportReport {
-        scenes: added,
-        items: imported.report.items,
-        skipped: imported.report.notes.clone(),
-        sources: imported.sources.iter().map(|s| s.id.clone()).collect(),
-        source_report: imported.report.sources.clone(),
-        filters_duplicated: imported.report.filters_duplicated.clone(),
-        config_toml: imported.to_config_toml().ok(),
-    })
-}
-
 /// `scene.list`.
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 pub struct SceneListing {
@@ -397,30 +355,4 @@ pub struct Validation {
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 pub struct SceneRemoved {
     pub removed: String,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
-pub struct ImportReport {
-    /// The scenes that were added, by the names they ended up with.
-    pub scenes: Vec<String>,
-    pub items: usize,
-    /// What could not be brought across, and why, one line each.
-    pub skipped: Vec<String>,
-    /// The sources the collection needs, which have to be added separately.
-    pub sources: Vec<String>,
-    /// Every OBS source and what became of it: carried across, needing a
-    /// plugin that is not installed, or skipped with the reason.
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub source_report: Vec<godwinmix_core::scene::obs_import::SourceReport>,
-    /// OBS attaches a filter to a source, so a camera keyed in one scene is
-    /// keyed in all of them. Here filters belong to the item, so a source
-    /// filter is copied onto each placement and each copy is named here. This
-    /// is the one thing an import changes the meaning of, so it is reported
-    /// rather than left for somebody to find on air.
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub filters_duplicated: Vec<godwinmix_core::scene::obs_import::FilterReport>,
-    /// The `[[sources]]` block to paste into a config, so the sources the
-    /// scenes draw can be added in one edit rather than one call each.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub config_toml: Option<String>,
 }

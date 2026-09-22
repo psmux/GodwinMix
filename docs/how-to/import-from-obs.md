@@ -143,6 +143,39 @@ says "needs the ... plugin" is in your scene document and in your source list,
 and it starts working the day you install the plugin, with nothing else to
 change.
 
+## From a page, or anything that speaks the protocol
+
+The mixer can read the collection itself, sent as text, and add the sources in
+the same call. This is what a browser does with the file a person picked, so
+the file does not have to be on the mixer's machine:
+
+```sh
+jq -Rs '{content: ., add_sources: true}' Sunday_service.json \
+  | curl -s -X POST localhost:8080/api/v1/scenes/import/obs \
+      -H 'content-type: application/json' -d @-
+```
+
+The answer is the report above as JSON, plus two lists:
+
+```json
+{
+  "scenes": ["Main"],
+  "sources_added": ["backdrop"],
+  "sources_not_added": [
+    {"id": "camera", "plugin": "camera",
+     "reason": "Camera needs the camera plugin, which is not installed. Install it, then import again or add the source."}
+  ]
+}
+```
+
+A source whose id the mixer already has is not added twice: the imported
+scenes use the one that is there, and the reason says so. A source the mixer
+refuses, a clip whose file is not on this machine for example, is listed with
+the mixer's own reason.
+
+The welcome screen's Import from OBS tile still shows the command line. A drop
+zone that sends the file this way arrives in a later change.
+
 ## What comes across, exactly
 
 | OBS | GodwinMix |
