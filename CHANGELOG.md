@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+* Four new methods read and change the mixer's own settings: `config.get`, `config.set`, `config.reset` and `config.schema`. Keys are dotted, as in a preset plan. Every answer says when a change applies: live (the safety rules, the stall policy, the audio ramp, exec sources), on the next source (`[browser]`), or at the next start, with the list of keys still waiting. A bad value is refused with the range or the choices, and nothing is written unless every value fits and the file still loads. The control token is never read back. The GUI dialog on top of these is not built yet.
+* `preset.apply` and `plugin.settings.set` edit the config file in place and keep every comment in it. Both used to write the file again from its values, so one click on a welcome tile turned a 506 line commented file into about a hundred bare lines.
+* `preset.apply` names only the config keys it wrote as waiting for a restart. It counted keys where your own value won and nothing was written.
+* `core.doctor`, over `/rpc` and over `GET /api/v1/core/doctor`, checks the config the mixer was started with. It looked for `godwinmix.toml` in the working directory and reported it missing on a mixer started with `--config`.
+* `[canvas]`, `[program]` and `[control]` take a default for each key left out, as the other sections already did. A `[canvas]` with only a width in it used to stop the mixer starting.
 * Fixed a segfault in the programme compositor when a source that was on air was removed. A flush stop sent into a slot could free a frame the compositor's scaler threads were still writing. It took about eighty removals to hit on an M4 Pro. A slot is now hidden, and one frame let out, before its flush is ended.
 * "Start empty" on the first run screen opens the Default scene's own source chooser. It used to add the source to the mixer and to no scene, so the toast said added and nothing appeared.
 * The source chooser reuses a test pattern or media file the mixer already has. It compared against the full address while the core publishes a shortened one, so every scene got its own copy of colour bars.

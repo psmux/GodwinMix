@@ -17,7 +17,7 @@
 pub mod methods;
 pub mod routes;
 
-pub use methods::register;
+pub use methods::{doctor_config_path, register};
 pub use routes::{router, ObserveState};
 
 /// Middleware that counts and times every call, for the api agent's `/rpc`

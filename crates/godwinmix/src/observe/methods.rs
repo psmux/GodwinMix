@@ -371,7 +371,7 @@ fn register_core(reg: &mut Registry<Call>) {
 /// The config the running core was started with, which is the one the doctor
 /// should look at. `--config` sets it; an embedded core built in code has none
 /// and gets the name a plain `godwinmix` start would read.
-fn doctor_config_path(started_with: &std::path::Path) -> std::path::PathBuf {
+pub fn doctor_config_path(started_with: &std::path::Path) -> std::path::PathBuf {
     if started_with.as_os_str().is_empty() {
         return godwinmix_core::config::path_in_force(std::path::Path::new("godwinmix.toml"));
     }

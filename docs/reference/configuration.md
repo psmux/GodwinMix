@@ -14,6 +14,11 @@ material in the order you would fill it in.
 Sections may be left out entirely. Every key has a default and the mixer starts
 with an empty file.
 
+The scalar keys on this page can also be read and changed on a running mixer
+with `config.get` and `config.set`, which edit this file in place and say
+which changes are live and which wait for a restart. See
+[the config methods](config-methods.md).
+
 ## `[canvas]`
 
 The contract every source is normalised to. It cannot change while a broadcast

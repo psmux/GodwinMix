@@ -112,7 +112,7 @@ above, so a preset written against this table works on it.
 
 | File | What happens to it |
 |---|---|
-| `godwinmix.toml` | Copied whole with its comments when there was none. Merged key by key when there was, and the original is kept as `godwinmix.toml.bak`. |
+| `godwinmix.toml` | Copied whole with its comments when there was none. Merged key by key when there was, in place, so your comments, blank lines and key order stay and what the preset adds arrives with the preset's own comments. The original is kept as `godwinmix.toml.bak`. |
 | `godwinmix.scenes.json` | The preset's scenes, resolved against its sources, appended by name. A scene already there under the same name is replaced. |
 | `godwinmix.runtime.toml` | A `[ui]` section: `preset`, `theme`, `gallery` and `layout`. |
 
@@ -158,7 +158,9 @@ Every one takes `--config` to name a config other than `godwinmix.toml`, and
 A running core picks up what it can without a restart: the sources and outputs
 the preset brought whose plugin is installed are added through the same commands
 `source.add` and `output.add` use, and the answer's `live` array says which.
-`needs_restart` says what did not, in plain words. The layout, theme and gallery
+`needs_restart` says what did not, in plain words. A config key is named there
+only when the apply wrote it: a key where your own value won was not changed and
+waits for nothing. The layout, theme and gallery
 mode go out to every client as `event/ui.changed`, and `core.info` answers with
 them from then on.
 
