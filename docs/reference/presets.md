@@ -70,11 +70,16 @@ theme = "calm"
 theme_css = "theme.css"
 scenes = "scenes"
 gallery = "icon"
-steps = [
-  "Put your two stream keys into the [[outputs]] blocks of godwinmix.toml.",
-  "Run `gmx` and open http://localhost:8080.",
-  "Press Wide to put a picture on air.",
-]
+
+[[provides.preset.steps]]
+text = "Add the YouTube stream key."
+does = "add-key"
+target = "youtube"
+
+[[provides.preset.steps]]
+text = "Press Wide to put a picture on air."
+does = "take"
+target = "cam-wide"
 ```
 
 | Key | Required | What it is |
@@ -87,7 +92,29 @@ steps = [
 | `scenes` | yes | A directory of scene documents, one file each. |
 | `theme_css` | no | A stylesheet inside the preset, served at `/presets/<name>/theme.css`. Required when `theme` is not a built in one. |
 | `gallery` | no | What the tiles start as: `live`, `snapshot`, `icon` or `label` (05 section 3b). Absent means the surface asks the machine, which is what `gmx doctor` proposes. |
-| `steps` | no | The three things the person does next. The welcome panel shows these in order, and the README repeats them. |
+| `steps` | no | The things the person does next, in order. Each is a table with `text`, and optionally `does` and `target`; a plain string is read as `text` alone. |
+
+### Steps
+
+A step is a sentence plus, optionally, what the page can do about it. The
+reference UI draws each one as a checklist row with a button, and ticks it
+from the mixer's state. `gmx preset apply` prints the sentences.
+
+| `does` | `target` | The button | Done when |
+|---|---|---|---|
+| `add-key` | an output id | opens that output's key form | the output has a key it did not have, or its form was saved from the list |
+| `add-source` | a picker category: `cameras`, `screens`, `audio`, `files`, `web`, `streams` | opens the source picker there | a source was added since the list opened |
+| `install-plugin` | a plugin name | installs it with `plugin.add` | the plugin is loaded |
+| `open-panel` | a panel id, `core/alerts` | brings the panel forward | it was shown |
+| `take` | a source or scene id | puts it on air | it is on air |
+
+A step with no `does`, or one a page does not know, is shown as its text.
+`text` names no file, command or address: the person reading it is already in
+the mixer.
+
+`preset.apply` and `preset.list` carry both `steps`, the sentences as strings,
+and `checklist`, the same steps with `does` and `target`. A page written before
+`checklist` existed reads `steps` and keeps working.
 
 ### The layout file
 

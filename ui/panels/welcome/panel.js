@@ -6,8 +6,8 @@
 // `ui.preset`), so a new browser on the same mixer does not get asked again.
 //
 // Picking a tile calls `preset.apply` over the same protocol every other client
-// uses, then shows that preset's own three steps with the plugins that are
-// still missing named. Nothing here is private to the first party UI.
+// uses, then shows that preset's own steps as a checklist, each with the
+// button that does it. Nothing here is private to the first party UI.
 
 import { el } from "../../shell/dom.js";
 import { errorToast } from "../../shell/toast.js";
@@ -100,7 +100,7 @@ export class WelcomePanel extends HTMLElement {
         el("p.dim", {
           text:
             "Pick the one closest to what you are doing. It sets this mixer up and tells " +
-            "you the three things left to do. Nothing here is permanent: Settings changes " +
+            "you what is left to do. Nothing here is permanent: Settings changes " +
             "any of it afterwards.",
           style: { marginTop: "0" },
         }),
@@ -127,7 +127,7 @@ export class WelcomePanel extends HTMLElement {
   async pick(choice) {
     if (choice.id === "obs") {
       this.close();
-      return (await import("./after.js")).importFromObs();
+      return (await import("./after.js")).importFromObs(this.client);
     }
     if (!choice.id) {
       this.close();

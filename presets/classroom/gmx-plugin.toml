@@ -23,10 +23,23 @@ scenes = "scenes"
 theme_css = "theme.css"
 gallery = "snapshot"
 
-# The three things the person does next. The welcome panel in the web UI
-# shows these in this order, and the README repeats them.
-steps = [
-  "Point the camera source at your webcam, or leave the placeholder and drop a file on the page.",
-  "Put your school's streaming URL and key into the [[outputs]] block, or record only.",
-  "Run `gmx`, open http://localhost:8080, and press Camera to start the lesson.",
-]
+# The things the person does next, in order. Each one says what it does and
+# to what, so the welcome dialog in the web UI draws it as a button and ticks
+# it off when it is done. The text is what the CLI prints, and what a page that
+# does not know `does` shows. None of them names a file or a command: the
+# person reading them is already in the mixer.
+
+[[provides.preset.steps]]
+text = "Add the webcam that points at the teacher. Until then the Teacher tile is a test pattern."
+does = "add-source"
+target = "cameras"
+
+[[provides.preset.steps]]
+text = "Add your school's stream key, or leave it and only record."
+does = "add-key"
+target = "stream"
+
+[[provides.preset.steps]]
+text = "Press Teacher to start the lesson."
+does = "take"
+target = "teacher"

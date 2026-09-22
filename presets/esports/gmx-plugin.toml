@@ -23,10 +23,23 @@ scenes = "scenes"
 theme_css = "theme.css"
 gallery = "live"
 
-# The three things the person does next. The welcome panel in the web UI
-# shows these in this order, and the README repeats them.
-steps = [
-  "Put the four player feeds and the caster camera into the [[sources]] blocks.",
-  "Put your destination's URL and stream key into the [[outputs]] block.",
-  "Run `gmx`, open http://localhost:8080, and press Quad to bring all four up.",
-]
+# The things the person does next, in order. Each one says what it does and
+# to what, so the welcome dialog in the web UI draws it as a button and ticks
+# it off when it is done. The text is what the CLI prints, and what a page that
+# does not know `does` shows. None of them names a file or a command: the
+# person reading them is already in the mixer.
+
+[[provides.preset.steps]]
+text = "Add the player feeds and the caster camera from the streams on your network."
+does = "add-source"
+target = "streams"
+
+[[provides.preset.steps]]
+text = "Add the Twitch stream key."
+does = "add-key"
+target = "twitch"
+
+[[provides.preset.steps]]
+text = "Press Quad to bring all four players up."
+does = "take"
+target = "quad"

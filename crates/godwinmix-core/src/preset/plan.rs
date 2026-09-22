@@ -81,7 +81,11 @@ pub struct Plan {
     pub theme_css: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub gallery: Option<String>,
+    /// The steps as sentences, which is what a page that predates
+    /// `checklist` reads and what the CLI prints.
     pub steps: Vec<String>,
+    /// The same steps with what each does and to what, in the same order.
+    pub checklist: Vec<super::step::Step>,
     pub plugins: Vec<PluginNeed>,
     pub config: Vec<ConfigChange>,
     pub sources: Vec<Addition>,
@@ -152,7 +156,8 @@ pub fn build(preset: &Preset, options: &Options) -> Result<Plan> {
         theme: block.theme.clone(),
         theme_css: block.theme_css.clone(),
         gallery: block.gallery.clone(),
-        steps: block.steps.clone(),
+        steps: super::step::texts(&block.steps),
+        checklist: block.steps.clone(),
         plugins,
         config,
         sources,

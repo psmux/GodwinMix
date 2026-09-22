@@ -23,10 +23,23 @@ scenes = "scenes"
 theme_css = "theme.css"
 gallery = "icon"
 
-# The three things the person does next. The welcome panel in the web UI
-# shows these in this order, and the README repeats them.
-steps = [
-  "Put your YouTube and Facebook stream keys into the two [[outputs]] blocks of godwinmix.toml.",
-  "Run `gmx` and open http://localhost:8080 on the volunteer's screen.",
-  "Press Wide to put a picture on air, then press the red button when the service starts.",
-]
+# The things the person does next, in order. Each one says what it does and
+# to what, so the welcome dialog in the web UI draws it as a button and ticks
+# it off when it is done. The text is what the CLI prints, and what a page that
+# does not know `does` shows. None of them names a file or a command: the
+# person reading them is already in the mixer.
+
+[[provides.preset.steps]]
+text = "Add the YouTube stream key."
+does = "add-key"
+target = "youtube"
+
+[[provides.preset.steps]]
+text = "Add the Facebook stream key."
+does = "add-key"
+target = "facebook"
+
+[[provides.preset.steps]]
+text = "Press Wide to put a picture on air, then press the red button when the service starts."
+does = "take"
+target = "cam-wide"

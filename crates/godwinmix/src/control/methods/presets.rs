@@ -320,12 +320,12 @@ fn still_pending(plan: &preset::Plan, reload: &Reload) -> Vec<String> {
         }
         match &addition.needs_plugin {
             Some(plugin) => out.push(format!(
-                "{} waits for the {plugin} plugin: `gmx plugin add {plugin}`",
+                "{} waits for the {plugin} plugin, and starts once it is installed",
                 addition.id
             )),
             None => out.push(format!(
                 "{} is in the config file; this core did not bring it up now, so it \
-                 starts on the next `gmx` restart",
+                 starts when the mixer restarts",
                 addition.id
             )),
         }
