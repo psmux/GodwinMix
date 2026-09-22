@@ -21,6 +21,15 @@ import { modal } from "../../shell/modal.js";
 import { toast, errorToast } from "../../shell/toast.js";
 import { PLATFORMS, platform, platformOfHost, joinKey } from "../../client/kinds.js";
 
+/** What the two reconnect policies are called where somebody has to pick one. */
+const OWN_LABEL = "Retry quickly (a server you run)";
+const CDN_LABEL = "Back off (a platform that penalises hammering)";
+
+/** The same sentence the API hint has carried all along, in the form as well. */
+const POLICY_HINT =
+  "own retries quickly, for a server you run; cdn backs off harder, for a platform that " +
+  "penalises hammering.";
+
 /**
  * The platforms this build can actually reach. The core says which output
  * kinds exist, so a build with no `srtsink` does not get an SRT tile it would
@@ -132,10 +141,14 @@ export function schemaFor(p, output) {
     // in force, so without it every edit would quietly reset a cdn output to
     // own on its way to changing the buffer.
     enum: editing ? ["keep", "own", "cdn"] : ["own", "cdn"],
+    // The values are the protocol's and they stay the protocol's. What the
+    // list says is what a volunteer is choosing between: "own" and "cdn" on
+    // their own are two words nobody outside this codebase has met.
+    "x-gmx-labels": editing
+      ? ["Leave it as it is", OWN_LABEL, CDN_LABEL]
+      : [OWN_LABEL, CDN_LABEL],
     default: editing ? "keep" : p.policy,
-    description:
-      "own: reconnect on our schedule, for a server you run. cdn: back off the way the " +
-      "big platforms want." + (editing ? " keep: leave it as it is." : ""),
+    description: POLICY_HINT + (editing ? " Leave it as it is keeps whichever is in force." : ""),
     "x-gmx-group": "Advanced",
   };
   props.queue_secs = {
@@ -200,9 +213,34 @@ export function paramsFor(p, output, values) {
     params.uri = server;
   }
 
+  if (params.uri !== undefined) {
+    const wrong = schemeError(p, params.uri);
+    if (wrong) return { error: wrong, field: "server" };
+  }
+
   if (values.policy !== undefined && values.policy !== "keep") params.policy = values.policy;
   if (values.queue_secs !== undefined) params.queue_secs = values.queue_secs;
   return { params };
+}
+
+/**
+ * Why an address cannot be sent as it stands, or null.
+ *
+ * `127.0.0.1:1935/live` in the server box used to reach the core, which
+ * answered with a sentence about writing a `type` field and a list of the
+ * kinds this build has. Neither exists on this form, so the person reading it
+ * had nothing to do. The scheme is the one thing this form can judge for
+ * itself, so it judges it here and the core's message stays as it is for
+ * whoever is calling `output.add` directly.
+ */
+export function schemeError(p, uri) {
+  const want = p.provides === "srt/output" ? ["srt://"] : ["rtmp://", "rtmps://"];
+  const address = String(uri || "").trim();
+  if (want.some((s) => address.toLowerCase().startsWith(s))) return null;
+  const wanted = want.join(" or ");
+  return /^[a-z][a-z0-9+.-]*:\/\//i.test(address)
+    ? `This destination sends over ${wanted}. Change what the address starts with.`
+    : `The address has to start with ${wanted}. Try ${want[0]}${address.replace(/^\/+/, "")}.`;
 }
 
 /** What `schemaFor` puts in the server box on an edit, so a change shows. */
@@ -253,6 +291,13 @@ async function openForm(client, p, output, onDone) {
     }
     const asked = paramsFor(p, output, form.read());
     if (asked.error) {
+      // The same red outline `validate` draws round an empty required box, so
+      // a refusal points at the box it is about rather than only at the toast.
+      const field = asked.field && form.fields.find((f) => f.name === asked.field);
+      if (field) {
+        field.wrap.classList.add("bad");
+        field.input.focus();
+      }
       toast({ kind: "warning", text: asked.error });
       return;
     }

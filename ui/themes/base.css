@@ -342,6 +342,9 @@ label { display: block; }
    warning: nothing is arriving anywhere and nothing will until somebody
    pastes a key. */
 .needs-key { color: var(--bad); }
+/* And so is an address nothing ever answered at, which is the same fault
+   wearing different clothes. */
+.output-advice { color: var(--bad); }
 .dot.reconnecting { background: var(--warn); }
 /* The add flow's tiles are one line of platform and one of where to find the
    key, with no icon, so they read as a list of choices rather than a gallery. */
