@@ -35,8 +35,6 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use tracing::{error, info, warn};
 
-const EXAMPLE_CONFIG: &str = include_str!("../../../godwinmix.example.toml");
-
 /// Where a client subcommand looks for a mixer when nothing says otherwise.
 pub const DEFAULT_URL: &str = "http://127.0.0.1:8080";
 
@@ -51,7 +49,8 @@ struct Args {
     #[arg(short, long)]
     bind: Option<String>,
 
-    /// Print a commented example configuration and exit.
+    /// Print a commented example configuration and exit. It is the file a
+    /// first run writes: the sample cameras and outputs are commented out.
     #[arg(long)]
     example_config: bool,
 
@@ -446,6 +445,24 @@ pub fn install_wasm_host() {
     godwinmix_wasm::install();
 }
 
+/// A missing config file is a first run: write the starting one where the
+/// config would be, say so in one line, and carry on. Refused only when the
+/// file cannot be written, and then the error says where and why.
+fn first_run(config_path: &std::path::Path) -> Result<()> {
+    let wrote = config::first_run::write_if_missing(config_path).with_context(|| {
+        format!(
+            "there is no config at {} and one could not be written there. Make sure the \
+             folder exists and is writable, or pass --config with a path that is",
+            config_path.display()
+        )
+    })?;
+    if wrote {
+        let shown = std::fs::canonicalize(config_path).unwrap_or_else(|_| config_path.to_path_buf());
+        info!(path = %shown.display(), "first run: no config was here, so a starting one was written");
+    }
+    Ok(())
+}
+
 /// The program, on a thread with room to run it.
 ///
 /// Both binaries start here rather than with `#[tokio::main]`. That macro
@@ -589,7 +606,7 @@ pub async fn run() -> Result<()> {
     }
 
     if args.example_config {
-        print!("{EXAMPLE_CONFIG}");
+        print!("{}", config::first_run::first_run_config(config::first_run::EXAMPLE_CONFIG));
         return Ok(());
     }
 
@@ -620,12 +637,9 @@ pub async fn run() -> Result<()> {
     // The LiveboxMix config name is still read when there is no GodwinMix one.
     let config_path = config::path_in_force(&args.config);
     let load = core_observe::introspect::stage("config");
-    let cfg = Config::load(&config_path).with_context(|| {
-        format!(
-            "could not load {}. Run with --example-config to print a starting point.",
-            config_path.display()
-        )
-    })?;
+    first_run(&config_path)?;
+    let cfg = Config::load(&config_path)
+        .with_context(|| format!("could not load {}", config_path.display()))?;
     let bind = args.bind.unwrap_or_else(|| cfg.control.bind.clone());
     let tokens = cfg.tokens(args.rehearsal);
     match tokens.entries().len() {

@@ -1,14 +1,16 @@
 # Configuration
 
 Every key the mixer reads, with its default and what it is for. The file is
-TOML. Print a complete annotated one with:
+TOML. A mixer started with no config file writes a complete annotated one where
+the config would be, and starts on it. Print the same text with:
 
 ```sh
 godwinmix --example-config > godwinmix.toml
 ```
 
-The copy in the repository is [`godwinmix.example.toml`](../../godwinmix.example.toml)
-and it is the same text. This page is the flat list; that file is the same
+It is [`godwinmix.example.toml`](../../godwinmix.example.toml) from the
+repository with every `[[sources]]` and `[[outputs]]` table commented out, so a
+first run starts with nothing that tries to connect. This page is the flat list; that file is the same
 material in the order you would fill it in.
 
 Sections may be left out entirely. Every key has a default and the mixer starts

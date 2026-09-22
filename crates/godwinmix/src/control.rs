@@ -1487,7 +1487,18 @@ fn spawn_operator_watchdog(app: AppState) {
 pub async fn serve(bind: &str, state: AppState) -> Result<()> {
     let listener = tokio::net::TcpListener::bind(bind).await?;
     info!(%bind, "control server listening");
+    // One line for a person, whatever the log format: the JSON record above
+    // is for a log collector, and someone who just typed `godwinmix` wants
+    // the address to open.
+    eprintln!("GodwinMix is running. Open {} in a browser.", page_address(bind));
     serve_on(listener, state).await
+}
+
+/// The address a browser on this machine opens for a bind address. A bind on
+/// every interface is reached as 127.0.0.1 from here.
+fn page_address(bind: &str) -> String {
+    let local = bind.replacen("0.0.0.0:", "127.0.0.1:", 1).replacen("[::]:", "127.0.0.1:", 1);
+    format!("http://{local}/")
 }
 
 /// The same, on a listener somebody else opened.
