@@ -2725,6 +2725,10 @@
     },
     "MediaListing": {
       "properties": {
+        "created": {
+          "description": "True when the folder was not there and this listing made it, so a\nclient can say \"made the media folder\" once instead of nothing.",
+          "type": "boolean"
+        },
         "dir": {
           "type": "string"
         },

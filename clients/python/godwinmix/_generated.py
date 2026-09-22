@@ -805,6 +805,8 @@ class MediaItem(TypedDict, total=False):
     width: Optional[int]
 
 class MediaListing(TypedDict, total=False):
+    created: bool
+    # True when the folder was not there and this listing made it, so a client can say "made the media folder" once instead of nothing.
     dir: str
     error: Optional[str]
     # Set when the directory itself could not be read, so the UI can say why the list is empty instead of just showing nothing.

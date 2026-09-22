@@ -1267,6 +1267,10 @@ pub struct MediaItem {
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct MediaListing {
+    /// True when the folder was not there and this listing made it, so a
+    /// client can say "made the media folder" once instead of nothing.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub created: Option<bool>,
     pub dir: String,
     /// Set when the directory itself could not be read, so the UI can say why
     /// the list is empty instead of just showing nothing.
