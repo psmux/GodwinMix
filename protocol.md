@@ -40,6 +40,7 @@ Keys accepted on every method, handled before a method runs.
 | `core.api` | `GET /api/v1/core/api` | read |  | 1 | Every method, event and type as JSON Schema. The same document as protocol.json and `godwinmix --api-info`. |
 | `core.doctor` | `GET /api/v1/core/doctor` | read |  | 1 | The environment checks: GStreamer, the elements, the config, the disk and the ports. The same list `gmx doctor` prints. |
 | `core.info` | `GET /api/v1/core/info` | read |  | 1 | What this core is, what it can do, and where its edges are. |
+| `core.restart` | `POST /api/v1/core/restart` | admin | yes | 1 | Stop the mixer and have it started again, when something will start it again. On a supervised core (core.info restart.possible) it answers restarting: true and exits; the programme is off air until it is back. On a core started by hand it answers restarting: false, says how to restart it, and keeps running. |
 | `core.session_log` | `GET /api/v1/core/session_log` | admin |  | 1 | The append only record of everything that happened, back as far as you ask. |
 | `core.shutdown` | `POST /api/v1/core/shutdown` | admin | yes | 1 | Stop the mixer, and with it the programme. Nothing else takes the show off air, so this is deliberately its own call. |
 | `core.startup_report` | `GET /api/v1/core/startup_report` | read |  | 1 | How long each stage of the start took, and what was over the 250 ms mark. |
@@ -108,7 +109,7 @@ Keys accepted on every method, handled before a method runs.
 | `scene.graphic.list` | `GET /api/v1/scenes/graphic/list` | read |  | 1 | Every graphic template this core can place, with what each one takes. |
 | `scene.history.mark` | `POST /api/v1/scenes/history/mark` | operate |  | 1 | Group the changes that follow into one undo step, until the next mark. This is what makes a drag of forty moves one Ctrl+Z. |
 | `scene.import` | `POST /api/v1/scenes/import` | operate |  | 1 | Read a collection bundle, a zip or the directory it unpacks to, and add its scenes to this one. Answers with a relink report for any asset that did not come across. |
-| `scene.import.obs` | `POST /api/v1/scenes/import/obs` | operate |  | 1 | Read an OBS Studio scene collection and add its scenes to this one. |
+| `scene.import.obs` | `POST /api/v1/scenes/import/obs` | operate |  | 1 | Read an OBS Studio scene collection and add its scenes to this one. Send the file's text as `content` (what a page's file picker reads) or a `path` on the mixer's machine. With `add_sources: true` the sources the scenes draw are added through source.add, and the answer says which were added and why any were not. |
 | `scene.item.add` | `POST /api/v1/scenes/item/add` | operate |  | 1 | Put something on a scene's canvas. With no transform it lands in the next free cell, so a drop never needs a dialog. |
 | `scene.item.align` | `POST /api/v1/scenes/item/align` | operate |  | 1 | Line items up on an edge: left, right, top, bottom, center-x or center-y. |
 | `scene.item.arrange_grid` | `POST /api/v1/scenes/item/arrange_grid` | operate |  | 1 | Lay items out in a grid of `cols` columns. |
@@ -285,6 +286,23 @@ MCP tool `core_info` in the `search` profile: readOnlyHint true, destructiveHint
   },
   "result": {
     "$ref": "#/$defs/CoreInfo"
+  }
+}
+```
+
+#### `core.restart`
+
+Stop the mixer and have it started again, when something will start it again. On a supervised core (core.info restart.possible) it answers restarting: true and exits; the programme is off air until it is back. On a core started by hand it answers restarting: false, says how to restart it, and keeps running.
+
+```json
+{
+  "params": {
+    "additionalProperties": false,
+    "properties": {},
+    "type": "object"
+  },
+  "result": {
+    "$ref": "#/$defs/RestartAnswer"
   }
 }
 ```
@@ -1409,7 +1427,7 @@ MCP tool `import_collection` in the `search` profile: readOnlyHint false, destru
 
 #### `scene.import.obs`
 
-Read an OBS Studio scene collection and add its scenes to this one.
+Read an OBS Studio scene collection and add its scenes to this one. Send the file's text as `content` (what a page's file picker reads) or a `path` on the mixer's machine. With `add_sources: true` the sources the scenes draw are added through source.add, and the answer says which were added and why any were not.
 
 ```json
 {

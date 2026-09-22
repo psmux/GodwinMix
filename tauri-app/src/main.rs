@@ -14,7 +14,10 @@
 //   * a connect dialog, so the same app drives a headless server;
 //   * a tray icon, a menu, remembered window geometry, one instance;
 //   * two ways out, as menu items and as `godwinmix://quit` and
-//     `godwinmix://quit-all` navigations from the page.
+//     `godwinmix://quit-all` navigations from the page;
+//   * a restart of the mixer on this computer, from the menu, from a
+//     `godwinmix://restart` navigation, and whenever the mixer exits asking
+//     for one (`core.restart`).
 //
 // There is no address and no token compiled into this program. The port is
 // taken from the operating system at every start and the token is generated
@@ -24,6 +27,7 @@
 mod commands;
 mod core_link;
 mod plugins;
+mod restart;
 mod settings;
 mod sidecar;
 mod ui;
@@ -68,7 +72,11 @@ fn main() {
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_window_state::Builder::default().build())
         .manage(Shell { http: core_link::client(), ..Shell::default() })
-        .invoke_handler(tauri::generate_handler![commands::saved_connection, commands::connect_core])
+        .invoke_handler(tauri::generate_handler![
+            commands::saved_connection,
+            commands::connect_core,
+            restart::restart_core
+        ])
         .setup(move |app| {
             let handle = app.handle().clone();
             if headless {

@@ -121,8 +121,11 @@ class MediaPanel extends HTMLElement {
     this.count.textContent = this.items.length ? String(this.items.length) : "";
     clear(this.list);
     if (!this.items.length) {
+      // The core makes the folder itself, so the only error left is one it
+      // could not get past. The way to add a clip is said either way.
+      if (this.error) this.list.appendChild(el("p.dim.sm", { text: this.error, style: { margin: "0 0 4px" } }));
       this.list.appendChild(
-        el("p.dim.sm", { text: this.error || `Nothing in ${this.dir || "the media directory"}. Drop a file on the window to upload one.`, style: { margin: 0 } })
+        el("p.dim.sm", { text: "Nothing here yet. Press Upload, or drop a file on the window.", style: { margin: 0 } })
       );
       return;
     }

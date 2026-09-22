@@ -63,8 +63,18 @@ pub struct DuplicateSceneRequest {
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 pub struct ImportObsRequest {
     /// The collection JSON exported from OBS (Scene Collection, Export), as a
-    /// path on the machine the core is running on.
-    pub path: String,
+    /// path on the machine the core is running on. Give this or `content`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub path: Option<String>,
+    /// The collection JSON itself, as text: what a page reads from the file
+    /// the person picked. Give this or `path`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub content: Option<String>,
+    /// Add the sources the scenes draw, each through `source.add`. Left out,
+    /// only the scenes are added and the answer carries a `[[sources]]` block
+    /// in `config_toml` instead.
+    #[serde(default)]
+    pub add_sources: bool,
 }
 
 /// `scene.item.add`.

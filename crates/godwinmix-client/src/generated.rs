@@ -452,6 +452,15 @@ pub struct CoreInfo {
     /// True when the core was started with `--rehearsal`, which refuses
     /// `output.add` and accepts rehearsal tokens.
     pub rehearsal: bool,
+    /// Whether `core.restart` brings this core back, so a page can decide
+    /// between a Restart button and a sentence.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub restart: Option<RestartInfo>,
+    /// True when the core was started with `--supervised` (or
+    /// `GODWINMIX_SUPERVISED=1`): a service manager, a container runtime or
+    /// the desktop app starts it again after it exits.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub supervised: Option<bool>,
     /// Present when the request carried a token the core recognises.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub token: Option<TokenInfo>,
@@ -907,16 +916,26 @@ pub struct IdRequest {
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct ImportObsRequest {
+    /// Add the sources the scenes draw, each through `source.add`. Left out,
+    /// only the scenes are added and the answer carries a `[[sources]]` block
+    /// in `config_toml` instead.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub add_sources: Option<bool>,
+    /// The collection JSON itself, as text: what a page reads from the file
+    /// the person picked. Give this or `path`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub content: Option<String>,
     /// The collection JSON exported from OBS (Scene Collection, Export), as a
-    /// path on the machine the core is running on.
-    pub path: String,
+    /// path on the machine the core is running on. Give this or `content`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub path: Option<String>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct ImportReport {
-    /// The `[[sources]]` block to paste into a config, so the sources the
-    /// scenes draw can be added in one edit rather than one call each.
+    /// The `[[sources]]` block for a config file. Only for an import that did
+    /// not add the sources itself, which is what the command line wants.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub config_toml: Option<String>,
     /// OBS attaches a filter to a source, so a camera keyed in one scene is
@@ -933,8 +952,15 @@ pub struct ImportReport {
     /// Every OBS source and what became of it: carried across, needing a
     /// plugin that is not installed, or skipped with the reason.
     pub source_report: Vec<SourceReport>,
-    /// The sources the collection needs, which have to be added separately.
+    /// The sources the collection needs, by id. Without `add_sources` they
+    /// have to be added separately.
     pub sources: Vec<String>,
+    /// With `add_sources`: the sources added to the mixer, by id.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub sources_added: Option<Vec<String>>,
+    /// With `add_sources`: the sources that were not added, each with why.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub sources_not_added: Option<Vec<SourceNotAdded>>,
 }
 
 /// `scene.import`.
@@ -1258,6 +1284,10 @@ pub struct MediaItem {
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct MediaListing {
+    /// True when the folder was not there and this listing made it, so a
+    /// client can say "made the media folder" once instead of nothing.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub created: Option<bool>,
     pub dir: String,
     /// Set when the directory itself could not be read, so the UI can say why
     /// the list is empty instead of just showing nothing.
@@ -1836,6 +1866,32 @@ pub type ResponseFormat = String;
 /// The values api_level 1 knows for [`ResponseFormat`].
 pub const RESPONSE_FORMAT_VALUES: &[&str] = &["concise", "detailed"];
 
+/// `core.restart`: what happened.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct RestartAnswer {
+    pub how: RestartHow,
+    /// One sentence for a person: what happens now, or how to restart it.
+    pub message: String,
+    /// True when the core is on its way out and will be started again. False
+    /// when nothing would start it again, in which case it keeps running.
+    pub restarting: bool,
+}
+
+/// How a core that exits gets started again.
+pub type RestartHow = String;
+/// The values api_level 1 knows for [`RestartHow`].
+pub const RESTART_HOW_VALUES: &[&str] = &["supervised", "none"];
+
+/// `core.info.restart`: can this core be restarted from a client.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct RestartInfo {
+    pub how: RestartHow,
+    /// True when `core.restart` will bring the core back by itself.
+    pub possible: bool,
+}
+
 /// `event/resync`: the client fell behind and the stream has a hole in it.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
@@ -2148,6 +2204,18 @@ pub struct SourceMeta {
     pub group: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub name: Option<String>,
+}
+
+/// A source the import found and did not add, and why.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct SourceNotAdded {
+    pub id: String,
+    /// The plugin that plays it, when that is what is missing, so a page can
+    /// offer to install it.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub plugin: Option<String>,
+    pub reason: String,
 }
 
 /// Where a seekable source has got to, which is what the seek endpoint answers
@@ -2641,7 +2709,7 @@ pub struct MethodInfo {
     pub rest: Option<(&'static str, &'static str)>,
 }
 
-pub const METHODS: [MethodInfo; 126] = [
+pub const METHODS: [MethodInfo; 127] = [
     MethodInfo { name: "adbreak.end", summary: "Cut a running ad short, or disarm one that is scheduled.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/adbreak/end")) },
     MethodInfo { name: "adbreak.start", summary: "Interrupt the programme with a clip, then rejoin live when it ends.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/adbreak/start")) },
     MethodInfo { name: "agent.state", summary: "The compact document written for agents: the programme, each source's state and a motion score saying how much its picture is changing.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/agent/state")) },
@@ -2649,6 +2717,7 @@ pub const METHODS: [MethodInfo; 126] = [
     MethodInfo { name: "core.api", summary: "Every method, event and type as JSON Schema. The same document as protocol.json and `godwinmix --api-info`.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/core/api")) },
     MethodInfo { name: "core.doctor", summary: "The environment checks: GStreamer, the elements, the config, the disk and the ports. The same list `gmx doctor` prints.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/core/doctor")) },
     MethodInfo { name: "core.info", summary: "What this core is, what it can do, and where its edges are.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/core/info")) },
+    MethodInfo { name: "core.restart", summary: "Stop the mixer and have it started again, when something will start it again. On a supervised core (core.info restart.possible) it answers restarting: true and exits; the programme is off air until it is back. On a core started by hand it answers restarting: false, says how to restart it, and keeps running.", scope: "admin", mutating: true, destructive: true, rest: Some(("POST", "/api/v1/core/restart")) },
     MethodInfo { name: "core.session_log", summary: "The append only record of everything that happened, back as far as you ask.", scope: "admin", mutating: true, destructive: false, rest: Some(("GET", "/api/v1/core/session_log")) },
     MethodInfo { name: "core.shutdown", summary: "Stop the mixer, and with it the programme. Nothing else takes the show off air, so this is deliberately its own call.", scope: "admin", mutating: true, destructive: true, rest: Some(("POST", "/api/v1/core/shutdown")) },
     MethodInfo { name: "core.startup_report", summary: "How long each stage of the start took, and what was over the 250 ms mark.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/core/startup_report")) },
@@ -2717,7 +2786,7 @@ pub const METHODS: [MethodInfo; 126] = [
     MethodInfo { name: "scene.graphic.list", summary: "Every graphic template this core can place, with what each one takes.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/scenes/graphic/list")) },
     MethodInfo { name: "scene.history.mark", summary: "Group the changes that follow into one undo step, until the next mark. This is what makes a drag of forty moves one Ctrl+Z.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/scenes/history/mark")) },
     MethodInfo { name: "scene.import", summary: "Read a collection bundle, a zip or the directory it unpacks to, and add its scenes to this one. Answers with a relink report for any asset that did not come across.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/scenes/import")) },
-    MethodInfo { name: "scene.import.obs", summary: "Read an OBS Studio scene collection and add its scenes to this one.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/scenes/import/obs")) },
+    MethodInfo { name: "scene.import.obs", summary: "Read an OBS Studio scene collection and add its scenes to this one. Send the file's text as `content` (what a page's file picker reads) or a `path` on the mixer's machine. With `add_sources: true` the sources the scenes draw are added through source.add, and the answer says which were added and why any were not.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/scenes/import/obs")) },
     MethodInfo { name: "scene.item.add", summary: "Put something on a scene's canvas. With no transform it lands in the next free cell, so a drop never needs a dialog.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/scenes/item/add")) },
     MethodInfo { name: "scene.item.align", summary: "Line items up on an edge: left, right, top, bottom, center-x or center-y.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/scenes/item/align")) },
     MethodInfo { name: "scene.item.arrange_grid", summary: "Lay items out in a grid of `cols` columns.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/scenes/item/arrange_grid")) },
@@ -3008,6 +3077,11 @@ impl Client {
     /// What this core is, what it can do, and where its edges are.
     pub async fn core_info(&self) -> Result<CoreInfo> {
         self.call("core.info", &serde_json::json!({})).await
+    }
+
+    /// Stop the mixer and have it started again, when something will start it again. On a supervised core (core.info restart.possible) it answers restarting: true and exits; the programme is off air until it is back. On a core started by hand it answers restarting: false, says how to restart it, and keeps running.
+    pub async fn core_restart(&self) -> Result<RestartAnswer> {
+        self.call("core.restart", &serde_json::json!({})).await
     }
 
     /// The append only record of everything that happened, back as far as you ask.
@@ -3350,7 +3424,7 @@ impl Client {
         self.call("scene.import", params).await
     }
 
-    /// Read an OBS Studio scene collection and add its scenes to this one.
+    /// Read an OBS Studio scene collection and add its scenes to this one. Send the file's text as `content` (what a page's file picker reads) or a `path` on the mixer's machine. With `add_sources: true` the sources the scenes draw are added through source.add, and the answer says which were added and why any were not.
     pub async fn scene_import_obs(&self, params: &ImportObsRequest) -> Result<ImportReport> {
         self.call("scene.import.obs", params).await
     }

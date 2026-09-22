@@ -48,7 +48,7 @@ draws its handles without recomputing anything.
 | `scene.validate {scene?}` | what to fix before saying it is done |
 | `scene.export {format, path?}` | the whole collection: `json`, or `zip` or `dir` with its assets |
 | `scene.import {path}` | read a collection bundle and add its scenes, with a relink report |
-| `scene.import.obs {path}` | read an OBS collection and add its scenes |
+| `scene.import.obs {content? \| path?, add_sources?}` | read an OBS collection and add its scenes. `content` is the collection's JSON as text (what a page's file picker reads), `path` a file on the mixer's machine; exactly one. With `add_sources: true` each source the scenes draw is added through `source.add`, and the answer carries `sources_added` (ids) and `sources_not_added` (`{id, reason, plugin?}`, `plugin` naming what to install). Without it the answer carries `config_toml`, a `[[sources]]` block, as before |
 
 ```json
 {"method": "scene.create_from",

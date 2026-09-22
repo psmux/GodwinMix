@@ -287,6 +287,10 @@ class CoreInfo(TypedDict, total=False):
     limits: Limits
     rehearsal: bool
     # True when the core was started with `--rehearsal`, which refuses `output.add` and accepts rehearsal tokens.
+    restart: RestartInfo
+    # Whether `core.restart` brings this core back, so a page can decide between a Restart button and a sentence.
+    supervised: bool
+    # True when the core was started with `--supervised` (or `GODWINMIX_SUPERVISED=1`): a service manager, a container runtime or the desktop app starts it again after it exits.
     token: Union[TokenInfo, None]
     # Present when the request carried a token the core recognises.
     ui: Union[UiDefaults, None]
@@ -574,12 +578,16 @@ class IdRequest(TypedDict, total=False):
     id: str
 
 class ImportObsRequest(TypedDict, total=False):
-    path: str
-    # The collection JSON exported from OBS (Scene Collection, Export), as a path on the machine the core is running on.
+    add_sources: bool
+    # Add the sources the scenes draw, each through `source.add`. Left out, only the scenes are added and the answer carries a `[[sources]]` block in `config_toml` instead.
+    content: Optional[str]
+    # The collection JSON itself, as text: what a page reads from the file the person picked. Give this or `path`.
+    path: Optional[str]
+    # The collection JSON exported from OBS (Scene Collection, Export), as a path on the machine the core is running on. Give this or `content`.
 
 class ImportReport(TypedDict, total=False):
     config_toml: Optional[str]
-    # The `[[sources]]` block to paste into a config, so the sources the scenes draw can be added in one edit rather than one call each.
+    # The `[[sources]]` block for a config file. Only for an import that did not add the sources itself, which is what the command line wants.
     filters_duplicated: List[FilterReport]
     # OBS attaches a filter to a source, so a camera keyed in one scene is keyed in all of them. Here filters belong to the item, so a source filter is copied onto each placement and each copy is named here. This is the one thing an import changes the meaning of, so it is reported rather than left for somebody to find on air.
     items: int
@@ -590,7 +598,11 @@ class ImportReport(TypedDict, total=False):
     source_report: List[SourceReport]
     # Every OBS source and what became of it: carried across, needing a plugin that is not installed, or skipped with the reason.
     sources: List[str]
-    # The sources the collection needs, which have to be added separately.
+    # The sources the collection needs, by id. Without `add_sources` they have to be added separately.
+    sources_added: Optional[List[str]]
+    # With `add_sources`: the sources added to the mixer, by id.
+    sources_not_added: Optional[List[SourceNotAdded]]
+    # With `add_sources`: the sources that were not added, each with why.
 
 class ImportRequest(TypedDict, total=False):
     """`scene.import`."""
@@ -801,6 +813,8 @@ class MediaItem(TypedDict, total=False):
     width: Optional[int]
 
 class MediaListing(TypedDict, total=False):
+    created: bool
+    # True when the folder was not there and this listing made it, so a client can say "made the media folder" once instead of nothing.
     dir: str
     error: Optional[str]
     # Set when the directory itself could not be read, so the UI can say why the list is empty instead of just showing nothing.
@@ -1161,6 +1175,22 @@ class Requirement(TypedDict, total=False):
     versions: str
     # A semver range, `^0.2.0`, or `*` when the exporter had no version to name because the plugin was not installed where the export ran.
 
+class RestartAnswer(TypedDict, total=False):
+    """`core.restart`: what happened."""
+
+    how: RestartHow
+    message: str
+    # One sentence for a person: what happens now, or how to restart it.
+    restarting: bool
+    # True when the core is on its way out and will be started again. False when nothing would start it again, in which case it keeps running.
+
+class RestartInfo(TypedDict, total=False):
+    """`core.info.restart`: can this core be restarted from a client."""
+
+    how: RestartHow
+    possible: bool
+    # True when `core.restart` will bring the core back by itself.
+
 class Resync(TypedDict, total=False):
     """`event/resync`: the client fell behind and the stream has a hole in it."""
 
@@ -1353,6 +1383,14 @@ class SourceMeta(TypedDict, total=False):
     group: Optional[str]
     # A tray folder: a tag on the source, purely for finding things. Not a scene group, which is a thing on the canvas.
     name: Optional[str]
+
+class SourceNotAdded(TypedDict, total=False):
+    """A source the import found and did not add, and why."""
+
+    id: str
+    plugin: Optional[str]
+    # The plugin that plays it, when that is what is missing, so a page can offer to install it.
+    reason: str
 
 class SourcePositionState(TypedDict, total=False):
     """Where a seekable source has got to, which is what the seek endpoint answers with. Both numbers are read back off the pipeline after the seek has landed, not taken from the request. A seek snaps to a key unit, so the frame an operator asked for and the frame they got are rarely the same millisecond, and a scrubber drawn from the request would sit a little away from the picture."""
@@ -1674,6 +1712,9 @@ PreviewExt = Union[str, bool, Dict[str, Any]]
 
 ResponseFormat = Literal['concise', 'detailed']
 
+# How a core that exits gets started again.
+RestartHow = Literal['supervised', 'none']
+
 # How much the reader should care.
 Severity = Literal['error', 'warning', 'info']
 
@@ -1697,6 +1738,7 @@ METHODS = (
     {"name": "core.api", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/core/api"), "summary": 'Every method, event and type as JSON Schema. The same document as protocol.json and `godwinmix --api-info`.'},
     {"name": "core.doctor", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/core/doctor"), "summary": 'The environment checks: GStreamer, the elements, the config, the disk and the ports. The same list `gmx doctor` prints.'},
     {"name": "core.info", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/core/info"), "summary": 'What this core is, what it can do, and where its edges are.'},
+    {"name": "core.restart", "scope": "admin", "mutating": True, "destructive": True, "rest": ("POST", "/api/v1/core/restart"), "summary": 'Stop the mixer and have it started again, when something will start it again. On a supervised core (core.info restart.possible) it answers restarting: true and exits; the programme is off air until it is back. On a core started by hand it answers restarting: false, says how to restart it, and keeps running.'},
     {"name": "core.session_log", "scope": "admin", "mutating": True, "destructive": False, "rest": ("GET", "/api/v1/core/session_log"), "summary": 'The append only record of everything that happened, back as far as you ask.'},
     {"name": "core.shutdown", "scope": "admin", "mutating": True, "destructive": True, "rest": ("POST", "/api/v1/core/shutdown"), "summary": 'Stop the mixer, and with it the programme. Nothing else takes the show off air, so this is deliberately its own call.'},
     {"name": "core.startup_report", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/core/startup_report"), "summary": 'How long each stage of the start took, and what was over the 250 ms mark.'},
@@ -1765,7 +1807,7 @@ METHODS = (
     {"name": "scene.graphic.list", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/scenes/graphic/list"), "summary": 'Every graphic template this core can place, with what each one takes.'},
     {"name": "scene.history.mark", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/scenes/history/mark"), "summary": 'Group the changes that follow into one undo step, until the next mark. This is what makes a drag of forty moves one Ctrl+Z.'},
     {"name": "scene.import", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/scenes/import"), "summary": 'Read a collection bundle, a zip or the directory it unpacks to, and add its scenes to this one. Answers with a relink report for any asset that did not come across.'},
-    {"name": "scene.import.obs", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/scenes/import/obs"), "summary": 'Read an OBS Studio scene collection and add its scenes to this one.'},
+    {"name": "scene.import.obs", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/scenes/import/obs"), "summary": "Read an OBS Studio scene collection and add its scenes to this one. Send the file's text as `content` (what a page's file picker reads) or a `path` on the mixer's machine. With `add_sources: true` the sources the scenes draw are added through source.add, and the answer says which were added and why any were not."},
     {"name": "scene.item.add", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/scenes/item/add"), "summary": "Put something on a scene's canvas. With no transform it lands in the next free cell, so a drop never needs a dialog."},
     {"name": "scene.item.align", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/scenes/item/align"), "summary": 'Line items up on an edge: left, right, top, bottom, center-x or center-y.'},
     {"name": "scene.item.arrange_grid", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/scenes/item/arrange_grid"), "summary": 'Lay items out in a grid of `cols` columns.'},
@@ -1927,6 +1969,13 @@ class GeneratedMethods:
         """What this core is, what it can do, and where its edges are."""
         params: Dict[str, Any] = {}
         return await self._call("core.info", params)
+
+    async def core_restart(
+        self,
+    ) -> RestartAnswer:
+        """Stop the mixer and have it started again, when something will start it again. On a supervised core (core.info restart.possible) it answers restarting: true and exits; the programme is off air until it is back. On a core started by hand it answers restarting: false, says how to restart it, and keeps running."""
+        params: Dict[str, Any] = {}
+        return await self._call("core.restart", params)
 
     async def core_session_log(
         self,
@@ -2693,11 +2742,19 @@ class GeneratedMethods:
 
     async def scene_import_obs(
         self,
-        path: str,
+        *,
+        add_sources: Optional[bool] = None,
+        content: Optional[str] = None,
+        path: Optional[str] = None,
     ) -> ImportReport:
-        """Read an OBS Studio scene collection and add its scenes to this one."""
+        """Read an OBS Studio scene collection and add its scenes to this one. Send the file's text as `content` (what a page's file picker reads) or a `path` on the mixer's machine. With `add_sources: true` the sources the scenes draw are added through source.add, and the answer says which were added and why any were not."""
         params: Dict[str, Any] = {}
-        params["path"] = path
+        if add_sources is not None:
+            params["add_sources"] = add_sources
+        if content is not None:
+            params["content"] = content
+        if path is not None:
+            params["path"] = path
         return await self._call("scene.import.obs", params)
 
     async def scene_item_add(

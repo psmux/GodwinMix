@@ -23,7 +23,9 @@ Type=exec
 User=godwinmix
 Group=godwinmix
 EnvironmentFile=-/etc/godwinmix/env
-ExecStart=/usr/local/bin/godwinmix --config /etc/godwinmix/godwinmix.toml
+# --supervised tells the mixer that this unit starts it again when it exits,
+# so core.restart exits and the page offers a Restart button.
+ExecStart=/usr/local/bin/godwinmix --supervised --config /etc/godwinmix/godwinmix.toml
 WorkingDirectory=/var/lib/godwinmix
 
 # SIGTERM closes the outputs and lets the muxers finish their last fragment.
@@ -34,7 +36,12 @@ TimeoutStopSec=10
 # A mixer that died at 3am should be back before anyone wakes up. The burst
 # limit stops a restart loop from filling the log with the same failure; the
 # unit gives up and stays failed instead, where monitoring can see it.
-Restart=on-failure
+#
+# Always, not on-failure: core.restart (the Restart button in the page) is a
+# deliberate exit, and on-failure would leave the programme off air after it.
+# The same goes for core.shutdown, which on this unit is a restart too. To stop
+# the mixer for good, use `systemctl stop godwinmix`.
+Restart=always
 RestartSec=5
 StartLimitBurst=5
 StartLimitIntervalSec=120

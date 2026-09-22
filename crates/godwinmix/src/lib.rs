@@ -35,8 +35,6 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use tracing::{error, info, warn};
 
-const EXAMPLE_CONFIG: &str = include_str!("../../../godwinmix.example.toml");
-
 /// Where a client subcommand looks for a mixer when nothing says otherwise.
 pub const DEFAULT_URL: &str = "http://127.0.0.1:8080";
 
@@ -51,7 +49,8 @@ struct Args {
     #[arg(short, long)]
     bind: Option<String>,
 
-    /// Print a commented example configuration and exit.
+    /// Print a commented example configuration and exit. It is the file a
+    /// first run writes: the sample cameras and outputs are commented out.
     #[arg(long)]
     example_config: bool,
 
@@ -117,6 +116,14 @@ struct Args {
     /// rehearsal token outright and this one refuses a live token.
     #[arg(long)]
     rehearsal: bool,
+
+    /// Say that something starts this mixer again when it exits: a service
+    /// manager, a container restart policy or the desktop app. Only then does
+    /// `core.restart` exit, and `core.info` offer a restart to a page. Also
+    /// read from `GODWINMIX_SUPERVISED` (1, true, yes or on), which is what the
+    /// systemd unit and the compose file set.
+    #[arg(long, env = "GODWINMIX_SUPERVISED", value_parser = clap::builder::FalseyValueParser::new())]
+    supervised: bool,
 
     #[command(subcommand)]
     command: Option<Command>,
@@ -446,6 +453,24 @@ pub fn install_wasm_host() {
     godwinmix_wasm::install();
 }
 
+/// A missing config file is a first run: write the starting one where the
+/// config would be, say so in one line, and carry on. Refused only when the
+/// file cannot be written, and then the error says where and why.
+fn first_run(config_path: &std::path::Path) -> Result<()> {
+    let wrote = config::first_run::write_if_missing(config_path).with_context(|| {
+        format!(
+            "there is no config at {} and one could not be written there. Make sure the \
+             folder exists and is writable, or pass --config with a path that is",
+            config_path.display()
+        )
+    })?;
+    if wrote {
+        let shown = std::fs::canonicalize(config_path).unwrap_or_else(|_| config_path.to_path_buf());
+        info!(path = %shown.display(), "first run: no config was here, so a starting one was written");
+    }
+    Ok(())
+}
+
 /// The program, on a thread with room to run it.
 ///
 /// Both binaries start here rather than with `#[tokio::main]`. That macro
@@ -589,7 +614,7 @@ pub async fn run() -> Result<()> {
     }
 
     if args.example_config {
-        print!("{EXAMPLE_CONFIG}");
+        print!("{}", config::first_run::first_run_config(config::first_run::EXAMPLE_CONFIG));
         return Ok(());
     }
 
@@ -620,13 +645,14 @@ pub async fn run() -> Result<()> {
     // The LiveboxMix config name is still read when there is no GodwinMix one.
     let config_path = config::path_in_force(&args.config);
     let load = core_observe::introspect::stage("config");
-    let cfg = Config::load(&config_path).with_context(|| {
-        format!(
-            "could not load {}. Run with --example-config to print a starting point.",
-            config_path.display()
-        )
-    })?;
+    first_run(&config_path)?;
+    let cfg = Config::load(&config_path)
+        .with_context(|| format!("could not load {}", config_path.display()))?;
     let bind = args.bind.unwrap_or_else(|| cfg.control.bind.clone());
+    control::methods::lifecycle::set_supervised(args.supervised);
+    if args.supervised {
+        info!("supervised: core.restart exits and something starts this mixer again");
+    }
     let tokens = cfg.tokens(args.rehearsal);
     match tokens.entries().len() {
         0 => info!("control API is open: no token configured"),
@@ -811,6 +837,13 @@ pub async fn run() -> Result<()> {
     let mixer_thread = mixer::spawn(mix, cmd_rx, handle.clone());
 
     let library = Arc::new(media::MediaLibrary::new(cfg_media));
+    // Made now rather than when somebody first opens the Media tab, so the
+    // folder is there to drop files into by hand as well.
+    match library.ensure_dir() {
+        Ok(true) => info!(dir = %library.dir().display(), "made the media folder"),
+        Ok(false) => {}
+        Err(e) => warn!(dir = %library.dir().display(), error = %e, "could not make the media folder; clips cannot be uploaded until it can be"),
+    }
     let converter = Arc::new(convert::Converter::new(
         handle.clone(),
         library.cfg().convert_threads,
@@ -909,5 +942,30 @@ pub async fn run() -> Result<()> {
     let _ = handle.send(mixer::Command::Shutdown);
     server.abort();
     let _ = tokio::task::spawn_blocking(move || mixer_thread.join()).await;
+    if control::methods::lifecycle::restart_asked() {
+        // Not a clean zero: the desktop app starts its mixer again on this
+        // status only, and every supervisor reads it as "start me again".
+        info!(code = control::methods::lifecycle::RESTART_EXIT_CODE, "exiting to be restarted");
+        std::process::exit(control::methods::lifecycle::RESTART_EXIT_CODE);
+    }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// One test owns `GODWINMIX_SUPERVISED`, so nothing else in this binary
+    /// reads it while it is set.
+    #[test]
+    fn supervised_comes_from_the_flag_or_the_environment_and_is_off_otherwise() {
+        std::env::remove_var("GODWINMIX_SUPERVISED");
+        assert!(!Args::try_parse_from(["godwinmix"]).unwrap().supervised);
+        assert!(Args::try_parse_from(["godwinmix", "--supervised"]).unwrap().supervised);
+        for (value, want) in [("1", true), ("true", true), ("yes", true), ("on", true), ("0", false), ("false", false)] {
+            std::env::set_var("GODWINMIX_SUPERVISED", value);
+            assert_eq!(Args::try_parse_from(["godwinmix"]).unwrap().supervised, want, "{value}");
+        }
+        std::env::remove_var("GODWINMIX_SUPERVISED");
+    }
 }
