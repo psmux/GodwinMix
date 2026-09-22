@@ -233,6 +233,10 @@ pub struct Reload {
     pub live: Vec<String>,
     /// The ones whose add was refused, each with what the core said.
     pub failed: Vec<(String, String)>,
+    /// Why nothing was tried at all, when that is the case. Without this a
+    /// core that could not read its own file back reported every addition as
+    /// "not brought up now", six lines that all said the same thing.
+    pub untried: Option<String>,
 }
 
 /// Add what a running core can take now: the sources and outputs the preset
@@ -244,18 +248,28 @@ async fn reload(call: &Call, plan: &preset::Plan) -> Reload {
     use godwinmix_core::mixer::Command;
 
     let mut out = Reload::default();
-    let Ok(config) = godwinmix_core::config::Config::load(&godwinmix_core::config::path_in_force(
+    let config = match godwinmix_core::config::Config::load(&godwinmix_core::config::path_in_force(
         &plan.config_path,
-    )) else {
-        return out;
+    )) {
+        Ok(c) => c,
+        Err(e) => {
+            out.untried = Some(format!("the config file could not be read back: {e:#}"));
+            return out;
+        }
     };
     let status = match call.app.mixer.status().await {
         Ok(s) => s,
-        Err(_) => return out,
+        Err(e) => {
+            out.untried = Some(format!("the mixer did not answer: {e}"));
+            return out;
+        }
     };
 
     for source in &config.sources {
+        // Already running, from an earlier apply or the operator's own hand,
+        // which is as good as taken.
         if status.sources.iter().any(|s| s.id == source.id) {
+            out.live.push(format!("source {}", source.id));
             continue;
         }
         if plan.sources.iter().any(|a| a.id == source.id && a.needs_plugin.is_some()) {
@@ -274,6 +288,7 @@ async fn reload(call: &Call, plan: &preset::Plan) -> Reload {
     }
     for output in &config.outputs {
         if status.outputs.iter().any(|o| o.id == output.id) {
+            out.live.push(format!("output {}", output.id));
             continue;
         }
         if plan.outputs.iter().any(|a| a.id == output.id && a.needs_plugin.is_some()) {
@@ -304,6 +319,8 @@ async fn reload(call: &Call, plan: &preset::Plan) -> Reload {
 /// start. Only the last of those is a restart.
 fn still_pending(plan: &preset::Plan, reload: &Reload) -> Vec<String> {
     let mut out = Vec::new();
+    // The ones the core never tried, said once, at the end.
+    let mut later: Vec<&str> = Vec::new();
     for addition in plan.sources.iter().chain(&plan.outputs) {
         // An exact match on the label `reload` wrote, so that an id which is
         // the tail of another id cannot be mistaken for it.
@@ -323,17 +340,31 @@ fn still_pending(plan: &preset::Plan, reload: &Reload) -> Vec<String> {
                 "{} waits for the {plugin} plugin, and starts once it is installed",
                 addition.id
             )),
-            None => out.push(format!(
-                "{} is in the config file; this core did not bring it up now, so it \
-                 starts when the mixer restarts",
-                addition.id
-            )),
+            None => later.push(&addition.id),
         }
+    }
+    if !later.is_empty() {
+        let why = reload.untried.as_deref().unwrap_or("this core did not bring them up now");
+        out.push(format!(
+            "{} {} in the config file and {} when the mixer restarts, because {why}.",
+            list_of(&later),
+            if later.len() == 1 { "is" } else { "are" },
+            if later.len() == 1 { "starts" } else { "start" },
+        ));
     }
     if let Some(line) = written_keys_line(plan) {
         out.push(line);
     }
     out
+}
+
+/// `a`, `a and b`, `a, b and c`.
+fn list_of(ids: &[&str]) -> String {
+    match ids {
+        [] => String::new(),
+        [one] => one.to_string(),
+        [rest @ .., last] => format!("{} and {last}", rest.join(", ")),
+    }
 }
 
 /// The config keys the apply actually wrote, by name. A key the operator
@@ -425,6 +456,7 @@ mod tests {
         let reloaded = Reload {
             live: Vec::new(),
             failed: vec![(id.clone(), "no such device".into())],
+            untried: None,
         };
         let pending = still_pending(&plan, &reloaded);
         let line = pending
@@ -434,6 +466,28 @@ mod tests {
         assert!(line.contains("did not start"), "{line}");
         assert!(line.contains("no such device"), "{line}");
         assert!(!line.contains("restart"), "{line}");
+    }
+
+    #[test]
+    fn what_the_core_never_tried_is_said_once_with_the_reason() {
+        let _ = gstreamer::init();
+        let found = preset::resolve("church").unwrap();
+        let plan =
+            preset::plan::build(&found, &Options::new("/nowhere/godwinmix.toml")).unwrap();
+        let reloaded = Reload {
+            untried: Some("the mixer did not answer: busy".into()),
+            ..Default::default()
+        };
+        let pending = still_pending(&plan, &reloaded);
+        let about_restart: Vec<&String> = pending.iter().filter(|p| p.contains("in the config file")).collect();
+        // One line for all of them, not one per source and output.
+        assert_eq!(about_restart.len(), 1, "{pending:?}");
+        let line = about_restart[0];
+        assert!(line.contains("cam-wide") && line.contains("youtube"), "{line}");
+        assert!(line.contains("because the mixer did not answer: busy"), "{line}");
+        assert_eq!(list_of(&["a"]), "a");
+        assert_eq!(list_of(&["a", "b"]), "a and b");
+        assert_eq!(list_of(&["a", "b", "c"]), "a, b and c");
     }
 
     #[test]
@@ -448,6 +502,7 @@ mod tests {
         let reloaded = Reload {
             live: vec![format!("source extra-{id}")],
             failed: Vec::new(),
+            untried: None,
         };
         let pending = still_pending(&plan, &reloaded);
         assert!(pending.iter().any(|p| p.starts_with(&id)), "{pending:?}");
