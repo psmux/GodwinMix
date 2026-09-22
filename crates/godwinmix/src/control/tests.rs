@@ -217,10 +217,10 @@ fn the_table_matches_the_scopes_in_the_protocol_document() {
     assert_eq!(
         destructive,
         vec![
-            "core.restart",
             // Both rewrite the operator's configuration file, as preset.apply does.
             "config.reset",
             "config.set",
+            "core.restart",
             "core.shutdown",
             "filter.remove",
             "media.remove",
