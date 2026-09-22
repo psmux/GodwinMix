@@ -46,7 +46,7 @@ delete offers an Undo button in the toast rather than asking you first.
 | drag inputs onto empty space | a new scene, laid out by count | `scene.create_from` |
 | drag an input onto a scene tile | it joins that scene, in the next free slot | `scene.item.add` |
 | drag an item chip onto another scene | it moves there; hold Alt to copy | `scene.item.move`, `scene.item.copy` |
-| F2, or click the name | rename | `scene.rename` |
+| F2, a double click on the name, or Rename in the right click menu | rename | `scene.rename` |
 | a swatch from the right click menu | recolour | `scene.rename {color}` |
 | Ctrl+C then Ctrl+V | a duplicate | `scene.duplicate` |
 | "Copy the layout", then "Paste the layout onto this" | the target's items take the first scene's positions and sizes | `scene.layout.copy`, `scene.layout.paste` |
@@ -63,9 +63,11 @@ and touches nothing else.
 ## The composer
 
 Press the pencil on a scene: it is beside each tab in the tab view and on the
-face of each tile in the tile view. A double tap on either opens it too. The
-composer opens as a modal, on a copy of the scene, and Full screen makes it
-fill the window.
+face of each tile in the tile view. Its tooltip says "Edit the layout", because
+a pencil beside a name reads as rename to nearly everyone and this one is not
+that. A double tap on the tab, or on the face of the tile, opens the composer
+too; a double click on the tile's name renames instead. The composer opens as a
+modal, on a copy of the scene, and Full screen makes it fill the window.
 
 Nothing you do in it reaches air. You are editing a draft (`scene.edit.begin`),
 and Apply writes it back; Discard throws it away; closing the window discards
