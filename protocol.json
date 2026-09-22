@@ -3646,6 +3646,120 @@
       ],
       "type": "object"
     },
+    "PathCreateRequest": {
+      "properties": {
+        "name": {
+          "description": "The new folder's name: one folder, no separators, not hidden.",
+          "type": "string"
+        },
+        "parent": {
+          "description": "The folder to make it in, as `path.list` names it.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "parent",
+        "name"
+      ],
+      "type": "object"
+    },
+    "PathEntry": {
+      "description": "One folder inside the one listed.",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "path": {
+          "description": "Absolute, ready to pass back as `path`.",
+          "type": "string"
+        },
+        "writable": {
+          "description": "Whether the mixer can write into it.",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "name",
+        "path",
+        "writable"
+      ],
+      "type": "object"
+    },
+    "PathListRequest": {
+      "properties": {
+        "path": {
+          "default": null,
+          "description": "The folder to list. Absent, empty or `~` is the mixer's home folder; a\nrelative path is taken from there.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "type": "object"
+    },
+    "PathListing": {
+      "description": "What `path.list` and `path.create` answer with.",
+      "properties": {
+        "dirs": {
+          "description": "The folders in it, sorted by name. Files are never listed.",
+          "items": {
+            "$ref": "#/$defs/PathEntry"
+          },
+          "type": "array"
+        },
+        "parent": {
+          "description": "One level up, or null at the top of a root.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "path": {
+          "description": "The folder listed, absolute and with links resolved.",
+          "type": "string"
+        },
+        "roots": {
+          "items": {
+            "$ref": "#/$defs/PathRoot"
+          },
+          "type": "array"
+        },
+        "truncated": {
+          "description": "True when there were more than 500 and the rest were left out.",
+          "type": "boolean"
+        },
+        "writable": {
+          "description": "Whether the mixer can write into this folder.",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "path",
+        "writable",
+        "dirs",
+        "truncated",
+        "roots"
+      ],
+      "type": "object"
+    },
+    "PathRoot": {
+      "description": "A place the picker may start from.",
+      "properties": {
+        "label": {
+          "description": "`Home`, `Media folder` or `Config folder`.",
+          "type": "string"
+        },
+        "path": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "label",
+        "path"
+      ],
+      "type": "object"
+    },
     "PipelineDot": {
       "description": "What `pipeline.dot` answers with on `/rpc`. The REST route serves the same\ngraph as `text/vnd.graphviz`, so `gmx dot | dot -Tsvg` needs no unwrapping.",
       "properties": {
@@ -7560,6 +7674,44 @@
       "scope": "operate",
       "since": "1",
       "summary": "Change a destination in place: a new address with a new stream key, a new reconnect policy, a deeper outage buffer. The address is write only, so a client that only wants the buffer never has to hold the key."
+    },
+    {
+      "destructive": false,
+      "idempotent": true,
+      "mutating": true,
+      "name": "path.create",
+      "params": {
+        "$ref": "#/$defs/PathCreateRequest"
+      },
+      "rest": {
+        "method": "POST",
+        "path": "/api/v1/path/create"
+      },
+      "result": {
+        "$ref": "#/$defs/PathListing"
+      },
+      "scope": "operate",
+      "since": "1",
+      "summary": "Make one new folder inside a folder path.list shows, and list it. A folder that is already there is listed rather than refused."
+    },
+    {
+      "destructive": false,
+      "idempotent": true,
+      "mutating": false,
+      "name": "path.list",
+      "params": {
+        "$ref": "#/$defs/PathListRequest"
+      },
+      "rest": {
+        "method": "GET",
+        "path": "/api/v1/path/list"
+      },
+      "result": {
+        "$ref": "#/$defs/PathListing"
+      },
+      "scope": "read",
+      "since": "1",
+      "summary": "The folders in one folder on the mixer, and whether each is writable, for a folder picker. Only the home folder and the mixer's own folders are shown; files never are."
     },
     {
       "destructive": false,

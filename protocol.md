@@ -73,6 +73,8 @@ Keys accepted on every method, handled before a method runs.
 | `output.reconnect` | `POST /api/v1/outputs/{id}/reconnect` | operate |  | 1 | Drop and re-establish one destination's connection now, without waiting for its reconnect policy. |
 | `output.remove` | `DELETE /api/v1/outputs/{id}` | operate | yes | 1 | Stop sending to a destination and forget it. Other outputs are unaffected. |
 | `output.set` | `POST /api/v1/outputs/{id}/set` | operate |  | 1 | Change a destination in place: a new address with a new stream key, a new reconnect policy, a deeper outage buffer. The address is write only, so a client that only wants the buffer never has to hold the key. |
+| `path.create` | `POST /api/v1/path/create` | operate |  | 1 | Make one new folder inside a folder path.list shows, and list it. A folder that is already there is listed rather than refused. |
+| `path.list` | `GET /api/v1/path/list` | read |  | 1 | The folders in one folder on the mixer, and whether each is writable, for a folder picker. Only the home folder and the mixer's own folders are shown; files never are. |
 | `pipeline.clock` | `GET /api/v1/pipeline/clock` | read |  | 1 | The clock every pipeline is running against, and how far each one has got. |
 | `pipeline.dot` | `GET /api/v1/pipeline/dot` | read |  | 1 | One pipeline as a graphviz graph: every element, every pad and the caps negotiated between them. |
 | `pipeline.latency` | `GET /api/v1/pipeline/latency` | read |  | 1 | How much delay one pipeline is carrying, and which stage put it there. |
@@ -834,6 +836,36 @@ MCP tool `set_output` in the `search` profile: readOnlyHint false, destructiveHi
   },
   "result": {
     "$ref": "#/$defs/OutputStatus"
+  }
+}
+```
+
+#### `path.create`
+
+Make one new folder inside a folder path.list shows, and list it. A folder that is already there is listed rather than refused.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/PathCreateRequest"
+  },
+  "result": {
+    "$ref": "#/$defs/PathListing"
+  }
+}
+```
+
+#### `path.list`
+
+The folders in one folder on the mixer, and whether each is writable, for a folder picker. Only the home folder and the mixer's own folders are shown; files never are.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/PathListRequest"
+  },
+  "result": {
+    "$ref": "#/$defs/PathListing"
   }
 }
 ```

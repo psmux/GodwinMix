@@ -957,6 +957,38 @@ export interface Patch {
   updated?: Update[];
 }
 
+export interface PathCreateRequest {
+  name: string;
+  parent: string;
+}
+
+/** One folder inside the one listed. */
+export interface PathEntry {
+  name: string;
+  path: string;
+  writable: boolean;
+}
+
+export interface PathListRequest {
+  path?: string | null;
+}
+
+/** What `path.list` and `path.create` answer with. */
+export interface PathListing {
+  dirs: PathEntry[];
+  parent?: string | null;
+  path: string;
+  roots: PathRoot[];
+  truncated: boolean;
+  writable: boolean;
+}
+
+/** A place the picker may start from. */
+export interface PathRoot {
+  label: string;
+  path: string;
+}
+
 /**
  * What `pipeline.dot` answers with on `/rpc`. The REST route serves the same
  * graph as `text/vnd.graphviz`, so `gmx dot | dot -Tsvg` needs no unwrapping.
@@ -1667,6 +1699,8 @@ export interface MethodParams {
   "output.reconnect": IdRequest;
   "output.remove": IdRequest;
   "output.set": SetOutputRequest;
+  "path.create": PathCreateRequest;
+  "path.list": PathListRequest;
   "pipeline.clock": Record<string, never>;
   "pipeline.dot": PipelineRequest;
   "pipeline.latency": PipelineRequest;
@@ -1802,6 +1836,8 @@ export interface MethodResults {
   "output.reconnect": OutputStatus;
   "output.remove": Record<string, unknown>;
   "output.set": OutputStatus;
+  "path.create": PathListing;
+  "path.list": PathListing;
   "pipeline.clock": Record<string, unknown>;
   "pipeline.dot": PipelineDot;
   "pipeline.latency": Record<string, unknown>;
@@ -1975,6 +2011,8 @@ export const METHODS: readonly MethodInfo[] = [
   { name: "output.reconnect", summary: "Drop and re-establish one destination's connection now, without waiting for its reconnect policy.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/outputs/{id}/reconnect" } },
   { name: "output.remove", summary: "Stop sending to a destination and forget it. Other outputs are unaffected.", scope: "operate", mutating: true, destructive: true, rest: { method: "DELETE", path: "/api/v1/outputs/{id}" } },
   { name: "output.set", summary: "Change a destination in place: a new address with a new stream key, a new reconnect policy, a deeper outage buffer. The address is write only, so a client that only wants the buffer never has to hold the key.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/outputs/{id}/set" } },
+  { name: "path.create", summary: "Make one new folder inside a folder path.list shows, and list it. A folder that is already there is listed rather than refused.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/path/create" } },
+  { name: "path.list", summary: "The folders in one folder on the mixer, and whether each is writable, for a folder picker. Only the home folder and the mixer's own folders are shown; files never are.", scope: "read", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/path/list" } },
   { name: "pipeline.clock", summary: "The clock every pipeline is running against, and how far each one has got.", scope: "read", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/pipeline/clock" } },
   { name: "pipeline.dot", summary: "One pipeline as a graphviz graph: every element, every pad and the caps negotiated between them.", scope: "read", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/pipeline/dot" } },
   { name: "pipeline.latency", summary: "How much delay one pipeline is carrying, and which stage put it there.", scope: "read", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/pipeline/latency" } },
@@ -2315,6 +2353,16 @@ export class GeneratedMethods {
   /** Change a destination in place: a new address with a new stream key, a new reconnect policy, a deeper outage buffer. The address is write only, so a client that only wants the buffer never has to hold the key. */
   outputSet(params: SetOutputRequest): Promise<OutputStatus> {
     return this._call("output.set", params as unknown as Record<string, unknown>) as Promise<OutputStatus>;
+  }
+
+  /** Make one new folder inside a folder path.list shows, and list it. A folder that is already there is listed rather than refused. */
+  pathCreate(params: PathCreateRequest): Promise<PathListing> {
+    return this._call("path.create", params as unknown as Record<string, unknown>) as Promise<PathListing>;
+  }
+
+  /** The folders in one folder on the mixer, and whether each is writable, for a folder picker. Only the home folder and the mixer's own folders are shown; files never are. */
+  pathList(params: PathListRequest = {}): Promise<PathListing> {
+    return this._call("path.list", params as unknown as Record<string, unknown>) as Promise<PathListing>;
   }
 
   /** The clock every pipeline is running against, and how far each one has got. */
