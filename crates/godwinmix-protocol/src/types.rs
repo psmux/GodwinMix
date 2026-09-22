@@ -343,7 +343,7 @@ pub enum Event {
         severity: Severity,
         message: String,
         #[serde(default, skip_serializing_if = "Option::is_none")]
-        action: Option<crate::action::ErrorAction>,
+        action: Option<Box<crate::action::ErrorAction>>,
     },
     /// A file in the media library changed: uploaded, deleted, or its
     /// conversion moved on. The UI refetches the media listing rather than

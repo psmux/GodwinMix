@@ -225,7 +225,7 @@ pub struct Refusal {
     pub retry_after_ms: u64,
     pub message: String,
     /// The button a person can press instead of waiting, when there is one.
-    pub action: Option<ErrorAction>,
+    pub action: Option<Box<ErrorAction>>,
 }
 
 /// Milliseconds as a person reads them: "1.5 s", "2 s".
@@ -323,7 +323,7 @@ impl Guard {
                     // A person can turn the hold off from the refusal; an
                     // agent gets no button, for the reason below.
                     action: (!token.agent).then(|| {
-                        ErrorAction::set_config("Turn the hold off", "safety.min_hold_ms", 0, "live")
+                        Box::new(ErrorAction::set_config("Turn the hold off", "safety.min_hold_ms", 0, "live"))
                     }),
                     rule: "min_hold",
                     retry_after_ms: left,
