@@ -228,7 +228,11 @@ async fn the_minimum_hold_refuses_a_second_take_and_revert_puts_the_shot_back() 
     assert!(left > 7_000 && left <= 8_000, "{left} ms left");
     assert_eq!(refused.data["rule"], "min_hold");
     assert_eq!(refused.data["retryable"], true);
-    assert!(refused.message.contains(&left.to_string()), "{}", refused.message);
+    // A person reads the wait in seconds, to a tenth, rounded up.
+    let tenths = left.div_ceil(100);
+    let said = if tenths % 10 == 0 { format!("wait {} s", tenths / 10) } else { format!("wait {}.{} s", tenths / 10, tenths % 10) };
+    assert!(refused.message.contains(&said), "{said}: {}", refused.message);
+    assert_eq!(refused.data["action"]["key"], "safety.min_hold_ms");
     // And nothing moved.
     assert_eq!(core.program().await.as_deref(), Some("cam1"));
 
