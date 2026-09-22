@@ -8,7 +8,8 @@
 //! A config file that did not exist is copied from the preset verbatim, with
 //! its comments, because those comments are the preset's documentation and the
 //! volunteer in 09 reads them before anything else. A config file that did
-//! exist is merged key by key and the original is kept beside it as `.bak`.
+//! exist is merged key by key in place, keeping the operator's comments, and
+//! the original is kept beside it as `.bak`. See `merge.rs`.
 
 use std::path::{Path, PathBuf};
 
@@ -17,6 +18,7 @@ use serde::Serialize;
 
 use super::manifest::Preset;
 use super::plan::Plan;
+use crate::config::edit::write_atomic;
 use crate::config::{Config, UiDefaults};
 use crate::scene::document::{Canvas, Collection, SCHEMA_VERSION};
 use crate::scene::Id;
@@ -42,7 +44,7 @@ pub struct Applied {
 pub fn run(preset: &Preset, plan: &Plan) -> Result<Applied> {
     let block = preset.block()?;
     let preset_config = preset.read(&block.config)?;
-    let backup = write_config(plan, &preset_config)?;
+    let backup = super::merge::write_config(plan, &preset_config)?;
     let mut wrote = vec![plan.config_path.clone()];
 
     let merged = Config::load(&crate::config::path_in_force(&plan.config_path))
@@ -70,91 +72,6 @@ pub fn run(preset: &Preset, plan: &Plan) -> Result<Applied> {
         todo: plan.todo.clone(),
         steps: plan.steps.clone(),
     })
-}
-
-/// The config file. Returns the backup path when one was made.
-fn write_config(plan: &Plan, preset_config: &str) -> Result<Option<PathBuf>> {
-    let path = crate::config::path_in_force(&plan.config_path);
-    if let Some(parent) = path.parent() {
-        if !parent.as_os_str().is_empty() {
-            std::fs::create_dir_all(parent)
-                .with_context(|| format!("making {}", parent.display()))?;
-        }
-    }
-    if !path.exists() {
-        // Nothing to merge into: the preset's own file, comments and all.
-        std::fs::write(&path, preset_config)
-            .with_context(|| format!("writing {}", path.display()))?;
-        return Ok(None);
-    }
-    let original = std::fs::read_to_string(&path)
-        .with_context(|| format!("reading {}", path.display()))?;
-    let mut current: toml::Table = toml::from_str(&original)
-        .with_context(|| format!("{} is not valid TOML", path.display()))?;
-    let preset_table: toml::Table =
-        toml::from_str(preset_config).context("the preset's config is not valid TOML")?;
-
-    merge(&mut current, &preset_table, plan.force);
-    if !plan.keep_sources {
-        append_by_id(&mut current, &preset_table, "sources");
-        append_by_id(&mut current, &preset_table, "outputs");
-    }
-
-    let backup = path.with_extension("toml.bak");
-    std::fs::write(&backup, &original)
-        .with_context(|| format!("writing {}", backup.display()))?;
-    let body = format!(
-        "# Merged by `gmx preset apply {}`. The file as it was before is in {}.\n\
-         # Comments from your own file are in that copy: this one is rewritten from\n\
-         # the values, which is the price of merging two configurations.\n\n{}",
-        plan.name,
-        backup.file_name().unwrap_or_default().to_string_lossy(),
-        toml::to_string_pretty(&current).context("writing the merged config")?
-    );
-    std::fs::write(&path, body).with_context(|| format!("writing {}", path.display()))?;
-    Ok(Some(backup))
-}
-
-/// Preset values fill gaps; the operator's own win unless `force`.
-fn merge(current: &mut toml::Table, preset: &toml::Table, force: bool) {
-    for (key, value) in preset {
-        if matches!(key.as_str(), "sources" | "outputs") {
-            continue;
-        }
-        match (current.get_mut(key), value) {
-            (Some(toml::Value::Table(mine)), toml::Value::Table(theirs)) => {
-                merge(mine, theirs, force)
-            }
-            (Some(_), _) if !force => {}
-            (_, _) => {
-                current.insert(key.clone(), value.clone());
-            }
-        }
-    }
-}
-
-/// Append the preset's entries whose id is not already in the operator's list.
-fn append_by_id(current: &mut toml::Table, preset: &toml::Table, key: &str) {
-    let Some(incoming) = preset.get(key).and_then(toml::Value::as_array) else { return };
-    let mut list = current
-        .get(key)
-        .and_then(toml::Value::as_array)
-        .cloned()
-        .unwrap_or_default();
-    let have: Vec<String> = list
-        .iter()
-        .filter_map(|v| v.get("id")?.as_str().map(str::to_string))
-        .collect();
-    for entry in incoming {
-        let Some(id) = entry.get("id").and_then(toml::Value::as_str) else { continue };
-        if have.iter().any(|h| h == id) {
-            continue;
-        }
-        list.push(entry.clone());
-    }
-    if !list.is_empty() {
-        current.insert(key.to_string(), toml::Value::Array(list));
-    }
 }
 
 /// The scene collection, as the tree projection 11 section 2 describes.
@@ -226,19 +143,6 @@ fn write_ui(config_path: &Path, ui: &UiDefaults, surface: &str) -> Result<PathBu
     );
     write_atomic(&path, body.as_bytes())?;
     Ok(path)
-}
-
-/// Write then rename, so a crash mid write cannot leave half a file.
-fn write_atomic(path: &Path, body: &[u8]) -> Result<()> {
-    if let Some(parent) = path.parent() {
-        if !parent.as_os_str().is_empty() {
-            std::fs::create_dir_all(parent)
-                .with_context(|| format!("making {}", parent.display()))?;
-        }
-    }
-    let tmp = path.with_extension("tmp");
-    std::fs::write(&tmp, body).with_context(|| format!("writing {}", tmp.display()))?;
-    std::fs::rename(&tmp, path).with_context(|| format!("writing {}", path.display()))
 }
 
 impl Applied {
@@ -353,6 +257,42 @@ mod tests {
         assert!(applied.backup.is_some());
         let backup = std::fs::read_to_string(applied.backup.unwrap()).unwrap();
         assert!(backup.contains("1500"));
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn a_commented_config_keeps_its_comments_through_an_apply_and_a_plugin_settings_write() {
+        let dir = work("comments");
+        let config = dir.join("godwinmix.toml");
+        let mine = "# My church mixer. Written by hand, keep this.\n\
+                    [program]\n\
+                    # the hall's uplink is slow\n\
+                    video_bitrate_kbps = 1500 # measured in June\n\n\
+                    [[sources]]\n\
+                    # the camera on the balcony\n\
+                    id = \"mine\"\n\
+                    uri = \"rtmp://localhost/live/a\"\n";
+        std::fs::write(&config, mine).unwrap();
+
+        apply_named("church", &Options::new(&config)).unwrap();
+        // Then what `plugin.settings.set` does to the same file.
+        let mut ndi = toml::Table::new();
+        ndi.insert("group".into(), "hall".into());
+        crate::config::edit::write_plugin_settings(&config, "ndi", &ndi).unwrap();
+
+        let text = std::fs::read_to_string(&config).unwrap();
+        assert!(text.contains("[plugins.ndi]\ngroup = \"hall\""), "{text}");
+        for line in [
+            "# My church mixer. Written by hand, keep this.",
+            "# the hall's uplink is slow",
+            "video_bitrate_kbps = 1500 # measured in June",
+            "# the camera on the balcony",
+        ] {
+            assert!(text.contains(line), "lost {line:?}:\n{text}");
+        }
+        assert!(text.starts_with("# My church mixer."), "the file is not rewritten from the top:\n{text}");
+        let loaded = Config::load(&config).unwrap();
+        assert!(loaded.sources.iter().any(|s| s.id == "cam-wide"), "the preset's source was added");
         std::fs::remove_dir_all(&dir).ok();
     }
 

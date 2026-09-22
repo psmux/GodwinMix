@@ -238,10 +238,9 @@ impl AppState {
     ///
     /// The config is the one place a restart reads settings from, so a change
     /// that only lived in memory would be lost by the next restart and an
-    /// operator would rightly call that a bug. The file is rewritten whole
-    /// from the table that was parsed, so comments elsewhere in it are lost;
-    /// that is said plainly in `docs/how-to/install-a-plugin.md` rather than
-    /// discovered.
+    /// operator would rightly call that a bug. Only `[plugins.<name>]` is
+    /// touched, in place, so every comment in the file survives, including
+    /// the ones inside that table beside keys that are still there.
     pub fn save_plugin_settings(
         &self,
         name: &str,
@@ -253,16 +252,7 @@ impl AppState {
             // to the running instance and there is nowhere to persist it.
             return Ok(settings);
         }
-        let text = std::fs::read_to_string(path)?;
-        let mut document: toml::Table = toml::from_str(&text)?;
-        let plugins = document
-            .entry("plugins".to_string())
-            .or_insert_with(|| toml::Value::Table(toml::Table::new()));
-        let Some(table) = plugins.as_table_mut() else {
-            anyhow::bail!("[plugins] in {} is not a table", path.display());
-        };
-        table.insert(name.to_string(), toml::Value::Table(settings.clone()));
-        std::fs::write(path, toml::to_string_pretty(&document)?)?;
+        godwinmix_core::config::edit::write_plugin_settings(path, name, &settings)?;
         Ok(settings)
     }
 }
