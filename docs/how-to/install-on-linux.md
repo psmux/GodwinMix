@@ -130,9 +130,8 @@ sudo apt install gstreamer1.0-plugins-base gstreamer1.0-plugins-good \
   gstreamer1.0-plugins-bad gstreamer1.0-libav gstreamer1.0-tools
 tar xzf godwinmix-0.2.0-x86_64-unknown-linux-gnu.tar.gz
 cd godwinmix-0.2.0-x86_64-unknown-linux-gnu
-./godwinmix --example-config > godwinmix.toml
-# put a token in it, then
-./godwinmix --config godwinmix.toml
+./godwinmix          # writes godwinmix.toml here on the first run
+# stop it, put a token in godwinmix.toml, then start it again
 ```
 
 The archive also carries `deploy/systemd/godwinmix.service` for running it as a

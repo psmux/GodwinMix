@@ -250,6 +250,8 @@ export interface CoreInfo {
   features: string[];
   limits: Limits;
   rehearsal: boolean;
+  restart?: RestartInfo;
+  supervised?: boolean;
   token?: TokenInfo | null;
   ui?: UiDefaults | null;
   version: string;
@@ -539,7 +541,9 @@ export interface IdRequest {
 }
 
 export interface ImportObsRequest {
-  path: string;
+  add_sources?: boolean;
+  content?: string | null;
+  path?: string | null;
 }
 
 export interface ImportReport {
@@ -550,6 +554,8 @@ export interface ImportReport {
   skipped: string[];
   source_report?: SourceReport[];
   sources: string[];
+  sources_added?: string[] | null;
+  sources_not_added?: SourceNotAdded[] | null;
 }
 
 /** `scene.import`. */
@@ -732,6 +738,7 @@ export interface MediaItem {
 }
 
 export interface MediaListing {
+  created?: boolean;
   dir: string;
   error?: string | null;
   items: MediaItem[];
@@ -1079,6 +1086,22 @@ export interface Requirement {
 
 export type ResponseFormat = "concise" | "detailed";
 
+/** `core.restart`: what happened. */
+export interface RestartAnswer {
+  how: RestartHow;
+  message: string;
+  restarting: boolean;
+}
+
+/** How a core that exits gets started again. */
+export type RestartHow = "supervised" | "none";
+
+/** `core.info.restart`: can this core be restarted from a client. */
+export interface RestartInfo {
+  how: RestartHow;
+  possible: boolean;
+}
+
 /** `event/resync`: the client fell behind and the stream has a hole in it. */
 export interface Resync {
   dropped: number;
@@ -1262,6 +1285,13 @@ export interface SourceMeta {
   color?: string | null;
   group?: string | null;
   name?: string | null;
+}
+
+/** A source the import found and did not add, and why. */
+export interface SourceNotAdded {
+  id: string;
+  plugin?: string | null;
+  reason: string;
 }
 
 /**
@@ -1550,6 +1580,7 @@ export interface MethodParams {
   "core.api": Record<string, never>;
   "core.doctor": Record<string, never>;
   "core.info": Record<string, never>;
+  "core.restart": Record<string, never>;
   "core.session_log": SessionLogRequest;
   "core.shutdown": Record<string, never>;
   "core.startup_report": Record<string, never>;
@@ -1680,6 +1711,7 @@ export interface MethodResults {
   "core.api": Record<string, unknown>;
   "core.doctor": Record<string, unknown>;
   "core.info": CoreInfo;
+  "core.restart": RestartAnswer;
   "core.session_log": Record<string, unknown>;
   "core.shutdown": Record<string, unknown>;
   "core.startup_report": Record<string, unknown>;
@@ -1848,6 +1880,7 @@ export const METHODS: readonly MethodInfo[] = [
   { name: "core.api", summary: "Every method, event and type as JSON Schema. The same document as protocol.json and `godwinmix --api-info`.", scope: "read", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/core/api" } },
   { name: "core.doctor", summary: "The environment checks: GStreamer, the elements, the config, the disk and the ports. The same list `gmx doctor` prints.", scope: "read", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/core/doctor" } },
   { name: "core.info", summary: "What this core is, what it can do, and where its edges are.", scope: "read", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/core/info" } },
+  { name: "core.restart", summary: "Stop the mixer and have it started again, when something will start it again. On a supervised core (core.info restart.possible) it answers restarting: true and exits; the programme is off air until it is back. On a core started by hand it answers restarting: false, says how to restart it, and keeps running.", scope: "admin", mutating: true, destructive: true, rest: { method: "POST", path: "/api/v1/core/restart" } },
   { name: "core.session_log", summary: "The append only record of everything that happened, back as far as you ask.", scope: "admin", mutating: true, destructive: false, rest: { method: "GET", path: "/api/v1/core/session_log" } },
   { name: "core.shutdown", summary: "Stop the mixer, and with it the programme. Nothing else takes the show off air, so this is deliberately its own call.", scope: "admin", mutating: true, destructive: true, rest: { method: "POST", path: "/api/v1/core/shutdown" } },
   { name: "core.startup_report", summary: "How long each stage of the start took, and what was over the 250 ms mark.", scope: "read", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/core/startup_report" } },
@@ -1916,7 +1949,7 @@ export const METHODS: readonly MethodInfo[] = [
   { name: "scene.graphic.list", summary: "Every graphic template this core can place, with what each one takes.", scope: "read", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/scenes/graphic/list" } },
   { name: "scene.history.mark", summary: "Group the changes that follow into one undo step, until the next mark. This is what makes a drag of forty moves one Ctrl+Z.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/scenes/history/mark" } },
   { name: "scene.import", summary: "Read a collection bundle, a zip or the directory it unpacks to, and add its scenes to this one. Answers with a relink report for any asset that did not come across.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/scenes/import" } },
-  { name: "scene.import.obs", summary: "Read an OBS Studio scene collection and add its scenes to this one.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/scenes/import/obs" } },
+  { name: "scene.import.obs", summary: "Read an OBS Studio scene collection and add its scenes to this one. Send the file's text as `content` (what a page's file picker reads) or a `path` on the mixer's machine. With `add_sources: true` the sources the scenes draw are added through source.add, and the answer says which were added and why any were not.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/scenes/import/obs" } },
   { name: "scene.item.add", summary: "Put something on a scene's canvas. With no transform it lands in the next free cell, so a drop never needs a dialog.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/scenes/item/add" } },
   { name: "scene.item.align", summary: "Line items up on an edge: left, right, top, bottom, center-x or center-y.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/scenes/item/align" } },
   { name: "scene.item.arrange_grid", summary: "Lay items out in a grid of `cols` columns.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/scenes/item/arrange_grid" } },
@@ -2051,6 +2084,11 @@ export class GeneratedMethods {
   /** What this core is, what it can do, and where its edges are. */
   coreInfo(): Promise<CoreInfo> {
     return this._call("core.info", {}) as Promise<CoreInfo>;
+  }
+
+  /** Stop the mixer and have it started again, when something will start it again. On a supervised core (core.info restart.possible) it answers restarting: true and exits; the programme is off air until it is back. On a core started by hand it answers restarting: false, says how to restart it, and keeps running. */
+  coreRestart(): Promise<RestartAnswer> {
+    return this._call("core.restart", {}) as Promise<RestartAnswer>;
   }
 
   /** The append only record of everything that happened, back as far as you ask. */
@@ -2393,8 +2431,8 @@ export class GeneratedMethods {
     return this._call("scene.import", params as unknown as Record<string, unknown>) as Promise<ImportedReport>;
   }
 
-  /** Read an OBS Studio scene collection and add its scenes to this one. */
-  sceneImportObs(params: ImportObsRequest): Promise<ImportReport> {
+  /** Read an OBS Studio scene collection and add its scenes to this one. Send the file's text as `content` (what a page's file picker reads) or a `path` on the mixer's machine. With `add_sources: true` the sources the scenes draw are added through source.add, and the answer says which were added and why any were not. */
+  sceneImportObs(params: ImportObsRequest = {}): Promise<ImportReport> {
     return this._call("scene.import.obs", params as unknown as Record<string, unknown>) as Promise<ImportReport>;
   }
 

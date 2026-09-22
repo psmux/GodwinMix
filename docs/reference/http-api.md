@@ -8,7 +8,7 @@ these and nothing else. A generated `openapi.json` and a `protocol.md` from
 | | |
 |---|---|
 | `GET /api/status` | full snapshot |
-| `GET /api/media` | ad clips found in the configured library |
+| `GET /api/media` | ad clips found in the configured library. `GET /api/v1/media` is `media.list`: `{dir, items, error}`, plus `"created": true` on the listing that had to make a missing folder. `error` is set only when the folder could not be read or made |
 | `POST /api/take` | `{"source": "cam1"}`, or `{"source": null}` for black |
 | `POST /api/sources` | add a source at runtime: `{"id","uri","name","kind","superimpose"}` |
 | `DELETE /api/sources/{id}` | remove one |
@@ -20,6 +20,7 @@ these and nothing else. A generated `openapi.json` and a `protocol.md` from
 | `DELETE /api/outputs/{id}` | stop sending to one |
 | `POST /api/outputs/{id}/reconnect` | force a reconnect |
 | `POST /api/shutdown` | stop the mixer; what the desktop app's "Quit and stop the mixer" sends |
+| `POST /api/v1/core/restart` | `core.restart`, admin scope. On a mixer started with `--supervised` it answers `{"restarting": true, "how": "supervised", "message"}` and exits with status 75 for its supervisor to start it again. On one started by hand it answers `{"restarting": false, "how": "none", "message"}`, the message saying how to restart it, and keeps running. `core.info` carries `supervised` and `restart: {possible, how}` so a page can decide before it asks. See [restart the mixer](../how-to/restart-the-mixer.md) |
 | `GET /api/agent/state` | the state a language model needs, compact: programme, sources with their state and motion, outputs, a snapshot URL pattern. `?response_format=detailed` adds the audio peak per source, the last five takes and the safety limits in force. See [agent-state.md](agent-state.md) |
 | `POST /api/v1/program/revert` | take back to the shot before this one |
 | `GET /api/v1/program/history` | the last hundred takes, newest first, each with the token that asked |

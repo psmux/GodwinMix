@@ -19,33 +19,6 @@ const TOKEN_FILE: &str = "core-token";
 const CONNECTION_FILE: &str = "connection.json";
 const LOCAL_PORT_FILE: &str = "local-core.port";
 
-/// The example config, read at compile time rather than shipped as a bundle
-/// resource: it is 10 kB, it can then never go missing from an installation,
-/// and `cargo run` gets the same first run as the installed app.
-const EXAMPLE_CONFIG: &str = include_str!("../../godwinmix.example.toml");
-
-/// Written above the copy so that whoever opens the file knows which two
-/// settings the app is going to overrule.
-const CONFIG_PREAMBLE: &str = "\
-# GodwinMix desktop: the mixer's config file.
-#
-# Yours to edit. The canvas, the sources, the outputs and everything else
-# below take effect the next time the app starts the mixer.
-#
-# Two lines the desktop app overrules every time it starts the mixer, because
-# they belong to this machine and not to your setup:
-#   [control] bind  a free port on 127.0.0.1, chosen at start
-#   [control] token a random token, kept next to this file in core-token
-#
-# The example's two sample cameras and its sample output are commented out
-# below, so the app starts on an empty desk. Uncomment them, or add sources
-# and outputs from the window and let the app write them down for you.
-#
-# Connecting to a mixer somewhere else instead? Then none of this is used:
-# that mixer reads its own config file on its own machine.
-
-";
-
 /// Which mixer the app talks to.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
@@ -103,37 +76,14 @@ pub fn log_dir(app: &AppHandle) -> io::Result<PathBuf> {
     Ok(dir)
 }
 
-/// The daemon's config file, written from the example on first run.
+/// The daemon's config file. Not written here: a mixer started with a
+/// `--config` that is not there yet writes the first run config itself
+/// (`godwinmix_core::config::first_run`), the same file a person running
+/// `godwinmix` in an empty folder gets, so the two first runs cannot drift.
+/// The folder it goes in is made here, because the mixer refuses to write
+/// into a folder that is missing.
 pub fn config_path(app: &AppHandle) -> io::Result<PathBuf> {
-    let path = data_dir(app)?.join(CONFIG_FILE);
-    if !path.exists() {
-        fs::write(&path, first_run_config(EXAMPLE_CONFIG))?;
-    }
-    Ok(path)
-}
-
-/// The example config, ready for someone who has never run this before.
-///
-/// Everything down to the first `[[sources]]` is settings with defaults, and
-/// is copied as it stands. From there on the example is two cameras and an
-/// output pointed at an RTMP server on this machine, which nobody has on a
-/// first run: left switched on they fill the window with sources that cannot
-/// connect and the log with reconnect attempts. They stay, commented, because
-/// the comments around them are the documentation for adding a real one.
-fn first_run_config(example: &str) -> String {
-    let mut out = String::with_capacity(CONFIG_PREAMBLE.len() + example.len() + 512);
-    out.push_str(CONFIG_PREAMBLE);
-    let mut reached_the_samples = false;
-    for line in example.lines() {
-        reached_the_samples |= line.starts_with("[[sources]]");
-        let sample = reached_the_samples && !line.trim().is_empty() && !line.trim_start().starts_with('#');
-        if sample {
-            out.push_str("# ");
-        }
-        out.push_str(line);
-        out.push('\n');
-    }
-    out
+    Ok(data_dir(app)?.join(CONFIG_FILE))
 }
 
 /// The token the local daemon is started with. Generated once and kept, so
@@ -232,36 +182,6 @@ mod tests {
         assert_eq!(t.len(), 64);
         assert!(t.chars().all(|c| c.is_ascii_hexdigit()));
         assert_ne!(t, random_token().unwrap(), "two tokens in a row must differ");
-    }
-
-    #[test]
-    fn the_example_config_travels_with_the_binary() {
-        assert!(EXAMPLE_CONFIG.contains("[control]"), "the example must still have a control section");
-        assert!(EXAMPLE_CONFIG.contains("[canvas]"));
-    }
-
-    #[test]
-    fn a_first_run_config_has_no_source_switched_on() {
-        let made = first_run_config(EXAMPLE_CONFIG);
-        assert!(made.starts_with("# GodwinMix desktop"), "the preamble comes first");
-        assert!(made.contains("\n[canvas]\n"), "settings above the samples are left alone");
-        assert!(made.contains("\n[control]\n"));
-        for line in made.lines() {
-            assert!(
-                !line.starts_with("[[sources]]") && !line.starts_with("[[outputs]]"),
-                "a sample is still switched on: {line}"
-            );
-        }
-        // Commented out, not deleted: the comments around them are how
-        // someone learns what a source can be given.
-        assert!(made.contains("# [[sources]]"));
-        assert!(made.contains("# id = \"cam1\""));
-    }
-
-    #[test]
-    fn the_preamble_says_what_the_app_overrules() {
-        assert!(CONFIG_PREAMBLE.contains("bind"));
-        assert!(CONFIG_PREAMBLE.contains("token"));
     }
 
     #[test]

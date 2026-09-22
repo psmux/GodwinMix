@@ -35,6 +35,7 @@ is the five command version of this.
 ```sh
 docker run -d --name godwinmix \
   --restart unless-stopped \
+  -e GODWINMIX_SUPERVISED=1 \
   --shm-size 1g \
   -p 127.0.0.1:8080:8080 \
   -e GODWINMIX_TOKEN="$(cat /etc/godwinmix/token)" \

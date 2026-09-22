@@ -16,6 +16,7 @@ head -c 32 /dev/urandom | base64 > /srv/godwinmix/token
 
 docker run -d --name godwinmix \
   --restart unless-stopped \
+  -e GODWINMIX_SUPERVISED=1 \
   --shm-size 1g \
   -p 127.0.0.1:8080:8080 \
   -e GODWINMIX_TOKEN="$(cat /srv/godwinmix/token)" \
@@ -110,9 +111,19 @@ land, the three checks above and the log are what there is.
 
 ## Restarting and upgrading
 
-Replace the binary or pull the new image, then restart. The programme stops for
-as long as the restart takes, so do it between broadcasts. Sources and outputs
-come back from the runtime file.
+The systemd unit runs the mixer with `--supervised` and `Restart=always`, and
+the container examples set `GODWINMIX_SUPERVISED=1` beside their restart
+policy. That is what lets `core.restart`, and the Restart button in the page,
+bring the mixer back: it exits and the supervisor starts it again. On a mixer
+started by hand, with neither, `core.restart` says so and keeps running. See
+[Restart the mixer from the page](restart-the-mixer.md).
+
+With `Restart=always`, `core.shutdown` is a restart too. `systemctl stop
+godwinmix` is how to stop it for good.
+
+To upgrade, replace the binary or pull the new image, then restart. The
+programme stops for as long as the restart takes, so do it between broadcasts.
+Sources and outputs come back from the runtime file.
 
 ## See also
 

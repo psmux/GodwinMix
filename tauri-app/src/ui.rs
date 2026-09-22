@@ -61,6 +61,7 @@ fn on_navigation(app: &AppHandle, url: &Url) -> bool {
     match url.host_str().unwrap_or("") {
         "quit" => crate::quit(app, false),
         "quit-all" => crate::quit(app, true),
+        "restart" => crate::restart::from_page(app),
         _ => {}
     }
     false
@@ -74,6 +75,7 @@ pub fn build_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
         .build(app)?;
     let logs = MenuItemBuilder::with_id("logs", "Open logs folder").build(app)?;
     let config = MenuItemBuilder::with_id("config", "Open config folder").build(app)?;
+    let restart = MenuItemBuilder::with_id("restart", "Restart the mixer").build(app)?;
     let updates = MenuItemBuilder::with_id("updates", "Check for updates...").build(app)?;
     let quit = MenuItemBuilder::with_id("quit", "Quit").accelerator("CmdOrCtrl+Q").build(app)?;
     let quit_all = MenuItemBuilder::with_id("quit-all", "Quit and stop the mixer")
@@ -83,7 +85,7 @@ pub fn build_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
     let about = PredefinedMenuItem::about(app, Some("About GodwinMix"), Some(about_metadata()))?;
     let separator = || PredefinedMenuItem::separator(app);
     let app_menu = SubmenuBuilder::new(app, "GodwinMix")
-        .items(&[&about, &updates, &separator()?, &connect, &separator()?, &logs, &config, &separator()?, &quit, &quit_all])
+        .items(&[&about, &updates, &separator()?, &connect, &restart, &separator()?, &logs, &config, &separator()?, &quit, &quit_all])
         .build()?;
     let edit = SubmenuBuilder::new(app, "Edit")
         .items(&[
@@ -146,6 +148,7 @@ pub fn on_menu(app: &AppHandle, id: &str) {
         "logs" => reveal(app, crate::settings::log_dir(app).ok()),
         "config" => reveal(app, crate::settings::data_dir(app).ok()),
         "updates" => check_for_updates(app.clone()),
+        "restart" => crate::restart::from_page(app),
         "quit" => crate::quit(app, false),
         "quit-all" => crate::quit(app, true),
         _ => {}

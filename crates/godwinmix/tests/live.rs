@@ -479,3 +479,41 @@ async fn a_task_is_readable_and_cancellable_through_the_method_table() {
     }
     panic!("the task never stopped");
 }
+
+/// An OBS collection sent as text, the way a page sends the file a person
+/// picked, with its sources added through source.add in the same call. The
+/// fixture has a colour backdrop (a built in kind, added), a clip whose file
+/// is not on this machine and a V4L2 camera (the camera plugin, not installed
+/// here). Imported twice, the second import finds the backdrop already there.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn an_obs_collection_sent_as_text_adds_its_scenes_and_its_sources() {
+    let core = Core::start(godwinmix_core::safety::SafetyConfig::default()).await;
+    let token = desk();
+    let content = include_str!("../../../tests/fixtures/obs/simple.json");
+
+    let report = core
+        .call(&token, "scene.import.obs", json!({ "content": content, "add_sources": true }))
+        .await
+        .expect("the collection imports");
+    assert_eq!(report["scenes"], json!(["Main"]), "{report}");
+    let added: Vec<&str> = report["sources_added"].as_array().unwrap().iter().filter_map(|v| v.as_str()).collect();
+    assert!(added.contains(&"backdrop"), "the colour source is added: {report}");
+    let left = report["sources_not_added"].as_array().unwrap();
+    let camera = left.iter().find(|s| s["id"] == "camera").expect("the camera is reported");
+    assert_eq!(camera["plugin"], "camera", "with the plugin to install: {camera}");
+    assert!(report.get("config_toml").is_none(), "nothing to paste when the sources were added");
+    let ids = core.app.mixer.status().await.unwrap().sources.into_iter().map(|s| s.id).collect::<Vec<_>>();
+    assert!(ids.contains(&"backdrop".to_string()), "{ids:?}");
+
+    let again = core
+        .call(&token, "scene.import.obs", json!({ "content": content, "add_sources": true }))
+        .await
+        .expect("a second import is fine");
+    assert_eq!(again["scenes"], json!(["Main 2"]));
+    let backdrop = again["sources_not_added"].as_array().unwrap().iter().find(|s| s["id"] == "backdrop").cloned();
+    assert!(backdrop.expect("the backdrop is already there")["reason"].as_str().unwrap().contains("already has"));
+
+    let neither = core.call(&token, "scene.import.obs", json!({})).await.expect_err("nothing to read");
+    assert_eq!(neither.code, -32602);
+    assert_eq!(neither.data["fields"], json!(["content", "path"]));
+}

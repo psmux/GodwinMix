@@ -929,6 +929,19 @@
             "description": "True when the core was started with `--rehearsal`, which refuses\n`output.add` and accepts rehearsal tokens.",
             "type": "boolean"
           },
+          "restart": {
+            "$ref": "#/components/schemas/RestartInfo",
+            "default": {
+              "how": "none",
+              "possible": false
+            },
+            "description": "Whether `core.restart` brings this core back, so a page can decide\nbetween a Restart button and a sentence."
+          },
+          "supervised": {
+            "default": false,
+            "description": "True when the core was started with `--supervised` (or\n`GODWINMIX_SUPERVISED=1`): a service manager, a container runtime or\nthe desktop app starts it again after it exits.",
+            "type": "boolean"
+          },
           "token": {
             "anyOf": [
               {
@@ -1860,20 +1873,32 @@
       },
       "ImportObsRequest": {
         "properties": {
+          "add_sources": {
+            "default": false,
+            "description": "Add the sources the scenes draw, each through `source.add`. Left out,\nonly the scenes are added and the answer carries a `[[sources]]` block\nin `config_toml` instead.",
+            "type": "boolean"
+          },
+          "content": {
+            "description": "The collection JSON itself, as text: what a page reads from the file\nthe person picked. Give this or `path`.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
           "path": {
-            "description": "The collection JSON exported from OBS (Scene Collection, Export), as a\npath on the machine the core is running on.",
-            "type": "string"
+            "description": "The collection JSON exported from OBS (Scene Collection, Export), as a\npath on the machine the core is running on. Give this or `content`.",
+            "type": [
+              "string",
+              "null"
+            ]
           }
         },
-        "required": [
-          "path"
-        ],
         "type": "object"
       },
       "ImportReport": {
         "properties": {
           "config_toml": {
-            "description": "The `[[sources]]` block to paste into a config, so the sources the\nscenes draw can be added in one edit rather than one call each.",
+            "description": "The `[[sources]]` block for a config file. Only for an import that did\nnot add the sources itself, which is what the command line wants.",
             "type": [
               "string",
               "null"
@@ -1913,11 +1938,31 @@
             "type": "array"
           },
           "sources": {
-            "description": "The sources the collection needs, which have to be added separately.",
+            "description": "The sources the collection needs, by id. Without `add_sources` they\nhave to be added separately.",
             "items": {
               "type": "string"
             },
             "type": "array"
+          },
+          "sources_added": {
+            "description": "With `add_sources`: the sources added to the mixer, by id.",
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "sources_not_added": {
+            "description": "With `add_sources`: the sources that were not added, each with why.",
+            "items": {
+              "$ref": "#/components/schemas/SourceNotAdded"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
           }
         },
         "required": [
@@ -2640,6 +2685,10 @@
       },
       "MediaListing": {
         "properties": {
+          "created": {
+            "description": "True when the folder was not there and this listing made it, so a\nclient can say \"made the media folder\" once instead of nothing.",
+            "type": "boolean"
+          },
           "dir": {
             "type": "string"
           },
@@ -3861,6 +3910,60 @@
         ],
         "type": "string"
       },
+      "RestartAnswer": {
+        "description": "`core.restart`: what happened.",
+        "properties": {
+          "how": {
+            "$ref": "#/components/schemas/RestartHow"
+          },
+          "message": {
+            "description": "One sentence for a person: what happens now, or how to restart it.",
+            "type": "string"
+          },
+          "restarting": {
+            "description": "True when the core is on its way out and will be started again. False\nwhen nothing would start it again, in which case it keeps running.",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "restarting",
+          "how",
+          "message"
+        ],
+        "type": "object"
+      },
+      "RestartHow": {
+        "description": "How a core that exits gets started again.",
+        "oneOf": [
+          {
+            "const": "supervised",
+            "description": "Something watches the process and starts it again: systemd, a\ncontainer restart policy, or the desktop app.",
+            "type": "string"
+          },
+          {
+            "const": "none",
+            "description": "Nothing does. It was started by hand, and has to be started again the\nsame way.",
+            "type": "string"
+          }
+        ]
+      },
+      "RestartInfo": {
+        "description": "`core.info.restart`: can this core be restarted from a client.",
+        "properties": {
+          "how": {
+            "$ref": "#/components/schemas/RestartHow"
+          },
+          "possible": {
+            "description": "True when `core.restart` will bring the core back by itself.",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "possible",
+          "how"
+        ],
+        "type": "object"
+      },
       "SaveRequest": {
         "properties": {
           "name": {
@@ -4426,6 +4529,29 @@
             ]
           }
         },
+        "type": "object"
+      },
+      "SourceNotAdded": {
+        "description": "A source the import found and did not add, and why.",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "plugin": {
+            "description": "The plugin that plays it, when that is what is missing, so a page can\noffer to install it.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "reason": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "reason"
+        ],
         "type": "object"
       },
       "SourcePositionState": {
@@ -5353,6 +5479,46 @@
         "x-destructive": false,
         "x-idempotent": true,
         "x-scope": "read"
+      }
+    },
+    "/api/v1/core/restart": {
+      "post": {
+        "description": "JSON-RPC method `core.restart`. Needs the `admin` scope. Destructive: accepts `dry_run: true`, and on a token whose policy is `confirm = required` it is refused once with -32020 and a confirm token. Accepts `idempotency_key`, honoured for 24 hours.",
+        "operationId": "core.restart",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {},
+                "type": "object"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RestartAnswer"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Stop the mixer and have it started again, when something will start it again. On a supervised core (core.info restart.possible) it answers restarting: true and exits; the programme is off air until it is back. On a core started by hand it answers restarting: false, says how to restart it, and keeps running.",
+        "tags": [
+          "core"
+        ],
+        "x-destructive": true,
+        "x-idempotent": false,
+        "x-scope": "admin"
       }
     },
     "/api/v1/core/session_log": {
@@ -7904,7 +8070,7 @@
             "$ref": "#/components/responses/Error"
           }
         },
-        "summary": "Read an OBS Studio scene collection and add its scenes to this one.",
+        "summary": "Read an OBS Studio scene collection and add its scenes to this one. Send the file's text as `content` (what a page's file picker reads) or a `path` on the mixer's machine. With `add_sources: true` the sources the scenes draw are added through source.add, and the answer says which were added and why any were not.",
         "tags": [
           "scene"
         ],
