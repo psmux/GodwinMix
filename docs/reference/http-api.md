@@ -9,6 +9,8 @@ these and nothing else. A generated `openapi.json` and a `protocol.md` from
 |---|---|
 | `GET /api/status` | full snapshot |
 | `GET /api/media` | ad clips found in the configured library. `GET /api/v1/media` is `media.list`: `{dir, items, error}`, plus `"created": true` on the listing that had to make a missing folder. `error` is set only when the folder could not be read or made |
+| `GET /api/v1/path/list` | `path.list`, read scope. `?path=` names a folder on the mixer; absent, empty or `~` is its home folder, and a relative path starts there. Answers `{path, parent, writable, dirs: [{name, path, writable}], truncated, roots: [{label, path}]}`: folders only, sorted, none hidden, at most 500. The roots are the home folder, the media folder and the folder the config is in, and a path outside them (links resolved) is refused with -32602 and `data.path`. A folder that is not there is -32004 with `data.nearest`, the closest one that is |
+| `POST /api/v1/path/create` | `path.create`, operate scope. `{"parent": "/home/show/Videos", "name": "Easter"}` makes one folder inside a folder `path.list` shows and answers with its listing. A folder already there is listed, not refused. A name with a separator, a leading dot or one of `: * ? " < > \|` is refused with -32602 and `data.name` |
 | `POST /api/take` | `{"source": "cam1"}`, or `{"source": null}` for black |
 | `POST /api/sources` | add a source at runtime: `{"id","uri","name","kind","superimpose"}` |
 | `DELETE /api/sources/{id}` | remove one |
