@@ -91,7 +91,7 @@ export function reportView(client, report, rows) {
   if (scenes.length) box.appendChild(el("p.dim", { text: "Scenes: " + scenes.join(", ") }));
   if (added.length) box.appendChild(el("p.dim", { text: "Sources added: " + added.join(", ") }));
   const left = (report.sources_not_added || []).map((s) => `${s.id}: ${s.reason}`);
-  const skipped = (report.skipped || []).concat(left);
+  const skipped = (report.skipped || []).concat(left).map(withoutFlags);
   if (skipped.length) {
     box.appendChild(el("p", { text: "Not brought across:" }));
     box.appendChild(el("ul.obs-skipped", {}, skipped.map((line) => el("li", { text: line }))));
@@ -102,6 +102,18 @@ export function reportView(client, report, rows) {
   const plugins = [...new Set((report.sources_not_added || []).map((s) => s.plugin).filter(Boolean))];
   for (const name of plugins) box.appendChild(rows.installRow(client, { name }));
   return box;
+}
+
+/**
+ * The importer's lines are shared with `gmx import obs`, and a few end in the
+ * command line flag that fixes them there. The sentence before it already
+ * says what happened; the flag means nothing to somebody in the page.
+ */
+export function withoutFlags(line) {
+  return String(line)
+    .split(/(?<=\.)\s+/)
+    .filter((sentence) => !/(^|\s)--[a-z]/.test(sentence))
+    .join(" ");
 }
 
 function summary(scenes, items, sources) {
