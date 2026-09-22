@@ -96,6 +96,7 @@ const ASSETS: &[(&str, &str)] = &[
     ("panels/welcome/tiles.js", include_str!("../../../ui/panels/welcome/tiles.js")),
     ("shell/commands.js", include_str!("../../../ui/shell/commands.js")),
     ("shell/dom.js", include_str!("../../../ui/shell/dom.js")),
+    ("shell/error-actions.js", include_str!("../../../ui/shell/error-actions.js")),
     ("shell/focus.js", include_str!("../../../ui/shell/focus.js")),
     ("shell/fader.js", include_str!("../../../ui/shell/fader.js")),
     ("shell/firstrun.js", include_str!("../../../ui/shell/firstrun.js")),
@@ -155,6 +156,7 @@ const DEV_ASSETS: &[(&str, &str)] = &[
     ("test/run.js", include_str!("../../../ui/test/run.js")),
     ("test/source-files.js", include_str!("../../../ui/test/source-files.js")),
     ("test/mixer-settings.js", include_str!("../../../ui/test/mixer-settings.js")),
+    ("test/error-actions.js", include_str!("../../../ui/test/error-actions.js")),
     ("test/source-chooser.js", include_str!("../../../ui/test/source-chooser.js")),
     ("test/studio.js", include_str!("../../../ui/test/studio.js")),
     ("test/monitor-resize.js", include_str!("../../../ui/test/monitor-resize.js")),
@@ -669,6 +671,7 @@ mod tests {
         reachable.extend(closure_of("panels/welcome/tiles.js"));
         reachable.extend(closure_of("panels/welcome/after.js"));
         reachable.extend(closure_of("panels/welcome/obs-import.js"));
+        reachable.extend(closure_of("shell/error-actions.js"));
         reachable.extend(closure_of("kits/schema/index.js"));
         reachable.extend(closure_of("shell/mixer-settings.js"));
         reachable.extend(closure_of("shell/folder-picker.js"));
@@ -717,6 +720,7 @@ mod tests {
             ("panels/welcome/checklist.js", "picking a welcome tile"),
             ("panels/welcome/install.js", "picking a welcome tile"),
             ("panels/welcome/obs-import.js", "the Import from OBS tile"),
+            ("shell/error-actions.js", "a button pressed on an error toast"),
         ] {
             assert!(known(path).is_some(), "{path} is not served at all");
             assert!(!eager.contains(path), "{path} is fetched at load, but only {who} needs it");

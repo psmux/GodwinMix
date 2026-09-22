@@ -120,6 +120,7 @@ Start here if you have never run it.
 * [Nodes](reference/nodes.md)
 * [The network plugins: srt, whip, ingest and ndi](reference/plugins-network.md)
 * [The client libraries](reference/clients.md)
+* [Errors and the button they offer: `data.action`](reference/errors.md)
 * [Hooks](reference/hooks.md)
 * [The session log](reference/session-log.md)
 * [Reference: the shipped codec catalogue](reference/codecs.md)

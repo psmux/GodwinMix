@@ -34,6 +34,7 @@ use crate::output::OutputSlot;
 use crate::probe::Backends;
 use crate::state::*;
 use anyhow::{Context, Result};
+use godwinmix_protocol::ErrorAction;
 use gstreamer as gst;
 use gstreamer::prelude::*;
 use parking_lot::Mutex;
@@ -97,7 +98,35 @@ const AD_LEAD_IN: gst::ClockTime = gst::ClockTime::from_mseconds(500);
 /// Without one the control plane can only answer "queued", so a rejected
 /// request, a duplicate source id or a missing ad file, looks like success to
 /// whoever clicked the button.
-pub type Ack = oneshot::Sender<Result<(), String>>;
+pub type Ack = oneshot::Sender<Result<(), Refused>>;
+
+/// A command's refusal on its way back from the mixer thread. The message
+/// is the whole chain, as it always was; the action rides beside it so the
+/// button a refusal raised (`Actionable`) survives the channel.
+#[derive(Debug, Clone)]
+pub struct Refused {
+    pub message: String,
+    pub action: Option<ErrorAction>,
+}
+
+/// The message alone, which is what an embedder reading the ack as a string
+/// always got.
+impl std::fmt::Display for Refused {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.message)
+    }
+}
+
+impl std::error::Error for Refused {}
+
+impl Refused {
+    pub fn into_error(self) -> anyhow::Error {
+        match self.action {
+            Some(action) => anyhow::Error::new(godwinmix_protocol::Actionable::new(self.message, action)),
+            None => anyhow::anyhow!(self.message),
+        }
+    }
+}
 
 /// How many commands may be waiting for the mixer thread.
 ///
@@ -265,7 +294,10 @@ struct Coalesced {
 
 fn reply(ack: Option<Ack>, outcome: &Result<()>) {
     if let Some(tx) = ack {
-        let _ = tx.send(outcome.as_ref().map(|_| ()).map_err(|e| format!("{e:#}")));
+        let _ = tx.send(outcome.as_ref().map(|_| ()).map_err(|e| Refused {
+            message: format!("{e:#}"),
+            action: ErrorAction::find(e.as_ref()),
+        }));
     }
 }
 
@@ -565,7 +597,7 @@ impl MixerHandle {
     /// Send a command and wait for the mixer to accept or reject it.
     pub async fn request(&self, make: impl FnOnce(Ack) -> Command) -> Result<()> {
         let (tx, rx) = oneshot::channel();
-        self.ask(make(tx), rx).await?.map_err(|e| anyhow::anyhow!(e))
+        self.ask(make(tx), rx).await?.map_err(Refused::into_error)
     }
 
     /// Send one command and wait for its reply, for at most `REPLY_DEADLINE`.
@@ -677,7 +709,7 @@ impl MixerHandle {
     /// raises an alert is already inside the loop and sends the event
     /// directly.
     pub fn publish_alert(&self, severity: Severity, message: impl Into<String>) {
-        let _ = self.events.send(Event::Alert { severity, message: message.into() });
+        let _ = self.events.send(Event::Alert { severity, message: message.into(), action: None });
     }
 
     /// The sequence number of the last event published, so a caller taking a
@@ -2261,6 +2293,7 @@ impl Mixer {
                 let _ = self.events.send(Event::Alert {
                     severity: Severity::Warning,
                     message: format!("{avoid} has no picture to hold; {next} is on programme meanwhile"),
+                    action: None,
                 });
                 Some(next)
             }
@@ -2353,6 +2386,7 @@ impl Mixer {
                 let _ = self.events.send(Event::Alert {
                     severity: Severity::Error,
                     message: format!("{} did not come back; the programme is on the slate", r.id),
+                    action: None,
                 });
                 let _ = self.take(None, None);
             }
@@ -3354,6 +3388,7 @@ impl Mixer {
             let _ = self.events.send(Event::Alert {
                 severity: Severity::Error,
                 message: format!("ad break could not start: {e:#}"),
+                action: None,
             });
             return Err(e).context("preparing the ad break");
         }
@@ -3493,7 +3528,12 @@ impl Mixer {
     /// Say on the event stream that a command failed in a way nothing planned
     /// for, so an operator watching the UI sees it rather than reading logs.
     pub fn alert(&self, severity: Severity, message: String) {
-        let _ = self.events.send(Event::Alert { severity, message });
+        let _ = self.events.send(Event::Alert { severity, message, action: None });
+    }
+
+    /// The same, with the button that deals with it.
+    pub fn alert_with(&self, severity: Severity, message: String, action: ErrorAction) {
+        let _ = self.events.send(Event::Alert { severity, message, action: Some(Box::new(action)) });
     }
 
     pub fn handle(&mut self, cmd: Command) -> Result<bool> {
@@ -3693,6 +3733,7 @@ impl Mixer {
                 let _ = self.events.send(Event::Alert {
                     severity: Severity::Error,
                     message: format!("program pipeline error from {src}: {message}"),
+                    action: None,
                 });
             }
             BusEvent::Warning { pipeline, src, message } => {
@@ -3809,6 +3850,7 @@ impl Mixer {
                                     "{} delivered no media; retrying with the other RTMP client",
                                     slot.input.id
                                 ),
+                                action: None,
                             });
                         }
                         Ok(false) => {}
@@ -3925,6 +3967,7 @@ impl Mixer {
                         "{id} has failed {failures} rebuilds in a row; the next is in {} s",
                         wait.as_secs()
                     ),
+                    action: None,
                 });
                 // Scheduled rather than dropped, so the retry happens even
                 // once the source stops being reported as stalled.
@@ -4922,13 +4965,14 @@ pub fn spawn(
                     // dropped in the unwind, so it is already getting an error.
                     Err(_) => {
                         error!(command = label, "the mixer panicked handling a command");
-                        mixer.alert(
+                        mixer.alert_with(
                             Severity::Error,
                             format!(
                                 "the mixer failed while handling {label} and the command did \
                                  not complete. The programme is still on air. Check whatever \
                                  you just changed; restart the mixer when you can."
                             ),
+                            ErrorAction::restart(),
                         );
                     }
                 }
@@ -5294,7 +5338,7 @@ mod tests {
             .expect("an alert arrives")
             .expect("the bus is still open");
         match envelope.event {
-            Event::Alert { severity, message } => {
+            Event::Alert { severity, message, .. } => {
                 assert_eq!(severity, Severity::Error);
                 assert!(message.contains("source.add"), "the alert names the command: {message}");
             }

@@ -11,7 +11,7 @@ import { UndoStack } from "./undo.js";
 import { registerAll, register, addProtocolCommands } from "./commands.js";
 import { openSettings, settings, onSettingsChanged } from "./settings.js";
 import { initTheme } from "./theme.js";
-import { toast, errorToast } from "./toast.js";
+import { toast, errorToast, alertToast } from "./toast.js";
 import { openPicker, pickFromDrop } from "./picker-loader.js";
 import { modal } from "./modal.js";
 import { Workspace } from "./dock.js";
@@ -119,7 +119,7 @@ export async function mountShell(client, root) {
   // Settings written to the file that wait for a restart, and the restart.
   mountRestartBar(client);
   // Notifications belong to the window, including when Alerts is closed.
-  client.on("alert", a => toast({ kind: a.severity, text: a.message, ms: a.severity === "info" ? 6000 : 12000 }));
+  client.on("alert", a => alertToast(client, a));
   fileDrop(client);
   applyTileWidth();
   onSettingsChanged((s, key) => {

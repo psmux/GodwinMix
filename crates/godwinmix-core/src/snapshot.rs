@@ -29,6 +29,7 @@
 use crate::config::SnapshotConfig;
 use crate::mixer::MixerHandle;
 use crate::multiview::{MultiviewHandle, MultiviewRequest};
+use godwinmix_protocol::{Actionable, ErrorAction};
 use crate::state::{BackendInfo, CellAssignment, MixerStatus, OutputState, SourceId, SourceState};
 use image::{GrayImage, ImageFormat, RgbImage};
 use parking_lot::{Mutex, RwLock};
@@ -90,6 +91,19 @@ impl Refusal {
             ),
         }
     }
+}
+
+/// A refusal for anything the multiview has to be on for: the switch named,
+/// the restart said, and the button that turns it on. `lead` is the clause
+/// saying what could not be done.
+pub fn multiview_switched_off(lead: &str) -> Actionable {
+    Actionable::new(
+        format!(
+            "{lead} in this mixer's settings (multiview.enabled). The programme is still \
+             going out. Turn the multiview on and restart the mixer to see pictures here."
+        ),
+        ErrorAction::set_config("Turn the multiview on", "multiview.enabled", true, "restart"),
+    )
 }
 
 /// What a client asked for, before the limits are applied.
@@ -162,23 +176,21 @@ impl Tracker {
         self.cfg.enabled && self.mv.enabled()
     }
 
-    /// The 404 text for a switched off snapshot path, naming the switch that
-    /// turned it off and what to do about it.
-    pub fn disabled_reason(&self) -> Option<String> {
+    /// Why a switched off snapshot path refuses, naming the switch that
+    /// turned it off, with the button that turns it back on.
+    pub fn disabled_reason(&self) -> Option<Actionable> {
         if !self.cfg.enabled {
-            return Some(
-                "snapshots are switched off by [snapshot] enabled = false in the mixer's \
-                 config. Set it to true and restart to get stills and motion back."
-                    .into(),
-            );
+            return Some(Actionable::new(
+                "snapshots are switched off in this mixer's settings (snapshot.enabled), so \
+                 there are no stills and no motion. Turn them on and restart the mixer to get \
+                 them back.",
+                ErrorAction::set_config("Turn snapshots on", "snapshot.enabled", true, "restart"),
+            ));
         }
         if !self.mv.enabled() {
-            return Some(
-                "stills are cut out of the mosaic, and the mosaic is switched off by \
-                 [multiview] enabled = false in the mixer's config. Set it to true and \
-                 restart, or read /api/agent/state, which works without pictures."
-                    .into(),
-            );
+            return Some(multiview_switched_off(
+                "stills are cut out of the multiview, and the multiview is switched off",
+            ));
         }
         None
     }
@@ -865,7 +877,11 @@ mod tests {
     async fn a_switched_off_snapshot_says_which_switch_did_it() {
         let off = tracker_with(SnapshotConfig { enabled: false, ..Default::default() });
         let why = off.disabled_reason().expect("must refuse");
-        assert!(why.contains("[snapshot] enabled = false"), "{why}");
+        assert!(why.message.contains("snapshot.enabled"), "{why}");
+        assert!(why.message.contains("restart"), "{why}");
+        assert_eq!(why.action.to_value()["kind"], "set-config");
+        assert_eq!(why.action.to_value()["key"], "snapshot.enabled");
+        assert_eq!(why.action.to_value()["applies"], "restart");
         assert!(!off.enabled());
 
         let no_mosaic = Tracker::build(
@@ -877,7 +893,10 @@ mod tests {
             None,
         );
         let why = no_mosaic.disabled_reason().expect("must refuse");
-        assert!(why.contains("[multiview] enabled = false"), "{why}");
+        assert!(why.message.contains("multiview.enabled"), "{why}");
+        assert!(!why.message.contains("/api/agent"), "a person reads this: {why}");
+        assert_eq!(why.action.to_value()["key"], "multiview.enabled");
+        assert_eq!(why.action.to_value()["value"], true);
 
         let on = tracker_with(SnapshotConfig::default());
         assert!(on.disabled_reason().is_none());

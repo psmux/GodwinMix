@@ -276,6 +276,7 @@ impl Converter {
                 self.events.emit(Event::Alert {
                     severity: crate::state::Severity::Error,
                     message: format!("Converting {name} failed: {e:#}"),
+                    action: None,
                 });
             }
         }

@@ -83,6 +83,7 @@ state and the next step, so show it as it came.
 | `nextStep` / `next_step` | the sentence after the last full stop |
 | `retryable` | whether offering a retry is honest |
 | `retryAfterMs` / `retry_after_ms` | how long to wait, when the core said |
+| `action` (`data.action`) | the button to offer, when the core knows the way past: a setting, a plugin, a restart. See [Errors and the button they offer](errors.md) |
 
 A call outstanding when the connection drops fails with a retryable error
 rather than hanging. That is tested in all three libraries.

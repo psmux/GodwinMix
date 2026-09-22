@@ -254,7 +254,7 @@ pub fn spawn_watch(hooks: Arc<Hooks>, mut events: tokio::sync::broadcast::Receiv
                         })
                     });
                 }
-                Event::Alert { severity, message } => {
+                Event::Alert { severity, message, .. } => {
                     hooks.fire(name::ALERT_RAISED, || {
                         serde_json::json!({ "severity": severity, "message": message })
                     });

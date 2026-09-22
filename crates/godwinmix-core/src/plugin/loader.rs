@@ -30,6 +30,7 @@ use godwinmix_protocol::plugin::manifest::{
     Manifest as PluginManifest, Provide as ProvideDecl, Tool,
 };
 use godwinmix_protocol::plugin::wire::Transport;
+use godwinmix_protocol::{Actionable, ErrorAction};
 use parking_lot::RwLock;
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
@@ -733,6 +734,27 @@ pub struct Launched {
     pub transports: Vec<Transport>,
 }
 
+/// A source asked for a plugin that is not here. The message lists what is,
+/// and the button installs the missing one by name.
+fn not_installed(name: &str) -> anyhow::Error {
+    let have = list().iter().map(|p| p.name().to_string()).collect::<Vec<_>>();
+    anyhow::Error::new(Actionable::new(
+        format!(
+            "no plugin called `{name}` is installed. Installed: {}. Install it and try again.",
+            if have.is_empty() { "none".into() } else { have.join(", ") }
+        ),
+        ErrorAction::install_plugin(name),
+    ))
+}
+
+/// Installed and switched off: the button turns it back on.
+fn switched_off(name: &str) -> Actionable {
+    Actionable::new(
+        format!("the plugin `{name}` is installed but switched off. Turn it on to use it."),
+        ErrorAction::enable_plugin(name),
+    )
+}
+
 /// Build the launch plan for one instance of `type_id`.
 ///
 /// The token is the per instance one, scoped `plugin:<name>`, issued by the
@@ -746,19 +768,10 @@ pub fn launch_for(
     let (name, id) = type_id
         .split_once('/')
         .with_context(|| format!("`{type_id}` is not a plugin provide id; write <plugin>/<provide>"))?;
-    let plugin = get(name).with_context(|| {
-        let have = list().iter().map(|p| p.name().to_string()).collect::<Vec<_>>();
-        format!(
-            "no plugin called `{name}` is installed. Installed: {}. Add one with \
-             `gmx plugin add <path>`.",
-            if have.is_empty() { "none".into() } else { have.join(", ") }
-        )
-    })?;
-    anyhow::ensure!(
-        plugin.enabled,
-        "the plugin `{name}` is installed but disabled. Turn it on with \
-         `gmx plugin enable {name}`."
-    );
+    let plugin = get(name).ok_or_else(|| not_installed(name))?;
+    if !plugin.enabled {
+        return Err(switched_off(name).into());
+    }
     if let Some(problem) = &plugin.problem {
         anyhow::bail!("the plugin `{name}` did not load: {problem}");
     }
@@ -1126,11 +1139,11 @@ pub struct Updated {
 /// answered `initialize`, and if it does not, what was there is put back and
 /// the registry is left holding the version that was working.
 pub fn update(name: &str, spec: &str, opts: &InstallOptions) -> Result<Updated> {
-    let old = get(name).with_context(|| {
-        format!(
-            "`{name}` is not installed, so there is nothing to update. \
-             `gmx plugin add {spec}` installs it."
-        )
+    let old = get(name).ok_or_else(|| {
+        anyhow::Error::new(Actionable::new(
+            format!("`{name}` is not installed, so there is nothing to update. Install it instead."),
+            ErrorAction::install_plugin(spec),
+        ))
     })?;
     let old_version = old.version().to_string();
     let old_root = old.root.clone();
@@ -1574,6 +1587,25 @@ mod tests {
         guard
     }
 
+    /// A source whose plugin is missing, or switched off, is refused with the
+    /// button that fixes it rather than a `gmx` line.
+    #[test]
+    fn a_missing_or_switched_off_plugin_carries_its_button() {
+        let _lock = exclusive();
+        let err = launch_for("ndi/source", "cam", "t".into(), "r".into()).unwrap_err();
+        let msg = format!("{err:#}");
+        assert!(!msg.contains("gmx "), "no command in the message: {msg}");
+        let action = ErrorAction::find(err.as_ref()).expect("an action").to_value();
+        assert_eq!(action["kind"], "install-plugin");
+        assert_eq!(action["name"], "ndi");
+
+        let off = anyhow::Error::from(switched_off("ndi"));
+        assert!(!format!("{off:#}").contains("gmx "));
+        let action = ErrorAction::find(off.as_ref()).expect("an action").to_value();
+        assert_eq!(action["kind"], "enable-plugin");
+        assert_eq!(action["name"], "ndi");
+    }
+
     /// A plugin directory with a manifest that validates, and nothing else.
     fn write_plugin(root: &Path, name: &str, version: &str, extra: &str) -> PathBuf {
         let dir = root.join(name).join(version);
@@ -1815,7 +1847,10 @@ settings = "settings.json"
         let err = launch_for("nope/source", "cam1", "t".into(), "ws://x/rpc".into())
             .expect_err("nothing is installed");
         let text = format!("{err}");
-        assert!(text.contains("gmx plugin add"), "{text}");
+        assert!(text.contains("Installed: none"), "{text}");
+        assert!(text.contains("Install it"), "{text}");
+        let action = ErrorAction::find(err.as_ref()).expect("the install, as a button");
+        assert_eq!(action.name.as_deref(), Some("nope"));
         clear();
     }
 }

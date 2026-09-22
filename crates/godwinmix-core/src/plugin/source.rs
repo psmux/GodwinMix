@@ -156,12 +156,7 @@ pub fn resolve(uri: &str) -> Option<&'static Provide> {
 /// looking in the wrong place.
 pub fn resolve_config(cfg: &SourceConfig) -> Result<&'static Provide> {
     if let Some(t) = cfg.type_id.as_deref().filter(|t| !t.trim().is_empty()) {
-        return by_type(t.trim()).ok_or_else(|| {
-            anyhow::anyhow!(
-                "no source type `{t}` in this build. It has: {}",
-                available().join(", ")
-            )
-        });
+        return by_type(t.trim()).ok_or_else(|| unknown_type(t.trim()));
     }
     resolve(&cfg.uri).ok_or_else(|| {
         anyhow::anyhow!(
@@ -170,6 +165,30 @@ pub fn resolve_config(cfg: &SourceConfig) -> Result<&'static Provide> {
             available().join(", ")
         )
     })
+}
+
+/// A `type` nothing provides. `ndi/source` names the plugin that would, so
+/// the refusal carries the button that installs it, or turns it on when it
+/// is here and switched off.
+fn unknown_type(t: &str) -> anyhow::Error {
+    use godwinmix_protocol::{Actionable, ErrorAction};
+    let have = available().join(", ");
+    let plugin = t.split_once('/').map(|(p, _)| p).filter(|p| !p.is_empty());
+    match plugin {
+        Some(name) => {
+            let off = super::loader::get(name).is_some_and(|p| !p.enabled);
+            let (how, action) = if off {
+                ("is installed and switched off. Turn it on and try again", ErrorAction::enable_plugin(name))
+            } else {
+                ("would provide it. Install it and try again", ErrorAction::install_plugin(name))
+            };
+            anyhow::Error::new(Actionable::new(
+                format!("no source type `{t}` in this build. It has: {have}. The `{name}` plugin {how}."),
+                action,
+            ))
+        }
+        None => anyhow::anyhow!("no source type `{t}` in this build. It has: {have}"),
+    }
 }
 
 /// Every source type id this build carries, for an error message or a listing.
@@ -200,6 +219,21 @@ pub fn instance_capabilities(manifest: &Manifest, seekable: bool) -> CapabilityS
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A type that names a plugin nobody installed offers to install it,
+    /// which is what an imported OBS collection with an NDI source meets.
+    #[test]
+    fn a_type_from_a_missing_plugin_offers_the_install() {
+        let err = unknown_type("zz-not-here/source");
+        let msg = format!("{err:#}");
+        assert!(msg.contains("zz-not-here"), "{msg}");
+        assert!(!msg.contains("gmx "), "{msg}");
+        let action = godwinmix_protocol::ErrorAction::find(err.as_ref()).expect("an action").to_value();
+        assert_eq!(action["kind"], "install-plugin");
+        assert_eq!(action["name"], "zz-not-here");
+        // No plugin half, no button.
+        assert!(godwinmix_protocol::ErrorAction::find(unknown_type("bare").as_ref()).is_none());
+    }
 
     #[test]
     fn a_bare_uri_still_picks_the_kind_it_always_did() {

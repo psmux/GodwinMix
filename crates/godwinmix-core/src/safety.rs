@@ -19,6 +19,7 @@
 //! ```
 
 use godwinmix_protocol::scope::{Token, TokenSafety};
+use godwinmix_protocol::ErrorAction;
 use parking_lot::{Mutex, RwLock};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::collections::VecDeque;
@@ -223,6 +224,18 @@ pub struct Refusal {
     pub rule: &'static str,
     pub retry_after_ms: u64,
     pub message: String,
+    /// The button a person can press instead of waiting, when there is one.
+    pub action: Option<Box<ErrorAction>>,
+}
+
+/// Milliseconds as a person reads them: "1.5 s", "2 s".
+fn seconds(ms: u64) -> String {
+    let tenths = ms.div_ceil(100);
+    if tenths % 10 == 0 {
+        format!("{} s", tenths / 10)
+    } else {
+        format!("{}.{} s", tenths / 10, tenths % 10)
+    }
 }
 
 /// The rules, and the little history they need.
@@ -290,6 +303,7 @@ impl Guard {
         state.forget_before(now);
         if state.silent {
             return Err(Refusal {
+                action: None,
                 rule: "operator_silence",
                 retry_after_ms: 0,
                 message: format!(
@@ -306,6 +320,11 @@ impl Guard {
             if held < limits.min_hold_ms {
                 let left = limits.min_hold_ms - held;
                 return Err(Refusal {
+                    // A person can turn the hold off from the refusal; an
+                    // agent gets no button, for the reason below.
+                    action: (!token.agent).then(|| {
+                        Box::new(ErrorAction::set_config("Turn the hold off", "safety.min_hold_ms", 0, "live"))
+                    }),
                     rule: "min_hold",
                     retry_after_ms: left,
                     // What to do about it differs by who is asking. A person
@@ -321,11 +340,13 @@ impl Guard {
                         )
                     } else {
                         format!(
-                            "the shot on air has been up for {held} ms and this core holds a \
-                             shot for {} ms, so there are {left} ms left. Wait {left} ms and \
-                             take again, or set [safety] min_hold_ms lower in the config and \
-                             restart.",
-                            limits.min_hold_ms
+                            "the shot on air has been up for {} and this mixer holds every \
+                             shot for {}, so wait {} and take again. The hold is Least time \
+                             between takes in Settings (safety.min_hold_ms), and a change \
+                             to it applies at once.",
+                            seconds(held),
+                            seconds(limits.min_hold_ms),
+                            seconds(left)
                         )
                     },
                 });
@@ -337,6 +358,7 @@ impl Guard {
                 .saturating_sub(now.saturating_duration_since(oldest).as_millis() as u64)
                 .max(1);
             return Err(Refusal {
+                action: None,
                 rule: "rate_limit",
                 retry_after_ms: left,
                 message: format!(
@@ -364,6 +386,7 @@ impl Guard {
         if since < separation {
             let left = separation - since;
             return Some(Refusal {
+                action: None,
                 rule: "flash_guard",
                 retry_after_ms: left,
                 message: format!(
@@ -387,6 +410,7 @@ impl Guard {
                 .saturating_sub(now.saturating_duration_since(*oldest).as_millis() as u64)
                 .max(1);
             return Some(Refusal {
+                action: None,
                 rule: "flash_guard",
                 retry_after_ms: left,
                 message: format!(
@@ -579,7 +603,19 @@ mod tests {
         let refusal = g.check_at(&human(), t0 + Duration::from_millis(1_200)).unwrap_err();
         assert_eq!(refusal.rule, "min_hold");
         assert_eq!(refusal.retry_after_ms, 6_800);
-        assert!(refusal.message.contains("6800 ms"), "{}", refusal.message);
+        assert!(refusal.message.contains("wait 6.8 s"), "{}", refusal.message);
+        assert!(!refusal.message.contains("restart"), "the hold applies live: {}", refusal.message);
+        let action = refusal.action.as_ref().expect("a person gets the button").to_value();
+        assert_eq!(action["kind"], "set-config");
+        assert_eq!(action["key"], "safety.min_hold_ms");
+        assert_eq!(action["applies"], "live");
+
+        // An agent is told to wait and is offered nothing else.
+        let g2 = guard(SafetyConfig { min_hold_ms: 8_000, flash_guard: false, ..SafetyConfig::default() });
+        let bot = agent(TokenSafety::default());
+        g2.record_at("desk", t0);
+        let refusal = g2.check_at(&bot, t0 + Duration::from_millis(1_200)).unwrap_err();
+        assert!(refusal.action.is_none(), "{:?}", refusal.action);
 
         // And it lets go on its own once the hold is served.
         assert!(g.check_at(&human(), t0 + Duration::from_millis(8_001)).is_ok());

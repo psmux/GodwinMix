@@ -1,5 +1,40 @@
 {
   "$defs": {
+    "ActionKind": {
+      "description": "What pressing the button does.",
+      "oneOf": [
+        {
+          "const": "set-config",
+          "description": "Call `config.set {values: {key: value}}`.",
+          "type": "string"
+        },
+        {
+          "const": "install-plugin",
+          "description": "Call `plugin.add {source: name}`.",
+          "type": "string"
+        },
+        {
+          "const": "enable-plugin",
+          "description": "Call `plugin.enable {name}`.",
+          "type": "string"
+        },
+        {
+          "const": "open",
+          "description": "Open a part of the client.",
+          "type": "string"
+        },
+        {
+          "const": "retry",
+          "description": "Send the same call again after `after_ms`.",
+          "type": "string"
+        },
+        {
+          "const": "restart",
+          "description": "Call `core.restart`, when `core.info` says a restart is possible.",
+          "type": "string"
+        }
+      ]
+    },
     "AdBreakRequest": {
       "description": "`adbreak.start`.",
       "properties": {
@@ -1436,6 +1471,70 @@
       },
       "required": [
         "name"
+      ],
+      "type": "object"
+    },
+    "ErrorAction": {
+      "description": "One thing a client can offer as a button. `label` is the button's text,\n`kind` says what pressing it does, and the other fields are the ones that\nkind uses. Flat rather than an enum with data, so every generated client\nreads every field.",
+      "properties": {
+        "after_ms": {
+          "description": "`retry`: how long to wait first.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "applies": {
+          "description": "`set-config`: what `config.get` says about the key: `live`,\n`next_source` or `restart`.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "dialog": {
+          "description": "`open`: a dialog, such as `settings`.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "key": {
+          "description": "`set-config`: the dotted key. `open`: the setting to show.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "kind": {
+          "$ref": "#/$defs/ActionKind"
+        },
+        "label": {
+          "description": "Short, in the imperative, for a person: \"Turn the multiview on\".",
+          "type": "string"
+        },
+        "name": {
+          "description": "`install-plugin` and `enable-plugin`: the plugin.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "panel": {
+          "description": "`open`: a panel by id.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "value": {
+          "description": "`set-config`: the value to send."
+        }
+      },
+      "required": [
+        "kind",
+        "label"
       ],
       "type": "object"
     },
@@ -5931,6 +6030,38 @@
     }
   },
   "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "actions": [
+    {
+      "does": "config.set with that one value; a restart follows when applies is restart",
+      "fields": "key, value, applies",
+      "kind": "set-config"
+    },
+    {
+      "does": "plugin.add with the name as the source",
+      "fields": "name",
+      "kind": "install-plugin"
+    },
+    {
+      "does": "plugin.enable",
+      "fields": "name",
+      "kind": "enable-plugin"
+    },
+    {
+      "does": "show that part of the client",
+      "fields": "panel, dialog, key",
+      "kind": "open"
+    },
+    {
+      "does": "the same call again, after the wait",
+      "fields": "after_ms",
+      "kind": "retry"
+    },
+    {
+      "does": "core.restart, when core.info says restart.possible",
+      "fields": "",
+      "kind": "restart"
+    }
+  ],
   "api_compatible": 1,
   "api_level": 1,
   "core": "godwinmix",
@@ -6366,6 +6497,9 @@
       "pattern": "alert",
       "payload": {
         "properties": {
+          "action": {
+            "$ref": "#/$defs/ErrorAction"
+          },
           "message": {
             "type": "string"
           },

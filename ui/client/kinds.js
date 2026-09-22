@@ -328,7 +328,20 @@ export async function listPlugins(client) {
 
 /** Whether a named plugin is installed and loaded, given that listing. */
 export function hasPlugin(plugins, name) {
-  return (plugins || []).some((p) => p.name === name && p.enabled !== false && !p.problem);
+  return pluginState(plugins, name) === "ready";
+}
+
+/**
+ * Where a named plugin stands: "absent", "disabled" (installed and switched
+ * off), "problem" (installed and did not load) or "ready". The picker offers
+ * a different button for each, because installing what is already installed
+ * does nothing a person can see.
+ */
+export function pluginState(plugins, name) {
+  const p = (plugins || []).find((x) => x.name === name);
+  if (!p) return "absent";
+  if (p.enabled === false) return "disabled";
+  return p.problem ? "problem" : "ready";
 }
 
 /**

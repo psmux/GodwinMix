@@ -5,6 +5,7 @@
 // `source.set` will take all arrive with the first click.
 
 import { el } from "../../shell/dom.js";
+import { confirmModal } from "../../shell/modal.js";
 import { toast, errorToast } from "../../shell/toast.js";
 import { shell } from "../../shell/shell.js";
 import { SchemaForm } from "../../client/schema-form.js";
@@ -65,12 +66,64 @@ export async function openSourceDrawer(panel, source) {
   shell.drawer(
     el("div.pad.col", {}, [
       el("div.row", {}, [el("strong.grow", { text: nameOf(source) }), el("button.btn.icon", { text: "×", onclick: () => shell.drawer(null) })]),
-      el("div.sm.dim", { text: source.uri, title: source.uri }),
-      el("div.sm.dim", {
-        text: "The address is fixed once a source exists. To point it somewhere else, remove this source and add it again.",
-      }),
+      addressRow(client, source),
       form.el,
       el("div.row", {}, [apply]),
     ])
   );
+}
+
+/**
+ * The address, and a way to change it.
+ *
+ * `source.set` will not take a new `uri` (the mixer builds a source around
+ * its address), so a new address is the same source removed and added again
+ * under the same id and name. Scene items point at the id, so they keep
+ * pointing at it. This used to be a sentence telling the person to do those
+ * two steps by hand, which lost the name and every placement on the way.
+ * A device source (a camera, a screen, a sound card) is picked by its
+ * settings rather than an address, so it shows the address only.
+ */
+const ADDRESSED = new Set(["rtmp", "hls", "file", "exec", "browser", "layered", "test"]);
+
+function addressRow(client, source) {
+  const shown = el("div.sm.dim", { text: source.uri, title: source.uri });
+  if (source.type && !ADDRESSED.has(source.type.split("/")[0])) return shown;
+  const input = el("input", { type: "text", value: source.uri, "aria-label": "Address" });
+  const button = el("button.btn", { text: "Change the address" });
+  button.onclick = async () => {
+    const uri = input.value.trim();
+    if (!uri || uri === source.uri) return toast({ text: "That is the address it already has." });
+    const onAir = client.state.program === source.id;
+    const yes = await confirmModal(
+      `Changing the address takes ${nameOf(source)} out and puts it back at the new one, ` +
+        `with the same name and the same places in scenes.` +
+        (onAir ? " It is on air, so the programme shows the slate for that moment." : ""),
+      "Change it"
+    );
+    if (!yes) return;
+    button.disabled = true;
+    try {
+      await readdress(client, source, uri);
+      toast({ text: `${nameOf(source)} now plays ${uri}.` });
+      shell.drawer(null);
+    } catch (e) {
+      errorToast(e, "Change the address");
+    } finally {
+      button.disabled = false;
+    }
+  };
+  return el("div.col", {}, [el("div.row", {}, [input, button])]);
+}
+
+/** Remove and add again under the same id. A refused add puts the old one back. */
+export async function readdress(client, source, uri) {
+  const name = source.name || source.id;
+  await client.call("source.remove", { id: source.id });
+  try {
+    await client.call("source.add", { id: source.id, name, uri });
+  } catch (e) {
+    await client.call("source.add", { id: source.id, name, uri: source.uri }).catch(() => {});
+    throw e;
+  }
 }

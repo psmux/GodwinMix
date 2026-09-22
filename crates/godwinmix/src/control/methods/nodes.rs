@@ -189,8 +189,8 @@ async fn enrol(call: Call, params: Value) -> Result<Value, RpcError> {
             tokio::time::sleep(std::time::Duration::from_millis(250)).await;
         }
         Err(format!(
-            "`{waiting}` did not enrol before the token expired. Mint another with `gmx node \
-             token --name {waiting}`"
+            "`{waiting}` did not enrol before the token expired. Enrol it again for a fresh \
+             token."
         ))
     }))
 }
@@ -233,19 +233,46 @@ async fn discover(call: Call, params: Value) -> Result<Value, RpcError> {
         Err(e) => Err(RpcError::new(
             ErrorCode::InternalError,
             format!(
-                "{e:#}. A network without multicast finds nothing this way; list the node in \
-                 the [nodes] table instead"
+                "{e:#}. A network without multicast finds nothing this way; enrol the node by \
+                 name instead."
             ),
         )),
     }
 }
 
 fn runtime() -> Result<std::sync::Arc<node::runtime::Runtime>, RpcError> {
-    node::runtime::get().ok_or_else(|| {
-        RpcError::new(
-            ErrorCode::NotInState,
-            "this core has no node bridge, so it has no nodes. Add a [nodes] table to the \
-             config with `listen` and restart.",
-        )
-    })
+    node::runtime::get().ok_or_else(bridge_off)
+}
+
+/// The node bridge is not switched on. `nodes.listen` is settable, so the
+/// refusal carries the value that turns it on; the bridge starts with the
+/// mixer, so a restart follows.
+fn bridge_off() -> RpcError {
+    RpcError::new(
+        ErrorCode::NotInState,
+        "this mixer is not listening for nodes: the node bridge is not switched on, so it \
+         has no nodes. Turn it on by giving nodes.listen an address, such as 0.0.0.0:8443, \
+         then restart the mixer.",
+    )
+    .with_action(godwinmix_protocol::ErrorAction::set_config(
+        "Listen for nodes",
+        "nodes.listen",
+        "0.0.0.0:8443",
+        "restart",
+    ))
+}
+
+#[cfg(test)]
+mod tests {
+    /// The refusal a page sees when the bridge is off says so and carries
+    /// the one setting that turns it on.
+    #[test]
+    fn a_switched_off_bridge_offers_to_listen() {
+        let e = super::bridge_off();
+        assert!(!e.message.contains("[nodes]"), "no TOML table in the message: {}", e.message);
+        assert!(e.message.contains("restart the mixer"), "{}", e.message);
+        assert_eq!(e.data["action"]["kind"], "set-config");
+        assert_eq!(e.data["action"]["key"], "nodes.listen");
+        assert_eq!(e.data["action"]["applies"], "restart");
+    }
 }

@@ -527,7 +527,7 @@ mod tests {
 
         tx(Event::took_cut(Some("cam1".into()), None, 1234)).unwrap();
         tx(Event::SourceStateChanged { source: "cam1".into(), state: SourceState::Live }).unwrap();
-        tx(Event::Alert { severity: Severity::Warning, message: "cam1 stalled".into() }).unwrap();
+        tx(Event::Alert { severity: Severity::Warning, message: "cam1 stalled".into(), action: None }).unwrap();
         // Meters are counted, not written.
         tx(Event::AudioLevel { peak_db: vec![-21.0, -20.5] }).unwrap();
 

@@ -14,6 +14,7 @@ use godwinmix_protocol::method::Registry;
 use godwinmix_protocol::rpc::CallEnvelope;
 use godwinmix_protocol::scope::{ConfirmPolicy, Token};
 use godwinmix_protocol::MutationMeta;
+use godwinmix_protocol::ErrorAction;
 use crate::control::AppState;
 use godwinmix_core::snapshot::Tracker;
 use serde::de::DeserializeOwned;
@@ -101,11 +102,17 @@ impl Call {
         // generic failure: it is the one thing that says whether asking again
         // will help.
         if let Some(wedged) = e.downcast_ref::<godwinmix_core::mixer::Wedged>() {
-            return RpcError::not_in_state(wedged.to_string())
+            let refusal = RpcError::not_in_state(wedged.to_string())
                 .with("method", self.method)
                 .with("command", wedged.command)
                 .with("held_ms", wedged.held_ms)
                 .with("retryable", true);
+            // Held by a named command is the case whose message ends in
+            // "restart the core if it does not clear", so it carries the button.
+            return match wedged.command {
+                Some(_) => refusal.with_action(ErrorAction::restart()),
+                None => refusal,
+            };
         }
         if let Some(busy) = e.downcast_ref::<godwinmix_core::mixer::Busy>() {
             return RpcError::not_in_state(busy.to_string())
@@ -113,7 +120,7 @@ impl Call {
                 .with("retry_after_ms", busy.retry_after_ms)
                 .with("retryable", true);
         }
-        RpcError::not_in_state(e.to_string()).with("method", self.method)
+        with_found_action(RpcError::not_in_state(e.to_string()).with("method", self.method), &e)
     }
 
     /// A safety rule said no. `-32003` with the time left, which is the one
@@ -123,12 +130,25 @@ impl Call {
     }
 }
 
+/// Lift a button raised deep in the engine (an `Actionable` anywhere in the
+/// chain) into `data.action`.
+pub fn with_found_action(refusal: RpcError, e: &anyhow::Error) -> RpcError {
+    match ErrorAction::find(e.as_ref()) {
+        Some(action) => refusal.with_action(action),
+        None => refusal,
+    }
+}
+
 /// The same, without a `Call` in hand.
 pub fn safety_error(method: &str, refusal: godwinmix_core::safety::Refusal) -> RpcError {
-    RpcError::new(ErrorCode::Safety, refusal.message)
+    let error = RpcError::new(ErrorCode::Safety, refusal.message)
         .with("rule", refusal.rule)
         .with("retry_after_ms", refusal.retry_after_ms)
-        .with("method", method)
+        .with("method", method);
+    match refusal.action {
+        Some(action) => error.with_action(*action),
+        None => error,
+    }
 }
 
 /// Run one method, with everything that has to happen around it.
