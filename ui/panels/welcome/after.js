@@ -6,11 +6,12 @@
 // set up never shows either. They arrive with the first pick.
 
 import { el } from "../../shell/dom.js";
-import { errorToast, toast } from "../../shell/toast.js";
+import { toast } from "../../shell/toast.js";
 import { modal } from "../../shell/modal.js";
-import { pluginSourceFor, listPlugins, hasPlugin } from "../../client/kinds.js";
 import { checklist, stepsOf, newContext } from "./checklist.js";
 import { checkRestart } from "../../shell/restart-bar.js";
+import { installPlugin, installRow } from "./install.js";
+import { leaves } from "../../shell/dock-model.js";
 
 const COUNT = ["No", "One", "Two", "Three", "Four", "Five", "Six"];
 
@@ -76,63 +77,31 @@ export function notesWorthShowing(plan, result) {
 }
 
 /**
- * Bring a panel into view: close the checklist's scrim for a moment so the
- * panel can be seen, open it if it is folded, and offer the way back.
+ * Bring a panel into view: make it the open tab of its group (or put it back
+ * if it was closed), lift the checklist's scrim for a moment so it can be
+ * seen, and offer the way back.
+ *
+ * @returns {boolean} whether there was a panel to show
  */
 function showPanel(m, id) {
-  const panel = document.querySelector(`[data-panel="${CSS.escape(id)}"]`);
+  const ws = document.querySelector("gmx-shell")?.workspace;
+  if (ws) {
+    const group = leaves(ws.state.tree).find((g) => g.tabs.includes(id));
+    if (group) ws.activate(group, id);
+    else ws.show(id);
+  }
+  const panel = document.querySelector(`[data-dock-panel="${CSS.escape(id)}"], [data-panel="${CSS.escape(id)}"]`);
   if (!panel) {
-    toast({ text: "That panel is not on this page. Add it back from the workspace menu." });
-    return;
+    toast({ text: "That panel is not on this page. Put it back from Panels and layout." });
+    return false;
   }
   const scrim = m && m.el.parentElement;
   if (scrim) scrim.hidden = true;
-  const section = panel.closest("details");
-  if (section) section.open = true;
-  panel.scrollIntoView({ block: "center" });
+  panel.scrollIntoView({ block: "nearest" });
   panel.classList.add("flash");
   setTimeout(() => panel.classList.remove("flash"), 2400);
   toast({ text: "Here it is.", action: { label: "Back to the list", run: () => scrim && (scrim.hidden = false) }, ms: 20000 });
-}
-
-/**
- * Install one plugin with `plugin.add`, the call `gmx plugin add` makes, then
- * read the listing again so the line says what actually happened.
- *
- * @returns {Promise<boolean>} whether it is loaded now
- */
-async function installPlugin(client, name, button, note) {
-  button.disabled = true;
-  note.textContent = " Installing. This can take a minute.";
-  try {
-    const source = await pluginSourceFor(client, name);
-    await client.call("plugin.add", { source });
-  } catch (e) {
-    errorToast(e, `Installing ${name}`);
-    button.disabled = false;
-    note.textContent = "";
-    return false;
-  }
-  const loaded = hasPlugin(await listPlugins(client), name);
-  note.textContent = loaded ? " Installed, and nothing restarted." : " Installed, but the mixer has not picked it up yet.";
-  button.remove();
-  return loaded;
-}
-
-/** One missing plugin, and the button that installs it. */
-export function installRow(client, plugin) {
-  const note = el("span.sm.dim");
-  const button = el("button.btn.primary", { text: `Install ${plugin.name} support` });
-  button.onclick = () => installPlugin(client, plugin.name, button, note);
-  return el("p.sm", {}, [
-    el("span.dot.stalled"),
-    " ",
-    el("span", {
-      text: `The ${plugin.name} plugin is not installed yet, so anything that needs it stays listed and does not start. `,
-    }),
-    button,
-    note,
-  ]);
+  return true;
 }
 
 /** The OBS tile: a drop zone, in its own module because few ever press it. */

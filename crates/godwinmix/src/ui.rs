@@ -88,6 +88,7 @@ const ASSETS: &[(&str, &str)] = &[
     ("panels/sources/setreq.js", include_str!("../../../ui/panels/sources/setreq.js")),
     ("panels/sources/tile.js", include_str!("../../../ui/panels/sources/tile.js")),
     ("panels/welcome/after.js", include_str!("../../../ui/panels/welcome/after.js")),
+    ("panels/welcome/install.js", include_str!("../../../ui/panels/welcome/install.js")),
     ("panels/welcome/checklist.js", include_str!("../../../ui/panels/welcome/checklist.js")),
     ("panels/welcome/obs-import.js", include_str!("../../../ui/panels/welcome/obs-import.js")),
     ("panels/welcome/defaults.js", include_str!("../../../ui/panels/welcome/defaults.js")),
@@ -152,6 +153,7 @@ const DEV_ASSETS: &[(&str, &str)] = &[
     ("test/studio.js", include_str!("../../../ui/test/studio.js")),
     ("test/monitor-resize.js", include_str!("../../../ui/test/monitor-resize.js")),
     ("test/dock.js", include_str!("../../../ui/test/dock.js")),
+    ("test/welcome.js", include_str!("../../../ui/test/welcome.js")),
     // The designer kits' behaviour, as the reference implementation answered
     // it. The TypeScript and Python suites read the same file from the
     // repository; the browser reads it from here, because the page has no file
@@ -700,6 +702,7 @@ mod tests {
             ("panels/welcome/tiles.js", "the welcome dialog"),
             ("panels/welcome/after.js", "picking a welcome tile"),
             ("panels/welcome/checklist.js", "picking a welcome tile"),
+            ("panels/welcome/install.js", "picking a welcome tile"),
             ("panels/welcome/obs-import.js", "the Import from OBS tile"),
         ] {
             assert!(known(path).is_some(), "{path} is not served at all");
