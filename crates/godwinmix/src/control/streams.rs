@@ -128,11 +128,12 @@ async fn mjpeg_for(
     q: HashMap<String, String>,
 ) -> Response {
     if !ctx.app.multiview.enabled() {
-        return refuse(
+        let why = snapshot::multiview_switched_off("there is no picture to preview: the multiview is switched off");
+        return (
             StatusCode::NOT_FOUND,
-            "[multiview] enabled = false, so there is no picture to preview. Turn it on and \
-             restart the core.",
-        );
+            axum::Json(json!({ "error": why.message, "action": why.action })),
+        )
+            .into_response();
     }
     let width = number(&q, "width").filter(|w| *w > 0).map(|w| w as u32);
     // A cell is cut out of the mosaic, so a client asking for a wide cell is

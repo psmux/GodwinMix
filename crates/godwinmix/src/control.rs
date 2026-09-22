@@ -881,7 +881,10 @@ pub async fn snapshot_bytes(
         ));
     };
     if let Some(why) = snapshots.disabled_reason() {
-        return Err(RpcError::not_in_state(why));
+        // An agent can still read the state without pictures, so say where.
+        return Err(RpcError::not_in_state(why.message)
+            .with_action(why.action)
+            .with("without_pictures", "/api/agent/state"));
     }
     // The width the limits allow for this client, which is also what says no
     // when one client asks too often.
@@ -891,10 +894,17 @@ pub async fn snapshot_bytes(
     let width = match snapshots.resolve(&format!("{client} {with_suffix}"), ask) {
         Ok(w) => w,
         Err(refusal @ snapshot::Refusal::TooWide { .. }) => {
-            return Err(RpcError::invalid_params(refusal.message()))
+            return Err(RpcError::invalid_params(refusal.message())
+                .with("config_key", "snapshot.max_width"))
         }
         Err(refusal) => {
-            return Err(RpcError::new(ErrorCode::Safety, refusal.message()));
+            let wait = match refusal {
+                snapshot::Refusal::TooSoon { retry_after_secs } => retry_after_secs * 1000,
+                _ => 0,
+            };
+            return Err(RpcError::new(ErrorCode::Safety, refusal.message())
+                .with("config_key", "snapshot.min_interval_secs")
+                .with("retry_after_ms", wait));
         }
     };
     // Asking is what starts the tracker and, through it, the mosaic. The first
@@ -1453,6 +1463,7 @@ fn spawn_operator_watchdog(app: AppState) {
             app.mixer.emit(Event::Alert {
                 severity: godwinmix_protocol::types::Severity::Critical,
                 message,
+                action: None,
             });
             let target = match &action {
                 SilenceAction::Slate => Some(None),

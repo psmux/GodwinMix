@@ -597,16 +597,14 @@ async fn add(call: Call, params: Value) -> Result<Value, RpcError> {
                 Err(direct)
             }
         })
-        .map_err(|e| {
-            RpcError::new(ErrorCode::NotFound, format!("{e:#}")).with("source", req.source.clone())
-        })?;
+        .map_err(|e| not_a_source(&req.source, &options(&call).only, format!("{e:#}")))?;
     if let godwinmix_host::sources::Source::Path(path) = &source {
         if !path.as_os_str().is_empty() && !path.exists() {
             return Err(RpcError::new(
                 ErrorCode::NotFound,
                 format!(
-                    "there is nothing at `{}`. A path source is a directory with \
-                     gmx-plugin.toml at its root; `gmx plugin new` writes one.",
+                    "there is nothing at `{}`. A folder source is a directory on the \
+                     mixer's machine with gmx-plugin.toml at its root.",
                     req.source
                 ),
             )
@@ -729,6 +727,36 @@ async fn update(call: Call, params: Value) -> Result<Value, RpcError> {
             .map_err(|e| e.to_string())
         },
     ))
+}
+
+/// What `plugin.add` can install from, for a person, with no `gmx` line.
+const FORMS: &str = "a GitHub release written owner/repo, a git address ending in .git, a \
+                     cargo:, npm:, pypi: or oci: package, or a folder on the mixer's machine";
+
+/// `plugin.add` was given something it cannot install. The parser's own
+/// text is written for the terminal (it lists the forms in columns and names
+/// `gmx marketplace add`), so this says the same for a page: what can be
+/// installed, and from where.
+fn not_a_source(spec: &str, only: &[String], parsed: String) -> RpcError {
+    let markets: Vec<String> =
+        godwinmix_host::marketplace::documents(only).into_iter().map(|m| m.name).collect();
+    let message = if !parsed.contains("`gmx ") {
+        parsed
+    } else if markets.is_empty() {
+        format!(
+            "no marketplace is set up on this mixer, so a plain name like `{spec}` cannot be \
+             looked up. It can install {FORMS}."
+        )
+    } else {
+        format!(
+            "no plugin called `{spec}` is listed in the marketplaces this mixer knows ({}). \
+             Search them to see what there is, or install {FORMS}.",
+            markets.join(", ")
+        )
+    };
+    RpcError::new(ErrorCode::NotFound, message)
+        .with("source", spec)
+        .with("marketplaces", markets)
 }
 
 async fn search(call: Call, params: Value) -> Result<Value, RpcError> {
@@ -1133,3 +1161,19 @@ fn plugin_arrived(hooks: &std::sync::Arc<crate::control::hooks::Hooks>, installe
     });
 }
 
+
+#[cfg(test)]
+mod refusal_tests {
+    /// The parser's terminal text names `gmx marketplace add`; a page is told
+    /// what can be installed and from where instead.
+    #[test]
+    fn an_unknown_name_says_what_can_be_installed_without_a_command() {
+        let parsed = godwinmix_host::sources::Source::parse("nosuchplugin").unwrap_err();
+        let e = super::not_a_source("nosuchplugin", &["no-such-market".into()], format!("{parsed:#}"));
+        assert!(!e.message.contains("gmx "), "{}", e.message);
+        assert!(e.message.contains("owner/repo"), "{}", e.message);
+        assert!(e.message.contains("nosuchplugin"), "{}", e.message);
+        assert_eq!(e.data["source"], "nosuchplugin");
+        assert!(e.data["marketplaces"].is_array());
+    }
+}

@@ -284,7 +284,8 @@ fn stream_events() -> Vec<EventDef> {
                     "type": "object",
                     "properties": {
                         "severity": schema_of::<types::Severity>(g),
-                        "message": { "type": "string" }
+                        "message": { "type": "string" },
+                        "action": schema_of::<crate::action::ErrorAction>(g)
                     }
                 })
             },
@@ -503,6 +504,7 @@ pub fn descriptor<C>(registry: &Registry<C>, kinds: Value) -> Value {
         "ext": ext_entries(),
         "kinds": kinds,
         "errors": error_entries(),
+        "actions": action_entries(),
         "$defs": defs,
     })
 }
@@ -572,6 +574,13 @@ fn error_entries() -> Vec<Value> {
                 "http_status": c.http_status(),
             })
         })
+        .collect()
+}
+
+fn action_entries() -> Vec<Value> {
+    crate::action::ErrorAction::table()
+        .into_iter()
+        .map(|(kind, fields, does)| json!({ "kind": kind, "fields": fields, "does": does }))
         .collect()
 }
 
@@ -796,6 +805,16 @@ fn markdown_errors(doc: &Value, out: &mut String) {
             e["http_status"],
             if e["retryable"] == json!(true) { "yes" } else { "no" },
         ));
+    }
+    out.push('\n');
+    out.push_str(
+        "When a client can do the next step for the person, `data.action` says so: an object \
+         with `kind`, a `label` for the button and the fields below. The same object can ride \
+         on an `alert` event. A client that does not know a kind shows the message alone.\n\n",
+    );
+    out.push_str("| Kind | Fields | What the button does |\n|---|---|---|\n");
+    for a in doc["actions"].as_array().into_iter().flatten() {
+        out.push_str(&format!("| `{}` | {} | {} |\n", text(&a["kind"]), text(&a["fields"]), text(&a["does"])));
     }
     out.push('\n');
 }

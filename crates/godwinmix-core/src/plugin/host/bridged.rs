@@ -316,14 +316,22 @@ pub fn make(
     type_id: &str,
     node: &str,
 ) -> Result<Box<dyn Source>> {
-    let runtime = crate::node::runtime::get().context(
-        "this core has no node bridge, so nothing can be placed on a node. Add a [nodes] table \
-         to the config and restart",
-    )?;
+    let runtime = crate::node::runtime::get().ok_or_else(|| {
+        anyhow::Error::new(godwinmix_protocol::Actionable::new(
+            "this mixer is not listening for nodes, so nothing can be placed on a node. Turn \
+             the node bridge on by giving nodes.listen an address, then restart the mixer",
+            godwinmix_protocol::ErrorAction::set_config(
+                "Listen for nodes",
+                "nodes.listen",
+                "0.0.0.0:8443",
+                "restart",
+            ),
+        ))
+    })?;
     anyhow::ensure!(
         runtime.nodes.view(node).is_some(),
-        "no node called `{node}`. This core knows: {}. `gmx node token --name {node}` mints an \
-         enrolment token for a new one",
+        "no node called `{node}`. This mixer knows: {}. Enrol the new machine first, which \
+         gives it a token to join with",
         match runtime.nodes.names().join(", ") {
             names if names.is_empty() => "none".to_string(),
             names => names,

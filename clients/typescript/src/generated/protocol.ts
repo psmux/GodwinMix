@@ -12,6 +12,9 @@
 export const API_LEVEL = 1;
 export const API_COMPATIBLE = 1;
 
+/** What pressing the button does. */
+export type ActionKind = "set-config" | "install-plugin" | "enable-plugin" | "open" | "retry" | "restart";
+
 /** `adbreak.start`. */
 export interface AdBreakRequest {
   at_running_time_ms?: number | null;
@@ -377,6 +380,24 @@ export interface EnrolRequest {
   address?: string | null;
   name: string;
   ttl_secs?: number | null;
+}
+
+/**
+ * One thing a client can offer as a button. `label` is the button's text,
+ * `kind` says what pressing it does, and the other fields are the ones that
+ * kind uses. Flat rather than an enum with data, so every generated client
+ * reads every field.
+ */
+export interface ErrorAction {
+  after_ms?: number | null;
+  applies?: string | null;
+  dialog?: string | null;
+  key?: string | null;
+  kind: ActionKind;
+  label: string;
+  name?: string | null;
+  panel?: string | null;
+  value?: unknown;
 }
 
 /** `scene.export`. */
@@ -1610,6 +1631,7 @@ export interface MediaChangedEvent {
 }
 
 export interface AlertEvent {
+  action?: ErrorAction;
   message?: string;
   severity?: Severity2;
 }

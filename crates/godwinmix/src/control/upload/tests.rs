@@ -109,3 +109,16 @@ async fn first_upload_creates_the_configured_media_directory() {
     assert_eq!(store(&library, "tone.wav", Body::from(wav())).await.unwrap(), 16044);
     assert_eq!(tokio::fs::read(library.join("tone.wav")).await.unwrap(), wav());
 }
+
+#[tokio::test]
+async fn a_media_folder_that_cannot_be_made_offers_the_setting() {
+    let dir = Directory::new();
+    std::fs::create_dir_all(&dir.0).unwrap();
+    // A file where the folder should be: create_dir_all cannot get past it.
+    let blocker = dir.0.join("blocked");
+    std::fs::write(&blocker, b"x").unwrap();
+    let e = store(&blocker.join("media"), "tone.wav", Body::from(wav())).await.unwrap_err();
+    assert!(!e.message.contains("[media]"), "no TOML table: {}", e.message);
+    assert_eq!(e.data["action"]["kind"], "open");
+    assert_eq!(e.data["action"]["key"], "media.dir");
+}
