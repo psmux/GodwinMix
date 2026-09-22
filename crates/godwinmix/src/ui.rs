@@ -88,6 +88,9 @@ const ASSETS: &[(&str, &str)] = &[
     ("panels/sources/setreq.js", include_str!("../../../ui/panels/sources/setreq.js")),
     ("panels/sources/tile.js", include_str!("../../../ui/panels/sources/tile.js")),
     ("panels/welcome/after.js", include_str!("../../../ui/panels/welcome/after.js")),
+    ("panels/welcome/install.js", include_str!("../../../ui/panels/welcome/install.js")),
+    ("panels/welcome/checklist.js", include_str!("../../../ui/panels/welcome/checklist.js")),
+    ("panels/welcome/obs-import.js", include_str!("../../../ui/panels/welcome/obs-import.js")),
     ("panels/welcome/defaults.js", include_str!("../../../ui/panels/welcome/defaults.js")),
     ("panels/welcome/panel.js", include_str!("../../../ui/panels/welcome/panel.js")),
     ("panels/welcome/tiles.js", include_str!("../../../ui/panels/welcome/tiles.js")),
@@ -115,6 +118,7 @@ const ASSETS: &[(&str, &str)] = &[
     ("shell/modal.js", include_str!("../../../ui/shell/modal.js")),
     ("shell/palette.js", include_str!("../../../ui/shell/palette.js")),
     ("shell/lazy-action.js", include_str!("../../../ui/shell/lazy-action.js")),
+    ("shell/restart-bar.js", include_str!("../../../ui/shell/restart-bar.js")),
     ("shell/scene-session.js", include_str!("../../../ui/shell/scene-session.js")),
     ("shell/source-files.js", include_str!("../../../ui/shell/source-files.js")),
     ("shell/picker-loader.js", include_str!("../../../ui/shell/picker-loader.js")),
@@ -155,6 +159,7 @@ const DEV_ASSETS: &[(&str, &str)] = &[
     ("test/studio.js", include_str!("../../../ui/test/studio.js")),
     ("test/monitor-resize.js", include_str!("../../../ui/test/monitor-resize.js")),
     ("test/dock.js", include_str!("../../../ui/test/dock.js")),
+    ("test/welcome.js", include_str!("../../../ui/test/welcome.js")),
     // The designer kits' behaviour, as the reference implementation answered
     // it. The TypeScript and Python suites read the same file from the
     // repository; the browser reads it from here, because the page has no file
@@ -663,6 +668,7 @@ mod tests {
         reachable.extend(closure_of("shell/sandbox.js"));
         reachable.extend(closure_of("panels/welcome/tiles.js"));
         reachable.extend(closure_of("panels/welcome/after.js"));
+        reachable.extend(closure_of("panels/welcome/obs-import.js"));
         reachable.extend(closure_of("kits/schema/index.js"));
         reachable.extend(closure_of("shell/mixer-settings.js"));
         reachable.extend(closure_of("shell/folder-picker.js"));
@@ -707,6 +713,10 @@ mod tests {
             ("shell/mixer-form.js", "Mixer settings or a switch where a refusal was"),
             ("shell/mixer-config.js", "a switch where a refusal was"),
             ("shell/folder-picker.js", "choosing a folder on the mixer"),
+            ("panels/welcome/after.js", "picking a welcome tile"),
+            ("panels/welcome/checklist.js", "picking a welcome tile"),
+            ("panels/welcome/install.js", "picking a welcome tile"),
+            ("panels/welcome/obs-import.js", "the Import from OBS tile"),
         ] {
             assert!(known(path).is_some(), "{path} is not served at all");
             assert!(!eager.contains(path), "{path} is fetched at load, but only {who} needs it");

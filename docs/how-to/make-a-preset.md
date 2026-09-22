@@ -82,11 +82,21 @@ theme = "calm"
 theme_css = "theme.css"            # when the theme is your own
 scenes = "scenes"
 gallery = "icon"                   # live, snapshot, icon or label
-steps = [                          # the three things the person does next
-  "Run `gmx ctl device list` and put your cameras' names into [[sources]].",
-  "Put your stream key into the [[outputs]] block.",
-  "Run `gmx`, open http://localhost:8080, and press Wide.",
-]
+
+[[provides.preset.steps]]              # the things the person does next
+text = "Add your camera."
+does = "add-source"
+target = "cameras"
+
+[[provides.preset.steps]]
+text = "Add the Twitch stream key."
+does = "add-key"
+target = "twitch"
+
+[[provides.preset.steps]]
+text = "Press Wide to put a picture on air."
+does = "take"
+target = "cam-wide"
 ```
 
 `plugins` is a list of `name@range`, semver ranges. `gmx preset apply` installs
@@ -104,10 +114,13 @@ producer, `icon` for a volunteer on a modest machine, `snapshot` for a laptop on
 battery, `label` for a headless box. Leave it out and the surface asks the
 machine, which is what `gmx doctor` proposes.
 
-`steps` is three sentences, in order. They are what the welcome panel in the web
-UI shows straight after your preset is applied, with any missing plugin named
-alongside, and they are the same three that go in the README. Three, not five:
-somebody is reading them with a service starting.
+`steps` is three steps, in order. The web UI shows them straight after your
+preset is applied as a checklist: `does` picks the button (`add-key`,
+`add-source`, `install-plugin`, `open-panel` or `take`) and `target` says what
+it acts on. [The preset reference](../reference/presets.md#steps) lists what
+each one targets. Leave `does` out for a step only a person can do. Write the
+`text` for somebody already looking at the page: no file, no command, no
+address. Three, not five: somebody is reading them with a service starting.
 
 ### `config/godwinmix.toml`
 
