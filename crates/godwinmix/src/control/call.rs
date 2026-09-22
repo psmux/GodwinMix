@@ -146,7 +146,7 @@ pub fn safety_error(method: &str, refusal: godwinmix_core::safety::Refusal) -> R
         .with("retry_after_ms", refusal.retry_after_ms)
         .with("method", method);
     match refusal.action {
-        Some(action) => error.with_action(action),
+        Some(action) => error.with_action(*action),
         None => error,
     }
 }

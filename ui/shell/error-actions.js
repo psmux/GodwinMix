@@ -81,7 +81,7 @@ async function openPart(client, action) {
 async function again(err, label) {
   try {
     await err.again();
-    toast({ text: `${label}: done.` });
+    toast({ text: `${err.what || label}: done.` });
   } catch (e) {
     errorToast(e, label);
   }

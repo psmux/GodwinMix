@@ -3533,7 +3533,7 @@ impl Mixer {
 
     /// The same, with the button that deals with it.
     pub fn alert_with(&self, severity: Severity, message: String, action: ErrorAction) {
-        let _ = self.events.send(Event::Alert { severity, message, action: Some(action) });
+        let _ = self.events.send(Event::Alert { severity, message, action: Some(Box::new(action)) });
     }
 
     pub fn handle(&mut self, cmd: Command) -> Result<bool> {

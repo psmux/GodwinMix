@@ -81,11 +81,14 @@ export async function openSourceDrawer(panel, source) {
  * under the same id and name. Scene items point at the id, so they keep
  * pointing at it. This used to be a sentence telling the person to do those
  * two steps by hand, which lost the name and every placement on the way.
- * A plugin's source has no address to edit, so it shows the address only.
+ * A device source (a camera, a screen, a sound card) is picked by its
+ * settings rather than an address, so it shows the address only.
  */
+const ADDRESSED = new Set(["rtmp", "hls", "file", "exec", "browser", "layered", "test"]);
+
 function addressRow(client, source) {
   const shown = el("div.sm.dim", { text: source.uri, title: source.uri });
-  if (source.type && source.type.includes("/")) return shown;
+  if (source.type && !ADDRESSED.has(source.type.split("/")[0])) return shown;
   const input = el("input", { type: "text", value: source.uri, "aria-label": "Address" });
   const button = el("button.btn", { text: "Change the address" });
   button.onclick = async () => {

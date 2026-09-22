@@ -152,6 +152,22 @@ export async function errorActionTests(test, eq, ok) {
     eq(alertButtons(c2, { severity: "error", message: "x", action: { kind: "launch-rockets", label: "Go" } }), []);
   });
 
+  // A want made before the socket is open used to subscribe at once, be
+  // refused with "not connected to the mixer yet", and log a warning; the
+  // open then subscribed anyway. Now nothing is sent until the open.
+  const asks = [];
+  const early = new Client({ name: "fake", subscribe: (spec) => (asks.push(spec), Promise.resolve({})) }, new Store());
+  const held = early.want("multiview", { fps: 8, width: 640 });
+  await new Promise((r) => setTimeout(r, 80));
+  test("nothing subscribes before the socket is open", () => eq(asks.length, 0));
+  early.store.patch({ connected: true });
+  await early.resubscribe();
+  test("the open subscribes with what was wanted before it", () => {
+    eq(asks.length, 1);
+    eq(asks[0].ext, { multiview: { fps: 8, width: 640 } });
+  });
+  held.release();
+
   test("a plugin that is installed and switched off is not offered for install", () => {
     const plugins = [{ name: "camera", enabled: false }, { name: "screen", problem: "no manifest" }, { name: "audio-device" }];
     eq(pluginState(plugins, "camera"), "disabled");

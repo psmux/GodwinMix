@@ -88,6 +88,8 @@ export function errorText(err, what) {
  */
 export function errorButtons(err, what) {
   const out = [];
+  // What the person pressed, so "went through this time" can name it.
+  if (err && what && typeof err === "object") Object.defineProperty(err, "what", { value: what, configurable: true });
   const action = err && err.action && KNOWN.has(err.action.kind) ? err.action : null;
   if (action) out.push({ label: action.label, run: () => act(action, err), after: action.after_ms || 0 });
   const canRetry = err && err.again && !(action && action.kind === "retry");
