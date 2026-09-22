@@ -1428,14 +1428,14 @@ fn spawn_history(app: AppState) {
 /// programme that keeps running is the safe state.
 fn spawn_operator_watchdog(app: AppState) {
     use godwinmix_core::safety::SilenceAction;
-    let after = app.safety.config().on_operator_silence.after_secs;
     tokio::spawn(async move {
         let mut tick = tokio::time::interval(Duration::from_secs(1));
         tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
         loop {
             tick.tick().await;
             let Some(who) = app.safety.silent_operator() else { continue };
-            let action = app.safety.config().on_operator_silence.action.clone();
+            let silence = app.safety.config().on_operator_silence;
+            let (after, action) = (silence.after_secs, silence.action);
             // Arm it before acting, so this fires once rather than every
             // second until somebody comes back.
             app.safety.arm_silence(matches!(action, SilenceAction::Hold));

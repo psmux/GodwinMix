@@ -263,6 +263,73 @@ class CellAssignment(TypedDict, total=False):
     x: int
     y: int
 
+class ConfigChanged(TypedDict, total=False):
+    """One key this call changed, and when the change takes effect."""
+
+    applies: Applies
+    key: str
+    note: Optional[str]
+    # Said when something outside the file wins over it, such as `--bind`.
+
+class ConfigGetRequest(TypedDict, total=False):
+    keys: List[str]
+    # Only these dotted keys. Empty or absent is every key.
+
+class ConfigGetResult(TypedDict, total=False):
+    keys: List[ConfigKey]
+    needs_restart: List[str]
+    # Every key whose new value waits for a restart, whichever keys were asked for.
+    path: str
+    # The config file these values are read from and written to.
+
+class ConfigKey(TypedDict, total=False):
+    """One setting as `config.get` reports it."""
+
+    applies: Applies
+    default: Any
+    key: str
+    # Dotted, as in `program.video_bitrate_kbps`.
+    overridden_by: Optional[str]
+    # What wins over the file for this key, when something does: `--bind`, or `GODWINMIX_TOKEN` in the core's environment.
+    pending: bool
+    # True when the file differs from what the running core uses and only a restart will close the gap.
+    secret: bool
+    set: Optional[bool]
+    # For a secret: whether one is set. The value itself is never sent.
+    source: str
+    # `file` when the key is written in the config file, `default` when not.
+    value: Any
+    # What the config file says, or the default when it says nothing. Always null for a secret.
+
+class ConfigResetRequest(TypedDict, total=False):
+    dry_run: bool
+    keys: List[str]
+    # Dotted keys to take out of the config file, so their defaults apply.
+
+class ConfigSetRequest(TypedDict, total=False):
+    dry_run: bool
+    # Check everything and write nothing.
+    values: Dict[str, Any]
+    # Dotted key to new value: `{"program.video_bitrate_kbps": 4500}`. Null puts a key back to its default. For a secret, the sentinel `"__secret__"` means leave it as it is, and an empty string clears it.
+
+class ConfigSetResult(TypedDict, total=False):
+    """What `config.set` and `config.reset` answer with."""
+
+    applied: List[str]
+    # Keys from this call in force now.
+    changed: List[ConfigChanged]
+    # Every key this call changed, each with its `applies`.
+    dry_run: bool
+    # True when nothing was written because `dry_run` was set.
+    needs_restart: List[str]
+    # Every key, from this call or an earlier one, whose new value waits for a restart. Empty is the good case.
+    next_source: List[str]
+    # Keys from this call every source added or rebuilt from now on uses.
+    path: str
+    # The config file written to.
+    unchanged: List[str]
+    # Secrets sent back as the sentinel, so left as they were.
+
 class ConversionState(TypedDict, total=False):
     """One conversion, in flight or remembered after it finished."""
 
@@ -1641,6 +1708,9 @@ AgentExt = Union[bool, Dict[str, Any]]
 # The nine alignment keywords, used to place content inside its frame.
 Align = Literal['top-left', 'top-center', 'top-right', 'center-left', 'center', 'center-right', 'bottom-left', 'bottom-center', 'bottom-right']
 
+# When a change to a key takes effect.
+Applies = Literal['live', 'next_source', 'restart']
+
 # Whether the item's source is heard. A source is audible when any live item of it says so, which is OBS's behaviour and changes no pad topology.
 Audio = Literal['follow', 'always', 'never']
 
@@ -1694,6 +1764,10 @@ METHODS = (
     {"name": "adbreak.start", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/adbreak/start"), "summary": 'Interrupt the programme with a clip, then rejoin live when it ends.'},
     {"name": "agent.state", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/agent/state"), "summary": "The compact document written for agents: the programme, each source's state and a motion score saying how much its picture is changing."},
     {"name": "codec.list", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/codecs"), "summary": 'Every codec and element in the catalogue, which of them this machine actually has, and what it would pick.'},
+    {"name": "config.get", "scope": "admin", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/config"), "summary": "The mixer's settings: each key's value in the config file, its default, when a change to it takes effect, and which keys are waiting for a restart. Secrets say only whether one is set."},
+    {"name": "config.reset", "scope": "admin", "mutating": True, "destructive": True, "rest": ("POST", "/api/v1/config/reset"), "summary": 'Put settings back to their defaults by taking them out of the config file. Answers like config.set.'},
+    {"name": "config.schema", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/config/schema"), "summary": 'Every setting config.set takes, as one JSON Schema: type, title, description, default, range or choices, and x-gmx-applies (live, next_source or restart).'},
+    {"name": "config.set", "scope": "admin", "mutating": True, "destructive": True, "rest": ("POST", "/api/v1/config/set"), "summary": 'Change settings in the config file, keeping its comments. Every value is checked first and nothing is written unless all of them fit. Live keys take effect at once; the answer says which wait for the next source or a restart.'},
     {"name": "core.api", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/core/api"), "summary": 'Every method, event and type as JSON Schema. The same document as protocol.json and `godwinmix --api-info`.'},
     {"name": "core.doctor", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/core/doctor"), "summary": 'The environment checks: GStreamer, the elements, the config, the disk and the ports. The same list `gmx doctor` prints.'},
     {"name": "core.info", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/core/info"), "summary": 'What this core is, what it can do, and where its edges are.'},
@@ -1906,6 +1980,50 @@ class GeneratedMethods:
         """Every codec and element in the catalogue, which of them this machine actually has, and what it would pick."""
         params: Dict[str, Any] = {}
         return await self._call("codec.list", params)
+
+    async def config_get(
+        self,
+        *,
+        keys: Optional[List[str]] = None,
+    ) -> ConfigGetResult:
+        """The mixer's settings: each key's value in the config file, its default, when a change to it takes effect, and which keys are waiting for a restart. Secrets say only whether one is set."""
+        params: Dict[str, Any] = {}
+        if keys is not None:
+            params["keys"] = keys
+        return await self._call("config.get", params)
+
+    async def config_reset(
+        self,
+        keys: List[str],
+        *,
+        dry_run: Optional[bool] = None,
+    ) -> ConfigSetResult:
+        """Put settings back to their defaults by taking them out of the config file. Answers like config.set."""
+        params: Dict[str, Any] = {}
+        params["keys"] = keys
+        if dry_run is not None:
+            params["dry_run"] = dry_run
+        return await self._call("config.reset", params)
+
+    async def config_schema(
+        self,
+    ) -> Dict[str, Any]:
+        """Every setting config.set takes, as one JSON Schema: type, title, description, default, range or choices, and x-gmx-applies (live, next_source or restart)."""
+        params: Dict[str, Any] = {}
+        return await self._call("config.schema", params)
+
+    async def config_set(
+        self,
+        values: Dict[str, Any],
+        *,
+        dry_run: Optional[bool] = None,
+    ) -> ConfigSetResult:
+        """Change settings in the config file, keeping its comments. Every value is checked first and nothing is written unless all of them fit. Live keys take effect at once; the answer says which wait for the next source or a restart."""
+        params: Dict[str, Any] = {}
+        params["values"] = values
+        if dry_run is not None:
+            params["dry_run"] = dry_run
+        return await self._call("config.set", params)
 
     async def core_api(
         self,

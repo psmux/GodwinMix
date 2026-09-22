@@ -204,12 +204,21 @@ fn the_table_matches_the_scopes_in_the_protocol_document() {
     assert_eq!(scope("core.doctor"), Scope::Read);
     assert_eq!(scope("log.set"), Scope::Admin);
     assert_eq!(scope("core.session_log"), Scope::Admin);
+    // The mixer's own settings. Reading them is admin too, because they carry
+    // the bind address and the paths; the schema carries no values.
+    assert_eq!(scope("config.get"), Scope::Admin);
+    assert_eq!(scope("config.set"), Scope::Admin);
+    assert_eq!(scope("config.reset"), Scope::Admin);
+    assert_eq!(scope("config.schema"), Scope::Read);
 
     let destructive: Vec<&str> =
         reg.iter().filter(|m| m.destructive).map(|m| m.name).collect();
     assert_eq!(
         destructive,
         vec![
+            // Both rewrite the operator's configuration file, as preset.apply does.
+            "config.reset",
+            "config.set",
             "core.shutdown",
             "filter.remove",
             "media.remove",

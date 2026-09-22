@@ -343,6 +343,26 @@
         ],
         "type": "string"
       },
+      "Applies": {
+        "description": "When a change to a key takes effect.",
+        "oneOf": [
+          {
+            "const": "live",
+            "description": "In force as soon as `config.set` answers.",
+            "type": "string"
+          },
+          {
+            "const": "next_source",
+            "description": "Used by every source added or rebuilt after the change.",
+            "type": "string"
+          },
+          {
+            "const": "restart",
+            "description": "Written to the file and used from the next start.",
+            "type": "string"
+          }
+        ]
+      },
       "ApplyGraphicRequest": {
         "description": "`scene.apply_graphic`.",
         "properties": {
@@ -852,6 +872,215 @@
           "y",
           "w",
           "h"
+        ],
+        "type": "object"
+      },
+      "ConfigChanged": {
+        "description": "One key this call changed, and when the change takes effect.",
+        "properties": {
+          "applies": {
+            "$ref": "#/components/schemas/Applies"
+          },
+          "key": {
+            "type": "string"
+          },
+          "note": {
+            "description": "Said when something outside the file wins over it, such as `--bind`.",
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "key",
+          "applies"
+        ],
+        "type": "object"
+      },
+      "ConfigGetRequest": {
+        "properties": {
+          "keys": {
+            "default": [],
+            "description": "Only these dotted keys. Empty or absent is every key.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "ConfigGetResult": {
+        "properties": {
+          "keys": {
+            "items": {
+              "$ref": "#/components/schemas/ConfigKey"
+            },
+            "type": "array"
+          },
+          "needs_restart": {
+            "description": "Every key whose new value waits for a restart, whichever keys were asked for.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "path": {
+            "description": "The config file these values are read from and written to.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "path",
+          "keys",
+          "needs_restart"
+        ],
+        "type": "object"
+      },
+      "ConfigKey": {
+        "description": "One setting as `config.get` reports it.",
+        "properties": {
+          "applies": {
+            "$ref": "#/components/schemas/Applies"
+          },
+          "default": true,
+          "key": {
+            "description": "Dotted, as in `program.video_bitrate_kbps`.",
+            "type": "string"
+          },
+          "overridden_by": {
+            "description": "What wins over the file for this key, when something does: `--bind`,\nor `GODWINMIX_TOKEN` in the core's environment.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "pending": {
+            "description": "True when the file differs from what the running core uses and only a\nrestart will close the gap.",
+            "type": "boolean"
+          },
+          "secret": {
+            "type": "boolean"
+          },
+          "set": {
+            "description": "For a secret: whether one is set. The value itself is never sent.",
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "source": {
+            "description": "`file` when the key is written in the config file, `default` when not.",
+            "type": "string"
+          },
+          "value": {
+            "description": "What the config file says, or the default when it says nothing. Always\nnull for a secret."
+          }
+        },
+        "required": [
+          "key",
+          "value",
+          "default",
+          "source",
+          "applies",
+          "secret",
+          "pending"
+        ],
+        "type": "object"
+      },
+      "ConfigResetRequest": {
+        "properties": {
+          "dry_run": {
+            "default": false,
+            "type": "boolean"
+          },
+          "keys": {
+            "description": "Dotted keys to take out of the config file, so their defaults apply.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "keys"
+        ],
+        "type": "object"
+      },
+      "ConfigSetRequest": {
+        "properties": {
+          "dry_run": {
+            "default": false,
+            "description": "Check everything and write nothing.",
+            "type": "boolean"
+          },
+          "values": {
+            "additionalProperties": true,
+            "description": "Dotted key to new value: `{\"program.video_bitrate_kbps\": 4500}`. Null\nputs a key back to its default. For a secret, the sentinel\n`\"__secret__\"` means leave it as it is, and an empty string clears it.",
+            "type": "object"
+          }
+        },
+        "required": [
+          "values"
+        ],
+        "type": "object"
+      },
+      "ConfigSetResult": {
+        "description": "What `config.set` and `config.reset` answer with.",
+        "properties": {
+          "applied": {
+            "description": "Keys from this call in force now.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "changed": {
+            "description": "Every key this call changed, each with its `applies`.",
+            "items": {
+              "$ref": "#/components/schemas/ConfigChanged"
+            },
+            "type": "array"
+          },
+          "dry_run": {
+            "description": "True when nothing was written because `dry_run` was set.",
+            "type": "boolean"
+          },
+          "needs_restart": {
+            "description": "Every key, from this call or an earlier one, whose new value waits for\na restart. Empty is the good case.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "next_source": {
+            "description": "Keys from this call every source added or rebuilt from now on uses.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "path": {
+            "description": "The config file written to.",
+            "type": "string"
+          },
+          "unchanged": {
+            "description": "Secrets sent back as the sentinel, so left as they were.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "dry_run",
+          "path",
+          "changed",
+          "unchanged",
+          "applied",
+          "next_source",
+          "needs_restart"
         ],
         "type": "object"
       },
@@ -5269,6 +5498,138 @@
         "x-destructive": false,
         "x-idempotent": true,
         "x-scope": "read"
+      }
+    },
+    "/api/v1/config": {
+      "get": {
+        "description": "JSON-RPC method `config.get`. Needs the `admin` scope.",
+        "operationId": "config.get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConfigGetResult"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "The mixer's settings: each key's value in the config file, its default, when a change to it takes effect, and which keys are waiting for a restart. Secrets say only whether one is set.",
+        "tags": [
+          "config"
+        ],
+        "x-destructive": false,
+        "x-idempotent": true,
+        "x-scope": "admin"
+      }
+    },
+    "/api/v1/config/reset": {
+      "post": {
+        "description": "JSON-RPC method `config.reset`. Needs the `admin` scope. Destructive: accepts `dry_run: true`, and on a token whose policy is `confirm = required` it is refused once with -32020 and a confirm token. Accepts `idempotency_key`, honoured for 24 hours.",
+        "operationId": "config.reset",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConfigResetRequest"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConfigSetResult"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Put settings back to their defaults by taking them out of the config file. Answers like config.set.",
+        "tags": [
+          "config"
+        ],
+        "x-destructive": true,
+        "x-idempotent": true,
+        "x-scope": "admin"
+      }
+    },
+    "/api/v1/config/schema": {
+      "get": {
+        "description": "JSON-RPC method `config.schema`. Needs the `read` scope.",
+        "operationId": "config.schema",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Every setting config.set takes, as one JSON Schema: type, title, description, default, range or choices, and x-gmx-applies (live, next_source or restart).",
+        "tags": [
+          "config"
+        ],
+        "x-destructive": false,
+        "x-idempotent": true,
+        "x-scope": "read"
+      }
+    },
+    "/api/v1/config/set": {
+      "post": {
+        "description": "JSON-RPC method `config.set`. Needs the `admin` scope. Destructive: accepts `dry_run: true`, and on a token whose policy is `confirm = required` it is refused once with -32020 and a confirm token. Accepts `idempotency_key`, honoured for 24 hours.",
+        "operationId": "config.set",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConfigSetRequest"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConfigSetResult"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Change settings in the config file, keeping its comments. Every value is checked first and nothing is written unless all of them fit. Live keys take effect at once; the answer says which wait for the next source or a restart.",
+        "tags": [
+          "config"
+        ],
+        "x-destructive": true,
+        "x-idempotent": true,
+        "x-scope": "admin"
       }
     },
     "/api/v1/core/api": {
