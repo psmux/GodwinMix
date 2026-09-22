@@ -8,7 +8,7 @@ import { dockTests } from "./dock.js";
 // here, including the legacy adapter against a stubbed server.
 
 import { Selection, overlaps, rectFrom } from "../shell/selection.js";
-import { dbToPos, FLOOR } from "../shell/meter.js";
+import { dbToPos, FLOOR, addView, dropView, meterClient } from "../shell/meter.js";
 import { posToGain, gainToPos, gainLabel, UNITY, AudioGestures, ScrubGestures, audioFor } from "../shell/fader.js";
 import {
   parseFrame,
@@ -395,6 +395,25 @@ test("a boolean ext stays a boolean", () => {
   eq(client.extSpec(), {});
 });
 
+test("a meter drawn on the page is what asks the core for levels", () => {
+  // `ext.meters` alone governs `event/meters`, whatever a client lists among
+  // its event patterns. Every meter in this UI therefore sat empty against a
+  // source making a sound, because nothing ever asked. The ask belongs to the
+  // meters themselves: the first one drawn takes it, the last one to go gives
+  // it back, and a page with none costs the core nothing.
+  const client = new Client({ name: "test", subscribe: () => Promise.resolve({}) }, new Store());
+  meterClient(client);
+  eq(client.extSpec(), {}, "levels were asked for before anything drew them");
+  addView("test:master", "program", document.createElement("div"), "h");
+  eq(client.extSpec(), { meters: true }, "a meter is on screen and nothing asked for levels");
+  addView("test:cam1", "src:cam1", document.createElement("div"), "v");
+  dropView("test:master");
+  eq(client.extSpec(), { meters: true }, "the ask went back while a meter was still drawn");
+  dropView("test:cam1");
+  eq(client.extSpec(), {}, "the last meter went and the core is still measuring");
+  meterClient(null);
+});
+
 // ---------------------------------------------------------------- errors
 
 test("an error names its next step and says whether a retry is honest", () => {
@@ -612,6 +631,37 @@ test("an output's row stands through a status, so a button held for a moment is 
   state.outputs = [];
   panel.render(state);
   ok(panel.textContent.includes("Nothing is being sent"), panel.textContent);
+  panel.remove();
+});
+
+test("the outputs panel reads the numbers back while there is a row to put them in", () => {
+  // Nothing pushes a recording's megabytes or a link's buffer: a status is
+  // sent when something changes and both of those change when nothing does.
+  // The row used to say "0.0 MB sent to the file" for the length of a
+  // recording. It is read back on a clock now, and only while a row is drawn
+  // and the panel is on screen.
+  const state = { outputs: [] };
+  let reads = 0;
+  const panel = document.createElement("gmx-outputs");
+  panel.setClient({
+    state,
+    onRender: () => () => {},
+    call: async () => ({}),
+    refreshOutputs: async () => {
+      reads += 1;
+    },
+  });
+  document.body.appendChild(panel);
+  eq(panel.timer, null, "there is nothing to follow and the core is being asked anyway");
+  state.outputs = [
+    { id: "rec", type: "record/output", state: "live", reconnects: 0, queue_secs: 0, has_key: true, uri_host: "record://programme/…", bytes_muxed: 0 },
+  ];
+  panel.render(state);
+  ok(panel.timer, "a recording is on screen and nothing is reading its numbers back");
+  panel.refresh();
+  eq(reads, 1, "what the timer does did not reach the core");
+  panel.setWorkspaceActive(false);
+  eq(panel.timer, null, "a panel put away is still asking the core once a second");
   panel.remove();
 });
 
@@ -1666,6 +1716,60 @@ async function welcomeSuite() {
   panel.close();
 }
 
+// ------------------------------------------------- the outputs' own numbers
+
+/** What a panel gets when it reads the destinations back off the core. */
+async function outputNumbersSuite() {
+  const asked = [];
+  const client = new Client(
+    {
+      name: "test",
+      subscribe: () => Promise.resolve({}),
+      call: (method) => {
+        asked.push(method);
+        return Promise.resolve([{ id: "rec", type: "record/output", bytes_muxed: 2516582 }]);
+      },
+    },
+    new Store()
+  );
+  let painted = 0;
+  client.store.subscribe(() => {
+    painted += 1;
+  });
+  const list = await client.refreshOutputs();
+
+  test("reading the outputs back puts them in the store and paints once", () => {
+    eq(asked, ["output.list"], "it asked for something else");
+    eq(client.state.outputs[0].bytes_muxed, 2516582);
+    eq(list.length, 1, "the list is handed back as well");
+    eq(painted, 1, "one read must be one repaint");
+  });
+
+  // `/rpc` answers with the array itself and the legacy adapter wraps it.
+  const old = new Client(
+    {
+      name: "legacy",
+      subscribe: () => Promise.resolve({}),
+      call: () => Promise.resolve({ outputs: [{ id: "rec", bytes_muxed: 9017754 }] }),
+    },
+    new Store()
+  );
+  await old.refreshOutputs();
+  test("the legacy adapter's wrapper is read as the same list", () => {
+    eq(old.state.outputs[0].bytes_muxed, 9017754);
+  });
+
+  const odd = new Client(
+    { name: "odd", subscribe: () => Promise.resolve({}), call: () => Promise.resolve({ error: "no" }) },
+    new Store()
+  );
+  const nothing = await odd.refreshOutputs();
+  test("an answer that is not a list leaves the rows as they were", () => {
+    eq(nothing, null);
+    eq(odd.state.outputs, []);
+  });
+}
+
 // ------------------------------------------------------- the number keys
 
 /**
@@ -2339,6 +2443,12 @@ legacySuite()
   .catch((e) => {
     failed += 1;
     line("fail", "the welcome suite threw: " + e.message);
+    console.error(e);
+  })
+  .then(outputNumbersSuite)
+  .catch((e) => {
+    failed += 1;
+    line("fail", "the output numbers suite threw: " + e.message);
     console.error(e);
   })
   .then(numberKeySuite)

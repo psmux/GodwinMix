@@ -43,6 +43,31 @@ const levels = new Map();
 /** view id -> {key, node, orient, bars, held, shown, readout} */
 const views = new Map();
 
+// Levels are an `ext` stream: the core sends none until a client asks for them
+// by name, whatever it listed among its event patterns. A page that drew
+// meters and never asked drew silence, and every meter on it sat empty with a
+// live source making a sound. The ask is held here rather than in each panel,
+// because this module is the one thing that knows whether a meter is on screen
+// at all: the first view takes it and the last one to go gives it back.
+let asking = null;
+let want = null;
+
+/** Tell the meters which client to ask. Called once, at boot. */
+export function meterClient(client) {
+  asking = client;
+  if (views.size > 0) askForLevels();
+}
+
+function askForLevels() {
+  if (asking && !want) want = asking.want("meters");
+}
+
+function stopAskingForLevels() {
+  if (!want) return;
+  want.release();
+  want = null;
+}
+
 export function takeLevel(key, peaks) {
   if (!Array.isArray(peaks)) return;
   // Drop levels nothing is watching, or the map grows by one entry per source
@@ -75,6 +100,7 @@ export function takeMeters(params) {
  */
 export function addView(viewId, key, node, orient, readout) {
   views.set(viewId, { key, node, orient: orient || "v", bars: [], held: [], shown: [], readout, channels: 0 });
+  askForLevels();
   start();
 }
 
@@ -82,6 +108,7 @@ export function dropView(viewId) {
   const view = views.get(viewId);
   views.delete(viewId);
   if (view && ![...views.values()].some(other => other.key === view.key)) levels.delete(view.key);
+  if (views.size === 0) stopAskingForLevels();
 }
 
 /** Remove every view whose id starts with the prefix. Used on a cell rebuild. */
