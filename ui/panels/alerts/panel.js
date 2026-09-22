@@ -3,6 +3,7 @@
 
 import { el, clear } from "../../shell/dom.js";
 import { registerAll } from "../../shell/commands.js";
+import { alertButtons } from "../../shell/toast.js";
 
 class AlertsPanel extends HTMLElement {
   static get panel() {
@@ -64,6 +65,7 @@ class AlertsPanel extends HTMLElement {
           el("span.dot" + (a.severity === "error" || a.severity === "critical" ? ".failed" : a.severity === "warning" ? ".stalled" : "")),
           el("span.num.faint", { text: new Date(a.at).toLocaleTimeString() }),
           el("span.grow", { text: a.message }),
+          ...alertButtons(this.client, a).map((b) => el("button.btn.sm", { text: b.label, onclick: b.run })),
         ])
       );
     }

@@ -440,6 +440,27 @@ class EnrolRequest(TypedDict, total=False):
     ttl_secs: Optional[int]
     # How long the token is good for. Default one hour.
 
+class ErrorAction(TypedDict, total=False):
+    """One thing a client can offer as a button. `label` is the button's text, `kind` says what pressing it does, and the other fields are the ones that kind uses. Flat rather than an enum with data, so every generated client reads every field."""
+
+    after_ms: Optional[int]
+    # `retry`: how long to wait first.
+    applies: Optional[str]
+    # `set-config`: what `config.get` says about the key: `live`, `next_source` or `restart`.
+    dialog: Optional[str]
+    # `open`: a dialog, such as `settings`.
+    key: Optional[str]
+    # `set-config`: the dotted key. `open`: the setting to show.
+    kind: ActionKind
+    label: str
+    # Short, in the imperative, for a person: "Turn the multiview on".
+    name: Optional[str]
+    # `install-plugin` and `enable-plugin`: the plugin.
+    panel: Optional[str]
+    # `open`: a panel by id.
+    value: Any
+    # `set-config`: the value to send.
+
 class ExportRequest(TypedDict, total=False):
     """`scene.export`."""
 
@@ -1763,6 +1784,7 @@ class MediaChangedEvent(TypedDict, total=False):
     name: str
 
 class AlertEvent(TypedDict, total=False):
+    action: ErrorAction
     message: str
     severity: Severity2
 
@@ -1780,6 +1802,9 @@ class TelemetryEvent(TypedDict, total=False):
     # source id to 1 when it is live and 0 otherwise
     ts: int
     # milliseconds since the Unix epoch
+
+# What pressing the button does.
+ActionKind = Literal['set-config', 'install-plugin', 'enable-plugin', 'open', 'retry', 'restart']
 
 # `ext.agent`. `true` takes the default thresholds; an object moves them.
 AgentExt = Union[bool, Dict[str, Any]]

@@ -539,7 +539,7 @@ class SourcesPanel extends HTMLElement {
     // this panel yet, so a drop onto another tile says so rather than silently
     // doing nothing.
     if (info.target && info.targetId && !this.selection.has(info.targetId)) {
-      toast({ text: "Folders arrive with source.group. To build a scene, drag these onto Scenes." });
+      toast({ text: "Grouping sources into folders is not ready yet. To build a scene, drag these onto Scenes instead." });
     }
   }
 

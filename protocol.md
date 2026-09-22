@@ -2449,3 +2449,14 @@ One shape everywhere: `{"error": {"code", "message", "data"}}`, with `trace_id` 
 | -32012 | the change needs the instance restarted | 400 | no |
 | -32020 | a confirm token is needed first | 428 | yes |
 
+When a client can do the next step for the person, `data.action` says so: an object with `kind`, a `label` for the button and the fields below. The same object can ride on an `alert` event. A client that does not know a kind shows the message alone.
+
+| Kind | Fields | What the button does |
+|---|---|---|
+| `set-config` | key, value, applies | config.set with that one value; a restart follows when applies is restart |
+| `install-plugin` | name | plugin.add with the name as the source |
+| `enable-plugin` | name | plugin.enable |
+| `open` | panel, dialog, key | show that part of the client |
+| `retry` | after_ms | the same call again, after the wait |
+| `restart` |  | core.restart, when core.info says restart.possible |
+

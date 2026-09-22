@@ -1,6 +1,7 @@
 import { recordingState } from "../panels/outputs/recording.js";
 import { sourceFileTests } from "./source-files.js";
 import { mixerSettingsTests } from "./mixer-settings.js";
+import { errorActionTests } from "./error-actions.js";
 import { sourceChooserTests } from "./source-chooser.js";
 import { studioTests } from "./studio.js";
 import { dockTests } from "./dock.js";
@@ -2649,6 +2650,7 @@ legacySuite()
   .then(scopedSourcesSuite)
   .then(() => sourceChooserTests(test, eq, ok))
   .then(() => sourceFileTests(test, eq, ok))
+  .then(() => errorActionTests(test, eq, ok))
   .catch((e) => {
     failed += 1;
     line("fail", "the scoped sources suite threw: " + e.message);

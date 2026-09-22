@@ -9,7 +9,7 @@ import { installGlobal } from "./shell/registry.js";
 import { mountShell } from "./shell/shell.js";
 import { askForToken } from "./shell/firstrun.js";
 import { initTheme } from "./shell/theme.js";
-import { toast } from "./shell/toast.js";
+import { toast, confirmHook } from "./shell/toast.js";
 import { proposeGalleryMode } from "./shell/settings.js";
 import { meterClient } from "./shell/meter.js";
 import { applyCoreDefaults, watchCoreDefaults } from "./panels/welcome/defaults.js";
@@ -74,6 +74,9 @@ async function main() {
   const token = await authorise(location.origin);
   const client = await connect({ token });
   window.gmxClient = client;
+  // A token set to confirm destructive calls asks the person here, and the
+  // call goes again with the confirmation when they say yes.
+  client.confirm = confirmHook;
   // Who the meters ask for levels. Nothing is asked for until a panel puts a
   // meter on screen, and the ask is given back when the last one goes.
   meterClient(client);

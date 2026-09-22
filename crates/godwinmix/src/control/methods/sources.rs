@@ -316,7 +316,7 @@ async fn seek(call: Call, params: Value) -> Result<Value, RpcError> {
 }
 
 fn refuse(e: anyhow::Error) -> RpcError {
-    RpcError::invalid_params(e.to_string())
+    crate::control::call::with_found_action(RpcError::invalid_params(e.to_string()), &e)
 }
 
 // ---------------------------------------------------------------------------

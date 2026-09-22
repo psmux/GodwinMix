@@ -275,12 +275,9 @@ impl ExecSpec {
     /// The command behind an `exec:` URI, if exec sources are allowed.
     pub fn from_uri(uri: &str, allowed: bool) -> Result<Self> {
         let command = exec_command(uri).context("not an exec source")?;
-        anyhow::ensure!(
-            allowed,
-            "exec sources are disabled. They run a command line on this machine, so \
-             anyone who can reach the control port could run anything. Set \
-             security.allow_exec_sources = true only if that port is on a trusted network."
-        );
+        if !allowed {
+            return Err(exec_refused().into());
+        }
         anyhow::ensure!(!command.is_empty(), "exec source has an empty command");
         let argv = shell_words::split(command)
             .with_context(|| format!("parsing command: {command}"))?;
@@ -2326,20 +2323,63 @@ pub fn make_exec_source(id: &str, spec: &ExecSpec) -> Result<(gst::Element, Exec
     Ok((src, held))
 }
 
+/// Why an `exec:` source was refused, with the switch that allows them.
+///
+/// The key applies live (`config.set` reaches the held config), so the
+/// button can allow it and the same add can go again straight away.
+fn exec_refused() -> godwinmix_protocol::Actionable {
+    godwinmix_protocol::Actionable::new(
+        "command sources are switched off. They run a command line on the mixer's machine, \
+         so anyone who can reach the control port could run anything. Allow them only if \
+         that port is on a trusted network: the setting is security.allow_exec_sources, and \
+         it takes effect at once.",
+        godwinmix_protocol::ErrorAction::set_config(
+            "Allow command sources",
+            "security.allow_exec_sources",
+            true,
+            "live",
+        ),
+    )
+}
+
+/// Why a web page source cannot start: no browser sidecar was found, and
+/// the GStreamer fallback is not here either.
+///
+/// The sidecar is the answer on every platform and the only one on macOS and
+/// Windows, so it leads. The Linux package comes second, for a person who
+/// would rather have the lighter renderer. The button opens the setting that
+/// points the mixer at a sidecar it did not find by itself.
+fn no_web_renderer() -> godwinmix_protocol::Actionable {
+    let fallback = if cfg!(target_os = "linux") {
+        " On Linux the lighter GStreamer renderer also works: the gstreamer1.0-wpe package \
+         on Debian and Ubuntu."
+    } else {
+        ""
+    };
+    godwinmix_protocol::Actionable::new(
+        format!(
+            "cannot render web pages: the browser sidecar, godwinmix-browser, is not beside \
+             the mixer or on the PATH, and the setting browser.sidecar does not point at one. \
+             Put godwinmix-browser{} next to the mixer, or set Browser sidecar in Settings to \
+             where it is. It applies to the next web source you add.{fallback}",
+            if cfg!(target_os = "macos") { ".app" } else { std::env::consts::EXE_SUFFIX }
+        ),
+        godwinmix_protocol::ErrorAction::open_setting("Set the browser sidecar", "browser.sidecar"),
+    )
+}
+
 /// Build a headless browser rendering a page as a live source.
 ///
 /// `wpesrc` runs a WPE WebKit instance offscreen and exposes what it draws and
 /// plays as pads. It is packaged on Linux (`gstreamer1.0-wpe` on Debian and
 /// Ubuntu, `gst-plugins-bad` with `wpewebkit` elsewhere) and is not available
-/// on macOS, so say plainly what is missing rather than failing obscurely.
+/// on macOS. This is the fallback when no sidecar was found, so the refusal
+/// names the sidecar first.
 pub fn make_web_source(id: &str, uri: &str) -> Result<gst::Element> {
     let url = web_url(uri).context("not a web source url")?;
-    anyhow::ensure!(
-        crate::probe::exists("wpesrc"),
-        "cannot render web pages: the GStreamer `wpesrc` element is not installed. \
-         Install gstreamer1.0-wpe (Debian, Ubuntu) or gst-plugins-bad built with \
-         wpewebkit. It is not available on macOS."
-    );
+    if !crate::probe::exists("wpesrc") {
+        return Err(no_web_renderer().into());
+    }
 
     let src = make("wpesrc", &format!("{id}-src-web"))?;
     src.set_property("location", &url);
@@ -2688,8 +2728,15 @@ mod tests {
         }
         let err = make_web_source("s", "web+https://example.com").unwrap_err();
         let msg = format!("{err:#}");
-        assert!(msg.contains("wpesrc"), "should name the element: {msg}");
-        assert!(msg.contains("gstreamer1.0-wpe"), "should name the package: {msg}");
+        assert!(msg.contains("godwinmix-browser"), "should name the sidecar: {msg}");
+        if cfg!(target_os = "linux") {
+            assert!(msg.contains("gstreamer1.0-wpe"), "should name the package: {msg}");
+        } else {
+            assert!(!msg.contains("gstreamer1.0-wpe"), "no Debian package off Linux: {msg}");
+        }
+        let action = godwinmix_protocol::ErrorAction::find(err.as_ref()).expect("an action");
+        assert_eq!(action.to_value()["key"], "browser.sidecar");
+        assert_eq!(action.to_value()["kind"], "open");
     }
 
     /// The sidecar's report is the whole basis for taking the layered path, so
@@ -2900,8 +2947,15 @@ mod tests {
     fn exec_sources_are_refused_unless_enabled() {
         let err = ExecSpec::from_uri("exec:echo hi", false).unwrap_err();
         let msg = format!("{err:#}");
-        assert!(msg.contains("disabled"), "should say it is off: {msg}");
+        assert!(msg.contains("switched off"), "should say it is off: {msg}");
         assert!(msg.contains("allow_exec_sources"), "should name the setting: {msg}");
+        // And carry the switch as a button a page can offer.
+        let action = godwinmix_protocol::ErrorAction::find(err.as_ref()).expect("an action");
+        assert_eq!(
+            action.to_value(),
+            serde_json::json!({ "label": "Allow command sources", "kind": "set-config",
+                "key": "security.allow_exec_sources", "value": true, "applies": "live" })
+        );
 
         // And an empty command is refused even when enabled.
         assert!(ExecSpec::from_uri("exec:", true).is_err());

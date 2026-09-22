@@ -227,9 +227,12 @@ pub fn event_name_and_payload(event: &Event) -> Option<(&'static str, Value)> {
                 "source": source, "position_ms": position_ms, "duration_ms": duration_ms
             })),
         ),
-        Event::Alert { severity, message } => (
+        Event::Alert { severity, message, action } => (
             "alert",
-            payload(json!({ "severity": severity, "message": message })),
+            payload(match action {
+                Some(action) => json!({ "severity": severity, "message": message, "action": action }),
+                None => json!({ "severity": severity, "message": message }),
+            }),
         ),
         Event::MediaChanged { name, conversion } => (
             "media.changed",
@@ -493,7 +496,7 @@ mod tests {
             Some("source.state")
         );
         assert_eq!(
-            name(Event::Alert { severity: Severity::Warning, message: "x".into() }),
+            name(Event::Alert { severity: Severity::Warning, message: "x".into(), action: None }),
             Some("alert")
         );
         // Meters are coalesced by the connection, not published one per meter.
