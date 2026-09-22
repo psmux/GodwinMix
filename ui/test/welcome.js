@@ -133,7 +133,13 @@ async function restartBarTests(test, eq, ok) {
 }
 
 async function obsReportTests(test, eq, ok) {
-  const { reportView } = await import("../panels/welcome/obs-import.js");
+  const { reportView, withoutFlags } = await import("../panels/welcome/obs-import.js");
+  test("an importer line loses the command line flag the page cannot use", () => {
+    eq(
+      withoutFlags('the crop was measured against 1920x1080. Pass --source-size "NAME=WxH" to get it exact.'),
+      "the crop was measured against 1920x1080."
+    );
+  });
   const rows = { installRow: (c, p) => Object.assign(document.createElement("p"), { className: "install", textContent: p.name }) };
   const view = reportView({}, {
     scenes: ["Main", "BRB"],
