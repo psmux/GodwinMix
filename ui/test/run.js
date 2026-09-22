@@ -688,8 +688,7 @@ test("a destination nothing ever answered at says so, not just how many goes it 
   // something to send anybody off to check cables over.
   eq(stalledAdvice({ state: "reconnecting", reconnects: 3, has_key: true, uri_host: host }), "");
   const said = stalledAdvice({ state: "reconnecting", reconnects: ADVICE_AFTER, has_key: true, uri_host: host });
-  ok(said.includes(host), said);
-  ok(said.includes("server is up"), said);
+  eq(said, "Nothing answered at rtmp://127.0.0.1:1935. Check the address and that the server is up.");
   // A missing key has its own answer already, and a live one has no problem.
   eq(stalledAdvice({ state: "reconnecting", reconnects: 99, has_key: false, uri_host: host }), "");
   eq(stalledAdvice({ state: "live", reconnects: 99, has_key: true, uri_host: host }), "");

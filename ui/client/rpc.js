@@ -67,12 +67,11 @@ export class RpcSocket {
       // One line per close. The banner says the page is blind and never said
       // why; the code tells a clean hang up from a dropped socket, and the
       // core now logs its own side of the same event.
-      console.debug("gmx: control socket closed", {
-        code: ev && ev.code,
-        reason: (ev && ev.reason) || "",
-        clean: !!(ev && ev.wasClean),
-        attempt: this.attempt,
-      });
+      const reason = (ev && ev.reason) || "no reason given";
+      console.debug(
+        `gmx: control socket closed, code ${ev && ev.code}, ${reason}, ` +
+          `${ev && ev.wasClean ? "clean" : "not clean"}, retry ${this.attempt + 1}`
+      );
       this.ready = false;
       this._failPending("the connection to the mixer closed. It will be retried.");
       this.hooks.onClose && this.hooks.onClose();
