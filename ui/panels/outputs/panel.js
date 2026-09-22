@@ -53,7 +53,11 @@ export function stalledAdvice(output) {
   if (output.has_key === false) return "";
   if (output.state !== "reconnecting") return "";
   if ((output.reconnects || 0) < ADVICE_AFTER) return "";
-  const where = output.uri_host ? ` at ${output.uri_host}` : "";
+  // The core cuts an address off after the host and puts an ellipsis there,
+  // which reads badly in front of a full stop. The host is the part worth
+  // naming anyway: it is what nothing answered at.
+  const host = String(output.uri_host || "").replace(/\/?…$/, "");
+  const where = host ? ` at ${host}` : "";
   return `Nothing answered${where}. Check the address and that the server is up.`;
 }
 
