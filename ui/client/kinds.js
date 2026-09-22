@@ -93,8 +93,15 @@ export const SOURCE_KINDS = [
     title: "Command",
     group: "Everything else",
     icon: "exec",
-    description: "A program that writes frames to its output. Off unless the config allows it.",
+    description: "A program on the mixer that writes frames to its output.",
     plugin: "built in",
+    // The mixer setting that has to be on before an add can work. The form
+    // draws it as a switch above the fields, so the refusal never happens.
+    gate: {
+      key: "security.allow_exec_sources",
+      label: "Allow command sources on this mixer",
+      about: "A command source runs a command line on the mixer, so anyone who can reach its control port could run anything there. Switch it on only when that port is on a network you trust.",
+    },
     schema: {
       type: "object",
       required: ["uri"],

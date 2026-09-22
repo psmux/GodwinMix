@@ -154,7 +154,8 @@ function applyTileWidth() {
 function shellCommands(client, node) {
   registerAll([
     { id: "shell.palette", title: "Command palette", group: "Shell", key: "Ctrl+K", run: () => palette().then((m) => m.openPalette()) },
-    { id: "shell.settings", title: "Settings", group: "Shell", key: "Ctrl+,", run: () => openSettings(client) },
+    { id: "shell.settings", title: "Settings for this page", group: "Shell", key: "Ctrl+,", run: () => openSettings(client) },
+    { id: "mixer.settings", title: "Mixer settings", group: "Shell", run: () => import("./mixer-settings.js").then((m) => m.openMixerSettings(client)) },
     { id: "shell.undo", title: "Undo", group: "Shell", key: "Ctrl+Z", enabled: () => shell.undo.canUndo, run: () => shell.undo.undo() },
     { id: "shell.redo", title: "Redo", group: "Shell", key: "Ctrl+Shift+Z", enabled: () => shell.undo.canRedo, run: () => shell.undo.redo() },
     { id: "shell.shortcuts", title: "Keyboard shortcuts", group: "Shell", key: "?", run: () => shortcutSheet() },

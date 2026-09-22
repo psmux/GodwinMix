@@ -1,5 +1,6 @@
 import { recordingState } from "../panels/outputs/recording.js";
 import { sourceFileTests } from "./source-files.js";
+import { mixerSettingsTests } from "./mixer-settings.js";
 import { sourceChooserTests } from "./source-chooser.js";
 import { studioTests } from "./studio.js";
 import { dockTests } from "./dock.js";
@@ -2655,6 +2656,12 @@ legacySuite()
   .catch((e) => {
     failed += 1;
     line("fail", "the kit suite threw: " + e.message);
+    console.error(e);
+  })
+  .then(() => mixerSettingsTests(test, eq, ok))
+  .catch((e) => {
+    failed += 1;
+    line("fail", "the mixer settings suite threw: " + e.message);
     console.error(e);
   })
   .then(designerFixtureSuite)

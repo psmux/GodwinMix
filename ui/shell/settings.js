@@ -220,9 +220,23 @@ export function openSettings(client, opts = {}) {
   clear(body);
   body.appendChild(shown);
 
+  // The split a person needs before anything else: what is here changes this
+  // page in this browser, and the mixer's own settings are one button away.
+  const mixer = el("div.row", { style: { paddingBottom: "var(--gap)", marginBottom: "var(--gap)", borderBottom: "var(--border) solid var(--line)" } }, [
+    el("span.sm.dim.grow", { text: "This page: kept in this browser, and nothing here changes the mixer. The mixer's own settings (picture, stream, folders, token) are in Mixer settings." }),
+    el("button.btn", {
+      text: "Mixer settings",
+      onclick: async () => {
+        m.close();
+        const { openMixerSettings } = await import("./mixer-settings.js");
+        openMixerSettings(client);
+      },
+    }),
+  ]);
+
   const m = modal({
-    title: "Settings",
-    body: el("div", {}, [tabs, body]),
+    title: "Settings for this page",
+    body: el("div", {}, [mixer, tabs, body]),
     footer: [el("button.btn.primary", { text: "Done", onclick: () => m.close() })],
   });
   return m;

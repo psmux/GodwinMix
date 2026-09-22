@@ -106,6 +106,11 @@ const ASSETS: &[(&str, &str)] = &[
     ("shell/dock-pointer.js", include_str!("../../../ui/shell/dock-pointer.js")),
     ("shell/dock-menu.js", include_str!("../../../ui/shell/dock-menu.js")),
     ("shell/menu.js", include_str!("../../../ui/shell/menu.js")),
+    ("shell/mixer-config.js", include_str!("../../../ui/shell/mixer-config.js")),
+    ("shell/mixer-fields.js", include_str!("../../../ui/shell/mixer-fields.js")),
+    ("shell/mixer-form.js", include_str!("../../../ui/shell/mixer-form.js")),
+    ("shell/mixer-settings.js", include_str!("../../../ui/shell/mixer-settings.js")),
+    ("shell/folder-picker.js", include_str!("../../../ui/shell/folder-picker.js")),
     ("shell/meter.js", include_str!("../../../ui/shell/meter.js")),
     ("shell/modal.js", include_str!("../../../ui/shell/modal.js")),
     ("shell/palette.js", include_str!("../../../ui/shell/palette.js")),
@@ -658,6 +663,8 @@ mod tests {
         reachable.extend(closure_of("panels/welcome/tiles.js"));
         reachable.extend(closure_of("panels/welcome/after.js"));
         reachable.extend(closure_of("kits/schema/index.js"));
+        reachable.extend(closure_of("shell/mixer-settings.js"));
+        reachable.extend(closure_of("shell/folder-picker.js"));
         // Not imported by this page at all: it is what a sandboxed panel's own
         // HTML imports, inside the iframe, to talk the same protocol back.
         reachable.extend(closure_of("client/sandbox-client.js"));
@@ -694,6 +701,11 @@ mod tests {
             ("shell/palette.js", "Ctrl+K"),
             ("shell/sandbox.js", "a sandboxed plugin panel"),
             ("panels/welcome/tiles.js", "the welcome dialog"),
+            ("shell/mixer-settings.js", "Mixer settings"),
+            ("shell/mixer-fields.js", "Mixer settings"),
+            ("shell/mixer-form.js", "Mixer settings or a switch where a refusal was"),
+            ("shell/mixer-config.js", "a switch where a refusal was"),
+            ("shell/folder-picker.js", "choosing a folder on the mixer"),
         ] {
             assert!(known(path).is_some(), "{path} is not served at all");
             assert!(!eager.contains(path), "{path} is fetched at load, but only {who} needs it");

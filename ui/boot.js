@@ -54,7 +54,7 @@ async function authorise(base) {
     const answer = await askForToken(
       attempt === 0
         ? null
-        : "That token was refused. It is the value of GODWINMIX_TOKEN, or the token line in the config file."
+        : "That token was refused. Check it with whoever runs this mixer. If you are an admin here and the token is lost, set a new one in Mixer settings under Control token from a page that is already connected."
     );
     if (!answer) return null;
     token = answer;

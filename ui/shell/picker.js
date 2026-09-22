@@ -574,10 +574,12 @@ export async function openForm(client, what, kind, preset, opts = {}) {
   }
   const form = new SchemaForm(schema, preset || {});
   const add = el("button.btn.primary", { text: what === "output" ? "Start sending" : "Add" });
+  // A kind the mixer only allows with a setting on shows that setting as a switch.
+  const gate = kind.gate ? await import("./mixer-config.js").then((c) => c.configSwitch(client, kind.gate)) : null;
 
   const m = modal({
     title: kind.title,
-    body: el("div", {}, [el("p.dim.sm", { text: kind.description, style: { marginTop: "0" } }), form.el]),
+    body: el("div", {}, [el("p.dim.sm", { text: kind.description, style: { marginTop: "0" } }), gate ? el("div.form", {}, [gate]) : null, form.el]),
     footer: [el("button.btn", { text: "Cancel", onclick: () => m.close() }), add],
   });
 
