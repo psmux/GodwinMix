@@ -337,8 +337,14 @@ pub enum Event {
     /// those sources only, because a camera has no position to report and a
     /// scrubber updated twice a minute is worse than no scrubber.
     SourcePosition { source: SourceId, position_ms: u64, duration_ms: Option<u64> },
-    /// Something went wrong that the operator should see.
-    Alert { severity: Severity, message: String },
+    /// Something went wrong that the operator should see. `action` is the
+    /// button that fixes it, when there is one (see `action.rs`).
+    Alert {
+        severity: Severity,
+        message: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        action: Option<crate::action::ErrorAction>,
+    },
     /// A file in the media library changed: uploaded, deleted, or its
     /// conversion moved on. The UI refetches the media listing rather than
     /// being sent the whole item, because the listing is the one place a

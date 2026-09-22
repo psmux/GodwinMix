@@ -192,6 +192,42 @@ async fn the_settings_round_trip_through_the_protocol() {
     assert_eq!(schema["properties"]["safety.min_hold_ms"]["x-gmx-applies"], "live");
 }
 
+/// A refusal that names a setting carries it as `data.action`, and doing
+/// what the action says is enough: the exec switch is live, so the same add
+/// goes through straight after.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_refusals_action_is_the_setting_that_lets_it_through() {
+    let core = Core::start("actions").await;
+
+    let add = json!({ "id": "cmd", "uri": "exec:sleep 30" });
+    let e = core.call("source.add", add.clone()).await.unwrap_err();
+    let action = &e.data["action"];
+    assert_eq!(action["kind"], "set-config", "{e}");
+    assert_eq!(action["key"], "security.allow_exec_sources");
+    assert_eq!(action["applies"], "live");
+    let set = core
+        .call("config.set", json!({ "values": { action["key"].as_str().unwrap(): action["value"].clone() } }))
+        .await
+        .unwrap();
+    assert_eq!(set["applied"], json!(["security.allow_exec_sources"]));
+    core.call("source.add", add).await.expect("the same add, allowed now");
+
+    // The multiview is off in this file, so a snapshot says which switch and
+    // offers it, with the restart it needs.
+    let e = core.call("snapshot.get", json!({ "id": "sheet" })).await.unwrap_err();
+    assert_eq!(e.data["action"]["key"], "multiview.enabled", "{e}");
+    assert_eq!(e.data["action"]["applies"], "restart");
+    assert!(e.message.contains("restart the mixer"), "{}", e.message);
+
+    // The take guard names the hold in seconds and offers the live setting.
+    core.call("config.set", json!({ "values": { "safety.min_hold_ms": 60000 } })).await.unwrap();
+    core.call("program.take", json!({ "source": "cam1" })).await.unwrap();
+    let held = core.call("program.take", json!({ "source": "cam2" })).await.unwrap_err();
+    assert_eq!(held.data["action"]["key"], "safety.min_hold_ms", "{held}");
+    assert!(held.message.contains(" s,") || held.message.contains(" s "), "{}", held.message);
+    assert!(!held.message.contains("[safety]"), "{}", held.message);
+}
+
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn the_doctor_reads_the_config_the_core_was_started_with() {
     let core = Core::start("doctor").await;

@@ -24,6 +24,11 @@ use crate::{Client, Result};
 pub const API_LEVEL: u32 = 1;
 pub const API_COMPATIBLE: u32 = 1;
 
+/// What pressing the button does.
+pub type ActionKind = String;
+/// The values api_level 1 knows for [`ActionKind`].
+pub const ACTION_KIND_VALUES: &[&str] = &["set-config", "install-plugin", "enable-plugin", "open", "retry", "restart"];
+
 /// `adbreak.start`.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
@@ -694,6 +699,39 @@ pub struct EnrolRequest {
     /// How long the token is good for. Default one hour.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub ttl_secs: Option<u64>,
+}
+
+/// One thing a client can offer as a button. `label` is the button's text,
+/// `kind` says what pressing it does, and the other fields are the ones that
+/// kind uses. Flat rather than an enum with data, so every generated client
+/// reads every field.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct ErrorAction {
+    /// `retry`: how long to wait first.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub after_ms: Option<u64>,
+    /// `set-config`: what `config.get` says about the key: `live`,
+    /// `next_source` or `restart`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub applies: Option<String>,
+    /// `open`: a dialog, such as `settings`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub dialog: Option<String>,
+    /// `set-config`: the dotted key. `open`: the setting to show.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub key: Option<String>,
+    pub kind: ActionKind,
+    /// Short, in the imperative, for a person: "Turn the multiview on".
+    pub label: String,
+    /// `install-plugin` and `enable-plugin`: the plugin.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+    /// `open`: a panel by id.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub panel: Option<String>,
+    /// `set-config`: the value to send.
+    pub value: Value,
 }
 
 /// `scene.export`.
@@ -2773,6 +2811,8 @@ pub struct MediaChangedEvent {
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct AlertEvent {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub action: Option<ErrorAction>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub message: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]

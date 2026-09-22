@@ -161,6 +161,12 @@ impl RpcError {
         self
     }
 
+    /// Put the button a person can press into `data.action`. See `action.rs`.
+    pub fn with_action(self, action: crate::action::ErrorAction) -> Self {
+        let value = action.to_value();
+        self.with("action", value)
+    }
+
     /// An unknown id, with the ids that would have worked.
     ///
     /// Listing them is the whole point: 09 section 5 item 6 asks that an

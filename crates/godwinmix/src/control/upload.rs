@@ -13,11 +13,19 @@ fn collision(name: &str) -> RpcError {
     )).with("name", serde_json::json!(name))
 }
 
-pub(super) async fn store(dir: &Path, name: &str, body: Body) -> Result<u64, RpcError> {
-    tokio::fs::create_dir_all(dir).await.map_err(|e| RpcError::internal(format!(
-        "creating media directory {}: {e}. Choose a writable directory in [media].dir and retry.",
+/// The media folder cannot be made. The folder is a restart setting, so the
+/// button opens it in Settings rather than guessing a path.
+fn unwritable(dir: &Path, e: &std::io::Error) -> RpcError {
+    RpcError::internal(format!(
+        "the mixer cannot create its media folder {}: {e}. Choose a folder it can write to as \
+         Media folder in Settings (media.dir), restart the mixer, and upload again.",
         dir.display()
-    )))?;
+    ))
+    .with_action(godwinmix_protocol::ErrorAction::open_setting("Choose the media folder", "media.dir"))
+}
+
+pub(super) async fn store(dir: &Path, name: &str, body: Body) -> Result<u64, RpcError> {
+    tokio::fs::create_dir_all(dir).await.map_err(|e| unwritable(dir, &e))?;
     let part = dir.join(format!(".{name}.part"));
     let final_path = dir.join(name);
     match tokio::fs::symlink_metadata(&final_path).await {

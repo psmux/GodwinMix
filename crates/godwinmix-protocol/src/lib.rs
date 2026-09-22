@@ -15,6 +15,7 @@
 //!   types.rs        status and event records
 //!   requests.rs     request and result bodies
 //!   error.rs        the code table, one error shape
+//!   action.rs       the button a refusal offers, in data.action
 //!   method.rs       the method table and the REST transform
 //!   protocol.rs     protocol.json, protocol.md, core.api
 //!   openapi.rs      openapi.json for the REST layer
@@ -32,6 +33,7 @@
 //!
 //! See `README.md` beside this file for how another module adds a method.
 
+pub mod action;
 pub mod error;
 pub mod idempotency;
 pub mod mcp_tools;
@@ -45,6 +47,7 @@ pub mod scope;
 pub mod trace;
 pub mod types;
 
+pub use action::{ActionKind, Actionable, ErrorAction};
 pub use error::{ErrorCode, RpcError};
 pub use method::{MethodDef, Registry, Rest, Tier};
 pub use requests::*;
