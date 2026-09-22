@@ -125,6 +125,26 @@ export class Client {
     }
   }
 
+  /**
+   * Read the destinations back from the core and put them in the store.
+   *
+   * The status document is sent when something changes, and two of the numbers
+   * on a destination change while nothing does: the megabytes a recording has
+   * written and the seconds a link has buffered. Neither has an event, so a
+   * panel that shows them asks for this on its own clock rather than waiting
+   * for one that is not coming. Returns the list, or null if the core answered
+   * with something else.
+   */
+  async refreshOutputs() {
+    const answer = await this.call("output.list", {});
+    // `/rpc` answers with the array; the legacy adapter wraps it in an object.
+    const outputs = Array.isArray(answer) ? answer : answer && answer.outputs;
+    if (!Array.isArray(outputs)) return null;
+    this.store.patch({ outputs });
+    this.store.flush();
+    return outputs;
+  }
+
   upload(name, file, onProgress) {
     return this.transport.upload(name, file, onProgress);
   }

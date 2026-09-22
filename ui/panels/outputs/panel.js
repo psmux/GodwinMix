@@ -21,6 +21,12 @@ import { lazyAction } from "../../shell/lazy-action.js";
 const addDestination = lazyAction(() => import("./destination.js").then(m => m.addDestination), "Add destination");
 const editDestination = lazyAction(() => import("./destination.js").then(m => m.editDestination), "Edit destination");
 
+/**
+ * How often a row's numbers are read back from the core while the panel is on
+ * screen and has something to put them in.
+ */
+const REFRESH_MS = 1000;
+
 /** The state of one destination, in words that say what to do about it. */
 export function stateLabel(output) {
   if (output.state === "live") return "Live";
@@ -84,11 +90,46 @@ class OutputsPanel extends HTMLElement {
   disconnectedCallback() {
     for (const off of this.offs || []) off();
     this.offs = [];
+    this.follow(false);
   }
 
   setWorkspaceActive(active) {
     this.workspaceActive = active;
     if (active) this.render(this.client.state);
+    else this.follow(false);
+  }
+
+  /**
+   * Keep the numbers on the rows moving.
+   *
+   * A status is sent when something changes, and these numbers change while
+   * nothing does: a recording's megabytes climb and a link's buffer breathes.
+   * So a row stood at whatever the last status said, which for a recording is
+   * "0.0 MB sent to the file" for as long as it runs. Read them back on a
+   * clock instead, while there is a row to put them in and the panel is on
+   * screen, and stop the moment either stops being true.
+   */
+  follow(wanted) {
+    if (!wanted || this.workspaceActive === false) {
+      if (this.timer) clearInterval(this.timer);
+      this.timer = null;
+      return;
+    }
+    if (!this.timer) this.timer = setInterval(() => this.refresh(), REFRESH_MS);
+  }
+
+  /** One read, and never two at once: a slow core must not grow a queue. */
+  async refresh() {
+    if (this.refreshing) return;
+    this.refreshing = true;
+    try {
+      await this.client.refreshOutputs();
+    } catch {
+      // The rows keep the numbers they have. A core that is not answering is
+      // already said in the header, and a toast a second would be its own bug.
+    } finally {
+      this.refreshing = false;
+    }
   }
 
   add() {
@@ -111,6 +152,7 @@ class OutputsPanel extends HTMLElement {
     if (this.workspaceActive === false) return;
     const outputs = s.outputs || [];
     this.count.textContent = outputs.length ? String(outputs.length) : "";
+    this.follow(outputs.length > 0);
     this.rows = this.rows || new Map();
     if (!outputs.length) {
       if (this.rows.size || !this.list.firstChild) {

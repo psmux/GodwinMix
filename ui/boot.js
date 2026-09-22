@@ -11,6 +11,7 @@ import { askForToken } from "./shell/firstrun.js";
 import { initTheme } from "./shell/theme.js";
 import { toast } from "./shell/toast.js";
 import { proposeGalleryMode } from "./shell/settings.js";
+import { meterClient } from "./shell/meter.js";
 import { applyCoreDefaults, watchCoreDefaults } from "./panels/welcome/defaults.js";
 
 const PANELS = [
@@ -73,6 +74,9 @@ async function main() {
   const token = await authorise(location.origin);
   const client = await connect({ token });
   window.gmxClient = client;
+  // Who the meters ask for levels. Nothing is asked for until a panel puts a
+  // meter on screen, and the ask is given back when the last one goes.
+  meterClient(client);
 
   // The core's [ui] section: the theme, the gallery mode and the layout a
   // preset chose. Applied before the panels mount so nothing flashes.
