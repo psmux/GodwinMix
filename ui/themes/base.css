@@ -509,7 +509,7 @@ iframe.panel { width: 100%; border: 0; background: var(--panel); display: block;
 .obs-drop.busy { opacity: 0.6; pointer-events: none; }
 .obs-skipped { margin: 0; padding-left: 1.3em; }
 
-[data-panel].flash { outline: 2px solid var(--accent, #4a8); outline-offset: 2px; }
+[data-panel].flash, [data-dock-panel].flash { outline: 2px solid var(--accent, #4a8); outline-offset: 2px; }
 
 .welcome-code {
   margin: 0;

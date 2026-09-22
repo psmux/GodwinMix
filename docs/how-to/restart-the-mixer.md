@@ -56,8 +56,18 @@ the container.
 The menu has Restart the mixer. The page, or anything else talking to the
 mixer, can call `core.restart` as above: the app sees its mixer exit with
 status 75 and starts it again on the same port, so the page reconnects without
-being sent anywhere. A Restart button in the page itself, shown when
-`restart.possible` is true, arrives in a later change.
+being sent anywhere.
+
+## In the page
+
+When settings are waiting for a restart, a bar across the top of the page
+names them, read from `config.get` `needs_restart`, so it is right whoever
+wrote them. When `restart.possible` is true the bar has Restart now, which
+asks once (the programme goes off air for a few seconds), calls
+`core.restart` and waits for the page to reconnect. On a mixer started by
+hand it has no button and says the first sentence of `core.restart`'s own
+answer instead. Dismissing it hides it until a new setting is waiting or the
+page is loaded again.
 
 ## Under systemd
 

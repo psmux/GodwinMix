@@ -119,9 +119,8 @@ async function act(client, step, ctx, hooks, ui) {
     }
     if (step.does === "install-plugin") return await hooks.install(target, ui.button, ui.note);
     if (step.does === "open-panel") {
-      ctx.looked.add(target);
-      ui.rerender();
-      return hooks.showPanel(target);
+      if (hooks.showPanel(target)) ctx.looked.add(target);
+      return ui.rerender();
     }
     if (step.does === "take") return await take(client, target, ui);
   } catch (e) {

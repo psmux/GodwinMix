@@ -3,6 +3,7 @@ import { sourceFileTests } from "./source-files.js";
 import { sourceChooserTests } from "./source-chooser.js";
 import { studioTests } from "./studio.js";
 import { dockTests } from "./dock.js";
+import { welcomeStepTests } from "./welcome.js";
 // The test runner: forty lines, no dependencies, no toolchain. Open the page,
 // read the console, or read the list. Everything testable without a mixer is
 // here, including the legacy adapter against a stubbed server.
@@ -2620,6 +2621,7 @@ legacySuite()
   })
   .then(() => studioTests(test, eq, ok))
   .then(welcomeSuite)
+  .then(() => welcomeStepTests(test, eq, ok))
   .catch((e) => {
     failed += 1;
     line("fail", "the welcome suite threw: " + e.message);

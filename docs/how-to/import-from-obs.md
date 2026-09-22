@@ -3,6 +3,17 @@
 You have an OBS layout that works. This brings it across in one command, and
 tells you plainly what it could not bring.
 
+## From the page
+
+On the welcome screen, press Import from OBS. Drop the
+collection file on the dialog, or press the drop area to choose it. The page
+reads the file itself, so it can be on the computer you are using rather than
+the mixer's, and sends it to `scene.import.obs` with `add_sources`. The answer
+is shown as it comes back: the scenes and sources added, what was not brought
+across and why, and an Install button for any plugin a source needs.
+
+The rest of this page is the same import from a terminal.
+
 ## 1. Find the collection file
 
 OBS keeps every scene collection as a single JSON file. It is already on your
@@ -173,8 +184,8 @@ scenes use the one that is there, and the reason says so. A source the mixer
 refuses, a clip whose file is not on this machine for example, is listed with
 the mixer's own reason.
 
-The welcome screen's Import from OBS tile still shows the command line. A drop
-zone that sends the file this way arrives in a later change.
+The welcome screen's Import from OBS tile sends the file this way, as
+described at the top of this page.
 
 ## What comes across, exactly
 

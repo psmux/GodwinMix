@@ -18,6 +18,7 @@ import { errorToast } from "./toast.js";
 let bar = null;
 let dismissed = "";
 let whyNot = "";
+let titles = null;
 
 /** Ask the core what is waiting, and show or hide the bar to match. */
 export async function checkRestart(client) {
@@ -35,13 +36,27 @@ export async function checkRestart(client) {
   if (!pending.length || pending.join() === dismissed) return hide();
   const possible = !!(info && info.restart && info.restart.possible);
   const why = possible ? "" : await reasonItCannot(client);
-  show(client, { pending, possible, why });
+  const names = await titlesOf(client);
+  show(client, { pending, labels: pending.map((k) => names[k] || k), possible, why });
 }
 
 /** Mount once. Every reconnect asks again, which is how it goes away after a restart. */
 export function mountRestartBar(client) {
   client.on("open", () => checkRestart(client));
   checkRestart(client);
+}
+
+/** The names `config.schema` gives each key, so the bar says "Programme video bitrate". */
+async function titlesOf(client) {
+  if (titles) return titles;
+  try {
+    const schema = await client.call("config.schema", {});
+    titles = {};
+    for (const [key, prop] of Object.entries(schema.properties || {})) titles[key] = prop.title || key;
+  } catch {
+    return {};
+  }
+  return titles;
 }
 
 /** Which settings, in a line a person can read. */
@@ -66,7 +81,7 @@ async function reasonItCannot(client) {
   if (whyNot) return whyNot;
   try {
     const answer = await client.call("core.restart", {});
-    if (!answer.restarting) whyNot = firstSentence(answer.message);
+    if (!answer.restarting) whyNot = `${firstSentence(answer.message)} They apply when it is next started.`;
   } catch {
     /* refused for scope or confirm; the fallback below says the same thing */
   }
@@ -80,7 +95,7 @@ function show(client, state) {
   }
   clear(bar);
   bar.hidden = false;
-  bar.appendChild(el("span.grow", { text: pendingLine(state.pending) }));
+  bar.appendChild(el("span.grow", { text: pendingLine(state.labels), title: state.pending.join(", ") }));
   if (state.possible) {
     bar.appendChild(el("button.btn.primary.sm", { text: "Restart now", onclick: () => restart(client) }));
   } else {

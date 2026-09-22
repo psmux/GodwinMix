@@ -23,6 +23,25 @@ Open that address. The page asks what you are streaming, with a tile for a
 church service, a classroom, a streamer, starting empty, and importing from
 OBS. Pick one.
 
+A preset tile sets the mixer up and opens Nearly there, a short checklist. Each
+row has a button that does the step: Add key opens the same form the Outputs
+panel uses, Add opens the source picker on the right category, Install fetches
+a missing plugin, Show me brings a panel forward, and Put on air takes the
+source. A row ticks itself once the mixer says it is done, for instance when
+the output has its key. Steps only a person can do, like pressing the red
+button when the service starts, are plain sentences.
+
+Some settings a preset writes only take effect when the mixer starts, the
+encoder bitrate for one. A bar across the top of the window names them. When
+something will start the mixer again (the desktop app, the systemd unit, the
+container) it has a Restart now button; on a mixer started by hand in a
+terminal it says so instead, and the settings apply the next time you start
+it. [Restart the mixer from the page](restart-the-mixer.md) has the detail.
+
+Import from OBS opens a drop zone: drop the scene collection file on it, or
+press it to choose the file. [Import your scenes from OBS](import-from-obs.md)
+says what comes across.
+
 ## What the file it wrote holds
 
 It is the example config with a short note at the top. Every setting is there
