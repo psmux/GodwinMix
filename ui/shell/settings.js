@@ -178,7 +178,9 @@ export function openSettings(client, opts = {}) {
         } catch {
           /* nothing saved */
         }
-        toast({ text: "Token forgotten. Reload the page to enter a new one." });
+        // The page asks for a token when it starts and the mixer wants one,
+        // so starting it again is the whole of "enter a new one".
+        location.reload();
       },
     })
   );
@@ -201,7 +203,9 @@ export function openSettings(client, opts = {}) {
       text: "Reset the layout",
       onclick: () => {
         layout.reset();
-        toast({ text: "Layout reset. Reload the page to see it." });
+        // The shell reads the layout once, as it mounts; a fresh start is
+        // the one way to draw the default without a second press.
+        location.reload();
       },
     })
   );

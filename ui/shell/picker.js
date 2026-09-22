@@ -28,6 +28,7 @@ import {
   loadKinds,
   listPlugins,
   hasPlugin,
+  pluginState,
   grouped,
   kindOfUri,
   categoryOf,
@@ -381,20 +382,23 @@ function openSourcePicker(client, kinds, plugins, opts) {
    */
   function installBlock(cat) {
     const note = el("p.sm.dim", { text: "" });
-    const button = el("button.btn.primary", { text: cat.plugin.label });
+    // Installed and switched off is a different offer: installing again
+    // answers ok, changes nothing, and redraws this same block for ever.
+    const off = pluginState(state.plugins, cat.plugin.name) === "disabled";
+    const button = el("button.btn.primary", { text: off ? `Turn ${cat.plugin.name} support back on` : cat.plugin.label });
     button.onclick = async () => {
       button.disabled = true;
-      note.textContent = "Installing. It is fetched, checked and started; this can take a minute.";
+      note.textContent = off ? "Turning it on." : "Installing. It is fetched, checked and started; this can take a minute.";
       try {
-        const source = await pluginSourceFor(client, cat.plugin.name);
-        await client.call("plugin.add", { source });
+        if (off) await client.call("plugin.enable", { name: cat.plugin.name });
+        else await client.call("plugin.add", { source: await pluginSourceFor(client, cat.plugin.name) });
       } catch (e) {
         errorToast(e, cat.plugin.label);
         button.disabled = false;
         note.textContent = "";
         return;
       }
-      note.textContent = "Installed. Looking for devices.";
+      note.textContent = off ? "On. Looking for devices." : "Installed. Looking for devices.";
       state.plugins = await listPlugins(client);
       if (!hasPlugin(state.plugins, cat.plugin.name)) {
         // The install answered, so something is on disk, but the core has not
@@ -407,8 +411,11 @@ function openSourcePicker(client, kinds, plugins, opts) {
       }
       await rescan();
     };
+    const line = off
+      ? `This needs the ${cat.plugin.name} plugin, which is on this mixer and switched off. Turning it on takes nothing off air.`
+      : cat.plugin.line;
     return el("div.col", {}, [
-      el("p.dim", { text: cat.plugin.line, style: { marginTop: "0" } }),
+      el("p.dim", { text: line, style: { marginTop: "0" } }),
       // In a row rather than loose in the column, which would stretch a
       // primary button the whole width of the modal.
       el("div.row", {}, [button, note, el("span.grow")]),

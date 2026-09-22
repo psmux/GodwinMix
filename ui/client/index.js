@@ -9,7 +9,7 @@
 
 import { Store } from "./store.js";
 import { RpcTransport } from "./transport-rpc.js";
-import { asRpcError } from "./errors.js";
+import { asRpcError, CODES } from "./errors.js";
 import { SheetPainter, PicturePainter, sheetWidthFor } from "./frames.js";
 
 export { RpcError, CODES } from "./errors.js";
@@ -51,6 +51,13 @@ export class Client {
     this._subscribed = null;
     this._resubTimer = null;
     this._flushTimer = null;
+    /**
+     * Asked before a destructive call is sent again with the confirm token a
+     * `confirm = "required"` token gets back (-32020). Resolves true to go
+     * ahead. Unset, the refusal reaches the caller as it is.
+     * @type {null | ((ask: {method: string, params: object, error: RpcError}) => Promise<boolean>)}
+     */
+    this.confirm = null;
   }
 
   get state() {
@@ -114,12 +121,33 @@ export class Client {
 
   // ---------------------------------------------------------------- calls
 
-  /** Every method goes through here, so every failure has the one error shape. */
+  /**
+   * Every method goes through here, so every failure has the one error shape.
+   *
+   * A failure also carries, out of sight of JSON, what a toast needs to act
+   * on it: the method, this client, and `again()` to send the same call once
+   * more. A call refused for want of a confirmation asks `confirm` first and,
+   * on a yes, goes again with the token, so the caller gets the answer rather
+   * than a refusal it has to understand.
+   */
   async call(method, params) {
+    const sent = params || {};
     try {
-      return await this.transport.call(method, params || {});
+      return await this.transport.call(method, sent);
     } catch (e) {
       const err = asRpcError(e);
+      const token = err.code === CODES.CONFIRM_REQUIRED && err.data.confirm_token;
+      if (token && this.confirm && !sent.confirm) {
+        if (await this.confirm({ method, params: sent, error: err })) {
+          return this.call(method, { ...sent, confirm: token });
+        }
+        err.declined = true;
+      }
+      Object.defineProperties(err, {
+        method: { value: method, configurable: true },
+        client: { value: this, configurable: true },
+        again: { value: () => this.call(method, sent), configurable: true },
+      });
       this.emit("error", { method, error: err });
       throw err;
     }
@@ -218,6 +246,10 @@ export class Client {
   }
 
   async _resubscribe() {
+    // Before the socket is open there is nothing to tell, and the open itself
+    // subscribes with whatever has been asked for by then. Trying anyway was
+    // a refusal logged as a warning on every fresh page.
+    if (!this.store.state.connected) return;
     const spec = { events: WANTED_EVENTS, ext: this.extSpec() };
     const same = JSON.stringify(spec) === JSON.stringify(this._subscribed);
     if (same) return;
