@@ -710,6 +710,10 @@ pub async fn run() -> Result<()> {
     );
     // Which config `preset.apply` writes to, and what the surface starts with.
     control::methods::presets::configure(&config_path, cfg.ui.clone());
+    // What config.get compares the file with, and what wins over the file.
+    let bind_flag: &[(&str, &str)] =
+        if bind != cfg.control.bind { &[("control.bind", "--bind")] } else { &[] };
+    control::methods::config::configure(&cfg, bind_flag);
     // Kept for the control plane, which reads the canvas, the snapshot limits,
     // the feature list and the token table off it once at startup.
     let cfg_for_control = cfg.clone();

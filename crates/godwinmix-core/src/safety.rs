@@ -19,7 +19,7 @@
 //! ```
 
 use godwinmix_protocol::scope::{Token, TokenSafety};
-use parking_lot::Mutex;
+use parking_lot::{Mutex, RwLock};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::collections::VecDeque;
 use std::sync::Arc;
@@ -48,7 +48,7 @@ pub const AGENT_MIN_HOLD_MS: u64 = 8_000;
 pub const AGENT_MAX_TAKES_PER_MINUTE: u32 = 12;
 
 /// `[safety]`.
-#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
+#[derive(Debug, Clone, PartialEq, Deserialize, Serialize, schemars::JsonSchema)]
 #[serde(default)]
 pub struct SafetyConfig {
     /// A take inside this window of the last one is refused, and the refusal
@@ -69,6 +69,7 @@ pub struct SafetyConfig {
     pub max_takes_per_minute: u32,
     /// The BT.1702-3 hold. On by default.
     pub flash_guard: bool,
+    /// What happens when whoever made the last take stops calling.
     pub on_operator_silence: OperatorSilence,
 }
 
@@ -84,10 +85,13 @@ impl Default for SafetyConfig {
 }
 
 /// What happens when whoever made the last take stops calling.
-#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
+#[derive(Debug, Clone, PartialEq, Deserialize, Serialize, schemars::JsonSchema)]
 #[serde(default)]
 pub struct OperatorSilence {
+    /// Seconds without a call from the last operator before the action.
     pub after_secs: u64,
+    /// `alert`, `hold`, `slate`, or `fallback:<source id>`.
+    #[schemars(with = "String")]
     pub action: SilenceAction,
 }
 
@@ -223,7 +227,8 @@ pub struct Refusal {
 
 /// The rules, and the little history they need.
 pub struct Guard {
-    cfg: SafetyConfig,
+    /// Behind a lock so `config.set` can move a limit while the show runs.
+    cfg: RwLock<SafetyConfig>,
     /// The frame rate the programme runs at, which decides whether the flash
     /// separation is 360 ms or 334 ms.
     fps: u32,
@@ -250,11 +255,17 @@ struct State {
 
 impl Guard {
     pub fn new(cfg: SafetyConfig, fps: u32) -> Arc<Self> {
-        Arc::new(Self { cfg, fps, state: Mutex::new(State::default()) })
+        Arc::new(Self { cfg: RwLock::new(cfg), fps, state: Mutex::new(State::default()) })
     }
 
-    pub fn config(&self) -> &SafetyConfig {
-        &self.cfg
+    pub fn config(&self) -> SafetyConfig {
+        self.cfg.read().clone()
+    }
+
+    /// New limits, in force from the next check. The history of takes and
+    /// flashes is kept, so a tighter hold counts from the last real take.
+    pub fn set_config(&self, cfg: SafetyConfig) {
+        *self.cfg.write() = cfg;
     }
 
     /// The flash separation at this core's frame rate.
@@ -274,7 +285,7 @@ impl Guard {
     }
 
     fn check_inner(&self, token: &Token, now: Instant, min_hold: bool) -> Result<(), Refusal> {
-        let limits = self.cfg.for_token(token);
+        let limits = self.cfg.read().for_token(token);
         let mut state = self.state.lock();
         state.forget_before(now);
         if state.silent {
@@ -286,7 +297,7 @@ impl Guard {
                      for {} seconds, so on_operator_silence took over. Any call from a \
                      token releases the hold; call program.get and then take again.",
                     state.operator.as_deref().unwrap_or("nobody"),
-                    self.cfg.on_operator_silence.after_secs
+                    self.cfg.read().on_operator_silence.after_secs
                 ),
             });
         }
@@ -452,7 +463,7 @@ impl Guard {
         if state.silent {
             return None;
         }
-        let after = Duration::from_secs(self.cfg.on_operator_silence.after_secs);
+        let after = Duration::from_secs(self.cfg.read().on_operator_silence.after_secs);
         let last = state.last_call?;
         let who = state.operator.clone()?;
         (last.elapsed() >= after).then_some(who)
@@ -468,7 +479,7 @@ impl Guard {
 
     /// For `core.info` and the tests: the numbers a token is held to.
     pub fn limits_for(&self, token: &Token) -> Limits {
-        self.cfg.for_token(token)
+        self.cfg.read().for_token(token)
     }
 }
 

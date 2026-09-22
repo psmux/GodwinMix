@@ -72,6 +72,11 @@ tower-http = "0.6"
 serde = "1"
 serde_json = "1"
 toml = "0.9"
+# The one way to write a person's config file back without destroying it:
+# `toml` serialises from values and throws away every comment, and the config
+# file is commented on nearly every line. Already in the tree under
+# proc-macro-crate, at the same version, so nothing new is compiled.
+toml_edit = { version = "0.25", default-features = false, features = ["parse", "display"] }
 schemars = "1"
 
 anyhow = "1"

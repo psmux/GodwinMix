@@ -10,6 +10,12 @@ use serde::{Deserialize, Serialize};
 use std::path::Path;
 
 pub mod first_run;
+pub mod edit;
+pub mod keys;
+pub mod schema;
+pub mod settable;
+#[cfg(test)]
+mod settable_tests;
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct Config {
@@ -99,9 +105,11 @@ pub type Params = toml::Table;
 /// setting, a sub table is a plugin's own settings. It dereferences to the map
 /// of plugin tables, so every existing reader (`cfg.plugins["ndi"]`,
 /// `load_all(&cfg.plugins)`) goes on working unchanged.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, schemars::JsonSchema)]
 pub struct PluginsTable {
-    /// `[plugins.<name>]`, one per plugin.
+    /// `[plugins.<name>]`, one per plugin. Not part of the schema: each is
+    /// the plugin's own, described by the plugin's settings schema.
+    #[schemars(skip)]
     pub settings: std::collections::BTreeMap<String, Params>,
     /// Whether a plugin nothing signed may be installed. True by default,
     /// because that is what `gmx plugin add ./my-plugin` is, and it is the
@@ -305,12 +313,22 @@ fn default_scopes() -> Vec<godwinmix_protocol::scope::Scope> {
 }
 
 /// The fixed raw format that every branch of the graph must produce.
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Debug, Clone, Deserialize, Serialize, schemars::JsonSchema)]
+// Every field defaults on its own, so `[canvas]` with only a width is a
+// complete section, and `config.set` can write one key into a file that has
+// no `[canvas]` yet.
+#[serde(default)]
 pub struct Canvas {
+    /// Width of the programme picture in pixels. Every source is scaled to
+    /// it. Even, because 4:2:0 chroma needs it.
     pub width: i32,
+    /// Height of the programme picture in pixels. Even, like the width.
     pub height: i32,
+    /// Frames per second of the programme.
     pub fps: i32,
+    /// Audio samples per second. 48000 is what video uses everywhere.
     pub sample_rate: i32,
+    /// 1 for mono, 2 for stereo.
     pub channels: i32,
 }
 
@@ -320,7 +338,8 @@ impl Default for Canvas {
     }
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Debug, Clone, Deserialize, Serialize, schemars::JsonSchema)]
+#[serde(default)]
 pub struct ProgramConfig {
     /// Video bitrate in kbit/s for the outgoing program stream.
     pub video_bitrate_kbps: u32,
@@ -389,7 +408,7 @@ impl Default for ProgramConfig {
 /// Every field has a default, so `[multiview]\nenabled = false` on its own is
 /// a valid section: turning a subsystem off must not oblige anybody to write
 /// out the settings of the thing they are turning off.
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Debug, Clone, Deserialize, Serialize, schemars::JsonSchema)]
 pub struct MultiviewConfig {
     /// False removes the mosaic entirely: no pipeline, no encoder, no
     /// thumbnail end on any source, and the snapshot routes answer 404. See
@@ -401,8 +420,11 @@ pub struct MultiviewConfig {
     /// ask for a size gets.
     #[serde(default = "default_multiview_width")]
     pub width: i32,
+    /// Height of the whole mosaic in pixels.
     #[serde(default = "default_multiview_height")]
     pub height: i32,
+    /// Frames per second of the mosaic. The operator needs to see what is
+    /// in frame, not judge motion, so a low number is plenty.
     #[serde(default = "default_multiview_fps")]
     pub fps: i32,
     /// JPEG quality, 1 to 100. The mosaic exists so an operator can tell what
@@ -462,7 +484,7 @@ impl Default for MultiviewConfig {
 /// only while something is actually asking: a snapshot request, an
 /// `agent.state` read, or a subscriber with agent thresholds. The numbers here
 /// are the ones 09 section 3 commits to.
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Debug, Clone, Deserialize, Serialize, schemars::JsonSchema)]
 pub struct SnapshotConfig {
     /// False removes the tracker and the snapshot routes entirely. The routes
     /// then answer 404 naming this switch, and `agent.state` reports
@@ -515,8 +537,11 @@ impl Default for SnapshotConfig {
     }
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Debug, Clone, Deserialize, Serialize, schemars::JsonSchema)]
+#[serde(default)]
 pub struct ControlConfig {
+    /// The address and port the web UI and the API listen on. `0.0.0.0` is
+    /// every network this machine is on; `127.0.0.1` is this machine only.
     pub bind: String,
     /// Directory of static UI assets. Falls back to the embedded page. Point
     /// it at the repository's `ui/` to edit the page without rebuilding.
@@ -550,7 +575,7 @@ impl Default for ControlConfig {
 /// These names are the `accel` field in `codecs.toml`. Adding a vendor means
 /// adding entries there and, if it is one an operator should be able to pin,
 /// one variant here.
-#[derive(Debug, Clone, Copy, Default, Deserialize, Serialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Default, Deserialize, Serialize, PartialEq, Eq, schemars::JsonSchema)]
 #[serde(rename_all = "lowercase")]
 pub enum Accel {
     #[default]
@@ -593,10 +618,14 @@ impl Accel {
     }
 }
 
-#[derive(Debug, Clone, Default, Deserialize, Serialize)]
+#[derive(Debug, Clone, Default, Deserialize, Serialize, schemars::JsonSchema)]
 pub struct HardwareConfig {
+    /// Which hardware decodes the sources. `auto` picks the best the
+    /// catalogue finds installed.
     #[serde(default)]
     pub decode: Accel,
+    /// Which hardware encodes the programme. `auto` picks the best the
+    /// catalogue finds installed.
     #[serde(default)]
     pub encode: Accel,
     /// Which compositor and conversion backend to draw the canvas on. `Auto`
@@ -656,7 +685,7 @@ impl RtmpClient {
 }
 
 /// Things that widen what somebody reaching the control port can do.
-#[derive(Debug, Clone, Default, Deserialize, Serialize)]
+#[derive(Debug, Clone, Default, Deserialize, Serialize, schemars::JsonSchema)]
 pub struct SecurityConfig {
     /// Allow `exec:` sources, which run a command line on this machine.
     ///
@@ -674,7 +703,7 @@ pub struct SecurityConfig {
 /// `browser/`: a full Chromium drawing off screen, handing over raw frames and
 /// PCM with no encoder in between. When it is found, every `web+` source runs
 /// through it. When it is not, `web+` falls back to GStreamer's `wpesrc`.
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Debug, Clone, Deserialize, Serialize, schemars::JsonSchema)]
 pub struct BrowserConfig {
     /// Path to `godwinmix-browser`. Unset means: look next to this executable,
     /// then on PATH. Set to a path that does not exist and `web+` sources fail
@@ -732,7 +761,7 @@ fn default_overlay_fps() -> u32 {
 /// each one cutting the programme to black for the ten or so seconds the
 /// browser took to start. Neither number is a repair strategy, it is a loop,
 /// and the operator had nothing in the UI to tell him it was running.
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Debug, Clone, Deserialize, Serialize, schemars::JsonSchema)]
 pub struct StallConfig {
     /// Seconds a source may deliver nothing before its pipeline is rebuilt.
     #[serde(default = "default_restart_after_stall_secs")]
@@ -807,10 +836,12 @@ impl StallConfig {
 }
 
 /// Where the ad library lives on the machine running the mixer.
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Debug, Clone, Deserialize, Serialize, schemars::JsonSchema)]
 pub struct MediaConfig {
     // Every field defaults independently, so `[media]` with only a `dir` set
     // is a complete section. Requiring the rest would be a trap.
+    /// The folder of clips, slides and stills. Relative to where the mixer
+    /// was started unless it starts with `/`.
     #[serde(default = "default_media_dir")]
     pub dir: String,
     /// How deep to recurse into subdirectories.
@@ -973,7 +1004,7 @@ pub struct SourceConfig {
 /// `listen`, `clock_port`, `clock`, `server_names` and `advertise` are the
 /// settings; every other key is a node. A node called `listen` would be a
 /// problem and is not a name anybody picks.
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Debug, Clone, Deserialize, Serialize, schemars::JsonSchema)]
 pub struct NodesTable {
     /// Where the node bridge listens. Empty turns it off, which is the default
     /// for a core nobody has enrolled a node with.
@@ -995,6 +1026,7 @@ pub struct NodesTable {
     pub advertise: bool,
     /// Every other key: one node each.
     #[serde(flatten, default)]
+    #[schemars(skip)]
     pub list: std::collections::BTreeMap<String, NodeEntry>,
 }
 
