@@ -46,7 +46,8 @@ export function showSteps(client, choice, result) {
   for (const plugin of (plan.plugins || []).filter((p) => !p.installed && !covered.has(p.name))) {
     body.appendChild(installRow(client, plugin));
   }
-  for (const note of notesWorthShowing(plan, result)) body.appendChild(el("p.sm.dim", { text: note }));
+  const notes = notesWorthShowing(plan, result);
+  if (notes.length) body.appendChild(el("ul.welcome-notes.sm.dim", {}, notes.map((note) => el("li", { text: note }))));
 
   const off = client.onRender ? client.onRender((state) => list.render(state)) : () => {};
   m = modal({

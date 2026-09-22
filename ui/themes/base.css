@@ -488,6 +488,10 @@ iframe.panel { width: 100%; border: 0; background: var(--panel); display: block;
   line-height: 1.6;
 }
 
+/* What did not start, under the checklist: one tight list, not a paragraph each. */
+.welcome-notes { margin: 8px 0 0; padding-left: 1.2em; line-height: 1.5; }
+.welcome-notes li { margin: 2px 0; }
+
 .checklist { padding-left: 0; list-style: none; }
 .checklist li { display: flex; align-items: center; gap: 8px; padding: 4px 0; }
 .checklist li:not(.step) { padding-left: 26px; }

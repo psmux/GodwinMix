@@ -358,42 +358,6 @@ id = "cam2"
 name = "Camera 2"
 uri = "rtmp://127.0.0.1:1935/live/cam2"
 
-# The two cameras. Until `gmx plugin add camera` has run these are test
-# patterns, which means the service can go out today and the cameras can be
-# sorted out next week.
-[[sources]]
-id = "cam-wide"
-name = "Wide"
-type = "test/source"
-uri = "test://smpte"
-params = { uri = "test://smpte" }
-
-[[sources]]
-id = "cam-pulpit"
-name = "Pulpit"
-type = "test/source"
-uri = "test://ball"
-params = { uri = "test://ball" }
-
-# The lyrics page. Any presentation program with a web output works here:
-# point this at its address. A transparent background is what makes the words
-# sit over the picture rather than replace it.
-[[sources]]
-id = "lyrics"
-name = "Lyrics"
-type = "browser/source"
-uri = "web+http://127.0.0.1:8000/lyrics"
-params = { url = "http://127.0.0.1:8000/lyrics", superimpose = "auto" }
-
-# The slides. A file on this machine, in the media directory above. Drop a new
-# one onto the page on a Saturday and it is there on Sunday.
-[[sources]]
-id = "slides"
-name = "Slides"
-type = "file/source"
-uri = "media/slides.mp4"
-params = { uri = "media/slides.mp4" }
-
 # --- outputs ---------------------------------------------------------------
 # Each output is supervised separately and has its own reconnect policy.
 
@@ -405,20 +369,6 @@ policy = "own"
 # Seconds of encoded data held before the muxer. This is the buffer that makes
 # a short network hiccup invisible to the viewer.
 queue_secs = 5.0
-
-[[outputs]]
-id = "youtube"
-type = "rtmp/output"
-uri = "rtmp://a.rtmp.youtube.com/live2/YOUR-STREAM-KEY"
-policy = "cdn"
-queue_secs = 6.0
-
-[[outputs]]
-id = "facebook"
-type = "rtmp/output"
-uri = "rtmps://live-api-s.facebook.com:443/rtmp/YOUR-STREAM-KEY"
-policy = "cdn"
-queue_secs = 6.0
 
 # [[outputs]]
 # id = "youtube"

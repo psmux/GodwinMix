@@ -1,0 +1,356 @@
+{
+  "schemaVersion": 1,
+  "id": "01a0cac9-9f88-7004-b93c-901b1bcddfdc",
+  "name": "church scenes",
+  "canvas": {
+    "width": 1920,
+    "height": 1080,
+    "fps": 30
+  },
+  "params": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "properties": {},
+    "type": "object"
+  },
+  "scenes": [
+    {
+      "id": "01a0cac9-9f88-7000-a93b-f5731fcd91cf",
+      "name": "Full screen",
+      "items": [
+        {
+          "id": "b4fa9ead-4130-8c82-951e-d26d7b11cbae",
+          "name": "main",
+          "content": {
+            "source": "cam1"
+          },
+          "transform": {
+            "position": {
+              "x": 0.0,
+              "y": 0.0
+            },
+            "rotation": 0.0,
+            "scale": {
+              "x": 1.0,
+              "y": 1.0
+            },
+            "anchor": {
+              "x": 0.0,
+              "y": 0.0
+            },
+            "frame": {
+              "w": 1920.0,
+              "h": 1080.0
+            },
+            "fit": "cover",
+            "align": "center"
+          },
+          "crop": {
+            "left": 0.0,
+            "top": 0.0,
+            "right": 0.0,
+            "bottom": 0.0
+          },
+          "opacity": 1.0,
+          "blend": "normal",
+          "visible": true,
+          "locked": false,
+          "audio": "follow"
+        }
+      ]
+    },
+    {
+      "id": "01a0cac9-9f88-7001-a97c-a619624fb6c0",
+      "name": "L shape: source, side bar, ticker",
+      "items": [
+        {
+          "id": "90f6fb4b-dc02-8e12-8807-647e9d2f1934",
+          "name": "main",
+          "content": {
+            "source": "cam1"
+          },
+          "transform": {
+            "position": {
+              "x": 0.0,
+              "y": 0.0
+            },
+            "rotation": 0.0,
+            "scale": {
+              "x": 1.0,
+              "y": 1.0
+            },
+            "anchor": {
+              "x": 0.0,
+              "y": 0.0
+            },
+            "frame": {
+              "w": 1440.0,
+              "h": 885.6
+            },
+            "fit": "cover",
+            "align": "center"
+          },
+          "crop": {
+            "left": 0.0,
+            "top": 0.0,
+            "right": 0.0,
+            "bottom": 0.0
+          },
+          "opacity": 1.0,
+          "blend": "normal",
+          "visible": true,
+          "locked": false,
+          "audio": "follow"
+        },
+        {
+          "id": "575e2de4-2f8c-898d-bd4d-c2ed8f72d4e4",
+          "name": "side bar",
+          "content": {
+            "graphic": "lowerthird/graphic"
+          },
+          "transform": {
+            "position": {
+              "x": 1440.0,
+              "y": 0.0
+            },
+            "rotation": 0.0,
+            "scale": {
+              "x": 1.0,
+              "y": 1.0
+            },
+            "anchor": {
+              "x": 0.0,
+              "y": 0.0
+            },
+            "frame": {
+              "w": 480.0,
+              "h": 885.6
+            },
+            "fit": "stretch",
+            "align": "center"
+          },
+          "crop": {
+            "left": 0.0,
+            "top": 0.0,
+            "right": 0.0,
+            "bottom": 0.0
+          },
+          "opacity": 1.0,
+          "blend": "normal",
+          "visible": true,
+          "locked": false,
+          "audio": "follow"
+        },
+        {
+          "id": "7a24e0e0-c3df-8b23-a14e-5007bb3bc454",
+          "name": "ticker",
+          "content": {
+            "graphic": "lowerthird/graphic",
+            "params": {
+              "text": ""
+            }
+          },
+          "transform": {
+            "position": {
+              "x": 0.0,
+              "y": 885.6
+            },
+            "rotation": 0.0,
+            "scale": {
+              "x": 1.0,
+              "y": 1.0
+            },
+            "anchor": {
+              "x": 0.0,
+              "y": 0.0
+            },
+            "frame": {
+              "w": 1920.0,
+              "h": 194.4
+            },
+            "fit": "stretch",
+            "align": "center"
+          },
+          "crop": {
+            "left": 0.0,
+            "top": 0.0,
+            "right": 0.0,
+            "bottom": 0.0
+          },
+          "opacity": 1.0,
+          "blend": "normal",
+          "visible": true,
+          "locked": false,
+          "audio": "follow"
+        }
+      ]
+    },
+    {
+      "id": "01a0cac9-9f88-7002-af50-a4a73f3eb1c6",
+      "name": "Picture in picture, bottom right",
+      "items": [
+        {
+          "id": "0b844c34-42ed-8738-b908-03c4efeb73b4",
+          "name": "main",
+          "content": {
+            "source": "cam1"
+          },
+          "transform": {
+            "position": {
+              "x": 0.0,
+              "y": 0.0
+            },
+            "rotation": 0.0,
+            "scale": {
+              "x": 1.0,
+              "y": 1.0
+            },
+            "anchor": {
+              "x": 0.0,
+              "y": 0.0
+            },
+            "frame": {
+              "w": 1920.0,
+              "h": 1080.0
+            },
+            "fit": "cover",
+            "align": "center"
+          },
+          "crop": {
+            "left": 0.0,
+            "top": 0.0,
+            "right": 0.0,
+            "bottom": 0.0
+          },
+          "opacity": 1.0,
+          "blend": "normal",
+          "visible": true,
+          "locked": false,
+          "audio": "follow"
+        },
+        {
+          "id": "e7032f38-663b-8235-b2e8-3accbb65eb54",
+          "name": "inset",
+          "content": {
+            "source": "cam2"
+          },
+          "transform": {
+            "position": {
+              "x": 1286.4,
+              "y": 723.5999999999999
+            },
+            "rotation": 0.0,
+            "scale": {
+              "x": 1.0,
+              "y": 1.0
+            },
+            "anchor": {
+              "x": 0.0,
+              "y": 0.0
+            },
+            "frame": {
+              "w": 537.6,
+              "h": 302.40000000000003
+            },
+            "fit": "cover",
+            "align": "center"
+          },
+          "crop": {
+            "left": 0.0,
+            "top": 0.0,
+            "right": 0.0,
+            "bottom": 0.0
+          },
+          "opacity": 1.0,
+          "blend": "normal",
+          "visible": true,
+          "locked": false,
+          "audio": "follow"
+        }
+      ]
+    },
+    {
+      "id": "01a0cac9-9f88-7003-b7b9-df59c2542ed6",
+      "name": "Two boxes, side by side",
+      "items": [
+        {
+          "id": "1444723a-2349-870e-bbef-00f267c861c5",
+          "name": "left",
+          "content": {
+            "source": "cam1"
+          },
+          "transform": {
+            "position": {
+              "x": 38.4,
+              "y": 21.6
+            },
+            "rotation": 0.0,
+            "scale": {
+              "x": 1.0,
+              "y": 1.0
+            },
+            "anchor": {
+              "x": 0.0,
+              "y": 0.0
+            },
+            "frame": {
+              "w": 902.4,
+              "h": 1036.8
+            },
+            "fit": "cover",
+            "align": "center"
+          },
+          "crop": {
+            "left": 0.0,
+            "top": 0.0,
+            "right": 0.0,
+            "bottom": 0.0
+          },
+          "opacity": 1.0,
+          "blend": "normal",
+          "visible": true,
+          "locked": false,
+          "audio": "follow"
+        },
+        {
+          "id": "bbcdc8f5-41a2-8952-bb6f-f3f754677399",
+          "name": "right",
+          "content": {
+            "source": "cam2"
+          },
+          "transform": {
+            "position": {
+              "x": 979.1999999999999,
+              "y": 21.6
+            },
+            "rotation": 0.0,
+            "scale": {
+              "x": 1.0,
+              "y": 1.0
+            },
+            "anchor": {
+              "x": 0.0,
+              "y": 0.0
+            },
+            "frame": {
+              "w": 902.4,
+              "h": 1036.8
+            },
+            "fit": "cover",
+            "align": "center"
+          },
+          "crop": {
+            "left": 0.0,
+            "top": 0.0,
+            "right": 0.0,
+            "bottom": 0.0
+          },
+          "opacity": 1.0,
+          "blend": "normal",
+          "visible": true,
+          "locked": false,
+          "audio": "follow"
+        }
+      ]
+    }
+  ]
+}
