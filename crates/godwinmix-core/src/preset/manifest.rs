@@ -82,10 +82,11 @@ pub struct PresetBlock {
     /// A stylesheet inside the preset, served as the preset's own theme.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub theme_css: Option<String>,
-    /// The three things the person does after applying it. The welcome panel
-    /// shows these, in this order, and the README repeats them.
+    /// The things the person does after applying it, in order. Each is a
+    /// sentence, and may also say what it does so a page can draw a button
+    /// for it (see [`super::step`]). The README repeats them.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub steps: Vec<String>,
+    pub steps: Vec<super::step::Step>,
 }
 
 /// One plugin a preset names, split into the parts that matter.

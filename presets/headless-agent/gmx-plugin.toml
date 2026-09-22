@@ -22,10 +22,23 @@ theme = "dark"
 scenes = "scenes"
 gallery = "label"
 
-# The three things the person does next. The welcome panel in the web UI
-# shows these in this order, and the README repeats them.
-steps = [
-  "Put your destination's URL and stream key into the [[outputs]] block.",
-  "Run `gmx`, then point your agent at it with `gmx mcp --url http://localhost:8080`.",
-  "Ask the agent for `get_state`, then `take` a source, and watch `gmx ctl status`.",
-]
+# The things the person does next, in order. Each one says what it does and
+# to what, so the welcome dialog in the web UI draws it as a button and ticks
+# it off when it is done. The text is what the CLI prints, and what a page that
+# does not know `does` shows. None of them names a file or a command: the
+# person reading them is already in the mixer.
+
+[[provides.preset.steps]]
+text = "Add the stream key for wherever the channel goes."
+does = "add-key"
+target = "primary"
+
+[[provides.preset.steps]]
+text = "Install the director plugin, the agent that runs the channel."
+does = "install-plugin"
+target = "director"
+
+[[provides.preset.steps]]
+text = "Watch Alerts while the agent takes its first source. Every switch it makes shows up there."
+does = "open-panel"
+target = "core/alerts"
