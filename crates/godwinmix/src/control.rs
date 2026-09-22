@@ -238,10 +238,9 @@ impl AppState {
     ///
     /// The config is the one place a restart reads settings from, so a change
     /// that only lived in memory would be lost by the next restart and an
-    /// operator would rightly call that a bug. The file is rewritten whole
-    /// from the table that was parsed, so comments elsewhere in it are lost;
-    /// that is said plainly in `docs/how-to/install-a-plugin.md` rather than
-    /// discovered.
+    /// operator would rightly call that a bug. Only `[plugins.<name>]` is
+    /// touched, in place, so every comment in the file survives, including
+    /// the ones inside that table beside keys that are still there.
     pub fn save_plugin_settings(
         &self,
         name: &str,
@@ -253,16 +252,7 @@ impl AppState {
             // to the running instance and there is nowhere to persist it.
             return Ok(settings);
         }
-        let text = std::fs::read_to_string(path)?;
-        let mut document: toml::Table = toml::from_str(&text)?;
-        let plugins = document
-            .entry("plugins".to_string())
-            .or_insert_with(|| toml::Value::Table(toml::Table::new()));
-        let Some(table) = plugins.as_table_mut() else {
-            anyhow::bail!("[plugins] in {} is not a table", path.display());
-        };
-        table.insert(name.to_string(), toml::Value::Table(settings.clone()));
-        std::fs::write(path, toml::to_string_pretty(&document)?)?;
+        godwinmix_core::config::edit::write_plugin_settings(path, name, &settings)?;
         Ok(settings)
     }
 }
@@ -1438,14 +1428,14 @@ fn spawn_history(app: AppState) {
 /// programme that keeps running is the safe state.
 fn spawn_operator_watchdog(app: AppState) {
     use godwinmix_core::safety::SilenceAction;
-    let after = app.safety.config().on_operator_silence.after_secs;
     tokio::spawn(async move {
         let mut tick = tokio::time::interval(Duration::from_secs(1));
         tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
         loop {
             tick.tick().await;
             let Some(who) = app.safety.silent_operator() else { continue };
-            let action = app.safety.config().on_operator_silence.action.clone();
+            let silence = app.safety.config().on_operator_silence;
+            let (after, action) = (silence.after_secs, silence.action);
             // Arm it before acting, so this fires once rather than every
             // second until somebody comes back.
             app.safety.arm_silence(matches!(action, SilenceAction::Hold));
@@ -1531,7 +1521,9 @@ fn observe_state(state: &AppState) -> crate::observe::ObserveState {
         tokens: Some(state.tokens.clone()),
         // Prometheus scrapes with no credentials. See the field's own note.
         metrics_open: true,
-        config_path: godwinmix_core::config::path_in_force(std::path::Path::new("godwinmix.toml")),
+        // The file the core was started with, as `core.doctor` over /rpc
+        // reads, so the two doors answer the same.
+        config_path: crate::observe::doctor_config_path(&state.config_path),
     }
 }
 

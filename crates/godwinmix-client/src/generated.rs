@@ -194,6 +194,11 @@ pub type Align = String;
 /// The values api_level 1 knows for [`Align`].
 pub const ALIGN_VALUES: &[&str] = &["top-left", "top-center", "top-right", "center-left", "center", "center-right", "bottom-left", "bottom-center", "bottom-right"];
 
+/// When a change to a key takes effect.
+pub type Applies = String;
+/// The values api_level 1 knows for [`Applies`].
+pub const APPLIES_VALUES: &[&str] = &["live", "next_source", "restart"];
+
 /// `scene.apply_graphic`.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
@@ -414,6 +419,102 @@ pub struct CellAssignment {
     pub w: i32,
     pub x: i32,
     pub y: i32,
+}
+
+/// One key this call changed, and when the change takes effect.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct ConfigChanged {
+    pub applies: Applies,
+    pub key: String,
+    /// Said when something outside the file wins over it, such as `--bind`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub note: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct ConfigGetRequest {
+    /// Only these dotted keys. Empty or absent is every key.
+    pub keys: Vec<String>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct ConfigGetResult {
+    pub keys: Vec<ConfigKey>,
+    /// Every key whose new value waits for a restart, whichever keys were asked for.
+    pub needs_restart: Vec<String>,
+    /// The config file these values are read from and written to.
+    pub path: String,
+}
+
+/// One setting as `config.get` reports it.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct ConfigKey {
+    pub applies: Applies,
+    pub default: Value,
+    /// Dotted, as in `program.video_bitrate_kbps`.
+    pub key: String,
+    /// What wins over the file for this key, when something does: `--bind`,
+    /// or `GODWINMIX_TOKEN` in the core's environment.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub overridden_by: Option<String>,
+    /// True when the file differs from what the running core uses and only a
+    /// restart will close the gap.
+    pub pending: bool,
+    pub secret: bool,
+    /// For a secret: whether one is set. The value itself is never sent.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub set: Option<bool>,
+    /// `file` when the key is written in the config file, `default` when not.
+    pub source: String,
+    /// What the config file says, or the default when it says nothing. Always
+    /// null for a secret.
+    pub value: Value,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct ConfigResetRequest {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub dry_run: Option<bool>,
+    /// Dotted keys to take out of the config file, so their defaults apply.
+    pub keys: Vec<String>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct ConfigSetRequest {
+    /// Check everything and write nothing.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub dry_run: Option<bool>,
+    /// Dotted key to new value: `{"program.video_bitrate_kbps": 4500}`. Null
+    /// puts a key back to its default. For a secret, the sentinel
+    /// `"__secret__"` means leave it as it is, and an empty string clears it.
+    pub values: BTreeMap<String, Value>,
+}
+
+/// What `config.set` and `config.reset` answer with.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct ConfigSetResult {
+    /// Keys from this call in force now.
+    pub applied: Vec<String>,
+    /// Every key this call changed, each with its `applies`.
+    pub changed: Vec<ConfigChanged>,
+    /// True when nothing was written because `dry_run` was set.
+    pub dry_run: bool,
+    /// Every key, from this call or an earlier one, whose new value waits for
+    /// a restart. Empty is the good case.
+    pub needs_restart: Vec<String>,
+    /// Keys from this call every source added or rebuilt from now on uses.
+    pub next_source: Vec<String>,
+    /// The config file written to.
+    pub path: String,
+    /// Secrets sent back as the sentinel, so left as they were.
+    pub unchanged: Vec<String>,
 }
 
 pub type ConversionPhase = String;
@@ -2709,11 +2810,15 @@ pub struct MethodInfo {
     pub rest: Option<(&'static str, &'static str)>,
 }
 
-pub const METHODS: [MethodInfo; 127] = [
+pub const METHODS: [MethodInfo; 131] = [
     MethodInfo { name: "adbreak.end", summary: "Cut a running ad short, or disarm one that is scheduled.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/adbreak/end")) },
     MethodInfo { name: "adbreak.start", summary: "Interrupt the programme with a clip, then rejoin live when it ends.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/adbreak/start")) },
     MethodInfo { name: "agent.state", summary: "The compact document written for agents: the programme, each source's state and a motion score saying how much its picture is changing.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/agent/state")) },
     MethodInfo { name: "codec.list", summary: "Every codec and element in the catalogue, which of them this machine actually has, and what it would pick.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/codecs")) },
+    MethodInfo { name: "config.get", summary: "The mixer's settings: each key's value in the config file, its default, when a change to it takes effect, and which keys are waiting for a restart. Secrets say only whether one is set.", scope: "admin", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/config")) },
+    MethodInfo { name: "config.reset", summary: "Put settings back to their defaults by taking them out of the config file. Answers like config.set.", scope: "admin", mutating: true, destructive: true, rest: Some(("POST", "/api/v1/config/reset")) },
+    MethodInfo { name: "config.schema", summary: "Every setting config.set takes, as one JSON Schema: type, title, description, default, range or choices, and x-gmx-applies (live, next_source or restart).", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/config/schema")) },
+    MethodInfo { name: "config.set", summary: "Change settings in the config file, keeping its comments. Every value is checked first and nothing is written unless all of them fit. Live keys take effect at once; the answer says which wait for the next source or a restart.", scope: "admin", mutating: true, destructive: true, rest: Some(("POST", "/api/v1/config/set")) },
     MethodInfo { name: "core.api", summary: "Every method, event and type as JSON Schema. The same document as protocol.json and `godwinmix --api-info`.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/core/api")) },
     MethodInfo { name: "core.doctor", summary: "The environment checks: GStreamer, the elements, the config, the disk and the ports. The same list `gmx doctor` prints.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/core/doctor")) },
     MethodInfo { name: "core.info", summary: "What this core is, what it can do, and where its edges are.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/core/info")) },
@@ -3062,6 +3167,26 @@ impl Client {
     /// Every codec and element in the catalogue, which of them this machine actually has, and what it would pick.
     pub async fn codec_list(&self) -> Result<BTreeMap<String, Value>> {
         self.call("codec.list", &serde_json::json!({})).await
+    }
+
+    /// The mixer's settings: each key's value in the config file, its default, when a change to it takes effect, and which keys are waiting for a restart. Secrets say only whether one is set.
+    pub async fn config_get(&self, params: &ConfigGetRequest) -> Result<ConfigGetResult> {
+        self.call("config.get", params).await
+    }
+
+    /// Put settings back to their defaults by taking them out of the config file. Answers like config.set.
+    pub async fn config_reset(&self, params: &ConfigResetRequest) -> Result<ConfigSetResult> {
+        self.call("config.reset", params).await
+    }
+
+    /// Every setting config.set takes, as one JSON Schema: type, title, description, default, range or choices, and x-gmx-applies (live, next_source or restart).
+    pub async fn config_schema(&self) -> Result<BTreeMap<String, Value>> {
+        self.call("config.schema", &serde_json::json!({})).await
+    }
+
+    /// Change settings in the config file, keeping its comments. Every value is checked first and nothing is written unless all of them fit. Live keys take effect at once; the answer says which wait for the next source or a restart.
+    pub async fn config_set(&self, params: &ConfigSetRequest) -> Result<ConfigSetResult> {
+        self.call("config.set", params).await
     }
 
     /// Every method, event and type as JSON Schema. The same document as protocol.json and `godwinmix --api-info`.

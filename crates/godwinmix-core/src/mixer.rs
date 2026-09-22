@@ -457,6 +457,10 @@ pub enum Command {
     /// The configured sources and outputs with their URLs intact. `Status`
     /// masks those, so anything that must match on a URL asks here.
     Configs(oneshot::Sender<RuntimeConfigs>),
+    /// The settings `config.set` changed that this loop reads each time it
+    /// uses them. Only those are copied, by `config::keys::take_live`; a
+    /// setting the pipeline was built from waits for a restart.
+    Reconfigure(Box<Config>, Option<Ack>),
     Bus(BusEvent),
     Tick,
     /// Report where each seekable source has got to. Separate from `Tick`
@@ -3475,6 +3479,7 @@ impl Mixer {
             Command::ListFilters(_) => "filter.list",
             Command::Status(_) => "core.status",
             Command::Configs(_) => "core.configs",
+            Command::Reconfigure(..) => "config.set",
             Command::Bus(_) => "bus message",
             Command::Tick => "tick",
             Command::PositionTick => "position tick",
@@ -3622,6 +3627,10 @@ impl Mixer {
             }
             Command::Status(reply) => {
                 let _ = reply.send(self.status());
+            }
+            Command::Reconfigure(cfg, ack) => {
+                crate::config::keys::take_live(&mut self.cfg, &cfg);
+                reply(ack, &Ok(()));
             }
             Command::Configs(reply) => {
                 let _ = reply.send(self.runtime_configs());

@@ -26,6 +26,7 @@
 pub mod apply;
 pub mod embedded;
 pub mod manifest;
+mod merge;
 pub mod plan;
 pub mod save;
 

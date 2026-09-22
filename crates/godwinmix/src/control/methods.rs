@@ -19,6 +19,7 @@ use std::future::Future;
 use std::sync::Arc;
 
 pub mod agent;
+pub mod config;
 mod filters;
 pub mod lifecycle;
 mod media;
@@ -68,6 +69,7 @@ pub fn registry() -> Registry<Call> {
     plugins::register(&mut reg);
     nodes::register(&mut reg);
     presets::register(&mut reg);
+    config::register(&mut reg);
     crate::observe::register(&mut reg);
     // Other modules add their own here. One line each, and they land on
     // /rpc, /api/v1, protocol.json and the tool list together. See

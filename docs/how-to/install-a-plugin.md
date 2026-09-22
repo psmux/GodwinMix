@@ -129,10 +129,9 @@ reads inside them: the table is handed to the plugin named and nothing else
 sees it. A change made over the API is written back to the config file so it
 survives a restart.
 
-One thing to know: writing settings back rewrites the config file from the
-table that was parsed, so comments elsewhere in the file are lost. If you keep
-your config in git and care about the comments, edit the file and restart
-instead.
+Only the plugin's own `[plugins.<name>]` table is touched when settings are
+written back, and it is edited in place: every comment in the file stays,
+including the ones inside that table beside keys that are still there.
 
 ## Turn one off without removing it
 
