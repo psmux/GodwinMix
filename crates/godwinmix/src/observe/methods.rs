@@ -329,7 +329,7 @@ fn register_core(reg: &mut Registry<Call>) {
             handler(|call: Call, _| async move {
                 // Every check is a syscall or a registry lookup, none of it
                 // long, but none of it belongs on a runtime worker either.
-                let path = godwinmix_core::config::path_in_force(std::path::Path::new("godwinmix.toml"));
+                let path = doctor_config_path(&call.app.config_path);
                 let checks = tokio::task::spawn_blocking(move || godwinmix_core::observe::doctor::run(&path))
                     .await
                     .map_err(|e| {
@@ -368,9 +368,26 @@ fn register_core(reg: &mut Registry<Call>) {
     );
 }
 
+/// The config the running core was started with, which is the one the doctor
+/// should look at. `--config` sets it; an embedded core built in code has none
+/// and gets the name a plain `godwinmix` start would read.
+fn doctor_config_path(started_with: &std::path::Path) -> std::path::PathBuf {
+    if started_with.as_os_str().is_empty() {
+        return godwinmix_core::config::path_in_force(std::path::Path::new("godwinmix.toml"));
+    }
+    started_with.to_path_buf()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_doctor_reads_the_config_the_core_was_started_with() {
+        let custom = std::path::Path::new("/srv/show/gmx.toml");
+        assert_eq!(doctor_config_path(custom), custom);
+        assert_eq!(doctor_config_path(std::path::Path::new("")), std::path::Path::new("godwinmix.toml"));
+    }
 
     /// The REST paths in `routes.rs` and the ones the transform rule gives
     /// these methods have to be the same paths, or the core answers a method

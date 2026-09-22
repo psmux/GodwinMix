@@ -330,14 +330,31 @@ fn still_pending(plan: &preset::Plan, reload: &Reload) -> Vec<String> {
             )),
         }
     }
-    if !plan.config.is_empty() {
-        out.push(format!(
-            "{} configuration key(s) were written to {} and take effect on restart",
-            plan.config.len(),
-            plan.config_path.display()
-        ));
+    if let Some(line) = written_keys_line(plan) {
+        out.push(line);
     }
     out
+}
+
+/// The config keys the apply actually wrote, by name. A key the operator
+/// already had and kept was not written, so it waits for nothing.
+fn written_keys_line(plan: &preset::Plan) -> Option<String> {
+    let written: Vec<&str> = plan
+        .config
+        .iter()
+        .filter(|c| c.action != preset::plan::Action::Keep)
+        .map(|c| c.key.as_str())
+        .collect();
+    let (first, rest) = written.split_first()?;
+    let named = match rest.len() {
+        0 => format!("`{first}` was"),
+        1 => format!("`{first}` and `{}` were", rest[0]),
+        n => format!("`{first}` and {n} other keys were"),
+    };
+    Some(format!(
+        "{named} written to {} and take effect on restart",
+        plan.config_path.display()
+    ))
 }
 
 async fn save(call: Call, params: Value) -> Result<Value, RpcError> {
@@ -376,6 +393,26 @@ mod tests {
         assert!(pending.iter().any(|p| p.contains("restart")), "{pending:?}");
         // The camera plugin is still named, on the plan rather than here.
         assert!(plan.missing().iter().any(|p| p.name == "camera"));
+    }
+
+    #[test]
+    fn keys_the_operator_kept_are_not_reported_as_waiting_for_a_restart() {
+        let _ = gstreamer::init();
+        let found = preset::resolve("church").unwrap();
+        let mut plan =
+            preset::plan::build(&found, &Options::new("/nowhere/godwinmix.toml")).unwrap();
+        assert!(!plan.config.is_empty(), "the church preset sets config keys");
+        for change in &mut plan.config {
+            change.action = preset::plan::Action::Keep;
+        }
+        let pending = still_pending(&plan, &Reload::default());
+        assert!(pending.iter().all(|p| !p.contains("configuration") && !p.contains("written")), "{pending:?}");
+
+        plan.config[0].action = preset::plan::Action::Override;
+        let key = plan.config[0].key.clone();
+        let pending = still_pending(&plan, &Reload::default());
+        let line = pending.iter().find(|p| p.contains("written")).expect("the one written key");
+        assert!(line.contains(&format!("`{key}` was written")), "{line}");
     }
 
     #[test]
