@@ -11,6 +11,7 @@
 
 import { el, on } from "../../shell/dom.js";
 import { sheetWidthFor } from "../../client/frames.js";
+import { programLabel } from "../../client/store.js";
 import { settings, setSetting, onSettingsChanged } from "../../shell/settings.js";
 import { toast, errorToast } from "../../shell/toast.js";
 import { register } from "../../shell/commands.js";
@@ -263,16 +264,15 @@ class ProgramPanel extends HTMLElement {
   render(s) {
     this.armed = s.preview || (document.body.dataset.armed || null) || null;
     // A scene of more than one item is `scene`, not `program`; reading only
-    // the source said "black" under a live two box.
-    const onAir = s.program || s.scene;
-    this.row.querySelector(".program").classList.toggle("on", !!onAir);
+    // the source said "black" under a live two box, and reading the name the
+    // core froze at take time said the old one after a rename.
+    const named = programLabel(s);
+    this.row.querySelector(".program").classList.toggle("on", !!named);
     this.previewWrap.hidden = !settings().producer;
-    this.programName.textContent = (s.sources.find((x) => x.id === s.program) || {}).name || onAir || "Black";
+    this.programName.textContent = named || "Black";
     this.previewName.textContent = this.armed || "Choose a scene";
     this.takeBtn.disabled = this.autoBtn.disabled = !this.armed;
-    this.bar.firstChild.textContent = onAir
-      ? `Audience sees ${(s.sources.find((x) => x.id === s.program) || {}).name || onAir}`
-      : "Audience sees black";
+    this.bar.firstChild.textContent = named ? `Audience sees ${named}` : "Audience sees black";
     this.retune();
   }
 }

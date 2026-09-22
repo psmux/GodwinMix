@@ -7,6 +7,7 @@ import { el, clear, fmtDuration } from "../../shell/dom.js";
 import { addView, dropView, meterElement, takeMeters } from "../../shell/meter.js";
 import { openSettings } from "../../shell/settings.js";
 import { errorToast } from "../../shell/toast.js";
+import { programLabel } from "../../client/store.js";
 
 class HeaderPanel extends HTMLElement {
   static get panel() {
@@ -88,9 +89,8 @@ class HeaderPanel extends HTMLElement {
     // A multi item scene puts nothing in `program`, so reading that alone
     // said "black" over a live programme.
     const on = !!(s.program || s.scene);
-    const source = s.program ? s.sources.find((x) => x.id === s.program) : null;
     this.tally.classList.toggle("on", on);
-    this.tally.lastChild.textContent = source ? source.name : s.program || s.scene || "black";
+    this.tally.lastChild.textContent = programLabel(s) || "black";
     document.body.classList.toggle("onair", on);
     if (s.uptime_secs !== this.uptimeSaid) {
       this.uptimeSaid = s.uptime_secs;

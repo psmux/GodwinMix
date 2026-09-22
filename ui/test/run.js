@@ -18,7 +18,7 @@ import {
   SheetPainter,
   PicturePainter,
 } from "../client/frames.js";
-import { Store } from "../client/store.js";
+import { Store, programLabel } from "../client/store.js";
 import { SchemaForm } from "../client/schema-form.js";
 import { Client } from "../client/index.js";
 import { RpcError, CODES } from "../client/errors.js";
@@ -359,6 +359,29 @@ test("a live scene survives the snapshot a reconnect brings", () => {
   // A single source take still names the source, which is what tally reads.
   store.snapshot({ program: "cam1", scene: null, sources: [] }, 2);
   eq(store.tallyOf("cam1"), "program");
+});
+
+test("what is on air is named once, for every bar that shows it", () => {
+  const sources = [{ id: "cam1", name: "Camera 1" }];
+  eq(programLabel({ program: null, scene: null, sources }), null, "nothing on air");
+  eq(programLabel({ program: "cam1", scene: null, sources }), "Camera 1", "a single source by its name");
+  eq(programLabel({ program: "gone", scene: null, sources }), "gone", "a source this page has not heard of");
+  eq(programLabel({ program: null, scene: "Two box", sources }), "Two box", "a scene, before anybody renames it");
+  // The header and the programme monitor both read this, and both kept the
+  // old name after a rename because the core never revises what it said.
+  eq(programLabel({ program: null, scene: "Scene 3", sceneName: "tb-one", sources }), "tb-one", "the name it goes by now");
+});
+
+test("the name a renamed scene goes by survives the snapshot too", () => {
+  // The status document has no field for it: the core reports the scene on air
+  // by the name it had when it was taken, and the scene session works out what
+  // it is called now. A re-subscribe brings a snapshot, and wiping the answer
+  // there put the old name back in the header a moment after the rename.
+  const store = new Store();
+  store.patch({ scene: "Scene 3", sceneName: "tb-one" });
+  store.snapshot({ program: null, scene: "Scene 3", sources: [] }, 1);
+  eq(store.state.sceneName, "tb-one", "the snapshot took the current name away");
+  eq(store.state.scene, "Scene 3", "and the core still says the old one");
 });
 
 test("meters do not dirty the store, because they arrive ten times a second", () => {
@@ -1434,8 +1457,13 @@ async function sceneTabsSuite() {
     { id: "two-box", name: "Two box", items: 1 },
   ];
   const calls = [];
+  // A real store, because the scene session files the name of the scene on air
+  // in it and the panel reads the programme out of it.
+  const store = new Store();
+  store.patch({ connected: true });
   const client = {
-    state: { connected: true },
+    store,
+    state: store.state,
     call: (method, params) => {
       calls.push({ method, params });
       return Promise.resolve({});
@@ -1499,6 +1527,74 @@ async function sceneTabsSuite() {
     panel.take.click();
     eq(calls.filter((c) => c.method === "program.take").map((c) => c.params.scene), ["two-box"]);
   });
+
+  // The palette's entry, which a strip of tabs left with nothing to act on:
+  // a tab is not a selection, so the row read as unavailable and choosing it
+  // did nothing at all.
+  test("the palette's Rename a scene takes the scene in hand when none is selected", () => {
+    panel.setView("tabs");
+    panel.selection.clear();
+    setFocusedScene("two-box");
+    const cmd = panel.commands().find((c) => c.id === "scenes.rename");
+    ok(!cmd.enabled, "the row must not be offered as unavailable: it finds a scene for itself");
+    eq(panel.renameTarget(), "two-box", "the scene the operator says they are working on");
+    cmd.run();
+    eq(panel.view, "tiles", "the name is edited on a tile, so the tabs give way to tiles");
+    ok(panel.tiles.get("two-box").name.isContentEditable, "the name is not editable");
+    eq(panel.selected(), ["two-box"], "and it is selected, so F2 means the same thing next time");
+    panel.tiles.get("two-box").name.blur();
+  });
+
+  test("with nothing selected and nothing in hand it falls back to the scene on air", () => {
+    panel.selection.clear();
+    setFocusedScene(null);
+    store.patch({ scene: "Wide" });
+    eq(panel.renameTarget(), "wide", "the core names the scene on air, and that name is a scene");
+  });
+
+  // The core names the programme's scene by the name it had when it was taken
+  // and never revises it, so everything that reads that name has to resolve it
+  // to an id once and follow the document after that.
+  test("a rename does not lose the scene on air", () => {
+    store.patch({ scene: "Wide" });
+    eq(panel.scenes.live(), "wide");
+    summaries[0].name = "tb-one";
+    eq(store.state.scene, "Wide", "the core still says the old name, which is the whole problem");
+    eq(panel.scenes.live(), "wide", "and it is still the same scene");
+    panel.paintTally();
+    ok(panel.tiles.get("wide").node.classList.contains("program"), "the red frame fell off the renamed scene");
+    summaries[0].name = "Wide";
+  });
+
+  test("the buttons on a tile say which scene they act on, after a rename too", () => {
+    summaries[0].name = "tb-one";
+    panel.render();
+    const tile = panel.tiles.get("wide");
+    eq(tile.name.textContent, "tb-one");
+    eq(tile.node.querySelector("button.scene-add-source").title, "Add sources to tb-one");
+    eq(tile.node.querySelector("button.scene-edit").getAttribute("aria-label"), "Edit the layout of tb-one in the composer");
+    ok(!/[Rr]ename/.test(tile.node.querySelector("button.scene-edit").title), "the pencil must not read as rename");
+    summaries[0].name = "Wide";
+    panel.render();
+  });
+
+  test("a double click on the name renames, and anywhere else on the tile opens the composer", () => {
+    const opened = [];
+    panel.open = (id) => opened.push(id);
+    const tile = panel.tiles.get("wide");
+    tile.name.dispatchEvent(new MouseEvent("dblclick", { bubbles: true }));
+    ok(tile.name.isContentEditable, "a double click on the name has to start the rename");
+    eq(opened, [], "and it must not also open the composer");
+    tile.name.blur();
+    tile.face.dispatchEvent(new MouseEvent("dblclick", { bubbles: true }));
+    eq(opened, ["wide"], "the rest of the tile still opens the composer");
+  });
+
+  // Escape out of a rename, and the blur that follows it, used to commit twice
+  // and write the old name back over a rename that had already landed. The
+  // guard is `done` in `beginRename`; this page cannot drive it, because a
+  // keydown dispatched at the editable name here never reaches its listener,
+  // so that one is checked by hand in a browser.
 
   panel.remove();
   setFocusedScene(null);
