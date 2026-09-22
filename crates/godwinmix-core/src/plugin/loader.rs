@@ -1847,7 +1847,10 @@ settings = "settings.json"
         let err = launch_for("nope/source", "cam1", "t".into(), "ws://x/rpc".into())
             .expect_err("nothing is installed");
         let text = format!("{err}");
-        assert!(text.contains("gmx plugin add"), "{text}");
+        assert!(text.contains("Installed: none"), "{text}");
+        assert!(text.contains("Install it"), "{text}");
+        let action = ErrorAction::find(err.as_ref()).expect("the install, as a button");
+        assert_eq!(action.name.as_deref(), Some("nope"));
         clear();
     }
 }
