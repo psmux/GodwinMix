@@ -40,22 +40,14 @@ export function stateLabel(output) {
   }
 }
 
-/**
- * How many goes it takes before the count stops being the news.
- *
- * The `own` policy settles at one attempt every two seconds, so this is about
- * twenty seconds of trying. Long enough that a server coming back up is not
- * nagged about, short enough that nobody watches a number climb for a minute
- * wondering what they are supposed to do.
- */
+/** Goes before the count stops being the news. The `own` policy settles at
+    one every two seconds, so this is about twenty seconds of trying. */
 export const ADVICE_AFTER = 10;
 
 /**
- * What to say once a destination has been at it a while.
- *
  * "Reconnecting, attempt 152" is the truth and it is not the next step. A
  * destination that has never answered is a wrong address or a server that is
- * not running, and either one is fixed away from this page.
+ * not running, and both are fixed away from this page.
  */
 export function stalledAdvice(output) {
   if (output.has_key === false) return "";
@@ -222,8 +214,8 @@ class OutputsPanel extends HTMLElement {
     ]);
     const update = (next) => {
       current = next;
-      // A line of its own rather than a longer state label: the label shares
-      // its row with three buttons, and a sentence in there wraps the row.
+      // A line of its own rather than a longer label: the label shares a row
+      // with three buttons, and a sentence in there wraps them.
       const say = stalledAdvice(next);
       write(advice, "textContent", say);
       write(advice, "hidden", !say);
