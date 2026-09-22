@@ -26,8 +26,8 @@ import { rank, paramsSchema, methodForm } from "../shell/palette.js";
 import { chordOf, DEFAULT_MAP } from "../shell/keymap.js";
 import { IS_MAC } from "../shell/dom.js";
 import { kindOfUri, PLATFORMS, platformOfHost, joinKey } from "../client/kinds.js";
-import { schemaFor, paramsFor } from "../panels/outputs/destination.js";
-import { stateLabel, dotClass } from "../panels/outputs/panel.js";
+import { schemaFor, paramsFor, schemeError } from "../panels/outputs/destination.js";
+import { stateLabel, dotClass, stalledAdvice, ADVICE_AFTER } from "../panels/outputs/panel.js";
 import { tagFor } from "../shell/registry.js";
 import * as layout from "../shell/layout.js";
 import { ART } from "../panels/welcome/tiles.js";
@@ -253,6 +253,21 @@ test("the mute button toggles the latest source state", () => {
   syncTile(tile, { ...source, muted: true }, {});
   tile.mute.click();
   eq(muted, [true, false]);
+});
+
+test("a source with no audio says why its mute and fader are dead", () => {
+  // A disabled button with "Mute" on it and nothing else reads as broken.
+  const source = { id: "slide", uri: "file:///deck.png", has_audio: false, gain: 1 };
+  const tile = buildTile(source, { audio: { bindFader() {} }, scrub: {}, onMute: () => {} });
+  syncTile(tile, source, {});
+  ok(tile.mute.disabled, "a source with no audio cannot be muted");
+  eq(tile.mute.title, "This source has no audio");
+  eq(tile.fader.title, "This source has no audio");
+  // One that does have audio keeps the words it always had.
+  const heard = { id: "cam1", uri: "test://smpte", muted: false, gain: 1 };
+  const other = buildTile(heard, { audio: { bindFader() {} }, scrub: {}, onMute: () => {} });
+  syncTile(other, heard, {});
+  eq(other.mute.title, "Mute");
 });
 
 test("control sections collapse without destroying their panels", () => {
@@ -574,6 +589,44 @@ test("a server changed on its own says what else it needs", () => {
     ok(paramsFor(yt, null, { id: "yt", server: yt.server, key: "" }).error, "YouTube with no key is still refused");
   });
 
+test("an address with no scheme is refused here, not by the core", () => {
+  // What a tester typed: a host and a port, no rtmp:// in front. This used to
+  // go to the core, which answered with a sentence about writing a `type`
+  // field and a list of output kinds. The form has no `type` field.
+  const custom = PLATFORMS.find((x) => x.id === "custom");
+  const asked = paramsFor(custom, null, { id: "mine", server: "127.0.0.1:1935/live", key: "" });
+  eq(asked.params, undefined, "half an address must not be sent");
+  eq(asked.field, "server", "the refusal names the box to outline");
+  ok(asked.error.includes("rtmp://127.0.0.1:1935/live"), asked.error);
+  ok(!asked.error.includes("type"), "nothing about a field this form does not have");
+
+  // A whole address still goes through, on both kinds.
+  eq(schemeError(custom, "rtmp://127.0.0.1:1935/live/key"), null);
+  eq(schemeError(custom, "rtmps://live-api-s.facebook.com:443/rtmp/x"), null);
+  const srt = PLATFORMS.find((x) => x.id === "srt");
+  eq(schemeError(srt, "srt://192.168.1.50:9000"), null);
+  // And the wrong scheme for the tile is caught as well.
+  ok(schemeError(srt, "rtmp://192.168.1.50:9000").includes("srt://"));
+  ok(schemeError(custom, "http://example.org/live").includes("rtmp://"));
+  // An edit that names no address is untouched by any of this.
+  const output = { id: "mine", uri_host: "rtmp://127.0.0.1:1935/…", has_key: true };
+  ok(paramsFor(custom, output, { queue_secs: 6 }).params, "an edit with no address is still allowed");
+});
+
+test("the two policies are named rather than spelled own and cdn", () => {
+  // "When it drops" offering "own" and "cdn" and nothing else is two words
+  // nobody outside this codebase has met.
+  const custom = PLATFORMS.find((x) => x.id === "custom");
+  const policy = schemaFor(custom, null).properties.policy;
+  eq(policy.enum, ["own", "cdn"], "the values stay the protocol's");
+  eq(policy["x-gmx-labels"].length, 2);
+  ok(policy["x-gmx-labels"][0].toLowerCase().includes("quickly"), policy["x-gmx-labels"][0]);
+  ok(policy["x-gmx-labels"][1].toLowerCase().includes("back off"), policy["x-gmx-labels"][1]);
+  ok(policy.description.includes("own retries quickly"), policy.description);
+  const editing = schemaFor(custom, { id: "mine", uri_host: "rtmp://h/…", has_key: true }).properties.policy;
+  eq(editing.enum.length, editing["x-gmx-labels"].length, "every choice on an edit is named too");
+});
+
 test("an SRT destination has an address and no key at all", () => {
   const srt = PLATFORMS.find((p) => p.id === "srt");
   const form = new SchemaForm(schemaFor(srt, null), {});
@@ -627,6 +680,37 @@ test("an output's state is spelled out as the next thing to do about it", () => 
   // An older core says nothing about keys, and must not be read as missing one.
   eq(stateLabel({ state: "live" }), "Live");
   eq(stateLabel({ state: "reconnecting", reconnects: 2 }), "Reconnecting, attempt 2");
+});
+
+test("a destination nothing ever answered at says so, not just how many goes it has had", () => {
+  const host = "rtmp://127.0.0.1:1935/…";
+  // Early on the count is the whole truth: a server coming back up is not
+  // something to send anybody off to check cables over.
+  eq(stalledAdvice({ state: "reconnecting", reconnects: 3, has_key: true, uri_host: host }), "");
+  const said = stalledAdvice({ state: "reconnecting", reconnects: ADVICE_AFTER, has_key: true, uri_host: host });
+  ok(said.includes(host), said);
+  ok(said.includes("server is up"), said);
+  // A missing key has its own answer already, and a live one has no problem.
+  eq(stalledAdvice({ state: "reconnecting", reconnects: 99, has_key: false, uri_host: host }), "");
+  eq(stalledAdvice({ state: "live", reconnects: 99, has_key: true, uri_host: host }), "");
+});
+
+test("the advice appears on the row and goes away again", () => {
+  const row = (reconnects) => ({ id: "dead", state: "reconnecting", reconnects, queue_secs: 0, has_key: true, uri_host: "rtmp://127.0.0.1:1935/…" });
+  const state = { outputs: [row(2)] };
+  const panel = document.createElement("gmx-outputs");
+  panel.setClient({ state, onRender: () => () => {}, call: async () => ({}) });
+  document.body.appendChild(panel);
+  const advice = () => panel.querySelector(".output-advice");
+  ok(advice().hidden, "nothing to say after two goes");
+  state.outputs = [row(ADVICE_AFTER + 5)];
+  panel.render(state);
+  ok(!advice().hidden && advice().textContent.includes("Nothing answered"), advice().textContent);
+  // The row is not rebuilt for it, so a button held down is still there.
+  state.outputs = [Object.assign(row(ADVICE_AFTER + 6), { state: "live" })];
+  panel.render(state);
+  ok(advice().hidden, "a destination that came up keeps saying nothing answered");
+  panel.remove();
 });
 
 // ---------------------------------------------------------------- palette
