@@ -33,7 +33,11 @@ class ProgramPanel extends HTMLElement {
 
     this.canvas = el("canvas", { width: 640, height: 360, style: { width: "100%", display: "block", background: "#000" } });
     this.still = el("img", { alt: "", hidden: true, style: { width: "100%", display: "block", background: "#000" } });
-    this.note = el("div.empty", { hidden: true }, [el("div.dim", { text: "Multiview is switched off, so there is no picture here. The programme is still going out." })]);
+    this.noteSwitch = el("div");
+    this.note = el("div.empty", { hidden: true }, [el("div.col", {}, [
+      el("div.dim", { text: "Multiview is switched off, so there is no picture here. The programme is still going out." }),
+      this.noteSwitch,
+    ])]);
 
     this.previewWrap = el("div.monitor-pane.preview-pane", { hidden: true });
     this.previewCanvas = el("canvas", { width: 320, height: 180, style: { width: "100%", display: "block", background: "#000" } });
@@ -134,6 +138,18 @@ class ProgramPanel extends HTMLElement {
     this.resizeTimer = setTimeout(() => { this.resizeTimer = null; this.retune(); }, 150);
   }
 
+  /** The switch that turns multiview back on, loaded the first time the note shows. */
+  async offerSwitch() {
+    if (this.switchOffered) return;
+    this.switchOffered = true;
+    const { configSwitch } = await import("../../shell/mixer-config.js");
+    this.noteSwitch.appendChild(el("div.form", {}, [await configSwitch(this.client, {
+      key: "multiview.enabled",
+      label: "Multiview on",
+      about: "The picture here and the source tiles come from multiview. It costs the mixer a little while a page is watching and nothing while none is.",
+    })]));
+  }
+
   retune() {
     const s = this.client.state;
     const cell = this.programCell(s);
@@ -142,6 +158,7 @@ class ProgramPanel extends HTMLElement {
       this.release();
       this.canvas.hidden = true;
       this.note.hidden = !(s.multiview && !s.multiview.enabled);
+      if (!this.note.hidden) this.offerSwitch();
       return;
     }
     this.canvas.hidden = false;

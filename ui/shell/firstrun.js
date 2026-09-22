@@ -38,7 +38,7 @@ export function askForToken(reason) {
         el("p.dim", {
           text:
             reason ||
-            "The mixer was started with a token, so it will not answer without one. It is the value of GODWINMIX_TOKEN, or the token line in the config file.",
+            "This mixer asks for a token before it answers. If you set the mixer up, the token is the one you chose in Mixer settings under Control token. The mixer never shows it again, so if it is lost, set a new one there from a page that is already connected with an admin token. Otherwise, ask whoever runs this mixer.",
           style: { marginTop: "0" },
         }),
         el("div.form", {}, [el("div.field", {}, [el("label", {}, [el("span.lbl", { text: "Token" }), input])])]),
