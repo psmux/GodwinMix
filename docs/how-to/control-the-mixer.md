@@ -5,10 +5,11 @@ air from a terminal, then shows the same thing over the WebSocket a UI uses.
 
 ## Two minutes to a source on air
 
-Start a mixer with the example config and leave it running:
+Start a mixer and leave it running. With no `godwinmix.toml` in the folder it
+writes a starting one there first (see [Start the mixer for the first
+time](first-run.md)):
 
 ```sh
-godwinmix --example-config > godwinmix.toml
 godwinmix
 ```
 

@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+* `godwinmix` with no config file starts. It writes a starting `godwinmix.toml` where the config would be, logs one line saying so and where, and prints the address to open. It used to exit with "could not load godwinmix.toml" and a shell redirect to type. The file is the example with every sample source and output commented out, the one the desktop app already wrote, so a first run reaches the welcome tiles instead of two cameras that cannot connect. `--example-config` prints the same text, and the desktop app now leaves the writing to the mixer, so the two first runs are one.
+* The mixer prints "GodwinMix is running. Open http://.../ in a browser." once on start, whatever the log format.
+
 * Fixed a segfault in the programme compositor when a source that was on air was removed. A flush stop sent into a slot could free a frame the compositor's scaler threads were still writing. It took about eighty removals to hit on an M4 Pro. A slot is now hidden, and one frame let out, before its flush is ended.
 * "Start empty" on the first run screen opens the Default scene's own source chooser. It used to add the source to the mixer and to no scene, so the toast said added and nothing appeared.
 * The source chooser reuses a test pattern or media file the mixer already has. It compared against the full address while the core publishes a shortened one, so every scene got its own copy of colour bars.

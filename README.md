@@ -95,8 +95,7 @@ brew install gstreamer          # or your distro's gstreamer + plugins base/good
 cargo install --git https://github.com/psmux/GodwinMix godwinmix
 
 godwinmix --probe                              # what codecs this machine will use
-godwinmix --example-config > godwinmix.toml
-godwinmix --config godwinmix.toml
+godwinmix                                      # writes godwinmix.toml here on a first run
 ```
 
 `cargo install` leaves two binaries with the same code behind them: `godwinmix`,
