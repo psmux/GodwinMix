@@ -37,6 +37,22 @@ export function emptyState() {
   };
 }
 
+/**
+ * What is on air, in one name, for a bar that has room for one.
+ *
+ * `program` is a source id when a single source is up. `scene` is the name that
+ * scene had at the moment it was taken, which the core never revises, so a
+ * rename leaves it reading the old one; `sceneName` is what the scene document
+ * calls it now. Null when nothing is on air, so each caller says black in its
+ * own words.
+ */
+export function programLabel(state) {
+  const source = state.program ? (state.sources || []).find((s) => s.id === state.program) : null;
+  if (source) return source.name;
+  if (state.program) return state.program;
+  return state.scene ? state.sceneName || state.scene : null;
+}
+
 export class Store {
   constructor() {
     this.state = emptyState();
