@@ -33,6 +33,11 @@
 * The uptime in the header counts on between snapshots.
 * The audio meters move. Every meter on the page drew silence, in the Audio tab, on the source tiles and on the header, because nothing ever asked the core for levels: `event/meters` is governed by `ext.meters` alone, and the page named the event and never the ext key. A meter asks for itself now. The first one drawn takes the subscription, the last one to go gives it back, and a page with no meter on it costs the core nothing.
 * The Outputs row's numbers follow the mixer. A recording's megabytes and a destination's buffered seconds move while nothing else changes, and a status is sent only when something does, so the row read "0.0 MB sent to the file" for the whole of a recording. The panel reads them back once a second while a row is on screen and stops when there is none.
+* "Rename a scene" in the command palette renames one. It was offered only while a scene tile was selected, and the page opens on a strip of tabs, which has no selection, so the row read as unavailable and choosing it did nothing. It now takes the selected scene, the one in hand, or the one on air, turns the tabs back to tiles because that is where a name is edited, and says so in a toast when there is no scene at all.
+* Renaming a scene that is on air changes the name in the header and on the programme monitor, and leaves the red frame on its tile. The core names the programme's scene by the name it had when it was taken and never revises it, so every one of those read the old name until the next take. The scene session now resolves that name to an id once and files the current name in the store.
+* The + and the pencil on a scene tile say the scene's new name after a rename. Both had the name written into them when the tile was built and nothing wrote it again.
+* The pencil's tooltip says "Edit the layout ... in the composer", and a double click on a scene's name renames it. A pencil beside a name reads as rename, and the only ways to rename were F2 and the right click menu.
+* Escape out of renaming a scene no longer writes the old name back over a rename that lands afterwards. The blur that followed the Escape committed a second time.
 
 ## 0.2.0 (2026-09-15)
 
