@@ -36,16 +36,25 @@ export function buildTile(source, deps) {
 
   // ----------------------------------------------------------- the strip
 
-  const mute = el("button.btn.icon", { text: "M", title: "Mute", "data-nodrag": "", disabled: source.has_audio === false });
+  // A button that cannot be pressed says why. Without this, M and the fader
+  // are simply dead on a camera with no microphone in it and nothing on the
+  // tile accounts for that.
+  const silent = source.has_audio === false;
+  const mute = el("button.btn.icon", {
+    text: "M",
+    title: silent ? "This source has no audio" : "Mute",
+    "data-nodrag": "",
+    disabled: silent,
+  });
   const fader = el("input", {
     type: "range",
     min: "0",
     max: "1",
     step: "0.005",
     value: String(gainToPos(source.gain === undefined ? 1 : source.gain)),
-    title: "Level",
+    title: silent ? "This source has no audio" : "Level",
     "data-nodrag": "",
-    disabled: source.has_audio === false,
+    disabled: silent,
   });
   const gv = el("span.num.sm", { text: gainLabel(source.gain === undefined ? 1 : source.gain) });
   const meter = meterElement("v");
@@ -120,7 +129,13 @@ export function syncTile(tile, source, view) {
   tile.gv.classList.toggle("muted", !!source.muted);
   tile.mute.classList.toggle("on", !!source.muted);
   tile.mute.setAttribute("aria-pressed", String(!!source.muted));
-  tile.mute.title = source.muted ? "Unmute" : "Mute";
+  // A source that turns out to have no audio keeps the reason on the button,
+  // which the muted/unmuted line above would otherwise write over.
+  tile.mute.title = source.has_audio === false
+    ? "This source has no audio"
+    : source.muted
+      ? "Unmute"
+      : "Mute";
 
   tile.strip.hidden = !view.showStrip;
 

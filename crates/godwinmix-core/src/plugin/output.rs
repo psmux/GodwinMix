@@ -128,6 +128,19 @@ pub fn resolve_config(cfg: &OutputConfig) -> Result<&'static OutputProvide> {
         });
     }
     resolve(&cfg.uri).ok_or_else(|| {
+        // The common way to get here is a host and a port typed without the
+        // scheme in front of them. Nothing can be worked out from that, and
+        // naming `type` to somebody who left `rtmp://` off is an answer to a
+        // question they did not ask.
+        if !cfg.uri.contains("://") {
+            return anyhow::anyhow!(
+                "`{}` does not say how to send it. Put the scheme in front, `rtmp://{}` for a \
+                 stream to an RTMP server, or write `type` to name a kind; this build has: {}",
+                cfg.uri,
+                cfg.uri,
+                available().join(", ")
+            );
+        }
         anyhow::anyhow!(
             "nothing in this build sends to `{}`. Write `type` to say what it is; this build has: {}",
             cfg.uri,
@@ -201,5 +214,13 @@ mod tests {
         let text = format!("{err}");
         assert!(text.contains("rtmp/output"), "{text}");
         assert!(text.contains("srt/output"), "{text}");
+    }
+
+    #[test]
+    fn an_address_with_no_scheme_is_told_which_one_to_put_in_front() {
+        let cfg = OutputConfig::bare("x", "127.0.0.1:1935/live");
+        let err = resolve_config(&cfg).err().expect("an address with no scheme cannot resolve");
+        let text = format!("{err}");
+        assert!(text.contains("rtmp://127.0.0.1:1935/live"), "{text}");
     }
 }

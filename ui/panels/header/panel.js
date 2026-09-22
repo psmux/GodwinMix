@@ -99,7 +99,14 @@ class HeaderPanel extends HTMLElement {
     this.connected = s.connected;
     this.tick();
     const b = s.backend;
-    this.backend.textContent = b ? `${b.video_encoder} · ${b.hardware_accelerated ? "hardware" : "software"}` : "";
+    // "vtenc_h264_hw · hardware" on its own reads like an error code. The word
+    // in front says what the name is the name of, and the title says it in
+    // full for anybody who hovers.
+    const how = b && b.hardware_accelerated ? "hardware" : "software";
+    this.backend.textContent = b ? `Encoder ${b.video_encoder} · ${how}` : "";
+    this.backend.title = b
+      ? `The video encoder in use: ${b.video_encoder}, running in ${how}.`
+      : "";
     const outputs = s.outputs || [];
     const streams = outputs.filter(o => o.type !== "record/output");
     const live = streams.filter(o => o.state === "live").length;

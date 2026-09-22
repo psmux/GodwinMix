@@ -27,7 +27,7 @@ use futures_util::SinkExt;
 use serde_json::{json, Map, Value};
 use std::time::Duration;
 use tokio::sync::broadcast;
-use tracing::{debug, warn};
+use tracing::{debug, info, warn};
 
 type Sink = SplitSink<WebSocket, Message>;
 
@@ -133,13 +133,17 @@ pub async fn serve_rpc(socket: WebSocket, ctx: Ctx, token: Token) {
     // poll. Nothing is written to a client that did not ask for `scene.*`.
     let mut patches = conn.ctx.app.scenes.subscribe();
 
-    loop {
+    // Why this socket ended, said once at the bottom. Three testers watched
+    // the page's "Disconnected from the mixer" dialog sit there while the
+    // mixer answered HTTP perfectly well, and the server said nothing about
+    // having closed anything, so there was nothing to read afterwards.
+    let why = 'client: loop {
         tokio::select! {
             incoming = rx.next() => match incoming {
-                None | Some(Err(_)) | Some(Ok(Message::Close(_))) => break,
+                None | Some(Err(_)) | Some(Ok(Message::Close(_))) => break 'client "the client hung up",
                 Some(Ok(Message::Text(text))) => {
                     if conn.on_text(&text).await.is_err() {
-                        break;
+                        break 'client "a reply could not be written";
                     }
                     // A `core.subscribe` may have changed what this client
                     // wants out of the mosaic. The new subscription is taken
@@ -165,36 +169,41 @@ pub async fn serve_rpc(socket: WebSocket, ctx: Ctx, token: Token) {
             // neither never wakes this task. See `control/push.rs`.
             _ = conn.push.due() => {
                 if conn.send_push().await.is_err() {
-                    break;
+                    break 'client "a telemetry or agent push could not be written";
                 }
             },
             event = events.recv() => match event {
                 Ok(envelope) => {
                     if conn.on_event(envelope).await.is_err() {
-                        break;
+                        break 'client "an event could not be written";
                     }
                     // Drain whatever else is waiting, then flush once, so a
                     // burst of changes paints as one update.
                     while let Ok(more) = events.try_recv() {
                         if conn.absorb(more).await.is_err() {
-                            return;
+                            break 'client "an event could not be written";
                         }
                     }
                     if conn.flush().await.is_err() {
-                        break;
+                        break 'client "a flush could not be written";
                     }
                 }
                 Err(broadcast::error::RecvError::Lagged(n)) => {
                     if conn.on_lag(n).await.is_err() {
-                        break;
+                        warn!(
+                            client = %conn.token.id,
+                            dropped = n,
+                            "rpc client fell too far behind to be resynced; closing it"
+                        );
+                        break 'client "it fell behind on events and the resync could not be written";
                     }
                 }
-                Err(broadcast::error::RecvError::Closed) => break,
+                Err(broadcast::error::RecvError::Closed) => break 'client "the mixer's event channel closed",
             },
             patch = patches.recv() => match patch {
                 Ok(patch) => {
                     if conn.send_patch(&patch).await.is_err() {
-                        break;
+                        break 'client "a scene patch could not be written";
                     }
                     // A transaction commits as one patch, but a burst of
                     // separate edits (a drag, a multi select align) arrives as
@@ -202,21 +211,26 @@ pub async fn serve_rpc(socket: WebSocket, ctx: Ctx, token: Token) {
                     // update, which is the rule every other batch follows.
                     while let Ok(more) = patches.try_recv() {
                         if conn.send_patch(&more).await.is_err() {
-                            return;
+                            break 'client "a scene patch could not be written";
                         }
                     }
                     if conn.flush().await.is_err() {
-                        break;
+                        break 'client "a flush could not be written";
                     }
                 }
                 // A client that has fallen this far behind the document cannot
                 // patch its way back, so it is told to fetch it again.
                 Err(broadcast::error::RecvError::Lagged(n)) => {
                     if conn.on_lag(n).await.is_err() {
-                        break;
+                        warn!(
+                            client = %conn.token.id,
+                            dropped = n,
+                            "rpc client fell too far behind the scene document to be resynced; closing it"
+                        );
+                        break 'client "it fell behind on scene patches and the resync could not be written";
                     }
                 }
-                Err(broadcast::error::RecvError::Closed) => break,
+                Err(broadcast::error::RecvError::Closed) => break 'client "the scene document's channel closed",
             },
             frame = async {
                 match mosaic.as_mut() {
@@ -226,7 +240,7 @@ pub async fn serve_rpc(socket: WebSocket, ctx: Ctx, token: Token) {
             } => match frame {
                 Ok(jpeg) => {
                     if conn.send_frame(&jpeg).await.is_err() {
-                        break;
+                        break 'client "a mosaic frame could not be written";
                     }
                 }
                 // A dropped preview frame is the right answer on a slow link:
@@ -234,7 +248,7 @@ pub async fn serve_rpc(socket: WebSocket, ctx: Ctx, token: Token) {
                 Err(broadcast::error::RecvError::Lagged(n)) => {
                     debug!(skipped = n, "rpc client fell behind on mosaic frames");
                 }
-                Err(broadcast::error::RecvError::Closed) => break,
+                Err(broadcast::error::RecvError::Closed) => break 'client "the mosaic stopped",
             },
             // The armed scene, on the same socket as the mosaic. Without this
             // arm every frame the preview compositor published was dropped on
@@ -248,17 +262,19 @@ pub async fn serve_rpc(socket: WebSocket, ctx: Ctx, token: Token) {
             } => match frame {
                 Ok(jpeg) => {
                     if conn.send_preview_frame(&jpeg).await.is_err() {
-                        break;
+                        break 'client "a preview frame could not be written";
                     }
                 }
                 Err(broadcast::error::RecvError::Lagged(n)) => {
                     debug!(skipped = n, "rpc client fell behind on preview frames");
                 }
-                Err(broadcast::error::RecvError::Closed) => break,
+                Err(broadcast::error::RecvError::Closed) => break 'client "the preview stopped",
             },
         }
-    }
-    debug!("rpc client disconnected");
+    };
+    // Info rather than debug: a page that says it is disconnected while the
+    // mixer is up is a support call, and this is the line that answers it.
+    info!(client = %conn.token.id, why, "rpc client disconnected");
 }
 
 impl Connection {
@@ -314,6 +330,7 @@ impl Connection {
             Ok(Err(_)) => Err(()),
             Err(_) => {
                 warn!(
+                    client = %self.token.id,
                     secs = SEND_DEADLINE.as_secs(),
                     "rpc client stopped reading; closing it so it stops holding the mosaic up"
                 );
@@ -703,7 +720,7 @@ impl Connection {
     /// This client fell behind. Say so with the last number it is known to
     /// have, then send it a fresh snapshot rather than leaving it to guess.
     async fn on_lag(&mut self, dropped: u64) -> Result<(), ()> {
-        warn!(dropped, "rpc client fell behind on events, resyncing");
+        warn!(client = %self.token.id, dropped, "rpc client fell behind on events, resyncing");
         if self.sub.is_none() {
             return Ok(());
         }
