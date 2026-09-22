@@ -31,6 +31,8 @@
 * A camera or microphone that is not on the machine is refused with the ones that are. The plugins fell back to the bare capture element whenever the device monitor did not find what was asked for, and that fallback answered with advice to clear an `element` setting nobody had set. The by hand form's Camera box is now a choice of the devices `device.discover` found, by name, so a name typed where an id belongs cannot be sent.
 * The capture plugins wait a moment for the bus before reporting a failed start, so the message carries GStreamer's reason.
 * The uptime in the header counts on between snapshots.
+* The audio meters move. Every meter on the page drew silence, in the Audio tab, on the source tiles and on the header, because nothing ever asked the core for levels: `event/meters` is governed by `ext.meters` alone, and the page named the event and never the ext key. A meter asks for itself now. The first one drawn takes the subscription, the last one to go gives it back, and a page with no meter on it costs the core nothing.
+* The Outputs row's numbers follow the mixer. A recording's megabytes and a destination's buffered seconds move while nothing else changes, and a status is sent only when something does, so the row read "0.0 MB sent to the file" for the whole of a recording. The panel reads them back once a second while a row is on screen and stops when there is none.
 
 ## 0.2.0 (2026-09-15)
 
