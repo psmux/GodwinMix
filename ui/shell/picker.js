@@ -40,6 +40,7 @@ import {
 } from "../client/kinds.js";
 import { OUTPUT_KINDS } from "../client/destinations.js";
 import { alreadyAdded, sameAddress, easeSchema, unease } from "../client/devices.js";
+import { addChannel } from "../panels/channels/entry.js";
 
 const LIST_KEY = "gmx.picker.list";
 
@@ -244,10 +245,27 @@ function openSourcePicker(client, kinds, plugins, opts) {
     return matching(rows, query);
   }
 
-  /** Rows that are not a listing: the file the library has never seen. */
+  /** Rows that are not a listing: the file the library has never seen, and a channel to publish to. */
   function extraRowsFor(cat, query) {
+    if (cat.id === "streams") return matching([channelEntry()], query);
     if (!cat.media || state.media === "looking") return [];
     return matching([browseEntry()], query);
+  }
+
+  /**
+   * An encoder that pushes rather than a feed to pull. A channel is made on
+   * the Channels panel's own dialog, and each stream on it becomes a source
+   * by itself when it goes live.
+   */
+  function channelEntry() {
+    return {
+      icon: "stream",
+      name: "An RTMP channel for OBS, a phone or an encoder to publish to",
+      note: "Each live stream on it becomes a source by itself",
+      label: "Add RTMP Channel",
+      run: () => addChannel(client),
+      added: () => false,
+    };
   }
 
   function matching(rows, query) {
@@ -336,6 +354,11 @@ function openSourcePicker(client, kinds, plugins, opts) {
       disabled: done,
     });
     button.onclick = async () => {
+      if (entry.run) {
+        m.close();
+        entry.run();
+        return;
+      }
       if (entry.open) {
         m.close();
         openForm(client, "source", entry.open, opts.preset, opts);

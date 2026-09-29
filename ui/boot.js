@@ -20,6 +20,7 @@ const PANELS = [
   "./panels/sources/panel.js",
   "./panels/scenes/panel.js",
   "./panels/outputs/panel.js",
+  "./panels/channels/entry.js",
   "./panels/audio/panel.js",
   "./panels/media/panel.js",
   "./panels/alerts/panel.js",
