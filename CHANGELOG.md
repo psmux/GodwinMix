@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+* The Docker entrypoint clears the lock and socket a previous Xvfb left in `/tmp`, starts a fresh one, and stops with the reason when it did not come up. After a host reboot the old socket was still there, the check on it passed, no X server ran, and every web page source failed with the programme black. Ported from the last LiveboxMix commit.
 * Mixer settings, a dialog for the mixer's own settings, drawn from `config.schema` and grouped by section. Save sends only what changed, a refused value is shown in red under its field, and each field then says whether it is in force, used by the next source, or waiting for a restart. Keys still waiting say so the next time it opens. Default under a field puts that key back. It opens from a button at the top of the gear's dialog, which is now called Settings for this page, and from the palette as `mixer.settings`.
 * Two new methods, `path.list` and `path.create`. A page walks the folders on the mixer (its home folder, its media folder and the folder its config is in, nothing outside them and no files) and makes a new one. The Record dialog uses them: it opens with `Videos/GodwinMix` in the mixer's home filled in and has a Choose button. So does the media folder in Mixer settings.
 * The Programme monitor with multiview off has a Multiview on switch. The Command source in Add sources has an Allow command sources switch above its fields, in force at once, so the add after it works. The tile no longer says it is off unless the config allows it.
