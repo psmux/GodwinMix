@@ -106,7 +106,9 @@ impl Discover {
         self.port
     }
 
-    #[cfg(test)]
+    /// The hub every stream on this listener goes through. The restreamer
+    /// reads a channel's streams with `hub().subscribe(app, stream)`.
+    #[allow(dead_code)]
     pub fn hub(&self) -> &Hub {
         &self.gate.hub
     }
