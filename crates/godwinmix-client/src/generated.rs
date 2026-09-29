@@ -55,6 +55,33 @@ pub struct AdStatus {
     pub uri: String,
 }
 
+/// `channel.destination.add`. Send a channel's stream on to a platform.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct AddDestinationRequest {
+    /// On by default.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub enabled: Option<bool>,
+    /// The channel.
+    pub id: String,
+    /// The stream key. Write only: no method reads it back.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub key: Option<String>,
+    /// What the list calls it. The platform's name when left out.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub label: Option<String>,
+    /// youtube, facebook, twitch, custom or srt.
+    pub platform: String,
+    /// The ingest address. Left out, the platform's own; custom and srt need
+    /// one.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub server: Option<String>,
+    /// Which of the channel's streams to send. `*`, the default, is the first
+    /// one live.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub stream: Option<String>,
+}
+
 /// `filter.add`.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
@@ -2014,6 +2041,16 @@ pub struct Relink {
     pub reason: String,
 }
 
+/// `channel.destination.remove`.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct RemoveDestinationRequest {
+    /// The destination's id within the channel.
+    pub destination: String,
+    /// The channel.
+    pub id: String,
+}
+
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct RenameSceneRequest {
@@ -2221,6 +2258,28 @@ pub struct SessionLogRequest {
     /// How far back to read, in seconds. An hour by default, a day at most.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub secs: Option<u64>,
+}
+
+/// `channel.destination.set`. Change one destination, naming only what moves.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct SetDestinationRequest {
+    /// The destination's id within the channel.
+    pub destination: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub enabled: Option<bool>,
+    /// The channel.
+    pub id: String,
+    /// A new stream key. Left out keeps the one it has; an empty string
+    /// clears it, where the platform allows none.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub key: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub label: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub server: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub stream: Option<String>,
 }
 
 /// `filter.set`.
@@ -2906,10 +2965,13 @@ pub struct MethodInfo {
     pub rest: Option<(&'static str, &'static str)>,
 }
 
-pub const METHODS: [MethodInfo; 133] = [
+pub const METHODS: [MethodInfo; 136] = [
     MethodInfo { name: "adbreak.end", summary: "Cut a running ad short, or disarm one that is scheduled.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/adbreak/end")) },
     MethodInfo { name: "adbreak.start", summary: "Interrupt the programme with a clip, then rejoin live when it ends.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/adbreak/start")) },
     MethodInfo { name: "agent.state", summary: "The compact document written for agents: the programme, each source's state and a motion score saying how much its picture is changing.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/agent/state")) },
+    MethodInfo { name: "channel.destination.add", summary: "Send a channel's stream on to YouTube, Facebook, Twitch, an RTMP server or an SRT receiver as it arrives. Nothing is decoded or encoded. The key is write only.", scope: "admin", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/channels/{id}/destinations")) },
+    MethodInfo { name: "channel.destination.remove", summary: "Stop sending a channel's stream to one destination and forget it. The publisher and the other destinations are not touched.", scope: "admin", mutating: true, destructive: true, rest: Some(("POST", "/api/v1/channels/{id}/destinations/remove")) },
+    MethodInfo { name: "channel.destination.set", summary: "Change one of a channel's destinations, naming only what moves: a new key, another server, which stream it sends, on or off. A key left out is kept.", scope: "admin", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/channels/{id}/destinations/set")) },
     MethodInfo { name: "codec.list", summary: "Every codec and element in the catalogue, which of them this machine actually has, and what it would pick.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/codecs")) },
     MethodInfo { name: "config.get", summary: "The mixer's settings: each key's value in the config file, its default, when a change to it takes effect, and which keys are waiting for a restart. Secrets say only whether one is set.", scope: "admin", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/config")) },
     MethodInfo { name: "config.reset", summary: "Put settings back to their defaults by taking them out of the config file. Answers like config.set.", scope: "admin", mutating: true, destructive: true, rest: Some(("POST", "/api/v1/config/reset")) },
@@ -3260,6 +3322,21 @@ impl Client {
     /// The compact document written for agents: the programme, each source's state and a motion score saying how much its picture is changing.
     pub async fn agent_state(&self, params: &AgentStateRequest) -> Result<BTreeMap<String, Value>> {
         self.call("agent.state", params).await
+    }
+
+    /// Send a channel's stream on to YouTube, Facebook, Twitch, an RTMP server or an SRT receiver as it arrives. Nothing is decoded or encoded. The key is write only.
+    pub async fn channel_destination_add(&self, params: &AddDestinationRequest) -> Result<BTreeMap<String, Value>> {
+        self.call("channel.destination.add", params).await
+    }
+
+    /// Stop sending a channel's stream to one destination and forget it. The publisher and the other destinations are not touched.
+    pub async fn channel_destination_remove(&self, params: &RemoveDestinationRequest) -> Result<BTreeMap<String, Value>> {
+        self.call("channel.destination.remove", params).await
+    }
+
+    /// Change one of a channel's destinations, naming only what moves: a new key, another server, which stream it sends, on or off. A key left out is kept.
+    pub async fn channel_destination_set(&self, params: &SetDestinationRequest) -> Result<BTreeMap<String, Value>> {
+        self.call("channel.destination.set", params).await
     }
 
     /// Every codec and element in the catalogue, which of them this machine actually has, and what it would pick.

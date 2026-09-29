@@ -1,0 +1,147 @@
+//! What a destination request may say, as pure functions over a channel's
+//! list, so each rule is tested without a mixer or a store.
+
+use godwinmix_protocol::destination::{
+    platform, platform_ids, AddDestinationRequest, Carriage, KeyRule, Platform,
+    SetDestinationRequest, StoredDestination,
+};
+use godwinmix_protocol::error::RpcError;
+
+/// Add a destination to `list`, and answer its id.
+pub fn add(list: &mut Vec<StoredDestination>, req: &AddDestinationRequest) -> Result<String, RpcError> {
+    let p = platform(&req.platform).ok_or_else(|| unknown_platform(&req.platform))?;
+    let label = clean(req.label.as_deref()).unwrap_or_else(|| p.title.to_string());
+    let server = clean(req.server.as_deref()).unwrap_or_else(|| p.server.to_string());
+    let d = StoredDestination {
+        id: unique_id(list, &slug(&label).unwrap_or_else(|| p.id.to_string())),
+        platform: p.id.to_string(),
+        label,
+        server,
+        key: key_for(p, req.key.as_deref()),
+        stream: clean(req.stream.as_deref()).unwrap_or_else(|| "*".into()),
+        enabled: req.enabled.unwrap_or(true),
+    };
+    check(p, &d)?;
+    let id = d.id.clone();
+    list.push(d);
+    Ok(id)
+}
+
+/// Change one destination, naming only what moves.
+pub fn set(list: &mut [StoredDestination], req: &SetDestinationRequest) -> Result<(), RpcError> {
+    let ids: Vec<String> = list.iter().map(|d| d.id.clone()).collect();
+    let d = list
+        .iter_mut()
+        .find(|d| d.id == req.destination)
+        .ok_or_else(|| not_found(&req.id, &req.destination, &ids))?;
+    let p = platform(&d.platform).ok_or_else(|| unknown_platform(&d.platform))?;
+    let mut wanted = d.clone();
+    if let Some(label) = clean(req.label.as_deref()) {
+        wanted.label = label;
+    }
+    if let Some(server) = req.server.as_deref() {
+        wanted.server = clean(Some(server)).unwrap_or_else(|| p.server.to_string());
+    }
+    if let Some(key) = req.key.as_deref() {
+        wanted.key = key_for(p, Some(key));
+    }
+    if let Some(stream) = clean(req.stream.as_deref()) {
+        wanted.stream = stream;
+    }
+    if let Some(enabled) = req.enabled {
+        wanted.enabled = enabled;
+    }
+    check(p, &wanted)?;
+    *d = wanted;
+    Ok(())
+}
+
+/// Take one destination off the list, and answer it.
+pub fn remove(
+    list: &mut Vec<StoredDestination>,
+    channel: &str,
+    id: &str,
+) -> Result<StoredDestination, RpcError> {
+    let ids: Vec<String> = list.iter().map(|d| d.id.clone()).collect();
+    let at = list.iter().position(|d| d.id == id).ok_or_else(|| not_found(channel, id, &ids))?;
+    Ok(list.remove(at))
+}
+
+fn clean(s: Option<&str>) -> Option<String> {
+    s.map(str::trim).filter(|s| !s.is_empty()).map(str::to_string)
+}
+
+/// A platform with no key keeps none, whatever was sent.
+fn key_for(p: &Platform, key: Option<&str>) -> Option<String> {
+    if p.key == KeyRule::None {
+        return None;
+    }
+    clean(key)
+}
+
+/// The rules a stored destination has to meet, whichever method made it.
+fn check(p: &Platform, d: &StoredDestination) -> Result<(), RpcError> {
+    let field = |e: RpcError, f: &str| e.with("field", f).with("platform", p.id).with("destination", d.id.clone());
+    let example = if p.carriage == Carriage::Srt { "srt://192.168.1.50:9000" } else { "rtmp://host/live" };
+    if d.server.is_empty() {
+        let msg = format!("{} needs a server address. Send `server`, as in {example}.", p.title);
+        return Err(field(RpcError::invalid_params(msg), "server"));
+    }
+    let scheme = d.server.split_once("://").map(|(s, _)| s.to_ascii_lowercase()).unwrap_or_default();
+    let fits = match p.carriage {
+        Carriage::Rtmp => scheme == "rtmp" || scheme == "rtmps",
+        Carriage::Srt => scheme == "srt",
+    };
+    if !fits {
+        let msg = format!("{} takes an address like {example}, and this one does not start that way.", p.title);
+        return Err(field(RpcError::invalid_params(msg), "server"));
+    }
+    let keyless = d.key.is_none();
+    if keyless && p.key == KeyRule::Required {
+        let msg = format!("{} needs its stream key. Copy it from the platform and send it as `key`.", p.title);
+        return Err(field(RpcError::invalid_params(msg), "key"));
+    }
+    let path = d.server.split_once("://").map(|(_, r)| r).unwrap_or("");
+    if keyless && p.carriage == Carriage::Rtmp && path.split('/').filter(|s| !s.is_empty()).count() < 3 {
+        let msg = "that address has no stream key on the end. Send `key`, or the whole address \
+                   with the key on it, as in rtmp://host/live/key.";
+        return Err(field(RpcError::invalid_params(msg), "key"));
+    }
+    Ok(())
+}
+
+fn slug(label: &str) -> Option<String> {
+    let mut out = String::new();
+    for c in label.to_lowercase().chars() {
+        if c.is_ascii_alphanumeric() {
+            out.push(c);
+        } else if !out.is_empty() && !out.ends_with('-') {
+            out.push('-');
+        }
+    }
+    let out = out.trim_end_matches('-').to_string();
+    out.starts_with(|c: char| c.is_ascii_alphabetic()).then_some(out)
+}
+
+fn unique_id(list: &[StoredDestination], base: &str) -> String {
+    let taken = |id: &str| list.iter().any(|d| d.id == id);
+    if !taken(base) {
+        return base.to_string();
+    }
+    (2..).map(|n| format!("{base}-{n}")).find(|id| !taken(id)).expect("an unbounded range ends")
+}
+
+fn unknown_platform(id: &str) -> RpcError {
+    let ids = platform_ids();
+    RpcError::invalid_params(format!("'{id}' is not a platform. Use one of {}.", ids.join(", ")))
+        .with("field", "platform")
+        .with("platforms", ids)
+}
+
+fn not_found(channel: &str, id: &str, ids: &[String]) -> RpcError {
+    RpcError::not_found("destination", id, ids).with("channel", channel)
+}
+
+#[cfg(test)]
+#[path = "rules_tests.rs"]
+mod tests;

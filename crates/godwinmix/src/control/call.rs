@@ -319,9 +319,14 @@ async fn claim(
 ///
 /// `output.set` is on the list for the same reason as `output.add`: it takes
 /// a whole new address, so without it a rehearsal could point an existing
-/// destination at a real ingest and go on air by the back door.
+/// destination at a real ingest and go on air by the back door. A channel
+/// destination is the same thing reached another way.
 fn rehearsal_refusal(app: &AppState, method: &str) -> Option<RpcError> {
-    if !app.rehearsal || !matches!(method, "output.add" | "output.set") {
+    let sends = matches!(
+        method,
+        "output.add" | "output.set" | "channel.destination.add" | "channel.destination.set"
+    );
+    if !app.rehearsal || !sends {
         return None;
     }
     Some(
