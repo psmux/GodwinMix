@@ -289,7 +289,7 @@ class Channel(TypedDict, total=False):
     auto_source: bool
     # A stream that goes live becomes a mixer source by itself.
     destinations: List[Destination]
-    # Where the channel's streams are sent on to. Filled in by `channel.destination.*`.
+    # Where the channel's streams are sent on to, with what each is doing. Changed by `channel.destination.*`.
     enabled: bool
     # Off turns every publisher away with a sentence saying so.
     id: str
@@ -499,22 +499,28 @@ class Crop(TypedDict, total=False):
     top: float
 
 class Destination(TypedDict, total=False):
-    """Where a channel's stream is sent on to, remuxed and never decoded."""
+    """One destination as a client sees it. The key never appears: `has_key` says whether there is one."""
 
     enabled: bool
     error: Optional[str]
+    # What went wrong last, in words a person can act on.
     has_key: bool
     id: str
+    # A slug, unique within its channel: `youtube`, `youtube-2`.
     kbps: int
+    # What is going out, over the last second.
     label: str
     platform: str
+    # A platform id from the table: youtube, facebook, twitch, custom, srt.
     reconnects: int
+    # Connections lost and made again since it was switched on.
     since_ms: int
-    state: str
-    # off, waiting, connecting, live, reconnecting or failed.
+    # Milliseconds since `state` last changed.
+    state: DestinationState
     stream: str
-    # Which stream to send; `*` is the first live one.
+    # Which of the channel's streams to send. `*` is the first live one.
     uri_host: str
+    # The scheme, host and port, and nothing that could carry a key.
 
 class DiscoverAnswer(TypedDict, total=False):
     found: List[Found]
@@ -2034,6 +2040,9 @@ BridgeTransport = Literal['rtp', 'srt', 'whip']
 
 ConversionPhase = Literal['running', 'done', 'failed']
 
+# Where a destination has got to.
+DestinationState = Literal['off', 'waiting', 'connecting', 'live', 'reconnecting', 'failed']
+
 # How content fills its frame. SVG's vocabulary, which replaces OBS's seven bounds types and maps onto `sizing-policy` on a `glvideomixer` pad.
 Fit = Literal['none', 'contain', 'cover', 'stretch', 'fit-width', 'fit-height', 'max']
 
@@ -2082,12 +2091,12 @@ METHODS = (
     {"name": "adbreak.start", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/adbreak/start"), "summary": 'Interrupt the programme with a clip, then rejoin live when it ends.'},
     {"name": "agent.state", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/agent/state"), "summary": "The compact document written for agents: the programme, each source's state and a motion score saying how much its picture is changing."},
     {"name": "channel.add", "scope": "admin", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/channels"), "summary": 'Make a channel and its first key. The key is in this answer and never again.'},
-    {"name": "channel.destination.add", "scope": "admin", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/channels/{id}/destination"), "summary": "Send a channel's stream on to YouTube, Facebook, Twitch, an RTMP server or an SRT receiver as it arrives. Nothing is decoded or encoded. The key is write only."},
-    {"name": "channel.destination.remove", "scope": "admin", "mutating": True, "destructive": True, "rest": ("POST", "/api/v1/channels/{id}/destination"), "summary": "Stop sending a channel's stream to one destination and forget it. The publisher and the other destinations are not touched."},
+    {"name": "channel.destination.add", "scope": "admin", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/channels/{id}/destination/add"), "summary": "Send a channel's stream on to YouTube, Facebook, Twitch, an RTMP server or an SRT receiver as it arrives. Nothing is decoded or encoded. The key is write only."},
+    {"name": "channel.destination.remove", "scope": "admin", "mutating": True, "destructive": True, "rest": ("POST", "/api/v1/channels/{id}/destination/remove"), "summary": "Stop sending a channel's stream to one destination and forget it. The publisher and the other destinations are not touched."},
     {"name": "channel.destination.set", "scope": "admin", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/channels/{id}/destination"), "summary": "Change one of a channel's destinations, naming only what moves: a new key, another server, which stream it sends, on or off. A key left out is kept."},
     {"name": "channel.get", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/channels/{id}"), "summary": 'One channel.'},
-    {"name": "channel.key.add", "scope": "admin", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/channels/key/add"), "summary": 'Make another key for a channel, to give to one more person or encoder. The key is in this answer and never again.'},
-    {"name": "channel.key.remove", "scope": "admin", "mutating": True, "destructive": True, "rest": ("POST", "/api/v1/channels/key/remove"), "summary": 'Take one key back. A publisher on air with it is cut off and the next one is turned away; the other keys are untouched.'},
+    {"name": "channel.key.add", "scope": "admin", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/channels/{id}/key/add"), "summary": 'Make another key for a channel, to give to one more person or encoder. The key is in this answer and never again.'},
+    {"name": "channel.key.remove", "scope": "admin", "mutating": True, "destructive": True, "rest": ("POST", "/api/v1/channels/{id}/key/remove"), "summary": 'Take one key back. A publisher on air with it is cut off and the next one is turned away; the other keys are untouched.'},
     {"name": "channel.list", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/channels"), "summary": 'Every RTMP channel with its keys (as hints), the address to publish to, and what is live on it, beside the port they all share.'},
     {"name": "channel.remove", "scope": "admin", "mutating": True, "destructive": True, "rest": ("DELETE", "/api/v1/channels/{id}"), "summary": 'Remove a channel and forget its keys. Sources it made that no scene holds go with it.'},
     {"name": "channel.set", "scope": "admin", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/channels/{id}/set"), "summary": 'Rename a channel, switch it on or off, or change its application name, whether its streams become sources, or how its key is given. Only what is named moves.'},

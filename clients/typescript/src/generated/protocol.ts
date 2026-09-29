@@ -431,7 +431,10 @@ export interface Crop {
   top: number;
 }
 
-/** Where a channel's stream is sent on to, remuxed and never decoded. */
+/**
+ * One destination as a client sees it. The key never appears: `has_key`
+ * says whether there is one.
+ */
 export interface Destination {
   enabled: boolean;
   error?: string | null;
@@ -442,10 +445,13 @@ export interface Destination {
   platform: string;
   reconnects: number;
   since_ms: number;
-  state: string;
+  state: DestinationState;
   stream: string;
   uri_host: string;
 }
+
+/** Where a destination has got to. */
+export type DestinationState = "off" | "waiting" | "connecting" | "live" | "reconnecting" | "failed";
 
 export interface DiscoverAnswer {
   found: Found[];
@@ -2205,12 +2211,12 @@ export const METHODS: readonly MethodInfo[] = [
   { name: "adbreak.start", summary: "Interrupt the programme with a clip, then rejoin live when it ends.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/adbreak/start" } },
   { name: "agent.state", summary: "The compact document written for agents: the programme, each source's state and a motion score saying how much its picture is changing.", scope: "read", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/agent/state" } },
   { name: "channel.add", summary: "Make a channel and its first key. The key is in this answer and never again.", scope: "admin", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/channels" } },
-  { name: "channel.destination.add", summary: "Send a channel's stream on to YouTube, Facebook, Twitch, an RTMP server or an SRT receiver as it arrives. Nothing is decoded or encoded. The key is write only.", scope: "admin", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/channels/{id}/destination" } },
-  { name: "channel.destination.remove", summary: "Stop sending a channel's stream to one destination and forget it. The publisher and the other destinations are not touched.", scope: "admin", mutating: true, destructive: true, rest: { method: "POST", path: "/api/v1/channels/{id}/destination" } },
+  { name: "channel.destination.add", summary: "Send a channel's stream on to YouTube, Facebook, Twitch, an RTMP server or an SRT receiver as it arrives. Nothing is decoded or encoded. The key is write only.", scope: "admin", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/channels/{id}/destination/add" } },
+  { name: "channel.destination.remove", summary: "Stop sending a channel's stream to one destination and forget it. The publisher and the other destinations are not touched.", scope: "admin", mutating: true, destructive: true, rest: { method: "POST", path: "/api/v1/channels/{id}/destination/remove" } },
   { name: "channel.destination.set", summary: "Change one of a channel's destinations, naming only what moves: a new key, another server, which stream it sends, on or off. A key left out is kept.", scope: "admin", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/channels/{id}/destination" } },
   { name: "channel.get", summary: "One channel.", scope: "read", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/channels/{id}" } },
-  { name: "channel.key.add", summary: "Make another key for a channel, to give to one more person or encoder. The key is in this answer and never again.", scope: "admin", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/channels/key/add" } },
-  { name: "channel.key.remove", summary: "Take one key back. A publisher on air with it is cut off and the next one is turned away; the other keys are untouched.", scope: "admin", mutating: true, destructive: true, rest: { method: "POST", path: "/api/v1/channels/key/remove" } },
+  { name: "channel.key.add", summary: "Make another key for a channel, to give to one more person or encoder. The key is in this answer and never again.", scope: "admin", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/channels/{id}/key/add" } },
+  { name: "channel.key.remove", summary: "Take one key back. A publisher on air with it is cut off and the next one is turned away; the other keys are untouched.", scope: "admin", mutating: true, destructive: true, rest: { method: "POST", path: "/api/v1/channels/{id}/key/remove" } },
   { name: "channel.list", summary: "Every RTMP channel with its keys (as hints), the address to publish to, and what is live on it, beside the port they all share.", scope: "read", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/channels" } },
   { name: "channel.remove", summary: "Remove a channel and forget its keys. Sources it made that no scene holds go with it.", scope: "admin", mutating: true, destructive: true, rest: { method: "DELETE", path: "/api/v1/channels/{id}" } },
   { name: "channel.set", summary: "Rename a channel, switch it on or off, or change its application name, whether its streams become sources, or how its key is given. Only what is named moves.", scope: "admin", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/channels/{id}/set" } },

@@ -941,7 +941,7 @@
           },
           "destinations": {
             "default": [],
-            "description": "Where the channel's streams are sent on to. Filled in by\n`channel.destination.*`.",
+            "description": "Where the channel's streams are sent on to, with what each is doing.\nChanged by `channel.destination.*`.",
             "items": {
               "$ref": "#/components/schemas/Destination"
             },
@@ -1662,12 +1662,13 @@
         "type": "object"
       },
       "Destination": {
-        "description": "Where a channel's stream is sent on to, remuxed and never decoded.",
+        "description": "One destination as a client sees it. The key never appears: `has_key`\nsays whether there is one.",
         "properties": {
           "enabled": {
             "type": "boolean"
           },
           "error": {
+            "description": "What went wrong last, in words a person can act on.",
             "type": [
               "string",
               "null"
@@ -1677,9 +1678,11 @@
             "type": "boolean"
           },
           "id": {
+            "description": "A slug, unique within its channel: `youtube`, `youtube-2`.",
             "type": "string"
           },
           "kbps": {
+            "description": "What is going out, over the last second.",
             "format": "uint32",
             "minimum": 0,
             "type": "integer"
@@ -1688,27 +1691,30 @@
             "type": "string"
           },
           "platform": {
+            "description": "A platform id from the table: youtube, facebook, twitch, custom, srt.",
             "type": "string"
           },
           "reconnects": {
+            "description": "Connections lost and made again since it was switched on.",
             "format": "uint32",
             "minimum": 0,
             "type": "integer"
           },
           "since_ms": {
+            "description": "Milliseconds since `state` last changed.",
             "format": "uint64",
             "minimum": 0,
             "type": "integer"
           },
           "state": {
-            "description": "off, waiting, connecting, live, reconnecting or failed.",
-            "type": "string"
+            "$ref": "#/components/schemas/DestinationState"
           },
           "stream": {
-            "description": "Which stream to send; `*` is the first live one.",
+            "description": "Which of the channel's streams to send. `*` is the first live one.",
             "type": "string"
           },
           "uri_host": {
+            "description": "The scheme, host and port, and nothing that could carry a key.",
             "type": "string"
           }
         },
@@ -1726,6 +1732,41 @@
           "reconnects"
         ],
         "type": "object"
+      },
+      "DestinationState": {
+        "description": "Where a destination has got to.",
+        "oneOf": [
+          {
+            "const": "off",
+            "description": "Switched off by the person.",
+            "type": "string"
+          },
+          {
+            "const": "waiting",
+            "description": "Switched on, and waiting for the stream it sends to go live.",
+            "type": "string"
+          },
+          {
+            "const": "connecting",
+            "description": "Dialling the far end for the first time.",
+            "type": "string"
+          },
+          {
+            "const": "live",
+            "description": "Sending.",
+            "type": "string"
+          },
+          {
+            "const": "reconnecting",
+            "description": "Lost the far end and dialling it again on the backoff.",
+            "type": "string"
+          },
+          {
+            "const": "failed",
+            "description": "The far end said no in a way retrying will not fix: the key was\nrefused. `error` says what to change.",
+            "type": "string"
+          }
+        ]
       },
       "DiscoverAnswer": {
         "properties": {
@@ -6449,82 +6490,6 @@
         "x-scope": "admin"
       }
     },
-    "/api/v1/channels/key/add": {
-      "post": {
-        "description": "JSON-RPC method `channel.key.add`. Needs the `admin` scope. Accepts `idempotency_key`, honoured for 24 hours.",
-        "operationId": "channel.key.add",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/ChannelKeyAddRequest"
-              }
-            }
-          },
-          "required": false
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/KeyAdded"
-                }
-              }
-            },
-            "description": "the full resulting object, so no follow up read is needed"
-          },
-          "default": {
-            "$ref": "#/components/responses/Error"
-          }
-        },
-        "summary": "Make another key for a channel, to give to one more person or encoder. The key is in this answer and never again.",
-        "tags": [
-          "channel"
-        ],
-        "x-destructive": false,
-        "x-idempotent": false,
-        "x-scope": "admin"
-      }
-    },
-    "/api/v1/channels/key/remove": {
-      "post": {
-        "description": "JSON-RPC method `channel.key.remove`. Needs the `admin` scope. Destructive: accepts `dry_run: true`, and on a token whose policy is `confirm = required` it is refused once with -32020 and a confirm token. Accepts `idempotency_key`, honoured for 24 hours.",
-        "operationId": "channel.key.remove",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/ChannelKeyRemoveRequest"
-              }
-            }
-          },
-          "required": false
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Channel"
-                }
-              }
-            },
-            "description": "the full resulting object, so no follow up read is needed"
-          },
-          "default": {
-            "$ref": "#/components/responses/Error"
-          }
-        },
-        "summary": "Take one key back. A publisher on air with it is cut off and the next one is turned away; the other keys are untouched.",
-        "tags": [
-          "channel"
-        ],
-        "x-destructive": true,
-        "x-idempotent": true,
-        "x-scope": "admin"
-      }
-    },
     "/api/v1/channels/{id}": {
       "delete": {
         "description": "JSON-RPC method `channel.remove`. Needs the `admin` scope. Destructive: accepts `dry_run: true`, and on a token whose policy is `confirm = required` it is refused once with -32020 and a confirm token. Accepts `idempotency_key`, honoured for 24 hours.",
@@ -6656,6 +6621,202 @@
           "channel"
         ],
         "x-destructive": false,
+        "x-idempotent": true,
+        "x-scope": "admin"
+      }
+    },
+    "/api/v1/channels/{id}/destination/add": {
+      "post": {
+        "description": "JSON-RPC method `channel.destination.add`. Needs the `admin` scope. Accepts `idempotency_key`, honoured for 24 hours.",
+        "operationId": "channel.destination.add",
+        "parameters": [
+          {
+            "description": "The id, as listed by the matching list call.",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AddDestinationRequest"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Send a channel's stream on to YouTube, Facebook, Twitch, an RTMP server or an SRT receiver as it arrives. Nothing is decoded or encoded. The key is write only.",
+        "tags": [
+          "channel"
+        ],
+        "x-destructive": false,
+        "x-idempotent": true,
+        "x-scope": "admin"
+      }
+    },
+    "/api/v1/channels/{id}/destination/remove": {
+      "post": {
+        "description": "JSON-RPC method `channel.destination.remove`. Needs the `admin` scope. Destructive: accepts `dry_run: true`, and on a token whose policy is `confirm = required` it is refused once with -32020 and a confirm token. Accepts `idempotency_key`, honoured for 24 hours.",
+        "operationId": "channel.destination.remove",
+        "parameters": [
+          {
+            "description": "The id, as listed by the matching list call.",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RemoveDestinationRequest"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Stop sending a channel's stream to one destination and forget it. The publisher and the other destinations are not touched.",
+        "tags": [
+          "channel"
+        ],
+        "x-destructive": true,
+        "x-idempotent": true,
+        "x-scope": "admin"
+      }
+    },
+    "/api/v1/channels/{id}/key/add": {
+      "post": {
+        "description": "JSON-RPC method `channel.key.add`. Needs the `admin` scope. Accepts `idempotency_key`, honoured for 24 hours.",
+        "operationId": "channel.key.add",
+        "parameters": [
+          {
+            "description": "The id, as listed by the matching list call.",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChannelKeyAddRequest"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/KeyAdded"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Make another key for a channel, to give to one more person or encoder. The key is in this answer and never again.",
+        "tags": [
+          "channel"
+        ],
+        "x-destructive": false,
+        "x-idempotent": false,
+        "x-scope": "admin"
+      }
+    },
+    "/api/v1/channels/{id}/key/remove": {
+      "post": {
+        "description": "JSON-RPC method `channel.key.remove`. Needs the `admin` scope. Destructive: accepts `dry_run: true`, and on a token whose policy is `confirm = required` it is refused once with -32020 and a confirm token. Accepts `idempotency_key`, honoured for 24 hours.",
+        "operationId": "channel.key.remove",
+        "parameters": [
+          {
+            "description": "The id, as listed by the matching list call.",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChannelKeyRemoveRequest"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Channel"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Take one key back. A publisher on air with it is cut off and the next one is turned away; the other keys are untouched.",
+        "tags": [
+          "channel"
+        ],
+        "x-destructive": true,
         "x-idempotent": true,
         "x-scope": "admin"
       }

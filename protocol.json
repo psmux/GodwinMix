@@ -970,7 +970,7 @@
         },
         "destinations": {
           "default": [],
-          "description": "Where the channel's streams are sent on to. Filled in by\n`channel.destination.*`.",
+          "description": "Where the channel's streams are sent on to, with what each is doing.\nChanged by `channel.destination.*`.",
           "items": {
             "$ref": "#/$defs/Destination"
           },
@@ -1691,12 +1691,13 @@
       "type": "object"
     },
     "Destination": {
-      "description": "Where a channel's stream is sent on to, remuxed and never decoded.",
+      "description": "One destination as a client sees it. The key never appears: `has_key`\nsays whether there is one.",
       "properties": {
         "enabled": {
           "type": "boolean"
         },
         "error": {
+          "description": "What went wrong last, in words a person can act on.",
           "type": [
             "string",
             "null"
@@ -1706,9 +1707,11 @@
           "type": "boolean"
         },
         "id": {
+          "description": "A slug, unique within its channel: `youtube`, `youtube-2`.",
           "type": "string"
         },
         "kbps": {
+          "description": "What is going out, over the last second.",
           "format": "uint32",
           "minimum": 0,
           "type": "integer"
@@ -1717,27 +1720,30 @@
           "type": "string"
         },
         "platform": {
+          "description": "A platform id from the table: youtube, facebook, twitch, custom, srt.",
           "type": "string"
         },
         "reconnects": {
+          "description": "Connections lost and made again since it was switched on.",
           "format": "uint32",
           "minimum": 0,
           "type": "integer"
         },
         "since_ms": {
+          "description": "Milliseconds since `state` last changed.",
           "format": "uint64",
           "minimum": 0,
           "type": "integer"
         },
         "state": {
-          "description": "off, waiting, connecting, live, reconnecting or failed.",
-          "type": "string"
+          "$ref": "#/$defs/DestinationState"
         },
         "stream": {
-          "description": "Which stream to send; `*` is the first live one.",
+          "description": "Which of the channel's streams to send. `*` is the first live one.",
           "type": "string"
         },
         "uri_host": {
+          "description": "The scheme, host and port, and nothing that could carry a key.",
           "type": "string"
         }
       },
@@ -1755,6 +1761,41 @@
         "reconnects"
       ],
       "type": "object"
+    },
+    "DestinationState": {
+      "description": "Where a destination has got to.",
+      "oneOf": [
+        {
+          "const": "off",
+          "description": "Switched off by the person.",
+          "type": "string"
+        },
+        {
+          "const": "waiting",
+          "description": "Switched on, and waiting for the stream it sends to go live.",
+          "type": "string"
+        },
+        {
+          "const": "connecting",
+          "description": "Dialling the far end for the first time.",
+          "type": "string"
+        },
+        {
+          "const": "live",
+          "description": "Sending.",
+          "type": "string"
+        },
+        {
+          "const": "reconnecting",
+          "description": "Lost the far end and dialling it again on the backoff.",
+          "type": "string"
+        },
+        {
+          "const": "failed",
+          "description": "The far end said no in a way retrying will not fix: the key was\nrefused. `error` says what to change.",
+          "type": "string"
+        }
+      ]
     },
     "DiscoverAnswer": {
       "properties": {
@@ -7740,7 +7781,7 @@
       },
       "rest": {
         "method": "POST",
-        "path": "/api/v1/channels/{id}/destination"
+        "path": "/api/v1/channels/{id}/destination/add"
       },
       "result": {
         "type": "object"
@@ -7759,7 +7800,7 @@
       },
       "rest": {
         "method": "POST",
-        "path": "/api/v1/channels/{id}/destination"
+        "path": "/api/v1/channels/{id}/destination/remove"
       },
       "result": {
         "type": "object"
@@ -7816,7 +7857,7 @@
       },
       "rest": {
         "method": "POST",
-        "path": "/api/v1/channels/key/add"
+        "path": "/api/v1/channels/{id}/key/add"
       },
       "result": {
         "$ref": "#/$defs/KeyAdded"
@@ -7835,7 +7876,7 @@
       },
       "rest": {
         "method": "POST",
-        "path": "/api/v1/channels/key/remove"
+        "path": "/api/v1/channels/{id}/key/remove"
       },
       "result": {
         "$ref": "#/$defs/Channel"
