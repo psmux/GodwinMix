@@ -30,7 +30,7 @@ mod target;
 #[cfg(test)]
 mod fanout;
 #[cfg(test)]
-mod test_gate;
+pub mod test_gate;
 #[cfg(test)]
 mod tests;
 
