@@ -28,3 +28,15 @@ serde_json = { workspace = true }
 # binary and a second supervised process for the mediamtx alternative. The
 # reasoning is written out at the top of src/rtmp.rs.
 rml_rtmp = "0.8.0"
+
+# The restreamer (src/restream/). None of these is new to the build: the
+# protocol crate is under the SDK already, `bytes` and `rml_amf0` are under
+# rml_rtmp, and rustls with the ring provider and the Mozilla roots is what the
+# core's node bridge and reqwest compile. Named here because the client
+# session takes `Bytes`, metadata has to be read out of AMF0, and Facebook
+# takes nothing but RTMPS.
+godwinmix-protocol = { workspace = true }
+bytes = "1.9"
+rml_amf0 = "0.3.0"
+rustls = { workspace = true }
+webpki-roots = "1"

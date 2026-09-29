@@ -1378,15 +1378,16 @@ pub struct ReconnectConfig {
 }
 
 impl ReconnectConfig {
+    /// The numbers live in the protocol crate, beside the platform table, so
+    /// a channel destination the ingest plugin restreams backs off exactly as
+    /// an output on the same platform does.
     pub fn preset(policy: OutputPolicy) -> Self {
-        match policy {
-            OutputPolicy::Own => {
-                Self { initial_delay_ms: 100, max_delay_ms: 2_000, multiplier: 1.6 }
-            }
-            OutputPolicy::Cdn => {
-                Self { initial_delay_ms: 1_000, max_delay_ms: 30_000, multiplier: 2.0 }
-            }
-        }
+        use godwinmix_protocol::destination::RetryPolicy;
+        let r = match policy {
+            OutputPolicy::Own => RetryPolicy::Own.retry(),
+            OutputPolicy::Cdn => RetryPolicy::Cdn.retry(),
+        };
+        Self { initial_delay_ms: r.initial_delay_ms, max_delay_ms: r.max_delay_ms, multiplier: r.multiplier }
     }
 
     /// Delay before attempt number `attempt`, counting from zero.
