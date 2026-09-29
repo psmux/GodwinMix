@@ -2,9 +2,10 @@
 // and where it is being sent on to.
 //
 // Loaded the first time its tab is shown (entry.js is the part the page
-// loads). While it is on screen it asks the core for `channel.*` events and
-// nothing else; the moment it is hidden it gives them back, so a mixer with
-// nobody looking at channels sends nobody anything about them.
+// loads). While it is on screen it asks the core for `channel.*` events, and
+// while something is live it reads `channel.list` every two seconds for the
+// bit rates, which no event carries. The moment it is hidden it stops both,
+// so a mixer with nobody looking at channels measures nothing for anybody.
 
 import { el, clear } from "../../shell/dom.js";
 import { toast } from "../../shell/toast.js";
@@ -20,6 +21,8 @@ import { addChannel } from "./create.js";
 export { addChannel };
 
 const CSS_ID = "gmx-channels-css";
+/** Seconds between two readings of the bit rates while something is live. */
+const RATE_TICKS = 2;
 
 /** The view on screen now, so a channel made from elsewhere lands in it. */
 export let current = null;
@@ -128,7 +131,8 @@ export class ChannelsView {
     this.clock(channels.some(isLive));
   }
 
-  /** Uptime moves every second while something is live. Local only: no call. */
+  /** Uptime moves every second while something is live, and every second
+   * tick the numbers are read again. */
   clock(wanted) {
     if (!wanted) {
       clearInterval(this.timer);
@@ -140,6 +144,22 @@ export class ChannelsView {
 
   tick() {
     for (const card of this.cards.values()) card.tick?.();
+    this.ticks = (this.ticks || 0) + 1;
+    if (this.ticks % RATE_TICKS === 0) this.poll();
+  }
+
+  /** Read the numbers again, quietly: a failure here waits for the next one. */
+  async poll() {
+    if (this.polling || !this.running) return;
+    this.polling = true;
+    try {
+      this.model.load(await this.client.call("channel.list", {}));
+      this.render();
+    } catch {
+      /* the next tick asks again */
+    } finally {
+      this.polling = false;
+    }
   }
 }
 
