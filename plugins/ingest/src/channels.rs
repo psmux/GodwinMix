@@ -108,8 +108,8 @@ impl Table {
         };
         let Some((key, _)) = channel.keys.iter().find(|(_, secret)| same(secret, &offered)) else {
             return Err(refuse(shown, format!(
-                "that key is not one of the channel '{app}''s keys. It may have been taken \
-                 back; copy the current one from the mixer's Channels page."
+                "that key is not one of the keys of the channel '{app}'. It may have been \
+                 taken back; copy the current one from the mixer's Channels page."
             )));
         };
         let stream = if channel.key_in_name { key.clone() } else { name.to_string() };
