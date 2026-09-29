@@ -9,20 +9,29 @@
 //! |---|---|
 //! | `ingest/rtmp` | an RTMP listener written in Rust, remuxed to Matroska |
 //! | `ingest/whip` | a WHIP endpoint, so a browser needs nothing but the URL |
-//! | `ingest/discover` | one RTMP port for many publishers, each reported as a candidate |
+//! | `ingest/discover` | the channel server: one RTMP port, many channels, many streams on each |
 //!
 //! The SRT listener is not here: `srt/source` already is one, and its default
 //! mode is `listener`. Duplicating it would mean two places to fix a bug.
 //! `docs/how-to/receive-a-phone-or-obs-stream.md` says so where a reader looking
 //! for it will be.
 
+mod channels;
+mod codec;
 mod device;
 mod flv;
+mod gate;
+// The restreamer (src/restream/) reads the hub through `subscribe`, so parts
+// of it are public API this binary does not call itself.
+#[allow(dead_code)]
+mod hub;
+mod media_tag;
 mod relay;
 mod remux;
 mod rest;
 mod rtmp;
 mod source;
+mod sps;
 mod whip_in;
 
 use godwinmix_sdk::prelude::*;
@@ -213,20 +222,26 @@ impl Device for Publishers {
         reporter: Reporter,
     ) -> Result<InitializeResult, RpcError> {
         self.settings = device::Settings::from_params(&ready.params);
-        let running = device::Discover::start(&self.settings, Some(reporter)).map_err(internal)?;
+        let table = channels::Table::from_params(&ready.params);
+        let running = device::Discover::start(&self.settings, table, Some(reporter)).map_err(internal)?;
         self.running = Some(running);
         Ok(InitializeResult::default())
     }
 
+    /// The channel table changes live: the core sends it here every time a
+    /// channel or a key does. The port and the interface need the socket
+    /// bound again, which is a reload.
     fn configure(&mut self, params: Value) -> Result<Configure, RpcError> {
+        if let Some(running) = &self.running {
+            running.set_table(channels::Table::from_params(&params));
+        }
         let wanted = device::Settings::from_params(&params);
         if wanted == self.settings {
             return Ok(Configure::applied());
         }
         self.settings = wanted;
         Ok(Configure::restart_required(
-            "the listening port is chosen when the socket is bound. Call plugin.reload \
-             and the device listens on the new one.",
+            "the listening port is chosen when the socket is bound. Call plugin.reload              and the device listens on the new one.",
         ))
     }
 
@@ -239,39 +254,38 @@ impl Device for Publishers {
 
     fn discover(&mut self, _timeout_ms: u64) -> Result<Vec<Candidate>, RpcError> {
         // Nothing to wait for: the listener has been running since initialize
-        // and the table is current, so the timeout is not used.
-        Ok(self
-            .running
-            .as_ref()
-            .map(|r| r.candidates())
-            .unwrap_or_default())
+        // and the hub is current, so the timeout is not used.
+        Ok(self.running.as_ref().map(|r| r.candidates()).unwrap_or_default())
     }
 
     fn call(&mut self, method: &str, params: Value) -> Result<Value, RpcError> {
-        match method {
-            "tool.call" => {
-                let name = params.get("name").and_then(Value::as_str).unwrap_or("");
-                let arguments = params.get("arguments").cloned().unwrap_or(json!({}));
-                let short = name.rsplit('/').next().unwrap_or(name);
-                if short != "add_publishers" {
-                    return Err(RpcError::new(
-                        codes::METHOD_NOT_FOUND,
-                        format!(
-                            "ingest has no tool '{name}'. It has one: add_publishers, \
-                             which makes the sources match the publishers."
-                        ),
-                    ));
-                }
-                let running = self.running.as_ref().ok_or_else(|| {
-                    RpcError::new(codes::WRONG_STATE, "the RTMP listener is not running")
-                })?;
-                let core = rest::Core::from_env(&self.env.rpc, &self.env.token);
-                let result = running.add_publishers(&arguments, core);
-                serde_json::to_value(result)
-                    .map_err(|e| RpcError::new(codes::INTERNAL_ERROR, e.to_string()))
-            }
-            other => Err(no_method("ingest/discover", other, "tool.call")),
+        if method != "tool.call" {
+            return Err(no_method("ingest/discover", method, "tool.call"));
         }
+        let name = params.get("name").and_then(Value::as_str).unwrap_or("");
+        let arguments = params.get("arguments").cloned().unwrap_or(json!({}));
+        let short = name.rsplit('/').next().unwrap_or(name);
+        if !matches!(short, "streams" | "add_publishers") {
+            return Err(RpcError::new(
+                codes::METHOD_NOT_FOUND,
+                format!(
+                    "ingest has no tool '{name}'. It has two: streams, which lists every \
+                     live stream with its codec, size and bit rate, and add_publishers, \
+                     which makes the sources match the publishers."
+                ),
+            ));
+        }
+        let running = self.running.as_ref().ok_or_else(|| {
+            RpcError::new(codes::WRONG_STATE, "the RTMP listener is not running")
+        })?;
+        let result = match short {
+            "streams" => running.streams(),
+            _ => {
+                let core = rest::Core::from_env(&self.env.rpc, &self.env.token);
+                running.add_publishers(&arguments, core)
+            }
+        };
+        serde_json::to_value(result).map_err(|e| RpcError::new(codes::INTERNAL_ERROR, e.to_string()))
     }
 }
 
@@ -374,6 +388,7 @@ mod tests {
             assert!(manifest.provides.iter().any(|p| p.id == id), "no provide '{id}'");
         }
         assert!(manifest.tools.iter().any(|t| t.name == "add_publishers"));
+        assert!(manifest.tools.iter().any(|t| t.name == "streams"));
     }
 
     #[test]

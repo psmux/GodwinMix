@@ -1,0 +1,52 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "streams output",
+  "type": "object",
+  "properties": {
+    "port": {
+      "description": "The RTMP port the listener holds.",
+      "type": "integer"
+    },
+    "relay": {
+      "description": "Where a source on this machine reads a stream: 127.0.0.1 and the same port.",
+      "type": "string"
+    },
+    "streams": {
+      "description": "Every live stream, sorted by channel and name.",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "app": { "description": "The channel's application name.", "type": "string" },
+          "stream": { "description": "The name the encoder published under.", "type": "string" },
+          "state": { "type": "string", "enum": ["live"] },
+          "since_ms": { "description": "When it went live, in milliseconds since 1970.", "type": "integer" },
+          "from": { "description": "The publisher's address.", "type": "string" },
+          "key": { "description": "The id of the key that let it in, or null on the open door.", "type": ["string", "null"] },
+          "video": {
+            "type": ["object", "null"],
+            "properties": {
+              "codec": { "type": "string" },
+              "width": { "type": "integer" },
+              "height": { "type": "integer" },
+              "fps": { "type": "number" },
+              "kbps": { "type": "integer" }
+            }
+          },
+          "audio": {
+            "type": ["object", "null"],
+            "properties": {
+              "codec": { "type": "string" },
+              "channels": { "type": "integer" },
+              "sample_rate": { "type": "integer" },
+              "kbps": { "type": "integer" }
+            }
+          },
+          "readers": { "description": "Mixer sources and restreams reading it.", "type": "integer" },
+          "dropped_gops": { "description": "Whole GOPs lost by readers that fell behind, this session.", "type": "integer" },
+          "bytes": { "description": "Bytes received this session.", "type": "integer" }
+        }
+      }
+    }
+  }
+}
