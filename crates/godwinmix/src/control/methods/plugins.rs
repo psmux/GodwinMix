@@ -1114,7 +1114,7 @@ fn secret_fields_of(installed: &loader::Installed) -> Vec<String> {
 /// `~/.godwinmix/secrets`, beside the plugins themselves. A process global
 /// because `settings_of` is called from a handler that has no place to keep
 /// one, and because there is exactly one of these per machine.
-fn secrets() -> &'static godwinmix_core::secrets::Secrets {
+pub(crate) fn secrets() -> &'static godwinmix_core::secrets::Secrets {
     static STORE: std::sync::OnceLock<godwinmix_core::secrets::Secrets> =
         std::sync::OnceLock::new();
     STORE.get_or_init(|| {

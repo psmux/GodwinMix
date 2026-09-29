@@ -238,6 +238,14 @@ pub fn event_name_and_payload(event: &Event) -> Option<(&'static str, Value)> {
             "media.changed",
             payload(json!({ "name": name, "conversion": conversion })),
         ),
+        Event::ChannelChanged { channel } => {
+            ("channel.changed", payload(json!({ "channel": channel })))
+        }
+        Event::ChannelRemoved { id } => ("channel.removed", payload(json!({ "id": id }))),
+        Event::ChannelRefused { id, stream, from, why } => (
+            "channel.refused",
+            payload(json!({ "id": id, "stream": stream, "from": from, "why": why })),
+        ),
         Event::AudioLevel { .. } | Event::SourceAudioLevel { .. } => return None,
     })
 }

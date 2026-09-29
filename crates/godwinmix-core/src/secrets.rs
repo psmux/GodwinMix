@@ -146,6 +146,18 @@ impl Secrets {
     }
 }
 
+/// A fresh key for somebody to type into an encoder: `len` characters of
+/// lower case letters and digits, with the ones that are easy to misread
+/// (0, o, 1, l) left out. 32 characters of that alphabet carry about 160
+/// bits, which is more than enough to guess at over RTMP.
+pub fn random_key(len: usize) -> Result<String> {
+    const ALPHABET: &[u8] = b"abcdefghijkmnpqrstuvwxyz23456789";
+    let mut bytes = vec![0u8; len];
+    getrandom::fill(&mut bytes).context("the operating system would not give us random bytes")?;
+    // 32 letters, so the low five bits of each byte pick one with no bias.
+    Ok(bytes.iter().map(|b| ALPHABET[(b & 31) as usize] as char).collect())
+}
+
 /// Which fields of a settings schema are secret.
 ///
 /// Walks `properties` one level, which is where a settings schema puts them.

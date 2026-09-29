@@ -17,6 +17,7 @@
 //! be a copy of the other. `run` below is what both call.
 
 pub mod bench;
+pub mod channels;
 pub mod cli;
 pub mod control;
 pub mod ctl;
@@ -877,6 +878,24 @@ pub async fn run() -> Result<()> {
         }).context("creating the default scene")?;
     }
 
+    let state = control::AppState::new(
+        &cfg_for_control,
+        control::Engine {
+            mixer: handle.clone(),
+            multiview,
+            preview,
+            encoder,
+            library,
+            converter,
+            quit: quit.clone(),
+            scenes,
+            plugins: supervisor.clone(),
+        },
+        args.rehearsal,
+    );
+    // After the control plane, because the channel registry it holds is what
+    // hands the RTMP listener its channels and keys: a listener started before
+    // that would take any publisher for the moment until it was told.
     // Every plugin that is not a source: the services, the devices and the
     // transitions, each one instance per plugin, started now and kept up by
     // its own pump thread. A device that finds a publisher adds a source
@@ -893,21 +912,6 @@ pub async fn run() -> Result<()> {
         }
     }
     supervisor.spawn_pump();
-    let state = control::AppState::new(
-        &cfg_for_control,
-        control::Engine {
-            mixer: handle.clone(),
-            multiview,
-            preview,
-            encoder,
-            library,
-            converter,
-            quit: quit.clone(),
-            scenes,
-            plugins: supervisor.clone(),
-        },
-        args.rehearsal,
-    );
     // The hook call site for the daemon's own lifecycle. `session.start` goes
     // out once the control plane is built and before anything is served, so a
     // recorder started by a hook is running before the first take.
