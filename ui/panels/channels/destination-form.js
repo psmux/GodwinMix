@@ -112,7 +112,6 @@ export function editDestination(view, channel, dest) {
   };
   save.onclick = async () => {
     const params = editParams(channel, dest, { label: label.value(), stream: stream ? stream.value() : undefined, key: key && key.value(), server: server && server.value() });
-    if (params.server && p.key && !params.key) return toast({ kind: "warning", text: "Paste the key as well, so the whole address can be rebuilt." });
     if (Object.keys(params).length === 2) return m.close();
     await act(view, m, "channel.destination.set", params, "Save");
   };
