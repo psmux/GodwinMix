@@ -5832,21 +5832,10 @@
         "x-scope": "read"
       }
     },
-    "/api/v1/channels/{id}/destinations": {
+    "/api/v1/channel/destination/add": {
       "post": {
         "description": "JSON-RPC method `channel.destination.add`. Needs the `admin` scope. Accepts `idempotency_key`, honoured for 24 hours.",
         "operationId": "channel.destination.add",
-        "parameters": [
-          {
-            "description": "The id, as listed by the matching list call.",
-            "in": "path",
-            "name": "id",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
         "requestBody": {
           "content": {
             "application/json": {
@@ -5881,21 +5870,10 @@
         "x-scope": "admin"
       }
     },
-    "/api/v1/channels/{id}/destinations/remove": {
+    "/api/v1/channel/destination/remove": {
       "post": {
         "description": "JSON-RPC method `channel.destination.remove`. Needs the `admin` scope. Destructive: accepts `dry_run: true`, and on a token whose policy is `confirm = required` it is refused once with -32020 and a confirm token. Accepts `idempotency_key`, honoured for 24 hours.",
         "operationId": "channel.destination.remove",
-        "parameters": [
-          {
-            "description": "The id, as listed by the matching list call.",
-            "in": "path",
-            "name": "id",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
         "requestBody": {
           "content": {
             "application/json": {
@@ -5930,21 +5908,10 @@
         "x-scope": "admin"
       }
     },
-    "/api/v1/channels/{id}/destinations/set": {
+    "/api/v1/channel/destination/set": {
       "post": {
         "description": "JSON-RPC method `channel.destination.set`. Needs the `admin` scope. Accepts `idempotency_key`, honoured for 24 hours.",
         "operationId": "channel.destination.set",
-        "parameters": [
-          {
-            "description": "The id, as listed by the matching list call.",
-            "in": "path",
-            "name": "id",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
         "requestBody": {
           "content": {
             "application/json": {

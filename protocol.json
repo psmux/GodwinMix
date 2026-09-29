@@ -7102,7 +7102,7 @@
       },
       "rest": {
         "method": "POST",
-        "path": "/api/v1/channels/{id}/destinations"
+        "path": "/api/v1/channel/destination/add"
       },
       "result": {
         "type": "object"
@@ -7121,7 +7121,7 @@
       },
       "rest": {
         "method": "POST",
-        "path": "/api/v1/channels/{id}/destinations/remove"
+        "path": "/api/v1/channel/destination/remove"
       },
       "result": {
         "type": "object"
@@ -7140,7 +7140,7 @@
       },
       "rest": {
         "method": "POST",
-        "path": "/api/v1/channels/{id}/destinations/set"
+        "path": "/api/v1/channel/destination/set"
       },
       "result": {
         "type": "object"

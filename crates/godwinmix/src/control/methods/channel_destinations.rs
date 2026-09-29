@@ -57,8 +57,7 @@ pub fn register(reg: &mut Registry<Call>) {
             }),
         )
         .params(schema_of::<AddDestinationRequest>)
-        .result(any_object)
-        .rest_at("POST", "/api/v1/channels/{id}/destinations"),
+        .result(any_object),
     );
 
     reg.register(
@@ -73,8 +72,7 @@ pub fn register(reg: &mut Registry<Call>) {
             }),
         )
         .params(schema_of::<SetDestinationRequest>)
-        .result(any_object)
-        .rest_at("POST", "/api/v1/channels/{id}/destinations/set"),
+        .result(any_object),
     );
 
     reg.register(
@@ -90,8 +88,7 @@ pub fn register(reg: &mut Registry<Call>) {
         )
         .params(schema_of::<RemoveDestinationRequest>)
         .result(any_object)
-        .destructive()
-        .rest_at("POST", "/api/v1/channels/{id}/destinations/remove"),
+        .destructive(),
     );
 }
 
@@ -163,12 +160,16 @@ mod tests {
     }
 
     #[test]
-    fn the_methods_need_admin_and_have_routes_of_their_own() {
+    fn the_methods_need_admin_and_each_have_a_route() {
         let reg = super::super::registry();
         for name in ["channel.destination.add", "channel.destination.set", "channel.destination.remove"] {
             let m = reg.iter().find(|m| m.name == name).unwrap_or_else(|| panic!("{name}"));
             assert_eq!(m.scope, Scope::Admin, "{name}");
-            assert!(m.rest.as_ref().unwrap().path.starts_with("/api/v1/channels/{id}/destinations"));
+            // Where the transform rule puts them. If `channel` joins the
+            // collections, all three would land on one path and this fails
+            // first: give them `rest_at` routes then.
+            let path = &m.rest.as_ref().unwrap().path;
+            assert!(path.starts_with("/api/v1/channel/destination/"), "{path}");
         }
     }
 }

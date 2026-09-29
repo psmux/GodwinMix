@@ -219,6 +219,9 @@ fn the_table_matches_the_scopes_in_the_protocol_document() {
     assert_eq!(
         destructive,
         vec![
+            // It takes a live stream off a platform, and repeating the call
+            // does not put it back.
+            "channel.destination.remove",
             // Both rewrite the operator's configuration file, as preset.apply does.
             "config.reset",
             "config.set",
