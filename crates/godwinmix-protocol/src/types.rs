@@ -357,6 +357,13 @@ pub enum Event {
     /// A hook did not get its say: it timed out, or the thing behind it could
     /// not be reached. The take went ahead anyway. See 03 section 8.
     HookBlocked { hook: String, plugin: String, reason: String },
+    /// A channel changed: made, renamed, a key made or taken back, a stream
+    /// went live, learned its codecs or left.
+    ChannelChanged { channel: Box<crate::channels::Channel> },
+    /// A channel was removed.
+    ChannelRemoved { id: String },
+    /// A publisher was turned away, with the reason it was given.
+    ChannelRefused { id: String, stream: String, from: String, why: String },
 }
 
 /// What a surface starts with: the layout, the theme and the gallery mode.
