@@ -18,6 +18,13 @@
 
 mod device;
 mod flv;
+// The type the channel hub and the restreamer share, and the restreamer. The
+// hub that feeds it is built in a parallel branch; until they meet, only the
+// tests call in, so nothing here is dead code on purpose.
+#[allow(dead_code)]
+mod media_tag;
+#[allow(dead_code)]
+mod restream;
 mod relay;
 mod remux;
 mod rest;

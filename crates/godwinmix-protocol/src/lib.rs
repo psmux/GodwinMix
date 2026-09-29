@@ -34,6 +34,7 @@
 //! See `README.md` beside this file for how another module adds a method.
 
 pub mod action;
+pub mod destination;
 pub mod error;
 pub mod idempotency;
 pub mod mcp_tools;
