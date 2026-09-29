@@ -12,7 +12,7 @@ use godwinmix_protocol::method::Registry;
 use godwinmix_protocol::scope::Token;
 use godwinmix_protocol::types::Event;
 use serde_json::{json, Value};
-use std::path::PathBuf;
+use std::path::Path;
 use std::sync::Arc;
 
 const FILE: &str = "\
@@ -57,7 +57,7 @@ fn app(cfg: &Config, handle: &MixerHandle, mix: &Mixer) -> AppState {
 
 /// A core over the config at `path`. The mixer is built but not started:
 /// channels need nothing from a running pipeline.
-fn start(path: &PathBuf) -> Core {
+fn start(path: &Path) -> Core {
     let _ = gstreamer::init();
     let cfg = Config::load(path).expect("the test config loads");
     let (mix, handle, _cmd_rx, _bus_rx) = Mixer::build(cfg.clone()).expect("building");
