@@ -230,7 +230,7 @@ impl<C> Registry<C> {
 /// Collection nouns: `source.list` is `GET /api/v1/sources`. Everything else
 /// is a singleton, where `program.take` is `POST /api/v1/program/take`.
 const COLLECTIONS: &[&str] =
-    &["source", "output", "filter", "media", "plugin", "node", "scene", "codec"];
+    &["source", "output", "filter", "media", "plugin", "node", "scene", "codec", "channel"];
 
 /// Methods on a collection that are about the collection and not about one of
 /// its members, so they carry no `{id}`.
@@ -258,6 +258,7 @@ const COLLECTION_LEVEL: &[&str] = &[
     "scene.apply_graphic",
     "scene.validate",
     "scene.export",
+    "channel.key",
 ];
 
 /// True when a method is about the collection rather than one of its members.

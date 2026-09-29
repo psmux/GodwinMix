@@ -247,6 +247,56 @@ fn state_events() -> Vec<EventDef> {
                 }))
             },
         },
+        EventDef {
+            name: "channel.changed",
+            since: "1",
+            summary: "A channel changed: made, renamed, switched on or off, a key made or \
+                      taken back, a stream went live, learned its codecs or left. Carries \
+                      the whole channel, keys as hints only.",
+            ext: None,
+            legacy: None,
+            payload: |g| {
+                json!({
+                    "type": "object",
+                    "properties": { "channel": schema_of::<crate::channels::Channel>(g) }
+                })
+            },
+        },
+        EventDef {
+            name: "channel.removed",
+            since: "1",
+            summary: "A channel was removed. Its publishers were turned away and its keys \
+                      forgotten.",
+            ext: None,
+            legacy: None,
+            payload: |_| {
+                inline(json!({
+                    "type": "object",
+                    "properties": { "id": { "type": "string" } }
+                }))
+            },
+        },
+        EventDef {
+            name: "channel.refused",
+            since: "1",
+            summary: "A publisher was turned away: no key, a wrong key, a channel switched \
+                      off, or a name somebody else is already publishing. why is the \
+                      sentence the encoder was sent. A key is never in it.",
+            ext: None,
+            legacy: None,
+            payload: |_| {
+                inline(json!({
+                    "type": "object",
+                    "properties": {
+                        "id": { "type": "string", "description": "The channel, or the application name asked for when no channel has it." },
+                        "stream": { "type": "string", "description": "The stream name asked for. Empty when the name was the key." },
+                        "from": { "type": "string", "description": "The publisher's address." },
+                        "why": { "type": "string" }
+                    },
+                    "required": ["id", "stream", "from", "why"]
+                }))
+            },
+        },
     ]
 }
 

@@ -957,6 +957,347 @@
       ],
       "type": "object"
     },
+    "Channel": {
+      "description": "A named place encoders publish to, on the mixer's own RTMP port.",
+      "properties": {
+        "app": {
+          "description": "The RTMP application name: the path segment after the port.",
+          "type": "string"
+        },
+        "auto_source": {
+          "description": "A stream that goes live becomes a mixer source by itself.",
+          "type": "boolean"
+        },
+        "destinations": {
+          "default": [],
+          "description": "Where the channel's streams are sent on to. Filled in by\n`channel.destination.*`.",
+          "items": {
+            "$ref": "#/$defs/Destination"
+          },
+          "type": "array"
+        },
+        "enabled": {
+          "description": "Off turns every publisher away with a sentence saying so.",
+          "type": "boolean"
+        },
+        "id": {
+          "description": "A slug, and never changes once the channel exists.",
+          "type": "string"
+        },
+        "key_mode": {
+          "$ref": "#/$defs/KeyMode"
+        },
+        "keys": {
+          "description": "The keys, write only: a hint of each and never the key.",
+          "items": {
+            "$ref": "#/$defs/ChannelKey"
+          },
+          "type": "array"
+        },
+        "name": {
+          "description": "What a person calls it.",
+          "type": "string"
+        },
+        "publish": {
+          "$ref": "#/$defs/ChannelPublish"
+        },
+        "streams": {
+          "description": "Live streams, and streams that left while a scene still holds their\nsource.",
+          "items": {
+            "$ref": "#/$defs/ChannelStream"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "app",
+        "enabled",
+        "auto_source",
+        "key_mode",
+        "keys",
+        "publish",
+        "streams"
+      ],
+      "type": "object"
+    },
+    "ChannelAddRequest": {
+      "description": "`channel.add`.",
+      "properties": {
+        "app": {
+          "description": "Defaults to a slug of the name.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "auto_source": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "key_mode": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/KeyMode"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "name": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "type": "object"
+    },
+    "ChannelAdded": {
+      "description": "What `channel.add` answers: the channel and its first key.",
+      "properties": {
+        "channel": {
+          "$ref": "#/$defs/Channel"
+        },
+        "key": {
+          "$ref": "#/$defs/NewKey"
+        }
+      },
+      "required": [
+        "channel",
+        "key"
+      ],
+      "type": "object"
+    },
+    "ChannelKey": {
+      "description": "One key, as a list shows it.",
+      "properties": {
+        "created": {
+          "description": "When it was made, RFC 3339 in UTC.",
+          "type": "string"
+        },
+        "hint": {
+          "description": "The last four characters, so a person can tell two keys apart.",
+          "type": "string"
+        },
+        "id": {
+          "type": "string"
+        },
+        "label": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "label",
+        "created",
+        "hint"
+      ],
+      "type": "object"
+    },
+    "ChannelKeyAddRequest": {
+      "description": "`channel.key.add`.",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "label": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "type": "object"
+    },
+    "ChannelKeyRemoveRequest": {
+      "description": "`channel.key.remove`.",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "key": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "key"
+      ],
+      "type": "object"
+    },
+    "ChannelList": {
+      "description": "`channel.list`.",
+      "properties": {
+        "channels": {
+          "items": {
+            "$ref": "#/$defs/Channel"
+          },
+          "type": "array"
+        },
+        "rtmp": {
+          "$ref": "#/$defs/RtmpInfo"
+        }
+      },
+      "required": [
+        "channels",
+        "rtmp"
+      ],
+      "type": "object"
+    },
+    "ChannelPublish": {
+      "description": "Where an encoder is pointed.",
+      "properties": {
+        "example": {
+          "description": "`<server>/main?psk=<key>`, with `<key>` left for the person to fill.",
+          "type": "string"
+        },
+        "server": {
+          "description": "`rtmp://<first address>:<port>/<app>`.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "server",
+        "example"
+      ],
+      "type": "object"
+    },
+    "ChannelRemoved": {
+      "description": "What `channel.remove` answers.",
+      "properties": {
+        "removed": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "removed"
+      ],
+      "type": "object"
+    },
+    "ChannelSetRequest": {
+      "description": "`channel.set`: only what is named moves.",
+      "properties": {
+        "app": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "auto_source": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "enabled": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "id": {
+          "type": "string"
+        },
+        "key_mode": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/KeyMode"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "name": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "type": "object"
+    },
+    "ChannelStream": {
+      "description": "One stream on a channel.",
+      "properties": {
+        "audio": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/StreamAudio"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "dropped_gops": {
+          "default": 0,
+          "description": "Whole GOPs readers of it have lost by falling behind, this session.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "from": {
+          "description": "The publisher's address.",
+          "type": "string"
+        },
+        "key": {
+          "description": "The id of the key that let it in.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "name": {
+          "type": "string"
+        },
+        "since_ms": {
+          "description": "When it last went live, in milliseconds since 1970.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "source": {
+          "description": "The mixer source it feeds, when it feeds one.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "state": {
+          "description": "`live`, or `idle` for one that left while a scene holds its source.",
+          "type": "string"
+        },
+        "video": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/StreamVideo"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "name",
+        "state",
+        "since_ms",
+        "from"
+      ],
+      "type": "object"
+    },
     "ConfigChanged": {
       "description": "One key this call changed, and when the change takes effect.",
       "properties": {
@@ -1346,6 +1687,72 @@
         "top",
         "right",
         "bottom"
+      ],
+      "type": "object"
+    },
+    "Destination": {
+      "description": "Where a channel's stream is sent on to, remuxed and never decoded.",
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "error": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "has_key": {
+          "type": "boolean"
+        },
+        "id": {
+          "type": "string"
+        },
+        "kbps": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "label": {
+          "type": "string"
+        },
+        "platform": {
+          "type": "string"
+        },
+        "reconnects": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "since_ms": {
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "state": {
+          "description": "off, waiting, connecting, live, reconnecting or failed.",
+          "type": "string"
+        },
+        "stream": {
+          "description": "Which stream to send; `*` is the first live one.",
+          "type": "string"
+        },
+        "uri_host": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "platform",
+        "label",
+        "uri_host",
+        "has_key",
+        "stream",
+        "enabled",
+        "state",
+        "since_ms",
+        "kbps",
+        "reconnects"
       ],
       "type": "object"
     },
@@ -2774,6 +3181,33 @@
       ],
       "type": "object"
     },
+    "KeyAdded": {
+      "description": "What `channel.key.add` answers.",
+      "properties": {
+        "key": {
+          "$ref": "#/$defs/NewKey"
+        }
+      },
+      "required": [
+        "key"
+      ],
+      "type": "object"
+    },
+    "KeyMode": {
+      "description": "How a publisher gives its key.",
+      "oneOf": [
+        {
+          "const": "query",
+          "description": "On the stream name: `main?psk=<key>`, or `key`, `token`, `Token`.",
+          "type": "string"
+        },
+        {
+          "const": "stream",
+          "description": "The stream name is the key, for an encoder with one box to type in.",
+          "type": "string"
+        }
+      ]
+    },
     "Layout": {
       "description": "A scene's geometry, for copying onto another one.",
       "properties": {
@@ -3399,6 +3833,27 @@
       },
       "required": [
         "name"
+      ],
+      "type": "object"
+    },
+    "NewKey": {
+      "description": "A key as it is made: the only time its secret is ever sent.",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "label": {
+          "type": "string"
+        },
+        "secret": {
+          "description": "Shown once. Nothing reads it back.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "label",
+        "secret"
       ],
       "type": "object"
     },
@@ -4697,6 +5152,41 @@
       ],
       "type": "object"
     },
+    "RtmpInfo": {
+      "description": "The RTMP port every channel shares.",
+      "properties": {
+        "listening": {
+          "description": "Whether the listener is running. False until the ingest plugin is\ninstalled and enabled.",
+          "type": "boolean"
+        },
+        "port": {
+          "format": "uint16",
+          "maximum": 65535,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "problem": {
+          "description": "Why not, and what to do, when it is not.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "urls": {
+          "description": "`rtmp://<address>:<port>` for each address this machine has.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "port",
+        "urls",
+        "listening"
+      ],
+      "type": "object"
+    },
     "SaveRequest": {
       "properties": {
         "name": {
@@ -5616,6 +6106,69 @@
       },
       "required": [
         "instances"
+      ],
+      "type": "object"
+    },
+    "StreamAudio": {
+      "properties": {
+        "channels": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "codec": {
+          "type": "string"
+        },
+        "kbps": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "sample_rate": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "codec",
+        "channels",
+        "sample_rate",
+        "kbps"
+      ],
+      "type": "object"
+    },
+    "StreamVideo": {
+      "properties": {
+        "codec": {
+          "type": "string"
+        },
+        "fps": {
+          "format": "double",
+          "type": "number"
+        },
+        "height": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "kbps": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "width": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "codec",
+        "width",
+        "height",
+        "fps",
+        "kbps"
       ],
       "type": "object"
     },
@@ -6589,6 +7142,72 @@
       "summary": "A file in the library was uploaded, deleted, or its conversion moved on."
     },
     {
+      "ext": null,
+      "legacy": null,
+      "name": "event/channel.changed",
+      "pattern": "channel.changed",
+      "payload": {
+        "properties": {
+          "channel": {
+            "$ref": "#/$defs/Channel"
+          }
+        },
+        "type": "object"
+      },
+      "since": "1",
+      "summary": "A channel changed: made, renamed, switched on or off, a key made or taken back, a stream went live, learned its codecs or left. Carries the whole channel, keys as hints only."
+    },
+    {
+      "ext": null,
+      "legacy": null,
+      "name": "event/channel.removed",
+      "pattern": "channel.removed",
+      "payload": {
+        "properties": {
+          "id": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "since": "1",
+      "summary": "A channel was removed. Its publishers were turned away and its keys forgotten."
+    },
+    {
+      "ext": null,
+      "legacy": null,
+      "name": "event/channel.refused",
+      "pattern": "channel.refused",
+      "payload": {
+        "properties": {
+          "from": {
+            "description": "The publisher's address.",
+            "type": "string"
+          },
+          "id": {
+            "description": "The channel, or the application name asked for when no channel has it.",
+            "type": "string"
+          },
+          "stream": {
+            "description": "The stream name asked for. Empty when the name was the key.",
+            "type": "string"
+          },
+          "why": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "stream",
+          "from",
+          "why"
+        ],
+        "type": "object"
+      },
+      "since": "1",
+      "summary": "A publisher was turned away: no key, a wrong key, a channel switched off, or a name somebody else is already publishing. why is the sentence the encoder was sent. A key is never in it."
+    },
+    {
       "ext": "meters",
       "legacy": "audio_level, source_audio_level",
       "name": "event/meters",
@@ -7094,6 +7713,25 @@
     },
     {
       "destructive": false,
+      "idempotent": false,
+      "mutating": true,
+      "name": "channel.add",
+      "params": {
+        "$ref": "#/$defs/ChannelAddRequest"
+      },
+      "rest": {
+        "method": "POST",
+        "path": "/api/v1/channels"
+      },
+      "result": {
+        "$ref": "#/$defs/ChannelAdded"
+      },
+      "scope": "admin",
+      "since": "1",
+      "summary": "Make a channel and its first key. The key is in this answer and never again."
+    },
+    {
+      "destructive": false,
       "idempotent": true,
       "mutating": true,
       "name": "channel.destination.add",
@@ -7102,7 +7740,7 @@
       },
       "rest": {
         "method": "POST",
-        "path": "/api/v1/channel/destination/add"
+        "path": "/api/v1/channels/{id}/destination"
       },
       "result": {
         "type": "object"
@@ -7121,7 +7759,7 @@
       },
       "rest": {
         "method": "POST",
-        "path": "/api/v1/channel/destination/remove"
+        "path": "/api/v1/channels/{id}/destination"
       },
       "result": {
         "type": "object"
@@ -7140,7 +7778,7 @@
       },
       "rest": {
         "method": "POST",
-        "path": "/api/v1/channel/destination/set"
+        "path": "/api/v1/channels/{id}/destination"
       },
       "result": {
         "type": "object"
@@ -7148,6 +7786,129 @@
       "scope": "admin",
       "since": "1",
       "summary": "Change one of a channel's destinations, naming only what moves: a new key, another server, which stream it sends, on or off. A key left out is kept."
+    },
+    {
+      "destructive": false,
+      "idempotent": true,
+      "mutating": false,
+      "name": "channel.get",
+      "params": {
+        "$ref": "#/$defs/IdRequest"
+      },
+      "rest": {
+        "method": "GET",
+        "path": "/api/v1/channels/{id}"
+      },
+      "result": {
+        "$ref": "#/$defs/Channel"
+      },
+      "scope": "read",
+      "since": "1",
+      "summary": "One channel."
+    },
+    {
+      "destructive": false,
+      "idempotent": false,
+      "mutating": true,
+      "name": "channel.key.add",
+      "params": {
+        "$ref": "#/$defs/ChannelKeyAddRequest"
+      },
+      "rest": {
+        "method": "POST",
+        "path": "/api/v1/channels/key/add"
+      },
+      "result": {
+        "$ref": "#/$defs/KeyAdded"
+      },
+      "scope": "admin",
+      "since": "1",
+      "summary": "Make another key for a channel, to give to one more person or encoder. The key is in this answer and never again."
+    },
+    {
+      "destructive": true,
+      "idempotent": true,
+      "mutating": true,
+      "name": "channel.key.remove",
+      "params": {
+        "$ref": "#/$defs/ChannelKeyRemoveRequest"
+      },
+      "rest": {
+        "method": "POST",
+        "path": "/api/v1/channels/key/remove"
+      },
+      "result": {
+        "$ref": "#/$defs/Channel"
+      },
+      "scope": "admin",
+      "since": "1",
+      "summary": "Take one key back. A publisher on air with it is cut off and the next one is turned away; the other keys are untouched."
+    },
+    {
+      "destructive": false,
+      "idempotent": true,
+      "mcp": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "profile": "search",
+        "readOnlyHint": true,
+        "tool": "list_channels"
+      },
+      "mutating": false,
+      "name": "channel.list",
+      "params": {
+        "additionalProperties": false,
+        "properties": {},
+        "type": "object"
+      },
+      "rest": {
+        "method": "GET",
+        "path": "/api/v1/channels"
+      },
+      "result": {
+        "$ref": "#/$defs/ChannelList"
+      },
+      "scope": "read",
+      "since": "1",
+      "summary": "Every RTMP channel with its keys (as hints), the address to publish to, and what is live on it, beside the port they all share."
+    },
+    {
+      "destructive": true,
+      "idempotent": true,
+      "mutating": true,
+      "name": "channel.remove",
+      "params": {
+        "$ref": "#/$defs/IdRequest"
+      },
+      "rest": {
+        "method": "DELETE",
+        "path": "/api/v1/channels/{id}"
+      },
+      "result": {
+        "$ref": "#/$defs/ChannelRemoved"
+      },
+      "scope": "admin",
+      "since": "1",
+      "summary": "Remove a channel and forget its keys. Sources it made that no scene holds go with it."
+    },
+    {
+      "destructive": false,
+      "idempotent": true,
+      "mutating": true,
+      "name": "channel.set",
+      "params": {
+        "$ref": "#/$defs/ChannelSetRequest"
+      },
+      "rest": {
+        "method": "POST",
+        "path": "/api/v1/channels/{id}/set"
+      },
+      "result": {
+        "$ref": "#/$defs/Channel"
+      },
+      "scope": "admin",
+      "since": "1",
+      "summary": "Rename a channel, switch it on or off, or change its application name, whether its streams become sources, or how its key is given. Only what is named moves."
     },
     {
       "destructive": false,

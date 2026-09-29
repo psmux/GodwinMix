@@ -281,6 +281,106 @@ class CellAssignment(TypedDict, total=False):
     x: int
     y: int
 
+class Channel(TypedDict, total=False):
+    """A named place encoders publish to, on the mixer's own RTMP port."""
+
+    app: str
+    # The RTMP application name: the path segment after the port.
+    auto_source: bool
+    # A stream that goes live becomes a mixer source by itself.
+    destinations: List[Destination]
+    # Where the channel's streams are sent on to. Filled in by `channel.destination.*`.
+    enabled: bool
+    # Off turns every publisher away with a sentence saying so.
+    id: str
+    # A slug, and never changes once the channel exists.
+    key_mode: KeyMode
+    keys: List[ChannelKey]
+    # The keys, write only: a hint of each and never the key.
+    name: str
+    # What a person calls it.
+    publish: ChannelPublish
+    streams: List[ChannelStream]
+    # Live streams, and streams that left while a scene still holds their source.
+
+class ChannelAddRequest(TypedDict, total=False):
+    """`channel.add`."""
+
+    app: Optional[str]
+    # Defaults to a slug of the name.
+    auto_source: Optional[bool]
+    key_mode: Union[KeyMode, None]
+    name: str
+
+class ChannelAdded(TypedDict, total=False):
+    """What `channel.add` answers: the channel and its first key."""
+
+    channel: Channel
+    key: NewKey
+
+class ChannelKey(TypedDict, total=False):
+    """One key, as a list shows it."""
+
+    created: str
+    # When it was made, RFC 3339 in UTC.
+    hint: str
+    # The last four characters, so a person can tell two keys apart.
+    id: str
+    label: str
+
+class ChannelKeyAddRequest(TypedDict, total=False):
+    """`channel.key.add`."""
+
+    id: str
+    label: Optional[str]
+
+class ChannelKeyRemoveRequest(TypedDict, total=False):
+    """`channel.key.remove`."""
+
+    id: str
+    key: str
+
+class ChannelList(TypedDict, total=False):
+    """`channel.list`."""
+
+    channels: List[Channel]
+    rtmp: RtmpInfo
+
+class ChannelPublish(TypedDict, total=False):
+    """Where an encoder is pointed."""
+
+    example: str
+    # `<server>/main?psk=<key>`, with `<key>` left for the person to fill.
+    server: str
+    # `rtmp://<first address>:<port>/<app>`.
+
+class ChannelRemoved(TypedDict, total=False):
+    """What `channel.remove` answers."""
+
+    removed: str
+
+class ChannelSetRequest(TypedDict, total=False):
+    """`channel.set`: only what is named moves."""
+
+    app: Optional[str]
+    auto_source: Optional[bool]
+    enabled: Optional[bool]
+    id: str
+    key_mode: Union[KeyMode, None]
+    name: Optional[str]
+
+ChannelStream = TypedDict("ChannelStream", {
+    "audio": Union[StreamAudio, None],
+    "dropped_gops": int,
+    "from": str,
+    "key": Optional[str],
+    "name": str,
+    "since_ms": int,
+    "source": Optional[str],
+    "state": str,
+    "video": Union[StreamVideo, None],
+}, total=False)
+
 class ConfigChanged(TypedDict, total=False):
     """One key this call changed, and when the change takes effect."""
 
@@ -397,6 +497,24 @@ class Crop(TypedDict, total=False):
     left: float
     right: float
     top: float
+
+class Destination(TypedDict, total=False):
+    """Where a channel's stream is sent on to, remuxed and never decoded."""
+
+    enabled: bool
+    error: Optional[str]
+    has_key: bool
+    id: str
+    kbps: int
+    label: str
+    platform: str
+    reconnects: int
+    since_ms: int
+    state: str
+    # off, waiting, connecting, live, reconnecting or failed.
+    stream: str
+    # Which stream to send; `*` is the first live one.
+    uri_host: str
 
 class DiscoverAnswer(TypedDict, total=False):
     found: List[Found]
@@ -809,6 +927,11 @@ class ItemsRequest(TypedDict, total=False):
     to: Optional[str]
     # `match_size`: the item to match.
 
+class KeyAdded(TypedDict, total=False):
+    """What `channel.key.add` answers."""
+
+    key: NewKey
+
 class Layout(TypedDict, total=False):
     """A scene's geometry, for copying onto another one."""
 
@@ -982,6 +1105,14 @@ class NameRequest(TypedDict, total=False):
 
     name: str
     # File name as it appears in the media listing. The REST layer puts it in the path, where the transform rule calls it `id`, so both spellings are read.
+
+class NewKey(TypedDict, total=False):
+    """A key as it is made: the only time its secret is ever sent."""
+
+    id: str
+    label: str
+    secret: str
+    # Shown once. Nothing reads it back.
 
 class NodeInstance(TypedDict, total=False):
     detail: Optional[str]
@@ -1354,6 +1485,17 @@ class Resync(TypedDict, total=False):
     from_seq: int
     # The last sequence number the client is known to have. Everything after it was dropped; re-subscribe for a fresh snapshot.
 
+class RtmpInfo(TypedDict, total=False):
+    """The RTMP port every channel shares."""
+
+    listening: bool
+    # Whether the listener is running. False until the ingest plugin is installed and enabled.
+    port: int
+    problem: Optional[str]
+    # Why not, and what to do, when it is not.
+    urls: List[str]
+    # `rtmp://<address>:<port>` for each address this machine has.
+
 class SaveRequest(TypedDict, total=False):
     name: str
     # The new preset's name. A slug: lower case letters, digits and hyphens.
@@ -1603,6 +1745,19 @@ class SourceStatus(TypedDict, total=False):
 class StatsListing(TypedDict, total=False):
     instances: List[InstanceRecord]
 
+class StreamAudio(TypedDict, total=False):
+    channels: int
+    codec: str
+    kbps: int
+    sample_rate: int
+
+class StreamVideo(TypedDict, total=False):
+    codec: str
+    fps: float
+    height: int
+    kbps: int
+    width: int
+
 class SubscribeRequest(TypedDict, total=False):
     """`core.subscribe`: which events, and which expensive streams."""
 
@@ -1823,6 +1978,19 @@ class MediaChangedEvent(TypedDict, total=False):
     conversion: Any
     name: str
 
+class ChannelChangedEvent(TypedDict, total=False):
+    channel: Channel
+
+class ChannelRemovedEvent(TypedDict, total=False):
+    id: str
+
+ChannelRefusedEvent = TypedDict("ChannelRefusedEvent", {
+    "from": str,
+    "id": str,
+    "stream": str,
+    "why": str,
+}, total=False)
+
 class AlertEvent(TypedDict, total=False):
     action: ErrorAction
     message: str
@@ -1875,6 +2043,9 @@ FlatContent = Dict[str, Any]
 # A UUID in the hyphenated form. Minted ids are version 7 (time ordered); ids derived from a layout are version 8.
 Id = str
 
+# How a publisher gives its key.
+KeyMode = Literal['query', 'stream']
+
 # `ext.multiview`. Accepts `false` to mean off, or an object.
 MultiviewExt = Union[bool, Dict[str, Any]]
 
@@ -1910,9 +2081,16 @@ METHODS = (
     {"name": "adbreak.end", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/adbreak/end"), "summary": 'Cut a running ad short, or disarm one that is scheduled.'},
     {"name": "adbreak.start", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/adbreak/start"), "summary": 'Interrupt the programme with a clip, then rejoin live when it ends.'},
     {"name": "agent.state", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/agent/state"), "summary": "The compact document written for agents: the programme, each source's state and a motion score saying how much its picture is changing."},
-    {"name": "channel.destination.add", "scope": "admin", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/channel/destination/add"), "summary": "Send a channel's stream on to YouTube, Facebook, Twitch, an RTMP server or an SRT receiver as it arrives. Nothing is decoded or encoded. The key is write only."},
-    {"name": "channel.destination.remove", "scope": "admin", "mutating": True, "destructive": True, "rest": ("POST", "/api/v1/channel/destination/remove"), "summary": "Stop sending a channel's stream to one destination and forget it. The publisher and the other destinations are not touched."},
-    {"name": "channel.destination.set", "scope": "admin", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/channel/destination/set"), "summary": "Change one of a channel's destinations, naming only what moves: a new key, another server, which stream it sends, on or off. A key left out is kept."},
+    {"name": "channel.add", "scope": "admin", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/channels"), "summary": 'Make a channel and its first key. The key is in this answer and never again.'},
+    {"name": "channel.destination.add", "scope": "admin", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/channels/{id}/destination"), "summary": "Send a channel's stream on to YouTube, Facebook, Twitch, an RTMP server or an SRT receiver as it arrives. Nothing is decoded or encoded. The key is write only."},
+    {"name": "channel.destination.remove", "scope": "admin", "mutating": True, "destructive": True, "rest": ("POST", "/api/v1/channels/{id}/destination"), "summary": "Stop sending a channel's stream to one destination and forget it. The publisher and the other destinations are not touched."},
+    {"name": "channel.destination.set", "scope": "admin", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/channels/{id}/destination"), "summary": "Change one of a channel's destinations, naming only what moves: a new key, another server, which stream it sends, on or off. A key left out is kept."},
+    {"name": "channel.get", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/channels/{id}"), "summary": 'One channel.'},
+    {"name": "channel.key.add", "scope": "admin", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/channels/key/add"), "summary": 'Make another key for a channel, to give to one more person or encoder. The key is in this answer and never again.'},
+    {"name": "channel.key.remove", "scope": "admin", "mutating": True, "destructive": True, "rest": ("POST", "/api/v1/channels/key/remove"), "summary": 'Take one key back. A publisher on air with it is cut off and the next one is turned away; the other keys are untouched.'},
+    {"name": "channel.list", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/channels"), "summary": 'Every RTMP channel with its keys (as hints), the address to publish to, and what is live on it, beside the port they all share.'},
+    {"name": "channel.remove", "scope": "admin", "mutating": True, "destructive": True, "rest": ("DELETE", "/api/v1/channels/{id}"), "summary": 'Remove a channel and forget its keys. Sources it made that no scene holds go with it.'},
+    {"name": "channel.set", "scope": "admin", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/channels/{id}/set"), "summary": 'Rename a channel, switch it on or off, or change its application name, whether its streams become sources, or how its key is given. Only what is named moves.'},
     {"name": "codec.list", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/codecs"), "summary": 'Every codec and element in the catalogue, which of them this machine actually has, and what it would pick.'},
     {"name": "config.get", "scope": "admin", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/config"), "summary": "The mixer's settings: each key's value in the config file, its default, when a change to it takes effect, and which keys are waiting for a restart. Secrets say only whether one is set."},
     {"name": "config.reset", "scope": "admin", "mutating": True, "destructive": True, "rest": ("POST", "/api/v1/config/reset"), "summary": 'Put settings back to their defaults by taking them out of the config file. Answers like config.set.'},
@@ -2057,6 +2235,9 @@ EVENT_NAMES = (
     "ui.changed",
     "hook.blocked",
     "media.changed",
+    "channel.changed",
+    "channel.removed",
+    "channel.refused",
     "meters",
     "tally",
     "alert",
@@ -2127,6 +2308,25 @@ class GeneratedMethods:
             params["response_format"] = response_format
         return await self._call("agent.state", params)
 
+    async def channel_add(
+        self,
+        name: str,
+        *,
+        app: Optional[str] = None,
+        auto_source: Optional[bool] = None,
+        key_mode: Optional[Union[KeyMode, None]] = None,
+    ) -> ChannelAdded:
+        """Make a channel and its first key. The key is in this answer and never again."""
+        params: Dict[str, Any] = {}
+        params["name"] = name
+        if app is not None:
+            params["app"] = app
+        if auto_source is not None:
+            params["auto_source"] = auto_source
+        if key_mode is not None:
+            params["key_mode"] = key_mode
+        return await self._call("channel.add", params)
+
     async def channel_destination_add(
         self,
         id: str,
@@ -2191,6 +2391,80 @@ class GeneratedMethods:
         if stream is not None:
             params["stream"] = stream
         return await self._call("channel.destination.set", params)
+
+    async def channel_get(
+        self,
+        id: str,
+    ) -> Channel:
+        """One channel."""
+        params: Dict[str, Any] = {}
+        params["id"] = id
+        return await self._call("channel.get", params)
+
+    async def channel_key_add(
+        self,
+        id: str,
+        *,
+        label: Optional[str] = None,
+    ) -> KeyAdded:
+        """Make another key for a channel, to give to one more person or encoder. The key is in this answer and never again."""
+        params: Dict[str, Any] = {}
+        params["id"] = id
+        if label is not None:
+            params["label"] = label
+        return await self._call("channel.key.add", params)
+
+    async def channel_key_remove(
+        self,
+        id: str,
+        key: str,
+    ) -> Channel:
+        """Take one key back. A publisher on air with it is cut off and the next one is turned away; the other keys are untouched."""
+        params: Dict[str, Any] = {}
+        params["id"] = id
+        params["key"] = key
+        return await self._call("channel.key.remove", params)
+
+    async def channel_list(
+        self,
+    ) -> ChannelList:
+        """Every RTMP channel with its keys (as hints), the address to publish to, and what is live on it, beside the port they all share."""
+        params: Dict[str, Any] = {}
+        return await self._call("channel.list", params)
+
+    async def channel_remove(
+        self,
+        id: str,
+    ) -> ChannelRemoved:
+        """Remove a channel and forget its keys. Sources it made that no scene holds go with it."""
+        params: Dict[str, Any] = {}
+        params["id"] = id
+        return await self._call("channel.remove", params)
+
+    async def channel_set(
+        self,
+        id: str,
+        *,
+        app: Optional[str] = None,
+        auto_source: Optional[bool] = None,
+        enabled: Optional[bool] = None,
+        key_mode: Optional[Union[KeyMode, None]] = None,
+        name: Optional[str] = None,
+    ) -> Channel:
+        """Rename a channel, switch it on or off, or change its application name, whether its streams become sources, or how its key is given. Only what is named moves."""
+        params: Dict[str, Any] = {}
+        params["id"] = id
+        if app is not None:
+            params["app"] = app
+        if auto_source is not None:
+            params["auto_source"] = auto_source
+        if enabled is not None:
+            params["enabled"] = enabled
+        if key_mode is not None:
+            params["key_mode"] = key_mode
+        if name is not None:
+            params["name"] = name
+        return await self._call("channel.set", params)
 
     async def codec_list(
         self,

@@ -23,15 +23,12 @@ The RTMP server itself is written in Rust, so nothing has to be installed beside
 the mixer. GStreamer is still needed for the remux that hands the stream to the
 core, and every element it uses ships with GStreamer itself.
 
-## Add the source
+## Nothing to add
 
-```sh
-gmx ctl source add phone --type ingest/rtmp
-```
-
-That is the whole configuration. It listens on TCP port 1935, the port every
-encoder offers by default, and takes the first publisher who arrives whatever
-name and key they use.
+That is the whole configuration. With the plugin installed the mixer listens
+on TCP port 1935, the port every encoder offers by default, and while it has
+no channels it takes whoever publishes, whatever name they use, and makes each
+of them a source.
 
 ## Tell them where to send
 
@@ -54,8 +51,8 @@ phone app it is usually one box taking the whole URL,
 gmx ctl status
 ```
 
-Within a second or two of the publisher's first keyframe the source turns live
-and the log says who it is:
+Within a second or two of the publisher's first keyframe a source named after
+the path, `live-phone`, is there and live, and the log says who it is:
 
 ```
 live/phone from 10.0.0.31:51666 started publishing
@@ -64,8 +61,10 @@ live/phone from 10.0.0.31:51666 started publishing
 Then take it:
 
 ```sh
-gmx ctl take phone
+gmx ctl take live-phone
 ```
+
+When they stop publishing the source goes again.
 
 ## Try it without anybody else
 
@@ -78,39 +77,41 @@ you can prove the path before asking somebody to point a real encoder at it.
 
 ## Two people at once
 
-One source is one picture, so a second publisher is refused while the first is
-live and their own error box says why. For two at once, add a second source on
-another port:
+The port takes several publishers at once. A laptop on `live/laptop` beside
+the phone on `live/phone` is a second source, `live-laptop`, and neither
+disturbs the other. Two publishers on the same name are one too many: the
+second is refused while the first is live, and its own error box says why.
+
+## Keys, so not just anybody can publish
+
+While there are no channels the door is open to anyone who can reach the
+port. Make a channel and only its encoders, with its keys, get in: [Take
+streams from several encoders on one port](rtmp-channels.md). Each key can be
+given to one person and taken back without touching the others. RTMP itself
+sends the key in the clear, so across the internet use SRT with a passphrase
+instead.
+
+## A source on a port of its own
+
+An `ingest/rtmp` source can also own a port by itself, one publisher at a
+time, with its own application name and stream key. It cannot share a port
+with the channel server, so give it another one:
 
 ```sh
 curl -s -X POST localhost:8080/api/v1/sources \
   -H 'content-type: application/json' \
-  -d '{"id":"laptop","uri":"ingest/rtmp","type":"ingest/rtmp","params":{"port":1936}}'
+  -d '{"id":"guest","uri":"ingest/rtmp","type":"ingest/rtmp",
+       "params":{"port":1936,"app":"live","stream_key":"nine-fat-owls"}}'
 ```
 
-and give that person `rtmp://<address>:1936/live`.
+and give that person `rtmp://<address>:1936/live` and the key. Anyone
+publishing under a different key is refused with a message naming the one
+that was wanted. The key is stored encrypted and never read back.
 
 `gmx ctl source add` carries an id, an address, a `--type` and a name, and has
 no flag for a plugin's own settings, so a source that needs them is added over
 the API. `uri` is required there: the type id goes in it when a source has no
 address of its own, which is what the command line puts there too.
-
-## A stream key that is a password
-
-An empty `stream_key` takes anybody. Setting one makes this source take only the
-publisher who knows it, which is the closest RTMP has to a password:
-
-```sh
-curl -s -X POST localhost:8080/api/v1/sources \
-  -H 'content-type: application/json' \
-  -d '{"id":"phone","uri":"ingest/rtmp","type":"ingest/rtmp",
-       "params":{"app":"live","stream_key":"nine-fat-owls"}}'
-```
-
-Anyone publishing under a different key is refused with a message naming the
-one that was wanted. The key is stored encrypted and never read back, but RTMP
-itself sends it in the clear: across the internet, use SRT with a passphrase
-instead.
 
 ## Over SRT rather than RTMP
 
@@ -141,19 +142,6 @@ build the source refuses to start with a message naming the package.
 
 ## What is not here yet
 
-**Sources that appear by themselves.** `ingest/discover` holds one port for many
-publishers and reports each one as a source ready to add, with an
-`event/ingest.publisher` notification and an `add_publishers` tool. The core
-cannot use any of it yet: it starts no `device` provides, calls `discover` from
-nowhere, and drops a plugin's `event` notifications into a buffer nothing reads.
-`tool.call` itself is registered, so `add_publishers` would be reachable once a
-`ingest/discover` instance runs. `plugins/ingest/src/device.rs` names the gaps
-with the file that would change for each.
-
-Until they land, an `ingest/rtmp` source that owns its own port does the job:
-added once, every publisher who arrives afterwards is live within seconds with
-nothing configured at either end.
-
 **An RTSP server.** Pulling *from* an RTSP camera works today with a bare
 `rtsp://` address. Running an RTSP server that cameras push to would mean
 linking `libgstrtspserver-1.0`, which would break this plugin's build for people
@@ -162,13 +150,13 @@ list.
 
 ## When nothing arrives
 
-1. `gmx ctl status` shows the source `degraded` with the address to use. Read it
-   back to the person publishing, port and all.
+1. A source appears only once somebody publishes. Nothing in `gmx ctl status`
+   means nothing has arrived; check the address they were given, port and all.
 2. The address must be the one on the network. `godwinmix --info` prints it.
 3. A firewall between the two machines. RTMP is TCP on 1935; SRT is **UDP** on
    its port, so a TCP rule will not do.
-4. A `stream_key` set here refuses a publisher using a different one, and the
-   refusal reaches their error box.
+4. Once a channel exists, a publisher with no key or a wrong one is refused,
+   and the refusal reaches their error box and the mixer's log.
 5. A port below 1024 needs privileges this process usually does not have, and
    the error says so.
 

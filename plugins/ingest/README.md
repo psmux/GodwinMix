@@ -111,28 +111,18 @@ server lands it should be its own plugin with its own platform list. Pulling
 *from* an RTSP camera already works today with a bare `rtsp://` URL, and
 pushing to somebody's RTSP server is `rtspclientsink`.
 
-## What the core cannot do yet
+## The channel server
 
-`ingest/rtmp` and `ingest/whip` work: they are `source` provides, and sources go
-through the plugin loader. `ingest/discover` and the `add_publishers` tool are
-written to the contract and dormant, because the core is missing four things:
+`ingest/discover` holds the mixer's RTMP port for every channel. The core runs
+it as a singleton, hands it the channel table in its settings, hears its
+`event/channel.*` notifications and asks it for the `streams` tool; a live
+stream becomes an `ingest/rtmp` source reading the hub over loopback on the
+same port. [The channel methods](../../docs/reference/channels.md) are the
+core's side of it, and [Take streams from several encoders on one
+port](../../docs/how-to/rtmp-channels.md) is the operator's.
 
-1. `crates/godwinmix-core/src/plugin/loader.rs` interns only provides whose
-   `kind` is `"source"`, so a `device` provide registers nothing. `SidecarDevice`
-   exists in `crates/godwinmix-core/src/plugin/host/service.rs` and is
-   constructed nowhere.
-2. Nothing calls `discover`. There is no `device.discover` in the method table,
-   no CLI command and no timer.
-3. A plugin's `event` notification is parsed by
-   `crates/godwinmix-core/src/plugin/host/process.rs` into a bounded ring buffer
-   that has no reader, so nothing can act on a publisher arriving.
-4. `tool.call` is not a registered method, so even the MCP bridge's
-   `POST /api/v1/tool/call` cannot reach a plugin's tool.
-
-Until those are wired, the working path is an `ingest/rtmp` source that owns its
-own port. Add it once, and every publisher who arrives is live within five
-seconds with nothing else to configure, which is the acceptance line either way.
-`docs/how-to/receive-a-phone-or-obs-stream.md` leads with that and says why.
+With no channels it takes any publisher, as it always has, and the supervisor
+makes each a source from its `event/ingest.publisher`.
 
 ## Settings
 
@@ -144,11 +134,12 @@ seconds with nothing else to configure, which is the acceptance line either way.
 | `bind` | `0.0.0.0` | every interface. Give one address to listen on that one only |
 | `app` | empty | the first part of the publish path. Empty takes any |
 | `stream_key` | empty | the rest of it. Empty takes any; setting one is the closest RTMP has to a password |
-| `relay` | empty | filled in by `ingest/discover` when it owns the port |
+| `relay` | empty | the channel server's address. Filled in when a channel's stream becomes a source |
+| `stream` | empty | `<channel>/<stream>` to read from it. Filled in with `relay` |
 
-One source is one picture, so a second publisher is refused while the first is
-live, with a message the publisher's own error box shows. For two at once, add a
-second source on another port.
+One source on its own port is one picture, so a second publisher is refused
+while the first is live, with a message the publisher's own error box shows.
+For two at once, make a channel.
 
 ### `ingest/whip`
 
@@ -165,10 +156,11 @@ second source on another port.
 |---|---|---|
 | `rtmp_port` | `1935` | the port every publisher uses |
 | `bind` | `0.0.0.0` | every interface |
-| `app` | empty | accept publishers on this application name only |
+| `app` | empty | with no channels, accept publishers on this application name only |
 
-This device and an `ingest/rtmp` source cannot both hold 1935. Run one or the
-other; the bind error names the other when they clash.
+The channel table arrives from the core under `channels` and is never written
+to the config. This device and an `ingest/rtmp` source cannot both hold one
+port: give a source that owns its port another one.
 
 ## Testing it
 
