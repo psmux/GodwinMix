@@ -214,6 +214,18 @@ export class Client {
     };
   }
 
+  /** Events beyond the usual set, held while a panel on screen wants them. */
+  listen(pattern) {
+    const n = (this._events ||= new Map());
+    n.set(pattern, (n.get(pattern) || 0) + 1);
+    this._scheduleResub();
+    return () => {
+      const left = n.get(pattern) - 1;
+      left > 0 ? n.set(pattern, left) : n.delete(pattern);
+      this._scheduleResub();
+    };
+  }
+
   /** The union of everything asked for: the widest width, the highest rate. */
   extSpec() {
     const ext = {};
@@ -250,7 +262,7 @@ export class Client {
     // subscribes with whatever has been asked for by then. Trying anyway was
     // a refusal logged as a warning on every fresh page.
     if (!this.store.state.connected) return;
-    const spec = { events: WANTED_EVENTS, ext: this.extSpec() };
+    const spec = { events: WANTED_EVENTS.concat([...(this._events?.keys() || [])]), ext: this.extSpec() };
     const same = JSON.stringify(spec) === JSON.stringify(this._subscribed);
     if (same) return;
     this._subscribed = spec;
