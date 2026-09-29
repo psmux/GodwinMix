@@ -76,6 +76,15 @@ annotations = { readOnlyHint = false, destructiveHint = false, idempotentHint = 
 user_invocable = true
 model_invocable = true
 
+[[tools]]
+name = "streams"
+description = "Every stream live on the mixer's RTMP port right now, by channel: who is publishing it and from where, which key let it in, its video codec, size, frame rate and bit rate, its audio codec, channels, sample rate and bit rate, how many readers it has and how many whole GOPs a slow reader has lost. Reads numbers the listener keeps anyway; changes nothing. Example: streams {} answers {port: 1935, streams: [{app: sunday-service, stream: main, video: {codec: h264, width: 1920, height: 1080, fps: 30, kbps: 5980}, ...}]}."
+input = "schemas/tools/streams.json"
+output = "schemas/tools/streams.out.json"
+annotations = { readOnlyHint = true, destructiveHint = false, idempotentHint = true, openWorldHint = false }
+user_invocable = true
+model_invocable = true
+
 # `gmx plugin add ./plugins/ingest` runs this when bin/gmx-ingest is not there.
 # The command runs in the directory you named, not in the installed copy:
 # this plugin is a workspace member and its dependencies are path

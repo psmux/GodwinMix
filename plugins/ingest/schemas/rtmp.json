@@ -12,21 +12,30 @@
       "minimum": 0,
       "maximum": 65535,
       "default": 1935,
-      "examples": [1935, 1936]
+      "examples": [
+        1935,
+        1936
+      ]
     },
     "bind": {
       "title": "Interface",
       "description": "0.0.0.0 listens on every interface, which is what a publisher on the same network needs. Give one address to listen on that one only.",
       "type": "string",
       "default": "0.0.0.0",
-      "examples": ["0.0.0.0", "127.0.0.1"]
+      "examples": [
+        "0.0.0.0",
+        "127.0.0.1"
+      ]
     },
     "app": {
       "title": "Application name",
       "description": "The first part of the publish path: rtmp://host:1935/<app>/<key>. Empty accepts whatever the publisher asks for, which is why nothing has to be configured at either end.",
       "type": "string",
       "default": "",
-      "examples": ["", "live"]
+      "examples": [
+        "",
+        "live"
+      ]
     },
     "stream_key": {
       "title": "Stream key",
@@ -34,14 +43,31 @@
       "type": "string",
       "format": "secret",
       "default": "",
-      "examples": ["", "phone"]
+      "examples": [
+        "",
+        "phone"
+      ]
     },
     "relay": {
       "title": "Relay address",
-      "description": "Filled in by ingest/discover when it, rather than this source, owns the listening port. Leave it empty and this source listens for itself.",
+      "description": "The channel server's address, 127.0.0.1 and the RTMP port. Filled in by the mixer when a stream on a channel becomes a source. Leave it empty and this source listens for itself.",
       "type": "string",
       "default": "",
-      "examples": ["", "127.0.0.1:54321"],
+      "examples": [
+        "",
+        "127.0.0.1:1935"
+      ],
+      "x-gmx-group": "Advanced"
+    },
+    "stream": {
+      "title": "Stream",
+      "description": "Which stream to read from the channel server, as <channel>/<stream>. Filled in with relay; leave both empty and this source listens for itself.",
+      "type": "string",
+      "default": "",
+      "examples": [
+        "",
+        "sunday-service/main"
+      ],
       "x-gmx-group": "Advanced"
     }
   }
