@@ -116,6 +116,7 @@
 .chn-tile[data-state="off"] .chn-ring svg { filter: grayscale(1); opacity: .45; }
 .chn-tile[data-state="waiting"] .chn-ring { border-style: dashed; border-color: var(--dim); }
 .chn-tile[data-state="connecting"] .chn-ring,
+.chn-tile[data-state="reconnecting"] .chn-terr { color: var(--warn); }
 .chn-tile[data-state="reconnecting"] .chn-ring { border-color: color-mix(in srgb, var(--warn) 25%, transparent); }
 .chn-tile[data-state="connecting"] .chn-ring::before,
 .chn-tile[data-state="reconnecting"] .chn-ring::before {

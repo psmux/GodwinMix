@@ -73,6 +73,51 @@ pub const PLATFORMS: &[Platform] = &[
         hosts: &["live.twitch.tv", "contribute.live-video.net"],
     },
     Platform {
+        id: "instagram",
+        title: "Instagram Live",
+        server: "",
+        key: KeyRule::Required,
+        carriage: Carriage::Rtmp,
+        policy: RetryPolicy::Cdn,
+        hosts: &["fbcdn.net"],
+    },
+    Platform {
+        id: "kick",
+        title: "Kick",
+        server: "rtmps://fa723fc1b171.global-contribute.live-video.net:443/app",
+        key: KeyRule::Required,
+        carriage: Carriage::Rtmp,
+        policy: RetryPolicy::Cdn,
+        hosts: &["fa723fc1b171.global-contribute.live-video.net"],
+    },
+    Platform {
+        id: "linkedin",
+        title: "LinkedIn Live",
+        server: "",
+        key: KeyRule::Required,
+        carriage: Carriage::Rtmp,
+        policy: RetryPolicy::Cdn,
+        hosts: &[],
+    },
+    Platform {
+        id: "x",
+        title: "X",
+        server: "rtmps://va.pscp.tv:443/x",
+        key: KeyRule::Required,
+        carriage: Carriage::Rtmp,
+        policy: RetryPolicy::Cdn,
+        hosts: &["pscp.tv"],
+    },
+    Platform {
+        id: "tiktok",
+        title: "TikTok LIVE",
+        server: "",
+        key: KeyRule::Required,
+        carriage: Carriage::Rtmp,
+        policy: RetryPolicy::Cdn,
+        hosts: &["tiktokcdn"],
+    },
+    Platform {
         id: "custom",
         title: "Custom RTMP",
         server: "",
@@ -171,6 +216,18 @@ mod tests {
             let server = format!("server: \"{}\"", p.server);
             let next = rest[1..].find("id: \"").map(|n| n + 1).unwrap_or(rest.len());
             assert!(rest[..next].contains(&server), "{} differs: want {server}", p.id);
+        }
+    }
+
+    /// Every tile the page offers is one the core takes: a tile the core
+    /// refused would be a form that can never be sent.
+    #[test]
+    fn every_platform_the_page_offers_is_on_this_table() {
+        let js = include_str!("../../../../ui/client/destinations.js");
+        let js = &js[js.find("export const PLATFORMS").expect("the table is there")..];
+        for line in js.lines().filter(|l| l.starts_with("    id: \"")) {
+            let id = line.trim().trim_start_matches("id: \"").trim_end_matches("\",");
+            assert!(platform(id).is_some(), "the page offers {id} and the core does not know it");
         }
     }
 

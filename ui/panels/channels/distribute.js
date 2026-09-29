@@ -87,7 +87,9 @@ function destinationTile(view, getChannel) {
       write(box, "checked", !!d.enabled);
       box.setAttribute("aria-label", `Send to ${d.label || p.title}`);
       const why = d.state === "failed" || d.state === "reconnecting" ? d.error || "" : "";
-      write(error, "textContent", d.state === "failed" ? why : "");
+      // Trying again says why too: a person looking at an amber ring wants
+      // to know whether it is their server or their key.
+      write(error, "textContent", why);
       error.hidden = !error.textContent;
       node.title = why ? `${p.title}: ${why}` : `${p.title}, ${tileState(d).toLowerCase()}`;
     },
