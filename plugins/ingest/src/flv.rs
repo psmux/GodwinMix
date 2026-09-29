@@ -11,9 +11,17 @@
 //! `rtmp/source` takes after `rtmp2src`, so a stream that arrives here is
 //! decoded by exactly the code that decodes one the core dialled out for.
 
+use std::collections::HashMap;
+
+use rml_rtmp::rml_amf0::{self, Amf0Value};
+use rml_rtmp::sessions::StreamMetadata;
+
+use crate::media_tag::{MediaTag, TagKind};
+
 /// Tag types, from the FLV specification.
 const TAG_AUDIO: u8 = 8;
 const TAG_VIDEO: u8 = 9;
+const TAG_SCRIPT: u8 = 18;
 
 /// The nine byte file header plus the first "previous tag size" word.
 ///
@@ -48,23 +56,73 @@ fn tag(kind: u8, timestamp_ms: u32, body: &[u8]) -> Vec<u8> {
 }
 
 /// An audio tag. `body` is the RTMP audio message payload, unchanged.
+#[cfg(test)]
 pub fn audio(timestamp_ms: u32, body: &[u8]) -> Vec<u8> {
     tag(TAG_AUDIO, timestamp_ms, body)
 }
 
 /// A video tag. `body` is the RTMP video message payload, unchanged.
+#[cfg(test)]
 pub fn video(timestamp_ms: u32, body: &[u8]) -> Vec<u8> {
     tag(TAG_VIDEO, timestamp_ms, body)
 }
 
-/// Is this video tag body a keyframe?
+/// Any tag the hub hands on, as FLV bytes.
+pub fn write(tag: &MediaTag) -> Vec<u8> {
+    self::tag(kind_byte(tag.kind), tag.timestamp_ms, &tag.payload)
+}
+
+/// The same, straight into a writer, so the payload is never copied into a
+/// buffer of its own on the way to a socket.
+pub fn write_to(out: &mut impl std::io::Write, tag: &MediaTag) -> std::io::Result<()> {
+    let size = tag.payload.len() as u32;
+    let ts = tag.timestamp_ms.to_be_bytes();
+    let s = size.to_be_bytes();
+    let head = [kind_byte(tag.kind), s[1], s[2], s[3], ts[1], ts[2], ts[3], ts[0], 0, 0, 0];
+    out.write_all(&head)?;
+    out.write_all(&tag.payload)?;
+    out.write_all(&(11 + size).to_be_bytes())
+}
+
+fn kind_byte(kind: TagKind) -> u8 {
+    match kind {
+        TagKind::Audio => TAG_AUDIO,
+        TagKind::Video => TAG_VIDEO,
+        TagKind::Script => TAG_SCRIPT,
+    }
+}
+
+/// The body of an `onMetaData` script tag, rebuilt from what the publisher
+/// said in its `@setDataFrame`.
 ///
-/// The top four bits of the first byte are the frame type, and 1 means a key
-/// frame. Used to decide where a stream may safely be picked up: handing a
-/// decoder a run of inter frames with no keyframe in front produces a grey
-/// picture and a lot of log noise.
-pub fn is_keyframe(body: &[u8]) -> bool {
-    body.first().map(|b| b >> 4 == 1).unwrap_or(false)
+/// `rml_rtmp` parses the publisher's metadata into a struct and does not keep
+/// the bytes, so they are written again here with the AMF0 encoder that crate
+/// already carries. A late reader, and a restream to a platform that shows
+/// the resolution it was told, both want it.
+pub fn metadata_body(meta: &StreamMetadata) -> Vec<u8> {
+    let mut props: HashMap<String, Amf0Value> = HashMap::new();
+    let mut number = |name: &str, value: Option<f64>| {
+        if let Some(v) = value {
+            props.insert(name.to_string(), Amf0Value::Number(v));
+        }
+    };
+    number("width", meta.video_width.map(f64::from));
+    number("height", meta.video_height.map(f64::from));
+    number("videocodecid", meta.video_codec_id.map(f64::from));
+    number("framerate", meta.video_frame_rate.map(f64::from));
+    number("videodatarate", meta.video_bitrate_kbps.map(f64::from));
+    number("audiocodecid", meta.audio_codec_id.map(f64::from));
+    number("audiodatarate", meta.audio_bitrate_kbps.map(f64::from));
+    number("audiosamplerate", meta.audio_sample_rate.map(f64::from));
+    number("audiochannels", meta.audio_channels.map(f64::from));
+    if let Some(stereo) = meta.audio_is_stereo {
+        props.insert("stereo".into(), Amf0Value::Boolean(stereo));
+    }
+    if let Some(encoder) = &meta.encoder {
+        props.insert("encoder".into(), Amf0Value::Utf8String(encoder.clone()));
+    }
+    let values = vec![Amf0Value::Utf8String("onMetaData".into()), Amf0Value::Object(props)];
+    rml_amf0::serialize(&values).unwrap_or_default()
 }
 
 #[cfg(test)]
@@ -109,9 +167,37 @@ mod tests {
     }
 
     #[test]
-    fn a_keyframe_is_recognised_and_an_inter_frame_is_not() {
-        assert!(is_keyframe(&[0x17, 0x01]));
-        assert!(!is_keyframe(&[0x27, 0x01]));
-        assert!(!is_keyframe(&[]));
+    fn metadata_becomes_an_on_metadata_script_body() {
+        let mut meta = StreamMetadata::new();
+        meta.video_width = Some(1920);
+        meta.video_frame_rate = Some(30.0);
+        let body = metadata_body(&meta);
+        let values = rml_amf0::deserialize(&mut std::io::Cursor::new(body)).expect("AMF0");
+        assert_eq!(values[0], Amf0Value::Utf8String("onMetaData".into()));
+        let Amf0Value::Object(props) = &values[1] else { panic!("{values:?}") };
+        assert_eq!(props["width"], Amf0Value::Number(1920.0));
+        let t = write(&MediaTag {
+            kind: TagKind::Script,
+            timestamp_ms: 0,
+            keyframe: false,
+            sequence_header: false,
+            payload: std::sync::Arc::from(&b"x"[..]),
+        });
+        assert_eq!(t[0], TAG_SCRIPT);
+    }
+
+    #[test]
+    fn writing_into_a_writer_gives_the_same_bytes_as_building_the_tag() {
+        let tag = MediaTag {
+            kind: TagKind::Video,
+            timestamp_ms: 0x0102_0304,
+            keyframe: true,
+            sequence_header: false,
+            payload: std::sync::Arc::from(&[0x17u8, 1, 0, 0, 0, 9][..]),
+        };
+        let mut out = Vec::new();
+        write_to(&mut out, &tag).unwrap();
+        assert_eq!(out, write(&tag));
+        assert_eq!(out, video(0x0102_0304, &tag.payload));
     }
 }

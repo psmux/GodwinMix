@@ -133,6 +133,9 @@ pub struct AppState {
     /// transitions, kept running as singletons. See
     /// `godwinmix_core::plugin::supervisor`.
     pub plugins: Arc<godwinmix_core::plugin::supervisor::Supervisor>,
+    /// RTMP channels: the core's half of the channel server. See
+    /// `crate::channels`.
+    pub channels: Arc<crate::channels::Channels>,
 }
 
 /// The handles onto one running engine, gathered so `AppState::new` takes a
@@ -176,6 +179,7 @@ impl AppState {
             scenes,
             plugins,
         } = engine;
+        let channels = channels_for(cfg, &plugins, &mixer, &scenes);
         let tokens = cfg.tokens(rehearsal);
         let safety =
             godwinmix_core::safety::Guard::new(cfg.safety.clone(), cfg.canvas.fps.max(1) as u32);
@@ -224,6 +228,7 @@ impl AppState {
             marketplaces_only: cfg.marketplaces_only(),
             config_path: Arc::new(cfg.source_path.clone()),
             hooks,
+            channels,
             plugins,
         }
     }
@@ -255,6 +260,35 @@ impl AppState {
         godwinmix_core::config::edit::write_plugin_settings(path, name, &settings)?;
         Ok(settings)
     }
+}
+
+/// The channel registry, opened beside the runtime store. Built here, before
+/// any plugin singleton starts, so the RTMP listener is handed its channels
+/// and keys at its very first start.
+fn channels_for(
+    cfg: &Config,
+    plugins: &Arc<godwinmix_core::plugin::supervisor::Supervisor>,
+    mixer: &MixerHandle,
+    scenes: &Arc<godwinmix_core::scene::server::SceneServer>,
+) -> Arc<crate::channels::Channels> {
+    let path = cfg.source_path.clone();
+    let runtime = (!path.as_os_str().is_empty()).then(|| Config::runtime_store_path(&path));
+    let port = cfg
+        .plugins
+        .settings
+        .get(crate::channels::PLUGIN)
+        .and_then(|t| t.get("rtmp_port"))
+        .and_then(|v| v.as_integer())
+        .and_then(|p| u16::try_from(p).ok())
+        .unwrap_or(1935);
+    crate::channels::Channels::open(
+        runtime,
+        port,
+        plugins.clone(),
+        mixer.clone(),
+        scenes.clone(),
+        methods::plugins::secrets(),
+    )
 }
 
 /// What `core.info` reports, so a client branches on a feature string rather

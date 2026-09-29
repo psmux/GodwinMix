@@ -101,11 +101,18 @@ over `rml_rtmp`; GStreamer is used only to remux for the core.
 | `bind` | string | `0.0.0.0` | the interface |
 | `app` | string | empty | the first part of the publish path. Empty takes any |
 | `stream_key` | string, `format: secret` | empty | the rest of it. Empty takes any |
-| `relay` | string | empty | filled in by `ingest/discover` when it owns the port |
+| `relay` | string | empty | the channel server's address, `127.0.0.1:<rtmp port>`. Filled in with `stream` when a channel's stream becomes a source |
+| `stream` | string | empty | `<channel>/<stream>` to read from the channel server |
 
-One source is one picture, so a second publisher is refused while the first is
-live and the refusal reaches the publisher's own error box. Bytes are held back
-until the first keyframe.
+With `relay` empty the source owns its port. One source is one picture, so a
+second publisher is refused while the first is live and the refusal reaches
+the publisher's own error box. Bytes are held back until the first keyframe.
+
+With `relay` and `stream` set it reads that stream from `ingest/discover` over
+loopback, waiting quietly while the stream is not live, and asking again once
+a second while the channel server itself is not up yet. When the publisher
+leaves, the process ends and the core starts it again in place behind the
+freeze frame, so the next publisher starts on a clean pipe.
 
 An RTMP audio or video message carries exactly the body of an FLV tag, so the
 listener writes FLV for nine bytes plus eleven per message and parses nothing.
@@ -136,18 +143,48 @@ source refuses at `initialize` with a message naming the package and pointing at
 |---|---|---|---|
 | `rtmp_port` | integer 0 to 65535 | `1935` | the port every publisher uses |
 | `bind` | string | `0.0.0.0` | the interface |
-| `app` | string | empty | accept publishers on this application name only |
+| `app` | string | empty | with no channels, accept publishers on this application name only |
+| `channels` | array | none | the channel table. Laid over these settings by the core from its channel registry; never written to the config |
 
-`discovery = { mdns = ["_rtmp._tcp"] }`. One publisher becomes one candidate of
-type `ingest/rtmp` whose params carry a loopback `relay` address. It also pushes
-`event/ingest.publisher`:
+The channel server: one listener, one thread per connection, and a hub
+(`plugins/ingest/src/hub.rs`) every reader of a stream goes through with a
+bounded queue of its own. [The channel methods](channels.md) are the core's
+side.
+
+With channels, a publisher is let in by its channel's table and each stream
+raises `event/channel.stream` (`state` `live`, again when its codecs are
+first known, and `idle` when it leaves) and a refusal `event/channel.refused`.
+A new table through `configure` applies at once, and cuts off a publisher
+whose key was taken back or whose channel was switched off or removed.
+
+With none, it takes any publisher. `discovery = { mdns = ["_rtmp._tcp"] }`.
+One publisher becomes one candidate of type `ingest/rtmp` whose params name
+the relay and the stream. It also pushes `event/ingest.publisher`, which the
+supervisor adds as a source:
 
 ```json
 {"action": "connected", "id": "live-phone", "type": "ingest/rtmp",
- "name": "live/phone", "peer": "10.0.0.31:51666", "params": {"relay": "127.0.0.1:54321"}}
+ "name": "live/phone", "peer": "10.0.0.31:51666",
+ "params": {"relay": "127.0.0.1:1935", "stream": "live/phone"}}
 ```
 
 and `{"action": "left", "id": "live-phone", "name": "live/phone"}`.
+
+A reader on this machine that sends `GMXHUB <app>/<stream>` and a newline on
+the RTMP port, instead of a handshake, gets that stream as FLV: the file header, then `onMetaData` and the two codec headers, then tags
+from the next keyframe. That is how an `ingest/rtmp` source in another
+process reads it.
+
+### Tool: `streams`
+
+No arguments. Answers `{port, relay, streams}`, one row per live stream with
+`app`, `stream`, `since_ms`, `from`, `key`, `video` (`codec`, `width`,
+`height`, `fps`, `kbps`), `audio` (`codec`, `channels`, `sample_rate`,
+`kbps`), `readers`, `dropped_gops` and `bytes`. Reads numbers the listener
+keeps anyway and changes nothing.
+
+Annotations: `readOnlyHint = true`, `destructiveHint = false`,
+`idempotentHint = true`, `openWorldHint = false`.
 
 ### Tool: `add_publishers`
 

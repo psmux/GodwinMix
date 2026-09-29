@@ -20,6 +20,7 @@ use std::sync::Arc;
 
 pub mod agent;
 pub mod channel_destinations;
+mod channels;
 pub mod config;
 mod filters;
 pub mod lifecycle;
@@ -28,7 +29,7 @@ mod paths;
 mod nodes;
 mod outputs;
 mod preview;
-mod plugins;
+pub(crate) mod plugins;
 pub mod presets;
 mod program;
 pub(crate) mod scenes;
@@ -71,6 +72,7 @@ pub fn registry() -> Registry<Call> {
     scenes::register(&mut reg);
     preview::register(&mut reg);
     plugins::register(&mut reg);
+    channels::register(&mut reg);
     nodes::register(&mut reg);
     presets::register(&mut reg);
     config::register(&mut reg);

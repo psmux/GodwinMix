@@ -56,6 +56,9 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tracing::{debug, info, warn};
 
+mod routes;
+pub use routes::EventRoute;
+
 /// How often the pump looks at every instance.
 ///
 /// A quarter of a second: twenty times inside the five seconds a publisher has
@@ -140,6 +143,9 @@ pub struct Supervisor {
     settings: Mutex<BTreeMap<String, Params>>,
     mixer: Mutex<Option<MixerHandle>>,
     stopping: AtomicBool,
+    /// What the core itself adds to a plugin's settings, and where the events
+    /// the supervisor does not act on go. See `supervisor/routes.rs`.
+    routes: routes::Routes,
 }
 
 impl Supervisor {
@@ -156,6 +162,7 @@ impl Supervisor {
             settings: Mutex::new(settings),
             mixer: Mutex::new(None),
             stopping: AtomicBool::new(false),
+            routes: routes::Routes::default(),
         })
     }
 
@@ -177,7 +184,9 @@ impl Supervisor {
     }
 
     fn params_for(&self, plugin: &str) -> Params {
-        self.settings.lock().get(plugin).cloned().unwrap_or_default()
+        let mut params = self.settings.lock().get(plugin).cloned().unwrap_or_default();
+        self.routes.add_extras(plugin, &mut params);
+        params
     }
 
     // -- starting and stopping ------------------------------------------
@@ -646,6 +655,9 @@ impl Supervisor {
     fn absorb(&self, instance: &str, kind: ProvideKind, notice: crate::plugin::host::Notice) {
         use crate::plugin::host::Notice;
         match notice {
+            Notice::Event { name, params } if self.routes.routes(&name) => {
+                self.routes.deliver(instance, &name, &params)
+            }
             Notice::Event { name, params } if kind == ProvideKind::Device => {
                 self.device_event(instance, &name, &params)
             }
@@ -658,7 +670,11 @@ impl Supervisor {
                 debug!(%instance, %state, ?detail, "a plugin's health changed");
             }
             Notice::Broken(why) => warn!(%instance, %why, "a plugin's channel broke"),
-            Notice::Log { .. } | Notice::MediaReport(_) => {}
+            // What a singleton says about itself goes in the core's log, tagged
+            // with the instance. It used to be drained and dropped, which left
+            // a refused publisher's reason nowhere an operator could read it.
+            Notice::Log { level, message } => routes::log(instance, level, &message),
+            Notice::MediaReport(_) => {}
         }
     }
 

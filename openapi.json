@@ -928,6 +928,347 @@
         ],
         "type": "object"
       },
+      "Channel": {
+        "description": "A named place encoders publish to, on the mixer's own RTMP port.",
+        "properties": {
+          "app": {
+            "description": "The RTMP application name: the path segment after the port.",
+            "type": "string"
+          },
+          "auto_source": {
+            "description": "A stream that goes live becomes a mixer source by itself.",
+            "type": "boolean"
+          },
+          "destinations": {
+            "default": [],
+            "description": "Where the channel's streams are sent on to. Filled in by\n`channel.destination.*`.",
+            "items": {
+              "$ref": "#/components/schemas/Destination"
+            },
+            "type": "array"
+          },
+          "enabled": {
+            "description": "Off turns every publisher away with a sentence saying so.",
+            "type": "boolean"
+          },
+          "id": {
+            "description": "A slug, and never changes once the channel exists.",
+            "type": "string"
+          },
+          "key_mode": {
+            "$ref": "#/components/schemas/KeyMode"
+          },
+          "keys": {
+            "description": "The keys, write only: a hint of each and never the key.",
+            "items": {
+              "$ref": "#/components/schemas/ChannelKey"
+            },
+            "type": "array"
+          },
+          "name": {
+            "description": "What a person calls it.",
+            "type": "string"
+          },
+          "publish": {
+            "$ref": "#/components/schemas/ChannelPublish"
+          },
+          "streams": {
+            "description": "Live streams, and streams that left while a scene still holds their\nsource.",
+            "items": {
+              "$ref": "#/components/schemas/ChannelStream"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "app",
+          "enabled",
+          "auto_source",
+          "key_mode",
+          "keys",
+          "publish",
+          "streams"
+        ],
+        "type": "object"
+      },
+      "ChannelAddRequest": {
+        "description": "`channel.add`.",
+        "properties": {
+          "app": {
+            "description": "Defaults to a slug of the name.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "auto_source": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "key_mode": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/KeyMode"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "type": "object"
+      },
+      "ChannelAdded": {
+        "description": "What `channel.add` answers: the channel and its first key.",
+        "properties": {
+          "channel": {
+            "$ref": "#/components/schemas/Channel"
+          },
+          "key": {
+            "$ref": "#/components/schemas/NewKey"
+          }
+        },
+        "required": [
+          "channel",
+          "key"
+        ],
+        "type": "object"
+      },
+      "ChannelKey": {
+        "description": "One key, as a list shows it.",
+        "properties": {
+          "created": {
+            "description": "When it was made, RFC 3339 in UTC.",
+            "type": "string"
+          },
+          "hint": {
+            "description": "The last four characters, so a person can tell two keys apart.",
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "label",
+          "created",
+          "hint"
+        ],
+        "type": "object"
+      },
+      "ChannelKeyAddRequest": {
+        "description": "`channel.key.add`.",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "label": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "type": "object"
+      },
+      "ChannelKeyRemoveRequest": {
+        "description": "`channel.key.remove`.",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "key": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "key"
+        ],
+        "type": "object"
+      },
+      "ChannelList": {
+        "description": "`channel.list`.",
+        "properties": {
+          "channels": {
+            "items": {
+              "$ref": "#/components/schemas/Channel"
+            },
+            "type": "array"
+          },
+          "rtmp": {
+            "$ref": "#/components/schemas/RtmpInfo"
+          }
+        },
+        "required": [
+          "channels",
+          "rtmp"
+        ],
+        "type": "object"
+      },
+      "ChannelPublish": {
+        "description": "Where an encoder is pointed.",
+        "properties": {
+          "example": {
+            "description": "`<server>/main?psk=<key>`, with `<key>` left for the person to fill.",
+            "type": "string"
+          },
+          "server": {
+            "description": "`rtmp://<first address>:<port>/<app>`.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "server",
+          "example"
+        ],
+        "type": "object"
+      },
+      "ChannelRemoved": {
+        "description": "What `channel.remove` answers.",
+        "properties": {
+          "removed": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "removed"
+        ],
+        "type": "object"
+      },
+      "ChannelSetRequest": {
+        "description": "`channel.set`: only what is named moves.",
+        "properties": {
+          "app": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "auto_source": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "enabled": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "id": {
+            "type": "string"
+          },
+          "key_mode": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/KeyMode"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "type": "object"
+      },
+      "ChannelStream": {
+        "description": "One stream on a channel.",
+        "properties": {
+          "audio": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/StreamAudio"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "dropped_gops": {
+            "default": 0,
+            "description": "Whole GOPs readers of it have lost by falling behind, this session.",
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "from": {
+            "description": "The publisher's address.",
+            "type": "string"
+          },
+          "key": {
+            "description": "The id of the key that let it in.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "name": {
+            "type": "string"
+          },
+          "since_ms": {
+            "description": "When it last went live, in milliseconds since 1970.",
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "source": {
+            "description": "The mixer source it feeds, when it feeds one.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "state": {
+            "description": "`live`, or `idle` for one that left while a scene holds its source.",
+            "type": "string"
+          },
+          "video": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/StreamVideo"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "name",
+          "state",
+          "since_ms",
+          "from"
+        ],
+        "type": "object"
+      },
       "ConfigChanged": {
         "description": "One key this call changed, and when the change takes effect.",
         "properties": {
@@ -1317,6 +1658,72 @@
           "top",
           "right",
           "bottom"
+        ],
+        "type": "object"
+      },
+      "Destination": {
+        "description": "Where a channel's stream is sent on to, remuxed and never decoded.",
+        "properties": {
+          "enabled": {
+            "type": "boolean"
+          },
+          "error": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "has_key": {
+            "type": "boolean"
+          },
+          "id": {
+            "type": "string"
+          },
+          "kbps": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "label": {
+            "type": "string"
+          },
+          "platform": {
+            "type": "string"
+          },
+          "reconnects": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "since_ms": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "state": {
+            "description": "off, waiting, connecting, live, reconnecting or failed.",
+            "type": "string"
+          },
+          "stream": {
+            "description": "Which stream to send; `*` is the first live one.",
+            "type": "string"
+          },
+          "uri_host": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "platform",
+          "label",
+          "uri_host",
+          "has_key",
+          "stream",
+          "enabled",
+          "state",
+          "since_ms",
+          "kbps",
+          "reconnects"
         ],
         "type": "object"
       },
@@ -2603,6 +3010,33 @@
         ],
         "type": "object"
       },
+      "KeyAdded": {
+        "description": "What `channel.key.add` answers.",
+        "properties": {
+          "key": {
+            "$ref": "#/components/schemas/NewKey"
+          }
+        },
+        "required": [
+          "key"
+        ],
+        "type": "object"
+      },
+      "KeyMode": {
+        "description": "How a publisher gives its key.",
+        "oneOf": [
+          {
+            "const": "query",
+            "description": "On the stream name: `main?psk=<key>`, or `key`, `token`, `Token`.",
+            "type": "string"
+          },
+          {
+            "const": "stream",
+            "description": "The stream name is the key, for an encoder with one box to type in.",
+            "type": "string"
+          }
+        ]
+      },
       "Layout": {
         "description": "A scene's geometry, for copying onto another one.",
         "properties": {
@@ -3139,6 +3573,27 @@
         },
         "required": [
           "name"
+        ],
+        "type": "object"
+      },
+      "NewKey": {
+        "description": "A key as it is made: the only time its secret is ever sent.",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "secret": {
+            "description": "Shown once. Nothing reads it back.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "label",
+          "secret"
         ],
         "type": "object"
       },
@@ -4378,6 +4833,41 @@
         ],
         "type": "object"
       },
+      "RtmpInfo": {
+        "description": "The RTMP port every channel shares.",
+        "properties": {
+          "listening": {
+            "description": "Whether the listener is running. False until the ingest plugin is\ninstalled and enabled.",
+            "type": "boolean"
+          },
+          "port": {
+            "format": "uint16",
+            "maximum": 65535,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "problem": {
+            "description": "Why not, and what to do, when it is not.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "urls": {
+            "description": "`rtmp://<address>:<port>` for each address this machine has.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "port",
+          "urls",
+          "listening"
+        ],
+        "type": "object"
+      },
       "SaveRequest": {
         "properties": {
           "name": {
@@ -5265,6 +5755,69 @@
         ],
         "type": "object"
       },
+      "StreamAudio": {
+        "properties": {
+          "channels": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "codec": {
+            "type": "string"
+          },
+          "kbps": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "sample_rate": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "codec",
+          "channels",
+          "sample_rate",
+          "kbps"
+        ],
+        "type": "object"
+      },
+      "StreamVideo": {
+        "properties": {
+          "codec": {
+            "type": "string"
+          },
+          "fps": {
+            "format": "double",
+            "type": "number"
+          },
+          "height": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "kbps": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "width": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "codec",
+          "width",
+          "height",
+          "fps",
+          "kbps"
+        ],
+        "type": "object"
+      },
       "TakeRecord": {
         "description": "One take, as `program.history` reports it.",
         "properties": {
@@ -5832,26 +6385,16 @@
         "x-scope": "read"
       }
     },
-    "/api/v1/channel/destination/add": {
-      "post": {
-        "description": "JSON-RPC method `channel.destination.add`. Needs the `admin` scope. Accepts `idempotency_key`, honoured for 24 hours.",
-        "operationId": "channel.destination.add",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/AddDestinationRequest"
-              }
-            }
-          },
-          "required": false
-        },
+    "/api/v1/channels": {
+      "get": {
+        "description": "JSON-RPC method `channel.list`. Needs the `read` scope.",
+        "operationId": "channel.list",
         "responses": {
           "200": {
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "object"
+                  "$ref": "#/components/schemas/ChannelList"
                 }
               }
             },
@@ -5861,24 +6404,22 @@
             "$ref": "#/components/responses/Error"
           }
         },
-        "summary": "Send a channel's stream on to YouTube, Facebook, Twitch, an RTMP server or an SRT receiver as it arrives. Nothing is decoded or encoded. The key is write only.",
+        "summary": "Every RTMP channel with its keys (as hints), the address to publish to, and what is live on it, beside the port they all share.",
         "tags": [
           "channel"
         ],
         "x-destructive": false,
         "x-idempotent": true,
-        "x-scope": "admin"
-      }
-    },
-    "/api/v1/channel/destination/remove": {
+        "x-scope": "read"
+      },
       "post": {
-        "description": "JSON-RPC method `channel.destination.remove`. Needs the `admin` scope. Destructive: accepts `dry_run: true`, and on a token whose policy is `confirm = required` it is refused once with -32020 and a confirm token. Accepts `idempotency_key`, honoured for 24 hours.",
-        "operationId": "channel.destination.remove",
+        "description": "JSON-RPC method `channel.add`. Needs the `admin` scope. Accepts `idempotency_key`, honoured for 24 hours.",
+        "operationId": "channel.add",
         "requestBody": {
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/RemoveDestinationRequest"
+                "$ref": "#/components/schemas/ChannelAddRequest"
               }
             }
           },
@@ -5889,7 +6430,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "object"
+                  "$ref": "#/components/schemas/ChannelAdded"
                 }
               }
             },
@@ -5899,7 +6440,83 @@
             "$ref": "#/components/responses/Error"
           }
         },
-        "summary": "Stop sending a channel's stream to one destination and forget it. The publisher and the other destinations are not touched.",
+        "summary": "Make a channel and its first key. The key is in this answer and never again.",
+        "tags": [
+          "channel"
+        ],
+        "x-destructive": false,
+        "x-idempotent": false,
+        "x-scope": "admin"
+      }
+    },
+    "/api/v1/channels/key/add": {
+      "post": {
+        "description": "JSON-RPC method `channel.key.add`. Needs the `admin` scope. Accepts `idempotency_key`, honoured for 24 hours.",
+        "operationId": "channel.key.add",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChannelKeyAddRequest"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/KeyAdded"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Make another key for a channel, to give to one more person or encoder. The key is in this answer and never again.",
+        "tags": [
+          "channel"
+        ],
+        "x-destructive": false,
+        "x-idempotent": false,
+        "x-scope": "admin"
+      }
+    },
+    "/api/v1/channels/key/remove": {
+      "post": {
+        "description": "JSON-RPC method `channel.key.remove`. Needs the `admin` scope. Destructive: accepts `dry_run: true`, and on a token whose policy is `confirm = required` it is refused once with -32020 and a confirm token. Accepts `idempotency_key`, honoured for 24 hours.",
+        "operationId": "channel.key.remove",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChannelKeyRemoveRequest"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Channel"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Take one key back. A publisher on air with it is cut off and the next one is turned away; the other keys are untouched.",
         "tags": [
           "channel"
         ],
@@ -5908,10 +6525,107 @@
         "x-scope": "admin"
       }
     },
-    "/api/v1/channel/destination/set": {
+    "/api/v1/channels/{id}": {
+      "delete": {
+        "description": "JSON-RPC method `channel.remove`. Needs the `admin` scope. Destructive: accepts `dry_run: true`, and on a token whose policy is `confirm = required` it is refused once with -32020 and a confirm token. Accepts `idempotency_key`, honoured for 24 hours.",
+        "operationId": "channel.remove",
+        "parameters": [
+          {
+            "description": "The id, as listed by the matching list call.",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/IdRequest"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChannelRemoved"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Remove a channel and forget its keys. Sources it made that no scene holds go with it.",
+        "tags": [
+          "channel"
+        ],
+        "x-destructive": true,
+        "x-idempotent": true,
+        "x-scope": "admin"
+      },
+      "get": {
+        "description": "JSON-RPC method `channel.get`. Needs the `read` scope.",
+        "operationId": "channel.get",
+        "parameters": [
+          {
+            "description": "The id, as listed by the matching list call.",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Channel"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "One channel.",
+        "tags": [
+          "channel"
+        ],
+        "x-destructive": false,
+        "x-idempotent": true,
+        "x-scope": "read"
+      }
+    },
+    "/api/v1/channels/{id}/destination": {
       "post": {
         "description": "JSON-RPC method `channel.destination.set`. Needs the `admin` scope. Accepts `idempotency_key`, honoured for 24 hours.",
         "operationId": "channel.destination.set",
+        "parameters": [
+          {
+            "description": "The id, as listed by the matching list call.",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
         "requestBody": {
           "content": {
             "application/json": {
@@ -5938,6 +6652,55 @@
           }
         },
         "summary": "Change one of a channel's destinations, naming only what moves: a new key, another server, which stream it sends, on or off. A key left out is kept.",
+        "tags": [
+          "channel"
+        ],
+        "x-destructive": false,
+        "x-idempotent": true,
+        "x-scope": "admin"
+      }
+    },
+    "/api/v1/channels/{id}/set": {
+      "post": {
+        "description": "JSON-RPC method `channel.set`. Needs the `admin` scope. Accepts `idempotency_key`, honoured for 24 hours.",
+        "operationId": "channel.set",
+        "parameters": [
+          {
+            "description": "The id, as listed by the matching list call.",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChannelSetRequest"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Channel"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Rename a channel, switch it on or off, or change its application name, whether its streams become sources, or how its key is given. Only what is named moves.",
         "tags": [
           "channel"
         ],
