@@ -89,6 +89,7 @@ impl Discover {
             open_app: settings.app.clone(),
             relay: OnceLock::new(),
             reporter: reporter.clone(),
+            on_air: Default::default(),
         });
         let server = Server::bind(&settings.bind, settings.rtmp_port, gate.clone())?;
         let port = server.port();
@@ -110,10 +111,11 @@ impl Discover {
         &self.gate.hub
     }
 
-    /// Take a new channel table. Publishers already in stay in: a key taken
-    /// back stops the next connection, not the one on air.
+    /// Take a new channel table. A publisher it no longer lets in (its key
+    /// taken back, its channel off or gone) is cut off now.
     pub fn set_table(&self, table: Table) {
         *self.gate.table.write().unwrap_or_else(|e| e.into_inner()) = table;
+        self.gate.enforce();
     }
 
     fn relay(&self) -> String {

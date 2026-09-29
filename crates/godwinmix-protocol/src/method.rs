@@ -258,6 +258,7 @@ const COLLECTION_LEVEL: &[&str] = &[
     "scene.apply_graphic",
     "scene.validate",
     "scene.export",
+    "channel.key",
 ];
 
 /// True when a method is about the collection rather than one of its members.

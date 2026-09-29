@@ -50,6 +50,11 @@ pub trait Inlet: Send {
     fn tag(&mut self, tag: MediaTag);
 }
 
+/// Ends one publisher's connection from outside its thread: the gate keeps
+/// it so a key taken back, or a channel switched off, can cut off a publisher
+/// already on air.
+pub type Kick = Arc<dyn Fn() + Send + Sync>;
+
 /// Who may publish, and where their tags go. Called from connection threads,
 /// so nothing in it may block for long.
 pub trait Gate: Send + Sync {
@@ -62,7 +67,7 @@ pub trait Gate: Send + Sync {
     /// A publisher asked for `app` and `stream`, exactly as sent (a key may
     /// ride on either as a query string). `Err` is the sentence it is refused
     /// with.
-    fn admit(&self, app: &str, stream: &str, peer: &str) -> Result<Box<dyn Inlet>, String>;
+    fn admit(&self, app: &str, stream: &str, peer: &str, kick: Kick) -> Result<Box<dyn Inlet>, String>;
 
     /// A loopback client that is not speaking RTMP. The gate that serves the
     /// hub takes it; any other lets it close.
@@ -216,7 +221,7 @@ mod tests {
     struct Closed;
 
     impl Gate for Closed {
-        fn admit(&self, _: &str, _: &str, _: &str) -> Result<Box<dyn Inlet>, String> {
+        fn admit(&self, _: &str, _: &str, _: &str, _: Kick) -> Result<Box<dyn Inlet>, String> {
             Err("closed".into())
         }
         fn note(&self, _: String) {}

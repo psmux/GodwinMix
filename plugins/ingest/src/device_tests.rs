@@ -131,3 +131,20 @@ fn a_hub_reader_on_the_same_port_gets_flv_with_the_headers_first() {
     assert_eq!(video["width"], 320);
     assert_eq!(video["height"], 240);
 }
+
+#[test]
+fn taking_a_key_back_cuts_off_the_publisher_on_air_with_it() {
+    let device = a_device(table());
+    let port = device.port();
+    let Some(mut publisher) = publish(&format!("rtmp://127.0.0.1:{port}/church/main?psk=s3cret")) else {
+        eprintln!("skipping: no ffmpeg on PATH");
+        return;
+    };
+    assert!(wait_for(|| device.hub().is_live("church", "main")), "it went live");
+    device.set_table(Table::from_params(&json!({"channels": [
+        {"id": "church", "app": "church", "keys": [{"id": "other", "secret": "different"}]}]})));
+    let cut = wait_for(|| !device.hub().is_live("church", "main"));
+    let _ = publisher.kill();
+    let _ = publisher.wait();
+    assert!(cut, "the stream on the key that was taken back is still live");
+}

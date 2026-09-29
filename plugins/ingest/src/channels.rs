@@ -122,6 +122,16 @@ impl Table {
     }
 }
 
+impl Table {
+    /// Would a publisher on this channel, with this key, still be let in?
+    /// Asked of everyone on air when the table changes.
+    pub fn still_admits(&self, channel: &str, key: &str) -> bool {
+        self.channels
+            .iter()
+            .any(|c| c.id == channel && c.enabled && c.keys.iter().any(|(id, _)| id == key))
+    }
+}
+
 fn channel_of(value: &Value) -> Option<Channel> {
     let text = |k: &str| value.get(k).and_then(Value::as_str).map(str::to_string);
     let id = text("id")?;

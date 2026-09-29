@@ -82,8 +82,7 @@ pub fn register(reg: &mut Registry<Call>) {
         )
         .params(schema_of::<ChannelKeyAddRequest>)
         .result(schema_of::<KeyAdded>)
-        .not_idempotent()
-        .rest_at("POST", "/api/v1/channels/{id}/keys"),
+        .not_idempotent(),
     );
     reg.register(
         MethodDef::new(
@@ -95,8 +94,7 @@ pub fn register(reg: &mut Registry<Call>) {
         )
         .params(schema_of::<ChannelKeyRemoveRequest>)
         .result(schema_of::<Channel>)
-        .destructive()
-        .rest_at("DELETE", "/api/v1/channels/{id}/keys/{key}"),
+        .destructive(),
     );
 }
 
