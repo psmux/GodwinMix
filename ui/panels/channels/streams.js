@@ -1,6 +1,7 @@
 // One stream on a channel: what the encoder is sending, who it is, how long
 // for, and which mixer source it feeds. The bitrate is a sparkline of the
-// last forty updates, kept by the model; nothing here asks the core for more.
+// last forty readings, kept by the model, which the panel takes every two
+// seconds while the stream is live.
 
 import { el, svg } from "../../shell/dom.js";
 import { write } from "./keyed.js";
