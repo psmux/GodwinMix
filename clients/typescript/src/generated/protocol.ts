@@ -237,6 +237,94 @@ export interface CellAssignment {
   y: number;
 }
 
+/** A named place encoders publish to, on the mixer's own RTMP port. */
+export interface Channel {
+  app: string;
+  auto_source: boolean;
+  destinations?: Destination[];
+  enabled: boolean;
+  id: string;
+  key_mode: KeyMode;
+  keys: ChannelKey[];
+  name: string;
+  publish: ChannelPublish;
+  streams: ChannelStream[];
+}
+
+/** `channel.add`. */
+export interface ChannelAddRequest {
+  app?: string | null;
+  auto_source?: boolean | null;
+  key_mode?: KeyMode | null;
+  name: string;
+}
+
+/** What `channel.add` answers: the channel and its first key. */
+export interface ChannelAdded {
+  channel: Channel;
+  key: NewKey;
+}
+
+/** One key, as a list shows it. */
+export interface ChannelKey {
+  created: string;
+  hint: string;
+  id: string;
+  label: string;
+}
+
+/** `channel.key.add`. */
+export interface ChannelKeyAddRequest {
+  id: string;
+  label?: string | null;
+}
+
+/** `channel.key.remove`. */
+export interface ChannelKeyRemoveRequest {
+  id: string;
+  key: string;
+}
+
+/** `channel.list`. */
+export interface ChannelList {
+  channels: Channel[];
+  rtmp: RtmpInfo;
+}
+
+/** Where an encoder is pointed. */
+export interface ChannelPublish {
+  example: string;
+  server: string;
+}
+
+/** What `channel.remove` answers. */
+export interface ChannelRemoved {
+  removed: string;
+}
+
+/** `channel.set`: only what is named moves. */
+export interface ChannelSetRequest {
+  app?: string | null;
+  auto_source?: boolean | null;
+  enabled?: boolean | null;
+  id: string;
+  key_mode?: KeyMode | null;
+  name?: string | null;
+}
+
+/** One stream on a channel. */
+export interface ChannelStream {
+  audio?: StreamAudio | null;
+  dropped_gops?: number;
+  from: string;
+  key?: string | null;
+  name: string;
+  since_ms: number;
+  source?: string | null;
+  state: string;
+  video?: StreamVideo | null;
+}
+
 /** One key this call changed, and when the change takes effect. */
 export interface ConfigChanged {
   applies: Applies;
@@ -330,6 +418,22 @@ export interface Crop {
   left: number;
   right: number;
   top: number;
+}
+
+/** Where a channel's stream is sent on to, remuxed and never decoded. */
+export interface Destination {
+  enabled: boolean;
+  error?: string | null;
+  has_key: boolean;
+  id: string;
+  kbps: number;
+  label: string;
+  platform: string;
+  reconnects: number;
+  since_ms: number;
+  state: string;
+  stream: string;
+  uri_host: string;
 }
 
 export interface DiscoverAnswer {
@@ -720,6 +824,14 @@ export interface ItemsRequest {
   to?: string | null;
 }
 
+/** What `channel.key.add` answers. */
+export interface KeyAdded {
+  key: NewKey;
+}
+
+/** How a publisher gives its key. */
+export type KeyMode = "query" | "stream";
+
 /** A scene's geometry, for copying onto another one. */
 export interface Layout {
   canvas: Canvas;
@@ -874,6 +986,13 @@ export interface MultiviewStatus {
 /** `media.convert` and `media.remove` name a file rather than an id. */
 export interface NameRequest {
   name: string;
+}
+
+/** A key as it is made: the only time its secret is ever sent. */
+export interface NewKey {
+  id: string;
+  label: string;
+  secret: string;
 }
 
 export interface NodeInstance {
@@ -1215,6 +1334,14 @@ export interface Resync {
   from_seq: number;
 }
 
+/** The RTMP port every channel shares. */
+export interface RtmpInfo {
+  listening: boolean;
+  port: number;
+  problem?: string | null;
+  urls: string[];
+}
+
 export interface SaveRequest {
   name: string;
   out?: string | null;
@@ -1446,6 +1573,21 @@ export interface StatsListing {
   instances: InstanceRecord[];
 }
 
+export interface StreamAudio {
+  channels: number;
+  codec: string;
+  kbps: number;
+  sample_rate: number;
+}
+
+export interface StreamVideo {
+  codec: string;
+  fps: number;
+  height: number;
+  kbps: number;
+  width: number;
+}
+
 /** `core.subscribe`: which events, and which expensive streams. */
 export interface SubscribeRequest {
   events?: string[];
@@ -1662,6 +1804,21 @@ export interface MediaChangedEvent {
   name?: string;
 }
 
+export interface ChannelChangedEvent {
+  channel?: Channel;
+}
+
+export interface ChannelRemovedEvent {
+  id?: string;
+}
+
+export interface ChannelRefusedEvent {
+  from: string;
+  id: string;
+  stream: string;
+  why: string;
+}
+
 export interface AlertEvent {
   action?: ErrorAction;
   message?: string;
@@ -1684,6 +1841,13 @@ export interface MethodParams {
   "adbreak.end": Record<string, never>;
   "adbreak.start": AdBreakRequest;
   "agent.state": AgentStateRequest;
+  "channel.add": ChannelAddRequest;
+  "channel.get": IdRequest;
+  "channel.key.add": ChannelKeyAddRequest;
+  "channel.key.remove": ChannelKeyRemoveRequest;
+  "channel.list": Record<string, never>;
+  "channel.remove": IdRequest;
+  "channel.set": ChannelSetRequest;
   "codec.list": Record<string, never>;
   "config.get": ConfigGetRequest;
   "config.reset": ConfigResetRequest;
@@ -1821,6 +1985,13 @@ export interface MethodResults {
   "adbreak.end": Record<string, unknown>;
   "adbreak.start": Record<string, unknown>;
   "agent.state": Record<string, unknown>;
+  "channel.add": ChannelAdded;
+  "channel.get": Channel;
+  "channel.key.add": KeyAdded;
+  "channel.key.remove": Channel;
+  "channel.list": ChannelList;
+  "channel.remove": ChannelRemoved;
+  "channel.set": Channel;
   "codec.list": Record<string, unknown>;
   "config.get": ConfigGetResult;
   "config.reset": ConfigSetResult;
@@ -1968,6 +2139,9 @@ export interface EventPayloads {
   "ui.changed": UiChangedEvent;
   "hook.blocked": HookBlockedEvent;
   "media.changed": MediaChangedEvent;
+  "channel.changed": ChannelChangedEvent;
+  "channel.removed": ChannelRemovedEvent;
+  "channel.refused": ChannelRefusedEvent;
   "meters": Meters;
   "tally": Tally;
   "alert": AlertEvent;
@@ -1996,6 +2170,13 @@ export const METHODS: readonly MethodInfo[] = [
   { name: "adbreak.end", summary: "Cut a running ad short, or disarm one that is scheduled.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/adbreak/end" } },
   { name: "adbreak.start", summary: "Interrupt the programme with a clip, then rejoin live when it ends.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/adbreak/start" } },
   { name: "agent.state", summary: "The compact document written for agents: the programme, each source's state and a motion score saying how much its picture is changing.", scope: "read", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/agent/state" } },
+  { name: "channel.add", summary: "Make a channel and its first key. The key is in this answer and never again.", scope: "admin", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/channels" } },
+  { name: "channel.get", summary: "One channel.", scope: "read", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/channels/{id}" } },
+  { name: "channel.key.add", summary: "Make another key for a channel, to give to one more person or encoder. The key is in this answer and never again.", scope: "admin", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/channels/key/add" } },
+  { name: "channel.key.remove", summary: "Take one key back. The next publisher with it is turned away; the other keys are untouched.", scope: "admin", mutating: true, destructive: true, rest: { method: "POST", path: "/api/v1/channels/key/remove" } },
+  { name: "channel.list", summary: "Every RTMP channel with its keys (as hints), the address to publish to, and what is live on it, beside the port they all share.", scope: "read", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/channels" } },
+  { name: "channel.remove", summary: "Remove a channel and forget its keys. Sources it made that no scene holds go with it.", scope: "admin", mutating: true, destructive: true, rest: { method: "DELETE", path: "/api/v1/channels/{id}" } },
+  { name: "channel.set", summary: "Rename a channel, switch it on or off, or change its application name, whether its streams become sources, or how its key is given. Only what is named moves.", scope: "admin", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/channels/{id}/set" } },
   { name: "codec.list", summary: "Every codec and element in the catalogue, which of them this machine actually has, and what it would pick.", scope: "read", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/codecs" } },
   { name: "config.get", summary: "The mixer's settings: each key's value in the config file, its default, when a change to it takes effect, and which keys are waiting for a restart. Secrets say only whether one is set.", scope: "admin", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/config" } },
   { name: "config.reset", summary: "Put settings back to their defaults by taking them out of the config file. Answers like config.set.", scope: "admin", mutating: true, destructive: true, rest: { method: "POST", path: "/api/v1/config/reset" } },
@@ -2152,6 +2333,9 @@ export const EVENT_NAMES: readonly EventName[] = [
   "ui.changed",
   "hook.blocked",
   "media.changed",
+  "channel.changed",
+  "channel.removed",
+  "channel.refused",
   "meters",
   "tally",
   "alert",
@@ -2190,6 +2374,41 @@ export class GeneratedMethods {
   /** The compact document written for agents: the programme, each source's state and a motion score saying how much its picture is changing. */
   agentState(params: AgentStateRequest = {}): Promise<Record<string, unknown>> {
     return this._call("agent.state", params as unknown as Record<string, unknown>) as Promise<Record<string, unknown>>;
+  }
+
+  /** Make a channel and its first key. The key is in this answer and never again. */
+  channelAdd(params: ChannelAddRequest): Promise<ChannelAdded> {
+    return this._call("channel.add", params as unknown as Record<string, unknown>) as Promise<ChannelAdded>;
+  }
+
+  /** One channel. */
+  channelGet(params: IdRequest): Promise<Channel> {
+    return this._call("channel.get", params as unknown as Record<string, unknown>) as Promise<Channel>;
+  }
+
+  /** Make another key for a channel, to give to one more person or encoder. The key is in this answer and never again. */
+  channelKeyAdd(params: ChannelKeyAddRequest): Promise<KeyAdded> {
+    return this._call("channel.key.add", params as unknown as Record<string, unknown>) as Promise<KeyAdded>;
+  }
+
+  /** Take one key back. The next publisher with it is turned away; the other keys are untouched. */
+  channelKeyRemove(params: ChannelKeyRemoveRequest): Promise<Channel> {
+    return this._call("channel.key.remove", params as unknown as Record<string, unknown>) as Promise<Channel>;
+  }
+
+  /** Every RTMP channel with its keys (as hints), the address to publish to, and what is live on it, beside the port they all share. */
+  channelList(): Promise<ChannelList> {
+    return this._call("channel.list", {}) as Promise<ChannelList>;
+  }
+
+  /** Remove a channel and forget its keys. Sources it made that no scene holds go with it. */
+  channelRemove(params: IdRequest): Promise<ChannelRemoved> {
+    return this._call("channel.remove", params as unknown as Record<string, unknown>) as Promise<ChannelRemoved>;
+  }
+
+  /** Rename a channel, switch it on or off, or change its application name, whether its streams become sources, or how its key is given. Only what is named moves. */
+  channelSet(params: ChannelSetRequest): Promise<Channel> {
+    return this._call("channel.set", params as unknown as Record<string, unknown>) as Promise<Channel>;
   }
 
   /** Every codec and element in the catalogue, which of them this machine actually has, and what it would pick. */

@@ -133,7 +133,7 @@ impl Connection {
                 self.send(packets.map_err(|e| format!("could not answer the connection: {e:?}"))?)
             }
             ServerSessionEvent::PublishStreamRequested { request_id, app_name, stream_key, .. } => {
-                let packets = match self.gate.admit(&app_name, &stream_key, &self.peer) {
+                let packets = match self.gate.admit(&app_name, &stream_key, &self.peer, self.kick()) {
                     Ok(inlet) => {
                         self.inlets.insert(stream_key, inlet);
                         session.accept_request(request_id)
@@ -174,6 +174,16 @@ impl Connection {
             sequence_header: codec::is_sequence_header(kind, body),
             payload: Arc::from(body),
         });
+    }
+
+    /// A way to end this connection from another thread.
+    fn kick(&self) -> super::Kick {
+        let socket = self.stream.try_clone().ok();
+        Arc::new(move || {
+            if let Some(s) = &socket {
+                let _ = s.shutdown(std::net::Shutdown::Both);
+            }
+        })
     }
 
     fn send(&mut self, packets: Vec<ServerSessionResult>) -> Result<(), String> {

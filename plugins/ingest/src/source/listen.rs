@@ -12,7 +12,7 @@ use crate::channels::split_query;
 use crate::flv;
 use crate::media_tag::{MediaTag, TagKind};
 use crate::remux::Remux;
-use crate::rtmp::{Filter, Gate, Inlet, Server};
+use crate::rtmp::{Filter, Gate, Inlet, Kick, Server};
 
 pub fn start(
     settings: &Settings,
@@ -48,7 +48,7 @@ struct OneAtATime {
 }
 
 impl Gate for OneAtATime {
-    fn admit(&self, app_raw: &str, stream_raw: &str, peer: &str) -> Result<Box<dyn Inlet>, String> {
+    fn admit(&self, app_raw: &str, stream_raw: &str, peer: &str, _: Kick) -> Result<Box<dyn Inlet>, String> {
         let (app, _) = split_query(app_raw);
         let key = stream_raw.trim();
         if !self.filter.accepts(app, key) {

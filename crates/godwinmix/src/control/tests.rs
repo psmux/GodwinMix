@@ -219,6 +219,10 @@ fn the_table_matches_the_scopes_in_the_protocol_document() {
     assert_eq!(
         destructive,
         vec![
+            // A channel removed forgets its keys, and a key taken back cannot
+            // be given again: the next one is a different secret.
+            "channel.key.remove",
+            "channel.remove",
             // Both rewrite the operator's configuration file, as preset.apply does.
             "config.reset",
             "config.set",

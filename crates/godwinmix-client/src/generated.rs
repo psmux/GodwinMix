@@ -426,6 +426,151 @@ pub struct CellAssignment {
     pub y: i32,
 }
 
+/// A named place encoders publish to, on the mixer's own RTMP port.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct Channel {
+    /// The RTMP application name: the path segment after the port.
+    pub app: String,
+    /// A stream that goes live becomes a mixer source by itself.
+    pub auto_source: bool,
+    /// Where the channel's streams are sent on to. Filled in by
+    /// `channel.destination.*`.
+    pub destinations: Vec<Destination>,
+    /// Off turns every publisher away with a sentence saying so.
+    pub enabled: bool,
+    /// A slug, and never changes once the channel exists.
+    pub id: String,
+    pub key_mode: KeyMode,
+    /// The keys, write only: a hint of each and never the key.
+    pub keys: Vec<ChannelKey>,
+    /// What a person calls it.
+    pub name: String,
+    pub publish: ChannelPublish,
+    /// Live streams, and streams that left while a scene still holds their
+    /// source.
+    pub streams: Vec<ChannelStream>,
+}
+
+/// `channel.add`.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct ChannelAddRequest {
+    /// Defaults to a slug of the name.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub app: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub auto_source: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub key_mode: Option<KeyMode>,
+    pub name: String,
+}
+
+/// What `channel.add` answers: the channel and its first key.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct ChannelAdded {
+    pub channel: Channel,
+    pub key: NewKey,
+}
+
+/// One key, as a list shows it.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct ChannelKey {
+    /// When it was made, RFC 3339 in UTC.
+    pub created: String,
+    /// The last four characters, so a person can tell two keys apart.
+    pub hint: String,
+    pub id: String,
+    pub label: String,
+}
+
+/// `channel.key.add`.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct ChannelKeyAddRequest {
+    pub id: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub label: Option<String>,
+}
+
+/// `channel.key.remove`.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct ChannelKeyRemoveRequest {
+    pub id: String,
+    pub key: String,
+}
+
+/// `channel.list`.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct ChannelList {
+    pub channels: Vec<Channel>,
+    pub rtmp: RtmpInfo,
+}
+
+/// Where an encoder is pointed.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct ChannelPublish {
+    /// `<server>/main?psk=<key>`, with `<key>` left for the person to fill.
+    pub example: String,
+    /// `rtmp://<first address>:<port>/<app>`.
+    pub server: String,
+}
+
+/// What `channel.remove` answers.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct ChannelRemoved {
+    pub removed: String,
+}
+
+/// `channel.set`: only what is named moves.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct ChannelSetRequest {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub app: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub auto_source: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub enabled: Option<bool>,
+    pub id: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub key_mode: Option<KeyMode>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+}
+
+/// One stream on a channel.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct ChannelStream {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub audio: Option<StreamAudio>,
+    /// Whole GOPs readers of it have lost by falling behind, this session.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub dropped_gops: Option<u64>,
+    /// The publisher's address.
+    pub from: String,
+    /// The id of the key that let it in.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub key: Option<String>,
+    pub name: String,
+    /// When it last went live, in milliseconds since 1970.
+    pub since_ms: u64,
+    /// The mixer source it feeds, when it feeds one.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub source: Option<String>,
+    /// `live`, or `idle` for one that left while a scene holds its source.
+    pub state: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub video: Option<StreamVideo>,
+}
+
 /// One key this call changed, and when the change takes effect.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
@@ -602,6 +747,27 @@ pub struct Crop {
     pub left: f64,
     pub right: f64,
     pub top: f64,
+}
+
+/// Where a channel's stream is sent on to, remuxed and never decoded.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct Destination {
+    pub enabled: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
+    pub has_key: bool,
+    pub id: String,
+    pub kbps: u32,
+    pub label: String,
+    pub platform: String,
+    pub reconnects: u32,
+    pub since_ms: u64,
+    /// off, waiting, connecting, live, reconnecting or failed.
+    pub state: String,
+    /// Which stream to send; `*` is the first live one.
+    pub stream: String,
+    pub uri_host: String,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
@@ -1245,6 +1411,18 @@ pub struct ItemsRequest {
     pub to: Option<String>,
 }
 
+/// What `channel.key.add` answers.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct KeyAdded {
+    pub key: NewKey,
+}
+
+/// How a publisher gives its key.
+pub type KeyMode = String;
+/// The values api_level 1 knows for [`KeyMode`].
+pub const KEY_MODE_VALUES: &[&str] = &["query", "stream"];
+
 /// A scene's geometry, for copying onto another one.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
@@ -1519,6 +1697,16 @@ pub struct NameRequest {
     /// in the path, where the transform rule calls it `id`, so both spellings
     /// are read.
     pub name: String,
+}
+
+/// A key as it is made: the only time its secret is ever sent.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct NewKey {
+    pub id: String,
+    pub label: String,
+    /// Shown once. Nothing reads it back.
+    pub secret: String,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
@@ -2098,6 +2286,21 @@ pub struct Resync {
     pub from_seq: u64,
 }
 
+/// The RTMP port every channel shares.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct RtmpInfo {
+    /// Whether the listener is running. False until the ingest plugin is
+    /// installed and enabled.
+    pub listening: bool,
+    pub port: u16,
+    /// Why not, and what to do, when it is not.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub problem: Option<String>,
+    /// `rtmp://<address>:<port>` for each address this machine has.
+    pub urls: Vec<String>,
+}
+
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct SaveRequest {
@@ -2495,6 +2698,25 @@ pub struct StatsListing {
     pub instances: Vec<InstanceRecord>,
 }
 
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct StreamAudio {
+    pub channels: u32,
+    pub codec: String,
+    pub kbps: u32,
+    pub sample_rate: u32,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct StreamVideo {
+    pub codec: String,
+    pub fps: f64,
+    pub height: u32,
+    pub kbps: u32,
+    pub width: u32,
+}
+
 /// `core.subscribe`: which events, and which expensive streams.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
@@ -2866,6 +3088,32 @@ pub struct MediaChangedEvent {
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
+pub struct ChannelChangedEvent {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub channel: Option<Channel>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct ChannelRemovedEvent {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub id: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct ChannelRefusedEvent {
+    /// The publisher's address.
+    pub from: String,
+    /// The channel, or the application name asked for when no channel has it.
+    pub id: String,
+    /// The stream name asked for. Empty when the name was the key.
+    pub stream: String,
+    pub why: String,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
 pub struct AlertEvent {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub action: Option<ErrorAction>,
@@ -2906,10 +3154,17 @@ pub struct MethodInfo {
     pub rest: Option<(&'static str, &'static str)>,
 }
 
-pub const METHODS: [MethodInfo; 133] = [
+pub const METHODS: [MethodInfo; 140] = [
     MethodInfo { name: "adbreak.end", summary: "Cut a running ad short, or disarm one that is scheduled.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/adbreak/end")) },
     MethodInfo { name: "adbreak.start", summary: "Interrupt the programme with a clip, then rejoin live when it ends.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/adbreak/start")) },
     MethodInfo { name: "agent.state", summary: "The compact document written for agents: the programme, each source's state and a motion score saying how much its picture is changing.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/agent/state")) },
+    MethodInfo { name: "channel.add", summary: "Make a channel and its first key. The key is in this answer and never again.", scope: "admin", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/channels")) },
+    MethodInfo { name: "channel.get", summary: "One channel.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/channels/{id}")) },
+    MethodInfo { name: "channel.key.add", summary: "Make another key for a channel, to give to one more person or encoder. The key is in this answer and never again.", scope: "admin", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/channels/key/add")) },
+    MethodInfo { name: "channel.key.remove", summary: "Take one key back. The next publisher with it is turned away; the other keys are untouched.", scope: "admin", mutating: true, destructive: true, rest: Some(("POST", "/api/v1/channels/key/remove")) },
+    MethodInfo { name: "channel.list", summary: "Every RTMP channel with its keys (as hints), the address to publish to, and what is live on it, beside the port they all share.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/channels")) },
+    MethodInfo { name: "channel.remove", summary: "Remove a channel and forget its keys. Sources it made that no scene holds go with it.", scope: "admin", mutating: true, destructive: true, rest: Some(("DELETE", "/api/v1/channels/{id}")) },
+    MethodInfo { name: "channel.set", summary: "Rename a channel, switch it on or off, or change its application name, whether its streams become sources, or how its key is given. Only what is named moves.", scope: "admin", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/channels/{id}/set")) },
     MethodInfo { name: "codec.list", summary: "Every codec and element in the catalogue, which of them this machine actually has, and what it would pick.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/codecs")) },
     MethodInfo { name: "config.get", summary: "The mixer's settings: each key's value in the config file, its default, when a change to it takes effect, and which keys are waiting for a restart. Secrets say only whether one is set.", scope: "admin", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/config")) },
     MethodInfo { name: "config.reset", summary: "Put settings back to their defaults by taking them out of the config file. Answers like config.set.", scope: "admin", mutating: true, destructive: true, rest: Some(("POST", "/api/v1/config/reset")) },
@@ -3042,7 +3297,7 @@ pub const METHODS: [MethodInfo; 133] = [
     MethodInfo { name: "tool.call", summary: "Call one of a plugin's tools, in MCP's shape. The name is `<plugin>/<tool>`, or the bare tool name when only one plugin has it.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/tool/call")) },
 ];
 
-pub const EVENT_NAMES: [&str; 21] = [
+pub const EVENT_NAMES: [&str; 24] = [
     "snapshot",
     "program.took",
     "scene.patch",
@@ -3054,6 +3309,9 @@ pub const EVENT_NAMES: [&str; 21] = [
     "ui.changed",
     "hook.blocked",
     "media.changed",
+    "channel.changed",
+    "channel.removed",
+    "channel.refused",
     "meters",
     "tally",
     "alert",
@@ -3105,6 +3363,12 @@ pub enum Event {
     HookBlocked(HookBlockedEvent),
     /// A file in the library was uploaded, deleted, or its conversion moved on.
     MediaChanged(MediaChangedEvent),
+    /// A channel changed: made, renamed, switched on or off, a key made or taken back, a stream went live, learned its codecs or left. Carries the whole channel, keys as hints only.
+    ChannelChanged(ChannelChangedEvent),
+    /// A channel was removed. Its publishers were turned away and its keys forgotten.
+    ChannelRemoved(ChannelRemovedEvent),
+    /// A publisher was turned away: no key, a wrong key, a channel switched off, or a name somebody else is already publishing. why is the sentence the encoder was sent. A key is never in it.
+    ChannelRefused(ChannelRefusedEvent),
     /// Peak dBFS for the programme bus and every source, in one message at 10 per second. Replaces the two separate meter events on /ws.
     Meters(Meters),
     /// Which sources are on programme, on preview, or off. Derived by the core so a Stream Deck does not have to.
@@ -3179,6 +3443,18 @@ impl Event {
                 Ok(payload) => Event::MediaChanged(payload),
                 Err(_) => Event::Other { name: pattern.to_string(), params },
             },
+            "channel.changed" => match serde_json::from_value(params.clone()) {
+                Ok(payload) => Event::ChannelChanged(payload),
+                Err(_) => Event::Other { name: pattern.to_string(), params },
+            },
+            "channel.removed" => match serde_json::from_value(params.clone()) {
+                Ok(payload) => Event::ChannelRemoved(payload),
+                Err(_) => Event::Other { name: pattern.to_string(), params },
+            },
+            "channel.refused" => match serde_json::from_value(params.clone()) {
+                Ok(payload) => Event::ChannelRefused(payload),
+                Err(_) => Event::Other { name: pattern.to_string(), params },
+            },
             "meters" => match serde_json::from_value(params.clone()) {
                 Ok(payload) => Event::Meters(payload),
                 Err(_) => Event::Other { name: pattern.to_string(), params },
@@ -3229,6 +3505,9 @@ impl Event {
             Event::UiChanged(_) => "ui.changed",
             Event::HookBlocked(_) => "hook.blocked",
             Event::MediaChanged(_) => "media.changed",
+            Event::ChannelChanged(_) => "channel.changed",
+            Event::ChannelRemoved(_) => "channel.removed",
+            Event::ChannelRefused(_) => "channel.refused",
             Event::Meters(_) => "meters",
             Event::Tally(_) => "tally",
             Event::Alert(_) => "alert",
@@ -3260,6 +3539,41 @@ impl Client {
     /// The compact document written for agents: the programme, each source's state and a motion score saying how much its picture is changing.
     pub async fn agent_state(&self, params: &AgentStateRequest) -> Result<BTreeMap<String, Value>> {
         self.call("agent.state", params).await
+    }
+
+    /// Make a channel and its first key. The key is in this answer and never again.
+    pub async fn channel_add(&self, params: &ChannelAddRequest) -> Result<ChannelAdded> {
+        self.call("channel.add", params).await
+    }
+
+    /// One channel.
+    pub async fn channel_get(&self, params: &IdRequest) -> Result<Channel> {
+        self.call("channel.get", params).await
+    }
+
+    /// Make another key for a channel, to give to one more person or encoder. The key is in this answer and never again.
+    pub async fn channel_key_add(&self, params: &ChannelKeyAddRequest) -> Result<KeyAdded> {
+        self.call("channel.key.add", params).await
+    }
+
+    /// Take one key back. The next publisher with it is turned away; the other keys are untouched.
+    pub async fn channel_key_remove(&self, params: &ChannelKeyRemoveRequest) -> Result<Channel> {
+        self.call("channel.key.remove", params).await
+    }
+
+    /// Every RTMP channel with its keys (as hints), the address to publish to, and what is live on it, beside the port they all share.
+    pub async fn channel_list(&self) -> Result<ChannelList> {
+        self.call("channel.list", &serde_json::json!({})).await
+    }
+
+    /// Remove a channel and forget its keys. Sources it made that no scene holds go with it.
+    pub async fn channel_remove(&self, params: &IdRequest) -> Result<ChannelRemoved> {
+        self.call("channel.remove", params).await
+    }
+
+    /// Rename a channel, switch it on or off, or change its application name, whether its streams become sources, or how its key is given. Only what is named moves.
+    pub async fn channel_set(&self, params: &ChannelSetRequest) -> Result<Channel> {
+        self.call("channel.set", params).await
     }
 
     /// Every codec and element in the catalogue, which of them this machine actually has, and what it would pick.

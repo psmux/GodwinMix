@@ -36,6 +36,13 @@ Keys accepted on every method, handled before a method runs.
 | `adbreak.end` | `POST /api/v1/adbreak/end` | operate |  | 1 | Cut a running ad short, or disarm one that is scheduled. |
 | `adbreak.start` | `POST /api/v1/adbreak/start` | operate |  | 1 | Interrupt the programme with a clip, then rejoin live when it ends. |
 | `agent.state` | `GET /api/v1/agent/state` | read |  | 1 | The compact document written for agents: the programme, each source's state and a motion score saying how much its picture is changing. |
+| `channel.add` | `POST /api/v1/channels` | admin |  | 1 | Make a channel and its first key. The key is in this answer and never again. |
+| `channel.get` | `GET /api/v1/channels/{id}` | read |  | 1 | One channel. |
+| `channel.key.add` | `POST /api/v1/channels/key/add` | admin |  | 1 | Make another key for a channel, to give to one more person or encoder. The key is in this answer and never again. |
+| `channel.key.remove` | `POST /api/v1/channels/key/remove` | admin | yes | 1 | Take one key back. The next publisher with it is turned away; the other keys are untouched. |
+| `channel.list` | `GET /api/v1/channels` | read |  | 1 | Every RTMP channel with its keys (as hints), the address to publish to, and what is live on it, beside the port they all share. |
+| `channel.remove` | `DELETE /api/v1/channels/{id}` | admin | yes | 1 | Remove a channel and forget its keys. Sources it made that no scene holds go with it. |
+| `channel.set` | `POST /api/v1/channels/{id}/set` | admin |  | 1 | Rename a channel, switch it on or off, or change its application name, whether its streams become sources, or how its key is given. Only what is named moves. |
 | `codec.list` | `GET /api/v1/codecs` | read |  | 1 | Every codec and element in the catalogue, which of them this machine actually has, and what it would pick. |
 | `config.get` | `GET /api/v1/config` | admin |  | 1 | The mixer's settings: each key's value in the config file, its default, when a change to it takes effect, and which keys are waiting for a restart. Secrets say only whether one is set. |
 | `config.reset` | `POST /api/v1/config/reset` | admin | yes | 1 | Put settings back to their defaults by taking them out of the config file. Answers like config.set. |
@@ -218,6 +225,115 @@ MCP tool `agent_state` in the `minimal` profile: readOnlyHint true, destructiveH
   },
   "result": {
     "type": "object"
+  }
+}
+```
+
+#### `channel.add`
+
+Make a channel and its first key. The key is in this answer and never again.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/ChannelAddRequest"
+  },
+  "result": {
+    "$ref": "#/$defs/ChannelAdded"
+  }
+}
+```
+
+#### `channel.get`
+
+One channel.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/IdRequest"
+  },
+  "result": {
+    "$ref": "#/$defs/Channel"
+  }
+}
+```
+
+#### `channel.key.add`
+
+Make another key for a channel, to give to one more person or encoder. The key is in this answer and never again.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/ChannelKeyAddRequest"
+  },
+  "result": {
+    "$ref": "#/$defs/KeyAdded"
+  }
+}
+```
+
+#### `channel.key.remove`
+
+Take one key back. The next publisher with it is turned away; the other keys are untouched.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/ChannelKeyRemoveRequest"
+  },
+  "result": {
+    "$ref": "#/$defs/Channel"
+  }
+}
+```
+
+#### `channel.list`
+
+Every RTMP channel with its keys (as hints), the address to publish to, and what is live on it, beside the port they all share.
+
+MCP tool `list_channels` in the `search` profile: readOnlyHint true, destructiveHint false, idempotentHint true.
+
+```json
+{
+  "params": {
+    "additionalProperties": false,
+    "properties": {},
+    "type": "object"
+  },
+  "result": {
+    "$ref": "#/$defs/ChannelList"
+  }
+}
+```
+
+#### `channel.remove`
+
+Remove a channel and forget its keys. Sources it made that no scene holds go with it.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/IdRequest"
+  },
+  "result": {
+    "$ref": "#/$defs/ChannelRemoved"
+  }
+}
+```
+
+#### `channel.set`
+
+Rename a channel, switch it on or off, or change its application name, whether its streams become sources, or how its key is given. Only what is named moves.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/ChannelSetRequest"
+  },
+  "result": {
+    "$ref": "#/$defs/Channel"
   }
 }
 ```
@@ -2367,6 +2483,9 @@ Subscribe with `core.subscribe`. Patterns match the part after `event/`, so `pro
 | `event/ui.changed` |  |  | The surface defaults changed: a preset was applied, or an operator set the layout, theme or gallery mode by hand. Nothing on air moves. |
 | `event/hook.blocked` |  |  | A hook did not get its say: it did not answer inside its timeout, or the thing behind it could not be reached. Whatever the hook was attached to went ahead anyway, which is the rule that keeps a slow hook off the frame path. See 03 section 8. |
 | `event/media.changed` |  | `media_changed` | A file in the library was uploaded, deleted, or its conversion moved on. |
+| `event/channel.changed` |  |  | A channel changed: made, renamed, switched on or off, a key made or taken back, a stream went live, learned its codecs or left. Carries the whole channel, keys as hints only. |
+| `event/channel.removed` |  |  | A channel was removed. Its publishers were turned away and its keys forgotten. |
+| `event/channel.refused` |  |  | A publisher was turned away: no key, a wrong key, a channel switched off, or a name somebody else is already publishing. why is the sentence the encoder was sent. A key is never in it. |
 | `event/meters` | `meters` | `audio_level, source_audio_level` | Peak dBFS for the programme bus and every source, in one message at 10 per second. Replaces the two separate meter events on /ws. |
 | `event/tally` | `tally` |  | Which sources are on programme, on preview, or off. Derived by the core so a Stream Deck does not have to. |
 | `event/alert` |  | `alert` | Something an operator should see. Also written to the log and to the alert webhook. |

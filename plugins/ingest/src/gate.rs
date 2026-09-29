@@ -14,7 +14,8 @@
 //! supervisor to add as a source.
 
 use std::net::TcpStream;
-use std::sync::{Arc, OnceLock, RwLock};
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::{Arc, Mutex, OnceLock, RwLock};
 
 use godwinmix_sdk::plugin::Reporter;
 use serde_json::{json, Value};
@@ -22,7 +23,7 @@ use serde_json::{json, Value};
 use crate::channels::{split_query, Table};
 use crate::hub::{Hub, Publication};
 use crate::media_tag::MediaTag;
-use crate::rtmp::{self, Gate, Inlet};
+use crate::rtmp::{self, Gate, Inlet, Kick};
 
 pub struct ChannelGate {
     pub hub: Hub,
@@ -33,9 +34,52 @@ pub struct ChannelGate {
     /// `127.0.0.1:<port>`, where a source reads a stream. Set once bound.
     pub relay: OnceLock<String>,
     pub reporter: Option<Reporter>,
+    pub on_air: Arc<OnAir>,
+}
+
+/// Every publisher let in on a channel, with the key that let it in and a
+/// way to cut it off.
+#[derive(Default)]
+pub struct OnAir {
+    next: AtomicU64,
+    list: Mutex<Vec<(u64, String, String, Kick)>>,
+}
+
+impl OnAir {
+    fn add(&self, channel: &str, key: &str, kick: Kick) -> u64 {
+        let id = self.next.fetch_add(1, Ordering::Relaxed);
+        self.lock().push((id, channel.to_string(), key.to_string(), kick));
+        id
+    }
+
+    fn remove(&self, id: u64) {
+        self.lock().retain(|(i, ..)| *i != id);
+    }
+
+    fn lock(&self) -> std::sync::MutexGuard<'_, Vec<(u64, String, String, Kick)>> {
+        self.list.lock().unwrap_or_else(|e| e.into_inner())
+    }
 }
 
 impl ChannelGate {
+    /// After the table changed: cut off whoever it no longer lets in. A key
+    /// taken back, a channel switched off or removed, ends that publisher now
+    /// rather than at its next reconnect.
+    pub fn enforce(&self) {
+        let table = self.table.read().unwrap_or_else(|e| e.into_inner());
+        let out: Vec<Kick> = self
+            .on_air
+            .lock()
+            .iter()
+            .filter(|(_, channel, key, _)| !table.still_admits(channel, key))
+            .map(|(.., kick)| kick.clone())
+            .collect();
+        drop(table);
+        for kick in out {
+            kick();
+        }
+    }
+
     fn event(&self, name: &str, params: Value) {
         if let Some(r) = &self.reporter {
             r.event(name, params);
@@ -90,7 +134,7 @@ impl ChannelGate {
 }
 
 impl Gate for ChannelGate {
-    fn admit(&self, app_raw: &str, stream_raw: &str, peer: &str) -> Result<Box<dyn Inlet>, String> {
+    fn admit(&self, app_raw: &str, stream_raw: &str, peer: &str, kick: Kick) -> Result<Box<dyn Inlet>, String> {
         let decided = {
             let table = self.table.read().unwrap_or_else(|e| e.into_inner());
             if table.is_open() {
@@ -114,7 +158,14 @@ impl Gate for ChannelGate {
         let parts = self.clone_parts();
         parts.live(&admit.channel, &publication);
         let stream = Stream { publication: Some(publication), open: None, gate: parts };
-        Ok(Box::new(Channelled { channel: admit.channel, app: admit.app, name: admit.stream, stream }))
+        let ticket = self.on_air.add(&admit.channel, &admit.key, kick);
+        Ok(Box::new(Channelled {
+            channel: admit.channel,
+            app: admit.app,
+            name: admit.stream,
+            stream,
+            on_air: (self.on_air.clone(), ticket),
+        }))
     }
 
     fn relay(&self, client: TcpStream, first: &[u8]) {
@@ -188,6 +239,7 @@ struct Channelled {
     app: String,
     name: String,
     stream: Stream,
+    on_air: (Arc<OnAir>, u64),
 }
 
 impl Inlet for Channelled {
@@ -202,6 +254,7 @@ impl Inlet for Channelled {
 
 impl Drop for Channelled {
     fn drop(&mut self) {
+        self.on_air.0.remove(self.on_air.1);
         self.stream.publication = None;
         let Some(r) = &self.stream.gate.reporter else { return };
         r.info(format!("{}/{} stopped publishing", self.app, self.name));

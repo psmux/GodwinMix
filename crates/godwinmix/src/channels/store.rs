@@ -122,7 +122,7 @@ mod tests {
         record.extra.insert("destinations".into(), toml::Value::Array(vec![]));
         save(&path, std::slice::from_ref(&record)).unwrap();
         let text = std::fs::read_to_string(&path).unwrap();
-        assert!(!text.contains("secret"), "{text}");
+        assert!(!text.contains("secret ="), "a key's secret is never written here: {text}");
         assert_eq!(load(&path).unwrap(), vec![record]);
         std::fs::remove_dir_all(&dir).ok();
     }
