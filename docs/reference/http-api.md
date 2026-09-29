@@ -48,6 +48,13 @@ same thing without a mixer. The ones the how to pages reach for:
 | `POST /api/v1/outputs/{id}/set` | `output.set`: `{"uri","policy","queue_secs"}`, naming only what moves. `uri` is write only and an absent one keeps the address in force, which is how a stream key is replaced without anything ever reading it back. See [stream to a platform](../how-to/stream-to-a-platform.md) |
 | `POST /api/v1/tool/call` | `tool.call`: `{"name","arguments"}`, the name being `<plugin>/<tool>` |
 | `GET /api/v1/plugins/{id}/settings` | a plugin's settings, and `POST` with `{"settings":{...}}` changes the keys it names |
+| `GET /api/v1/channels` | `channel.list`: every RTMP channel with its keys as hints, its streams and its destinations, and the port they share. See [channels.md](channels.md) |
+| `POST /api/v1/channels` | `channel.add`: `{"name","app","auto_source","key_mode"}`, only `name` required. The answer carries the first key, and nothing reads it back later |
+| `POST /api/v1/channels/{id}/key/add` | `channel.key.add`: `{"label"}`. Another key, shown once |
+| `POST /api/v1/channels/{id}/key/remove` | `channel.key.remove`: `{"key"}`. A publisher on air with it is cut off |
+| `POST /api/v1/channels/{id}/destination/add` | `channel.destination.add`: `{"platform","label","server","key","stream","enabled"}`. See [restream a channel](../how-to/restream-a-channel.md) |
+| `POST /api/v1/channels/{id}/destination` | `channel.destination.set`: `{"destination", ...}`, naming only what moves. A key left out is kept |
+| `POST /api/v1/channels/{id}/destination/remove` | `channel.destination.remove`: `{"destination"}` |
 
 A scheduled take takes `at_running_time_ms`, armed on the pipeline clock so it
 lands on the intended frame rather than whenever the request happened to arrive.

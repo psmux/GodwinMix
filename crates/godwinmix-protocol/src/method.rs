@@ -258,7 +258,6 @@ const COLLECTION_LEVEL: &[&str] = &[
     "scene.apply_graphic",
     "scene.validate",
     "scene.export",
-    "channel.key",
 ];
 
 /// True when a method is about the collection rather than one of its members.
@@ -281,7 +280,10 @@ fn plural(noun: &str) -> String {
 ///
 /// `noun.verb` becomes `/api/v1/<noun>/<verb>`, except that `list`, `get`,
 /// `add` and `remove` map onto the collection, and a middle segment becomes a
-/// sub resource: `source.audio.set` is `POST /api/v1/sources/{id}/audio`.
+/// sub resource: `source.audio.set` is `POST /api/v1/sources/{id}/audio`. Any
+/// other verb on a sub resource keeps its name, so `channel.key.add` and
+/// `channel.key.remove` are `/api/v1/channels/{id}/key/add` and `.../remove`
+/// rather than two methods on one path.
 pub fn rest_transform(method: &str) -> Option<Rest> {
     let parts: Vec<&str> = method.split('.').collect();
     let (noun, verb) = (*parts.first()?, *parts.last()?);
@@ -318,8 +320,11 @@ pub fn rest_transform(method: &str) -> Option<Rest> {
             ("get", false) => {
                 Rest { http: "GET", path: format!("{base}/{{id}}/{}", middle.join("/")) }
             }
-            (_, false) => {
+            ("set", false) => {
                 Rest { http: "POST", path: format!("{base}/{{id}}/{}", middle.join("/")) }
+            }
+            (verb, false) => {
+                Rest { http: "POST", path: format!("{base}/{{id}}/{}/{verb}", middle.join("/")) }
             }
         });
     }
@@ -380,6 +385,12 @@ mod tests {
         assert_eq!(at("source.add"), "POST /api/v1/sources");
         assert_eq!(at("source.remove"), "DELETE /api/v1/sources/{id}");
         assert_eq!(at("source.audio.set"), "POST /api/v1/sources/{id}/audio");
+        // A sub resource with more than a read and a write names the verb.
+        assert_eq!(at("channel.key.add"), "POST /api/v1/channels/{id}/key/add");
+        assert_eq!(at("channel.key.remove"), "POST /api/v1/channels/{id}/key/remove");
+        assert_eq!(at("channel.destination.add"), "POST /api/v1/channels/{id}/destination/add");
+        assert_eq!(at("channel.destination.set"), "POST /api/v1/channels/{id}/destination");
+        assert_eq!(at("channel.destination.remove"), "POST /api/v1/channels/{id}/destination/remove");
         assert_eq!(at("source.seek"), "POST /api/v1/sources/{id}/seek");
         assert_eq!(at("output.reconnect"), "POST /api/v1/outputs/{id}/reconnect");
         assert_eq!(at("program.take"), "POST /api/v1/program/take");

@@ -156,11 +156,10 @@ mod tests {
         for name in ["channel.destination.add", "channel.destination.set", "channel.destination.remove"] {
             let m = reg.iter().find(|m| m.name == name).unwrap_or_else(|| panic!("{name}"));
             assert_eq!(m.scope, Scope::Admin, "{name}");
-            // Where the transform rule puts them. If `channel` joins the
-            // collections, all three would land on one path and this fails
-            // first: give them `rest_at` routes then.
+            // Where the transform rule puts them: under the channel, each on
+            // a path of its own.
             let path = &m.rest.as_ref().unwrap().path;
-            assert!(path.starts_with("/api/v1/channel/destination/"), "{path}");
+            assert!(path.starts_with("/api/v1/channels/{id}/destination"), "{path}");
         }
     }
 }

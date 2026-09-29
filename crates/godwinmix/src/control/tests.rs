@@ -181,6 +181,19 @@ fn every_rest_path_comes_from_the_transform_rule() {
     }
 }
 
+/// Two methods on one route would mean the second can never be reached over
+/// HTTP, and the router would answer the first without saying so.
+#[test]
+fn no_two_methods_share_one_rest_route() {
+    let mut seen = std::collections::BTreeMap::new();
+    for m in methods::registry().iter() {
+        let Some(rest) = &m.rest else { continue };
+        if let Some(other) = seen.insert((rest.http, rest.path.clone()), m.name) {
+            panic!("{} and {} are both {} {}", other, m.name, rest.http, rest.path);
+        }
+    }
+}
+
 /// Scopes and destructiveness are the two flags the server enforces, so the
 /// table has to agree with 03 section 6 rather than with whoever typed last.
 #[test]
