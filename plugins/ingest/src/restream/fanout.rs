@@ -11,25 +11,8 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use super::{start, Target};
-use crate::media_tag::{MediaTag, TagKind};
-use crate::rtmp::{Event, Filter, Server, Sink};
-
-/// One FLV tag, as `rtmp.rs` hands them over, back into a `MediaTag`. The
-/// payload is made shared once and every destination gets the same one.
-fn to_tag(flv: &[u8]) -> Option<MediaTag> {
-    if flv.len() < 11 + 2 || flv.starts_with(b"FLV") {
-        return None;
-    }
-    let size = u32::from_be_bytes([0, flv[1], flv[2], flv[3]]) as usize;
-    let ts = u32::from_be_bytes([flv[7], flv[4], flv[5], flv[6]]);
-    let body = flv.get(11..11 + size)?;
-    let (kind, keyframe, header) = match flv[0] {
-        9 => (TagKind::Video, body[0] >> 4 == 1, body.get(1) == Some(&0)),
-        8 => (TagKind::Audio, false, body[0] >> 4 == 10 && body.get(1) == Some(&0)),
-        _ => (TagKind::Script, false, false),
-    };
-    Some(MediaTag { kind, timestamp_ms: ts, keyframe, sequence_header: header, payload: Arc::from(body) })
-}
+use crate::media_tag::MediaTag;
+use super::test_gate::listen;
 
 fn env(name: &str, default: &str) -> String {
     std::env::var(name).unwrap_or_else(|_| default.to_string())
@@ -50,21 +33,16 @@ fn fanout() {
     }
     let senders = Arc::new(Mutex::new(senders));
     let fan = Arc::clone(&senders);
-    let sink: Sink = Arc::new(move |e| match e {
-        Event::Bytes(b) => {
-            if let Some(tag) = to_tag(&b) {
-                for tx in fan.lock().unwrap().iter() {
-                    let _ = tx.send(tag.clone());
-                }
+    // The stream ending ends the destinations' inputs with it, so each one
+    // finishes what it holds and says goodbye to its receiver.
+    let _server = listen(port, None, Arc::new(move |t| match t {
+        Some(tag) => {
+            for tx in fan.lock().unwrap().iter() {
+                let _ = tx.send(tag.clone());
             }
         }
-        // The stream ended: the destinations' inputs end with it, so each
-        // one finishes what it holds and says goodbye to its receiver.
-        Event::Left { .. } => fan.lock().unwrap().clear(),
-        Event::Note(n) => eprintln!("listener: {n}"),
-        other => eprintln!("listener: {other:?}"),
-    });
-    let _server = Server::bind("127.0.0.1", port, Filter::default(), sink).expect("bind the input");
+        None => fan.lock().unwrap().clear(),
+    }));
     eprintln!("fanout: listening on {port}, {} destinations, {secs} s", handles.len());
     let started = Instant::now();
     while started.elapsed() < Duration::from_secs(secs) {

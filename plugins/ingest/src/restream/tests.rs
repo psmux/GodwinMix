@@ -8,7 +8,8 @@ use godwinmix_protocol::destination::DestinationState;
 
 use super::*;
 use crate::media_tag::TagKind;
-use crate::rtmp::{Event, Filter, Server, Sink};
+use super::test_gate::listen;
+use crate::rtmp::Server;
 
 const VIDEO_HEADER: &[u8] = &[0x17, 0x00, 0, 0, 0, 0x01, 0x64, 0x00, 0x28];
 const AUDIO_HEADER: &[u8] = &[0xaf, 0x00, 0x12, 0x10];
@@ -43,31 +44,30 @@ fn feed(tx: mpsc::Sender<MediaTag>) {
     });
 }
 
-/// A listener that keeps every byte a publisher sent it.
-fn receiver(port: u16) -> (Server, Arc<Mutex<Vec<u8>>>) {
+/// A listener that keeps every tag a publisher sent it.
+fn receiver(port: u16) -> (Server, Arc<Mutex<Vec<MediaTag>>>) {
     let got = Arc::new(Mutex::new(Vec::new()));
     let keep = Arc::clone(&got);
-    let sink: Sink = Arc::new(move |e| {
-        if let Event::Bytes(b) = e {
-            keep.lock().unwrap().extend_from_slice(&b);
+    let server = listen(port, None, Arc::new(move |t| {
+        if let Some(t) = t {
+            keep.lock().unwrap().push(t);
         }
-    });
-    (Server::bind("127.0.0.1", port, Filter::default(), sink).expect("bind"), got)
+    }));
+    (server, got)
 }
 
-/// The FLV tags in a byte stream, as (type, body).
-fn tags(flv: &[u8]) -> Vec<(u8, Vec<u8>)> {
-    let mut out = Vec::new();
-    let mut at = 13;
-    while at + 11 <= flv.len() {
-        let size = u32::from_be_bytes([0, flv[at + 1], flv[at + 2], flv[at + 3]]) as usize;
-        if at + 11 + size + 4 > flv.len() {
-            break;
-        }
-        out.push((flv[at], flv[at + 11..at + 11 + size].to_vec()));
-        at += 11 + size + 4;
-    }
-    out
+/// The tags as (FLV tag type, body).
+fn tags(got: &[MediaTag]) -> Vec<(u8, Vec<u8>)> {
+    got.iter()
+        .map(|t| {
+            let kind = match t.kind {
+                TagKind::Video => 9,
+                TagKind::Audio => 8,
+                TagKind::Script => 18,
+            };
+            (kind, t.payload.to_vec())
+        })
+        .collect()
 }
 
 fn wait_for(what: &str, mut ok: impl FnMut() -> bool) {
@@ -94,9 +94,10 @@ fn a_receiver_that_comes_back_gets_the_headers_again_and_then_a_keyframe() {
     wait_for("the reconnect", || tags(&again.lock().unwrap()).len() > 20);
 
     let after = tags(&again.lock().unwrap());
-    assert_eq!(after[0], (9, VIDEO_HEADER.to_vec()), "the AVC header comes first");
-    assert_eq!(after[1], (8, AUDIO_HEADER.to_vec()), "then the AAC header");
-    assert_eq!(after[2].1[..2], [0x17, 0x01], "then a keyframe, never an inter frame");
+    assert_eq!(after[0].0, 18, "the metadata comes first");
+    assert_eq!(after[1], (9, VIDEO_HEADER.to_vec()), "then the AVC header");
+    assert_eq!(after[2], (8, AUDIO_HEADER.to_vec()), "then the AAC header");
+    assert_eq!(after[3].1[..2], [0x17, 0x01], "then a keyframe, never an inter frame");
     let stats = dest.stats();
     assert_eq!(stats.live.state, DestinationState::Live);
     assert_eq!(stats.live.reconnects, 1);
@@ -105,9 +106,7 @@ fn a_receiver_that_comes_back_gets_the_headers_again_and_then_a_keyframe() {
 
 #[test]
 fn a_wrong_key_is_failed_with_a_sentence_that_says_so() {
-    let sink: Sink = Arc::new(|_| {});
-    let filter = Filter { key: "the-right-key".into(), ..Default::default() };
-    let server = Server::bind("127.0.0.1", 0, filter, sink).expect("bind");
+    let server = listen(0, Some("the-right-key"), Arc::new(|_| {}));
     let (tx, rx) = mpsc::channel();
     feed(tx);
     let url = format!("rtmp://127.0.0.1:{}/live/a-wrong-key", server.port());
