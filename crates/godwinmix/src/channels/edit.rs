@@ -77,7 +77,29 @@ impl Channels {
             record.key_mode = req.key_mode.unwrap_or(record.key_mode);
         }
         self.commit(Some(&req.id))?;
+        if req.auto_source == Some(true) {
+            self.adopt_live(&req.id);
+        }
         self.get(&req.id)
+    }
+
+    /// Streams already live when `auto_source` is switched on become
+    /// sources now, rather than at their next reconnect.
+    fn adopt_live(&self, id: &str) {
+        let Some(record) = self.records.lock().iter().find(|r| r.id == id && r.enabled).cloned() else {
+            return;
+        };
+        let waiting: Vec<(String, String)> = self
+            .live
+            .lock()
+            .iter()
+            .filter(|l| l.channel == id && l.state == "live" && l.source.is_none())
+            .map(|l| (l.name.clone(), l.relay.clone()))
+            .collect();
+        for (stream, relay) in waiting {
+            self.adopt(&record, &stream, &relay);
+        }
+        self.announce(id);
     }
 
     /// `channel.remove`: the channel, its keys, and the sources it added

@@ -146,14 +146,18 @@ fn a_real_publisher_arrives_and_its_stream_reaches_the_pipe_as_matroska() {
 }
 
 #[test]
-fn a_relay_address_nothing_is_listening_on_names_discover() {
+fn a_channel_server_that_is_not_up_yet_is_waited_for_rather_than_refused() {
+    // The mixer restores its sources before it starts its plugins, so a
+    // source a scene held across a restart asks before anything listens.
+    // Refusing to start would lose the source; it waits and says so instead.
     let path = std::env::temp_dir().join(format!("gmx-ingest-r-{}.flv", std::process::id()));
     let settings = Settings::from_params(&json!({"relay": "127.0.0.1:1", "stream": "live/x"}));
-    let err = match Ingest::start(&settings, None, Out::File(path.clone())) {
-        Ok(_) => panic!("nothing is listening on port 1"),
-        Err(e) => e,
-    };
-    assert!(err.contains("ingest/discover"), "{err}");
+    let ingest = Ingest::start(&settings, None, Out::File(path.clone()))
+        .expect("a channel server that is not up yet is waited for");
+    let health = ingest.health();
+    assert_eq!(health.state, godwinmix_sdk::wire::HealthState::Degraded);
+    assert!(health.detail.unwrap_or_default().contains("live/x"));
+    drop(ingest);
     let _ = std::fs::remove_file(&path);
 }
 

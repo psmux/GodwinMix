@@ -26,7 +26,7 @@ pub struct Meter {
     frames: u32,
     video_kbps: u32,
     audio_kbps: u32,
-    fps: f32,
+    fps: f64,
     pub total_bytes: u64,
 }
 
@@ -84,7 +84,7 @@ impl Meter {
             let secs = elapsed.as_secs_f64();
             self.video_kbps = (self.video_bytes as f64 * 8.0 / 1000.0 / secs).round() as u32;
             self.audio_kbps = (self.audio_bytes as f64 * 8.0 / 1000.0 / secs).round() as u32;
-            self.fps = ((self.frames as f64 / secs) * 100.0).round() as f32 / 100.0;
+            self.fps = ((self.frames as f64 / secs) * 100.0).round() / 100.0;
             self.window_start = now;
             self.video_bytes = 0;
             self.audio_bytes = 0;
