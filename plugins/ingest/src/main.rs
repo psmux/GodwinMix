@@ -20,9 +20,6 @@ mod channels;
 mod codec;
 mod device;
 mod flv;
-// The restreamer reads the hub through `subscribe`. Until destinations are
-// wired to the channel table, only the tests call it.
-#[allow(dead_code)]
 mod restream;
 mod gate;
 // The restreamer (src/restream/) reads the hub through `subscribe`, so parts
@@ -34,6 +31,7 @@ mod relay;
 mod remux;
 mod rest;
 mod rtmp;
+mod sends;
 mod source;
 mod sps;
 mod whip_in;
@@ -228,6 +226,7 @@ impl Device for Publishers {
         self.settings = device::Settings::from_params(&ready.params);
         let table = channels::Table::from_params(&ready.params);
         let running = device::Discover::start(&self.settings, table, Some(reporter)).map_err(internal)?;
+        running.set_sends(sends::wanted(&ready.params));
         self.running = Some(running);
         Ok(InitializeResult::default())
     }
@@ -238,6 +237,7 @@ impl Device for Publishers {
     fn configure(&mut self, params: Value) -> Result<Configure, RpcError> {
         if let Some(running) = &self.running {
             running.set_table(channels::Table::from_params(&params));
+            running.set_sends(sends::wanted(&params));
         }
         let wanted = device::Settings::from_params(&params);
         if wanted == self.settings {

@@ -19,6 +19,11 @@
 //!    answers with one candidate per publisher, `event/ingest.publisher` is
 //!    raised for each, and `add_publishers` makes the sources match.
 //!
+//! 4. `event/channel.destination` when one of a channel's destinations
+//!    changes state, and its bit rate in the `streams` answer. Each
+//!    destination the table carries is a restream reading the hub
+//!    (`src/sends.rs`).
+//!
 //! Each source reads its stream from the hub over loopback on this same port
 //! (`src/relay.rs`), so an address handed to a source stays good for as long
 //! as the port does.
@@ -34,6 +39,7 @@ use crate::gate::ChannelGate;
 use crate::hub::Hub;
 use crate::rest::Core;
 use crate::rtmp::{slug, Server};
+use crate::sends::{Sends, Wanted};
 
 /// The settings of `ingest/discover` that need the socket bound again.
 #[derive(Debug, Clone, PartialEq)]
@@ -79,6 +85,8 @@ pub struct Discover {
     _server: Server,
     /// Every slug `add_publishers` has added, so it knows what to remove.
     added: Mutex<Vec<String>>,
+    /// The channels' destinations, each a restream reading the hub.
+    sends: Sends,
 }
 
 impl Discover {
@@ -98,7 +106,8 @@ impl Discover {
             let channels = gate.table.read().map(|t| t.channels.len()).unwrap_or(0);
             r.info(format!("listening for RTMP publishers on port {port}, {channels} channel(s)"));
         }
-        Ok(Discover { gate, port, _server: server, added: Mutex::new(Vec::new()) })
+        let sends = Sends::new(gate.hub.clone(), reporter);
+        Ok(Discover { gate, port, _server: server, added: Mutex::new(Vec::new()), sends })
     }
 
     #[cfg(test)]
@@ -108,9 +117,14 @@ impl Discover {
 
     /// The hub every stream on this listener goes through. The restreamer
     /// reads a channel's streams with `hub().subscribe(app, stream)`.
-    #[allow(dead_code)]
+    #[cfg(test)]
     pub fn hub(&self) -> &Hub {
         &self.gate.hub
+    }
+
+    /// Run the destinations the channel table asks for, and no others.
+    pub fn set_sends(&self, wanted: Vec<Wanted>) {
+        self.sends.apply(wanted);
     }
 
     /// Take a new channel table. A publisher it no longer lets in (its key
@@ -146,7 +160,11 @@ impl Discover {
     pub fn streams(&self) -> ToolResult {
         let streams = self.gate.hub.streams();
         let summary = format!("{} live stream(s) on port {}", streams.len(), self.port);
-        ok_result(summary, json!({"port": self.port, "relay": self.relay(), "streams": streams}))
+        let destinations = self.sends.rates();
+        ok_result(
+            summary,
+            json!({"port": self.port, "relay": self.relay(), "streams": streams, "destinations": destinations}),
+        )
     }
 
     pub fn health(&self) -> Health {

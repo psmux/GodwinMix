@@ -49,10 +49,6 @@ impl Board {
         })
     }
 
-    pub fn current(&self) -> DestinationState {
-        self.with(|b| b.live.state)
-    }
-
     pub fn error(&self, error: Option<String>) {
         self.with(|b| b.live.error = error)
     }
