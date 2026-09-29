@@ -39,14 +39,14 @@ export async function addChannel(client) {
   const draw = () => {
     const s = slugify(input.value);
     slug.textContent = s || "your-channel";
-    slug.classList.toggle("empty", !s);
+    slug.classList.toggle("chn-unset", !s);
     create.disabled = !s;
   };
   on(input, "input", draw);
   on(input, "keydown", (e) => { if (e.key === "Enter" && !create.disabled) create.click(); });
   draw();
   input.focus();
-  firstBase(client).then((b) => { base.textContent = (b || "rtmp://this-mixer:1935") + "/"; });
+  firstBase(client).then((b) => { base.textContent = (b || `rtmp://${location.hostname}:1935`) + "/"; });
 
   create.onclick = async () => {
     const name = input.value.trim();
