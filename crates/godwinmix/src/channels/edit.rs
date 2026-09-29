@@ -39,6 +39,7 @@ impl Channels {
                 key_mode: req.key_mode.unwrap_or_default(),
                 keys: Vec::new(),
                 auto_sources: Vec::new(),
+                destinations: Vec::new(),
                 extra: Default::default(),
             };
             records.push(record.clone());
@@ -112,6 +113,7 @@ impl Channels {
         };
         let Some(gone) = gone else { return Err(self.not_found(id)) };
         self.secrets.forget(&keys::scope(id));
+        self.forget_channel_sending(id);
         let streams: Vec<super::Live> = {
             let mut live = self.live.lock();
             let (mine, rest): (Vec<_>, Vec<_>) = live.drain(..).partition(|l| l.channel == id);

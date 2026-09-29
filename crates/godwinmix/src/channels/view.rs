@@ -35,7 +35,7 @@ impl Channels {
                 .collect(),
             publish: ChannelPublish { server, example },
             streams,
-            destinations: Vec::new(),
+            destinations: self.destination_views(r),
         }
     }
 }

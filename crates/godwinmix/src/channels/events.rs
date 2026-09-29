@@ -30,6 +30,7 @@ pub fn start(channels: &Arc<Channels>) {
                 "channel.stream" if params["state"] == "idle" => me.went_idle(&params),
                 "channel.stream" => me.went_live(&params),
                 "channel.refused" => me.refused(&params),
+                "channel.destination" => me.destination_report(&params),
                 other => debug!(event = other, "a channel event nothing acts on"),
             }
         }
@@ -144,6 +145,9 @@ impl Channels {
         let body = &answer["structured_content"];
         if let Some(port) = body["port"].as_u64().and_then(|p| u16::try_from(p).ok()) {
             self.port.store(port, Ordering::Relaxed);
+        }
+        if let Some(rows) = body["destinations"].as_array() {
+            self.destination_rates(rows);
         }
         let rows = body["streams"].as_array().cloned().unwrap_or_default();
         let mut live = self.live.lock();
