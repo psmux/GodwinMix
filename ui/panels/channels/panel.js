@@ -43,7 +43,7 @@ export class ChannelsView {
     this.cards = new Map();
     this.list = el("div.chn-list");
     this.count = el("span.chn-count");
-    const add = el("button.btn.primary.chn-add", { text: "Add RTMP Channel", onclick: () => this.add() });
+    const add = (this.addButton = el("button.btn.primary.chn-add", { text: "Add RTMP Channel", onclick: () => this.add() }));
     this.head = el("header.chn-top", {}, [
       el("div.grow", {}, [el("h2", {}, ["RTMP channels ", this.count]), el("p.chn-lede", { text: "Encoders publish to the mixer. Each channel can go on air and on to the platforms." })]),
       add,
@@ -116,10 +116,13 @@ export class ChannelsView {
       this.list.appendChild(this.missing ? installCard(this.client, () => this.load()) : this.failure ? failed(this.failure, () => this.load()) : emptyArt(() => this.add()));
       // The empty picture has its own big button; one is enough.
       this.head.hidden = !this.missing && !this.failure;
+      // Without the plugin there is nothing to add a channel to.
+      this.addButton.hidden = this.missing;
       this.clock(false);
       return;
     }
     this.head.hidden = false;
+    this.addButton.hidden = false;
     if (!this.cards.size) clear(this.list);
     keyed(this.list, this.cards, channels, (c) => c.id, (c) => channelCard(this, c), (c) => (c.enabled ? "on" : "off"));
     this.clock(channels.some(isLive));
