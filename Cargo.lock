@@ -1279,13 +1279,18 @@ dependencies = [
 name = "gmx-ingest"
 version = "0.2.0"
 dependencies = [
+ "bytes",
  "glib",
  "gmx-netkit",
+ "godwinmix-protocol",
  "godwinmix-sdk",
  "gstreamer",
  "gstreamer-app",
+ "rml_amf0",
  "rml_rtmp",
+ "rustls",
  "serde_json",
+ "webpki-roots 1.0.9",
 ]
 
 [[package]]
