@@ -37,6 +37,7 @@ pub struct SrtLink {
 impl SrtLink {
     pub fn dial(target: &Target) -> Result<SrtLink, Failure> {
         let name = target.name();
+        gmx_netkit::init().map_err(Failure::Refused)?;
         gmx_netkit::elements::require(&["appsrc", "flvdemux", "h264parse", "aacparse", "mpegtsmux", "srtsink"])
             .map_err(Failure::Refused)?;
         let uri = target.url.replace('"', "");
@@ -106,8 +107,20 @@ impl Link for SrtLink {
         self.check()
     }
 
+    /// End the stream and let what the muxer and libsrt still hold go out.
     fn close(&mut self) {
         let _ = self.src.end_of_stream();
+        let watch = self.pipe.watch();
+        let until = std::time::Instant::now() + std::time::Duration::from_secs(2);
+        while !watch.ended() && watch.failure().is_none() && std::time::Instant::now() < until {
+            std::thread::sleep(std::time::Duration::from_millis(20));
+        }
+        // EOS has reached srtsink, but libsrt still holds what it has not
+        // delivered, and in live mode it drops that on close. Measured: the
+        // last 1.2 s of a 15 s run never arrived without this wait, and all
+        // of it did with it. It is the sender's own thread at the end of a
+        // stream, so nothing waits on it.
+        std::thread::sleep(std::time::Duration::from_secs(2));
         let _ = self.pipe.pipeline().set_state(gst::State::Null);
     }
 }

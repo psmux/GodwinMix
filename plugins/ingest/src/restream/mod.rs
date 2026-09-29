@@ -90,9 +90,15 @@ where
         stop: Arc::clone(&stop),
         pre: run::Preamble::default(),
     };
-    let _ = std::thread::Builder::new()
-        .name(format!("gmx-restream-{name}"))
-        .spawn(move || sender.run());
+    let on_panic = Arc::clone(&board);
+    let _ = std::thread::Builder::new().name(format!("gmx-restream-{name}")).spawn(move || {
+        // A bug in here must not leave the row saying "connecting" forever.
+        if std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| sender.run())).is_err() {
+            on_panic.state(DestinationState::Failed);
+            on_panic.error(Some("the restreamer stopped on an internal error; switch the \
+                                 destination off and on again".into()));
+        }
+    });
     Handle { stop, queue, board }
 }
 
