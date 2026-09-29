@@ -1042,6 +1042,10 @@ async function addSourcePickerSuite() {
     ok(!kinds.foldAdvanced(said).properties.gain["x-gmx-group"], "a plugin's own grouping was overruled");
     // A required field stays in view whatever it is called.
     const must = { required: ["bitrate"], properties: { bitrate: { type: "integer" }, tune: { type: "string" } } };
+    const basic = { properties: { uri: { type: "string" }, superimpose: { type: "string", "x-gmx-basic": true }, gain: { type: "number" } } };
+    const eased = kinds.foldAdvanced(basic);
+    ok(!eased.properties.superimpose["x-gmx-group"], "a field marked basic stays on the first visit");
+    eq(eased.properties.gain["x-gmx-group"], "Advanced", "the rest still folds");
     const kept = kinds.foldAdvanced(must);
     ok(!kept.properties.bitrate["x-gmx-group"] && kept.properties.tune["x-gmx-group"] === "Advanced");
     // The sizes a camera offers are for the form, never part of the request.

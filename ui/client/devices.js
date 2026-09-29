@@ -188,7 +188,10 @@ export function foldAdvanced(schema) {
   if (declared) return schema;
   const required = new Set(schema.required || []);
   for (const [key, prop] of Object.entries(props)) {
-    if (!prop || required.has(key) || ESSENTIAL.test(key)) continue;
+    // `x-gmx-basic` is a kind's own word that a field belongs on the first
+    // visit whatever its name: the way a web page is drawn is the one choice
+    // that kind has, and folded away nobody found it.
+    if (!prop || required.has(key) || ESSENTIAL.test(key) || prop["x-gmx-basic"]) continue;
     props[key] = Object.assign({}, prop, { "x-gmx-group": "Advanced" });
   }
   return schema;
