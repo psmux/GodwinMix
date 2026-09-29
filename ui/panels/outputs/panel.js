@@ -18,6 +18,7 @@ import { settings } from "../../shell/settings.js";
 import { startRecording, recordingRow, recordingState, isRecording } from "./recording.js";
 // Destination setup is needed only when adding or editing an output.
 import { lazyAction } from "../../shell/lazy-action.js";
+import { addChannel } from "../channels/entry.js";
 const addDestination = lazyAction(() => import("./destination.js").then(m => m.addDestination), "Add destination");
 const editDestination = lazyAction(() => import("./destination.js").then(m => m.editDestination), "Edit destination");
 
@@ -96,6 +97,7 @@ class OutputsPanel extends HTMLElement {
         el("span.grow"),
         el("button.btn", { text: "Record", onclick: () => startRecording(this.client) }),
         el("button.btn", { text: "Add destination", onclick: () => this.add() }),
+        el("button.btn", { text: "Add RTMP Channel", onclick: () => addChannel(this.client) }),
       ]),
       this.list
     );

@@ -63,6 +63,25 @@ const ASSETS: &[(&str, &str)] = &[
     ("kits/schema/render.js", include_str!("../../../ui/kits/schema/render.js")),
     ("kits/schema/ui-schema.js", include_str!("../../../ui/kits/schema/ui-schema.js")),
     ("panels/alerts/panel.js", include_str!("../../../ui/panels/alerts/panel.js")),
+    ("panels/channels/art.js", include_str!("../../../ui/panels/channels/art.js")),
+    ("panels/channels/brands.js", include_str!("../../../ui/panels/channels/brands.js")),
+    ("panels/channels/card.js", include_str!("../../../ui/panels/channels/card.js")),
+    ("panels/channels/channels.css", include_str!("../../../ui/panels/channels/channels.css")),
+    ("panels/channels/create.js", include_str!("../../../ui/panels/channels/create.js")),
+    ("panels/channels/destination-form.js", include_str!("../../../ui/panels/channels/destination-form.js")),
+    ("panels/channels/distribute.js", include_str!("../../../ui/panels/channels/distribute.js")),
+    ("panels/channels/edit.js", include_str!("../../../ui/panels/channels/edit.js")),
+    ("panels/channels/entry.js", include_str!("../../../ui/panels/channels/entry.js")),
+    ("panels/channels/fields.js", include_str!("../../../ui/panels/channels/fields.js")),
+    ("panels/channels/install.js", include_str!("../../../ui/panels/channels/install.js")),
+    ("panels/channels/keyed.js", include_str!("../../../ui/panels/channels/keyed.js")),
+    ("panels/channels/keys.js", include_str!("../../../ui/panels/channels/keys.js")),
+    ("panels/channels/model.js", include_str!("../../../ui/panels/channels/model.js")),
+    ("panels/channels/panel.js", include_str!("../../../ui/panels/channels/panel.js")),
+    ("panels/channels/qr-grid.js", include_str!("../../../ui/panels/channels/qr-grid.js")),
+    ("panels/channels/qr.js", include_str!("../../../ui/panels/channels/qr.js")),
+    ("panels/channels/reveal.js", include_str!("../../../ui/panels/channels/reveal.js")),
+    ("panels/channels/streams.js", include_str!("../../../ui/panels/channels/streams.js")),
     ("panels/composer/canvas.js", include_str!("../../../ui/panels/composer/canvas.js")),
     ("panels/composer/catalogue.js", include_str!("../../../ui/panels/composer/catalogue.js")),
     ("panels/composer/composer.css", include_str!("../../../ui/panels/composer/composer.css")),
@@ -162,6 +181,12 @@ const DEV_ASSETS: &[(&str, &str)] = &[
     ("test/monitor-resize.js", include_str!("../../../ui/test/monitor-resize.js")),
     ("test/dock.js", include_str!("../../../ui/test/dock.js")),
     ("test/welcome.js", include_str!("../../../ui/test/welcome.js")),
+    // The Channels panel against a stub of the channel contract, as tests and
+    // as a page to look at: /test/channels.html?scene=cards&theme=light.
+    ("test/channels.js", include_str!("../../../ui/test/channels.js")),
+    ("test/channels-stub.js", include_str!("../../../ui/test/channels-stub.js")),
+    ("test/channels-preview.js", include_str!("../../../ui/test/channels-preview.js")),
+    ("test/channels.html", include_str!("../../../ui/test/channels.html")),
     // The designer kits' behaviour, as the reference implementation answered
     // it. The TypeScript and Python suites read the same file from the
     // repository; the browser reads it from here, because the page has no file
@@ -667,6 +692,7 @@ mod tests {
         reachable.extend(closure_of("panels/sources/chooser.js"));
         reachable.extend(closure_of("panels/sources/drawer.js"));
         reachable.extend(closure_of("panels/outputs/destination.js"));
+        reachable.extend(closure_of("panels/channels/panel.js"));
         reachable.extend(closure_of("shell/sandbox.js"));
         reachable.extend(closure_of("panels/welcome/tiles.js"));
         reachable.extend(closure_of("panels/welcome/after.js"));
@@ -698,6 +724,9 @@ mod tests {
             ("shell/picker.js", "adding a source or dropping a URI"),
             ("panels/sources/chooser.js", "adding sources to a scene"),
             ("panels/outputs/destination.js", "adding or editing a destination"),
+            ("panels/channels/panel.js", "the Channels tab or Add RTMP Channel"),
+            ("panels/channels/qr.js", "a channel key being shown"),
+            ("panels/channels/brands.js", "the Channels tab"),
             ("panels/composer/canvas.js", "the composer"),
             ("panels/composer/inspector.js", "the composer"),
             ("kits/canvas/gizmos.js", "the composer's canvas"),
