@@ -29,6 +29,7 @@ mod keys;
 mod live;
 mod net;
 mod store;
+mod view;
 
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicU16, Ordering};
@@ -38,7 +39,7 @@ use godwinmix_core::mixer::MixerHandle;
 use godwinmix_core::plugin::supervisor::Supervisor;
 use godwinmix_core::scene::server::SceneServer;
 use godwinmix_core::secrets::Secrets;
-use godwinmix_protocol::channels::{Channel, ChannelKey, ChannelList, ChannelPublish, RtmpInfo};
+use godwinmix_protocol::channels::{Channel, ChannelList, RtmpInfo};
 use godwinmix_protocol::error::RpcError;
 use godwinmix_protocol::types::Event;
 use parking_lot::Mutex;
@@ -157,37 +158,6 @@ impl Channels {
     fn announce(&self, id: &str) {
         if let Some(channel) = self.channel(id) {
             self.mixer.emit(Event::ChannelChanged { channel: Box::new(channel) });
-        }
-    }
-
-    fn channel(&self, id: &str) -> Option<Channel> {
-        let record = self.records.lock().iter().find(|r| r.id == id).cloned()?;
-        Some(self.view(&record))
-    }
-
-    fn view(&self, r: &Record) -> Channel {
-        let port = self.port.load(Ordering::Relaxed);
-        let server = format!("rtmp://{}:{port}/{}", net::first_address(), r.app);
-        let example = match r.key_mode {
-            godwinmix_protocol::channels::KeyMode::Query => format!("{server}/main?psk=<key>"),
-            godwinmix_protocol::channels::KeyMode::Stream => format!("{server}/<key>"),
-        };
-        let streams = self.live.lock().iter().filter(|l| l.channel == r.id).map(Live::view).collect();
-        Channel {
-            id: r.id.clone(),
-            name: r.name.clone(),
-            app: r.app.clone(),
-            enabled: r.enabled,
-            auto_source: r.auto_source,
-            key_mode: r.key_mode,
-            keys: r
-                .keys
-                .iter()
-                .map(|k| ChannelKey { id: k.id.clone(), label: k.label.clone(), created: k.created.clone(), hint: k.hint.clone() })
-                .collect(),
-            publish: ChannelPublish { server, example },
-            streams,
-            destinations: Vec::new(),
         }
     }
 

@@ -3161,7 +3161,7 @@ pub const METHODS: [MethodInfo; 140] = [
     MethodInfo { name: "channel.add", summary: "Make a channel and its first key. The key is in this answer and never again.", scope: "admin", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/channels")) },
     MethodInfo { name: "channel.get", summary: "One channel.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/channels/{id}")) },
     MethodInfo { name: "channel.key.add", summary: "Make another key for a channel, to give to one more person or encoder. The key is in this answer and never again.", scope: "admin", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/channels/key/add")) },
-    MethodInfo { name: "channel.key.remove", summary: "Take one key back. The next publisher with it is turned away; the other keys are untouched.", scope: "admin", mutating: true, destructive: true, rest: Some(("POST", "/api/v1/channels/key/remove")) },
+    MethodInfo { name: "channel.key.remove", summary: "Take one key back. A publisher on air with it is cut off and the next one is turned away; the other keys are untouched.", scope: "admin", mutating: true, destructive: true, rest: Some(("POST", "/api/v1/channels/key/remove")) },
     MethodInfo { name: "channel.list", summary: "Every RTMP channel with its keys (as hints), the address to publish to, and what is live on it, beside the port they all share.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/channels")) },
     MethodInfo { name: "channel.remove", summary: "Remove a channel and forget its keys. Sources it made that no scene holds go with it.", scope: "admin", mutating: true, destructive: true, rest: Some(("DELETE", "/api/v1/channels/{id}")) },
     MethodInfo { name: "channel.set", summary: "Rename a channel, switch it on or off, or change its application name, whether its streams become sources, or how its key is given. Only what is named moves.", scope: "admin", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/channels/{id}/set")) },
@@ -3556,7 +3556,7 @@ impl Client {
         self.call("channel.key.add", params).await
     }
 
-    /// Take one key back. The next publisher with it is turned away; the other keys are untouched.
+    /// Take one key back. A publisher on air with it is cut off and the next one is turned away; the other keys are untouched.
     pub async fn channel_key_remove(&self, params: &ChannelKeyRemoveRequest) -> Result<Channel> {
         self.call("channel.key.remove", params).await
     }

@@ -1,5 +1,6 @@
 use super::*;
-use std::time::Instant;
+use crate::media_tag::{MediaTag, TagKind};
+use std::time::{Duration, Instant};
 
 fn tag(kind: TagKind, ms: u32, keyframe: bool, header: bool, size: usize) -> MediaTag {
     let mut body = vec![0u8; size.max(2)];

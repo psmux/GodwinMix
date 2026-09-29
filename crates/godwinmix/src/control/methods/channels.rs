@@ -88,8 +88,8 @@ pub fn register(reg: &mut Registry<Call>) {
         MethodDef::new(
             "channel.key.remove",
             Scope::Admin,
-            "Take one key back. The next publisher with it is turned away; the other keys \
-             are untouched.",
+            "Take one key back. A publisher on air with it is cut off and the next one is \
+             turned away; the other keys are untouched.",
             handler(key_remove),
         )
         .params(schema_of::<ChannelKeyRemoveRequest>)

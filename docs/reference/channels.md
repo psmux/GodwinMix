@@ -1,0 +1,166 @@
+# The channel methods
+
+A channel is a named place encoders publish to on the mixer's own RTMP port,
+the way a Livebox channel was an nginx-rtmp `application`:
+
+```
+rtmp://<mixer>:<port>/<app>/<stream>?psk=<key>
+```
+
+One port serves every channel, and several streams may be live on one channel
+at once: an encoder that sends its own ladder publishes each rendition as a
+stream of its own. The listener is the ingest plugin's `ingest/discover`; the
+methods below are the core's. Nothing listens until that plugin is installed
+and switched on, and `channel.list` says so in `rtmp.problem`.
+
+| Method | REST | Scope | Destructive | What it does |
+|---|---|---|---|---|
+| `channel.list` | `GET /api/v1/channels` | read | no | Every channel, and the port they share |
+| `channel.get {id}` | `GET /api/v1/channels/{id}` | read | no | One channel |
+| `channel.add {name, app?, auto_source?, key_mode?}` | `POST /api/v1/channels` | admin | no | A channel and its first key |
+| `channel.set {id, name?, app?, enabled?, auto_source?, key_mode?}` | `POST /api/v1/channels/{id}/set` | admin | no | Change what is named, leave the rest |
+| `channel.remove {id}` | `DELETE /api/v1/channels/{id}` | admin | yes | The channel, its keys, and the sources it made that no scene holds |
+| `channel.key.add {id, label?}` | `POST /api/v1/channels/key/add` | admin | no | One more key |
+| `channel.key.remove {id, key}` | `POST /api/v1/channels/key/remove` | admin | yes | Take one key back |
+
+`channel.destination.*`, which sends a channel's streams on to YouTube,
+Facebook, Twitch or any RTMP or SRT address, has a page of its own when it
+lands; until then `destinations` is always an empty list.
+
+Every refusal says what state things are in and what to do, with `data` a
+client can act on (`docs/reference/errors.md`). An unknown channel or key
+answers `-32004` with the ids that would have worked in `data.valid`. A bad
+application name or one already taken answers `-32602` with `data.field` set
+to `app`, and `data.channel` naming the channel that has it.
+
+## The Channel record
+
+```json
+{
+  "id": "sunday-service",
+  "name": "Sunday service",
+  "app": "sunday-service",
+  "enabled": true,
+  "auto_source": true,
+  "key_mode": "query",
+  "keys": [
+    { "id": "key-1", "label": "Key 1", "created": "2026-09-29T16:44:23.872Z", "hint": "jca7" }
+  ],
+  "publish": {
+    "server": "rtmp://192.168.77.106:19351/sunday-service",
+    "example": "rtmp://192.168.77.106:19351/sunday-service/main?psk=<key>"
+  },
+  "streams": [
+    {
+      "name": "main", "state": "live", "since_ms": 1790700583138, "from": "127.0.0.1:52616",
+      "key": "key-1",
+      "video": { "codec": "h264", "width": 1280, "height": 720, "fps": 29.95, "kbps": 2542 },
+      "audio": { "codec": "aac", "channels": 1, "sample_rate": 44100, "kbps": 70 },
+      "source": "sunday-service-main",
+      "dropped_gops": 0
+    }
+  ],
+  "destinations": []
+}
+```
+
+| Field | What it is |
+|---|---|
+| `id` | A slug made from the name when the channel is made. It never changes |
+| `app` | The RTMP application name, the path segment after the port. Letters, digits, dashes and underscores, up to 64. Defaults to the id |
+| `enabled` | Off turns every publisher away with a sentence saying the channel is switched off, and cuts off the ones already live |
+| `auto_source` | A stream that goes live becomes a mixer source by itself. On by default |
+| `key_mode` | `query`: the key rides on the stream name as `?psk=`, `?key=`, `?token=` or `?Token=`. `stream`: the whole stream name is the key |
+| `keys` | Write only. `hint` is the last four characters; the key itself is sent once, when it is made, and never again |
+| `publish.server` | What an encoder's server box takes. The address is this machine's address on its network |
+| `streams` | Every live stream, and any stream that left while a scene still holds its source (`state: "idle"`) |
+| `streams[].key` | The id of the key that let it in |
+| `streams[].video`, `.audio` | Read from the codec sequence headers and the byte rate. `fps` and `kbps` are measured over the last second |
+| `streams[].source` | The mixer source it feeds, `<app>-<stream>` |
+| `streams[].dropped_gops` | Whole GOPs readers of this stream lost by falling behind, this session. A reader that falls behind loses from the front of its queue and starts again at the next keyframe; the publisher is never slowed |
+
+In `stream` key mode the stream is named after the key's id, so a key never
+becomes part of a source id or a log line.
+
+## `channel.list`
+
+```json
+{
+  "channels": [ ... ],
+  "rtmp": { "port": 19351, "urls": ["rtmp://192.168.77.106:19351", "rtmp://127.0.0.1:19351"], "listening": true }
+}
+```
+
+`rtmp.port` is `rtmp_port` in the ingest plugin's settings, 1935 unless set.
+When `listening` is false, `rtmp.problem` says why in one sentence: the
+plugin is not installed, it is switched off, or its listener did not start.
+
+## `channel.add`
+
+```json
+{ "jsonrpc": "2.0", "id": 1, "method": "channel.add", "params": { "name": "Sunday service" } }
+```
+
+answers with the channel and its first key:
+
+```json
+{ "channel": { "id": "sunday-service", ... }, "key": { "id": "key-1", "label": "Key 1", "secret": "vjktb3s7s868eiquqfgcjca7" } }
+```
+
+The secret is 24 lower case letters and digits, with 0, o, 1 and l left out
+so it reads back over a phone. It is in this answer and in no other.
+
+## `channel.key.add` and `channel.key.remove`
+
+`channel.key.add {id, label?}` answers `{key: {id, label, secret}}`. The id is
+a slug of the label, `Key 2` when there is no label. `channel.key.remove {id,
+key}` answers with the channel. A publisher live on the key taken back is cut
+off at once; publishers on the other keys are not touched.
+
+## Events
+
+Subscribe with `core.subscribe {events: ["channel.*"]}`.
+
+| Event | Payload | When |
+|---|---|---|
+| `event/channel.changed` | `{channel}` | A channel was made or changed, a key was made or taken back, a stream went live, learned its codecs, or left |
+| `event/channel.removed` | `{id}` | A channel was removed |
+| `event/channel.refused` | `{id, stream, from, why}` | A publisher was turned away. `why` is the sentence its encoder was sent. `stream` is empty when the stream name was the key |
+
+Nothing is measured for a channel nobody is looking at beyond what the
+listener keeps anyway: the codec numbers are read from the listener when
+`channel.list` or `channel.get` is called, and `event/channel.changed` goes out
+on changes, never on a timer.
+
+## What a refused publisher is told
+
+| Why | The sentence |
+|---|---|
+| No channel by that name | there is no channel called 'x' on this mixer. Check the server address in the encoder: it ends with the channel's name. |
+| The channel is off | the channel 'x' is switched off. Switch it on in the mixer's Channels page and publish again. |
+| No key | the channel 'x' needs a key. Put it on the stream name as main?psk=<key>, or copy the whole stream key from the mixer's Channels page. |
+| A wrong key | that key is not one of the keys of the channel 'x'. It may have been taken back; copy the current one from the mixer's Channels page. |
+| The name is taken | x/main is already being published from 10.0.0.9:51000. Give this encoder another stream name, or stop the other one first. |
+
+Each goes to the encoder as `NetStream.Publish.Denied`, to the log, and out as
+`event/channel.refused`. A wrong key is never repeated in any of them.
+
+## Where it is kept
+
+Channels are written to `<config stem>.runtime.channels.toml` beside the
+runtime store, the way the scene collection sits beside it, and are there
+after a restart. The keys are not in that file: they are sealed in the same
+secret store plugin secrets use, and only their hints are written down. A
+source a channel made is listed there too, so after a restart the core knows
+which sources are its own to take away again.
+
+## The plugin side
+
+The core hands `ingest/discover` its table as `channels` in the plugin's
+settings, at every start and through `configure` on every change. The plugin
+raises `event/channel.stream` (a stream went live, learned its codecs, or
+left) and `event/channel.refused`, and answers the `streams` tool with every
+live stream measured. A mixer source reads its stream from the listener over
+loopback on the same port. `plugins/ingest/src/hub.rs` is the registry every
+reader goes through; `subscribe(app, stream)` is how the restreamer reads a
+stream.

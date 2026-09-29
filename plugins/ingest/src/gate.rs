@@ -21,9 +21,11 @@ use godwinmix_sdk::plugin::Reporter;
 use serde_json::{json, Value};
 
 use crate::channels::{split_query, Table};
-use crate::hub::{Hub, Publication};
-use crate::media_tag::MediaTag;
+use crate::hub::Hub;
 use crate::rtmp::{self, Gate, Inlet, Kick};
+
+mod inlet;
+use inlet::{Channelled, Parts, Stream};
 
 pub struct ChannelGate {
     pub hub: Hub,
@@ -46,13 +48,13 @@ pub struct OnAir {
 }
 
 impl OnAir {
-    fn add(&self, channel: &str, key: &str, kick: Kick) -> u64 {
+    pub(super) fn add(&self, channel: &str, key: &str, kick: Kick) -> u64 {
         let id = self.next.fetch_add(1, Ordering::Relaxed);
         self.lock().push((id, channel.to_string(), key.to_string(), kick));
         id
     }
 
-    fn remove(&self, id: u64) {
+    pub(super) fn remove(&self, id: u64) {
         self.lock().retain(|(i, ..)| *i != id);
     }
 
@@ -114,6 +116,9 @@ impl ChannelGate {
             .publish(app, stream, peer, None)
             .map_err(|why| self.refuse(app, stream, peer, why))?;
         let who = rtmp::Publisher { app: app.into(), key: stream.into(), peer: peer.into() };
+        if let Some(r) = &self.reporter {
+            r.info(format!("{app}/{stream} from {peer} started publishing"));
+        }
         self.event(
             "ingest.publisher",
             json!({
@@ -178,89 +183,5 @@ impl Gate for ChannelGate {
         if let Some(r) = &self.reporter {
             r.warn(message);
         }
-    }
-}
-
-/// What an inlet needs of the gate after it has been let in.
-struct Parts {
-    reporter: Option<Reporter>,
-    relay: String,
-}
-
-impl Parts {
-    fn live(&self, channel: &str, publication: &Publication) {
-        let Some(r) = &self.reporter else { return };
-        let mut described = publication.describe().unwrap_or_else(|| json!({}));
-        described["channel"] = json!(channel);
-        described["relay"] = json!(self.relay);
-        r.event("channel.stream", described);
-    }
-}
-
-/// One publisher's tags on their way into the hub.
-struct Stream {
-    publication: Option<Publication>,
-    /// Set on the open door, which announces arrivals the old way.
-    open: Option<rtmp::Publisher>,
-    gate: Parts,
-}
-
-impl Stream {
-    fn push(&mut self, tag: MediaTag) -> bool {
-        self.publication.as_ref().is_some_and(|p| p.push(tag))
-    }
-}
-
-impl Inlet for Stream {
-    fn tag(&mut self, tag: MediaTag) {
-        self.push(tag);
-    }
-}
-
-impl Drop for Stream {
-    fn drop(&mut self) {
-        // The session ends before anyone is told it has, so nobody who asks
-        // straight after the event still sees it live.
-        self.publication = None;
-        if let (Some(who), Some(r)) = (&self.open, &self.gate.reporter) {
-            r.info(format!("{}/{} stopped publishing", who.app, who.key));
-            r.event(
-                "ingest.publisher",
-                json!({"action": "left", "id": who.slug(), "name": format!("{}/{}", who.app, who.key)}),
-            );
-        }
-    }
-}
-
-/// A stream on a channel: the same, and the core is told about its codecs
-/// and its leaving.
-struct Channelled {
-    channel: String,
-    app: String,
-    name: String,
-    stream: Stream,
-    on_air: (Arc<OnAir>, u64),
-}
-
-impl Inlet for Channelled {
-    fn tag(&mut self, tag: MediaTag) {
-        if self.stream.push(tag) {
-            if let Some(p) = &self.stream.publication {
-                self.stream.gate.live(&self.channel, p);
-            }
-        }
-    }
-}
-
-impl Drop for Channelled {
-    fn drop(&mut self) {
-        self.on_air.0.remove(self.on_air.1);
-        self.stream.publication = None;
-        let Some(r) = &self.stream.gate.reporter else { return };
-        r.info(format!("{}/{} stopped publishing", self.app, self.name));
-        r.event(
-            "channel.stream",
-            json!({"channel": self.channel, "app": self.app, "stream": self.name, "state": "idle"}),
-        );
     }
 }

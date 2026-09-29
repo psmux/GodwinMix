@@ -2044,7 +2044,7 @@ METHODS = (
     {"name": "channel.add", "scope": "admin", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/channels"), "summary": 'Make a channel and its first key. The key is in this answer and never again.'},
     {"name": "channel.get", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/channels/{id}"), "summary": 'One channel.'},
     {"name": "channel.key.add", "scope": "admin", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/channels/key/add"), "summary": 'Make another key for a channel, to give to one more person or encoder. The key is in this answer and never again.'},
-    {"name": "channel.key.remove", "scope": "admin", "mutating": True, "destructive": True, "rest": ("POST", "/api/v1/channels/key/remove"), "summary": 'Take one key back. The next publisher with it is turned away; the other keys are untouched.'},
+    {"name": "channel.key.remove", "scope": "admin", "mutating": True, "destructive": True, "rest": ("POST", "/api/v1/channels/key/remove"), "summary": 'Take one key back. A publisher on air with it is cut off and the next one is turned away; the other keys are untouched.'},
     {"name": "channel.list", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/channels"), "summary": 'Every RTMP channel with its keys (as hints), the address to publish to, and what is live on it, beside the port they all share.'},
     {"name": "channel.remove", "scope": "admin", "mutating": True, "destructive": True, "rest": ("DELETE", "/api/v1/channels/{id}"), "summary": 'Remove a channel and forget its keys. Sources it made that no scene holds go with it.'},
     {"name": "channel.set", "scope": "admin", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/channels/{id}/set"), "summary": 'Rename a channel, switch it on or off, or change its application name, whether its streams become sources, or how its key is given. Only what is named moves.'},
@@ -2311,7 +2311,7 @@ class GeneratedMethods:
         id: str,
         key: str,
     ) -> Channel:
-        """Take one key back. The next publisher with it is turned away; the other keys are untouched."""
+        """Take one key back. A publisher on air with it is cut off and the next one is turned away; the other keys are untouched."""
         params: Dict[str, Any] = {}
         params["id"] = id
         params["key"] = key

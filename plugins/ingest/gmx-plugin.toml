@@ -8,13 +8,9 @@
 # server is not here either, and docs/how-to/receive-a-phone-or-obs-stream.md
 # says what it would cost.
 #
-# Note on the core as it stands: a `device` provide is parsed and then registers
-# nothing (crates/godwinmix-core/src/plugin/loader.rs interns only sources),
-# nothing calls `discover`, a plugin's `event` notification reaches a ring
-# buffer with no reader, and `tool.call` is not a registered method. So
-# ingest/discover and the add_publishers tool are written to the contract and
-# dormant. ingest/rtmp, which owns its own port, works today and is the path the
-# how to page leads with. src/device.rs names the four gaps precisely.
+# ingest/discover is the channel server: the core runs it as a singleton, hands
+# it the channel table under `channels` in its settings, and reads its
+# event/channel.* notifications. docs/reference/channels.md is the core's side.
 
 [plugin]
 name = "ingest"

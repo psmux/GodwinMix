@@ -38,14 +38,16 @@ and `health` turns from `degraded` to `ok`. Then `program.take {source: "phone"}
 | `bind` | `0.0.0.0` | every interface. Give one address to listen on that one only |
 | `app` | empty | the first part of the publish path. Empty takes any |
 | `stream_key` | empty | the rest of it. Empty takes any. Setting one is the closest RTMP has to a password |
-| `relay` | empty | filled in by `ingest/discover`. Leave it alone |
+| `relay` | empty | the channel server's address. Filled in, with `stream`, when a channel's stream becomes a source. Leave both alone |
+| `stream` | empty | `<channel>/<stream>` to read from the channel server |
 
 ## Two publishers
 
-One source is one picture, so a second publisher is refused while the first is
-live, with a message saying so. To take two at once, add a second
-`ingest/rtmp` source on another port (1936), or run `ingest/discover`, which
-holds one port for many publishers.
+One source on its own port is one picture, so a second publisher is refused
+while the first is live, with a message saying so. To take several at once,
+make a channel with `channel.add`: the channel server holds one port for every
+channel and each live stream becomes a source by itself. A source that owns
+its own port cannot share the channel server's, so give it another (1936).
 
 ## When nothing arrives
 
