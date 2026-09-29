@@ -19,6 +19,7 @@ use std::future::Future;
 use std::sync::Arc;
 
 pub mod agent;
+pub mod channel_destinations;
 pub mod config;
 mod filters;
 pub mod lifecycle;
@@ -62,6 +63,7 @@ pub fn registry() -> Registry<Call> {
     program::register(&mut reg);
     sources::register(&mut reg);
     outputs::register(&mut reg);
+    channel_destinations::register(&mut reg);
     media::register(&mut reg);
     tasks::register(&mut reg);
     agent::register(&mut reg);

@@ -40,6 +40,24 @@ class AdStatus(TypedDict, total=False):
     # Source to return to when the ad ends. None returns to the slate.
     uri: str
 
+class AddDestinationRequest(TypedDict, total=False):
+    """`channel.destination.add`. Send a channel's stream on to a platform."""
+
+    enabled: Optional[bool]
+    # On by default.
+    id: str
+    # The channel.
+    key: Optional[str]
+    # The stream key. Write only: no method reads it back.
+    label: Optional[str]
+    # What the list calls it. The platform's name when left out.
+    platform: str
+    # youtube, facebook, twitch, custom or srt.
+    server: Optional[str]
+    # The ingest address. Left out, the platform's own; custom and srt need one.
+    stream: Optional[str]
+    # Which of the channel's streams to send. `*`, the default, is the first one live.
+
 class AddFilterRequest(TypedDict, total=False):
     """`filter.add`."""
 
@@ -1276,6 +1294,14 @@ class Relink(TypedDict, total=False):
     reason: str
     # Why it could not be used: missing, or a hash that does not match.
 
+class RemoveDestinationRequest(TypedDict, total=False):
+    """`channel.destination.remove`."""
+
+    destination: str
+    # The destination's id within the channel.
+    id: str
+    # The channel.
+
 class RenameSceneRequest(TypedDict, total=False):
     color: Optional[str]
     name: Optional[str]
@@ -1417,6 +1443,20 @@ class SessionLogRequest(TypedDict, total=False):
 
     secs: int
     # How far back to read, in seconds. An hour by default, a day at most.
+
+class SetDestinationRequest(TypedDict, total=False):
+    """`channel.destination.set`. Change one destination, naming only what moves."""
+
+    destination: str
+    # The destination's id within the channel.
+    enabled: Optional[bool]
+    id: str
+    # The channel.
+    key: Optional[str]
+    # A new stream key. Left out keeps the one it has; an empty string clears it, where the platform allows none.
+    label: Optional[str]
+    server: Optional[str]
+    stream: Optional[str]
 
 class SetFilterRequest(TypedDict, total=False):
     """`filter.set`."""
@@ -1870,6 +1910,9 @@ METHODS = (
     {"name": "adbreak.end", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/adbreak/end"), "summary": 'Cut a running ad short, or disarm one that is scheduled.'},
     {"name": "adbreak.start", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/adbreak/start"), "summary": 'Interrupt the programme with a clip, then rejoin live when it ends.'},
     {"name": "agent.state", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/agent/state"), "summary": "The compact document written for agents: the programme, each source's state and a motion score saying how much its picture is changing."},
+    {"name": "channel.destination.add", "scope": "admin", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/channel/destination/add"), "summary": "Send a channel's stream on to YouTube, Facebook, Twitch, an RTMP server or an SRT receiver as it arrives. Nothing is decoded or encoded. The key is write only."},
+    {"name": "channel.destination.remove", "scope": "admin", "mutating": True, "destructive": True, "rest": ("POST", "/api/v1/channel/destination/remove"), "summary": "Stop sending a channel's stream to one destination and forget it. The publisher and the other destinations are not touched."},
+    {"name": "channel.destination.set", "scope": "admin", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/channel/destination/set"), "summary": "Change one of a channel's destinations, naming only what moves: a new key, another server, which stream it sends, on or off. A key left out is kept."},
     {"name": "codec.list", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/codecs"), "summary": 'Every codec and element in the catalogue, which of them this machine actually has, and what it would pick.'},
     {"name": "config.get", "scope": "admin", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/config"), "summary": "The mixer's settings: each key's value in the config file, its default, when a change to it takes effect, and which keys are waiting for a restart. Secrets say only whether one is set."},
     {"name": "config.reset", "scope": "admin", "mutating": True, "destructive": True, "rest": ("POST", "/api/v1/config/reset"), "summary": 'Put settings back to their defaults by taking them out of the config file. Answers like config.set.'},
@@ -2083,6 +2126,71 @@ class GeneratedMethods:
         if response_format is not None:
             params["response_format"] = response_format
         return await self._call("agent.state", params)
+
+    async def channel_destination_add(
+        self,
+        id: str,
+        platform: str,
+        *,
+        enabled: Optional[bool] = None,
+        key: Optional[str] = None,
+        label: Optional[str] = None,
+        server: Optional[str] = None,
+        stream: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Send a channel's stream on to YouTube, Facebook, Twitch, an RTMP server or an SRT receiver as it arrives. Nothing is decoded or encoded. The key is write only."""
+        params: Dict[str, Any] = {}
+        params["id"] = id
+        params["platform"] = platform
+        if enabled is not None:
+            params["enabled"] = enabled
+        if key is not None:
+            params["key"] = key
+        if label is not None:
+            params["label"] = label
+        if server is not None:
+            params["server"] = server
+        if stream is not None:
+            params["stream"] = stream
+        return await self._call("channel.destination.add", params)
+
+    async def channel_destination_remove(
+        self,
+        destination: str,
+        id: str,
+    ) -> Dict[str, Any]:
+        """Stop sending a channel's stream to one destination and forget it. The publisher and the other destinations are not touched."""
+        params: Dict[str, Any] = {}
+        params["destination"] = destination
+        params["id"] = id
+        return await self._call("channel.destination.remove", params)
+
+    async def channel_destination_set(
+        self,
+        destination: str,
+        id: str,
+        *,
+        enabled: Optional[bool] = None,
+        key: Optional[str] = None,
+        label: Optional[str] = None,
+        server: Optional[str] = None,
+        stream: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Change one of a channel's destinations, naming only what moves: a new key, another server, which stream it sends, on or off. A key left out is kept."""
+        params: Dict[str, Any] = {}
+        params["destination"] = destination
+        params["id"] = id
+        if enabled is not None:
+            params["enabled"] = enabled
+        if key is not None:
+            params["key"] = key
+        if label is not None:
+            params["label"] = label
+        if server is not None:
+            params["server"] = server
+        if stream is not None:
+            params["stream"] = stream
+        return await self._call("channel.destination.set", params)
 
     async def codec_list(
         self,

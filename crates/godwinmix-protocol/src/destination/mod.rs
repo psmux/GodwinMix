@@ -1,0 +1,182 @@
+//! A channel's destinations: where a published stream is sent on to, as it
+//! arrives, by remuxing. The wire shapes, the stored shape and the platform
+//! table. `dev/plans/channels-contract.md` is the contract these follow.
+
+mod platforms;
+mod requests;
+
+pub use platforms::*;
+pub use requests::*;
+
+use schemars::JsonSchema;
+use serde::{Deserialize, Serialize};
+
+/// Where a destination has got to.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "lowercase")]
+pub enum DestinationState {
+    /// Switched off by the person.
+    #[default]
+    Off,
+    /// Switched on, and waiting for the stream it sends to go live.
+    Waiting,
+    /// Dialling the far end for the first time.
+    Connecting,
+    /// Sending.
+    Live,
+    /// Lost the far end and dialling it again on the backoff.
+    Reconnecting,
+    /// The far end said no in a way retrying will not fix: the key was
+    /// refused. `error` says what to change.
+    Failed,
+}
+
+/// One destination as a client sees it. The key never appears: `has_key`
+/// says whether there is one.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct Destination {
+    /// A slug, unique within its channel: `youtube`, `youtube-2`.
+    pub id: String,
+    /// A platform id from the table: youtube, facebook, twitch, custom, srt.
+    pub platform: String,
+    pub label: String,
+    /// The scheme, host and port, and nothing that could carry a key.
+    pub uri_host: String,
+    pub has_key: bool,
+    /// Which of the channel's streams to send. `*` is the first live one.
+    pub stream: String,
+    pub enabled: bool,
+    #[serde(flatten)]
+    pub live: DestinationLive,
+}
+
+/// What a running destination reports. The restreamer fills it in.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct DestinationLive {
+    pub state: DestinationState,
+    /// Milliseconds since `state` last changed.
+    pub since_ms: u64,
+    /// What is going out, over the last second.
+    pub kbps: u32,
+    /// Connections lost and made again since it was switched on.
+    pub reconnects: u32,
+    /// What went wrong last, in words a person can act on.
+    pub error: Option<String>,
+}
+
+/// A destination as it is kept, key and all. Never sent to a client; the
+/// store persists this and [`StoredDestination::view`] is what goes out.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct StoredDestination {
+    pub id: String,
+    pub platform: String,
+    pub label: String,
+    /// The ingest address. The platform's own when it has one and nobody gave
+    /// another.
+    pub server: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub key: Option<String>,
+    pub stream: String,
+    pub enabled: bool,
+}
+
+impl StoredDestination {
+    /// The whole address the restreamer dials, key and all.
+    pub fn url(&self) -> String {
+        join_key(&self.server, self.key.as_deref().unwrap_or(""))
+    }
+
+    /// How hard to retry: the platform's, or `own` for one not on the table.
+    pub fn policy(&self) -> RetryPolicy {
+        platform(&self.platform).map(|p| p.policy).unwrap_or(RetryPolicy::Own)
+    }
+
+    /// Whether there is a key, or nothing that needs one.
+    pub fn has_key(&self) -> bool {
+        let keyed = self.key.as_deref().is_some_and(|k| {
+            !k.trim().is_empty() && crate::types::uri_has_key(k)
+        });
+        match platform(&self.platform).map(|p| p.key) {
+            Some(KeyRule::Required) => keyed,
+            _ => keyed || crate::types::uri_has_key(&self.server),
+        }
+    }
+
+    /// The client's view, with what the restreamer last reported.
+    pub fn view(&self, live: DestinationLive) -> Destination {
+        Destination {
+            id: self.id.clone(),
+            platform: self.platform.clone(),
+            label: self.label.clone(),
+            uri_host: uri_host(&self.server),
+            has_key: self.has_key(),
+            stream: self.stream.clone(),
+            enabled: self.enabled,
+            live,
+        }
+    }
+}
+
+/// `rtmps://live-api-s.facebook.com:443`, from anything with a scheme. The
+/// path and the query are dropped because either can carry a key: an SRT
+/// address takes its passphrase in the query.
+pub fn uri_host(uri: &str) -> String {
+    let uri = uri.trim();
+    match uri.split_once("://") {
+        Some((scheme, rest)) => {
+            let end = rest.find(['/', '?']).unwrap_or(rest.len());
+            let hostport = &rest[..end];
+            let host = hostport.rsplit('@').next().unwrap_or(hostport);
+            format!("{}://{host}", scheme.to_lowercase())
+        }
+        None => String::new(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn stored(platform: &str, server: &str, key: Option<&str>) -> StoredDestination {
+        StoredDestination {
+            id: platform.into(),
+            platform: platform.into(),
+            label: platform.into(),
+            server: server.into(),
+            key: key.map(Into::into),
+            stream: "*".into(),
+            enabled: true,
+        }
+    }
+
+    #[test]
+    fn the_view_never_carries_the_key_or_the_query() {
+        let d = stored("srt", "srt://10.0.0.9:9000?passphrase=hunter2hunter2", None);
+        let json = serde_json::to_string(&d.view(DestinationLive::default())).unwrap();
+        assert!(!json.contains("hunter2"), "{json}");
+        assert!(json.contains("\"uri_host\":\"srt://10.0.0.9:9000\""), "{json}");
+        let yt = stored("youtube", "rtmp://a.rtmp.youtube.com/live2", Some("abcd-1234"));
+        let json = serde_json::to_string(&yt.view(DestinationLive::default())).unwrap();
+        assert!(!json.contains("abcd"), "{json}");
+        assert!(json.contains("\"state\":\"off\""), "{json}");
+    }
+
+    #[test]
+    fn a_platform_that_needs_a_key_has_none_until_one_is_given() {
+        let yt = stored("youtube", "rtmp://a.rtmp.youtube.com/live2", None);
+        assert!(!yt.has_key());
+        assert!(stored("youtube", "rtmp://a/live2", Some("real")).has_key());
+        assert!(!stored("youtube", "rtmp://a/live2", Some("YOUR-STREAM-KEY")).has_key());
+        // A whole address pasted into a custom server is a whole address.
+        assert!(stored("custom", "rtmp://host/app/stream", None).has_key());
+        assert!(stored("srt", "srt://host:9000", None).has_key());
+    }
+
+    #[test]
+    fn the_url_is_the_server_and_the_key() {
+        let yt = stored("youtube", "rtmp://a.rtmp.youtube.com/live2", Some("k\n"));
+        assert_eq!(yt.url(), "rtmp://a.rtmp.youtube.com/live2/k");
+        assert_eq!(yt.policy(), RetryPolicy::Cdn);
+        assert_eq!(stored("custom", "rtmp://h/a/s", None).policy(), RetryPolicy::Own);
+    }
+}

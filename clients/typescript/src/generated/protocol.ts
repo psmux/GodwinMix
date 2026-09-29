@@ -29,6 +29,17 @@ export interface AdStatus {
   uri: string;
 }
 
+/** `channel.destination.add`. Send a channel's stream on to a platform. */
+export interface AddDestinationRequest {
+  enabled?: boolean | null;
+  id: string;
+  key?: string | null;
+  label?: string | null;
+  platform: string;
+  server?: string | null;
+  stream?: string | null;
+}
+
 /** `filter.add`. */
 export interface AddFilterRequest {
   id: string;
@@ -1168,6 +1179,12 @@ export interface Relink {
   reason: string;
 }
 
+/** `channel.destination.remove`. */
+export interface RemoveDestinationRequest {
+  destination: string;
+  id: string;
+}
+
 export interface RenameSceneRequest {
   color?: string | null;
   name?: string | null;
@@ -1287,6 +1304,17 @@ export interface SeekParams {
 /** `core.session_log`. */
 export interface SessionLogRequest {
   secs?: number;
+}
+
+/** `channel.destination.set`. Change one destination, naming only what moves. */
+export interface SetDestinationRequest {
+  destination: string;
+  enabled?: boolean | null;
+  id: string;
+  key?: string | null;
+  label?: string | null;
+  server?: string | null;
+  stream?: string | null;
 }
 
 /** `filter.set`. */
@@ -1684,6 +1712,9 @@ export interface MethodParams {
   "adbreak.end": Record<string, never>;
   "adbreak.start": AdBreakRequest;
   "agent.state": AgentStateRequest;
+  "channel.destination.add": AddDestinationRequest;
+  "channel.destination.remove": RemoveDestinationRequest;
+  "channel.destination.set": SetDestinationRequest;
   "codec.list": Record<string, never>;
   "config.get": ConfigGetRequest;
   "config.reset": ConfigResetRequest;
@@ -1821,6 +1852,9 @@ export interface MethodResults {
   "adbreak.end": Record<string, unknown>;
   "adbreak.start": Record<string, unknown>;
   "agent.state": Record<string, unknown>;
+  "channel.destination.add": Record<string, unknown>;
+  "channel.destination.remove": Record<string, unknown>;
+  "channel.destination.set": Record<string, unknown>;
   "codec.list": Record<string, unknown>;
   "config.get": ConfigGetResult;
   "config.reset": ConfigSetResult;
@@ -1996,6 +2030,9 @@ export const METHODS: readonly MethodInfo[] = [
   { name: "adbreak.end", summary: "Cut a running ad short, or disarm one that is scheduled.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/adbreak/end" } },
   { name: "adbreak.start", summary: "Interrupt the programme with a clip, then rejoin live when it ends.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/adbreak/start" } },
   { name: "agent.state", summary: "The compact document written for agents: the programme, each source's state and a motion score saying how much its picture is changing.", scope: "read", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/agent/state" } },
+  { name: "channel.destination.add", summary: "Send a channel's stream on to YouTube, Facebook, Twitch, an RTMP server or an SRT receiver as it arrives. Nothing is decoded or encoded. The key is write only.", scope: "admin", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/channel/destination/add" } },
+  { name: "channel.destination.remove", summary: "Stop sending a channel's stream to one destination and forget it. The publisher and the other destinations are not touched.", scope: "admin", mutating: true, destructive: true, rest: { method: "POST", path: "/api/v1/channel/destination/remove" } },
+  { name: "channel.destination.set", summary: "Change one of a channel's destinations, naming only what moves: a new key, another server, which stream it sends, on or off. A key left out is kept.", scope: "admin", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/channel/destination/set" } },
   { name: "codec.list", summary: "Every codec and element in the catalogue, which of them this machine actually has, and what it would pick.", scope: "read", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/codecs" } },
   { name: "config.get", summary: "The mixer's settings: each key's value in the config file, its default, when a change to it takes effect, and which keys are waiting for a restart. Secrets say only whether one is set.", scope: "admin", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/config" } },
   { name: "config.reset", summary: "Put settings back to their defaults by taking them out of the config file. Answers like config.set.", scope: "admin", mutating: true, destructive: true, rest: { method: "POST", path: "/api/v1/config/reset" } },
@@ -2190,6 +2227,21 @@ export class GeneratedMethods {
   /** The compact document written for agents: the programme, each source's state and a motion score saying how much its picture is changing. */
   agentState(params: AgentStateRequest = {}): Promise<Record<string, unknown>> {
     return this._call("agent.state", params as unknown as Record<string, unknown>) as Promise<Record<string, unknown>>;
+  }
+
+  /** Send a channel's stream on to YouTube, Facebook, Twitch, an RTMP server or an SRT receiver as it arrives. Nothing is decoded or encoded. The key is write only. */
+  channelDestinationAdd(params: AddDestinationRequest): Promise<Record<string, unknown>> {
+    return this._call("channel.destination.add", params as unknown as Record<string, unknown>) as Promise<Record<string, unknown>>;
+  }
+
+  /** Stop sending a channel's stream to one destination and forget it. The publisher and the other destinations are not touched. */
+  channelDestinationRemove(params: RemoveDestinationRequest): Promise<Record<string, unknown>> {
+    return this._call("channel.destination.remove", params as unknown as Record<string, unknown>) as Promise<Record<string, unknown>>;
+  }
+
+  /** Change one of a channel's destinations, naming only what moves: a new key, another server, which stream it sends, on or off. A key left out is kept. */
+  channelDestinationSet(params: SetDestinationRequest): Promise<Record<string, unknown>> {
+    return this._call("channel.destination.set", params as unknown as Record<string, unknown>) as Promise<Record<string, unknown>>;
   }
 
   /** Every codec and element in the catalogue, which of them this machine actually has, and what it would pick. */
