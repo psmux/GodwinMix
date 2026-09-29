@@ -45,15 +45,31 @@ fi
 
 # wpesrc renders a web page against an X display; nothing is drawn on it and
 # nothing reads it. Only started when the image was built with WITH_WPE=1.
-if command -v Xvfb > /dev/null 2>&1 && [ ! -S "/tmp/.X11-unix/X${DISPLAY#:}" ]; then
+if command -v Xvfb > /dev/null 2>&1; then
   mkdir -p "${XDG_RUNTIME_DIR:-/tmp/xdg}"
   chmod 700 "${XDG_RUNTIME_DIR:-/tmp/xdg}"
+  # /tmp outlives a restart of this container. A host reboot restarts it
+  # rather than recreating it, and the lock and socket of the Xvfb that went
+  # down with the old run are still there. Xvfb then refuses the display as
+  # "already active", and a check on the socket alone passes on the dead
+  # socket, so the mixer ran on with every web source failing and the
+  # programme black: thirty hours of it on 2026-09-21. Nothing else owns this
+  # display in this container, so the leftovers go.
+  rm -f "/tmp/.X${DISPLAY#:}-lock" "/tmp/.X11-unix/X${DISPLAY#:}"
   Xvfb "$DISPLAY" -screen 0 1920x1080x24 -nolisten tcp > /tmp/xvfb.log 2>&1 &
+  XVFB=$!
   i=0
   while [ ! -S "/tmp/.X11-unix/X${DISPLAY#:}" ] && [ "$i" -lt 100 ]; do
     i=$((i + 1))
     sleep 0.05
   done
+  # A socket is not a server. If Xvfb is gone or a zombie, say why and stop:
+  # the restart policy tries again, where running on would only be black.
+  if ! grep -qE '^State:[[:space:]]+[RS]' "/proc/$XVFB/status" 2>/dev/null; then
+    echo "godwinmix: Xvfb did not start:" >&2
+    cat /tmp/xvfb.log >&2
+    exit 1
+  fi
   # WebKit's web process sandbox is bubblewrap, which cannot set up its
   # namespaces inside an unprivileged container. The container is the sandbox.
   # EGL rather than GLX: the mixer's GL elements create the context first, and
