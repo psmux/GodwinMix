@@ -28,6 +28,8 @@ mod srt_out;
 mod target;
 
 #[cfg(test)]
+mod fanout;
+#[cfg(test)]
 mod tests;
 
 use std::sync::atomic::{AtomicBool, Ordering};
