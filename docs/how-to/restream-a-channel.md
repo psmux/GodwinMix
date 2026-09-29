@@ -1,23 +1,24 @@
 # Send a channel on to YouTube, Facebook or Twitch
 
-A channel is a place an encoder publishes to on the mixer. Its stream can be
+A channel is a place an encoder publishes to on the mixer (see
+[take streams from several encoders](rtmp-channels.md)). Its stream can be
 passed straight on to one platform or several at once, as it arrives, without
-going through the mixer's programme. Nothing is decoded or encoded on the
-way, so ten destinations cost about what one does.
+going through the mixer's programme. Nothing is decoded or encoded on the way,
+so each destination costs a copy of the bytes and not much else.
 
 This is how a service goes to YouTube and Facebook at once from the one
 encoder in the rack, while the mixer's own programme goes somewhere else or
 nowhere.
 
-The Channels page this describes arrives separately; until it does, the three
-methods in [the reference](../reference/channels.md#destinations) do the
-same.
-
 ## Add a destination
 
-Open the channel and press **Add destination**. Pick the platform. For
-YouTube, Facebook and Twitch the server is filled in, and the one thing to
-paste is the stream key:
+Every channel card on the Channels tab ends in a strip headed Send on to. On a
+channel with no destinations yet it offers YouTube, Facebook, Twitch and Kick,
+and **More** for the rest: Instagram Live, LinkedIn Live, X, TikTok LIVE,
+Custom RTMP and SRT. Once there is one, the strip shows the destinations as
+tiles and an **Add** tile opens the same choice.
+
+Press a platform, paste its stream key, press **Start sending**.
 
 | Platform | Where to copy the key from |
 |---|---|
@@ -25,72 +26,67 @@ paste is the stream key:
 | Facebook | The Live producer page, Streaming software |
 | Twitch | The Creator Dashboard, Settings, Stream. The primary stream key |
 
-**Custom RTMP** takes a server and a key, or a whole address with the key on
-the end and the key box left empty. **SRT** takes an `srt://` address and no
-key.
+For YouTube, Facebook and Twitch the server is filled in and not even shown.
+Kick and X start with their published server in the box, which you can paste
+over if your dashboard gives a different one. Instagram, LinkedIn and TikTok
+hand out a new server address with every stream, so their form asks for both
+halves and says where on the platform to find them.
 
-Save. The key is never shown again; the row says the platform and whether a
-key is there.
+**Custom RTMP** takes a server and a key, or a whole address in the Server box
+with the key box left empty (`rtmp://10.0.0.9:1935/live/hall`). **SRT** takes
+an `srt://` address and no key.
 
-If the channel has more than one stream live (an encoder sending its own
-1080p and 720p, say), **Stream** picks which one goes. Left as it is, the
-first stream to go live is sent.
+**More options** names the tile and, on a channel with several streams, picks
+which one to send. Left alone it sends the stream that has been live longest,
+and if that one stops while another is still live, it moves on to that one.
 
-## Read the row
+The key is never shown again after it is saved.
 
-| The row says | What it means |
-|---|---|
-| Waiting | on, and nothing is being published to the channel yet |
-| Connecting | dialling the platform |
-| Live, with a bitrate | sending |
-| Reconnecting | the platform went away and is being dialled again |
-| Failed | the platform refused the key |
+## Read the tiles
 
-Under a row that is not live is the reason, in a sentence: "nothing answered
-at rtmp://10.0.0.9:1935" means the server is down or the address is wrong;
-"YouTube refused the key" means paste it again from the platform.
+Each destination is a tile with the platform's mark in a ring, and a switch.
 
-When a platform drops, the others carry on and nothing reaches the encoder.
+| The tile says | The ring | What it means |
+|---|---|---|
+| Off | grey | switched off with its switch |
+| Waits for the stream | dashed | on, and nothing is being published to the channel yet |
+| Connecting | amber, turning | dialling the platform |
+| Live, 2.6 Mb/s | green | sending, at that rate |
+| Trying again | amber, turning slowly | the platform went away and is being dialled again |
+| Stopped | red | the platform refused the key three times and it has stopped asking |
+| Needs a key | red | a platform that needs a key has none |
+
+A tile that is trying again or has stopped says why under its state: "nothing
+answered at rtmp://10.0.0.9:1935" means the server is down or the address is
+wrong; "YouTube refused the key" means paste it again from the platform.
+
+When one platform drops, the others carry on and nothing reaches the encoder.
 The one that dropped is dialled again: gently for YouTube, Facebook and
-Twitch, which penalise a client that hammers them, and quickly for a server
-of your own. When it comes back it starts at the next keyframe, so viewers
-see the picture return rather than a smear.
+Twitch, which penalise a client that hammers them, and quickly for a server of
+your own. When it comes back it starts at the next keyframe, so viewers see
+the picture return rather than a smear. A destination that falls behind loses
+whole seconds of picture rather than slowing anything else down.
 
 ## Change or remove one
 
-**Edit** on the row changes the key, the server, the stream it sends, or
-switches it off without forgetting it. A key left empty in the form is kept.
-**Remove** stops it and forgets it; the channel and its other destinations
-are not touched.
-
-## From the page
-
-Every channel card on the Channels tab ends in a strip headed Send on to. On a
-channel with no destinations the strip offers YouTube, Facebook, Twitch and
-Kick straight away, and More for the rest: Instagram Live, LinkedIn Live, X,
-TikTok LIVE, Custom RTMP and SRT.
-
-Press a platform, paste its stream key, press Start sending. For YouTube,
-Facebook and Twitch the server is filled in and not even shown. Kick and X
-start with their published server in the box, which you can paste over if your
-dashboard gives a different one. Instagram, LinkedIn and TikTok hand out a new
-server address with every stream, so their form asks for both halves and says
-where on the platform to find them. More options names the tile and, on a
-channel with several streams, picks which one to send; left alone it sends
-whichever is live first.
-
-Each destination is then a tile with the platform's mark in a ring:
-
-* grey when it is switched off,
-* dashed while it waits for the channel to go live,
-* turning amber while it connects, and more slowly while it tries again,
-* green when it is live, with its bitrate under it,
-* red when it has stopped, with the reason written in the tile.
-
 The switch on a tile turns that destination on or off without opening
-anything. Press the tile itself to rename it, change which stream it sends,
-replace its key or remove it. Remove asks once. The key is never shown again
-after it is saved; an edit that leaves the key box alone keeps the key in use.
+anything. Off, it stops sending and keeps its key.
 
-Nothing here decodes or re-encodes. A destination gets the encoder's own
-stream, so its picture is what the encoder sent.
+Press the tile itself to rename it, change which stream it sends, give it
+another server, replace its key or **Remove** it. Leave the key box alone and
+the key in use is kept, even when the server changes. **Save** applies it.
+Remove asks once, then stops that destination and forgets its key; the
+channel and its other destinations are not touched.
+
+## After a restart
+
+Destinations are kept with their channel, their addresses and keys sealed in
+the mixer's secret store. When the mixer starts again each one is back as it
+was, waiting for the stream, and goes live when the encoder does.
+
+## Where to go next
+
+* [The channel reference](../reference/channels.md#destinations), the three
+  methods and the fields a destination reports
+* [Stream the programme to a platform](stream-to-a-platform.md), for sending
+  the mixer's own output rather than an encoder's stream

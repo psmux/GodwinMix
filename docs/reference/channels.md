@@ -20,12 +20,11 @@ and switched on, and `channel.list` says so in `rtmp.problem`.
 | `channel.add {name, app?, auto_source?, key_mode?}` | `POST /api/v1/channels` | admin | no | A channel and its first key |
 | `channel.set {id, name?, app?, enabled?, auto_source?, key_mode?}` | `POST /api/v1/channels/{id}/set` | admin | no | Change what is named, leave the rest |
 | `channel.remove {id}` | `DELETE /api/v1/channels/{id}` | admin | yes | The channel, its keys, and the sources it made that no scene holds |
-| `channel.key.add {id, label?}` | `POST /api/v1/channels/key/add` | admin | no | One more key |
-| `channel.key.remove {id, key}` | `POST /api/v1/channels/key/remove` | admin | yes | Take one key back |
+| `channel.key.add {id, label?}` | `POST /api/v1/channels/{id}/key/add` | admin | no | One more key |
+| `channel.key.remove {id, key}` | `POST /api/v1/channels/{id}/key/remove` | admin | yes | Take one key back |
 
-`channel.destination.*`, which sends a channel's streams on to YouTube,
-Facebook, Twitch or any RTMP or SRT address, has a page of its own when it
-lands; until then `destinations` is always an empty list.
+`channel.destination.*` sends a channel's streams on to YouTube, Facebook,
+Twitch or any RTMP or SRT address; see [Destinations](#destinations) below.
 
 Every refusal says what state things are in and what to do, with `data` a
 client can act on (`docs/reference/errors.md`). An unknown channel or key
@@ -123,14 +122,16 @@ Subscribe with `core.subscribe {events: ["channel.*"]}`.
 
 | Event | Payload | When |
 |---|---|---|
-| `event/channel.changed` | `{channel}` | A channel was made or changed, a key was made or taken back, a stream went live, learned its codecs, or left |
+| `event/channel.changed` | `{channel}` | A channel was made or changed, a key was made or taken back, a stream went live, learned its codecs, or left, a destination was added, changed or removed, or a destination's state, error or reconnect count moved |
 | `event/channel.removed` | `{id}` | A channel was removed |
 | `event/channel.refused` | `{id, stream, from, why}` | A publisher was turned away. `why` is the sentence its encoder was sent. `stream` is empty when the stream name was the key |
 
 Nothing is measured for a channel nobody is looking at beyond what the
-listener keeps anyway: the codec numbers are read from the listener when
+listener keeps anyway: the codec numbers and bit rates are read from the listener when
 `channel.list` or `channel.get` is called, and `event/channel.changed` goes out
-on changes, never on a timer.
+on changes, never on a timer. The Channels page calls `channel.list` every two
+seconds while it is on screen and something is live, which is where its bit
+rates come from.
 
 ## What a refused publisher is told
 
@@ -151,16 +152,24 @@ Channels are written to `<config stem>.runtime.channels.toml` beside the
 runtime store, the way the scene collection sits beside it, and are there
 after a restart. The keys are not in that file: they are sealed in the same
 secret store plugin secrets use, and only their hints are written down. A
+destination's platform, label, stream and host are in the file; its whole
+address and its key are sealed beside the channel's keys, and removing the
+channel forgets them too. A
 source a channel made is listed there too, so after a restart the core knows
 which sources are its own to take away again.
 
 ## The plugin side
 
 The core hands `ingest/discover` its table as `channels` in the plugin's
-settings, at every start and through `configure` on every change. The plugin
-raises `event/channel.stream` (a stream went live, learned its codecs, or
-left) and `event/channel.refused`, and answers the `streams` tool with every
-live stream measured. A mixer source reads its stream from the listener over
+settings, at every start and through `configure` on every change. Each channel in it carries
+`destinations`, the ones that are switched on, each as `{id, platform, url,
+stream}` with the whole address. The plugin raises `event/channel.stream` (a
+stream went live, learned its codecs, or left), `event/channel.refused`, and
+`event/channel.destination` (`{channel, destination, state, since_ms, kbps,
+reconnects, error}`) when a destination's state, error or reconnect count
+moves. It answers the `streams` tool with every live stream measured and each
+destination's `kbps` under `destinations`. It runs one restream per
+destination, each reading the hub through a bounded queue of its own. A mixer source reads its stream from the listener over
 loopback on the same port. `plugins/ingest/src/hub.rs` is the registry every
 reader goes through; `subscribe(app, stream)` is how the restreamer reads a
 stream.
@@ -179,16 +188,16 @@ its `destinations` list as below. A core started with `--rehearsal` refuses
 
 ### `channel.destination.add`
 
-`POST /api/v1/channel/destination/add`
+`POST /api/v1/channels/{id}/destination/add`
 
 | Param | | |
 |---|---|---|
 | `id` | required | the channel |
-| `platform` | required | `youtube`, `facebook`, `twitch`, `custom` or `srt` |
+| `platform` | required | `youtube`, `facebook`, `twitch`, `instagram`, `kick`, `linkedin`, `x`, `tiktok`, `custom` or `srt` |
 | `label` | optional | what the list calls it. The platform's name when left out |
 | `server` | optional | the ingest address. Left out, the platform's own. `custom` and `srt` need one |
 | `key` | optional | the stream key. Write only |
-| `stream` | optional | which of the channel's streams to send. `*`, the default, is the first live one |
+| `stream` | optional | which of the channel's streams to send. `*`, the default, is the one live longest, and when it leaves, the next one still live |
 | `enabled` | optional | `true` unless given |
 
 The destination's id is made from its label (`twitch-backup`), or the
@@ -197,7 +206,9 @@ platform's id, with `-2`, `-3` on the end when that is taken.
 What is refused, with `data.field` naming the field:
 
 * A platform not on the table. `data.platforms` lists the ones there are.
-* YouTube, Facebook or Twitch with no key.
+* A platform that needs a key (every one but `custom` and `srt`) with no key.
+* No server for a platform that hands out one per stream: `instagram`,
+  `linkedin` and `tiktok`.
 * No server for `custom` or `srt`, or a server of the wrong kind: `custom`
   takes `rtmp://` or `rtmps://`, `srt` takes `srt://`.
 * A `custom` server with no key and no key on the end of the address.
@@ -207,7 +218,7 @@ never shown back.
 
 ### `channel.destination.set`
 
-`POST /api/v1/channel/destination/set`
+`POST /api/v1/channels/{id}/destination`
 
 `id` and `destination` pick the destination; `label`, `server`, `key`,
 `stream` and `enabled` change only what is named. A key left out is kept. An
@@ -216,7 +227,7 @@ another platform is a remove and an add.
 
 ### `channel.destination.remove`
 
-`POST /api/v1/channel/destination/remove`
+`POST /api/v1/channels/{id}/destination/remove`
 
 `id` and `destination`. The stream to that destination stops and the
 destination is forgotten; the publisher and the other destinations are not
@@ -234,7 +245,7 @@ touched. It is destructive, so `dry_run: true` answers what it would stop.
 | `stream` | the stream it sends, or `*` |
 | `enabled` | |
 | `state` | `off`, `waiting`, `connecting`, `live`, `reconnecting` or `failed` |
-| `since_ms` | how long it has been in that state |
+| `since_ms` | how long it has been in that state, in milliseconds. A stream's `since_ms` is a time of day instead, in milliseconds since 1970 |
 | `kbps` | what is going out, over the last second |
 | `reconnects` | connections lost and made again since it was switched on |
 | `error` | the last thing that went wrong, in words, or `null` |

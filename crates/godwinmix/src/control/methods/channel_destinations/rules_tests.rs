@@ -24,6 +24,17 @@ fn youtube_takes_the_platform_server_and_needs_only_the_key() {
 }
 
 #[test]
+fn the_platforms_the_page_added_are_taken_and_ask_for_what_they_hand_out() {
+    let mut list = Vec::new();
+    let kick = AddDestinationRequest { key: Some("sk_live".into()), ..add_req("kick") };
+    assert_eq!(add(&mut list, &kick).unwrap(), "kick");
+    assert!(list[0].url().starts_with("rtmps://fa723fc1b171.global-contribute.live-video.net:443/app/"));
+    // Instagram hands out a server per stream, so a key alone is not enough.
+    let err = add(&mut list, &AddDestinationRequest { key: Some("k".into()), ..add_req("instagram") }).unwrap_err();
+    assert_eq!(field(&err), "server");
+}
+
+#[test]
 fn a_label_becomes_the_id() {
     let mut list = Vec::new();
     let req = AddDestinationRequest {
