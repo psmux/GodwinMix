@@ -8,6 +8,8 @@
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
+pub use crate::destination::Destination;
+
 /// How a publisher gives its key.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "lowercase")]
@@ -39,8 +41,8 @@ pub struct Channel {
     /// Live streams, and streams that left while a scene still holds their
     /// source.
     pub streams: Vec<ChannelStream>,
-    /// Where the channel's streams are sent on to. Filled in by
-    /// `channel.destination.*`.
+    /// Where the channel's streams are sent on to, with what each is doing.
+    /// Changed by `channel.destination.*`.
     #[serde(default)]
     pub destinations: Vec<Destination>,
 }
@@ -110,25 +112,6 @@ pub struct StreamAudio {
     pub channels: u32,
     pub sample_rate: u32,
     pub kbps: u32,
-}
-
-/// Where a channel's stream is sent on to, remuxed and never decoded.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
-pub struct Destination {
-    pub id: String,
-    pub platform: String,
-    pub label: String,
-    pub uri_host: String,
-    pub has_key: bool,
-    /// Which stream to send; `*` is the first live one.
-    pub stream: String,
-    pub enabled: bool,
-    /// off, waiting, connecting, live, reconnecting or failed.
-    pub state: String,
-    pub since_ms: u64,
-    pub kbps: u32,
-    pub reconnects: u32,
-    pub error: Option<String>,
 }
 
 /// `channel.list`.

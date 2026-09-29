@@ -1,33 +1,11 @@
 //! A channel's destinations: channel.destination.add, .set and .remove.
 //!
-//! # The seam, for the merge with the channel server
-//!
-//! These methods do not know where channels live. They reach them through
-//! one trait with one method, in `channel_destinations/store.rs`:
-//!
-//! ```text
-//! pub type Edit<'a> = &'a mut dyn FnMut(&mut Vec<StoredDestination>) -> Result<(), RpcError>;
-//!
-//! pub trait ChannelStore: Send + Sync {
-//!     fn edit_destinations(&self, channel: &str, edit: Edit) -> Result<Value, RpcError>;
-//! }
-//! ```
-//!
-//! The implementer finds the channel or answers
-//! `RpcError::not_found("channel", id, &ids)`, runs `edit` on the channel's
-//! `Vec<StoredDestination>` under its own lock, and when the list came out
-//! different it persists it, starts, restarts or stops the restreamer for
-//! each destination that changed (`restream::start(Target::new(&d.id,
-//! &d.platform, &d.url()), reader)` in the ingest plugin, with
-//! `Handle::stats().live` feeding `StoredDestination::view`), sends
-//! `event/channel.changed`, and answers the `Channel` as a client sees it. An
-//! edit that leaves the list alone saves and sends nothing.
-//!
-//! `store::current()` is the only other thing to change: today it hands out
-//! an in-memory store with no channels in it, and at the merge it returns the
-//! channel server's. `StoredDestination`, `Destination` and the platform
-//! table are in `godwinmix_protocol::destination`, so `Channel` can carry
-//! `destinations: Vec<Destination>` from there.
+//! The methods reach channels through one trait, [`ChannelStore`], which
+//! the channel registry (`crate::channels`) implements: it finds the
+//! channel, runs the edit under its own lock, seals the addresses and keys,
+//! persists, hands the listener the new table (which starts, restarts or
+//! stops each restream) and sends `event/channel.changed`. The rules of what
+//! an edit may say are pure functions in `rules.rs`.
 
 mod rules;
 mod store;
@@ -42,7 +20,7 @@ use serde_json::Value;
 
 use super::handler;
 use crate::control::call::Call;
-pub use store::ChannelStore;
+pub use store::{ChannelStore, Edit};
 
 pub fn register(reg: &mut Registry<Call>) {
     reg.register(
@@ -53,7 +31,7 @@ pub fn register(reg: &mut Registry<Call>) {
              receiver as it arrives. Nothing is decoded or encoded. The key is write only.",
             handler(|call: Call, params| async move {
                 let req: AddDestinationRequest = call.params(&params)?;
-                add(&*store::current(), &req)
+                blocking(&call, move |s| add(s, &req)).await
             }),
         )
         .params(schema_of::<AddDestinationRequest>)
@@ -68,7 +46,7 @@ pub fn register(reg: &mut Registry<Call>) {
              another server, which stream it sends, on or off. A key left out is kept.",
             handler(|call: Call, params| async move {
                 let req: SetDestinationRequest = call.params(&params)?;
-                set(&*store::current(), &req)
+                blocking(&call, move |s| set(s, &req)).await
             }),
         )
         .params(schema_of::<SetDestinationRequest>)
@@ -83,13 +61,26 @@ pub fn register(reg: &mut Registry<Call>) {
              and the other destinations are not touched.",
             handler(|call: Call, params| async move {
                 let req: RemoveDestinationRequest = call.params(&params)?;
-                remove(&*store::current(), &req, call.dry_run.then_some(&call))
+                let dry = call.clone();
+                blocking(&call, move |s| remove(s, &req, dry.dry_run.then_some(&dry))).await
             }),
         )
         .params(schema_of::<RemoveDestinationRequest>)
         .result(any_object)
         .destructive(),
     );
+}
+
+/// Run an edit on the blocking pool: it seals a key, writes a file and
+/// waits for the listener to take the new table.
+async fn blocking<F>(call: &Call, work: F) -> Result<Value, RpcError>
+where
+    F: FnOnce(&dyn ChannelStore) -> Result<Value, RpcError> + Send + 'static,
+{
+    let channels = call.app.channels.clone();
+    tokio::task::spawn_blocking(move || work(&*channels))
+        .await
+        .map_err(|e| RpcError::internal(format!("the destination edit stopped: {e}")))?
 }
 
 fn add(store: &dyn ChannelStore, req: &AddDestinationRequest) -> Result<Value, RpcError> {
@@ -136,25 +127,25 @@ mod tests {
 
     #[test]
     fn the_three_methods_go_through_the_store_and_never_hand_back_a_key() {
-        store::open_for_test("methods-test");
-        let s = store::current();
-        let added = add(&*s, &req(json!({"id": "methods-test", "platform": "youtube", "key": "sekret-1"}))).unwrap();
+        let s = store::MemoryStore::default();
+        s.open("methods-test");
+        let added = add(&s, &req(json!({"id": "methods-test", "platform": "youtube", "key": "sekret-1"}))).unwrap();
         let text = added.to_string();
         assert!(!text.contains("sekret"), "{text}");
         assert_eq!(added["destinations"][0]["has_key"], true);
         assert_eq!(added["destinations"][0]["uri_host"], "rtmp://a.rtmp.youtube.com");
 
-        let off = set(&*s, &req(json!({"id": "methods-test", "destination": "youtube", "enabled": false}))).unwrap();
+        let off = set(&s, &req(json!({"id": "methods-test", "destination": "youtube", "enabled": false}))).unwrap();
         assert_eq!(off["destinations"][0]["enabled"], false);
         assert_eq!(off["destinations"][0]["has_key"], true, "a key left out is kept");
 
-        let gone = remove(&*s, &req(json!({"id": "methods-test", "destination": "youtube"})), None).unwrap();
+        let gone = remove(&s, &req(json!({"id": "methods-test", "destination": "youtube"})), None).unwrap();
         assert_eq!(gone["destinations"].as_array().unwrap().len(), 0);
     }
 
     #[test]
     fn a_channel_that_is_not_there_is_named_as_missing() {
-        let err = add(&*store::current(), &req(json!({"id": "nowhere", "platform": "twitch", "key": "k"}))).unwrap_err();
+        let err = add(&store::MemoryStore::default(), &req(json!({"id": "nowhere", "platform": "twitch", "key": "k"}))).unwrap_err();
         assert_eq!(err.data["kind"], "channel");
         assert_eq!(err.data["id"], "nowhere");
     }

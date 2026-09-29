@@ -32,6 +32,10 @@ pub struct Record {
     /// take away again.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub auto_sources: Vec<String>,
+    /// Where its streams are sent on to. The address and key of each are
+    /// sealed in the secret store; only what a list shows is here.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub destinations: Vec<DestinationRecord>,
     /// Anything another part of the core keeps on a channel, such as its
     /// destinations, carried through untouched.
     #[serde(default, flatten)]
@@ -49,6 +53,20 @@ pub struct KeyRecord {
     pub label: String,
     pub created: String,
     pub hint: String,
+}
+
+/// A destination without its address or key.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct DestinationRecord {
+    pub id: String,
+    pub platform: String,
+    pub label: String,
+    /// Scheme, host and port, for a person reading this file.
+    pub uri_host: String,
+    #[serde(default)]
+    pub has_key: bool,
+    pub stream: String,
+    pub enabled: bool,
 }
 
 #[derive(Debug, Default, Serialize, Deserialize)]
@@ -117,9 +135,18 @@ mod tests {
                 hint: "x7kq".into(),
             }],
             auto_sources: vec![],
+            destinations: vec![DestinationRecord {
+                id: "youtube".into(),
+                platform: "youtube".into(),
+                label: "YouTube".into(),
+                uri_host: "rtmp://a.rtmp.youtube.com".into(),
+                has_key: true,
+                stream: "*".into(),
+                enabled: true,
+            }],
             extra: BTreeMap::new(),
         };
-        record.extra.insert("destinations".into(), toml::Value::Array(vec![]));
+        record.extra.insert("later".into(), toml::Value::Array(vec![]));
         save(&path, std::slice::from_ref(&record)).unwrap();
         let text = std::fs::read_to_string(&path).unwrap();
         assert!(!text.contains("secret ="), "a key's secret is never written here: {text}");

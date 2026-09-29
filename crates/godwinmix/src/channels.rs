@@ -23,11 +23,13 @@
 //! touches a pipeline except through the mixer's command queue.
 
 mod auto;
+mod destinations;
 mod edit;
 mod events;
 mod keys;
 mod live;
 mod net;
+mod sending;
 mod store;
 mod view;
 
@@ -61,6 +63,10 @@ pub struct Channels {
     store: Option<PathBuf>,
     records: Mutex<Vec<Record>>,
     live: Mutex<Vec<Live>>,
+    /// What the listener last said about each destination.
+    sending: Mutex<Vec<sending::Sending>>,
+    /// Destination edits, one at a time, so two cannot seal over each other.
+    edits: Mutex<()>,
     port: AtomicU16,
     plugins: Arc<Supervisor>,
     mixer: MixerHandle,
@@ -96,6 +102,8 @@ impl Channels {
             store,
             records: Mutex::new(records),
             live: Mutex::new(Vec::new()),
+            sending: Mutex::new(Vec::new()),
+            edits: Mutex::new(()),
             port: AtomicU16::new(port),
             plugins,
             mixer,
@@ -109,9 +117,8 @@ impl Channels {
 
     /// Give the listener the table: at its next start, and now if `now`.
     fn hand_over(&self, now: bool) {
-        let table: Vec<Value> = self
-            .records
-            .lock()
+        let records = self.records.lock().clone();
+        let table: Vec<Value> = records
             .iter()
             .map(|r| {
                 let keys: Vec<Value> = r
@@ -122,7 +129,14 @@ impl Channels {
                         Some(json!({"id": k.id, "secret": secret}))
                     })
                     .collect();
-                json!({"id": r.id, "app": r.app, "enabled": r.enabled, "key_mode": r.key_mode, "keys": keys})
+                json!({
+                    "id": r.id,
+                    "app": r.app,
+                    "enabled": r.enabled,
+                    "key_mode": r.key_mode,
+                    "keys": keys,
+                    "destinations": self.destination_table(r),
+                })
             })
             .collect();
         match toml::Value::try_from(Value::Array(table)) {
