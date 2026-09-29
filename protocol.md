@@ -39,7 +39,7 @@ Keys accepted on every method, handled before a method runs.
 | `channel.add` | `POST /api/v1/channels` | admin |  | 1 | Make a channel and its first key. The key is in this answer and never again. |
 | `channel.get` | `GET /api/v1/channels/{id}` | read |  | 1 | One channel. |
 | `channel.key.add` | `POST /api/v1/channels/key/add` | admin |  | 1 | Make another key for a channel, to give to one more person or encoder. The key is in this answer and never again. |
-| `channel.key.remove` | `POST /api/v1/channels/key/remove` | admin | yes | 1 | Take one key back. The next publisher with it is turned away; the other keys are untouched. |
+| `channel.key.remove` | `POST /api/v1/channels/key/remove` | admin | yes | 1 | Take one key back. A publisher on air with it is cut off and the next one is turned away; the other keys are untouched. |
 | `channel.list` | `GET /api/v1/channels` | read |  | 1 | Every RTMP channel with its keys (as hints), the address to publish to, and what is live on it, beside the port they all share. |
 | `channel.remove` | `DELETE /api/v1/channels/{id}` | admin | yes | 1 | Remove a channel and forget its keys. Sources it made that no scene holds go with it. |
 | `channel.set` | `POST /api/v1/channels/{id}/set` | admin |  | 1 | Rename a channel, switch it on or off, or change its application name, whether its streams become sources, or how its key is given. Only what is named moves. |
@@ -276,7 +276,7 @@ Make another key for a channel, to give to one more person or encoder. The key i
 
 #### `channel.key.remove`
 
-Take one key back. The next publisher with it is turned away; the other keys are untouched.
+Take one key back. A publisher on air with it is cut off and the next one is turned away; the other keys are untouched.
 
 ```json
 {

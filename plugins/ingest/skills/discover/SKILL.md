@@ -1,49 +1,51 @@
 ---
 name: ingest-discover
-description: Hold one RTMP port for many publishers and report each one as a source ready to add, with the add_publishers tool to add and remove them. Use when several people publish to the mixer at once, when the operator wants sources to appear by themselves as guests connect, or when asked what is publishing right now.
+description: The channel server. Holds the mixer's RTMP port for every channel, lets in the encoders whose keys match, measures each live stream, and hands it to a mixer source or a restream. Use when asked what is publishing right now, at what size, frame rate and bit rate, or why an encoder was turned away.
 ---
 
 # ingest/discover
 
-One address, many publishers. Where `ingest/rtmp` is one source on one port,
-this holds the port for everybody and hands each publisher's stream to a source
-through a loopback relay.
+One RTMP port, many channels, many streams on each. Channels are the core's:
+make and change them with the `channel.*` methods, and the core hands this
+device the table. What it does with it:
 
-## What it reports
+* a publisher on a channel with a key that matches is let in, and its stream
+  becomes a mixer source by itself when the channel's `auto_source` is on;
+* one with no key, a wrong key, or on a channel that is off is refused, and
+  its encoder is told why in a sentence;
+* taking a key back cuts off whoever is on air with it.
 
-* `discover` answers with one candidate per publisher, each with `type`
-  `ingest/rtmp` and the `params` a `source.add` needs.
-* `event/ingest.publisher` goes out the moment somebody connects or leaves,
-  carrying `action`, a legible `id`, the `name` (`live/phone`) and the `params`.
-* The `add_publishers` tool adds and removes the sources itself.
+With no channels at all it takes anybody, the way it always did, and each
+publisher becomes a source named after its path.
+
+## streams
+
+```
+streams {}
+```
+
+answers with every live stream:
+
+```json
+{"port": 1935, "relay": "127.0.0.1:1935", "streams": [
+  {"app": "sunday-service", "stream": "main", "from": "10.0.0.31:51666", "key": "key-1",
+   "video": {"codec": "h264", "width": 1920, "height": 1080, "fps": 30.0, "kbps": 5980},
+   "audio": {"codec": "aac", "channels": 2, "sample_rate": 48000, "kbps": 128},
+   "readers": 1, "dropped_gops": 0}]}
+```
+
+`dropped_gops` counts whole GOPs a slow reader lost. A publisher is never
+slowed by a reader; a reader that falls behind loses from the front of its own
+queue and picks up again at the next keyframe.
 
 ## add_publishers
 
-```
-add_publishers {dry_run: true}
-```
-
-answers with what it would do and changes nothing:
-
-```json
-{"add": ["live-phone"], "remove": [], "publishers": ["live-phone"]}
-```
-
-Without `dry_run` it adds an `ingest/rtmp` source for every publisher that has
-none and removes the ones it added whose publisher has gone. It never touches a
-source somebody else made. It calls the core's own REST layer with the token in
-`GMX_TOKEN`, so it needs that token to carry the `operate` scope; the error says
-so if it does not.
-
-## What does not work yet
-
-The core does not start `device` provides, does not call `discover`, does not
-read a plugin's `event` notifications, and does not route `tool.call`. Until it
-does, the way to take a publisher is an `ingest/rtmp` source that owns its own
-port: one source, added once, and every publisher who arrives is live in
-seconds. `plugins/ingest/src/device.rs` names the four gaps precisely.
+Only for the open door, with no channels: makes the sources match whoever is
+publishing. `add_publishers {dry_run: true}` answers with the plan and changes
+nothing. It calls the core's own REST layer with the token in `GMX_TOKEN`, so
+that token needs the `operate` scope.
 
 ## One port, one holder
 
-This device and an `ingest/rtmp` source cannot both hold 1935. Run one or the
-other; the bind error names the other when they clash.
+This device and an `ingest/rtmp` source that owns its own port cannot share a
+port. Give that source another one.

@@ -11,7 +11,7 @@ and `main` picks the handler from it:
 |---|---|---|
 | `ingest/rtmp` | source | `src/source.rs` over `src/rtmp.rs`, `src/flv.rs` and `src/remux.rs` |
 | `ingest/whip` | source | `src/whip_in.rs` |
-| `ingest/discover` | device | `src/device.rs` over `src/rtmp.rs`, `src/relay.rs`, `src/rest.rs` |
+| `ingest/discover` | device | `src/device.rs` over `src/rtmp.rs`, `src/gate.rs`, `src/channels.rs`, `src/hub.rs`, `src/relay.rs`, `src/rest.rs` |
 
 The RTMP half is pure Rust: `rml_rtmp` parses chunks and raises events, this
 plugin owns the sockets, and the published messages become FLV tags with a
@@ -40,12 +40,15 @@ gmx plugin test plugins/ingest --offline     # replay tests/transcript.jsonl
    Adding a decoder here would pay for the decode twice and is the one change
    that would make this plugin expensive.
 3. **A connection thread must not block on anything but its own socket.** The
-   `Sink` closure is called from it. Writing to the pipe is what it does;
-   waiting on a lock somebody else holds for long is not.
-4. **A relay reader that is not keeping up is dropped, not waited for.** Nothing
-   a plugin does may stall the media path. `Relay::send` retains only the
-   clients whose write succeeded.
-5. **Hold bytes back until the first keyframe.** `flv::is_keyframe` decides.
+   `Gate` and each `Inlet` are called from it. Handing a tag on is what it
+   does; waiting on a lock somebody else holds for long is not. No lock is
+   held across I/O anywhere in the hub.
+4. **A reader that is not keeping up loses GOPs, it is never waited for.**
+   Nothing a plugin does may stall the media path. The hub's queues are
+   bounded and drop whole GOPs from the front; the loss is counted in
+   `dropped_gops`. `hub::tests::a_blocked_reader_does_not_slow_the_publisher_or_the_other_reader`
+   holds that to a number.
+5. **Hold bytes back until the first keyframe.** `codec::is_keyframe` decides.
    Handing a decoder inter frames with no keyframe in front produces a grey
    picture and a lot of log noise, and it is the failure everyone blames on the
    encoder.
@@ -58,12 +61,28 @@ gmx plugin test plugins/ingest --offline     # replay tests/transcript.jsonl
    `src/rest.rs` is a hand written HTTP client precisely so that a plugin does
    not carry a TLS stack and a runtime to call a process on the same machine.
 
-## What the core cannot do yet
+## The channel server
 
-`ingest/discover` and `add_publishers` are dormant. The four gaps are listed at
-the top of `src/device.rs` with the file that would change for each. Do not
-delete the dormant code to make the warnings go away: it is what the core will
-call when those land, and it is tested.
+`ingest/discover` is the channel server: one RTMP port, many channels, many
+streams on each (`dev/plans/channels-contract.md`). The core owns channels and
+hands this process its table as `channels` in the settings; `src/channels.rs`
+decides who is let in, `src/gate.rs` tells the core, and `src/hub.rs` carries
+each stream to its readers:
+
+* a publisher pushes each tag once, as a `MediaTag` whose payload is an
+  `Arc<[u8]>`, and never waits on a reader;
+* every reader has a bounded queue (`src/hub/queue.rs`); one that falls behind
+  loses whole GOPs from the front, counted, and starts again at a keyframe
+  with the headers in front;
+* a late joiner gets `onMetaData` and the two sequence headers before its
+  first keyframe.
+
+`src/media_tag.rs` is shared with the restreamer in `src/restream/` and its
+content is fixed by the contract. Change it there first.
+
+A mixer source reads its stream from the hub over loopback on the RTMP port
+itself (`src/relay.rs`). The relayed source exits when its publisher leaves,
+on purpose: `src/source/relayed.rs` says why.
 
 ## What is deliberately not here
 
@@ -71,9 +90,9 @@ call when those land, and it is tested.
 * No RTSP server: `gstreamer-rtsp-server` needs `libgstrtspserver-1.0` at link
   time on every platform, which would break this plugin's build for people who
   only wanted RTMP. It belongs in its own plugin with its own platform list.
-* No `onMetaData` script tag. `flvdemux` works from the AVC and AAC sequence
-  headers, and rebuilding the AMF0 object would be work for nothing. If a
-  downstream tool ever needs the metadata, `ServerSessionEvent::StreamMetadataChanged`
-  is where it arrives.
+* No copy of the publisher's own `onMetaData` bytes. `rml_rtmp` parses them
+  into a struct and keeps nothing else, so `flv::metadata_body` writes the
+  object again with the AMF0 encoder `rml_rtmp` already carries, for a late
+  reader and for a restream.
 * No Enhanced RTMP. `rml_rtmp` does not do HEVC or AV1 over RTMP, and the crate
   that does wants a newer Rust than this workspace.

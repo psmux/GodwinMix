@@ -7665,7 +7665,7 @@
       },
       "scope": "admin",
       "since": "1",
-      "summary": "Take one key back. The next publisher with it is turned away; the other keys are untouched."
+      "summary": "Take one key back. A publisher on air with it is cut off and the next one is turned away; the other keys are untouched."
     },
     {
       "destructive": false,
