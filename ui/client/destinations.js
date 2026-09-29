@@ -108,6 +108,8 @@ export const PLATFORMS = [
     policy: "cdn",
     hosts: ["rtmp.youtube.com"],
     where: "YouTube Studio, Go live, Stream settings. Copy the stream key, not the stream URL.",
+    hint: "YouTube Studio, Go live: the stream key.",
+    colour: "#ff0000",
   },
   {
     id: "facebook",
@@ -119,6 +121,8 @@ export const PLATFORMS = [
     policy: "cdn",
     hosts: ["live-api-s.facebook.com"],
     where: "The Live producer page, Streaming software. Copy the stream key.",
+    hint: "Live producer, Streaming software: the stream key.",
+    colour: "#0866ff",
   },
   {
     id: "twitch",
@@ -133,6 +137,95 @@ export const PLATFORMS = [
       "The Creator Dashboard, Settings, Stream. Copy the primary stream key. Twitch also " +
       "publishes ingest servers nearer to you; this one works everywhere and you can paste " +
       "a closer one over it.",
+    hint: "Creator Dashboard, Settings, Stream: the primary key.",
+    colour: "#9146ff",
+  },
+  // The five below were checked against each platform's own help pages in
+  // September 2026. Instagram, LinkedIn and TikTok hand out a new address with
+  // every stream, so their server box starts empty and says where to find it;
+  // `perStream` is what tells a page to ask for both halves.
+  {
+    id: "instagram",
+    title: "Instagram Live",
+    provides: "rtmp/output",
+    server: "",
+    fixed: false,
+    perStream: true,
+    key: true,
+    policy: "cdn",
+    hosts: ["fbcdn.net"],
+    example: "rtmps://edgetee-upload-xxx.xx.fbcdn.net:443/rtmp/",
+    where:
+      "Instagram Live Producer on a computer, Streaming software. Copy the stream URL and the " +
+      "key; both change every time you go live.",
+    hint: "Live Producer: URL and key, new each time.",
+    colour: "#e1306c",
+  },
+  {
+    id: "kick",
+    title: "Kick",
+    provides: "rtmp/output",
+    server: "rtmps://fa723fc1b171.global-contribute.live-video.net:443/app",
+    fixed: false,
+    key: true,
+    policy: "cdn",
+    hosts: ["fa723fc1b171.global-contribute.live-video.net"],
+    where:
+      "Creator dashboard, Settings, Stream URL and Key. Copy the stream key, and the stream URL " +
+      "too if it differs from the one filled in here.",
+    hint: "Creator dashboard: Stream URL and Key.",
+    colour: "#53fc18",
+  },
+  {
+    id: "linkedin",
+    title: "LinkedIn Live",
+    provides: "rtmp/output",
+    server: "",
+    fixed: false,
+    perStream: true,
+    key: true,
+    policy: "cdn",
+    // LinkedIn does not publish its ingest host, so an existing output is not
+    // recognised as LinkedIn and opens as Custom RTMP.
+    hosts: [],
+    example: "the stream URL from Live Studio",
+    where:
+      "Create the live event, then Live Studio, Manage streams, Get URL. Copy the stream URL " +
+      "and the key; they appear up to two hours before the start.",
+    hint: "Live Studio: stream URL and key, per event.",
+    colour: "#0a66c2",
+  },
+  {
+    id: "x",
+    title: "X",
+    provides: "rtmp/output",
+    server: "rtmps://va.pscp.tv:443/x",
+    fixed: false,
+    key: true,
+    policy: "cdn",
+    hosts: ["pscp.tv"],
+    where:
+      "Media Studio Producer, Sources, your RTMP source. Copy the stream key, and the RTMPS URL " +
+      "if yours is in another region.",
+    hint: "Media Studio Producer: the RTMP source's key.",
+    colour: "#000000",
+  },
+  {
+    id: "tiktok",
+    title: "TikTok LIVE",
+    provides: "rtmp/output",
+    server: "",
+    fixed: false,
+    perStream: true,
+    key: true,
+    policy: "cdn",
+    hosts: ["tiktokcdn"],
+    example: "rtmp://push-rtmp-xx.tiktokcdn.com/game/",
+    where:
+      "LIVE Producer on a computer, at livecenter.tiktok.com/producer. Copy the server URL and " +
+      "the key. Only accounts TikTok has given encoder access see them.",
+    hint: "LIVE Producer: server URL and key, per stream.",
+    colour: "#000000",
   },
   {
     id: "custom",
@@ -147,6 +240,8 @@ export const PLATFORMS = [
     // into the server box, with nothing in the key box, is a whole address.
     keyOptional: true,
     where: "Your own server, or a platform that is not on this list. The key may be blank.",
+    hint: "Any RTMP or RTMPS server.",
+    colour: "#5b6b8c",
   },
   {
     id: "srt",
@@ -161,6 +256,8 @@ export const PLATFORMS = [
     // RTMP example, which is the wrong kind of address for this tile.
     example: "srt://192.168.1.50:9000",
     where: "A receiver that expects MPEG-TS over SRT. There is no stream key.",
+    hint: "A receiver, over SRT. No key.",
+    colour: "#14a38b",
   },
 ];
 
@@ -176,7 +273,13 @@ export function platform(id) {
  */
 export function platformOfHost(uriHost) {
   const host = String(uriHost || "").toLowerCase();
-  const known = PLATFORMS.find((p) => p.hosts.some((h) => host.includes(h)));
+  // The longest host that matches wins: Kick and Twitch both ingest under
+  // `contribute.live-video.net`, and Kick's is the more specific name.
+  let known = null;
+  let best = 0;
+  for (const p of PLATFORMS) {
+    for (const h of p.hosts) if (h.length > best && host.includes(h)) [known, best] = [p, h.length];
+  }
   if (known) return known;
   return platform(host.startsWith("srt://") ? "srt" : "custom");
 }
