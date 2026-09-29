@@ -56,13 +56,11 @@ fn tag(kind: u8, timestamp_ms: u32, body: &[u8]) -> Vec<u8> {
 }
 
 /// An audio tag. `body` is the RTMP audio message payload, unchanged.
-#[cfg(test)]
 pub fn audio(timestamp_ms: u32, body: &[u8]) -> Vec<u8> {
     tag(TAG_AUDIO, timestamp_ms, body)
 }
 
 /// A video tag. `body` is the RTMP video message payload, unchanged.
-#[cfg(test)]
 pub fn video(timestamp_ms: u32, body: &[u8]) -> Vec<u8> {
     tag(TAG_VIDEO, timestamp_ms, body)
 }
