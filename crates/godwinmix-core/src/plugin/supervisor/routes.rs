@@ -21,6 +21,17 @@ use std::sync::Arc;
 /// It must not block: hand the event to a queue and return.
 pub type EventRoute = Arc<dyn Fn(&str, &str, &Value) + Send + Sync>;
 
+/// One line a singleton logged, into the core's own log at its level.
+pub fn log(instance: &str, level: godwinmix_protocol::plugin::wire::LogLevel, message: &str) {
+    use godwinmix_protocol::plugin::wire::LogLevel;
+    match level {
+        LogLevel::Error => tracing::error!(%instance, "{message}"),
+        LogLevel::Warn => tracing::warn!(%instance, "{message}"),
+        LogLevel::Info => tracing::info!(%instance, "{message}"),
+        LogLevel::Debug | LogLevel::Trace => tracing::debug!(%instance, "{message}"),
+    }
+}
+
 #[derive(Default)]
 pub struct Routes {
     /// `plugin -> key -> value`, laid over the operator's `[plugins.<name>]`.

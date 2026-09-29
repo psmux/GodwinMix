@@ -529,6 +529,14 @@ fn notice(shared: &Arc<Shared>, method: &str, params: Value) {
             let body = params.get("params").cloned().unwrap_or(Value::Null);
             push(shared, Notice::Event { name, params: body });
         }
+        // What docs/reference/plugin-protocol.md documents and what the SDK's
+        // `Reporter::event` sends: the name in the method, the body as the
+        // params. Only the `event` form above used to be read, so every event
+        // an SDK plugin raised was dropped here.
+        m if m.starts_with("event/") => {
+            let name = m["event/".len()..].to_string();
+            push(shared, Notice::Event { name, params });
+        }
         "media.report" => push(shared, Notice::MediaReport(params)),
         "health.changed" => {
             let state = params
@@ -566,4 +574,42 @@ fn as_error(instance: &str, method: &str, e: WireError) -> anyhow::Error {
         );
     }
     anyhow::anyhow!("{instance} refused `{method}`: {}", e.message)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn shared() -> Arc<Shared> {
+        Arc::new(Shared {
+            instance: "ingest-discover".into(),
+            channel: Channel::new(Box::new(std::io::sink())),
+            notices: Mutex::new(Vec::new()),
+            hello: Mutex::new(None),
+            hello_signal: Mutex::new(None),
+        })
+    }
+
+    #[test]
+    fn an_event_reaches_the_notices_in_both_of_its_spellings() {
+        let shared = shared();
+        // The documented form, which the SDK sends.
+        notice(&shared, "event/channel.stream", json!({"app": "church", "state": "live"}));
+        // The older one, name and body wrapped.
+        notice(&shared, "event", json!({"name": "source.appeared", "params": {"id": "cam"}}));
+        let events: Vec<(String, Value)> = shared
+            .notices
+            .lock()
+            .iter()
+            .filter_map(|n| match n {
+                Notice::Event { name, params } => Some((name.clone(), params.clone())),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(events.len(), 2, "{events:?}");
+        assert_eq!(events[0].0, "channel.stream");
+        assert_eq!(events[0].1["app"], "church");
+        assert_eq!(events[1].0, "source.appeared");
+        assert_eq!(events[1].1["id"], "cam");
+    }
 }

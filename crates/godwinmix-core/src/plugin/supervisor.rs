@@ -670,7 +670,11 @@ impl Supervisor {
                 debug!(%instance, %state, ?detail, "a plugin's health changed");
             }
             Notice::Broken(why) => warn!(%instance, %why, "a plugin's channel broke"),
-            Notice::Log { .. } | Notice::MediaReport(_) => {}
+            // What a singleton says about itself goes in the core's log, tagged
+            // with the instance. It used to be drained and dropped, which left
+            // a refused publisher's reason nowhere an operator could read it.
+            Notice::Log { level, message } => routes::log(instance, level, &message),
+            Notice::MediaReport(_) => {}
         }
     }
 
