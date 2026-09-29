@@ -1,5 +1,6 @@
-// A stand in for a core with RTMP channels, written to
-// dev/plans/channels-contract.md, for the tests and the preview page. It keeps
+// A stand in for a core with RTMP channels, answering in the shapes the real
+// channel.* methods answer with (checked against a running core and the
+// ingest plugin), for the tests and the preview page. It keeps
 // channels in memory, answers the channel.* methods and sends
 // event/channel.changed the way the core will, through the client's own
 // `event` listeners.
@@ -74,7 +75,7 @@ export class ChannelStub {
 
 const METHODS = {
   "channel.list"() {
-    return { channels: [...this.channels.values()], rtmp: { port: 1935, urls: this.urls } };
+    return { channels: [...this.channels.values()], rtmp: { port: 1935, urls: this.urls, listening: true } };
   },
   "channel.get"({ id }) {
     return this.channel(id);
@@ -88,7 +89,7 @@ const METHODS = {
       streams: [], destinations: [],
     };
     this.channels.set(id, c);
-    const key = this.newKey(c, "First key");
+    const key = this.newKey(c);
     this.changed(id);
     return { channel: c, key };
   },
@@ -117,12 +118,14 @@ const METHODS = {
   },
   "channel.destination.add"(p) {
     const c = this.channel(p.id);
-    const base = p.platform;
+    // The core names a destination after its label, or its platform.
+    const base = slugify(p.label || "") || p.platform;
     let n = 1;
     while (c.destinations.some((d) => d.id === (n === 1 ? base : `${base}-${n}`))) n++;
     c.destinations.push({
-      id: n === 1 ? base : `${base}-${n}`, platform: p.platform, label: p.label || "", uri_host: (p.server || "").replace(/^(\w+:\/\/[^/]+).*$/, "$1/…"),
-      has_key: !!p.key, stream: p.stream || "*", enabled: p.enabled !== false, state: p.enabled === false ? "off" : "waiting",
+      id: n === 1 ? base : `${base}-${n}`, platform: p.platform, label: p.label || "", uri_host: (p.server || "").replace(/^(\w+:\/\/[^/?]+).*$/, "$1"),
+      // A whole address pasted into a custom server carries its own key.
+      has_key: !!p.key || p.platform === "srt" || (p.platform === "custom" && /^\w+:\/\/[^/]+\/[^/]+\/./.test(p.server || "")), stream: p.stream || "*", enabled: p.enabled !== false, state: p.enabled === false ? "off" : "waiting",
       since_ms: 0, kbps: 0, reconnects: 0, error: null,
     });
     this.changed(c.id);
@@ -133,7 +136,8 @@ const METHODS = {
     const d = c.destinations.find((x) => x.id === p.destination);
     if (p.enabled !== undefined) {
       d.enabled = p.enabled;
-      d.state = p.enabled ? "connecting" : "off";
+      // On again, it waits for the stream; the listener's report moves it on.
+      d.state = p.enabled ? "waiting" : "off";
     }
     if (p.key) d.has_key = true;
     if (p.label !== undefined) d.label = p.label;
@@ -152,7 +156,7 @@ const METHODS = {
 /** A publisher arriving on a channel, as the server would describe it. */
 export function liveStream(name, over = {}) {
   return {
-    name, state: "live", since_ms: Date.now() - 754000, from: "10.0.0.23", key: "key-1",
+    name, state: "live", since_ms: Date.now() - 754000, from: "10.0.0.23:51514", key: "key-1", dropped_gops: 0,
     video: { codec: "h264", width: 1920, height: 1080, fps: 30, kbps: 4500 },
     audio: { codec: "aac", channels: 2, sample_rate: 48000, kbps: 160 },
     source: null, ...over,

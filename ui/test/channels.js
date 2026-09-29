@@ -1,6 +1,7 @@
-// The Channels panel against a stub of dev/plans/channels-contract.md: create,
-// the key shown once, revoke, a destination added and switched, and an event
-// updating a card. No core needed.
+// The Channels panel against a stub that answers as the real channel.*
+// methods do: create, the key shown once, revoke, a destination added and
+// switched, an event updating a card, and the numbers read while live. No
+// core needed.
 
 import { ChannelStub, liveStream } from "./channels-stub.js";
 
@@ -169,6 +170,23 @@ export async function channelTests(test, eq, ok) {
     ok(tile === tileBefore, "the tile is written into, not rebuilt");
     eq(tile.dataset.state, "failed");
     eq(tile.querySelector(".chn-terr").textContent, "YouTube refused the key.");
+  });
+
+  // No event carries bit rates, so while something is live the panel reads
+  // them every other tick of its clock.
+  c.streams[0].video.kbps = 2600;
+  c.destinations[0].state = "reconnecting";
+  c.destinations[0].error = "nothing answered at rtmp://10.0.0.9:1935";
+  const before = stub.calls.filter((x) => x.method === "channel.list").length;
+  view.tick();
+  view.tick();
+  await wait(60);
+  test("while live the numbers are read again every two seconds", () => {
+    ok(stub.calls.filter((x) => x.method === "channel.list").length > before, "channel.list was read again");
+    ok(card().querySelector(".chn-rate").textContent.includes("2.8 Mb/s"), card().querySelector(".chn-rate").textContent);
+  });
+  test("a tile trying again says why", () => {
+    eq(card().querySelector(".chn-tile .chn-terr").textContent, "nothing answered at rtmp://10.0.0.9:1935");
   });
 
   stub.emit("event", { name: "channel.removed", params: { id: "sunday-service" } });
