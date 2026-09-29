@@ -88,6 +88,59 @@
       ],
       "type": "object"
     },
+    "AddDestinationRequest": {
+      "description": "`channel.destination.add`. Send a channel's stream on to a platform.",
+      "properties": {
+        "enabled": {
+          "description": "On by default.",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "id": {
+          "description": "The channel.",
+          "type": "string"
+        },
+        "key": {
+          "description": "The stream key. Write only: no method reads it back.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "label": {
+          "description": "What the list calls it. The platform's name when left out.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "platform": {
+          "description": "youtube, facebook, twitch, custom or srt.",
+          "type": "string"
+        },
+        "server": {
+          "description": "The ingest address. Left out, the platform's own; custom and srt need\none.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "stream": {
+          "description": "Which of the channel's streams to send. `*`, the default, is the first\none live.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "id",
+        "platform"
+      ],
+      "type": "object"
+    },
     "AddFilterRequest": {
       "description": "`filter.add`.",
       "properties": {
@@ -4449,6 +4502,24 @@
       ],
       "type": "object"
     },
+    "RemoveDestinationRequest": {
+      "description": "`channel.destination.remove`.",
+      "properties": {
+        "destination": {
+          "description": "The destination's id within the channel.",
+          "type": "string"
+        },
+        "id": {
+          "description": "The channel.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "destination"
+      ],
+      "type": "object"
+    },
     "RenameSceneRequest": {
       "properties": {
         "color": {
@@ -4887,6 +4958,55 @@
           "type": "integer"
         }
       },
+      "type": "object"
+    },
+    "SetDestinationRequest": {
+      "description": "`channel.destination.set`. Change one destination, naming only what moves.",
+      "properties": {
+        "destination": {
+          "description": "The destination's id within the channel.",
+          "type": "string"
+        },
+        "enabled": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "id": {
+          "description": "The channel.",
+          "type": "string"
+        },
+        "key": {
+          "description": "A new stream key. Left out keeps the one it has; an empty string\nclears it, where the platform allows none.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "label": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "server": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "stream": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "id",
+        "destination"
+      ],
       "type": "object"
     },
     "SetFilterRequest": {
@@ -6971,6 +7091,63 @@
       "scope": "read",
       "since": "1",
       "summary": "The compact document written for agents: the programme, each source's state and a motion score saying how much its picture is changing."
+    },
+    {
+      "destructive": false,
+      "idempotent": true,
+      "mutating": true,
+      "name": "channel.destination.add",
+      "params": {
+        "$ref": "#/$defs/AddDestinationRequest"
+      },
+      "rest": {
+        "method": "POST",
+        "path": "/api/v1/channels/{id}/destinations"
+      },
+      "result": {
+        "type": "object"
+      },
+      "scope": "admin",
+      "since": "1",
+      "summary": "Send a channel's stream on to YouTube, Facebook, Twitch, an RTMP server or an SRT receiver as it arrives. Nothing is decoded or encoded. The key is write only."
+    },
+    {
+      "destructive": true,
+      "idempotent": true,
+      "mutating": true,
+      "name": "channel.destination.remove",
+      "params": {
+        "$ref": "#/$defs/RemoveDestinationRequest"
+      },
+      "rest": {
+        "method": "POST",
+        "path": "/api/v1/channels/{id}/destinations/remove"
+      },
+      "result": {
+        "type": "object"
+      },
+      "scope": "admin",
+      "since": "1",
+      "summary": "Stop sending a channel's stream to one destination and forget it. The publisher and the other destinations are not touched."
+    },
+    {
+      "destructive": false,
+      "idempotent": true,
+      "mutating": true,
+      "name": "channel.destination.set",
+      "params": {
+        "$ref": "#/$defs/SetDestinationRequest"
+      },
+      "rest": {
+        "method": "POST",
+        "path": "/api/v1/channels/{id}/destinations/set"
+      },
+      "result": {
+        "type": "object"
+      },
+      "scope": "admin",
+      "since": "1",
+      "summary": "Change one of a channel's destinations, naming only what moves: a new key, another server, which stream it sends, on or off. A key left out is kept."
     },
     {
       "destructive": false,

@@ -36,6 +36,9 @@ Keys accepted on every method, handled before a method runs.
 | `adbreak.end` | `POST /api/v1/adbreak/end` | operate |  | 1 | Cut a running ad short, or disarm one that is scheduled. |
 | `adbreak.start` | `POST /api/v1/adbreak/start` | operate |  | 1 | Interrupt the programme with a clip, then rejoin live when it ends. |
 | `agent.state` | `GET /api/v1/agent/state` | read |  | 1 | The compact document written for agents: the programme, each source's state and a motion score saying how much its picture is changing. |
+| `channel.destination.add` | `POST /api/v1/channels/{id}/destinations` | admin |  | 1 | Send a channel's stream on to YouTube, Facebook, Twitch, an RTMP server or an SRT receiver as it arrives. Nothing is decoded or encoded. The key is write only. |
+| `channel.destination.remove` | `POST /api/v1/channels/{id}/destinations/remove` | admin | yes | 1 | Stop sending a channel's stream to one destination and forget it. The publisher and the other destinations are not touched. |
+| `channel.destination.set` | `POST /api/v1/channels/{id}/destinations/set` | admin |  | 1 | Change one of a channel's destinations, naming only what moves: a new key, another server, which stream it sends, on or off. A key left out is kept. |
 | `codec.list` | `GET /api/v1/codecs` | read |  | 1 | Every codec and element in the catalogue, which of them this machine actually has, and what it would pick. |
 | `config.get` | `GET /api/v1/config` | admin |  | 1 | The mixer's settings: each key's value in the config file, its default, when a change to it takes effect, and which keys are waiting for a restart. Secrets say only whether one is set. |
 | `config.reset` | `POST /api/v1/config/reset` | admin | yes | 1 | Put settings back to their defaults by taking them out of the config file. Answers like config.set. |
@@ -215,6 +218,51 @@ MCP tool `agent_state` in the `minimal` profile: readOnlyHint true, destructiveH
 {
   "params": {
     "$ref": "#/$defs/AgentStateRequest"
+  },
+  "result": {
+    "type": "object"
+  }
+}
+```
+
+#### `channel.destination.add`
+
+Send a channel's stream on to YouTube, Facebook, Twitch, an RTMP server or an SRT receiver as it arrives. Nothing is decoded or encoded. The key is write only.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/AddDestinationRequest"
+  },
+  "result": {
+    "type": "object"
+  }
+}
+```
+
+#### `channel.destination.remove`
+
+Stop sending a channel's stream to one destination and forget it. The publisher and the other destinations are not touched.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/RemoveDestinationRequest"
+  },
+  "result": {
+    "type": "object"
+  }
+}
+```
+
+#### `channel.destination.set`
+
+Change one of a channel's destinations, naming only what moves: a new key, another server, which stream it sends, on or off. A key left out is kept.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/SetDestinationRequest"
   },
   "result": {
     "type": "object"
