@@ -89,8 +89,10 @@ what the server does anyway to serve its publishers.
 
 ## Performance rules
 
-* One listener task, one task per connection, no lock held across an await,
-  no allocation per media message on the hot path (tags are `Bytes`, shared).
+* One listener, one thread per connection (the plugin is std threads on
+  rml_rtmp today; keep that unless measurement says otherwise), no lock held
+  while doing I/O, no copy of media per consumer: a tag's payload is shared
+  (`Arc<[u8]>`) between every reader.
 * A publisher is never slowed by a reader. Every consumer (a mixer source, a
   destination) reads through a bounded queue; a consumer that falls behind
   loses whole GOPs from the front and restarts at the next keyframe, and the
@@ -101,3 +103,46 @@ what the server does anyway to serve its publishers.
   never touches the publisher or the other destinations.
 * Channels persist in the runtime overlay beside the config, as sources and
   outputs do, and survive a restart.
+
+## The one type two halves share
+
+The server half (who publishes) and the distribution half (sending a stream
+on) meet at one type, in `plugins/ingest/src/media_tag.rs`. Both halves
+create that file with exactly this content if it is not there yet, so it
+merges clean:
+
+```rust
+//! One FLV tag as it came off the wire, shared by every reader of a stream.
+
+use std::sync::Arc;
+
+/// What a tag carries.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TagKind {
+    Audio,
+    Video,
+    /// `onMetaData` and the other script data a publisher sends.
+    Script,
+}
+
+/// One tag. Cloning it clones a pointer, never the payload.
+#[derive(Debug, Clone)]
+pub struct MediaTag {
+    pub kind: TagKind,
+    /// Milliseconds on the publisher's own timeline.
+    pub timestamp_ms: u32,
+    /// A video tag that starts a GOP. A reader that fell behind waits for one.
+    pub keyframe: bool,
+    /// The AVC or AAC sequence header, which a reader joining late must be
+    /// given before any other tag of its kind.
+    pub sequence_header: bool,
+    pub payload: Arc<[u8]>,
+}
+```
+
+The server half owns `plugins/ingest/src/hub.rs`: a registry of live streams
+by `(app, stream)` that hands a reader a bounded queue of `MediaTag`, the
+sequence headers and metadata first, and on overflow drops to the next
+keyframe. The distribution half owns `plugins/ingest/src/restream/`, which
+takes any `Iterator<Item = MediaTag>` (or a receiver of them) and publishes it
+to an RTMP or SRT destination, remuxing only.
