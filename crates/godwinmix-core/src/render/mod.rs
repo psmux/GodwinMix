@@ -46,6 +46,22 @@
 //! * `admit`, `shed`: tickets per encoder, refusals with advice, and giving
 //!   an encoder up when the machine runs short.
 
+mod admit;
+pub mod candidates;
+mod elements;
+mod graph;
+pub mod keyframes;
+pub mod model;
+mod refusal;
+mod renditions;
+mod shed;
+pub mod station;
 mod tap;
+mod view;
 
+pub use graph::Programme;
+pub use refusal::Refusal;
+pub use renditions::{Renditions, PROGRAMME};
+pub use shed::{Tick, RESTORE_AFTER};
+pub use station::Station;
 pub use tap::{Feed, Tap};

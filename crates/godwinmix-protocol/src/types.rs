@@ -200,6 +200,14 @@ pub struct OutputStatus {
     pub queue_secs: f64,
     /// Per kind data from whatever plugin owns this output. Empty for the
     /// RTMP outputs the core builds itself.
+    /// What this output asked to be made, when it asked: a rendition
+    /// request or a preset. Absent means the programme encoder.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub rendition: Option<crate::rendition::RenditionChoice>,
+    /// Why the governor has this output's rendition stopped just now, while
+    /// it has. The output stays connected and resumes by itself.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub shed: Option<String>,
     #[serde(flatten, default, skip_serializing_if = "extra_is_empty")]
     pub extra: Extra,
 }
@@ -364,6 +372,10 @@ pub enum Event {
     ChannelRemoved { id: String },
     /// A publisher was turned away, with the reason it was given.
     ChannelRefused { id: String, stream: String, from: String, why: String },
+    /// The programme's rendition plan changed.
+    RenditionPlan { scope: String, plan: crate::rendition::PlanView },
+    /// The governor stopped something to keep what is on air whole.
+    GovernorShed { what: String, why: String },
 }
 
 /// What a surface starts with: the layout, the theme and the gallery mode.
@@ -648,6 +660,8 @@ mod tests {
             state: OutputState::Live,
             reconnects: 0,
             queue_secs: 0.2,
+            rendition: None,
+            shed: None,
             extra: Extra::new(),
         };
         let v = serde_json::to_value(&o).unwrap();

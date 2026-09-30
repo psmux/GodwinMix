@@ -6,7 +6,10 @@
 //! can be built, tested and replaced without the others.
 
 mod shape;
+mod table;
 mod wire;
+
+pub use table::events;
 
 pub use shape::*;
 pub use wire::*;
