@@ -26,6 +26,8 @@ until then.
 | `udp/source` | source | `udp` | MPEG-TS over UDP or RTP, unicast or multicast, one program chosen | yes; every setting is in [udp.md](udp.md) |
 | `udp/output` | output | `udp` | the programme as MPEG-TS over UDP or RTP | yes, Linux and macOS |
 | `rtsp/output` | output | `rtsp` | serve the programme over RTSP for players, decoders and NVRs that pull | yes, Linux and macOS |
+| `ipcam/source` | source | `ipcam` | an IP camera's MJPEG stream or snapshot picture over HTTP | yes |
+| `ipcam/discover` | device | `ipcam` | ONVIF cameras on the LAN, each profile as an RTSP `hls/source` | yes |
 
 ### What "needs the core" means, precisely
 
@@ -254,6 +256,38 @@ Annotations: `readOnlyHint = true`, `destructiveHint = false`,
 Where the runtime is absent the tool is an error naming the download page, and
 `discover` answers with an empty list rather than an error, because a machine
 with no NDI on it is not broken.
+
+## `ipcam/source` and `ipcam/discover`
+
+`ipcam/source` reads what a camera serves over HTTP or HTTPS, as JPEGs that
+cross to the core in Matroska; the core decodes them. It has no sound.
+
+| Key | Type | Default | Meaning |
+|---|---|---|---|
+| `uri` | string | required | the camera's `http://` or `https://` MJPEG or snapshot address |
+| `mode` | `auto`, `mjpeg`, `snapshot` | `auto` | `auto` takes a `.jpg`, `snapshot`, `still` or `image.cgi` address as a snapshot and anything else as MJPEG |
+| `fps` | integer 1 to 30 | `5` | snapshots asked for a second |
+| `user` | string | empty | the camera's login, basic or digest, as the camera asks |
+| `password` | string, `format: secret` | empty | |
+
+Health says how many pictures have arrived, or why the last snapshot failed.
+`stats` answers `{address, mode, pictures}`.
+
+`ipcam/discover` sends one WS-Discovery probe to `239.255.255.250:3702` for
+ONVIF video transmitters, and for each that answers asks GetCapabilities,
+GetProfiles and GetStreamUri, with a WS-Security password digest when a login
+is set. Each profile becomes a candidate of the core's own `hls/source`, named
+`<camera> (<profile>)`, with the RTSP address and the login in it. Cameras that
+refuse without a login are named in its health.
+
+| Key | Type | Default | Meaning |
+|---|---|---|---|
+| `user` | string | empty | tried on every camera found |
+| `password` | string, `format: secret` | empty | |
+
+Discovery stays on the local segment (TTL 1) and answers within the time the
+core gives it. Cameras that want HTTP digest on their ONVIF service rather
+than WS-Security are not yet logged in to.
 
 ## `rist/output`, and RIST in
 

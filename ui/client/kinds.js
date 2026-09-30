@@ -249,8 +249,11 @@ export const CATEGORIES = [
     id: "streams",
     title: "Streams and feeds",
     icon: "stream",
+    // Found on the network: ONVIF cameras (as their RTSP streams) and NDI senders.
+    devices: true,
     kinds: ["stream"],
-    provides: ["rtmp/source", "hls/source", "srt/source", "udp/source", "ndi/source", "ingest/source", "whip/source"],
+    provides: ["rtmp/source", "hls/source", "srt/source", "udp/source", "ndi/source", "ingest/source", "whip/source", "ipcam/source"],
+    nothing: "No network camera or NDI sender answered. Type an address below, or rescan.",
   },
   { id: "test", title: "Test patterns", icon: "pattern", patterns: true, kinds: ["test"], provides: ["test/source"] },
   { id: "more", title: "More", icon: "more", kinds: ["exec"], provides: ["exec/source"] },
@@ -413,6 +416,7 @@ function iconFor(id, what) {
   if (ICONS[name]) return name;
   if (name === "audio-device") return "mic";
   if (name === "ndi" || name === "srt" || name === "udp" || name === "ingest" || name === "whip") return "stream";
+  if (name === "ipcam") return "camera";
   return what === "output" ? "output" : "device";
 }
 

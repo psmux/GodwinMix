@@ -1,0 +1,25 @@
+[package]
+name = "gmx-ipcam"
+description = "The ipcam plugin: an IP camera's MJPEG stream or snapshot picture as a source, and ONVIF discovery of the cameras on the LAN as ready to add RTSP streams"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[[bin]]
+name = "gmx-ipcam"
+path = "src/main.rs"
+
+[dependencies]
+godwinmix-sdk = { path = "../../crates/godwinmix-sdk" }
+gmx-netkit = { path = "../netkit" }
+
+gstreamer = { workspace = true }
+gstreamer-app = { workspace = true }
+serde_json = { workspace = true }
+# The ONVIF login: WS-Security's password digest is SHA-1 of a random nonce,
+# the time and the password, in base64. Both are already in the tree.
+ring = { workspace = true }
+base64 = { workspace = true }
