@@ -54,7 +54,7 @@ pub(super) fn output(id: &str, rendition: Option<RenditionChoice>) -> OutputConf
 
 /// Every element of the programme pipeline whose name says it is a
 /// rendition encoder.
-fn encoders(mix: &Mixer) -> Vec<String> {
+pub(super) fn encoders(mix: &Mixer) -> Vec<String> {
     let mut v: Vec<String> = mix
         .program
         .iterate_recurse()
@@ -222,4 +222,5 @@ async fn what_does_not_fit_is_refused_with_advice_and_leaves_nothing() {
     mix.shutdown();
 }
 
+mod hls;
 mod shed;

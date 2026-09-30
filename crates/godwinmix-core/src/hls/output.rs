@@ -3,19 +3,17 @@
 //!
 //! Registered with the other built in outputs, so it gets what they get: its
 //! own pipeline behind the proxy pair, the feed queue that rides out a
-//! rebuild, and the encoded programme on two queues. With no ladder it
+//! rebuild, and the encoded programme on two queues. With no rendition it
 //! packages that encode as it is, one rung and the audio, which costs a
-//! parser and a muxer. With a ladder preset it decodes the programme once and
-//! encodes each rung itself; that is the stand in until the rendition
-//! planner hands [`super::attach`] its own encoders (see `mod.rs`).
+//! parser and a muxer. With a ladder it encodes nothing itself: the mixer
+//! plans its rungs with every other output's renditions ([`super::request`]
+//! says what it asks for), and [`super::rungs`] packages what the plan made.
 
-use super::ladder::{self, Rung};
-use super::request::ladder_of;
+use super::rungs::Rungs;
 use super::stream::{self, Stream};
 use super::track::TrackKind;
 use super::{attach, HlsParams, Input};
 use crate::config::{OutputConfig, Params};
-use crate::gstutil::make;
 use crate::plugin::output::{Output, OutputCtx, OutputProvide};
 use crate::plugin::source::unknown_method;
 use crate::plugin::{
@@ -27,7 +25,6 @@ use gstreamer as gst;
 use gstreamer::prelude::*;
 use serde_json::{json, Value};
 use std::sync::Arc;
-use tracing::warn;
 
 pub const MANIFEST: Manifest = Manifest {
     plugin: "hls",
@@ -54,9 +51,9 @@ fn new(cfg: &OutputConfig) -> Result<Box<dyn Output>> {
     Ok(Box::new(HlsOutput {
         id: cfg.id.clone(),
         params: HlsParams::default(),
-        ladder: None,
         viewer_key: String::new(),
         stream: None,
+        rungs: Rungs::default(),
     }))
 }
 
@@ -65,20 +62,17 @@ pub struct HlsOutput {
     /// `params.viewer_key`, or the one this machine derives for the id.
     viewer_key: String,
     params: HlsParams,
-    ladder: Option<Vec<Rung>>,
     stream: Option<Arc<Stream>>,
+    /// This generation's branches off the lower rungs' tees.
+    rungs: Rungs,
 }
 
-fn check_elements(ladder: bool) -> Result<()> {
-    let mut need = vec!["cmafmux", "appsink"];
-    if ladder {
-        need.extend(["decodebin", "x264enc", "videoscale"]);
-    }
-    let missing: Vec<&str> = need.into_iter().filter(|e| !crate::probe::exists(e)).collect();
+fn check_elements() -> Result<()> {
+    let missing: Vec<&str> = ["cmafmux", "appsink"].into_iter().filter(|e| !crate::probe::exists(e)).collect();
     anyhow::ensure!(
         missing.is_empty(),
         "serving HLS needs the GStreamer elements {}. cmafmux is in gst-plugins-rs (gstreamer1.0-plugins-rs \
-         or the `fmp4` plugin), x264enc in gst-plugins-ugly.",
+         or the `fmp4` plugin).",
         missing.join(", ")
     );
     Ok(())
@@ -91,13 +85,12 @@ impl Output for HlsOutput {
 
     fn initialize(&mut self, hello: Hello) -> Result<Ready> {
         self.params = HlsParams::from_params(&hello.params)?;
-        self.ladder = ladder_of(&hello.params)?;
         self.viewer_key = match hello.params.get("viewer_key").and_then(|v| v.as_str()) {
             Some(k) if k.len() >= 16 => k.to_string(),
             Some(_) => anyhow::bail!("hls/output params.viewer_key must be at least 16 characters, or left out for the one this machine makes"),
             None => super::key::viewer_key(&self.id)?,
         };
-        check_elements(self.ladder.is_some())?;
+        check_elements()?;
         Ok(Ready { manifest: MANIFEST, latency_ms: self.params.segment_ms, capabilities: MANIFEST.capabilities })
     }
 
@@ -112,14 +105,12 @@ impl Output for HlsOutput {
             .clone();
         let pad = |el: &gst::Element| el.static_pad("src").context("the output queue has no src pad");
         attach(ctx.pipeline, &stream, Input { id: "audio", kind: TrackKind::Audio, pad: &pad(audio)?, declared_kbps: 0 })?;
-        match self.ladder.clone() {
-            None => {
-                let input = Input { id: "programme", kind: TrackKind::Video, pad: &pad(video)?, declared_kbps: 0 };
-                attach(ctx.pipeline, &stream, input)?;
-            }
-            Some(rungs) => transcode(ctx.pipeline, &stream, &pad(video)?, rungs, ctx.generation)?,
+        if ctx.taps.is_empty() {
+            let input = Input { id: "programme", kind: TrackKind::Video, pad: &pad(video)?, declared_kbps: 0 };
+            attach(ctx.pipeline, &stream, input)?;
+            return Ok(());
         }
-        Ok(())
+        self.rungs.build(ctx, &stream, &pad(video)?)
     }
 
     fn connected(&self) -> bool {
@@ -135,9 +126,13 @@ impl Output for HlsOutput {
         out
     }
 
+    fn shutdown(&mut self, pipeline: gst::Pipeline) {
+        let _ = pipeline.set_state(gst::State::Null);
+        self.rungs.detach();
+    }
+
     fn configure(&mut self, params: &Params) -> Result<Configure> {
         HlsParams::from_params(params)?;
-        ladder_of(params)?;
         Ok(Configure::RestartRequired("an hls output takes new segment lengths or a new ladder by being added again".into()))
     }
 
@@ -155,38 +150,9 @@ impl Output for HlsOutput {
 
 impl Drop for HlsOutput {
     fn drop(&mut self) {
+        self.rungs.detach();
         if let Some(s) = self.stream.take() {
             stream::withdraw(&s);
         }
     }
-}
-
-/// Decode the programme once and hand the raw picture to a ladder, whose
-/// rungs are packaged as they appear.
-fn transcode(pipeline: &gst::Pipeline, stream: &Arc<Stream>, video: &gst::Pad, rungs: Vec<Rung>, gen: u32) -> Result<()> {
-    let tag = format!("hls-{}-ladder-{gen}", stream.id);
-    let decode = make("decodebin", &format!("{tag}-decode"))?;
-    pipeline.add(&decode).context("adding the ladder decoder")?;
-    let (weak, stream) = (pipeline.downgrade(), stream.clone());
-    let segment_ms = stream.params.segment_ms;
-    decode.connect_pad_added(move |_, pad| {
-        let Some(pipeline) = weak.upgrade() else { return };
-        let raw = pad.current_caps().and_then(|c| c.structure(0).map(|s| s.name().starts_with("video/x-raw")));
-        if raw == Some(false) {
-            return;
-        }
-        let built = ladder::encode(&pipeline, pad, &rungs, segment_ms, &tag).and_then(|pads| {
-            for (rung, enc) in pads {
-                let input = Input { id: &rung.id, kind: TrackKind::Video, pad: &enc, declared_kbps: rung.kbps };
-                attach(&pipeline, &stream, input)?;
-            }
-            Ok(())
-        });
-        if let Err(e) = built {
-            warn!(error = %e, output = %stream.id, "the HLS ladder could not be built");
-        }
-    });
-    decode.sync_state_with_parent().ok();
-    video.link(&decode.static_pad("sink").context("decodebin has no sink pad")?).context("linking the programme into the ladder decoder")?;
-    Ok(())
 }

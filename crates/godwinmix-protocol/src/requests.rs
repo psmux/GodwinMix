@@ -256,7 +256,10 @@ pub struct SeekRequest {
 pub struct AddOutputRequest {
     /// Stable id for this destination.
     pub id: String,
-    /// rtmp:// or rtmps:// URL including the stream key.
+    /// rtmp:// or rtmps:// URL including the stream key. Left out for a
+    /// kind with no address of its own, such as `hls/output`, which is
+    /// served from the control port.
+    #[serde(default)]
     pub uri: String,
     /// Reconnect policy: "own" retries quickly, for servers you run; "cdn"
     /// backs off harder, for platforms that penalise hammering.

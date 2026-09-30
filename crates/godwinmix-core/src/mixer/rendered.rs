@@ -16,8 +16,8 @@ impl Mixer {
     /// Attach one output where it belongs. The rendition is planned and
     /// admitted first; a refusal leaves nothing behind.
     pub(super) fn attach_output(&mut self, cfg: &OutputConfig) -> Result<Arc<OutputSlot>> {
-        if let Some(choice) = &cfg.rendition {
-            match self.renditions.add(&cfg.id, choice) {
+        if let Some(choice) = rendition_of(cfg)? {
+            match self.renditions.add(&cfg.id, &choice) {
                 Ok(Some(taps)) => return self.attach_to_rendition(cfg, taps),
                 Ok(None) => {}
                 Err(refusal) => return Err(anyhow::Error::new(refusal)),
@@ -104,6 +104,16 @@ impl Mixer {
     pub(super) fn shed_reason(&self, output: &str) -> Option<String> {
         self.renditions.shed_reason(output)
     }
+}
+
+/// What `cfg` asks the planner for. An HLS output may say it in its params
+/// and always wants its keyframes on its segment boundaries, so its own
+/// module reads it; every other kind asks with `rendition`.
+fn rendition_of(cfg: &OutputConfig) -> Result<Option<godwinmix_protocol::rendition::RenditionChoice>> {
+    if crate::hls::request::is_hls(cfg) {
+        return crate::hls::request::choice(cfg);
+    }
+    Ok(cfg.rendition.clone())
 }
 
 /// The programme as the planner sees it: raw frames at the canvas size and

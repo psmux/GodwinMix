@@ -172,6 +172,23 @@ pub fn open(cfg: &OutputConfig) -> Result<(Box<dyn Output>, Ready)> {
     Ok((out, ready))
 }
 
+/// Refuse an output with no address, unless its kind takes none: an
+/// `hls/output` is served from the control port and has no address of its
+/// own. A kind is known to take none when it claims no uri scheme.
+pub fn check_uri(cfg: &OutputConfig) -> Result<()> {
+    if !cfg.uri.trim().is_empty() {
+        return Ok(());
+    }
+    let kind = cfg.type_id.as_deref().and_then(by_type);
+    anyhow::ensure!(
+        kind.is_some_and(|k| k.manifest.uri_schemes.is_empty()),
+        "output {} needs a uri: the address it sends to, such as rtmp://host/app/key. Only a kind \
+         with no address of its own (hls/output) may leave it out",
+        cfg.id
+    );
+    Ok(())
+}
+
 /// Link a queue to a muxer's request pad, asking for a named template first
 /// and falling back to whatever the muxer offers.
 ///
