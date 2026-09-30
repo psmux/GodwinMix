@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<MPD xmlns="urn:mpeg:dash:schema:mpd:2011" profiles="urn:mpeg:dash:profile:isoff-live:2011" type="dynamic" availabilityStartTime="2026-10-01T11:56:40.000Z" publishTime="2026-10-01T12:00:12.000Z" minimumUpdatePeriod="PT2.000S" minBufferTime="PT2.000S" timeShiftBufferDepth="PT30.000S" suggestedPresentationDelay="PT6.000S">
+  <Period id="0" start="PT0S">
+    <AdaptationSet mimeType="video/mp4" segmentAlignment="true" startWithSAP="1">
+      <Representation id="720p" bandwidth="3128000" codecs="avc1.64001f" width="1280" height="720" frameRate="30/1">
+        <SegmentTemplate timescale="90000" initialization="720p/init.mp4?key=abc&amp;v=xyz" media="720p/$Number$.m4s?key=abc&amp;v=xyz" startNumber="100">
+          <SegmentTimeline><S t="18000000" d="180000" r="4"/></SegmentTimeline>
+        </SegmentTemplate>
+      </Representation>
+      <Representation id="360p" bandwidth="928000" codecs="avc1.42c01e" width="640" height="360" frameRate="30/1">
+        <SegmentTemplate timescale="90000" initialization="360p/init.mp4?key=abc&amp;v=xyz" media="360p/$Number$.m4s?key=abc&amp;v=xyz" startNumber="100">
+          <SegmentTimeline><S t="18000000" d="180000" r="4"/></SegmentTimeline>
+        </SegmentTemplate>
+      </Representation>
+    </AdaptationSet>
+    <AdaptationSet mimeType="audio/mp4" segmentAlignment="true" startWithSAP="1">
+      <Representation id="audio" bandwidth="128000" codecs="mp4a.40.2">
+        <AudioChannelConfiguration schemeIdUri="urn:mpeg:dash:23003:3:audio_channel_configuration:2011" value="2"/>
+        <SegmentTemplate timescale="48000" initialization="audio/init.mp4?key=abc&amp;v=xyz" media="audio/$Number$.m4s?key=abc&amp;v=xyz" startNumber="100">
+          <SegmentTimeline><S t="9600000" d="96000" r="4"/></SegmentTimeline>
+        </SegmentTemplate>
+      </Representation>
+    </AdaptationSet>
+  </Period>
+  <UTCTiming schemeIdUri="urn:mpeg:dash:utc:direct:2014" value="2026-10-01T12:00:12.000Z"/>
+</MPD>

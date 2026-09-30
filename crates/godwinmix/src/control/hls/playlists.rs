@@ -1,7 +1,7 @@
 //! The two playlist routes.
 
 use super::auth::{self, Viewer};
-use super::{playlist_response, refuse};
+use super::{listing, playlist_response, refuse};
 use crate::control::Ctx;
 use axum::extract::{Path, Request, State};
 use axum::http::{header, HeaderValue, StatusCode};
@@ -45,22 +45,50 @@ fn not_yet(stream: &Stream, what: &str) -> Response {
 }
 
 pub async fn master(State(ctx): State<Ctx>, Path(output): Path<String>, req: Request) -> Response {
-    let (stream, mut viewer) = match open(&ctx, &output, &req) {
+    let (stream, viewer) = match first_look(&ctx, &output, &req) {
         Ok(v) => v,
         Err(r) => return *r,
     };
+    if let Err(r) = wait_ready(&stream).await {
+        return *r;
+    }
+    playlist_response(with_query(&stream.master(), &viewer.query))
+}
+
+pub async fn dash(State(ctx): State<Ctx>, Path(output): Path<String>, req: Request) -> Response {
+    let (stream, viewer) = match first_look(&ctx, &output, &req) {
+        Ok(v) => v,
+        Err(r) => return *r,
+    };
+    if let Err(r) = wait_ready(&stream).await {
+        return *r;
+    }
+    let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_millis() as i64).unwrap_or(0);
+    match stream.mpd(now, &viewer.query) {
+        Some(text) => listing(text, "application/dash+xml"),
+        None => not_yet(&stream, "A whole segment to list"),
+    }
+}
+
+/// What a player asks for first: let it in and give it a viewer id.
+fn first_look(ctx: &Ctx, output: &str, req: &Request) -> Result<(Arc<Stream>, Viewer), Box<Response>> {
+    let (stream, mut viewer) = open(ctx, output, req)?;
     viewer.ensure_id();
-    // Asked for before every rung has a segment: wait a little, since the
-    // bandwidth and the codecs are what the playlist is for.
+    Ok((stream, viewer))
+}
+
+/// Asked for before every rung has a segment: wait a little, since the
+/// bandwidth and the codecs are what the answer is for.
+async fn wait_ready(stream: &Stream) -> Result<(), Box<Response>> {
     let limit = Duration::from_millis(u64::from(stream.params.segment_ms) * 3).max(Duration::from_secs(6));
     let deadline = Instant::now() + limit;
     while !stream.ready() {
         if Instant::now() >= deadline {
-            return not_yet(&stream, "The first segment of every rung");
+            return Err(Box::new(not_yet(stream, "The first segment of every rung")));
         }
         tokio::time::sleep(Duration::from_millis(100)).await;
     }
-    playlist_response(with_query(&stream.master(), &viewer.query))
+    Ok(())
 }
 
 pub async fn media(State(ctx): State<Ctx>, Path((output, rung)): Path<(String, String)>, req: Request) -> Response {

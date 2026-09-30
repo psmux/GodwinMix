@@ -32,6 +32,8 @@ pub struct Segment {
     /// Which init segment decodes it. Changes only when the muxer was
     /// rebuilt, and then the playlist says so with a discontinuity.
     pub init: u32,
+    /// Its first `tfdt`, in the track's timescale, for a DASH timeline.
+    pub decode_time: Option<u64>,
     pub parts: Vec<Part>,
     pub complete: bool,
 }
@@ -103,13 +105,20 @@ impl Ring {
             Some(last) => last.msn + 1,
             None => (start_ns + segment_ns / 2) / segment_ns.max(1),
         };
-        self.segments.push_back(Segment { msn, pdt_ms, init, parts: Vec::new(), complete: false });
+        self.segments.push_back(Segment { msn, pdt_ms, init, decode_time: None, parts: Vec::new(), complete: false });
         while self.segments.len() > self.capacity {
             self.segments.pop_front();
         }
         self.forget_unused_inits();
         self.version += 1;
         Some(msn)
+    }
+
+    /// Record the open segment's decode time.
+    pub fn stamp(&mut self, decode_time: Option<u64>) {
+        if let Some(open) = self.segments.back_mut().filter(|s| !s.complete) {
+            open.decode_time = decode_time;
+        }
     }
 
     /// Add a part to the open segment. False when no segment is open, which
@@ -168,6 +177,7 @@ impl Ring {
                 msn: s.msn,
                 pdt_ms: s.pdt_ms,
                 init: s.init,
+                decode_time: s.decode_time,
                 complete: s.complete,
                 duration_ns: s.duration_ns(),
                 bytes: s.len(),

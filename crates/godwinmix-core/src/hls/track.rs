@@ -32,6 +32,8 @@ pub struct TrackInfo {
     /// Frames per second as a fraction.
     pub fps: Option<(i32, i32)>,
     pub channels: u32,
+    /// The media timescale in the init segment, for DASH. 0 until one came.
+    pub timescale: u32,
     /// What the rendition asked for, 0 when nobody said.
     pub declared_kbps: u32,
 }
@@ -70,11 +72,19 @@ impl Track {
     // --- The packager's side. Called on a streaming thread. -------------------
 
     pub fn set_init(&self, bytes: Bytes) {
+        if let Some(ts) = super::boxes::timescale(&bytes) {
+            self.update_info(|i| i.timescale = ts);
+        }
         self.ring.lock().set_init(bytes);
     }
 
-    pub fn begin(&self, start_ns: u64, pdt_ms: i64) -> Option<u64> {
-        self.change(|r| r.begin(start_ns, self.params.segment_ns(), pdt_ms))
+    /// Start a segment. `decode_time` is its `tfdt`, when the caller read one.
+    pub fn begin(&self, start_ns: u64, pdt_ms: i64, decode_time: Option<u64>) -> Option<u64> {
+        self.change(|r| {
+            let msn = r.begin(start_ns, self.params.segment_ns(), pdt_ms);
+            r.stamp(decode_time);
+            msn
+        })
     }
 
     pub fn push_part(&self, part: Part) -> bool {
