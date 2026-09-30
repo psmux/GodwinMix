@@ -42,6 +42,20 @@ Import from OBS opens a drop zone: drop the scene collection file on it, or
 press it to choose the file. [Import your scenes from OBS](import-from-obs.md)
 says what comes across.
 
+## A channel to publish to, from the start
+
+If the ingest plugin is installed, the mixer makes one channel on its first
+start, called Live, with RTMP on and one key labelled Default key. The RTMP
+port (1935 unless the ingest plugin's settings say otherwise) is open from
+then on, so OBS, a phone or a hardware encoder can publish to the mixer before
+you have made anything. Open the Channels tab: it opens on Live with Connect
+unfolded, and the server, stream key and full URL are there to copy. See
+[Take streams from several encoders into one channel](channels.md).
+
+Picking a tile does not touch it. No preset brings channels of its own today,
+so Live stays whichever tile you pick, and Nearly there has no channel step.
+Remove it from its settings if you do not want it; it is not made again.
+
 ## What the file it wrote holds
 
 It is the example config with a short note at the top. Every setting is there
