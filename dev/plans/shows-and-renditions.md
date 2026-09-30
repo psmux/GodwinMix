@@ -87,10 +87,12 @@ live on a second box with no new concept.
 resource governor. It does no media work of its own beyond what the hub does
 today (receiving and fanning out bytes).
 
-**How a show reads a channel stream.** Through the hub, as a mixer source
-does now: no decode in the station, bounded queues, a slow show loses GOPs
-and never slows a publisher. Two shows using the same camera read the same
-bytes; each decodes once for itself.
+**How a show reads a source.** Every device and every incoming stream is
+opened and decoded once, by the frame bus (see Decisions, 4), and every show
+reads the decoded frames from shared memory with no copy. A slow show skips
+frames and never slows the owner or another show. Where only a copy is
+wanted (a channel destination), the encoded bytes are read from the hub and
+nothing is decoded at all.
 
 **Single show mode stays the default.** Someone who opens the desktop app
 gets one show and never sees the word. A second show appears when they ask
@@ -105,7 +107,7 @@ station section is added only when a second show exists.
 
 | Protocol | In today | Port model | Plan |
 |---|---|---|---|
-| RTMP, RTMPS | yes, `ingest` channels | one TCP port (1935) for every channel | keep; add RTMPS on the same port by sniffing TLS, or 443 only when asked |
+| RTMP, RTMPS | yes, `ingest` channels | one TCP port (1935) for every channel, opened by the first RTMP channel | keep; RTMPS only when a person turns it on, on a port they choose (443 offered) |
 | SRT | yes, `srt/source` listener per source | one UDP port per listener | one UDP port for all channels, routed by `streamid` (`<channel>/<stream>`), keys as SRT passphrase or in the streamid |
 | WebRTC (WHIP in, WHEP out) | yes, `ingest/whip` on its own port 8889 | TCP 8889 plus UDP | move WHIP and WHEP onto the control port's HTTP; media on one UDP port with ICE mux |
 | RTSP | yes, `rtsp/source` (pull) | none, we dial out | keep as a channel "pull" stream; add discovery of ONVIF cameras on the LAN |
@@ -194,8 +196,8 @@ a frame of what is already on air?
    calibration that keeps the machine under the ceiling, rather than a fixed
    `veryfast`. A Pi gets `ultrafast` at 720p and is told so; a desktop CPU
    gets a better preset for the same load.
-4. **A ceiling, and a refusal that helps.** The default ceiling is 75% of CPU
-   and 85% of each GPU encoder's capacity, settable in Mixer settings. A
+4. **Headroom it works out itself, and a refusal that helps.** From the
+   calibration and the live load it knows what is left; nothing to set. A
    request that would cross it is not started. The person is told what it
    would cost and offered what fits: "a 1080p60 HEVC rendition needs about
    180% of this CPU. 1080p30 H.264 fits, or 720p60 HEVC." Nothing silently
@@ -268,12 +270,21 @@ can be replaced, tested alone, or left out of a build.
 | Rendition planner | new crate `godwinmix-render` | `plan(requests, sources, caps) -> Graph`, pure, no GStreamer, fully unit testable |
 | Graph builder | `godwinmix-core`, new module | builds and edits GStreamer elements from a `Graph` diff |
 | Resource governor | new crate `godwinmix-govern` | `admit(cost) -> Admit`, `calibrate()`, `shed()` |
+| Frame bus | new crate `godwinmix-framebus` | one owner decodes, any number of readers in or out of process, zero copy, skip on lag |
 | Show supervisor | `godwinmix`, new module on the existing plugin supervisor | show.* methods |
 | New transports | plugins: `udp`, `hls-out`, SRT and WHIP widened | the plugin protocol, unchanged |
 
 The planner is deliberately pure: it takes what is asked and what the machine
 can do and returns a graph, so its decisions (copy or encode, which encoder,
 what shares with what) are tested in milliseconds without a camera or a GPU.
+
+## The shared vocabulary
+
+`crates/godwinmix-protocol/src/rendition/` holds the types every module
+speaks: `RenditionRequest`, `VideoWant`, `AudioWant`, `StreamInfo`,
+`VideoShape`, `AudioShape`, `EncoderSlot`, `Cost`, and the codec and
+container enums. A module that needs another shape adds it there first, in
+its own commit, so the others see it.
 
 ## Phases
 
@@ -298,14 +309,30 @@ Each phase ships something a person can use and has its own benchmarks.
 Phases 1 and 3 can run in parallel; 2 and 4 need 1; 5 needs 3 for shared
 ingest.
 
-## Questions to settle before phase 1
+## Decisions (2026-09-30)
 
-1. RTMPS on 1935 by sniffing TLS, or only on 443 when asked?
-2. The default CPU ceiling: 75% leaves room for the desktop app's own page on
-   the same machine; a headless server could use 90%. One default, or one per
-   install kind?
-3. Does a channel destination (no show involved) count against the same
-   budget as shows? The plan says yes: one machine, one budget.
-4. Show isolation costs one decode per show per shared camera. Acceptable, or
-   should two shows on one machine share decoded frames through shared
-   memory? Sharing saves CPU and couples the shows.
+1. **No listener runs unless it is used.** RTMPS, like every other ingest,
+   opens nothing until a person turns it on for a channel, and then on a
+   port they choose (443 offered first). The same holds for the RTMP port,
+   the SRT port and the WebRTC media port: the first channel that needs one
+   opens it, the last one to stop needing it closes it.
+2. **Headroom is measured and set by the software, not typed by a person.**
+   The governor calibrates each encoder on this machine, watches real load
+   while running, and derives how much it can admit from what it measured,
+   leaving room for what is already on air and for the page on a desktop.
+   There is no number to set by default. An override exists under Advanced
+   for someone who wants to reserve CPU for something else on the machine.
+3. **One governor for the whole machine.** Everything that costs CPU, GPU
+   or bandwidth (a show's renditions, a channel's transcodes, previews) asks
+   the same governor before it starts, because they share one machine. The
+   governor is its own module; nothing else keeps its own budget.
+4. **Decode once per device or stream, share it everywhere.** A camera, a
+   capture card or an incoming stream is opened and decoded once, by one
+   owner, and every consumer (every show, every rendition, the preview)
+   reads that one decoded picture: inside a process by sharing the buffer,
+   across processes through shared memory with no copy. Shows stay separate
+   processes, so a show that fails still takes nothing else with it; they
+   share the decoded frames, not their fate. A consumer that falls behind
+   skips frames, and never slows the owner or the others.
+
+These replace the four open questions that stood here.
