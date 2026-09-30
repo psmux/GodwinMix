@@ -16,7 +16,9 @@ function hms(ms) {
 }
 (function tick() { $("clock").textContent = hms(Date.now()); requestAnimationFrame(tick); })();
 
-const hls = new Hls({ lowLatencyMode: q.get("ll") !== "0", backBufferLength: 30 });
+// No worker: the control port's CSP allows no blob: scripts, and hls.js
+// says so as an internalException before falling back to the main thread.
+const hls = new Hls({ lowLatencyMode: q.get("ll") !== "0", backBufferLength: 30, enableWorker: false });
 window.hls = hls;
 hls.loadSource(src);
 hls.attachMedia(video);
@@ -38,7 +40,11 @@ hls.on(Hls.Events.LEVEL_SWITCHED, (_, d) => {
   $("level").textContent = `${l.height}p, ${(l.bitrate / 1000).toFixed(0)} kbit/s`;
   log(`switched to ${l.height}p`);
 });
-hls.on(Hls.Events.ERROR, (_, d) => { stats.errors.push(`${d.type} ${d.details} ${d.fatal ? "fatal" : ""}`); log(`error ${d.details}${d.fatal ? " (fatal)" : ""}`); });
+hls.on(Hls.Events.ERROR, (_, d) => {
+  const why = d.error && d.error.message ? `: ${d.error.message}` : "";
+  stats.errors.push(`${d.type} ${d.details}${d.fatal ? " fatal" : ""}${why}`);
+  log(`error ${d.details}${d.fatal ? " (fatal)" : ""}${why}`);
+});
 setInterval(() => {
   const b = video.buffered.length ? video.buffered.end(video.buffered.length - 1) - video.currentTime : 0;
   const pd = hls.playingDate ? (Date.now() - hls.playingDate.getTime()) / 1000 : null;

@@ -65,7 +65,9 @@ fn stop(pipeline: gst::Pipeline) {
 
 #[test]
 fn a_four_rung_ladder_is_packaged_with_aligned_segments_and_parts() {
-    let params = HlsParams { segment_ms: 1000, part_ms: 250, window_s: 6 };
+    // A third of a second at 30 fps is the part that does not divide into
+    // nanoseconds, which is what once made two second segments 2.67 s long.
+    let params = HlsParams { segment_ms: 1000, part_ms: 333, window_s: 6 };
     let stream = Arc::new(Stream::new("ladder", params, "k".repeat(24).as_str()));
     let pipeline = running(&stream, &small_ladder());
     let whole = |t: &Arc<Track>| t.view().segments.iter().filter(|s| s.complete).count();
@@ -88,9 +90,13 @@ fn a_four_rung_ladder_is_packaged_with_aligned_segments_and_parts() {
     }
     for v in &videos {
         let view = v.view();
+        // Every whole segment after the first is one second to the frame:
+        // the muxer cut at every forced keyframe.
+        for s in view.segments.iter().filter(|s| s.complete).skip(1) {
+            assert!((966_000_000..=1_034_000_000).contains(&s.duration_ns), "{} segment {}: {} ns", v.id, s.msn, s.duration_ns);
+            assert_eq!(s.parts.len(), 3, "{} segment {} has {} parts", v.id, s.msn, s.parts.len());
+        }
         let s = view.segments.iter().find(|s| s.complete).unwrap();
-        assert!((900_000_000..=1_100_000_000).contains(&s.duration_ns), "{}: {}", v.id, s.duration_ns);
-        assert!(s.parts.len() >= 3, "{} has {} parts", v.id, s.parts.len());
         assert!(s.parts[0].1, "the first part of a segment starts with a keyframe");
         assert!(v.info().codecs.starts_with("avc1."), "{:?}", v.info());
         assert!(v.init(0).is_some_and(|b| &b[4..8] == b"ftyp"));
@@ -130,6 +136,36 @@ fn a_part_is_served_within_a_part_of_its_keyframe() {
     assert!(lags.len() >= 3, "segments did not open: {lags:?}");
     for lag in &lags[1..] {
         assert!(*lag < 1000, "a first part took {lag} ms after its keyframe");
+    }
+}
+
+#[test]
+fn a_plain_segment_is_served_as_soon_as_it_is_whole() {
+    let params = HlsParams { segment_ms: 1000, part_ms: 0, window_s: 6 };
+    let stream = Arc::new(Stream::new("plain", params, "k".repeat(24).as_str()));
+    let pipeline = running(&stream, &small_ladder()[..1]);
+    let track = stream.track("360p").unwrap();
+    let rx = track.watch();
+    let mut late = Vec::new();
+    let mut seen = None;
+    let deadline = Instant::now() + Duration::from_secs(12);
+    while late.len() < 4 && Instant::now() < deadline {
+        let done = rx.borrow().complete;
+        if done.is_some() && done != seen {
+            seen = done;
+            let view = track.view();
+            let s = view.segments.iter().find(|s| Some(s.msn) == done).unwrap();
+            let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_millis() as i64;
+            // How long after its last frame was made the segment could be fetched.
+            late.push(now - s.pdt_ms - (s.duration_ns / 1_000_000) as i64);
+        }
+        std::thread::sleep(Duration::from_millis(5));
+    }
+    stop(pipeline);
+    eprintln!("segment end to segment served, ms: {late:?}");
+    assert!(late.len() >= 3, "segments did not close: {late:?}");
+    for l in &late[1..] {
+        assert!(*l < 500, "a segment was served {l} ms after its last frame");
     }
 }
 
