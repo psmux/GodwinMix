@@ -120,6 +120,17 @@
           "description": "youtube, facebook, twitch, custom or srt.",
           "type": "string"
         },
+        "rendition": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RenditionChoice"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Convert the stream before sending it: `{\"preset\": \"youtube-720p30\"}`\nor a rendition request written out. Left out, or one the stream\nalready matches, the stream is sent as it arrives."
+        },
         "server": {
           "description": "The ingest address. Left out, the platform's own; custom and srt need\none.",
           "type": [
@@ -644,6 +655,17 @@
         }
       ]
     },
+    "AudioCodec": {
+      "enum": [
+        "aac",
+        "opus",
+        "mp3",
+        "ac3",
+        "pcm",
+        "other"
+      ],
+      "type": "string"
+    },
     "AudioSetParams": {
       "description": "`source.audio.set` takes an id as well as the levels: the id comes off the\npath on REST and out of the params on `/rpc`, and both land in one object.",
       "properties": {
@@ -689,6 +711,79 @@
       "required": [
         "id"
       ],
+      "type": "object"
+    },
+    "AudioShape": {
+      "description": "A sound as it is.",
+      "properties": {
+        "bitrate_kbps": {
+          "description": "0 when unknown.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "channels": {
+          "format": "uint8",
+          "maximum": 255,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "codec": {
+          "$ref": "#/$defs/AudioCodec"
+        },
+        "sample_rate": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "codec",
+        "channels",
+        "sample_rate",
+        "bitrate_kbps"
+      ],
+      "type": "object"
+    },
+    "AudioWant": {
+      "description": "The audio an output wants. Every field left out is taken from the source.",
+      "properties": {
+        "bitrate_kbps": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "channels": {
+          "format": "uint8",
+          "maximum": 255,
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "codec": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/AudioCodec"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "sample_rate": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        }
+      },
       "type": "object"
     },
     "BackendInfo": {
@@ -1696,6 +1791,21 @@
       ],
       "type": "object"
     },
+    "Container": {
+      "description": "How the bytes leave. Decides which codecs are allowed: FLV carries H.264\n(and HEVC and AV1 in enhanced RTMP), WebRTC wants VP8, VP9, H.264 or AV1.",
+      "enum": [
+        "flv",
+        "mpeg-ts",
+        "mp4-fragmented",
+        "mkv",
+        "hls",
+        "ll-hls",
+        "dash",
+        "rtp",
+        "webrtc"
+      ],
+      "type": "string"
+    },
     "ConversionPhase": {
       "enum": [
         "running",
@@ -1822,6 +1932,49 @@
       ],
       "type": "object"
     },
+    "Cost": {
+      "description": "What running one piece of work costs, in units the governor adds up.",
+      "properties": {
+        "cpu_millicores": {
+          "description": "Thousandths of one CPU core. 1000 is one whole core.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "device_millis": {
+          "description": "Share of one hardware device, in thousandths of what it can do, when\nthe work runs on one.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "device_sessions": {
+          "description": "Hardware encoder sessions held (consumer NVIDIA cards cap these).",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "egress_kbps": {
+          "description": "Bytes per second out of the machine, in kbit/s.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "memory_mib": {
+          "description": "Resident memory the work adds, in MiB.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "cpu_millicores",
+        "device_millis",
+        "device_sessions",
+        "memory_mib",
+        "egress_kbps"
+      ],
+      "type": "object"
+    },
     "CreateFromRequest": {
       "properties": {
         "layout": {
@@ -1908,6 +2061,17 @@
         "label": {
           "type": "string"
         },
+        "plan": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/DestinationPlan"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "What the plan gave it, while its stream is live."
+        },
         "platform": {
           "description": "A platform id from the table: youtube, facebook, twitch, custom, srt.",
           "type": "string"
@@ -1917,6 +2081,28 @@
           "format": "uint32",
           "minimum": 0,
           "type": "integer"
+        },
+        "refused": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/DestinationRefusal"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Why it is not sending what it asked for, and what would fit."
+        },
+        "rendition": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RenditionChoice"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "What it asked to be converted to. Absent: sent as it arrives."
         },
         "since_ms": {
           "description": "Milliseconds since `state` last changed.",
@@ -1948,6 +2134,122 @@
         "since_ms",
         "kbps",
         "reconnects"
+      ],
+      "type": "object"
+    },
+    "DestinationMode": {
+      "description": "Copied as it arrives, or converted.",
+      "enum": [
+        "copy",
+        "transcode"
+      ],
+      "type": "string"
+    },
+    "DestinationPlan": {
+      "description": "The plan's answer for one destination.",
+      "properties": {
+        "audio": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/AudioShape"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "encoder": {
+          "description": "The video encoder, `h264-videotoolbox`, and why that one. Absent for a\ncopy.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "encoder_reason": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "mode": {
+          "$ref": "#/$defs/DestinationMode"
+        },
+        "nodes": {
+          "description": "The plan's nodes this destination reads, so a page can show which\nwork it shares with the channel's other destinations.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "reason": {
+          "description": "One sentence: \"copied: the source's video goes out as it is\", \"encoded\nbecause the source is 1920x1080 and this output wants 1280x720\".",
+          "type": "string"
+        },
+        "stream": {
+          "description": "The stream it was planned against, when the destination names `*`.",
+          "type": "string"
+        },
+        "video": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/VideoShape"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "What goes out."
+        }
+      },
+      "required": [
+        "mode",
+        "stream",
+        "reason",
+        "nodes"
+      ],
+      "type": "object"
+    },
+    "DestinationRefusal": {
+      "description": "Why a destination that asked for a rendition is not sending, and what\nwould. `error` on the destination carries the same sentence.",
+      "properties": {
+        "advice": {
+          "description": "Renditions that would fit now, largest first.",
+          "items": {
+            "$ref": "#/$defs/RenditionAdvice"
+          },
+          "type": "array"
+        },
+        "code": {
+          "description": "`governor` (the machine has no room), `plan` (nothing here can make\nit), `shed` (it ran and was stopped to keep what is on air).",
+          "type": "string"
+        },
+        "have": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Cost"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "message": {
+          "type": "string"
+        },
+        "need": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Cost"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "code",
+        "message"
       ],
       "type": "object"
     },
@@ -2636,6 +2938,26 @@
         "address",
         "role",
         "api"
+      ],
+      "type": "object"
+    },
+    "Fps": {
+      "description": "A frame rate as a fraction, so 29.97 is exact.",
+      "properties": {
+        "den": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "num": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "num",
+        "den"
       ],
       "type": "object"
     },
@@ -3447,6 +3769,22 @@
       },
       "required": [
         "secret"
+      ],
+      "type": "object"
+    },
+    "LadderRef": {
+      "additionalProperties": false,
+      "description": "A custom ladder.",
+      "properties": {
+        "ladder": {
+          "items": {
+            "$ref": "#/$defs/RenditionRequest"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "ladder"
       ],
       "type": "object"
     },
@@ -4986,6 +5324,19 @@
       ],
       "type": "object"
     },
+    "PresetRef": {
+      "additionalProperties": false,
+      "description": "A preset named by id.",
+      "properties": {
+        "preset": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "preset"
+      ],
+      "type": "object"
+    },
     "PreviewClosed": {
       "description": "What `preview.close` answers with.",
       "properties": {
@@ -5319,6 +5670,86 @@
       "required": [
         "scene"
       ],
+      "type": "object"
+    },
+    "RenditionAdvice": {
+      "description": "One thing a refused rendition could be instead, as a button.",
+      "properties": {
+        "request": {
+          "$ref": "#/$defs/RenditionRequest",
+          "description": "Send this as the output's `rendition` to take the advice."
+        },
+        "text": {
+          "description": "\"720p30 H.264 on h264-videotoolbox fits\".",
+          "type": "string"
+        }
+      },
+      "required": [
+        "text",
+        "request"
+      ],
+      "type": "object"
+    },
+    "RenditionChoice": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/PresetRef",
+          "description": "`{\"preset\": \"youtube-1080p30\"}`."
+        },
+        {
+          "$ref": "#/$defs/LadderRef",
+          "description": "`{\"ladder\": [...]}`: a custom ABR ladder, top rung first, for an\n`hls/output`. Each rung's `id` names it (`<output>-<id>`)."
+        },
+        {
+          "$ref": "#/$defs/RenditionRequest"
+        }
+      ],
+      "description": "What an output asks for: a whole request, or a preset by id.\n\nA request's `id` is replaced by the output's own id (a ladder's rungs get\n`<output>-<rung>`), so a client may send any slug there."
+    },
+    "RenditionRequest": {
+      "description": "What one output wants. A field left out means \"whatever the source has\",\nso an empty request is a plain copy.",
+      "properties": {
+        "audio": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/AudioWant"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "container": {
+          "$ref": "#/$defs/Container",
+          "default": "flv",
+          "description": "How the bytes are wrapped on the way out. FLV when left out."
+        },
+        "id": {
+          "default": "",
+          "description": "Slug, unique within the show or channel that asks. Left out, the\noutput's own id is used.",
+          "type": "string"
+        },
+        "no_audio": {
+          "default": false,
+          "description": "Drop the audio altogether.",
+          "type": "boolean"
+        },
+        "no_video": {
+          "default": false,
+          "description": "Drop the video altogether (an audio only stream).",
+          "type": "boolean"
+        },
+        "video": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/VideoWant"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
       "type": "object"
     },
     "ReorderRequest": {
@@ -5822,6 +6253,17 @@
             "string",
             "null"
           ]
+        },
+        "rendition": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RenditionChoice"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "A new rendition. Left out keeps the one it has; `null` or\n`{\"preset\": \"copy\"}` goes back to sending the stream as it arrives."
         },
         "server": {
           "type": [
@@ -7040,6 +7482,137 @@
           "default": 0.0,
           "format": "double",
           "type": "number"
+        }
+      },
+      "type": "object"
+    },
+    "VideoCodec": {
+      "oneOf": [
+        {
+          "enum": [
+            "h264",
+            "h265",
+            "av1",
+            "vp8",
+            "vp9",
+            "mpeg2",
+            "prores"
+          ],
+          "type": "string"
+        },
+        {
+          "const": "other",
+          "description": "Anything the decoders know that has no name here yet. Never produced.",
+          "type": "string"
+        }
+      ]
+    },
+    "VideoShape": {
+      "description": "A picture as it is: codec, size, rate, bitrate.",
+      "properties": {
+        "bitrate_kbps": {
+          "description": "Measured or configured. 0 when unknown (a raw source).",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "codec": {
+          "$ref": "#/$defs/VideoCodec"
+        },
+        "fps": {
+          "$ref": "#/$defs/Fps"
+        },
+        "height": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "keyframe_ms": {
+          "description": "0 when unknown.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "width": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "codec",
+        "width",
+        "height",
+        "fps",
+        "bitrate_kbps",
+        "keyframe_ms"
+      ],
+      "type": "object"
+    },
+    "VideoWant": {
+      "description": "The video an output wants. Every field left out is taken from the source.",
+      "properties": {
+        "bitrate_kbps": {
+          "description": "Target bitrate. A copy is kept when the source is within\n`bitrate_tolerance` of it.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "bitrate_tolerance": {
+          "description": "Fraction either way a source's bitrate may differ and still be copied.\n0.25 when left out.",
+          "format": "float",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "codec": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/VideoCodec"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "fps": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Fps"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "height": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "keyframe_ms": {
+          "description": "Keyframe interval. Renditions in one ladder share it.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "width": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
         }
       },
       "type": "object"

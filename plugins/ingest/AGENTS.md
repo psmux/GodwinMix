@@ -38,7 +38,11 @@ gmx plugin test plugins/ingest --offline     # replay tests/transcript.jsonl
    stays one all the way to `matroskamux`. `h264parse` and `aacparse` are there
    because a muxer needs framing, not because anything is being examined.
    Adding a decoder here would pay for the decode twice and is the one change
-   that would make this plugin expensive.
+   that would make this plugin expensive. The one exception is `src/transcode/`,
+   which decodes a channel stream only while a destination has asked for a
+   rendition the stream is not, once per stream however many destinations
+   convert it, and builds exactly the nodes the core's plan hands over in the
+   channel table. A destination with no rendition never goes near it.
 3. **A connection thread must not block on anything but its own socket.** The
    `Gate` and each `Inlet` are called from it. Handing a tag on is what it
    does; waiting on a lock somebody else holds for long is not. No lock is

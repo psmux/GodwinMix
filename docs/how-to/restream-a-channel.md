@@ -67,6 +67,49 @@ your own. When it comes back it starts at the next keyframe, so viewers see
 the picture return rather than a smear. A destination that falls behind loses
 whole seconds of picture rather than slowing anything else down.
 
+## Send one destination a smaller picture
+
+Some destinations do not want the stream as the encoder sends it: a 1080p
+encoder and a church hall projector that only takes 720p, or a phone
+network that cannot carry 6 Mb/s. A destination can ask for a format of its
+own, and only that destination is converted. The page for this arrives with
+the renditions work; the steps below are what it shows.
+
+In the destination's form, under the stream key, **Format** starts on
+**Same as the source**, marked Free. Pick a preset instead, **YouTube 720p30**
+for instance, or **Custom** for a size, frame rate and bit rate of your own,
+then **Start sending** or **Save**.
+
+The tile then says what was done under its state:
+
+| The tile says | What it means |
+|---|---|
+| Copied | the stream already is what was asked for, so it goes out untouched, at no cost |
+| GPU encode | converted on the graphics chip (VideoToolbox on a Mac) |
+| CPU encode | converted in software, because this machine has no hardware encoder or it is full |
+| …, shared | another destination asked for the same format, and both get the one encoder's output |
+
+The stream is decoded once however many destinations convert it, and every
+destination that asks for the same format shares one encoder, so three
+destinations at 720p cost about what one does. A destination left on Same as
+the source still costs only a copy of the bytes.
+
+If the machine has no room for the conversion, nothing is started and the
+form says so, with what it would cost, what is free, and a button for each
+format that would fit. Press one to use it. When the machine runs short
+while live, say because another program took the CPU, a converting
+destination is stopped before anything the mixer has on air, its tile says
+why, and it starts again by itself once there has been room for half a
+minute.
+
+When the encoder changes size in the middle of a stream, the conversion
+follows: only the part that has to change is rebuilt, and the other
+destinations keep sending.
+
+Converted destinations go out as H.264 video and AAC sound, which every
+platform takes. A stream that arrives as anything else can be sent on as it
+is, but not converted.
+
 ## Change or remove one
 
 The switch on a tile turns that destination on or off without opening
