@@ -13,7 +13,13 @@ use crate::{Publisher, PublisherOptions};
 #[derive(Default)]
 pub struct BusSink {
     pub(super) settings: Mutex<Settings>,
-    pub(super) state: Mutex<Option<(Publisher, gst_video::VideoInfo)>>,
+    pub(super) state: Mutex<Option<(Publisher, Kind)>>,
+}
+
+/// What the negotiated caps carry.
+pub(super) enum Kind {
+    Video(gst_video::VideoInfo),
+    Audio(crate::Layout),
 }
 
 pub(super) struct Settings {
