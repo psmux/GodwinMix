@@ -4,6 +4,13 @@
 
 use serde_json::{json, Value};
 
+#[path = "tables_build.rs"]
+mod build;
+pub use build::{build_pat, build_pmt};
+#[path = "tables_sdt.rs"]
+mod sdt;
+pub use sdt::parse_sdt;
+
 /// One elementary stream, as the PMT lists it.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Stream {
@@ -102,7 +109,7 @@ pub fn descriptors(mut d: &[u8]) -> impl Iterator<Item = (u8, &[u8])> {
 
 /// The loop bytes of a long form section: after the 8 byte header, before
 /// the CRC.
-fn body(section: &[u8]) -> &[u8] {
+pub(super) fn body(section: &[u8]) -> &[u8] {
     &section[8.min(section.len())..section.len().saturating_sub(4)]
 }
 
@@ -138,69 +145,6 @@ pub fn parse_pmt(section: &[u8]) -> Option<(u16, Vec<u8>, Vec<Stream>)> {
         rest = &rest[5 + es_len..];
     }
     Some((pcr, info, streams))
-}
-
-/// `(service id, provider, name)` for every service an SDT describes.
-pub fn parse_sdt(section: &[u8]) -> Vec<(u16, String, String)> {
-    let mut out = Vec::new();
-    let b = body(section);
-    let mut rest = b.get(3..).unwrap_or_default();
-    while rest.len() >= 5 {
-        let id = u16::from_be_bytes([rest[0], rest[1]]);
-        let len = (usize::from(rest[3] & 0x0F) << 8) | usize::from(rest[4]);
-        let Some(loop_bytes) = rest.get(5..5 + len) else { break };
-        for (tag, d) in descriptors(loop_bytes) {
-            if tag == 0x48 && d.len() >= 2 {
-                let (provider, after) = text(&d[1..]);
-                let (name, _) = text(after);
-                out.push((id, provider, name));
-            }
-        }
-        rest = &rest[5 + len..];
-    }
-    out
-}
-
-/// A DVB length prefixed string. A leading byte under 0x20 names a character
-/// table; it is skipped and the rest read as near enough to UTF-8.
-fn text(d: &[u8]) -> (String, &[u8]) {
-    let len = d.first().copied().unwrap_or(0) as usize;
-    let Some(raw) = d.get(1..1 + len) else { return (String::new(), &[]) };
-    let raw = if raw.first().is_some_and(|&b| b < 0x20) { &raw[1..] } else { raw };
-    (String::from_utf8_lossy(raw).trim().to_string(), &d[1 + len..])
-}
-
-/// A PAT with one program in it.
-pub fn build_pat(ts_id: u16, version: u8, program: u16, pmt_pid: u16) -> Vec<u8> {
-    let mut loop_bytes = program.to_be_bytes().to_vec();
-    loop_bytes.extend_from_slice(&(0xE000 | pmt_pid).to_be_bytes());
-    long_section(0x00, ts_id, version, &loop_bytes)
-}
-
-/// A PMT listing only `streams`.
-pub fn build_pmt(p: &Program, version: u8, streams: &[&Stream]) -> Vec<u8> {
-    let mut b = (0xE000 | p.pcr_pid).to_be_bytes().to_vec();
-    b.extend_from_slice(&(0xF000 | p.info.len() as u16).to_be_bytes());
-    b.extend_from_slice(&p.info);
-    for s in streams {
-        b.push(s.stream_type);
-        b.extend_from_slice(&(0xE000 | s.pid).to_be_bytes());
-        b.extend_from_slice(&(0xF000 | s.info.len() as u16).to_be_bytes());
-        b.extend_from_slice(&s.info);
-    }
-    long_section(0x02, p.number, version, &b)
-}
-
-fn long_section(table: u8, id: u16, version: u8, loop_bytes: &[u8]) -> Vec<u8> {
-    let len = 5 + loop_bytes.len() + 4;
-    let mut s = vec![table, 0xB0 | ((len >> 8) as u8 & 0x0F), len as u8];
-    s.extend_from_slice(&id.to_be_bytes());
-    s.push(0xC1 | ((version & 0x1F) << 1));
-    s.extend_from_slice(&[0, 0]);
-    s.extend_from_slice(loop_bytes);
-    let crc = super::crc32(&s);
-    s.extend_from_slice(&crc.to_be_bytes());
-    s
 }
 
 #[cfg(test)]
