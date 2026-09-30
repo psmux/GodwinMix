@@ -124,12 +124,89 @@ pool, so it decodes into shared memory directly. That is not done, because a
 decoder keeps reference frames in its buffers, and a slot held as a reference
 is a slot readers cannot have.
 
+## Sound
+
+The bus carries sound too, under the same name with `#audio` after it. A
+channel stream has a picture and sound that must stay together, and deciding
+the stream once is only half done if every show still decodes the sound for
+itself from a second copy of the stream, on a timeline of its own.
+
+A picture and a chunk of sound want opposite things from the ring. A reader
+wants only the newest picture, and missing one is fine. It wants every chunk of
+sound, in order, because a missing chunk is a click. So a sound region is used
+the other way round: the owner overwrites the oldest free chunk rather than the
+lowest numbered one, which leaves the chunks a reader has not reached yet for
+last, and a reader leases the chunk after the one it had rather than the
+newest. A slot holds up to 100 ms and records how much of it the chunk filled.
+One rule is kept from pictures: a reader more than eight chunks behind jumps to
+the newest, because sound that late is as useless as a late picture.
+
+## In the mixer
+
+A source whose plugin declares `share` in its manifest (the camera, screen
+capture, and `ingest/rtmp` reading a channel) is a `SharedSource` in
+`crates/godwinmix-core/src/plugin/host/shared/`. The plugin does nothing
+different, which is what lets a third party camera plugin have this by writing
+one line in its manifest.
+
+**Who opens the device.** Two mixers that both want a camera have to agree
+which of them opens it before either does, and the agreement has to end by
+itself when the one that won dies, however it dies. An exclusive `flock` on a
+lock file beside the name's socket does both: one holder at a time across
+every process, and the kernel lets go when the holder's descriptor closes,
+which it does for a process killed with SIGKILL. Every shared source has a
+thread that asks for it every 50 ms. Asking is one system call that fails at
+once and touches nothing the owner has.
+
+**Every source reads the bus, the owner's own included.** The source the mixer
+holds is always `gmxbussrc` in front of the normaliser every source has.
+Whether this source is also the one running the plugin is the owner thread's
+business, and it can change while the source runs without the mixer seeing
+anything change. That is what makes the handover cheap: when the owner goes,
+a reader takes the claim, starts the plugin, publishes under the same name,
+and every reader's `gmxbussrc`, its own included, finds the new owner by
+itself. No pipeline is rebuilt anywhere.
+
+**The feed.** The owner runs the plugin exactly as an unshared source would
+(its socket or its pipe, then the normaliser) in a pipeline of its own, and
+hangs `gmxbussink` on the normaliser's tees where the branch to the programme
+would be. It is not in the programme's pipeline, so a feed that stalls is a gap
+for its readers and nothing else, and its failures are polled for rather than
+handled on a bus handler. A camera that sent pictures and then nothing for
+3 s is reopened, with the claim given up for a second first so another source
+can try. A channel that goes quiet is left alone: nobody is publishing to it.
+
+One thing had to change in that normaliser. Its `videorate` fills gaps by
+holding each frame until the next arrives, and whether it holds one depends on
+where the frames fall against its output grid. With it as it was, the first
+measurement of a reader in another mixer came to 33.8 ms from publish to
+programme, one frame. The feed's `videorate` now only drops, which holds
+nothing; every reader's own normaliser still fills gaps for its own canvas.
+
+**Keeping sound and picture together.** A picture alone is stamped when it
+arrives, on the reading mixer's clock, which is what a camera plugin does with
+its own frames. Sound and picture together cannot be stamped that way: the
+owner decodes the picture more slowly than the sound, and stamping on arrival
+would put that difference into the programme. So both tracks keep the owner's
+timestamps, which its demuxer made from one clock, and the reader moves them
+onto its own running time with one shift shared by the two, set by the first
+buffer of either and set again, once for both, when a new owner starts a new
+timeline. The later track arrives a little behind its time by the decoder's
+delay, as it does for a source that decodes for itself.
+
+**Where it is not used.** A source whose params name nothing to share (a
+channel source that listens for a publisher of its own) is opened on its own.
+So is anything on Windows, a source placed on a node, and everything when the
+mixer runs with `GODWINMIX_FRAMEBUS=off`, which is how the unshared numbers
+below were taken. A sound device is not shared: every desktop system lets
+several programs open one, and each show keeps its own trim.
+
 ## Platforms
 
 Linux and macOS are the same code apart from how the anonymous region is made.
 On Windows the crate builds and `available()` returns `unsupported`: there is no
-transport yet, and a show there decodes its own sources, which is what every
-consumer does now, so nothing breaks. The Windows transport would be an
+transport yet, and a source there opens its own device, as every source did
+before the mixer used the bus, so nothing breaks. The Windows transport would be an
 anonymous file mapping duplicated into the reader with `DuplicateHandle`, and a
 named pipe per reader for the nudges and for noticing it die. The header and
 the lease protocol would not change.
@@ -211,3 +288,72 @@ Reading the tables:
 
 Rerun it after any change to the crate; a number that gets worse needs a
 reason in the commit.
+
+## Measured in the mixer
+
+Two mixers on one MacBook Pro (M4 Pro, macOS 26), each started from a copy of
+`godwinmix.example.toml` with its control port changed and one source, the
+built in camera at the example's 1080p30 canvas. Release build. Other agents'
+builds were running on the machine throughout, with a load average between 6
+and 11, so every number is from a busy machine. CPU is percent of one core from
+each process's CPU time over 60 s, for both mixers and every process they
+started; memory is resident size at the end of the window.
+
+| | Bus on | Bus off (`GODWINMIX_FRAMEBUS=off`) |
+|---|---|---|
+| Processes that opened the camera | 1 | 2 |
+| Mixer A, its camera plugin | 2.9%, 5.4% | 2.4%, 4.7% |
+| Mixer B, its camera plugin | 2.0%, none | 2.5%, 5.2% |
+| Both, with every child | 10.3% | 14.9% |
+| Resident memory, both, with every child | 707 MB | 684 MB |
+
+On macOS the second mixer could open the camera without the bus: AVFoundation
+lets two processes capture one camera. On most Linux cameras through V4L2 it
+could not. Memory comes out about even: a camera process fewer (about 120 MB),
+but the shared frames are counted in the resident size of each mixer that maps
+them.
+
+The latency the bus adds, from each mixer's own measurement of frames in the
+same run (2,733 frames in the reader):
+
+| | p50 | p99 | max |
+|---|---|---|---|
+| owner: from the plugin's frame reaching the mixer to its publish | 0.003 ms | 0.018 ms | 0.032 ms |
+| reader in the other mixer: from publish to holding the frame | 0.21 ms | 0.44 ms | 2.8 ms |
+
+Everything after that is the normaliser any source runs, whose `videorate`
+holds a frame or not depending on where frames fall against its grid (in this
+run the reader's held one, 33.4 ms, and the owner's own reader's did not,
+0.22 ms). So the bus adds about a fifth of a millisecond to a picture.
+
+A channel stream, 720p30 H.264 and AAC published with ffmpeg to the first
+mixer's channel, flashing white and beeping for 100 ms at the top of every
+second, and both mixers recording their programme:
+
+| | Bus on | Bus off |
+|---|---|---|
+| Mixer A (decodes the stream) | 13.1% | 11.9% |
+| Mixer B | 2.5% | 11.9% |
+| Sound minus picture in A's recording, median over 25 flashes | +9 ms | -8 ms |
+| Sound minus picture in B's recording | -4 ms | +27 ms |
+
+A reader's lip sync through the bus is as good as decoding for itself. After
+the reader took the stream over, +14 ms.
+
+**The handover.** With both mixers on the camera, the owner was killed with
+SIGKILL six times, alternating which mixer owned it, and the survivor's own
+log says how long its picture stopped: 580 to 690 ms, the plugin taking 530 to
+550 ms of that to start and show a first frame. The same six rounds at a
+quieter moment earlier in the day gave 365 to 469 ms with the plugin starting
+in 222 to 246 ms, so the gap is the camera plugin starting on a busy machine,
+plus up to 50 ms for the reader to notice and a frame. Either way it is well
+inside the two seconds after which the mixer counts a source as stalled, and
+the programme holds the last frame through it. For a channel stream the new
+owner also waits for the next keyframe, so the gap is up to one keyframe
+interval longer: 580 ms with a one second interval, with the owner's source
+removed rather than its process killed, since that process also held the
+channel server.
+
+In the tests, with a shell plugin standing in for the camera, the gap is 110 to
+230 ms (`cargo test -p godwinmix-core --test shared_source --test
+shared_channel`).
