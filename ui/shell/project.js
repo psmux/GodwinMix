@@ -134,10 +134,12 @@ export async function newProject(client) {
     "Start a new project"
   );
   if (!yes) return;
-  const empty = { format: "godwinmix.project", version: 1, name: "New project" };
+  const empty = { format: "godwinmix.project", version: 1, name: "a new, empty project" };
   try {
-    await client.call("project.import", { file: empty, mode: "replace", dry_run: false });
-    toast({ text: "A new, empty project. Add a source to begin." });
+    const done = await client.call("project.import", { file: empty, mode: "replace", dry_run: false });
+    // Started again, as after Open project, so every panel draws the empty mixer.
+    sessionStorage.setItem("gmx.project.opened", JSON.stringify(done));
+    location.reload();
   } catch (e) {
     errorToast(e, "New project");
   }
