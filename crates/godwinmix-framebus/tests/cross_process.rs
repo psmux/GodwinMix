@@ -1,0 +1,94 @@
+//! Frames cross processes intact, and a stalled reader costs nobody else.
+
+#![cfg(unix)]
+
+mod common;
+
+use std::time::{Duration, Instant};
+
+use common::*;
+
+#[test]
+fn child_entry() {
+    child_main();
+}
+
+/// Publish for `ms` at about `fps`, returning the slowest single write.
+fn pump(p: &mut godwinmix_framebus::Publisher, ms: u64, fps: u64) -> Duration {
+    let (start, mut worst, mut seq) = (Instant::now(), Duration::ZERO, 0u64);
+    while start.elapsed() < Duration::from_millis(ms) {
+        seq += 1;
+        let t = Instant::now();
+        assert!(
+            p.write(Some(seq), None, |b| paint(seq, b)),
+            "the owner dropped frame {seq}"
+        );
+        worst = worst.max(t.elapsed());
+        std::thread::sleep(Duration::from_micros(1_000_000 / fps).saturating_sub(t.elapsed()));
+    }
+    worst
+}
+
+#[test]
+fn every_frame_a_reader_gets_in_another_process_matches_its_checksum() {
+    let reg = registry();
+    let mut p = publisher(&reg, small(), 8, 2);
+    let mut kids: Vec<Kid> = (0..3).map(|_| spawn("reader", &reg, "1500,0")).collect();
+    for k in &mut kids {
+        assert_eq!(num(&k.result(), "ready"), 1);
+    }
+    let mut local = subscribe(&reg);
+    let inproc = std::thread::spawn(move || {
+        let (mut got, mut bad) = (0, 0);
+        let end = Instant::now() + Duration::from_millis(1200);
+        while Instant::now() < end {
+            if let Some(f) = local.next(Duration::from_millis(50)).unwrap() {
+                got += 1;
+                bad += (f.verify() != Some(true)) as u32;
+            }
+        }
+        (got, bad)
+    });
+    pump(&mut p, 1800, 200);
+    for k in &mut kids {
+        let r = k.result();
+        assert!(num(&r, "got") > 100, "{r:?}");
+        assert_eq!(num(&r, "bad"), 0, "{r:?}");
+        assert_eq!(num(&r, "out_of_order"), 0, "{r:?}");
+    }
+    let (got, bad) = inproc.join().unwrap();
+    assert!(
+        got > 100 && bad == 0,
+        "in process reader got {got}, {bad} bad"
+    );
+    assert_eq!(p.stats().dropped, 0);
+}
+
+#[test]
+fn a_stalled_reader_skips_frames_and_never_slows_the_owner_or_the_others() {
+    let reg = registry();
+    let mut p = publisher(&reg, small(), 4, 2);
+    let mut slow = spawn("reader", &reg, "2000,400");
+    let mut fast = spawn("reader", &reg, "2000,0");
+    num(&slow.result(), "ready");
+    num(&fast.result(), "ready");
+    let worst = pump(&mut p, 2200, 100);
+    let (s, f) = (slow.result(), fast.result());
+    // The slow one sleeps 400 ms a frame: about five frames in two seconds,
+    // and everything else skipped. The fast one sees nearly every frame.
+    assert!(
+        num(&s, "got") <= 7 && num(&s, "skipped") > 20 * num(&s, "got"),
+        "slow reader: {s:?}"
+    );
+    assert!(num(&f, "got") > 100, "fast reader: {f:?}");
+    assert!(
+        num(&f, "skipped") * 10 < num(&f, "got"),
+        "fast reader: {f:?}"
+    );
+    assert_eq!(num(&s, "bad") + num(&f, "bad"), 0);
+    assert_eq!(p.stats().dropped, 0, "the owner never ran out of slots");
+    assert!(
+        worst < Duration::from_millis(20),
+        "one write took {worst:?}"
+    );
+}

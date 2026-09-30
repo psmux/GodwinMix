@@ -1502,6 +1502,15 @@ dependencies = [
  "serde",
  "serde_json",
  "tracing",
+name = "godwinmix-framebus"
+version = "0.2.0"
+dependencies = [
+ "glib",
+ "gstreamer",
+ "gstreamer-app",
+ "gstreamer-base",
+ "gstreamer-video",
+ "libc",
 ]
 
 [[package]]
