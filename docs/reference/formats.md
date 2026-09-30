@@ -98,6 +98,7 @@ has switched on. The hub carries what FLV carries.
 |---|---|---|---|---|
 | RTMP, RTMPS | copy, whatever came in (enhanced RTMP bytes included) | copy | `restream/rtmp_out.rs` | `plugins/ingest/src/restream/tests.rs` |
 | SRT | H.264 or HEVC copy, the parser picked by the stream's caps; AV1 not yet (flvdemux does not read it) | AAC copy | `restream/srt_out.rs`, `restream/ts_video.rs` | `plugins/ingest/src/restream/ts_video.rs` decodes HEVC out of the MPEG-TS |
+| SRT to a player that calls in (`m=request`), on the channel's own SRT port | H.264 or HEVC copy | AAC copy | `srt/play.rs` | `plugins/ingest/src/srt/tests.rs`: `srtsrc` on the publisher's port decodes the stream |
 | RTMP or SRT with a rendition | H.264 or HEVC in (AV1 in is decoded but its size is not read, so it is not planned yet); H.264, HEVC or AV1 out, HEVC and AV1 as enhanced RTMP | AAC | `transcode/` | `plugins/ingest/src/transcode/tests.rs` and `tests_hevc.rs`: HEVC to H.264 and H.264 to HEVC with real encoders |
 
 ## Decode table

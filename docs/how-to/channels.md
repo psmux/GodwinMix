@@ -160,6 +160,20 @@ A caller with the wrong passphrase is refused by SRT itself during the
 handshake, so the mixer never sees it and cannot log it; the encoder says
 the passphrase was wrong.
 
+## Pull a channel's stream over SRT
+
+Another site, a decoder, vMix or OBS can take a channel's live stream from
+the same SRT port the encoders publish to. Set it to caller mode with the
+access control stream id ending `m=request` and the same passphrase:
+
+```
+srt://192.168.1.20:9000?streamid=#!::r=sunday-service/main,m=request&passphrase=<the key>
+```
+
+It gets the stream as MPEG-TS, exactly as the encoder sent it, for as long as
+it reads. A stream that is not on air yet is refused; try again once the
+encoder is publishing. No second port is opened for players.
+
 ## Publish from a browser or OBS by WHIP
 
 WHIP is on the same port as this page, so there is nothing more to open. In

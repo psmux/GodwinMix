@@ -209,12 +209,18 @@ stream `main`. The key is either:
 
 A caller is refused with SRT's access control codes: 1400 for a stream id that
 names no channel, 1401 for a key, 1403 for a channel that is off or does not
-take SRT or for `m=request`, 1404 for no such channel, 1409 for a stream name
-already live. Each refusal is also `event/channel.refused`, as for RTMP.
+take SRT, 1404 for no such channel or, for a player, a stream not on air, and
+1409 for a stream name already live. Each refusal is also
+`event/channel.refused`, as for RTMP.
 
 The stream has to be MPEG-TS with H.264 or HEVC video and AAC audio (HEVC goes
-on the hub as enhanced RTMP HEVC). It is demuxed
-and parsed, never decoded, into the same hub RTMP feeds.
+on the hub as enhanced RTMP HEVC). It is demuxed and parsed, never decoded,
+into the same hub RTMP feeds.
+
+A caller with `m=request` in the access control form
+(`#!::r=<channel>/<stream>,m=request`) is a player: it is sent that stream as
+MPEG-TS on the same port, with the same key rules, for as long as it reads.
+Nothing is decoded; the stream goes out in the codecs it came in.
 
 ### WHIP on the control port
 
