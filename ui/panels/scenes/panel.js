@@ -227,7 +227,8 @@ class ScenesPanel extends HTMLElement {
             role: "tab",
             "data-id": summary.id,
             title: "Work on this scene. Double click to arrange it, Take to put it on air.",
-            onclick: () => setFocusedScene(summary.id),
+            // In Studio mode a click also fills the preview, which is safe.
+            onclick: () => { setFocusedScene(summary.id); if (settings().producer) this.activate(summary.id); },
             ondblclick: () => this.open(summary.id),
           },
           [el("span.ellipsis", { text: summary.name }), el("span.num.dim", { text: String(summary.items || 0) })]
@@ -365,6 +366,8 @@ class ScenesPanel extends HTMLElement {
       tile.node.classList.toggle("program", is(id, program));
       tile.node.classList.toggle("armed", is(id, armed));
     }
+    // A click on a tab arms in Studio mode, so a Take here would only mislead.
+    this.take.hidden = settings().producer;
     const focused = focusedScene([...this.tabs.keys()]);
     for (const [id, tab] of this.tabs) {
       tab.classList.toggle("program", is(id, program));
