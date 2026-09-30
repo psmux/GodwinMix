@@ -814,6 +814,19 @@ pub async fn run() -> Result<()> {
         ),
     };
     mix.set_station(station.clone());
+    let quit = Arc::new(tokio::sync::Notify::new());
+    // A show under a station binds the loopback port it was given, tells the
+    // station which one it got, and from then on answers only through it.
+    // Before `mix.start`, because starting attaches the configured outputs
+    // and their renditions ask the station's governor.
+    let linked = match station::show::under_station() {
+        true => {
+            let listener = tokio::net::TcpListener::bind(&bind).await.with_context(|| format!("binding {bind}"))?;
+            let bound = listener.local_addr()?;
+            Some((station::show::link(bound, &station, quit.clone())?, listener))
+        }
+        false => None,
+    };
     // A take may name a transition that lives in a plugin. The mixer never
     // launches one: it asks this, with a budget, before the window starts.
     mix.set_transition_renderer(supervisor.clone());
@@ -951,7 +964,6 @@ pub async fn run() -> Result<()> {
         library.cfg().convert_threads,
         library.cfg().probe_timeout_secs,
     ));
-    let quit = Arc::new(tokio::sync::Notify::new());
     // Desired state against what each node reports, four times a second. It
     // does nothing at all on a core with no nodes.
     nodes::spawn_reconciler(handle.clone(), quit.clone());
@@ -1020,16 +1032,6 @@ pub async fn run() -> Result<()> {
             "log": godwinmix_core::observe::session::session().path(),
         })
     });
-    // A show under a station binds the loopback port it was given, tells the
-    // station which one it got, and from then on answers only through it.
-    let linked = match station::show::under_station() {
-        true => {
-            let listener = tokio::net::TcpListener::bind(&bind).await.with_context(|| format!("binding {bind}"))?;
-            let bound = listener.local_addr()?;
-            Some((station::show::link(bound, &station, quit.clone())?, listener))
-        }
-        false => None,
-    };
     let server = tokio::spawn(async move {
         let served = match linked {
             Some((_link, listener)) => control::serve_on(listener, state).await,
