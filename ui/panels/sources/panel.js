@@ -241,8 +241,9 @@ class SourcesPanel extends HTMLElement {
       this.empty = el("p.dim.pad");
       this.append(this.empty);
     }
-    this.empty.hidden = list.length > 0;
-    this.empty.textContent = this.filter ? "No matching sources in this scene." : "Use + to choose an existing source or create a new one.";
+    // The + tile says how to add one; this line speaks only for a filter.
+    this.empty.hidden = list.length > 0 || !this.filter;
+    this.empty.textContent = "No matching sources in this scene.";
   }
 
   rebuild(list) {
@@ -418,6 +419,7 @@ class SourcesPanel extends HTMLElement {
     scenes.undo.record(`Added a source to ${target.name}`);
     await scenes.reread([target.id]);
     this.render(this.client.state);
+    await (await import("./first-air.js")).airIfNothingIs(this.client, scenes, target);
   }
 
   /** The single scene a fresh mixer boots with, while it is still empty. */
@@ -442,11 +444,8 @@ class SourcesPanel extends HTMLElement {
 
   async putOnAir(id) {
     if (settings().producer) {
+      // Only a scene can be armed on the core's preview; a source is armed here.
       document.body.dataset.armed = id;
-      this.client.call("scene.preview.set", { scene: id }).catch(() => {
-        // No preview on this core: the armed highlight is all there is, which
-        // 05 says is the acceptable fallback.
-      });
       this.render(this.client.state);
       return;
     }
