@@ -11,6 +11,7 @@ import { welcomeStepTests } from "./welcome.js";
 import { channelTests } from "./channels.js";
 import { renditionTests } from "./renditions.js";
 import { menubarTests } from "./menubar.js";
+import { showTests } from "./shows.js";
 // The test runner: forty lines, no dependencies, no toolchain. Open the page,
 // read the console, or read the list. Everything testable without a mixer is
 // here, including the legacy adapter against a stubbed server.
@@ -2665,6 +2666,12 @@ legacySuite()
   .catch((e) => {
     failed += 1;
     line("fail", "the menu bar suite threw: " + e.message);
+    console.error(e);
+  })
+  .then(() => showTests(test, eq, ok))
+  .catch((e) => {
+    failed += 1;
+    line("fail", "the shows suite threw: " + e.message);
     console.error(e);
   })
   .then(outputNumbersSuite)

@@ -63,7 +63,12 @@ export function openRouting(client) {
     observer.disconnect();
     seen.clear();
     const narrow = scroll.clientWidth < 700;
+    // Replacing the table empties the box for a moment, which would put the
+    // scroll back at the top on every answer that arrives.
+    const [top, left] = [scroll.scrollTop, scroll.scrollLeft];
     scroll.replaceChildren(groups.length ? (narrow ? list : grid)(groups, data.plans, collapsed) : el("p.rt-empty", { text: filter.value ? "Nothing matches that filter." : "Nothing here yet: no channel and no show." }));
+    scroll.scrollTop = top;
+    scroll.scrollLeft = left;
     for (const n of scroll.querySelectorAll("[data-group]:not(button):not(td)")) observer.observe(n);
     if (focused) scroll.querySelector(focused)?.focus();
   }
