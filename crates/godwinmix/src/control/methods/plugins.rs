@@ -623,6 +623,7 @@ async fn add(call: Call, params: Value) -> Result<Value, RpcError> {
     let opts = options(&call);
     let hooks = call.app.hooks.clone();
     let supervisor = call.app.plugins.clone();
+    let channels = call.app.channels.clone();
     Ok(super::tasks::spawn_task(
         &call.app.tasks,
         "plugin.add",
@@ -642,6 +643,11 @@ async fn add(call: Call, params: Value) -> Result<Value, RpcError> {
             let failures = tokio::task::spawn_blocking(move || supervisor.start_all())
                 .await
                 .unwrap_or_default();
+            // The channel server just arrived: a mixer with no channels gets
+            // its default one now, as it would have at start.
+            if installed.name() == crate::channels::PLUGIN {
+                let _ = tokio::task::spawn_blocking(move || channels.ensure_default()).await;
+            }
             let mut answer =
                 serde_json::to_value(record(&installed)).map_err(|e| e.to_string())?;
             if let (Some(map), false) = (answer.as_object_mut(), failures.is_empty()) {

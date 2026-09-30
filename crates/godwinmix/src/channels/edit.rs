@@ -176,7 +176,7 @@ impl Channels {
 
     /// Make a key, seal it, and add its record. Answers with the secret, which
     /// `channel.key.reveal` can read back later from the store.
-    fn make_key(&self, channel: &str, label: Option<String>) -> Result<NewKey, RpcError> {
+    pub(super) fn make_key(&self, channel: &str, label: Option<String>) -> Result<NewKey, RpcError> {
         let secret = godwinmix_core::secrets::random_key(keys::KEY_LEN)
             .map_err(|e| RpcError::internal(format!("making a key: {e:#}")))?;
         let mut records = self.records.lock();
