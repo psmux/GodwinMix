@@ -22,7 +22,7 @@ const PANELS = [
   "./panels/outputs/panel.js",
   "./panels/channels/entry.js",
   "./panels/audio/panel.js",
-  "./panels/media/panel.js",
+  "./panels/media/entry.js",
   "./panels/alerts/panel.js",
   "./panels/welcome/panel.js",
 ];

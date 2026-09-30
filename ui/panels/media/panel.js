@@ -253,6 +253,7 @@ class MediaPanel extends HTMLElement {
   }
 }
 
-customElements.define("gmx-media", MediaPanel);
-window.godwinmixPanels.push(MediaPanel);
+// Drawn inside the small `gmx-media` loader (entry.js), which is all the page
+// carries until the Media tab is shown.
+customElements.define("gmx-media-view", MediaPanel);
 export default MediaPanel;

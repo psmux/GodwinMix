@@ -94,6 +94,7 @@ const ASSETS: &[(&str, &str)] = &[
     ("panels/composer/inspector.js", include_str!("../../../ui/panels/composer/inspector.js")),
     ("panels/composer/ops.js", include_str!("../../../ui/panels/composer/ops.js")),
     ("panels/header/panel.js", include_str!("../../../ui/panels/header/panel.js")),
+    ("panels/media/entry.js", include_str!("../../../ui/panels/media/entry.js")),
     ("panels/media/panel.js", include_str!("../../../ui/panels/media/panel.js")),
     ("panels/multiview/panel.js", include_str!("../../../ui/panels/multiview/panel.js")),
     ("panels/multiview/wanted.js", include_str!("../../../ui/panels/multiview/wanted.js")),
@@ -772,6 +773,7 @@ mod tests {
         reachable.extend(closure_of("client/schema-form.js"));
         reachable.extend(closure_of("shell/palette.js"));
         reachable.extend(closure_of("shell/settings-dialog.js"));
+        reachable.extend(closure_of("panels/media/panel.js"));
         reachable.extend(closure_of("shell/dock-menu.js"));
         reachable.extend(closure_of("shell/picker.js"));
         reachable.extend(closure_of("panels/sources/chooser.js"));
