@@ -35,6 +35,7 @@
 
 pub mod action;
 pub mod destination;
+pub mod rendition;
 pub mod channels;
 pub mod error;
 pub mod idempotency;
