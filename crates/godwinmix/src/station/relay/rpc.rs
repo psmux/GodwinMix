@@ -1,15 +1,10 @@
-//! `/rpc` under a station.
-//!
-//! A frame from the client is read once, to see whose it is: a station
-//! method is answered here, `core.subscribe` may move the connection to
-//! another show, and anything else goes to the show as the client wrote it.
-//! What the show sends comes back untouched, the mosaic's binary frames
-//! included. The station's own events (`show.*`, `channel.*`) are written in
-//! between for a client whose subscription asks for them.
-//!
-//! When the show's side closes (the show died, or stopped) the client's is
-//! closed too, with 1012 (service restart), and it reconnects as it would to
-//! a core that restarted: through the station, which waits for the show.
+//! `/rpc` under a station. A client's frame is read once to see whose it is:
+//! a station method is answered here, `core.subscribe` may move the
+//! connection to another show, anything else goes to the show as written.
+//! What the show sends comes back untouched, mosaic frames included, with
+//! the station's own events (`show.*`, `channel.*`) written in between. When
+//! the show's side closes the client's closes with 1012 and it reconnects
+//! through the station, which waits for the show.
 
 use super::super::methods;
 use super::super::state::Station;
@@ -19,15 +14,16 @@ use axum::http::{HeaderMap, Method, Uri};
 use axum::response::Response;
 use futures_util::stream::{SplitSink, SplitStream};
 use futures_util::{SinkExt, StreamExt};
-use godwinmix_protocol::error::RpcError;
 use godwinmix_protocol::rpc::{self, Subscription};
-use godwinmix_protocol::scope::Token;
-use godwinmix_protocol::SubscribeRequest;
-use serde_json::{json, Value};
+use godwinmix_protocol::{error::RpcError, scope::Token, SubscribeRequest};
+use serde_json::Value;
 use std::sync::Arc;
 use tokio::sync::{broadcast, mpsc};
 use tokio_tungstenite::tungstenite::Message as Up;
 use tracing::debug;
+
+mod station_side;
+mod upstream;
 
 pub async fn upgrade(st: Arc<Station>, ws: WebSocketUpgrade, uri: Uri, headers: HeaderMap) -> Response {
     let presented = crate::control::presented_token(&Method::GET, &headers, &uri);
@@ -147,54 +143,8 @@ impl Relay {
         self.to_show(Up::Text(text.into())).await;
         None
     }
-
-    async fn connect(&self) -> Result<Upstream, RpcError> {
-        let addr = self.st.addr_of(&self.show).await?;
-        pipe::connect(addr, &self.uri, &self.headers)
-            .await
-            .map_err(|e| RpcError::internal(format!("show {} would not open /rpc: {e}", self.show)).with("show", self.show.as_str()))
-    }
-
-    async fn to_show(&mut self, m: Up) {
-        if let Some(up) = self.up.as_mut() {
-            let _ = up.send(m).await;
-        }
-    }
-
-    /// Run a station method on a task of its own, so a slow one (a show
-    /// stopping takes seconds) holds up nothing else on this connection.
-    fn answer_later(&self, id: Option<Value>, method: String, params: Value, answers: mpsc::Sender<Value>) {
-        let (st, token) = (self.st.clone(), self.token.clone());
-        tokio::spawn(async move {
-            let answer = methods::call(&st, &token, &method, params).await;
-            let Some(id) = id else { return };
-            let frame = match answer {
-                Ok(v) => rpc::result_frame(&id, v),
-                Err(e) => rpc::error_frame(&id, &e, ""),
-            };
-            let _ = answers.send(frame).await;
-        });
-    }
-
-    fn note_seq(&mut self, text: &str) {
-        if text.contains("\"event/flush\"") {
-            if let Some(seq) = serde_json::from_str::<Value>(text).ok().and_then(|v| v["params"]["seq"].as_u64()) {
-                self.seq = seq;
-            }
-        }
-    }
-
-    /// A station event, and the flush after it, for a client that asked.
-    fn station_event(&self, event: &godwinmix_protocol::types::Event) -> Vec<Value> {
-        let Some(sub) = self.sub.as_ref() else { return Vec::new() };
-        let Some((name, payload)) = rpc::event_name_and_payload(event) else { return Vec::new() };
-        if !sub.wants(name) {
-            return Vec::new();
-        }
-        vec![rpc::notification(&format!("event/{name}"), payload), rpc::notification("event/flush", json!({ "seq": self.seq }))]
-    }
 }
 
-async fn send(tx: &mut SplitSink<WebSocket, Message>, v: Value) -> Result<(), axum::Error> {
+pub(super) async fn send(tx: &mut SplitSink<WebSocket, Message>, v: Value) -> Result<(), axum::Error> {
     tx.send(Message::Text(v.to_string().into())).await
 }

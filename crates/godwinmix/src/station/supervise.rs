@@ -3,24 +3,22 @@
 //! died, with the plugin host's backoff (three restarts free, then 30
 //! seconds doubling) and a limit past which it is left failed with an alert.
 //! A show asked to restart itself (`core.restart`) is started again at once
-//! and not counted.
+//! and not counted. The rules are in `decide.rs`.
+
+mod decide;
+mod report;
 
 use super::child::{self, Start};
 use super::state::Station;
 use crate::control::methods::lifecycle::RESTART_EXIT_CODE;
+use decide::{Exit, Next, Tally};
 use godwinmix_core::state::Severity;
-use godwinmix_host::lifecycle::{Backoff, FREE_RESTARTS};
 use godwinmix_protocol::shows::ShowState;
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::sync::watch;
 use tracing::{info, warn};
-
-/// Failures in a row, past the free ones, before a show is left failed.
-const PAID_RESTARTS: u32 = 3;
-/// A show that ran this long before dying starts its count again.
-const STABLE: Duration = Duration::from_secs(60);
 
 /// Start supervising `id`. Already supervised is left alone.
 pub fn start(st: &Arc<Station>, id: &str) {
@@ -55,7 +53,7 @@ pub async fn stop(st: &Arc<Station>, id: &str) {
 }
 
 async fn run(st: Arc<Station>, id: String, mut stop: watch::Receiver<bool>) {
-    let mut backoff = Backoff::new();
+    let mut tally = Tally::default();
     loop {
         let Some(mut proc) = spawn(&st, &id) else { return };
         let started = Instant::now();
@@ -69,37 +67,24 @@ async fn run(st: Arc<Station>, id: String, mut stop: watch::Receiver<bool>) {
         if st.stopping.load(Ordering::SeqCst) || *stop.borrow() {
             return st.settle(&id, ShowState::Stopped, None);
         }
-        // Shut down on purpose (`core.shutdown`): stopped, not dead. With
-        // one show that was the whole mixer stopping, so the station goes too.
-        if status.as_ref().is_ok_and(|s| s.success()) {
-            info!(show = %id, "show shut down on request");
-            st.settle(&id, ShowState::Stopped, None);
-            if st.registry.lock().records.len() == 1 {
-                st.quit.notify_one();
-            }
-            return;
-        }
-        let asked = status.as_ref().ok().and_then(|s| s.code()) == Some(RESTART_EXIT_CODE);
-        if started.elapsed() > STABLE {
-            backoff.clear();
-        }
-        if !asked {
-            backoff.next_wait();
-        }
         let why = match &status {
             Ok(s) => format!("its process ended ({s})"),
             Err(e) => format!("its process could not be waited on ({e})"),
         };
-        if backoff.attempts() > FREE_RESTARTS + PAID_RESTARTS {
-            let error = format!("{why}, and it kept dying: {} times in a row. Start it again once the cause is fixed.", backoff.attempts());
-            st.events.publish_alert(Severity::Error, format!("Show {id} stopped for good: {error}"));
-            return st.settle(&id, ShowState::Failed, Some(error));
-        }
-        let wait = backoff.wait();
-        st.died(&id, &why, wait, asked);
-        tokio::select! {
-            _ = tokio::time::sleep(wait) => {}
-            _ = stop.changed() => return st.settle(&id, ShowState::Stopped, None),
+        match tally.after(Exit::of(&status, RESTART_EXIT_CODE), started.elapsed()) {
+            Next::Stop => return st.shut_down(&id),
+            Next::Fail { times } => {
+                let error = format!("{why}, and it kept dying: {times} times in a row. Start it again once the cause is fixed.");
+                st.events.publish_alert(Severity::Error, format!("Show {id} stopped for good: {error}"));
+                return st.settle(&id, ShowState::Failed, Some(error));
+            }
+            Next::Again { wait, counted } => {
+                st.died(&id, &why, wait, counted);
+                tokio::select! {
+                    _ = tokio::time::sleep(wait) => {}
+                    _ = stop.changed() => return st.settle(&id, ShowState::Stopped, None),
+                }
+            }
         }
     }
 }
@@ -134,39 +119,5 @@ fn spawn(st: &Arc<Station>, id: &str) -> Option<tokio::process::Child> {
             st.settle(id, ShowState::Failed, Some(error));
             None
         }
-    }
-}
-
-impl Station {
-    /// The task is done with this show: say where it ended up.
-    fn settle(&self, id: &str, state: ShowState, error: Option<String>) {
-        if let Some(p) = self.procs.lock().get_mut(id) {
-            p.state = state;
-            p.error = error;
-            p.pid = None;
-            p.stop = None;
-            p.addr.send_replace(None);
-        }
-        self.on_air.lock().remove(id);
-        self.announce(id);
-    }
-
-    fn died(&self, id: &str, why: &str, wait: Duration, asked: bool) {
-        if let Some(p) = self.procs.lock().get_mut(id) {
-            p.state = ShowState::Starting;
-            p.pid = None;
-            p.addr.send_replace(None);
-            if !asked {
-                p.restarts += 1;
-                p.error = Some(format!("{why}; the station is starting it again"));
-            }
-        }
-        self.on_air.lock().remove(id);
-        if !asked {
-            let when = if wait.is_zero() { "now".to_string() } else { format!("in {} seconds", wait.as_secs()) };
-            warn!(show = id, why, "a show died and is being started again");
-            self.events.publish_alert(Severity::Warning, format!("Show {id} stopped: {why}. Starting it again {when}."));
-        }
-        self.announce(id);
     }
 }
