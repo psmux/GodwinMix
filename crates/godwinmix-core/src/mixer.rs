@@ -3724,11 +3724,16 @@ impl Mixer {
                 let _ = reply.send(self.seek(&source, position_ms));
             }
             Command::ReconnectOutput(id, ack) => {
-                let r = if self.outputs.iter().any(|o| o.id() == &id) {
-                    self.reconnect_output(&id);
-                    Ok(())
-                } else {
-                    Err(anyhow::anyhow!("no such output {id}"))
+                let r = match self.outputs.iter().find(|o| o.id() == &id) {
+                    Some(o) if !o.has_key() => Err(anyhow::anyhow!(
+                        "{id} has no stream key yet, so there is nothing to reconnect to. \
+                         Add the key to the destination and it connects by itself"
+                    )),
+                    Some(_) => {
+                        self.reconnect_output(&id);
+                        Ok(())
+                    }
+                    None => Err(anyhow::anyhow!("no such output {id}")),
                 };
                 reply(ack, &r);
                 r?;

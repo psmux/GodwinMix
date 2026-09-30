@@ -185,6 +185,15 @@ impl OutputSlot {
             capabilities: ready.capabilities,
             taps,
         });
+        // An address still carrying a preset's placeholder is not one anybody
+        // can publish to, and dialling it anyway had the example config
+        // knocking on YouTube and Facebook twice a minute with
+        // `YOUR-STREAM-KEY`. It waits, attached, for the key: the page shows
+        // it as needing one, and the edit that adds it builds it again.
+        if !slot.has_key() {
+            info!(output = %id, "no stream key yet; not connecting until one is added");
+            return Ok(slot);
+        }
         // A destination that cannot be built takes its feed back out with it.
         if let Err(e) = slot.spin_up(false) {
             slot.detach(program);
@@ -360,7 +369,7 @@ impl OutputSlot {
             self.reconnect_armed.store(false, Ordering::SeqCst);
             anyhow::bail!("{} is still inside an earlier reconnect; this one was skipped", self.cfg.id);
         };
-        if self.turn.stopped() {
+        if self.turn.stopped() || !self.has_key() {
             self.reconnect_armed.store(false, Ordering::SeqCst);
             return Ok(());
         }
@@ -485,7 +494,7 @@ impl OutputSlot {
             // The address itself never leaves the core. This is the one bit
             // of it that does: whether a preset's placeholder is still in
             // there, so a surface can put its own key form up and say so.
-            has_key: uri_has_key(&self.cfg.uri),
+            has_key: self.has_key(),
             state: self.state(),
             reconnects: self.reconnects.load(Ordering::Relaxed),
             queue_secs: gstutil::queue_level_secs(&self.feed_video),
@@ -502,6 +511,12 @@ impl OutputSlot {
 
     pub fn id(&self) -> &OutputId {
         &self.cfg.id
+    }
+
+    /// Whether the address carries a real key rather than a preset's
+    /// placeholder. An output without one is attached and never dialled.
+    pub fn has_key(&self) -> bool {
+        uri_has_key(&self.cfg.uri)
     }
 
     pub fn shutdown(&self) {
@@ -704,6 +719,24 @@ mod tests {
         }
         slot.shutdown();
         assert!(slot.pipeline.lock().is_none());
+        let _ = program.set_state(gst::State::Null);
+    }
+
+    /// A preset's placeholder key is attached and waits: no pipeline, no
+    /// connection to the platform, not on a reconnect either.
+    #[test]
+    fn a_placeholder_key_is_never_dialled() {
+        init();
+        let (program, vtee, atee, tx) = harness();
+        let mut c = cfg("keyless");
+        c.uri = "rtmp://a.rtmp.youtube.com/live2/YOUR-STREAM-KEY".into();
+        let slot = OutputSlot::attach(&program, &vtee, &atee, &c, tx).expect("it attaches");
+        assert!(!slot.has_key());
+        assert!(slot.pipeline.lock().is_none(), "a placeholder address was dialled");
+        slot.reconnect().unwrap();
+        assert!(slot.pipeline.lock().is_none(), "a reconnect dialled a placeholder address");
+        assert_eq!(slot.status().reconnects, 0);
+        slot.detach(&program);
         let _ = program.set_state(gst::State::Null);
     }
 
