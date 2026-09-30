@@ -68,6 +68,8 @@ Keys accepted on every method, handled before a method runs.
 | `filter.list` | `GET /api/v1/filters` | read |  | 1 | Every filter in place, with what it is and where it sits. |
 | `filter.remove` | `DELETE /api/v1/filters/{id}` | operate | yes | 1 | Take a filter out of the pipeline. |
 | `filter.set` | `POST /api/v1/filters/{id}/set` | operate |  | 1 | Change a filter's settings in place. A filter that cannot take the change while running says so rather than being restarted behind your back. |
+| `governor.calibrate` | `POST /api/v1/governor/calibrate` | admin |  | 1 | Measure this machine's encoders again, in the background, a few seconds of every core. Refused while anything is on air unless `confirm` is true. |
+| `governor.status` | `GET /api/v1/governor/status` | read |  | 1 | The resource governor: when this machine was measured, what is in use and free on the CPU and each GPU encoder, and what was shed to keep the programme whole. |
 | `log.gst` | `POST /api/v1/log/gst` | admin |  | 1 | Raise GStreamer's own debug categories for a while, then let them fall back on their own. |
 | `log.levels` | `GET /api/v1/log/levels` | read |  | 1 | Every log level override in force, and the GStreamer categories still raised. |
 | `log.set` | `POST /api/v1/log/set` | admin |  | 1 | Change one instance's or one module's log level while the mixer runs. |
@@ -115,6 +117,8 @@ Keys accepted on every method, handled before a method runs.
 | `program.history` | `GET /api/v1/program/history` | read |  | 1 | The last hundred takes, newest first, with the token that asked for each. |
 | `program.revert` | `POST /api/v1/program/revert` | operate |  | 1 | Take back to the shot before this one. |
 | `program.take` | `POST /api/v1/program/take` | operate |  | 1 | Put a scene or a source on programme. The cut is instant and the outgoing stream is not disturbed. |
+| `rendition.plan` | `POST /api/v1/rendition/plan` | read |  | 1 | What the planner built for every output that asked for a rendition: each node, what it serves, which encoder and why, and the totals. |
+| `rendition.presets` | `POST /api/v1/rendition/presets` | read |  | 1 | Every rendition preset, priced on this machine by the governor. One this machine cannot make says so, with why. |
 | `scene.add` | `POST /api/v1/scenes` | operate |  | 1 | Make an empty scene, or one built from a set of sources. |
 | `scene.apply_graphic` | `POST /api/v1/scenes/apply_graphic` | operate |  | 1 | Fill a graphic that is on a scene, by field name, and optionally play it on or take it off. Answers with the records and, if asked, a still. |
 | `scene.apply_layout` | `POST /api/v1/scenes/apply_layout` | operate |  | 1 | Apply a layout, making a scene or reshaping one that exists. Applying onto an existing scene keeps the item ids, so the change is a ramp and not a cut. |
@@ -747,6 +751,38 @@ Change a filter's settings in place. A filter that cannot take the change while 
   },
   "result": {
     "$ref": "#/$defs/FilterRecord"
+  }
+}
+```
+
+#### `governor.calibrate`
+
+Measure this machine's encoders again, in the background, a few seconds of every core. Refused while anything is on air unless `confirm` is true.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/CalibrateRequest"
+  },
+  "result": {
+    "$ref": "#/$defs/CalibrateResult"
+  }
+}
+```
+
+#### `governor.status`
+
+The resource governor: when this machine was measured, what is in use and free on the CPU and each GPU encoder, and what was shed to keep the programme whole.
+
+```json
+{
+  "params": {
+    "additionalProperties": false,
+    "properties": {},
+    "type": "object"
+  },
+  "result": {
+    "$ref": "#/$defs/GovernorStatus"
   }
 }
 ```
@@ -1520,6 +1556,40 @@ MCP tool `take` in the `minimal` profile: readOnlyHint false, destructiveHint fa
   },
   "result": {
     "$ref": "#/$defs/ProgramState"
+  }
+}
+```
+
+#### `rendition.plan`
+
+What the planner built for every output that asked for a rendition: each node, what it serves, which encoder and why, and the totals.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/PlanRequest"
+  },
+  "result": {
+    "$ref": "#/$defs/PlanView"
+  }
+}
+```
+
+#### `rendition.presets`
+
+Every rendition preset, priced on this machine by the governor. One this machine cannot make says so, with why.
+
+MCP tool `rendition_presets` in the `search` profile: readOnlyHint true, destructiveHint false, idempotentHint true.
+
+```json
+{
+  "params": {
+    "additionalProperties": false,
+    "properties": {},
+    "type": "object"
+  },
+  "result": {
+    "$ref": "#/$defs/PresetsResult"
   }
 }
 ```
@@ -2592,6 +2662,8 @@ Subscribe with `core.subscribe`. Patterns match the part after `event/`, so `pro
 | `event/preview.frame` | `preview` |  | The armed scene as a picture, on the same socket and in the same 16 byte header as a mosaic frame, with the top bit of seq set to say so and the layout id zero because there is no grid to cut up. One picture per frame: draw it whole. |
 | `event/resync` |  |  | This client fell behind and events were dropped. Re-subscribe for a fresh snapshot; nothing between from_seq and the new snapshot arrives. |
 | `event/flush` |  |  | The end of a batch. Render here and not before, so a client never paints half an update. |
+| `event/rendition.plan` |  |  | The programme's rendition plan changed: an output that asks for a rendition was added, changed or removed, or the governor stopped or brought back an encoder. plan is what rendition.plan answers. |
+| `event/governor.shed` |  |  | The machine ran short while on air and the governor stopped something to keep what is on air whole: what it was and why. It is brought back by itself when there is room again. |
 
 ## The routes this replaces
 

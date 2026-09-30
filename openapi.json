@@ -288,6 +288,17 @@
               "null"
             ]
           },
+          "rendition": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RenditionChoice"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "What to make from the programme for this destination: a rendition\nrequest or `{\"preset\": \"youtube-720p30\"}` (`rendition.presets` lists\nthem). Absent means the programme encoder, at no extra cost."
+          },
           "uri": {
             "description": "rtmp:// or rtmps:// URL including the stream key.",
             "type": "string"
@@ -615,6 +626,17 @@
           }
         ]
       },
+      "AudioCodec": {
+        "enum": [
+          "aac",
+          "opus",
+          "mp3",
+          "ac3",
+          "pcm",
+          "other"
+        ],
+        "type": "string"
+      },
       "AudioSetParams": {
         "description": "`source.audio.set` takes an id as well as the levels: the id comes off the\npath on REST and out of the params on `/rpc`, and both land in one object.",
         "properties": {
@@ -660,6 +682,47 @@
         "required": [
           "id"
         ],
+        "type": "object"
+      },
+      "AudioWant": {
+        "description": "The audio an output wants. Every field left out is taken from the source.",
+        "properties": {
+          "bitrate_kbps": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "channels": {
+            "format": "uint8",
+            "maximum": 255,
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "codec": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AudioCodec"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "sample_rate": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          }
+        },
         "type": "object"
       },
       "BackendInfo": {
@@ -835,6 +898,28 @@
           "path",
           "sha256",
           "size"
+        ],
+        "type": "object"
+      },
+      "CalibrateRequest": {
+        "description": "`governor.calibrate`.",
+        "properties": {
+          "confirm": {
+            "default": false,
+            "description": "Measure even though something is on air. The measurement takes a few\nseconds of every core and can cost what is on air frames.",
+            "type": "boolean"
+          }
+        },
+        "type": "object"
+      },
+      "CalibrateResult": {
+        "properties": {
+          "started": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "started"
         ],
         "type": "object"
       },
@@ -1667,6 +1752,21 @@
         ],
         "type": "object"
       },
+      "Container": {
+        "description": "How the bytes leave. Decides which codecs are allowed: FLV carries H.264\n(and HEVC and AV1 in enhanced RTMP), WebRTC wants VP8, VP9, H.264 or AV1.",
+        "enum": [
+          "flv",
+          "mpeg-ts",
+          "mp4-fragmented",
+          "mkv",
+          "hls",
+          "ll-hls",
+          "dash",
+          "rtp",
+          "webrtc"
+        ],
+        "type": "string"
+      },
       "ConversionPhase": {
         "enum": [
           "running",
@@ -1790,6 +1890,74 @@
           "limits",
           "canvas",
           "rehearsal"
+        ],
+        "type": "object"
+      },
+      "Cost": {
+        "description": "What running one piece of work costs, in units the governor adds up.",
+        "properties": {
+          "cpu_millicores": {
+            "description": "Thousandths of one CPU core. 1000 is one whole core.",
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "device_millis": {
+            "description": "Share of one hardware device, in thousandths of what it can do, when\nthe work runs on one.",
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "device_sessions": {
+            "description": "Hardware encoder sessions held (consumer NVIDIA cards cap these).",
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "egress_kbps": {
+            "description": "Bytes per second out of the machine, in kbit/s.",
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "memory_mib": {
+            "description": "Resident memory the work adds, in MiB.",
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "cpu_millicores",
+          "device_millis",
+          "device_sessions",
+          "memory_mib",
+          "egress_kbps"
+        ],
+        "type": "object"
+      },
+      "CpuUse": {
+        "properties": {
+          "cores": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "room_millicores": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "used_millicores": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "cores",
+          "used_millicores",
+          "room_millicores"
         ],
         "type": "object"
       },
@@ -1956,6 +2124,69 @@
             "type": "string"
           }
         ]
+      },
+      "DeviceTotal": {
+        "description": "Use of one hardware device by a plan.",
+        "properties": {
+          "millis": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "sessions": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "millis",
+          "sessions"
+        ],
+        "type": "object"
+      },
+      "DeviceUse": {
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "kind": {
+            "description": "`videotoolbox`, `nvidia`, `va`.",
+            "type": "string"
+          },
+          "room_millis": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "sessions_max": {
+            "description": "Absent when the device showed no limit.",
+            "format": "uint32",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "sessions_used": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "used_millis": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "used_millis",
+          "room_millis",
+          "sessions_used"
+        ],
+        "type": "object"
       },
       "DiscoverAnswer": {
         "properties": {
@@ -2468,6 +2699,26 @@
         ],
         "type": "object"
       },
+      "Fps": {
+        "description": "A frame rate as a fraction, so 29.97 is exact.",
+        "properties": {
+          "den": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "num": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "num",
+          "den"
+        ],
+        "type": "object"
+      },
       "Frame": {
         "additionalProperties": false,
         "description": "The rectangle an item is fitted into.",
@@ -2604,6 +2855,59 @@
         "required": [
           "source",
           "state"
+        ],
+        "type": "object"
+      },
+      "GovernorStatus": {
+        "description": "`governor.status`.",
+        "properties": {
+          "calibrated_at": {
+            "description": "Unix seconds of the calibration in use; absent before the first.",
+            "format": "uint64",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "calibrating": {
+            "default": false,
+            "description": "True while a calibration is running.",
+            "type": "boolean"
+          },
+          "cpu": {
+            "$ref": "#/components/schemas/CpuUse"
+          },
+          "devices": {
+            "items": {
+              "$ref": "#/components/schemas/DeviceUse"
+            },
+            "type": "array"
+          },
+          "egress_kbps": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "fingerprint": {
+            "description": "The key the calibration is stored under.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "shed": {
+            "items": {
+              "$ref": "#/components/schemas/ShedNote"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "cpu",
+          "devices",
+          "egress_kbps",
+          "shed"
         ],
         "type": "object"
       },
@@ -3276,6 +3580,22 @@
         },
         "required": [
           "secret"
+        ],
+        "type": "object"
+      },
+      "LadderRef": {
+        "additionalProperties": false,
+        "description": "A custom ladder.",
+        "properties": {
+          "ladder": {
+            "items": {
+              "$ref": "#/components/schemas/RenditionRequest"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "ladder"
         ],
         "type": "object"
       },
@@ -4146,6 +4466,24 @@
             "minimum": 0,
             "type": "integer"
           },
+          "rendition": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RenditionChoice"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Per kind data from whatever plugin owns this output. Empty for the\nRTMP outputs the core builds itself.\nWhat this output asked to be made, when it asked: a rendition\nrequest or a preset. Absent means the programme encoder."
+          },
+          "shed": {
+            "description": "Why the governor has this output's rendition stopped just now, while\nit has. The output stays connected and resumes by itself.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
           "state": {
             "$ref": "#/components/schemas/OutputState"
           },
@@ -4442,6 +4780,135 @@
         ],
         "type": "string"
       },
+      "PlanNode": {
+        "description": "One node of a plan, as the page draws it.",
+        "properties": {
+          "cost": {
+            "$ref": "#/components/schemas/Cost"
+          },
+          "encoder": {
+            "description": "The catalogue id of the encoder, on an encode node.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "id": {
+            "description": "Stable across plans: `encode:programme:h264:1280x720p30:2800k:g2000`.",
+            "type": "string"
+          },
+          "kind": {
+            "description": "`source`, `copy`, `decode`, `scale`, `encode`, `audio-convert`,\n`audio-encode`, `mux`.",
+            "type": "string"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PlanReason"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "serves": {
+            "description": "The outputs it works for, each once (for a channel's plan, the\ndestination ids), however many rungs of one ladder it serves.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "shed": {
+            "description": "Set while the governor has this node stopped to keep what is on air.",
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "serves",
+          "cost"
+        ],
+        "type": "object"
+      },
+      "PlanReason": {
+        "description": "Why the planner decided what it did.",
+        "properties": {
+          "code": {
+            "description": "`hardware`, `software-only`, `device-full`, `shape-unsupported`,\n`copied`, `transcoded`.",
+            "type": "string"
+          },
+          "text": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "text"
+        ],
+        "type": "object"
+      },
+      "PlanRequest": {
+        "description": "`rendition.plan`.",
+        "properties": {
+          "scope": {
+            "description": "`programme` (the default) or `channel:<id>`.",
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "type": "object"
+      },
+      "PlanTotals": {
+        "properties": {
+          "cpu_millicores": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "devices": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/DeviceTotal"
+            },
+            "type": "object"
+          },
+          "egress_kbps": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "cpu_millicores",
+          "devices",
+          "egress_kbps"
+        ],
+        "type": "object"
+      },
+      "PlanView": {
+        "description": "`rendition.plan`, and the `plan` of `event/rendition.plan`.",
+        "properties": {
+          "nodes": {
+            "items": {
+              "$ref": "#/components/schemas/PlanNode"
+            },
+            "type": "array"
+          },
+          "totals": {
+            "$ref": "#/components/schemas/PlanTotals"
+          }
+        },
+        "required": [
+          "nodes",
+          "totals"
+        ],
+        "type": "object"
+      },
       "PluginDescription": {
         "description": "The whole of one plugin, for an agent about to use it.",
         "properties": {
@@ -4723,6 +5190,34 @@
           "to",
           "handshake_ms",
           "plugin"
+        ],
+        "type": "object"
+      },
+      "PresetRef": {
+        "additionalProperties": false,
+        "description": "A preset named by id.",
+        "properties": {
+          "preset": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "preset"
+        ],
+        "type": "object"
+      },
+      "PresetsResult": {
+        "description": "`rendition.presets`.",
+        "properties": {
+          "presets": {
+            "items": {
+              "$ref": "#/components/schemas/RenditionPreset"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "presets"
         ],
         "type": "object"
       },
@@ -5021,6 +5516,131 @@
         },
         "required": [
           "scene"
+        ],
+        "type": "object"
+      },
+      "RenditionChoice": {
+        "anyOf": [
+          {
+            "$ref": "#/components/schemas/PresetRef",
+            "description": "`{\"preset\": \"youtube-1080p30\"}`."
+          },
+          {
+            "$ref": "#/components/schemas/LadderRef",
+            "description": "`{\"ladder\": [...]}`: a custom ABR ladder, top rung first, for an\n`hls/output`. Each rung's `id` names it (`<output>-<id>`)."
+          },
+          {
+            "$ref": "#/components/schemas/RenditionRequest"
+          }
+        ],
+        "description": "What an output asks for: a whole request, or a preset by id.\n\nA request's `id` is replaced by the output's own id (a ladder's rungs get\n`<output>-<rung>`), so a client may send any slug there."
+      },
+      "RenditionPreset": {
+        "description": "One built in preset.",
+        "properties": {
+          "available": {
+            "default": true,
+            "description": "Whether this machine can make it.",
+            "type": "boolean"
+          },
+          "cost": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Cost"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "What the whole preset would cost here (every rung, the scaling and\nthe sound), as the governor prices it on this machine."
+          },
+          "group": {
+            "description": "`platform`, `ladder`, `audio` or `copy`, for grouping in a menu.",
+            "type": "string"
+          },
+          "id": {
+            "description": "`youtube-1080p30`, `abr-ladder-4`.",
+            "type": "string"
+          },
+          "ladder": {
+            "description": "Every rung, top first, for a ladder preset.",
+            "items": {
+              "$ref": "#/components/schemas/RenditionRequest"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "request": {
+            "$ref": "#/components/schemas/RenditionRequest",
+            "description": "The one rendition, or the top rung of a ladder."
+          },
+          "title": {
+            "description": "What the page shows: \"YouTube 1080p30\".",
+            "type": "string"
+          },
+          "why": {
+            "description": "Why not, when it cannot.",
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "title",
+          "group",
+          "request"
+        ],
+        "type": "object"
+      },
+      "RenditionRequest": {
+        "description": "What one output wants. A field left out means \"whatever the source has\",\nso an empty request is a plain copy.",
+        "properties": {
+          "audio": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AudioWant"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "container": {
+            "$ref": "#/components/schemas/Container",
+            "description": "How the bytes are wrapped on the way out."
+          },
+          "id": {
+            "description": "Slug, unique within the show or channel that asks.",
+            "type": "string"
+          },
+          "no_audio": {
+            "default": false,
+            "description": "Drop the audio altogether.",
+            "type": "boolean"
+          },
+          "no_video": {
+            "default": false,
+            "description": "Drop the video altogether (an audio only stream).",
+            "type": "boolean"
+          },
+          "video": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/VideoWant"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "container"
         ],
         "type": "object"
       },
@@ -5617,6 +6237,17 @@
               "null"
             ]
           },
+          "rendition": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RenditionChoice"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "A new rendition, as `output.add` takes it. `null` puts the output\nback on the programme's own encode; left out keeps what it has."
+          },
           "uri": {
             "description": "The whole new address, stream key and all. Write only: no method ever\nreads it back, so leaving it out keeps the address already in force\nand a client can offer \"change the buffer\" without holding the key.",
             "type": [
@@ -5734,6 +6365,24 @@
             "type": "string"
           }
         ]
+      },
+      "ShedNote": {
+        "description": "One thing the governor stopped or slowed, and why.",
+        "properties": {
+          "what": {
+            "description": "\"the 360p30 H.264 rendition for hls-main\".",
+            "type": "string"
+          },
+          "why": {
+            "description": "The alert text.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "what",
+          "why"
+        ],
+        "type": "object"
       },
       "SnapshotRequest": {
         "description": "`snapshot.get` on `/rpc` and through MCP. The REST route serves the same\nbytes raw, because an `<img>` tag cannot read base64 out of JSON.",
@@ -6598,6 +7247,95 @@
             "default": 0.0,
             "format": "double",
             "type": "number"
+          }
+        },
+        "type": "object"
+      },
+      "VideoCodec": {
+        "oneOf": [
+          {
+            "enum": [
+              "h264",
+              "h265",
+              "av1",
+              "vp8",
+              "vp9",
+              "mpeg2",
+              "prores"
+            ],
+            "type": "string"
+          },
+          {
+            "const": "other",
+            "description": "Anything the decoders know that has no name here yet. Never produced.",
+            "type": "string"
+          }
+        ]
+      },
+      "VideoWant": {
+        "description": "The video an output wants. Every field left out is taken from the source.",
+        "properties": {
+          "bitrate_kbps": {
+            "description": "Target bitrate. A copy is kept when the source is within\n`bitrate_tolerance` of it.",
+            "format": "uint32",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "bitrate_tolerance": {
+            "description": "Fraction either way a source's bitrate may differ and still be copied.\n0.25 when left out.",
+            "format": "float",
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "codec": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/VideoCodec"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "fps": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Fps"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "height": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "keyframe_ms": {
+            "description": "Keyframe interval. Renditions in one ladder share it.",
+            "format": "uint32",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "width": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
           }
         },
         "type": "object"
@@ -7903,6 +8641,72 @@
         "x-destructive": false,
         "x-idempotent": true,
         "x-scope": "operate"
+      }
+    },
+    "/api/v1/governor/calibrate": {
+      "post": {
+        "description": "JSON-RPC method `governor.calibrate`. Needs the `admin` scope. Accepts `idempotency_key`, honoured for 24 hours.",
+        "operationId": "governor.calibrate",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CalibrateRequest"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CalibrateResult"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Measure this machine's encoders again, in the background, a few seconds of every core. Refused while anything is on air unless `confirm` is true.",
+        "tags": [
+          "governor"
+        ],
+        "x-destructive": false,
+        "x-idempotent": true,
+        "x-scope": "admin"
+      }
+    },
+    "/api/v1/governor/status": {
+      "get": {
+        "description": "JSON-RPC method `governor.status`. Needs the `read` scope.",
+        "operationId": "governor.status",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GovernorStatus"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "The resource governor: when this machine was measured, what is in use and free on the CPU and each GPU encoder, and what was shed to keep the programme whole.",
+        "tags": [
+          "governor"
+        ],
+        "x-destructive": false,
+        "x-idempotent": true,
+        "x-scope": "read"
       }
     },
     "/api/v1/log/gst": {
@@ -9741,6 +10545,84 @@
         "x-destructive": false,
         "x-idempotent": true,
         "x-scope": "operate"
+      }
+    },
+    "/api/v1/rendition/plan": {
+      "post": {
+        "description": "JSON-RPC method `rendition.plan`. Needs the `read` scope.",
+        "operationId": "rendition.plan",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PlanRequest"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlanView"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "What the planner built for every output that asked for a rendition: each node, what it serves, which encoder and why, and the totals.",
+        "tags": [
+          "rendition"
+        ],
+        "x-destructive": false,
+        "x-idempotent": true,
+        "x-scope": "read"
+      }
+    },
+    "/api/v1/rendition/presets": {
+      "post": {
+        "description": "JSON-RPC method `rendition.presets`. Needs the `read` scope.",
+        "operationId": "rendition.presets",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {},
+                "type": "object"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PresetsResult"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Every rendition preset, priced on this machine by the governor. One this machine cannot make says so, with why.",
+        "tags": [
+          "rendition"
+        ],
+        "x-destructive": false,
+        "x-idempotent": true,
+        "x-scope": "read"
       }
     },
     "/api/v1/scenes": {
