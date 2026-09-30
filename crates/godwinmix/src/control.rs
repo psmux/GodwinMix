@@ -640,7 +640,10 @@ pub async fn restore_source(app: &AppState, id: &str) -> Result<String> {
     if configs.sources.iter().any(|c| c.id == id) {
         anyhow::bail!("source {id} already exists, so there is nothing to restore. Call source.list.");
     }
-    let Some(cfg) = configs.removed.iter().rev().find(|c| c.id == id).cloned() else {
+    // A source removed on purpose, or one that could not start: either way
+    // the mixer has what it was asked for and can ask again.
+    let again = configs.unstarted.iter().find(|u| u.config.id == id).map(|u| u.config.clone());
+    let Some(cfg) = configs.removed.iter().rev().find(|c| c.id == id).cloned().or(again) else {
         let known: Vec<&str> = configs.removed.iter().map(|c| c.id.as_str()).collect();
         anyhow::bail!(
             "no removed source {id} is remembered. The mixer keeps the last {} it removed, until \

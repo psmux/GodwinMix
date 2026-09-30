@@ -316,6 +316,8 @@ pub struct RuntimeConfigs {
     /// Sources a caller removed, newest last, as they stood when they went.
     /// What `source.add` with `restore` puts back. See `REMOVED_KEPT`.
     pub removed: Vec<SourceConfig>,
+    /// Sources asked for that could not be started, with why.
+    pub unstarted: Vec<unstarted::Unstarted>,
 }
 
 /// How many removed sources are remembered for `source.add` with `restore`.
@@ -398,6 +400,7 @@ pub mod group;
 mod rendered;
 pub mod slots;
 pub mod transition;
+pub mod unstarted;
 pub use slots::{Placement, SlotPool};
 
 pub enum Command {
@@ -1022,6 +1025,8 @@ pub struct Mixer {
     source_attempts: HashMap<SourceId, u32>,
     /// See `REMOVED_KEPT`.
     removed: Vec<SourceConfig>,
+    /// See `unstarted.rs`.
+    unstarted: unstarted::UnstartedList,
 
     handle: MixerHandle,
     events: EventBus,
@@ -1654,6 +1659,7 @@ impl Mixer {
             output_attempts: HashMap::new(),
             source_attempts: HashMap::new(),
             removed: Vec::new(),
+            unstarted: Default::default(),
             handle: handle.clone(),
             events,
             rt,
@@ -1757,6 +1763,7 @@ impl Mixer {
         else {
             let r = self.add_source(&cfg, None);
             self.finish_rebuild(&cfg, &r);
+            self.note_unstarted(&cfg, &r, ack.is_none());
             reply(ack, &r);
             return r;
         };
@@ -1961,6 +1968,7 @@ impl Mixer {
         info!(source = %cfg.id, kind = %self.sources.last().map(|s| s.input.type_id()).unwrap_or_default(), "source added");
         // An id that is live again has nothing left to restore under it.
         self.removed.retain(|c| c.id != cfg.id);
+        self.unstarted.forget(&cfg.id);
         self.broadcast_status();
         Ok(())
     }
@@ -2730,7 +2738,26 @@ impl Mixer {
             }
         }
         let outputs: Vec<OutputConfig> = self.outputs.iter().map(|o| o.cfg.clone()).collect();
-        RuntimeConfigs { sources, outputs, removed: self.removed.clone() }
+        RuntimeConfigs {
+            sources,
+            outputs,
+            removed: self.removed.clone(),
+            unstarted: self.unstarted.entries().to_vec(),
+        }
+    }
+
+    /// A source nobody is waiting on an answer for (one from the config at
+    /// boot, or a rebuild) that failed: kept with its error, so a page can say
+    /// why and put it back. A caller with an ack hears the error itself.
+    fn note_unstarted(&mut self, cfg: &SourceConfig, r: &Result<()>, unheard: bool) {
+        if let Err(e) = r {
+            if unheard && cfg.id != AD_ID {
+                self.unstarted.note(cfg, e);
+                // Written now, or a restart before the next add or remove
+                // would read a list without it and forget it for good.
+                self.persist_runtime();
+            }
+        }
     }
 
     /// Keep a source's config as it stands, for `source.add` with `restore`.
@@ -2761,7 +2788,13 @@ impl Mixer {
     /// keeps "where do sources come from" a question with a single answer.
     fn persist_runtime(&self) {
         let Some(path) = &self.runtime_store else { return };
-        let RuntimeConfigs { sources: live, outputs, .. } = self.runtime_configs();
+        let RuntimeConfigs { sources: mut live, outputs, .. } = self.runtime_configs();
+        // A source that could not start this time is still wanted next time.
+        for cfg in self.unstarted.configs() {
+            if !live.iter().any(|c| c.id == cfg.id) {
+                live.push(cfg.clone());
+            }
+        }
 
         #[derive(serde::Serialize)]
         struct Stored<'a> {
@@ -3634,6 +3667,7 @@ impl Mixer {
                 self.pending.retain(|c| c.id != cfg.id);
                 let r = self.add_source(&cfg, report);
                 self.finish_rebuild(&cfg, &r);
+                self.note_unstarted(&cfg, &r, ack.is_none());
                 reply(ack, &r);
                 r?;
             }
@@ -6789,6 +6823,33 @@ mod tests {
             "the return branch is still on the tee with nothing reading it"
         );
         mix.shutdown();
+    }
+
+    /// A configured source that cannot start is kept with its error, and
+    /// stays in the runtime list, so the next boot asks for it again rather
+    /// than having forgotten it. It was dropped from both before.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn a_source_that_cannot_start_is_kept_with_why_and_still_saved() {
+        let dir = crate::observe::tempdir("unstarted");
+        let store = dir.join("godwinmix.runtime.toml");
+        let mut mix = with_sources(&["cam1"]).await;
+        mix.persist_runtime_to(store.clone());
+        let slides: SourceConfig = toml::from_str(
+            "id = \"slides\"\ntype = \"file/source\"\nuri = \"media/not-there.mp4\"\n\
+             params = { uri = \"media/not-there.mp4\" }\n",
+        )
+        .expect("a source");
+        assert!(mix.begin_add_source(slides, None).is_err(), "a file that is not there started");
+
+        let kept = mix.runtime_configs().unstarted;
+        assert_eq!(kept.len(), 1, "{kept:?}");
+        assert!(kept[0].error.contains("not-there.mp4"), "{}", kept[0].error);
+        // Saved by the failure itself: a restart now must not lose it.
+        let saved = std::fs::read_to_string(&store).expect("the runtime store was written");
+        assert!(saved.contains("id = \"slides\""), "the unstarted source was not saved: {saved}");
+        assert!(saved.contains("id = \"cam1\""), "{saved}");
+        mix.shutdown();
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     /// The whole point of `output.set`: a destination the church preset left

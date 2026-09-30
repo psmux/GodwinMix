@@ -16,6 +16,7 @@ import { ComposerCanvas } from "./canvas.js";
 import { Inspector } from "./inspector.js";
 import { Catalogue } from "./catalogue.js";
 import { operations } from "./ops.js";
+import { fillNote, notRunning, sourcesOf } from "../scenes/fix-note.js";
 
 let styled = false;
 
@@ -86,7 +87,10 @@ export class Composer {
       onClose: () => this.close(),
     });
     this.dialog.el.classList.add("composer");
-    this.offs = [on(window, "keydown", (e) => this.key(e), true)];
+    this.offs = [
+      on(window, "keydown", (e) => this.key(e), true),
+      this.client.onRender(() => this.paintHealth()),
+    ];
 
     await this.catalogue.load();
     this.useView(begun.view || (await this.read()));
@@ -130,6 +134,32 @@ export class Composer {
     this.view = view;
     this.canvas.setView(view);
     this.showInspector();
+    this.paintHealth();
+  }
+
+  /** The items this draft draws, for the Fix dialog. */
+  items() {
+    return ((this.view && this.view.records) || []).filter((r) => r.kind === "item");
+  }
+
+  /**
+   * The line over the picture when the scene draws a source that is not
+   * running, with the Fix button. Removals from there go to this draft.
+   */
+  paintHealth() {
+    if (!this.health) return;
+    const ids = notRunning(this.client, sourcesOf(this.items()));
+    const key = ids.join("|");
+    if (key === this.healthKey) return;
+    this.healthKey = key;
+    fillNote(this.health, this.client, ids, () => ({
+      client: this.client,
+      scenes: this.scenes,
+      scene: this.scene,
+      draft: this.draft,
+      records: () => this.items(),
+      onChanged: (answer) => this.useView(answer),
+    }), ids.length === 1 ? "It draws nothing until it runs." : "They draw nothing until they run.");
   }
 
   async reread() {
@@ -147,7 +177,8 @@ export class Composer {
     this.note = el("span.sm.faint.grow");
     this.bar = el("div.composer-bar.row", {}, [...this.tools(), el("span.grow"), this.note, ...this.toggles()]);
     const side = el("div.composer-side", {}, [this.inspector.el]);
-    return el("div.composer-body", {}, [this.bar, this.canvas.el, side]);
+    this.health = el("div.composer-health", { role: "status", hidden: true });
+    return el("div.composer-body", {}, [this.bar, this.health, this.canvas.el, side]);
   }
 
   footer() {

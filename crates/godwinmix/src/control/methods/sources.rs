@@ -10,7 +10,10 @@ use crate::control::call::Call;
 use godwinmix_core::mixer::{AudioOutcome, Command, SeekOutcome};
 use serde_json::Value;
 
+mod missing;
+
 pub fn register(reg: &mut Registry<Call>) {
+    missing::register(reg);
     reg.register(
         MethodDef::new(
             "source.list",
