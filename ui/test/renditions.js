@@ -223,7 +223,7 @@ async function hlsTests(test, eq, ok) {
   test("once live, Watch here opens a player or says where to open it", () => {
     const player = card.node.querySelector(".rnd-player");
     if (playsHls()) ok(player.querySelector("video"), "a native player");
-    else ok(player.querySelector("a[href$='master.m3u8']").textContent === "Open in a player", player.textContent);
+    else ok(player.querySelector("a[href*='master.m3u8?key=']").textContent === "Open in a player", player.textContent);
   });
 }
 

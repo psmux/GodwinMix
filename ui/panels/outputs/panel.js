@@ -244,14 +244,17 @@ class OutputsPanel extends HTMLElement {
     const advice = el("div.sm.output-advice", { hidden: true });
     const plan = el("div.output-plan");
     const extra = el("div");
-    if (output.type === "hls/output") views().then((m) => m.hlsInto(this.client, extra, () => current));
+    const hls = output.type === "hls/output";
+    if (hls) views().then((m) => m.hlsInto(this.client, extra, () => current));
     const node = el("div.output-row", {}, [
       el("div.row", {}, [
         dot,
         el("strong", { text: output.id }),
         label,
         el("span.grow"),
-        el("button.btn.icon" + (needsKey ? ".primary" : ""), {
+        // An HLS output has no address or key to edit; a new ladder is a new
+        // output, so it has no Edit.
+        hls ? null : el("button.btn.icon" + (needsKey ? ".primary" : ""), {
           text: needsKey ? "Add key" : "Edit",
           onclick: () => editDestination(this.client, current),
         }),
@@ -293,7 +296,7 @@ class OutputsPanel extends HTMLElement {
       write(dot, "className", "dot " + dotClass(next));
       write(dot, "title", next.state || "");
       write(label, "textContent", stateLabel(next));
-      write(host, "textContent", next.uri_host || "");
+      write(host, "textContent", hls ? "Served from this mixer's own port" : next.uri_host || "");
       write(numbers, "textContent", `buffer ${Number(next.queue_secs || 0).toFixed(1)}s · ${next.reconnects || 0} reconnects`);
       write(plan, "textContent", this.planText ? this.planText(next.id) : "");
       if (extra.update) extra.update(next);
