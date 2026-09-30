@@ -105,7 +105,7 @@ class AddOutputRequest(TypedDict, total=False):
     # Stable id for this destination.
     policy: Optional[str]
     # Reconnect policy: "own" retries quickly, for servers you run; "cdn" backs off harder, for platforms that penalise hammering.
-    rendition: Union[RenditionChoice, None]
+    rendition: Optional[Dict[str, Any]]
     # What to make from the programme for this destination: a rendition request or `{"preset": "youtube-720p30"}` (`rendition.presets` lists them). Absent means the programme encoder, at no extra cost.
     uri: str
     # rtmp:// or rtmps:// URL including the stream key.
@@ -1901,7 +1901,7 @@ class SetOutputRequest(TypedDict, total=False):
     # "own" or "cdn", as `output.add`.
     queue_secs: Optional[float]
     # Seconds of encoded data to hold before the muxer.
-    rendition: Union[RenditionChoice, None]
+    rendition: Optional[Dict[str, Any]]
     # A new rendition, as `output.add` takes it. `null` puts the output back on the programme's own encode; left out keeps what it has.
     uri: Optional[str]
     # The whole new address, stream key and all. Write only: no method ever reads it back, so leaving it out keeps the address already in force and a client can offer "change the buffer" without holding the key.
@@ -3163,7 +3163,7 @@ class GeneratedMethods:
         uri: str,
         *,
         policy: Optional[str] = None,
-        rendition: Optional[Union[RenditionChoice, None]] = None,
+        rendition: Optional[Dict[str, Any]] = None,
         **extra: Any,
     ) -> OutputStatus:
         """Send the programme to another destination. The encoder is shared, so adding one costs nothing on air."""
@@ -3217,7 +3217,7 @@ class GeneratedMethods:
         *,
         policy: Optional[str] = None,
         queue_secs: Optional[float] = None,
-        rendition: Optional[Union[RenditionChoice, None]] = None,
+        rendition: Optional[Dict[str, Any]] = None,
         uri: Optional[str] = None,
         **extra: Any,
     ) -> OutputStatus:

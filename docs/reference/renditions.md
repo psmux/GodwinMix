@@ -9,7 +9,6 @@ graph that serves them all.
 The core plans every programme output that asks for a rendition and builds
 the plan in GStreamer (below, "In the core"). An output that asks for none
 reads the programme encoder exactly as before and costs nothing more.
-Channel destinations are planned by the same planner on the channel side.
 
 The shared types live in `crates/godwinmix-protocol/src/rendition/`. The
 planner, its errors and the plan it returns live in `godwinmix-render`.
@@ -250,11 +249,17 @@ refused with `-32003` and:
 
 ```json
 {
-  "need": {"cpu_millicores": 2700, "device_millis": 0, "device_sessions": 0, "memory_mib": 32, "egress_kbps": 0},
-  "have": {"cpu_millicores": 100, "device_millis": 0, "device_sessions": 0, "memory_mib": 30000, "egress_kbps": 4294967295},
-  "advice": [{"text": "720p30 H.264 on h264-videotoolbox fits", "request": {"id": "yt", "container": "flv", "video": {"codec": "h264", "width": 1280, "height": 720, "fps": {"num": 30, "den": 1}}}}]
+  "need": {"cpu_millicores": 988, "device_millis": 0, "device_sessions": 0, "egress_kbps": 0, "memory_mib": 31},
+  "have": {"cpu_millicores": 0, "device_millis": 0, "device_sessions": 0, "egress_kbps": 4294967295, "memory_mib": 5731},
+  "advice": [{"text": "720p30 H.264 on h264-software-x264 fits",
+              "request": {"id": "o5", "container": "flv", "no_video": false, "no_audio": false,
+                          "video": {"codec": "h264", "width": 1280, "height": 720, "fps": {"num": 30, "den": 1}, "keyframe_ms": 2000},
+                          "audio": {"codec": "aac", "channels": 2, "sample_rate": 48000, "bitrate_kbps": 128}}}]
 }
 ```
+
+An `egress_kbps` of 4294967295 in `have` means no limit is known: nothing
+has told the governor the uplink.
 
 Each `advice.request` can be sent as the output's `rendition` as it is.
 Nothing is started by a refused call: the whole change is planned and
@@ -286,12 +291,17 @@ Every platform and ladder preset asks for a keyframe every 2000 ms.
 `scope` is `programme` (the default) or `channel:<id>`. The answer:
 
 ```json
-{"nodes": [{"id": "encode:programme:h264:1280x720p30:3000k:g2000", "kind": "encode",
-            "serves": ["yt", "fb"], "encoder": "h264-videotoolbox",
+{"nodes": [...,
+           {"id": "encode:programme:h264:1280x720p30:3000k:g2000", "kind": "encode",
+            "serves": ["o1", "o2", "o3", "o4"], "encoder": "h264-videotoolbox",
             "reason": {"code": "hardware", "text": "h264-videotoolbox is a hardware H.264 encoder on videotoolbox"},
-            "cost": {"cpu_millicores": 49, "device_millis": 85, "device_sessions": 1, "memory_mib": 18, "egress_kbps": 0}}],
- "totals": {"cpu_millicores": 310, "devices": {"videotoolbox": {"millis": 85, "sessions": 1}}, "egress_kbps": 6512}}
+            "cost": {"cpu_millicores": 74, "device_millis": 104, "device_sessions": 1, "egress_kbps": 0, "memory_mib": 18}},
+           ...],
+ "totals": {"cpu_millicores": 216, "devices": {"videotoolbox": {"millis": 104, "sessions": 1}}, "egress_kbps": 12512}}
 ```
+
+That is four outputs on `youtube-720p30` on an M4 Pro: one scale, one
+encoder and one AAC encoder, serving all four.
 
 `serves` names outputs, each once, however many rungs of one ladder a node
 works for. `encoder` is the catalogue id. `shed` is on a node the governor
@@ -383,6 +393,29 @@ encoders the planner and the calibration see, exactly as it narrows the
 programme encoder: `encode = "software"` is a machine with no GPU encoder.
 `[governor] reserve_cores` is the Advanced override that keeps cores free.
 The calibration candidates are `godwinmix_core::render::candidates`.
+
+## Measured
+
+On an M4 Pro (14 cores), a release build, a 1080p30 programme on a moving
+test source, each destination an RTMP output to an ffmpeg listener on the
+same machine, the mixer's own CPU averaged over 20 s. Other work was running
+on the machine at the time (a load average near 12), so read the figures
+against each other rather than as absolutes.
+
+| Programme outputs | Mixer CPU |
+|---|---|
+| one output, no rendition, before this change | 0.221 and 0.229 cores |
+| one output, no rendition, after | 0.225 and 0.216 cores |
+| one `youtube-720p30`, VideoToolbox | 0.263 cores |
+| four `youtube-720p30`: one scale, one encoder, one AAC encoder | 0.312 cores |
+| 1080p, 720p, 480p, 360p, VideoToolbox | 0.379 cores |
+| the same ladder, x264 (`[hardware] encode = "software"`) | 0.696 cores |
+
+On the CPU only run with `[governor] reserve_cores = 7.2`, which left the
+governor about 1.4 cores to give, the four rungs were admitted and a fifth
+output asking for 1080p60 was refused: it needed 1.0 cores and 0.4 were
+free, and the advice was 720p30 on x264. The first calibration on this
+machine took 6.8 s, in the background, before anything was on air.
 
 ## How fast
 

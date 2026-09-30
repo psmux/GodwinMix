@@ -76,7 +76,7 @@ export interface AddItemRequest {
 export interface AddOutputRequest {
   id: string;
   policy?: string | null;
-  rendition?: RenditionChoice | null;
+  rendition?: Record<string, unknown> | null;
   uri: string;
   [key: string]: unknown;
 }
@@ -1718,7 +1718,7 @@ export interface SetOutputRequest {
   id: string;
   policy?: string | null;
   queue_secs?: number | null;
-  rendition?: RenditionChoice | null;
+  rendition?: Record<string, unknown> | null;
   uri?: string | null;
   [key: string]: unknown;
 }

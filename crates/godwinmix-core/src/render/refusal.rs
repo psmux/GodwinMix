@@ -47,6 +47,9 @@ impl Refusal {
                 video.width = Some(fit.width);
                 video.height = Some(fit.height);
                 video.fps = Some(fit.fps);
+                // The bitrate asked for was for the bigger picture; the
+                // smaller one gets the planner's own figure for its size.
+                video.bitrate_kbps = None;
                 request.video = Some(video);
                 RenditionAdvice { text: format!("{} fits", fit.label), request }
             })
