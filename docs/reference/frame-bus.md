@@ -6,8 +6,11 @@ the same process or in others, read the frames there without a copy. Why it is
 built this way, and what it costs, is in
 [the explanation](../explanation/frame-bus.md).
 
-Nothing in the mixer uses it yet. Shows will, when they become processes of
-their own.
+The mixer uses it for every source whose plugin declares
+[`share`](plugin-manifest.md#share): the camera, screen capture and channel
+streams (`ingest/rtmp` reading a channel). The first source to ask opens the
+device; every source, that one included, reads the bus. The mixer's side is
+described at the end of this page.
 
 ## Names
 
@@ -15,17 +18,26 @@ their own.
 |---|---|
 | `camera:<id>` | a device this machine opens: a camera, a capture card |
 | `channel:<app>/<stream>` | a stream arriving on a channel |
+| `<either>#audio` | the sound of that device or stream, published beside its pictures |
 
 Each part is 1 to 64 letters, digits, `-` or `_`. Anything else is refused with
-`bad-name` and a sentence showing both forms.
+`bad-name` and a sentence showing the forms.
 
 ## The registry
 
 A registry is a directory with one Unix socket per published name in it:
-`camera=<id>.sock` and `channel=<app>+<stream>.sock`. The station makes it and
-passes it to each show it starts as `GODWINMIX_BUS_DIR`. Without that variable
-it is `$XDG_RUNTIME_DIR/godwinmix/bus` on Linux, or `godwinmix-<uid>/bus` in the
-temporary directory. The directory is made mode 0700.
+`camera=<id>.sock`, `channel=<app>+<stream>.sock`, and the same with `#audio`
+before `.sock` for sound. The station makes it and passes it to each show it
+starts as `GODWINMIX_BUS_DIR`. Without that variable the crate uses
+`$XDG_RUNTIME_DIR/godwinmix/bus` on Linux, or `godwinmix-<uid>/bus` in the
+temporary directory, and the mixer uses `bus` under its home, `~/.godwinmix/bus`
+(or `$GODWINMIX_HOME/bus`), so that two mixers started by hand on one machine
+find each other until shows exist. The directory is made mode 0700.
+
+Beside each socket there is a lock file, `camera=<id>.lock`: whoever holds an
+exclusive `flock` on it is the one that opens the device (`Claim`). The kernel
+lets go of it when the holder's process dies, however it dies. The files stay
+after the owner has gone; they are empty and cost nothing.
 
 A socket path longer than 103 bytes cannot be bound on macOS. A name that would
 make one is refused, naming `GODWINMIX_BUS_DIR` as the way to a shorter
@@ -57,12 +69,20 @@ if let Some(frame) = reader.next(Duration::from_millis(100))? {
 }                                                              // dropping the frame gives the slot back
 ```
 
+### `Claim`
+
+| Call | Does |
+|---|---|
+| `Claim::try_take(registry, name)` | the right to open what `name` names, or `None` when a live process (or another `Claim` in this one) holds it. Dropping it gives it back |
+| `Claim::is_held(registry, name)` | whether somebody holds it now |
+
 ### `Publisher`
 
 | Call | Does |
 |---|---|
 | `create(registry, name, layout, options)` | binds the name's socket and starts the bus thread |
 | `write(pts, duration, fill)` | claims a slot, runs `fill` on its bytes, publishes it. `false` if every slot was leased and the frame was dropped |
+| `write_len(pts, duration, len, fill)` | the same, filling only the first `len` bytes, for a chunk of sound |
 | `write_planes(pts, planes)` | the same, copying planes given as `(bytes, stride)` row by row into the slot layout |
 | `push_buffer(buffer, video_info)` | the same for a GStreamer buffer; changes the layout first if the caps changed (`gst` feature) |
 | `set_layout(layout)` | a new format: readers are handed a new region, and frames they hold from the old one stay valid |
@@ -137,11 +157,27 @@ lease is returned when the buffer is freed. Each buffer also carries a
 time the owner was handed the frame, and its offset is `Frame::seq`. Caps come
 from the owner and change when the owner's do.
 
+| Property | Default | |
+|---|---|---|
+| `timestamps` | `arrival` | `arrival` stamps each buffer when it arrives, on this pipeline's clock. `owner` keeps the owner's timestamps and durations, for a reader that puts them on its own timeline itself, as the mixer does to keep a stream's sound and pictures together |
+
+Both elements carry sound under a name ending `#audio`: interleaved `F32LE` or
+`S16LE`, any rate and 1 to 64 channels. The sink cuts a buffer into chunks of
+at most 100 ms, each stamped with where it starts.
+
 ## Formats
 
 NV12, I420, P010_10LE, YUY2, UYVY, BGRA, RGBA and BGRx, at any size from 1x1 to
 16384x16384. Rows are padded to 64 bytes. Anything else is refused with
 `bad-layout`, which names `videoconvert` to NV12 as the fix.
+
+Sound is `F32LE` or `S16LE`, interleaved (`Layout::audio(format, rate,
+channels)`). A slot holds up to 100 ms and says how much of it a chunk filled.
+A sound region is used differently from a picture region: the owner overwrites
+the oldest free chunk rather than the lowest numbered one, and a reader takes
+the chunk after the one it had rather than the newest, so it hears every chunk
+in order. A reader that falls more than 8 chunks behind skips to the newest, and
+`skipped` counts what it missed.
 
 ## Platforms
 
@@ -178,3 +214,39 @@ today.
 | `--out` | | also write the table to this file |
 
 The clip is made once, under `target/framebus-bench/`.
+
+## In the mixer
+
+`crates/godwinmix-core/src/plugin/host/shared/` is the mixer's side. A source
+whose provide declares `share` is a `SharedSource`:
+
+* It always reads the bus: `gmxbussrc` in front of the normaliser every source
+  has. A picture alone is stamped on arrival. Pictures and sound together keep
+  the owner's timestamps and are moved onto the mixer's timeline by one shift
+  shared by both, so they stay in step.
+* A thread of its own asks for the name's claim every 50 ms. The source that
+  gets it starts the plugin, feeds what the plugin sends through a normaliser
+  whose `videorate` only drops (so it holds no frame back), and publishes it
+  with `gmxbussink` (16 readers, 8 frames each).
+* When the owner's plugin fails, or sends nothing for 3 s, it gives the claim
+  back and waits a second before asking again, so another source can try.
+* When the owner goes, its claim goes with it and the first reader to ask takes
+  it, starts the plugin, and publishes under the same name. Every reader's
+  `gmxbussrc` finds the new owner by itself.
+
+`source.call share` is not a protocol method; the numbers are in the mixer's
+log instead: `this source opened the device and shares it` with how long the
+plugin took to start, `the picture came back after a gap` with the gap, and
+`stopping a shared source` with the whole report:
+
+| Field | |
+|---|---|
+| `bus`, `dir` | the name and the registry |
+| `owner`, `plugin_pid`, `takeovers`, `last_start_ms` | whether this source runs the plugin, which process that is, how often it became the owner, and how long the plugin took to start the last time |
+| `publish_ms` | the owner only: from a frame reaching the mixer from the plugin to its publish, p50, p99 and max |
+| `hop_ms` | from the owner's publish to this source holding the frame |
+| `to_programme_ms` | from the owner's publish to the frame leaving this source for the programme |
+| `frames`, `longest_gap_ms`, `gaps`, `last_gap_ms` | frames that left, and the gaps between them; `gaps` counts those over 250 ms |
+
+`GODWINMIX_FRAMEBUS=off` in the mixer's environment turns sharing off: every
+source opens its own device, as before.
