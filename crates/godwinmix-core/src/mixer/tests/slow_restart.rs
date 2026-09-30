@@ -8,7 +8,7 @@ const STUCK: Duration = Duration::from_secs(3);
 /// source's test pattern parks in a probe for `STUCK`, holding the stream
 /// lock that taking the pipeline to NULL has to wait for. Returns once the
 /// thread is parked.
-fn park_the_source(input: &InputPipeline) {
+pub(super) fn park_the_source(input: &InputPipeline) {
     let src = input
         .pipeline
         .iterate_recurse()
