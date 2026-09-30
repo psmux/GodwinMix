@@ -27,7 +27,7 @@ Words used below:
 | RTMP, RTMPS pull | FLV | H.264 only | AAC only | `rtmp/source` (built in) | `crates/godwinmix/tests/live.rs` |
 | HLS pull | TS or fMP4 segments | any | any | `hls/source` (built in, `uridecodebin`) | URI routing only (`plugin/source.rs`); no media test |
 | DASH pull | fMP4 | any | any | `hls/source` (built in) | URI routing only |
-| RTSP, RTSPS pull (a camera, an NVR) | RTP | any | any | `hls/source` (built in) | URI routing only; no media test |
+| RTSP, RTSPS pull (a camera, an NVR) | RTP | any | any | `hls/source` (built in) | `plugins/rtsp/src/tests.rs` decodes an RTSP stream through the same `uridecodebin` |
 | SRT caller, listener, rendezvous | MPEG-TS | any | any | `srt/source` (plugin `srt`) | `plugins/srt/src/source.rs` |
 | UDP or RTP, unicast or multicast, one program of a multiplex | MPEG-TS | any | any | `udp/source` (plugin `udp`) | `plugins/udp/src/recv/tests.rs` |
 | WebRTC pull (WHEP client) | RTP | VP8, VP9, H.264, AV1 | Opus | `whip/whep` (plugin `whip`) | settings tests only; no media test |
@@ -79,7 +79,7 @@ has switched on. The hub carries what FLV carries.
 | NDI | NDI | raw | raw | `ndi/output` (plugin `ndi`) | needs the NDI runtime |
 | File | MP4 (fragmented), MKV | copy | copy | `record/output` (built in), `file-record/output` (plugin) | `crates/godwinmix-core/tests/recording*.rs`, `plugins/file-record/tests/records.rs` |
 | WHEP playback, served from the control port (`/whep/<output>`) | WebRTC | copy of the programme or a rendition: H.264, and H.265, AV1, VP8, VP9 from a rendition | Opus, encoded once for every viewer | `whep/output` (built in) | `whep/tests.rs` against a real `webrtcbin` receiver; by hand with `whepsrc` and headless Chrome against the release core |
-| RTSP server, for decoders, NVRs and players that pull | RTP | | | nothing | |
+| RTSP server, for decoders, NVRs and players that pull, on a port chosen when added | RTP over UDP or TCP | H.264, H.265 copy | AAC, MP3, Opus copy | `rtsp/output` (plugin `rtsp`) | `plugins/rtsp/src/tests.rs`: ffmpeg over TCP and UDP, frame hashes equal to the encoder's; by hand against the release core |
 | RIST | RTP MPEG-TS | | | nothing | |
 | Icecast or SHOUTcast (audio only) | MP3, Ogg | | | nothing | |
 | SDI out | | | | nothing | |
