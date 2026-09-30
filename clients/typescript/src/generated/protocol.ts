@@ -78,7 +78,7 @@ export interface AddOutputRequest {
   id: string;
   policy?: string | null;
   rendition?: Record<string, unknown> | null;
-  uri: string;
+  uri?: string;
   [key: string]: unknown;
 }
 
@@ -1831,6 +1831,60 @@ export interface ShedNote {
   why: string;
 }
 
+/** One show, as `show.list` and `event/show.changed` carry it. */
+export interface Show {
+  cpu_millicores: number;
+  error?: string | null;
+  id: string;
+  memory_mib?: number;
+  name: string;
+  on_air?: string | null;
+  programme_kbps: number;
+  restarts?: number;
+  state: ShowState;
+}
+
+/** `show.add`. */
+export interface ShowAddRequest {
+  from?: ShowFrom | null;
+  name: string;
+}
+
+/** `event/show.changed`. */
+export interface ShowChanged {
+  show: Show;
+}
+
+/** What a new show starts from. */
+export type ShowFrom = string | {
+  project: unknown;
+};
+
+/** `show.list`. */
+export interface ShowList {
+  current: string;
+  shows: Show[];
+}
+
+/** `show.remove`. */
+export interface ShowRemoved {
+  removed: string;
+}
+
+/** `event/show.removed`. */
+export interface ShowRemovedEvent {
+  id: string;
+}
+
+/** `show.rename`. */
+export interface ShowRenameRequest {
+  id: string;
+  name: string;
+}
+
+/** Where a show is in its life. */
+export type ShowState = "starting" | "running" | "stopped" | "failed";
+
 /** `event/snapshot`: the full state, and where in the stream it sits. */
 export interface Snapshot {
   seq: number;
@@ -1942,6 +1996,7 @@ export interface StreamVideo {
 export interface SubscribeRequest {
   events?: string[];
   ext?: Ext;
+  show?: string | null;
 }
 
 /** What `core.subscribe` answers with, before the snapshot arrives. */
@@ -2346,6 +2401,12 @@ export interface MethodParams {
   "scene.transaction.commit": Record<string, never>;
   "scene.undo": Record<string, never>;
   "scene.validate": ValidateRequest;
+  "show.add": ShowAddRequest;
+  "show.list": Record<string, never>;
+  "show.remove": IdRequest;
+  "show.rename": ShowRenameRequest;
+  "show.start": IdRequest;
+  "show.stop": IdRequest;
   "snapshot.get": SnapshotRequest;
   "source.add": AddSourceRequest;
   "source.audio.set": AudioSetParams;
@@ -2502,6 +2563,12 @@ export interface MethodResults {
   "scene.transaction.commit": Record<string, unknown>;
   "scene.undo": HistoryStep;
   "scene.validate": Validation;
+  "show.add": Show;
+  "show.list": ShowList;
+  "show.remove": ShowRemoved;
+  "show.rename": Show;
+  "show.start": Show;
+  "show.stop": Show;
   "snapshot.get": Record<string, unknown>;
   "source.add": SourceStatus;
   "source.audio.set": SourceAudioState;
@@ -2551,6 +2618,8 @@ export interface EventPayloads {
   "flush": Flush;
   "rendition.plan": RenditionPlanEvent;
   "governor.shed": ShedNote;
+  "show.changed": ShowChanged;
+  "show.removed": ShowRemovedEvent;
 }
 
 export type EventName = keyof EventPayloads;
@@ -2701,6 +2770,12 @@ export const METHODS: readonly MethodInfo[] = [
   { name: "scene.transaction.commit", summary: "Apply the batch.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/scenes/transaction/commit" } },
   { name: "scene.undo", summary: "Undo the last change. A drag marked with scene.history.mark undoes as one step.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/scenes/undo" } },
   { name: "scene.validate", summary: "Overlaps, items off the canvas, safe area breaches and missing sources: what to fix before saying a scene is done.", scope: "read", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/scenes/validate" } },
+  { name: "show.add", summary: "Make another show and start it: empty, a copy of a show (without its outputs, so nothing goes out twice), or from a project file.", scope: "admin", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/shows" } },
+  { name: "show.list", summary: "Every show on this machine: its name, whether it is running, what is on air, what its outputs send and what its process costs. `current` is the show a client reaches when it names none.", scope: "read", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/shows" } },
+  { name: "show.remove", summary: "Stop a show and remove it with its folder. Refused for the last show and for main, the show the station was started with.", scope: "admin", mutating: true, destructive: true, rest: { method: "DELETE", path: "/api/v1/shows/{id}" } },
+  { name: "show.rename", summary: "Give a show another name. Its id stays.", scope: "admin", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/shows/{id}/rename" } },
+  { name: "show.start", summary: "Start a stopped or failed show.", scope: "admin", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/shows/{id}/start" } },
+  { name: "show.stop", summary: "Stop a show. It keeps its config, and stays stopped when the station starts again, until show.start.", scope: "admin", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/shows/{id}/stop" } },
   { name: "snapshot.get", summary: "One JPEG: the whole contact sheet, the programme, or one source cut out of the mosaic.", scope: "read", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/snapshot/{id}" } },
   { name: "source.add", summary: "Add a source while the mixer runs. Answers with the id it got and the whole source record.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/sources" } },
   { name: "source.audio.set", summary: "Move a source's audio: the fader, the mute, and for a superimposed page the balance between its own sound and the videos under it.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/sources/{id}/audio" } },
@@ -2759,6 +2834,8 @@ export const EVENT_NAMES: readonly EventName[] = [
   "flush",
   "rendition.plan",
   "governor.shed",
+  "show.changed",
+  "show.removed",
 ];
 
 /**
@@ -3447,6 +3524,36 @@ export class GeneratedMethods {
   /** Overlaps, items off the canvas, safe area breaches and missing sources: what to fix before saying a scene is done. */
   sceneValidate(params: ValidateRequest = {}): Promise<Validation> {
     return this._call("scene.validate", params as unknown as Record<string, unknown>) as Promise<Validation>;
+  }
+
+  /** Make another show and start it: empty, a copy of a show (without its outputs, so nothing goes out twice), or from a project file. */
+  showAdd(params: ShowAddRequest): Promise<Show> {
+    return this._call("show.add", params as unknown as Record<string, unknown>) as Promise<Show>;
+  }
+
+  /** Every show on this machine: its name, whether it is running, what is on air, what its outputs send and what its process costs. `current` is the show a client reaches when it names none. */
+  showList(): Promise<ShowList> {
+    return this._call("show.list", {}) as Promise<ShowList>;
+  }
+
+  /** Stop a show and remove it with its folder. Refused for the last show and for main, the show the station was started with. */
+  showRemove(params: IdRequest): Promise<ShowRemoved> {
+    return this._call("show.remove", params as unknown as Record<string, unknown>) as Promise<ShowRemoved>;
+  }
+
+  /** Give a show another name. Its id stays. */
+  showRename(params: ShowRenameRequest): Promise<Show> {
+    return this._call("show.rename", params as unknown as Record<string, unknown>) as Promise<Show>;
+  }
+
+  /** Start a stopped or failed show. */
+  showStart(params: IdRequest): Promise<Show> {
+    return this._call("show.start", params as unknown as Record<string, unknown>) as Promise<Show>;
+  }
+
+  /** Stop a show. It keeps its config, and stays stopped when the station starts again, until show.start. */
+  showStop(params: IdRequest): Promise<Show> {
+    return this._call("show.stop", params as unknown as Record<string, unknown>) as Promise<Show>;
   }
 
   /** One JPEG: the whole contact sheet, the programme, or one source cut out of the mosaic. */
