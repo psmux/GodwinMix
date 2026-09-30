@@ -73,6 +73,8 @@ Start here if you have never run it.
 * [Use a webcam](how-to/use-a-webcam.md)
 * [Capture the screen](how-to/capture-the-screen.md)
 * [Share a camera between shows](how-to/share-a-camera-between-shows.md)
+* [Run several shows on one machine](how-to/run-several-shows.md)
+* [See where every input goes, and send it somewhere else](how-to/route-inputs-to-outputs.md)
 * [Record to a file](how-to/record-to-a-file.md)
 * [Serve HLS to viewers](how-to/serve-hls.md)
 * [Run your own code when something happens](how-to/hooks.md)
