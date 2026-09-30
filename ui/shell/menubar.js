@@ -42,6 +42,8 @@ function barKey(bar, e) {
   const at = titles.indexOf(e.target);
   if (at < 0) return;
   const step = { ArrowLeft: -1, ArrowRight: 1 }[e.key];
+  // Keys the bar uses are not the page's: Space here must not take a shot.
+  if (step || ["ArrowDown", "Enter", " ", "Escape"].includes(e.key)) e.stopPropagation();
   if (step) {
     e.preventDefault();
     const next = titles[(at + step + titles.length) % titles.length];

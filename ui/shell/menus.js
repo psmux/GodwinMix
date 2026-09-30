@@ -21,14 +21,22 @@ async function menusOf() {
   return definition;
 }
 
-/** Open a menu, or close it when it is the one already open. */
+/** Open a menu, or close it when it is the one already open. A menu the
+ * pointer opened on its way to the title a moment ago stays open: the click
+ * that follows the hover is the same gesture. */
 export async function toggle(bar, id) {
-  if (opened && opened.id === id) return close(true);
+  if (opened && opened.id === id) return performance.now() - opened.since > 400 ? close(true) : undefined;
   return open(bar, id, false);
 }
 
+let asked = 0;
+
 export async function open(bar, id, keyboard) {
+  // Only the last of two quick asks draws: two menus on screen at once is
+  // what a hover and a key pressed together would otherwise leave.
+  const mine = ++asked;
   const menu = (await menusOf()).find((m) => m.id === id);
+  if (mine !== asked) return;
   const title = bar.querySelector(`[data-menu="${id}"]`);
   if (!menu || !title) return;
   if (opened && opened.id === id) return;
@@ -38,16 +46,19 @@ export async function open(bar, id, keyboard) {
   node.style.left = Math.min(r.left, window.innerWidth - node.offsetWidth - 6) + "px";
   node.style.top = r.bottom + 2 + "px";
   title.setAttribute("aria-expanded", "true");
-  opened = { id, node, bar, title, offs: watch(node, bar) };
+  opened = { id, node, bar, title, since: performance.now(), offs: watch(node, bar) };
   if (keyboard) first(node);
 }
 
 /** At phone width: every menu in one list, each under its heading. */
 export async function openAll(bar, button) {
   if (opened && opened.id === "*") return close(true);
+  const mine = ++asked;
+  const menus = await menusOf();
+  if (mine !== asked) return;
   close(false);
   const node = el("div.menu.menubar-drop.menubar-every", { role: "menu", "aria-label": "Menu" });
-  for (const menu of await menusOf()) {
+  for (const menu of menus) {
     node.append(el("div.menubar-heading", { text: menu.title, role: "presentation" }));
     for (const b of items(menu.items, bar)) node.append(b);
   }
@@ -55,7 +66,7 @@ export async function openAll(bar, button) {
   const r = button.getBoundingClientRect();
   node.style.left = "8px";
   node.style.top = r.bottom + 2 + "px";
-  opened = { id: "*", node, bar, title: button, offs: watch(node, bar) };
+  opened = { id: "*", node, bar, title: button, since: performance.now(), offs: watch(node, bar) };
   first(node);
 }
 
@@ -112,6 +123,14 @@ function first(node) {
 /** Up and down inside, left and right to the next menu, Escape back to the bar. */
 function watch(node, bar) {
   const key = (e) => {
+    // A key pressed in a menu is the menu's. Enter and Space on the page's
+    // own map take and open things, and must not do that from in here.
+    e.stopPropagation();
+    if (e.key === "Enter" || e.key === " ") {
+      e.preventDefault();
+      if (node.contains(document.activeElement)) document.activeElement.click();
+      return;
+    }
     const buttons = [...node.querySelectorAll("button:not([disabled])")];
     const at = buttons.indexOf(document.activeElement);
     const move = { ArrowDown: 1, ArrowUp: -1 }[e.key];
@@ -129,7 +148,6 @@ function watch(node, bar) {
       open(bar, next.dataset.menu, true);
     } else if (e.key === "Escape") {
       e.preventDefault();
-      e.stopPropagation();
       close(true);
     } else if (e.key === "Tab") {
       close(false);

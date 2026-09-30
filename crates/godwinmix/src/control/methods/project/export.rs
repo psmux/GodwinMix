@@ -27,7 +27,10 @@ pub async fn build(call: &Call, ask: Ask) -> Result<Bundle, RpcError> {
     bundle.machine = machine;
 
     let configs = call.app.mixer.configs().await.map_err(|e| call.mixer_error(e))?;
-    for source in &configs.sources {
+    // A source that could not start here is still part of the show: a scene
+    // draws it, and the next machine may have what it needs.
+    let waiting = configs.unstarted.iter().map(|u| &u.config).filter(|c| !configs.sources.iter().any(|s| s.id == c.id));
+    for source in configs.sources.iter().chain(waiting) {
         let mut value = serde_json::to_value(source).map_err(encode)?;
         if !ask.secrets {
             note(&mut bundle.removed, "source", &source.id, redact::entry(&mut value));
