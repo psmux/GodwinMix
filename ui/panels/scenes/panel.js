@@ -419,7 +419,14 @@ class ScenesPanel extends HTMLElement {
       const made = await this.scenes.add("Scene");
       this.scenes.undo.record("Added a scene");
       await this.scenes.refresh();
-      if (made && made.id) this.beginRename(made.id);
+      if (!made || !made.id) return;
+      // The new scene is the one being worked on, so Sources shows it, empty,
+      // rather than going on listing the inputs of the scene focused before.
+      setFocusedScene(made.id);
+      this.render();
+      // Named in place where there is a tile to hold the caret. The strip has
+      // none, and flipping the whole panel to tiles for it was a surprise.
+      if (this.view === "tiles") this.beginRename(made.id);
     } catch (e) {
       errorToast(e, "New scene");
     }
