@@ -73,6 +73,9 @@ pub struct Header {
     pub n_slots: u32,
     pub leases_per_reader: u32,
     pub owner_pid: u32,
+    /// Frame rate as the owner negotiated it; 0/1 when it varies.
+    pub fps_n: u32,
+    pub fps_d: u32,
     pub _pad: u32,
     /// `seq << 8 | slot` of the newest frame, 0 before the first.
     pub latest: AtomicU64,
@@ -97,6 +100,8 @@ impl Header {
             offsets: self.offsets,
             strides: self.strides,
             size: self.frame_size,
+            fps_n: self.fps_n,
+            fps_d: self.fps_d.max(1),
         })
     }
 }

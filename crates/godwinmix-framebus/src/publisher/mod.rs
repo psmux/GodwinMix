@@ -21,6 +21,7 @@ mod service;
 mod stats;
 
 use service::Shared;
+pub(crate) use stats::copy_planes;
 pub use stats::{PublisherStats, ReaderStats};
 
 #[derive(Clone, Debug)]
@@ -122,7 +123,7 @@ impl Publisher {
     /// row into the slot's layout.
     pub fn write_planes(&mut self, pts: Option<u64>, planes: &[(&[u8], usize)]) -> bool {
         let layout = self.layout();
-        self.write(pts, None, |dst| stats::copy_planes(&layout, planes, dst))
+        self.write(pts, None, |dst| copy_planes(&layout, planes, dst))
     }
 
     pub fn stats(&self) -> PublisherStats {

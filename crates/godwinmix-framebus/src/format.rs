@@ -84,6 +84,9 @@ pub struct Layout {
     pub strides: [u32; 4],
     /// Bytes one frame takes, all planes and padding.
     pub size: u64,
+    /// Frames per second as a fraction; 0/1 when unknown or variable.
+    pub fps_n: u32,
+    pub fps_d: u32,
 }
 
 impl Layout {
@@ -103,6 +106,8 @@ impl Layout {
             offsets: [0; 4],
             strides: [0; 4],
             size: 0,
+            fps_n: 0,
+            fps_d: 1,
         };
         let mut at = 0u64;
         for (i, &(bpp, hdiv, vshift)) in format.planes().iter().enumerate() {
@@ -116,6 +121,12 @@ impl Layout {
         }
         layout.size = at;
         Ok(layout)
+    }
+
+    /// The same layout at `n`/`d` frames a second.
+    pub fn with_fps(mut self, n: u32, d: u32) -> Layout {
+        (self.fps_n, self.fps_d) = (n, d.max(1));
+        self
     }
 
     /// Rows in plane `i`.
