@@ -18,6 +18,9 @@ godwinmix-host = { workspace = true }
 # this crate has anyway. See `render/`.
 godwinmix-render = { workspace = true }
 godwinmix-govern = { workspace = true, features = ["calibrate"] }
+# The frame bus: a device or a stream decoded once and read by every source
+# that uses it, in this process or another. See `plugin/host/shared/`.
+godwinmix-framebus = { workspace = true }
 
 gstreamer = { workspace = true }
 gstreamer-video = { workspace = true }
