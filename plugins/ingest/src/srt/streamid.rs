@@ -20,7 +20,7 @@ pub struct Route {
     pub stream: String,
     /// `u=` from the access control syntax: the key the passphrase is.
     pub user: Option<String>,
-    /// `m=request` is a player, which this port does not serve.
+    /// `m=request` is a player, which this port sends the stream to.
     pub publish: bool,
 }
 

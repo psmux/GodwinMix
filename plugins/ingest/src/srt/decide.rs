@@ -28,6 +28,9 @@ pub enum Decision {
     /// the key is to be the passphrase.
     Take { admit: Admit, passphrase: Option<String> },
     Refuse { code: i32, channel: String, stream: String, why: String },
+    /// A player (`m=request`): send it `admit`'s stream, with this
+    /// passphrase set when the key is to be the passphrase.
+    Play { admit: Admit, passphrase: Option<String> },
 }
 
 pub fn decide(table: &Table, hub: &Hub, route: &Route) -> Decision {
@@ -38,7 +41,7 @@ pub fn decide(table: &Table, hub: &Hub, route: &Route) -> Decision {
         why,
     };
     if !route.publish {
-        return refuse(FORBIDDEN, "this port takes streams in and plays nothing out. Set the encoder to publish (m=publish), or leave m out.".into());
+        return super::play::decide(table, hub, route);
     }
     let channel = table.channels.iter().find(|c| c.app == route.app);
     let by_query = route.has_key() || channel.is_some_and(|c| c.key_in_name);
@@ -62,7 +65,7 @@ pub fn decide(table: &Table, hub: &Hub, route: &Route) -> Decision {
 
 /// The key as the SRT passphrase: which key, and whether the channel may
 /// take this caller at all. The passphrase itself is checked by libsrt.
-fn by_passphrase(table: &Table, route: &Route) -> Result<(Admit, Option<String>), (i32, String)> {
+pub(super) fn by_passphrase(table: &Table, route: &Route) -> Result<(Admit, Option<String>), (i32, String)> {
     let app = &route.app;
     let channel = table.channels.iter().find(|c| &c.app == app).ok_or_else(|| (NOT_FOUND, String::new()))?;
     if !channel.enabled {
@@ -136,7 +139,8 @@ mod tests {
         assert_eq!(code, FORBIDDEN);
         assert!(why.contains("does not take SRT"), "{why}");
         assert!(matches!(decide_on("nowhere/main"), Decision::Refuse { code: NOT_FOUND, .. }));
-        assert!(matches!(decide_on("#!::r=church/main,m=request"), Decision::Refuse { code: FORBIDDEN, .. }));
+        // A player asking for a stream that is not on air.
+        assert!(matches!(decide_on("#!::r=church/main,m=request"), Decision::Refuse { code: NOT_FOUND, .. }));
     }
 
     #[test]

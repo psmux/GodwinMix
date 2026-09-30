@@ -25,7 +25,7 @@ mod queue;
 mod rtmp_out;
 mod run;
 mod srt_out;
-mod ts_video;
+pub(crate) mod ts_video;
 mod target;
 
 #[cfg(test)]
