@@ -81,10 +81,6 @@ impl Server {
         a.len() == b.len() && a.iter().zip(b).fold(0u8, |acc, (x, y)| acc | (x ^ y)) == 0
     }
 
-    pub fn viewer_key(&self) -> &str {
-        &self.key
-    }
-
     pub fn ready(&self) -> bool {
         self.attached.lock().is_some()
     }
@@ -100,10 +96,8 @@ impl Server {
         };
         let max = self.params.max_viewers as usize;
         if self.viewers() >= max {
-            return Err(Refusal::new(503, format!(
-                "whep/output '{}' already has its {max} viewers. Raise max_viewers on the output, or serve a wider audience with an hls/output.",
-                self.id
-            )));
+            let why = "Raise max_viewers on the output, or serve a wider audience with an hls/output.";
+            return Err(Refusal::new(503, format!("whep/output '{}' already has its {max} viewers. {why}", self.id)));
         }
         let n = self.next.fetch_add(1, Ordering::Relaxed);
         let session_id = format!("v{n}");
@@ -119,7 +113,7 @@ impl Server {
         Ok((session_id, answer))
     }
 
-    /// The viewer said it is done (`DELETE`).
+    /// The viewer said it is done (`DELETE`). Taken down outside the lock.
     pub fn end(&self, session: &str) -> bool {
         let gone = self.viewers.lock().remove(session);
         gone.is_some()

@@ -13,7 +13,7 @@
 //! A viewer that stops reading fills its own queue, which drops, and holds
 //! nobody else up.
 
-use super::negotiate::{answer, mline, prefer, webrtcbin};
+use super::negotiate::{answer, mline, prefer, webrtcbin, Branch};
 use super::params::{VideoSend, WhepParams};
 use super::sdp;
 use super::Refusal;
@@ -44,13 +44,18 @@ impl Session {
         let message = gst_sdp::SDPMessage::parse_buffer(offer.as_bytes()).map_err(|_| {
             Refusal::bad("the body is not SDP. POST the RTCPeerConnection's offer, with Content-Type: application/sdp.")
         })?;
-        let video_pt = sdp::pick(offer, "video", tees.send.encoding).ok_or_else(|| {
+        let profile = tees
+            .video
+            .static_pad("sink")
+            .and_then(|p| p.current_caps())
+            .and_then(|c| c.structure(0).and_then(|s| s.get::<String>("profile").ok()));
+        let video_pt = sdp::pick(offer, "video", tees.send.encoding, profile.as_deref()).ok_or_else(|| {
             Refusal::new(406, format!(
                 "the offer has no {} video. This output sends {}; offer it (for a browser, add a recvonly video transceiver).",
                 tees.send.encoding, tees.send.encoding
             ))
         })?;
-        let audio_pt = tees.audio.and_then(|_| sdp::pick(offer, "audio", "OPUS"));
+        let audio_pt = tees.audio.and_then(|_| sdp::pick(offer, "audio", "OPUS", None));
         let bin = webrtcbin(name, params)?;
         let mut session = Session { bin: bin.clone(), pipeline: tees.pipeline.clone(), elements: vec![bin.clone()], branches: Vec::new() };
         tees.pipeline.add(&bin).map_err(|e| Refusal::internal(format!("could not add the viewer's webrtcbin: {e}")))?;
@@ -139,13 +144,5 @@ impl Drop for Session {
     fn drop(&mut self) {
         self.end();
     }
-}
-
-pub struct Branch<'a> {
-    pub tee: &'a gst::Element,
-    pub media: &'static str,
-    pub payloader: &'static str,
-    pub encoding: &'static str,
-    pub pt: u8,
 }
 
