@@ -155,6 +155,11 @@ impl Channels {
             secrets,
         });
         let _ = channels.me.set(Arc::downgrade(&channels));
+        // A show under a station has no channels of its own: it neither makes
+        // the default one nor talks to a listener, which is the station's.
+        if crate::station::show::under_station() {
+            return channels;
+        }
         channels.make_default(godwinmix_core::plugin::loader::get(PLUGIN).is_some());
         channels.hand_over(false);
         events::start(&channels);
