@@ -59,6 +59,15 @@ impl Watch {
         self.frames.load(Relaxed)
     }
 
+    /// Gaps longer than a quarter of a second so far.
+    pub fn gaps(&self) -> u64 {
+        self.gaps.load(Relaxed)
+    }
+
+    pub fn last_gap_ms(&self) -> u64 {
+        self.last_gap_ns.load(Relaxed) / 1_000_000
+    }
+
     /// Milliseconds since the last frame, or `None` before the first.
     pub fn quiet_ms(&self) -> Option<u64> {
         let last = self.last_ns.load(Relaxed);

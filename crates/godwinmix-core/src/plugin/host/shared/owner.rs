@@ -8,6 +8,7 @@
 //! plugin takes to say hello, and nothing the mixer runs may wait on that.
 
 use super::feed::{Feed, Plan};
+use super::reader::Watch;
 use godwinmix_framebus::{Claim, Registry};
 use parking_lot::Mutex;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering::Relaxed};
@@ -40,13 +41,13 @@ pub struct Owner {
 }
 
 impl Owner {
-    pub fn spawn(plan: Plan) -> std::io::Result<Owner> {
+    pub fn spawn(plan: Plan, watch: Arc<Watch>) -> std::io::Result<Owner> {
         let shared = Arc::new(Shared::default());
         *shared.plan.lock() = Some(plan.clone());
         let run = shared.clone();
         let thread = std::thread::Builder::new()
             .name(format!("share {}", plan.name))
-            .spawn(move || run_loop(&run))?;
+            .spawn(move || run_loop(&run, &watch))?;
         Ok(Owner { shared, thread: Some(thread) })
     }
 
@@ -69,9 +70,17 @@ impl Drop for Owner {
     }
 }
 
-fn run_loop(shared: &Arc<Shared>) {
+fn run_loop(shared: &Arc<Shared>, watch: &Watch) {
     let mut next_try = Instant::now();
+    let mut gaps = 0;
     while !shared.stop.load(Relaxed) {
+        // Said here rather than on the streaming thread that measured it,
+        // which must not wait on a log file.
+        if watch.gaps() != gaps {
+            gaps = watch.gaps();
+            let name = shared.plan.lock().as_ref().map(|p| p.name.to_string()).unwrap_or_default();
+            info!(bus = %name, gap_ms = watch.last_gap_ms(), "the picture came back after a gap");
+        }
         // Each lock is taken and let go within its own statement: a feed is
         // dropped (which waits for the plugin to stop) with no lock held, so
         // `health` and `call` on the mixer's side never wait on it.

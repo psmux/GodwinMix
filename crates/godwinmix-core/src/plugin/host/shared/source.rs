@@ -113,12 +113,16 @@ impl Source for SharedSource {
         self.build.canvas = canvas.clone();
         let ends = reader::build(&self.build, thumb, &self.name, &self.dir, &self.watch)?;
         if self.owner.is_none() {
-            self.owner = Some(Owner::spawn(self.plan()).context("starting the share thread")?);
+            let owner = Owner::spawn(self.plan(), self.watch.clone());
+            self.owner = Some(owner.context("starting the share thread")?);
         }
         Ok(ends)
     }
 
     fn stop(&mut self) -> Result<()> {
+        if self.watch.frames() > 0 {
+            tracing::info!(source = %self.build.id, share = %self.report(), "stopping a shared source");
+        }
         // Dropping the owner stops its thread and, if this source owned the
         // device, the plugin with it; the claim goes last, and a reader
         // elsewhere takes it within one tick.
