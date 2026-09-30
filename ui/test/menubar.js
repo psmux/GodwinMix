@@ -23,6 +23,10 @@ function key(target, name, opts = {}) {
 const drop = () => document.querySelector(".menubar-drop");
 
 export async function menubarTests(test, eq, ok) {
+  // A dialog an earlier suite left open holds Escape for itself; one Escape
+  // closes every one of them, as it would for a person.
+  window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+  await tick();
   const stub = { call: async () => ({}) };
   const wrap = menubar(stub);
   document.body.append(wrap);
@@ -38,6 +42,12 @@ export async function menubarTests(test, eq, ok) {
 
   key(window, "F10");
   test("F10 puts the keyboard on File", () => eq(document.activeElement, titles[0]));
+  const scrim = document.body.appendChild(Object.assign(document.createElement("div"), { className: "scrim" }));
+  titles[0].blur();
+  key(window, "F10");
+  test("F10 does nothing while a dialog is up", () => ok(document.activeElement !== titles[0], "the bar took the keyboard from a dialog"));
+  scrim.remove();
+  key(window, "F10");
   key(titles[0], "ArrowRight");
   test("right arrow moves along the bar", () => eq(document.activeElement, titles[1]));
   key(titles[1], "ArrowDown");
