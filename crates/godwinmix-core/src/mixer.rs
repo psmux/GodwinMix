@@ -2753,6 +2753,9 @@ impl Mixer {
         if let Err(e) = r {
             if unheard && cfg.id != AD_ID {
                 self.unstarted.note(cfg, e);
+                // Written now, or a restart before the next add or remove
+                // would read a list without it and forget it for good.
+                self.persist_runtime();
             }
         }
     }
@@ -6841,7 +6844,7 @@ mod tests {
         let kept = mix.runtime_configs().unstarted;
         assert_eq!(kept.len(), 1, "{kept:?}");
         assert!(kept[0].error.contains("not-there.mp4"), "{}", kept[0].error);
-        mix.persist_runtime();
+        // Saved by the failure itself: a restart now must not lose it.
         let saved = std::fs::read_to_string(&store).expect("the runtime store was written");
         assert!(saved.contains("id = \"slides\""), "the unstarted source was not saved: {saved}");
         assert!(saved.contains("id = \"cam1\""), "{saved}");
