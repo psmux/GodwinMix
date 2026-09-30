@@ -437,7 +437,7 @@ label { display: block; }
 .menubar-tick { width: 1em; flex: none; color: var(--accent); }
 .menubar-heading { padding: 6px 8px 2px; color: var(--faint); font-size: var(--fs-sm); }
 [data-native-menu] .menubar-wrap { display: none; }
-.project-counts { width: auto; border-collapse: collapse; }
+.project-counts { align-self: flex-start; border-collapse: collapse; }
 .project-counts th, .project-counts td { text-align: left; padding: 2px 24px 2px 0; }
 @media (max-width: 760px) {
   .menubar { display: none; }
