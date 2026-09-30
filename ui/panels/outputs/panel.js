@@ -258,7 +258,9 @@ class OutputsPanel extends HTMLElement {
           text: needsKey ? "Add key" : "Edit",
           onclick: () => editDestination(this.client, current),
         }),
-        el("button.btn.icon", {
+        // A destination with no key is never dialled, so there is nothing to
+        // reconnect until the key is in.
+        needsKey ? null : el("button.btn.icon", {
           text: "Reconnect",
           onclick: async () => {
             try {
