@@ -37,7 +37,7 @@ export async function waysTests(test, eq, ok, stub, card, view) {
       { protocol: "whip", transport: "tcp", port: 18681, open: false, because: [] },
     ];
     eq(ways.openPorts(rows), "Open ports: RTMP 19381 for sun · SRT 19382/udp for sun, hall");
-    eq(ways.openPorts([]), "No ingest port is open. One opens when a channel needs it.");
+    eq(ways.openPorts([]), "No port is open for encoders.");
     const stuck = [{ protocol: "srt", port: 9000, open: false, because: ["sun"], problem: "another program holds it" }];
     eq(ways.portProblems(stuck), ["SRT 9000 is not open: another program holds it"]);
   });

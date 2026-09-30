@@ -165,6 +165,21 @@ a slug of the label, `Key 2` when there is no label. `channel.key.remove {id,
 key}` answers with the channel. A publisher live on the key taken back is cut
 off at once; publishers on the other keys are not touched.
 
+## The default channel
+
+A mixer with a config file on disk and the ingest plugin installed, and no
+channels, makes one as it starts: id `live`, name `Live`, app `live`, RTMP
+only, `auto_source` on, one key with id `default-key` and label
+`Default key`. It is a channel like any other, so the RTMP port is open from
+that start. The channels file then carries `default_made = true`, which stays
+after the channel is removed, so it is made once. A file that already has
+channels without that line is taken as made. A plugin installed later by
+`plugin.add` makes it then, under the same rules, and `event/channel.changed`
+announces it. The secret store is per machine: when a key for `live` with id
+`default-key` is sealed there already, from another mixer on the machine, the
+default takes it rather than sealing a new one over it. There is no setting
+to turn it off; remove the channel instead.
+
 ## Protocols and ports
 
 `channel.set {id, protocols: ["rtmp", "srt"]}` switches SRT on for a channel
