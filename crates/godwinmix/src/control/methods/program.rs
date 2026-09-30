@@ -11,6 +11,8 @@ use godwinmix_core::mixer::transition::TransitionSpec;
 use godwinmix_core::mixer::Command;
 use serde_json::{json, Value};
 
+pub(crate) mod missing;
+
 pub fn register(reg: &mut Registry<Call>) {
     reg.register(
         MethodDef::new(
@@ -107,7 +109,13 @@ pub fn register(reg: &mut Registry<Call>) {
 /// The programme, as every method that changes it answers with.
 async fn state(call: &Call) -> Result<ProgramState, RpcError> {
     let status = call.app.mixer.status().await.map_err(|e| call.mixer_error(anyhow::anyhow!(e)))?;
+    let here: Vec<String> = status.sources.iter().map(|s| s.id.clone()).collect();
+    let missing = match &status.scene {
+        Some(scene) => missing::in_scene(call, scene, &here),
+        None => Vec::new(),
+    };
     Ok(ProgramState {
+        missing,
         previous: call.app.history.previous(status.program.as_deref()).flatten(),
         program: status.program,
         scene: status.scene,
@@ -269,29 +277,15 @@ async fn take_scene(
         .scenes
         .placements(which)
         .map_err(|e| super::scenes::scene_error(call, e))?;
-    // Every source the scene draws has to be here, or it is a composition with
-    // holes in it and the caller should know before it is on air.
+    // A source the scene draws that is not here draws nothing, and the take
+    // goes ahead with the rest: a missing camera must not keep the service
+    // off air. Only a scene with nothing here at all is refused. See
+    // `missing.rs` for why.
     let ids = call.source_ids().await?;
-    let missing: Vec<String> = {
-        let mut m: Vec<String> =
-            placements.iter().map(|p| p.source.clone()).filter(|s| !ids.contains(s)).collect();
-        m.sort();
-        m.dedup();
-        m
-    };
-    if !missing.is_empty() {
-        return Err(RpcError::new(
-            ErrorCode::NotFound,
-            format!(
-                "the scene {name:?} draws {} this mixer does not have. Add {} with \
-                 source.add, or take a scene whose sources are all here. Sources here: {}",
-                if missing.len() == 1 { "a source" } else { "sources" },
-                missing.join(", "),
-                if ids.is_empty() { "none".into() } else { ids.join(", ") }
-            ),
-        )
-        .with("missing", json!(missing))
-        .with("scene", name));
+    let drawn = missing::drawn(&placements);
+    let absent = missing::absent(&drawn, &ids);
+    if let Some(refused) = missing::refusal(&name, &drawn, &absent, &ids) {
+        return Err(refused);
     }
     // The same rules a source take goes through, and in the same place: after
     // the names have been checked and before the pipeline is touched.
@@ -314,6 +308,7 @@ async fn take_scene(
     // Only once the mixer has taken it, exactly as `cut` does: a take the
     // pipeline refused must not start the hold on the next one.
     call.app.safety.record(&call.token.id);
+    missing::alert(call, &name, &absent);
     body(state(call).await?)
 }
 

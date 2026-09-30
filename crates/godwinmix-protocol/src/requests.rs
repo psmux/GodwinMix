@@ -465,6 +465,12 @@ pub struct ProgramState {
     /// Present while an ad break is armed or on air.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub ad: Option<crate::types::AdStatus>,
+    /// Sources the scene on air draws that this mixer does not have. The take
+    /// went ahead without them and they draw nothing, so the slate or whatever
+    /// sits under them shows through, until they are added back. Left out when
+    /// every source is here.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub missing: Vec<String>,
 }
 
 /// `core.subscribe`: which events, and which expensive streams.
