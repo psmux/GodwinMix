@@ -110,6 +110,16 @@ export async function studioTests(test, eq, ok) {
   setSetting('producer', producer);
   if (armedBefore === undefined) delete document.body.dataset.armed; else document.body.dataset.armed = armedBefore;
 
+  // A page opened after a scene was armed reads it from the scene list, so
+  // the list has to follow a disarm, or Space took a scene nobody could see.
+  const { SceneClient } = await import('../kits/protocol/index.js');
+  const kit = new SceneClient({ on: () => () => {} });
+  kit.summaries = [{ id: 'two', name: 'Two shot', armed: true }, { id: 'wide', name: 'Wide' }];
+  kit.markArmed(null);
+  test('a disarm clears the armed flag in the scene list', () => eq(kit.armed(), null));
+  kit.markArmed('Wide');
+  test('arming by name marks that scene in the scene list', () => eq(kit.armed(), 'wide'));
+
   test('Space sends preview to programme, and does not take Enter or the number keys', () => {
     eq(DEFAULT_MAP.Space, 'program.take-armed');
     eq(DEFAULT_MAP.Enter, 'tray.open');
