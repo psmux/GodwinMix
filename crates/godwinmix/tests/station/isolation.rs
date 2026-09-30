@@ -41,6 +41,15 @@ async fn a_show_killed_is_started_again_the_other_runs_on_and_its_share_goes_bac
     let running = |p: &Value| p["show"]["id"] == "second" && p["show"]["state"] == "running";
     assert!(event(&mut ws, "show.changed", Duration::from_secs(90), running).await.is_some(), "the new show came up");
 
+    // `show` in core.subscribe moves a connection that named no show.
+    let mut moved = rpc(&st, "").await;
+    call(&mut moved, 1, "core.subscribe", json!({"show": "second", "events": ["scene.*"]})).await;
+    let made = call(&mut moved, 2, "scene.add", json!({"name": "Only in second"})).await;
+    assert!(made.get("result").is_some(), "{made}");
+    let in_second = get(&st, "/api/v1/scenes?show=second").await.to_string();
+    let in_main = get(&st, "/api/v1/scenes").await.to_string();
+    assert!(in_second.contains("Only in second") && !in_main.contains("Only in second"), "{in_second} / {in_main}");
+
     let recordings = dir.join("recordings");
     let output = json!({"id": "archive", "uri": "record://programme", "type": "record/output",
         "params": {"format": "mkv", "directory": recordings}, "rendition": {"preset": "youtube-720p30"}});
