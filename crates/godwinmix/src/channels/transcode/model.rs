@@ -10,10 +10,12 @@
 use std::collections::BTreeMap;
 use std::sync::Arc;
 
-use godwinmix_govern::Profile;
+use godwinmix_govern::headroom::UNLIMITED;
+use godwinmix_govern::{Governor, Profile};
 use godwinmix_protocol::rendition::{AudioCodec, AudioShape, Cost, EncoderSlot, VideoShape};
 use godwinmix_render::{AudioWork, CostModel, Room, StaticCostModel};
 
+use super::admit::Held;
 use super::machine::Machine;
 
 /// A hardware decode at 1080p30: the copy out of the media engine, in
@@ -87,4 +89,20 @@ impl CostModel for Model {
     fn room(&self, device: &str) -> Room {
         self.rooms.get(device).copied().unwrap_or(Room::OPEN)
     }
+}
+
+/// What is left on each hardware device for this channel's plan, with what
+/// the channel already holds there given back, so a replan does not find the
+/// device full of its own encoders.
+pub fn rooms(gov: &Governor, held: &BTreeMap<String, Held>, machine: &Machine) -> BTreeMap<String, Room> {
+    let mut out = BTreeMap::new();
+    for device in machine.slots().into_iter().filter_map(|s| s.device) {
+        let have = gov.headroom(Some(&device));
+        let mine = held.values().filter(|h| h.node.device == device).fold((0, 0), |(m, s), h| {
+            (m + h.ticket.cost().device_millis, s + h.ticket.cost().device_sessions)
+        });
+        let sessions = (have.device_sessions != UNLIMITED).then(|| have.device_sessions + mine.1);
+        out.insert(device, Room { sessions, device_millis: Some(have.device_millis + mine.0) });
+    }
+    out
 }

@@ -28,6 +28,7 @@ mod machine;
 mod model;
 mod outcome;
 mod plan;
+mod refuse;
 mod shed;
 mod source;
 mod spec;
