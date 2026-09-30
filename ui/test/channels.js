@@ -5,6 +5,7 @@
 // core needed.
 
 import { ChannelStub, liveStream } from "./channels-stub.js";
+import { waysTests } from "./channels-ways.js";
 
 const wait = (ms = 30) => new Promise((r) => setTimeout(r, ms));
 const dialogs = () => [...document.querySelectorAll(".dialog")];
@@ -201,6 +202,7 @@ export async function channelTests(test, eq, ok) {
   });
 
   await connectTests(test, eq, ok, stub, card);
+  await waysTests(test, eq, ok, stub, card, view);
 
   stub.emit("event", { name: "channel.removed", params: { id: "sunday-service" } });
   await wait();

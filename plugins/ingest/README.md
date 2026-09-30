@@ -97,12 +97,17 @@ of inter frames with nothing to decode them against.
 
 ## What is not here
 
-**No SRT listener.** `srt/source` is one already, and `listener` is its default
-mode. Two copies would mean two places to fix a bug:
+**No SRT source of its own.** For one SRT feed as one source, with no channel,
+`srt/source` in listener mode is the way:
 
 ```sh
 gmx source add feed --type srt/source --params '{"port":9000}'
 ```
+
+A channel's SRT is here instead, because it shares one port between every
+channel and tells callers apart by stream id, which `srtsrc` cannot do: it
+reads every caller on its port into one stream. `src/srt.rs` has the whole
+reasoning, and loads libsrt at run time to do it.
 
 **No RTSP server.** `gstreamer-rtsp-server` needs `libgstrtspserver-1.0` at link
 time on every platform, so adding it would make this whole plugin fail to build
@@ -113,16 +118,25 @@ pushing to somebody's RTSP server is `rtspclientsink`.
 
 ## The channel server
 
-`ingest/discover` holds the mixer's RTMP port for every channel. The core runs
-it as a singleton, hands it the channel table in its settings, hears its
-`event/channel.*` notifications and asks it for the `streams` tool; a live
-stream becomes an `ingest/rtmp` source reading the hub over loopback on the
-same port. [The channel methods](../../docs/reference/channels.md) are the
-core's side of it, and [Take streams from several encoders on one
-port](../../docs/how-to/rtmp-channels.md) is the operator's.
+`ingest/discover` holds the mixer's ingest ports for every channel: RTMP,
+SRT, RTMPS, and the WebRTC media ports of the WHIP sessions the core hands it
+from its control port. Each port opens when the first channel that is switched
+on needs it and closes when the last one stops (`src/listeners.rs`). The core
+runs it as a singleton, hands it the channel table in its settings, hears its
+`event/channel.*` notifications and asks it for the `streams` tool, whose
+answer has a `listeners` row per port; a live stream becomes an `ingest/rtmp`
+source reading the hub over loopback on the RTMP port number. [The channel
+methods](../../docs/reference/channels.md) are the core's side of it, and
+[Take streams from several encoders into one
+channel](../../docs/how-to/channels.md) is the operator's.
 
-With no channels it takes any publisher, as it always has, and the supervisor
-makes each a source from its `event/ingest.publisher`.
+With no channels nothing listens. Set `open_door` and it takes any RTMP
+publisher with no channel, as it did before channels, and the supervisor makes
+each a source from its `event/ingest.publisher`.
+
+Building it needs GStreamer's WebRTC and SDP libraries, for WHIP. A build for
+RTMP and SRT alone leaves them out: `cargo build -p gmx-ingest
+--no-default-features`.
 
 ## Settings
 
@@ -154,12 +168,15 @@ For two at once, make a channel.
 
 | Key | Default | What it does |
 |---|---|---|
-| `rtmp_port` | `1935` | the port every publisher uses |
+| `rtmp_port` | `1935` | the port every RTMP publisher uses, open while a channel has RTMP on |
+| `srt_port` | `9000` | the UDP port every SRT caller uses, open while a channel has SRT on |
+| `webrtc_port` | `8189` | the first of sixteen UDP ports WHIP publishers send media to, one each, only while one is publishing |
 | `bind` | `0.0.0.0` | every interface |
-| `app` | empty | with no channels, accept publishers on this application name only |
+| `open_door` | `false` | with no channels, keep the RTMP port open and take any publisher |
+| `app` | empty | with the open door, accept publishers on this application name only |
 
-The channel table arrives from the core under `channels` and is never written
-to the config. This device and an `ingest/rtmp` source cannot both hold one
+The channel table arrives from the core under `channels`, and the RTMPS
+certificate under `tls`, and neither is ever written to the config. This device and an `ingest/rtmp` source cannot both hold one
 port: give a source that owns its port another one.
 
 ## Testing it

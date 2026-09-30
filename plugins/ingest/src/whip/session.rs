@@ -52,7 +52,16 @@ impl Session {
         ended: Box<dyn Fn() + Send>,
     ) -> Result<(Session, String), String> {
         gmx_netkit::init()?;
-        let sdp = gst_sdp::SDPMessage::parse_buffer(offer.as_bytes()).map_err(|_| "the offer is not SDP. Send the RTCPeerConnection's offer as the request body, with Content-Type application/sdp.".to_string())?;
+        if !gmx_netkit::elements::exists("nicesrc") {
+            // webrtcbin carries its media over libnice's elements, and fails
+            // to start at all without them, with nothing in its error to say so.
+            return Err(format!(
+                "WHIP needs GStreamer's libnice elements (nicesrc), and this machine does not \
+                 have them. They come from {}; install that and publish again.",
+                gmx_netkit::elements::where_from("nicesrc")
+            ));
+        }
+        let sdp =gst_sdp::SDPMessage::parse_buffer(offer.as_bytes()).map_err(|_| "the offer is not SDP. Send the RTCPeerConnection's offer as the request body, with Content-Type application/sdp.".to_string())?;
         if !offer.contains("H264") {
             return Err("the offer has no H.264 video. Channels take H.264 from WebRTC so the picture is never decoded; set the browser or encoder to H.264.".into());
         }

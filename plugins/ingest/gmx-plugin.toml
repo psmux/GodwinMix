@@ -3,20 +3,20 @@
 # Everywhere else the mixer dials out. Here it waits, and a phone, an OBS on the
 # other laptop, a hardware encoder in the rack or a guest in a browser dials in.
 #
-# The SRT listener is not here. `srt/source` is one already, and `listener` is
-# its default mode; duplicating it would mean two places to fix a bug. The RTSP
-# server is not here either, and docs/how-to/receive-a-phone-or-obs-stream.md
-# says what it would cost.
-#
 # ingest/discover is the channel server: the core runs it as a singleton, hands
 # it the channel table under `channels` in its settings, and reads its
-# event/channel.* notifications. docs/reference/channels.md is the core's side.
+# event/channel.* notifications. It takes RTMP, RTMPS, SRT and WHIP (handed
+# over from the core's control port), one port per protocol for every channel,
+# and opens each only while a channel uses it. docs/reference/channels.md is
+# the core's side. `srt/source` is still the way to take one SRT feed with no
+# channel. The RTSP server is not here, and
+# docs/how-to/receive-a-phone-or-obs-stream.md says what it would cost.
 
 [plugin]
 name = "ingest"
 version = "0.1.0"
 api = 1
-description = "GodwinMix as a server: an RTMP listener written in Rust so a phone or an OBS can publish straight to the mixer, a WHIP endpoint a browser can publish to with nothing but a URL, and a device provide that reports every publisher as a source ready to add."
+description = "GodwinMix as a server: channels an OBS, a phone, a hardware encoder or a browser publish to by RTMP, RTMPS, SRT or WHIP, one port per protocol for every channel and none open until a channel needs it, and a standalone RTMP listener and WHIP endpoint for one publisher each."
 license = "Apache-2.0"
 authors = ["GodwinMix"]
 repository = "https://github.com/psmux/godwinmix"

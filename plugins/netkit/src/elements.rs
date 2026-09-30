@@ -62,6 +62,14 @@ pub const PACKAGES: &[Package] = &[
         windows: "the GStreamer MSI 1.26 or newer, 'complete' install",
     },
     Package {
+        // What webrtcbin carries its media over. Homebrew keeps it apart
+        // from the gstreamer formula.
+        element: "nicesrc",
+        debian: "gstreamer1.0-nice",
+        macos: "brew install libnice-gstreamer",
+        windows: "the GStreamer MSI, 'complete' install",
+    },
+    Package {
         element: "rtspclientsink",
         debian: "gstreamer1.0-rtsp",
         macos: "brew install gstreamer",
