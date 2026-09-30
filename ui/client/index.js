@@ -89,6 +89,22 @@ export class Client {
     return () => this.listeners.get(name).delete(fn);
   }
 
+  /**
+   * Resolves once the socket is open, or after `ms` whichever comes first.
+   *
+   * `connect()` returns before the socket has opened, and a call made in that
+   * gap is refused with "not connected". A caller whose first read decides
+   * what the page shows (the scene list, the core's defaults) waits here
+   * rather than drawing an empty answer it never reads again.
+   */
+  opened(ms = 5000) {
+    if (this.state.connected) return Promise.resolve(true);
+    return new Promise((resolve) => {
+      const timer = setTimeout(() => { off(); resolve(false); }, ms);
+      const off = this.on("open", () => { clearTimeout(timer); off(); resolve(true); });
+    });
+  }
+
   emit(name, arg) {
     const set = this.listeners.get(name);
     if (!set) return;

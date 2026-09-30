@@ -49,13 +49,6 @@ export class SceneClient {
    * applied, and every mutating answer is a view that lands in the mirror.
    */
   async start() {
-    try {
-      const info = await this.client.call("core.info", {});
-      if (info && info.token && info.token.id) this.mirror.setClientId(info.token.id);
-    } catch {
-      // A core that will not say who we are costs us echo suppression and
-      // nothing else: the mirror still converges on what the core sends.
-    }
     this.offs.push(
       this.client.on("event", ({ name, params }) => {
         if (name === "scene.patch") this.onPatch(params);
@@ -63,10 +56,34 @@ export class SceneClient {
         else if (name === "preview.changed") this.markArmed(params && params.scene);
         else if (name === "program.took") this.changed();
         else if (name === "resync") this.refresh();
-      })
+      }),
+      // Every open, the first and each reconnect, reads the document again.
+      // The page is built before its socket opens, and a list asked for in
+      // that gap was refused and drawn as no scenes at all, until New scene
+      // happened to read it again and the whole collection appeared at once.
+      // A reconnect missed every patch sent while it was away.
+      this.client.on("open", () => this.load())
     );
-    await this.refresh();
+    if (this.client.opened) await this.client.opened();
+    await this.load();
     return this;
+  }
+
+  /** Who we are, then the whole document. One at a time: an open and start agree. */
+  load() {
+    this.loading ||= this.read().finally(() => { this.loading = null; });
+    return this.loading;
+  }
+
+  async read() {
+    try {
+      const info = await this.client.call("core.info", {});
+      if (info && info.token && info.token.id) this.mirror.setClientId(info.token.id);
+    } catch {
+      // A core that will not say who we are costs us echo suppression and
+      // nothing else: the mirror still converges on what the core sends.
+    }
+    return this.refresh();
   }
 
   stop() {
@@ -128,6 +145,9 @@ export class SceneClient {
     try {
       list = await this.client.call("scene.list", {});
     } catch (e) {
+      // Not connected yet, or the socket dropped: that says nothing about the
+      // scenes, so what is drawn stays and the next open reads them again.
+      if (e && e.data && e.data.retryable) return this.summaries;
       // A core with no scene server. Every caller checks `supported` and shows
       // the sentence rather than a broken panel.
       if (e && e.code === -32601) this.supported = false;
