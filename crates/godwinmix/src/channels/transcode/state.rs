@@ -98,7 +98,8 @@ impl Transcode {
             let planned = plan::plan(wants, streams, &model, &held_out);
             match admit::admit(&gov, id, &planned.plan, &mut ch.held, &requests) {
                 Ok(()) => break planned,
-                Err(mut no) => {
+                Err(no) => {
+                    let mut no = *no;
                     if no.refusal.advice.is_empty() {
                         let base = no.requests.first().and_then(|r| requests.get(r));
                         admit::fill_advice(&mut no.refusal, &model, base);

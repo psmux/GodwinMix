@@ -45,7 +45,7 @@ pub fn admit(
     plan: &Plan,
     held: &mut BTreeMap<String, Held>,
     requests: &BTreeMap<String, RenditionRequest>,
-) -> Result<(), Refused> {
+) -> Result<(), Box<Refused>> {
     held.retain(|id, h| plan.node(id).is_some_and(|n| n.kind == h.node.kind && n.inputs == h.node.inputs));
     for n in plan.nodes.iter().filter(|n| costs(n)) {
         if held.contains_key(&n.id) {
@@ -61,7 +61,7 @@ pub fn admit(
             }
             Admit::Refused { need, have, advice } => {
                 let base = n.serves.first().and_then(|id| requests.get(id));
-                return Err(Refused { requests: n.serves.clone(), refusal: refusal(need, have, &advice, base) });
+                return Err(Box::new(Refused { requests: n.serves.clone(), refusal: refusal(need, have, &advice, base) }));
             }
         }
     }
