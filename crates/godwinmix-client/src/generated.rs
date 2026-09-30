@@ -155,6 +155,11 @@ pub struct AddOutputRequest {
     /// backs off harder, for platforms that penalise hammering.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub policy: Option<String>,
+    /// What to make from the programme for this destination: a rendition
+    /// request or `{"preset": "youtube-720p30"}` (`rendition.presets` lists
+    /// them). Absent means the programme encoder, at no extra cost.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub rendition: Option<RenditionChoice>,
     /// rtmp:// or rtmps:// URL including the stream key.
     pub uri: String,
     /// Anything this build does not know a name for.
@@ -326,6 +331,10 @@ pub type Audio = String;
 /// The values api_level 1 knows for [`Audio`].
 pub const AUDIO_VALUES: &[&str] = &["follow", "always", "never"];
 
+pub type AudioCodec = String;
+/// The values api_level 1 knows for [`AudioCodec`].
+pub const AUDIO_CODEC_VALUES: &[&str] = &["aac", "opus", "mp3", "ac3", "pcm", "other"];
+
 /// `source.audio.set` takes an id as well as the levels: the id comes off the
 /// path on REST and out of the params on `/rpc`, and both land in one object.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
@@ -348,6 +357,20 @@ pub struct AudioSetParams {
     /// Gain on a superimposed page's own sound.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub page: Option<f64>,
+}
+
+/// The audio an output wants. Every field left out is taken from the source.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct AudioWant {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub bitrate_kbps: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub channels: Option<u8>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub codec: Option<AudioCodec>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub sample_rate: Option<u32>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
@@ -419,6 +442,22 @@ pub struct BundleAsset {
     pub path: String,
     pub sha256: String,
     pub size: u64,
+}
+
+/// `governor.calibrate`.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct CalibrateRequest {
+    /// Measure even though something is on air. The measurement takes a few
+    /// seconds of every core and can cost what is on air frames.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub confirm: Option<bool>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct CalibrateResult {
+    pub started: bool,
 }
 
 /// The output raster. One per collection in this release; 11 section 1 leaves
@@ -769,6 +808,12 @@ pub struct ConfigSetResult {
     pub unchanged: Vec<String>,
 }
 
+/// How the bytes leave. Decides which codecs are allowed: FLV carries H.264
+/// (and HEVC and AV1 in enhanced RTMP), WebRTC wants VP8, VP9, H.264 or AV1.
+pub type Container = String;
+/// The values api_level 1 knows for [`Container`].
+pub const CONTAINER_VALUES: &[&str] = &["flv", "mpeg-ts", "mp4-fragmented", "mkv", "hls", "ll-hls", "dash", "rtp", "webrtc"];
+
 pub type ConversionPhase = String;
 /// The values api_level 1 knows for [`ConversionPhase`].
 pub const CONVERSION_PHASE_VALUES: &[&str] = &["running", "done", "failed"];
@@ -824,6 +869,31 @@ pub struct CoreInfo {
     pub ui: Option<UiDefaults>,
     /// The build's own version, as in Cargo.toml.
     pub version: String,
+}
+
+/// What running one piece of work costs, in units the governor adds up.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct Cost {
+    /// Thousandths of one CPU core. 1000 is one whole core.
+    pub cpu_millicores: u32,
+    /// Share of one hardware device, in thousandths of what it can do, when
+    /// the work runs on one.
+    pub device_millis: u32,
+    /// Hardware encoder sessions held (consumer NVIDIA cards cap these).
+    pub device_sessions: u32,
+    /// Bytes per second out of the machine, in kbit/s.
+    pub egress_kbps: u32,
+    /// Resident memory the work adds, in MiB.
+    pub memory_mib: u32,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct CpuUse {
+    pub cores: u32,
+    pub room_millicores: u32,
+    pub used_millicores: u32,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
@@ -883,6 +953,28 @@ pub struct Destination {
 pub type DestinationState = String;
 /// The values api_level 1 knows for [`DestinationState`].
 pub const DESTINATION_STATE_VALUES: &[&str] = &["off", "waiting", "connecting", "live", "reconnecting", "failed"];
+
+/// Use of one hardware device by a plan.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct DeviceTotal {
+    pub millis: u32,
+    pub sessions: u32,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct DeviceUse {
+    pub id: String,
+    /// `videotoolbox`, `nvidia`, `va`.
+    pub kind: String,
+    pub room_millis: u32,
+    /// Absent when the device showed no limit.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub sessions_max: Option<u32>,
+    pub sessions_used: u32,
+    pub used_millis: u32,
+}
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
@@ -1175,6 +1267,14 @@ pub struct Found {
     pub role: String,
 }
 
+/// A frame rate as a fraction, so 29.97 is exact.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct Fps {
+    pub den: u32,
+    pub num: u32,
+}
+
 /// The rectangle an item is fitted into.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
@@ -1236,6 +1336,25 @@ pub struct GoLiveResult {
     pub source: String,
     /// Where the source is now. It goes to programme as soon as it is live.
     pub state: SourceState,
+}
+
+/// `governor.status`.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct GovernorStatus {
+    /// Unix seconds of the calibration in use; absent before the first.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub calibrated_at: Option<u64>,
+    /// True while a calibration is running.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub calibrating: Option<bool>,
+    pub cpu: CpuUse,
+    pub devices: Vec<DeviceUse>,
+    pub egress_kbps: u32,
+    /// The key the calibration is stored under.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub fingerprint: Option<String>,
+    pub shed: Vec<ShedNote>,
 }
 
 /// `scene.graphic.list`.
@@ -1543,6 +1662,13 @@ pub const KEY_MODE_VALUES: &[&str] = &["query", "stream"];
 #[serde(default)]
 pub struct KeyRevealed {
     pub secret: String,
+}
+
+/// A custom ladder.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct LadderRef {
+    pub ladder: Vec<RenditionRequest>,
 }
 
 /// A scene's geometry, for copying onto another one.
@@ -1977,6 +2103,16 @@ pub struct OutputStatus {
     /// climbs and stays high means the destination cannot keep up.
     pub queue_secs: f64,
     pub reconnects: u32,
+    /// Per kind data from whatever plugin owns this output. Empty for the
+    /// RTMP outputs the core builds itself.
+    /// What this output asked to be made, when it asked: a rendition
+    /// request or a preset. Absent means the programme encoder.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub rendition: Option<RenditionChoice>,
+    /// Why the governor has this output's rendition stopped just now, while
+    /// it has. The output stays connected and resumes by itself.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub shed: Option<String>,
     pub state: OutputState,
     pub uri_host: String,
     /// Anything this build does not know a name for.
@@ -2121,6 +2257,64 @@ pub struct PipelineRequest {
 /// Where an instance runs: core, in-process, sidecar, or node:<name>.
 pub type Place = String;
 
+/// One node of a plan, as the page draws it.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct PlanNode {
+    pub cost: Cost,
+    /// The catalogue id of the encoder, on an encode node.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub encoder: Option<String>,
+    /// Stable across plans: `encode:programme:h264:1280x720p30:2800k:g2000`.
+    pub id: String,
+    /// `source`, `copy`, `decode`, `scale`, `encode`, `audio-convert`,
+    /// `audio-encode`, `mux`.
+    pub kind: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reason: Option<PlanReason>,
+    /// The outputs it works for, each once (for a channel's plan, the
+    /// destination ids), however many rungs of one ladder it serves.
+    pub serves: Vec<String>,
+    /// Set while the governor has this node stopped to keep what is on air.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub shed: Option<String>,
+}
+
+/// Why the planner decided what it did.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct PlanReason {
+    /// `hardware`, `software-only`, `device-full`, `shape-unsupported`,
+    /// `copied`, `transcoded`.
+    pub code: String,
+    pub text: String,
+}
+
+/// `rendition.plan`.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct PlanRequest {
+    /// `programme` (the default) or `channel:<id>`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub scope: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct PlanTotals {
+    pub cpu_millicores: u32,
+    pub devices: BTreeMap<String, Value>,
+    pub egress_kbps: u32,
+}
+
+/// `rendition.plan`, and the `plan` of `event/rendition.plan`.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct PlanView {
+    pub nodes: Vec<PlanNode>,
+    pub totals: PlanTotals,
+}
+
 /// The whole of one plugin, for an agent about to use it.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
@@ -2240,6 +2434,20 @@ pub struct PluginUpdated {
     pub handshake_ms: u64,
     pub plugin: PluginRecord,
     pub to: String,
+}
+
+/// A preset named by id.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct PresetRef {
+    pub preset: String,
+}
+
+/// `rendition.presets`.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct PresetsResult {
+    pub presets: Vec<RenditionPreset>,
 }
 
 /// What `preview.close` answers with.
@@ -2380,6 +2588,68 @@ pub struct RenameSceneRequest {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub name: Option<String>,
     pub scene: String,
+}
+
+/// What an output asks for: a whole request, or a preset by id.
+///
+/// A request's `id` is replaced by the output's own id (a ladder's rungs get
+/// `<output>-<rung>`), so a client may send any slug there.
+pub type RenditionChoice = Value;
+
+/// `event/rendition.plan`.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct RenditionPlanEvent {
+    pub plan: PlanView,
+    pub scope: String,
+}
+
+/// One built in preset.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct RenditionPreset {
+    /// Whether this machine can make it.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub available: Option<bool>,
+    /// What the whole preset would cost here (every rung, the scaling and
+    /// the sound), as the governor prices it on this machine.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cost: Option<Cost>,
+    /// `platform`, `ladder`, `audio` or `copy`, for grouping in a menu.
+    pub group: String,
+    /// `youtube-1080p30`, `abr-ladder-4`.
+    pub id: String,
+    /// Every rung, top first, for a ladder preset.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub ladder: Option<Vec<RenditionRequest>>,
+    /// The one rendition, or the top rung of a ladder.
+    pub request: RenditionRequest,
+    /// What the page shows: "YouTube 1080p30".
+    pub title: String,
+    /// Why not, when it cannot.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub why: Option<String>,
+}
+
+/// What one output wants. A field left out means "whatever the source has",
+/// so an empty request is a plain copy.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct RenditionRequest {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub audio: Option<AudioWant>,
+    /// How the bytes are wrapped on the way out.
+    pub container: Container,
+    /// Slug, unique within the show or channel that asks.
+    pub id: String,
+    /// Drop the audio altogether.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub no_audio: Option<bool>,
+    /// Drop the video altogether (an audio only stream).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub no_video: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub video: Option<VideoWant>,
 }
 
 /// `scene.item.reorder`.
@@ -2675,6 +2945,10 @@ pub struct SetOutputRequest {
     /// Seconds of encoded data to hold before the muxer.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub queue_secs: Option<f64>,
+    /// A new rendition, as `output.add` takes it. `null` puts the output
+    /// back on the programme's own encode; left out keeps what it has.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub rendition: Option<RenditionChoice>,
     /// The whole new address, stream key and all. Write only: no method ever
     /// reads it back, so leaving it out keeps the address already in force
     /// and a client can offer "change the buffer" without holding the key.
@@ -2740,6 +3014,16 @@ pub const SEVERITY_VALUES: &[&str] = &["error", "warning", "info"];
 pub type Severity2 = String;
 /// The values api_level 1 knows for [`Severity2`].
 pub const SEVERITY2_VALUES: &[&str] = &["critical", "info", "warning", "error"];
+
+/// One thing the governor stopped or slowed, and why.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct ShedNote {
+    /// "the 360p30 H.264 rendition for hls-main".
+    pub what: String,
+    /// The alert text.
+    pub why: String,
+}
 
 /// `event/snapshot`: the full state, and where in the stream it sits.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
@@ -3177,6 +3461,35 @@ pub struct Vec2 {
     pub y: Option<f64>,
 }
 
+pub type VideoCodec = String;
+/// The values api_level 1 knows for [`VideoCodec`].
+pub const VIDEO_CODEC_VALUES: &[&str] = &["other", "h264", "h265", "av1", "vp8", "vp9", "mpeg2", "prores"];
+
+/// The video an output wants. Every field left out is taken from the source.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct VideoWant {
+    /// Target bitrate. A copy is kept when the source is within
+    /// `bitrate_tolerance` of it.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub bitrate_kbps: Option<u32>,
+    /// Fraction either way a source's bitrate may differ and still be copied.
+    /// 0.25 when left out.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub bitrate_tolerance: Option<f32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub codec: Option<VideoCodec>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub fps: Option<Fps>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub height: Option<u32>,
+    /// Keyframe interval. Renditions in one ladder share it.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub keyframe_ms: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub width: Option<u32>,
+}
+
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct ProgramTookEvent {
@@ -3355,7 +3668,7 @@ pub struct MethodInfo {
     pub rest: Option<(&'static str, &'static str)>,
 }
 
-pub const METHODS: [MethodInfo; 146] = [
+pub const METHODS: [MethodInfo; 150] = [
     MethodInfo { name: "adbreak.end", summary: "Cut a running ad short, or disarm one that is scheduled.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/adbreak/end")) },
     MethodInfo { name: "adbreak.start", summary: "Interrupt the programme with a clip, then rejoin live when it ends.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/adbreak/start")) },
     MethodInfo { name: "agent.state", summary: "The compact document written for agents: the programme, each source's state and a motion score saying how much its picture is changing.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/agent/state")) },
@@ -3391,6 +3704,8 @@ pub const METHODS: [MethodInfo; 146] = [
     MethodInfo { name: "filter.list", summary: "Every filter in place, with what it is and where it sits.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/filters")) },
     MethodInfo { name: "filter.remove", summary: "Take a filter out of the pipeline.", scope: "operate", mutating: true, destructive: true, rest: Some(("DELETE", "/api/v1/filters/{id}")) },
     MethodInfo { name: "filter.set", summary: "Change a filter's settings in place. A filter that cannot take the change while running says so rather than being restarted behind your back.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/filters/{id}/set")) },
+    MethodInfo { name: "governor.calibrate", summary: "Measure this machine's encoders again, in the background, a few seconds of every core. Refused while anything is on air unless `confirm` is true.", scope: "admin", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/governor/calibrate")) },
+    MethodInfo { name: "governor.status", summary: "The resource governor: when this machine was measured, what is in use and free on the CPU and each GPU encoder, and what was shed to keep the programme whole.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/governor/status")) },
     MethodInfo { name: "log.gst", summary: "Raise GStreamer's own debug categories for a while, then let them fall back on their own.", scope: "admin", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/log/gst")) },
     MethodInfo { name: "log.levels", summary: "Every log level override in force, and the GStreamer categories still raised.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/log/levels")) },
     MethodInfo { name: "log.set", summary: "Change one instance's or one module's log level while the mixer runs.", scope: "admin", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/log/set")) },
@@ -3438,6 +3753,8 @@ pub const METHODS: [MethodInfo; 146] = [
     MethodInfo { name: "program.history", summary: "The last hundred takes, newest first, with the token that asked for each.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/program/history")) },
     MethodInfo { name: "program.revert", summary: "Take back to the shot before this one.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/program/revert")) },
     MethodInfo { name: "program.take", summary: "Put a scene or a source on programme. The cut is instant and the outgoing stream is not disturbed.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/program/take")) },
+    MethodInfo { name: "rendition.plan", summary: "What the planner built for every output that asked for a rendition: each node, what it serves, which encoder and why, and the totals.", scope: "read", mutating: false, destructive: false, rest: Some(("POST", "/api/v1/rendition/plan")) },
+    MethodInfo { name: "rendition.presets", summary: "Every rendition preset, priced on this machine by the governor. One this machine cannot make says so, with why.", scope: "read", mutating: false, destructive: false, rest: Some(("POST", "/api/v1/rendition/presets")) },
     MethodInfo { name: "scene.add", summary: "Make an empty scene, or one built from a set of sources.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/scenes")) },
     MethodInfo { name: "scene.apply_graphic", summary: "Fill a graphic that is on a scene, by field name, and optionally play it on or take it off. Answers with the records and, if asked, a still.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/scenes/apply_graphic")) },
     MethodInfo { name: "scene.apply_layout", summary: "Apply a layout, making a scene or reshaping one that exists. Applying onto an existing scene keeps the item ids, so the change is a ramp and not a cut.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/scenes/apply_layout")) },
@@ -3504,7 +3821,7 @@ pub const METHODS: [MethodInfo; 146] = [
     MethodInfo { name: "tool.call", summary: "Call one of a plugin's tools, in MCP's shape. The name is `<plugin>/<tool>`, or the bare tool name when only one plugin has it.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/tool/call")) },
 ];
 
-pub const EVENT_NAMES: [&str; 24] = [
+pub const EVENT_NAMES: [&str; 26] = [
     "snapshot",
     "program.took",
     "scene.patch",
@@ -3529,6 +3846,8 @@ pub const EVENT_NAMES: [&str; 24] = [
     "preview.frame",
     "resync",
     "flush",
+    "rendition.plan",
+    "governor.shed",
 ];
 
 pub const EXT_KEYS: [&str; 8] = [
@@ -3596,6 +3915,10 @@ pub enum Event {
     Resync(Resync),
     /// The end of a batch. Render here and not before, so a client never paints half an update.
     Flush(Flush),
+    /// The programme's rendition plan changed: an output that asks for a rendition was added, changed or removed, or the governor stopped or brought back an encoder. plan is what rendition.plan answers.
+    RenditionPlan(RenditionPlanEvent),
+    /// The machine ran short while on air and the governor stopped something to keep what is on air whole: what it was and why. It is brought back by itself when there is room again.
+    GovernorShed(ShedNote),
     /// An event name this api_level does not know, with its params as they came.
     Other { name: String, params: Value },
 }
@@ -3694,6 +4017,14 @@ impl Event {
                 Ok(payload) => Event::Flush(payload),
                 Err(_) => Event::Other { name: pattern.to_string(), params },
             },
+            "rendition.plan" => match serde_json::from_value(params.clone()) {
+                Ok(payload) => Event::RenditionPlan(payload),
+                Err(_) => Event::Other { name: pattern.to_string(), params },
+            },
+            "governor.shed" => match serde_json::from_value(params.clone()) {
+                Ok(payload) => Event::GovernorShed(payload),
+                Err(_) => Event::Other { name: pattern.to_string(), params },
+            },
             _ => Event::Other { name: pattern.to_string(), params },
         }
     }
@@ -3725,6 +4056,8 @@ impl Event {
             Event::PreviewFrame(_) => "preview.frame",
             Event::Resync(_) => "resync",
             Event::Flush(_) => "flush",
+            Event::RenditionPlan(_) => "rendition.plan",
+            Event::GovernorShed(_) => "governor.shed",
             Event::Other { name, .. } => name,
         }
     }
@@ -3906,6 +4239,16 @@ impl Client {
     /// Change a filter's settings in place. A filter that cannot take the change while running says so rather than being restarted behind your back.
     pub async fn filter_set(&self, params: &SetFilterRequest) -> Result<FilterRecord> {
         self.call("filter.set", params).await
+    }
+
+    /// Measure this machine's encoders again, in the background, a few seconds of every core. Refused while anything is on air unless `confirm` is true.
+    pub async fn governor_calibrate(&self, params: &CalibrateRequest) -> Result<CalibrateResult> {
+        self.call("governor.calibrate", params).await
+    }
+
+    /// The resource governor: when this machine was measured, what is in use and free on the CPU and each GPU encoder, and what was shed to keep the programme whole.
+    pub async fn governor_status(&self) -> Result<GovernorStatus> {
+        self.call("governor.status", &serde_json::json!({})).await
     }
 
     /// Raise GStreamer's own debug categories for a while, then let them fall back on their own.
@@ -4141,6 +4484,16 @@ impl Client {
     /// Put a scene or a source on programme. The cut is instant and the outgoing stream is not disturbed.
     pub async fn program_take(&self, params: &TakeRequest) -> Result<ProgramState> {
         self.call("program.take", params).await
+    }
+
+    /// What the planner built for every output that asked for a rendition: each node, what it serves, which encoder and why, and the totals.
+    pub async fn rendition_plan(&self, params: &PlanRequest) -> Result<PlanView> {
+        self.call("rendition.plan", params).await
+    }
+
+    /// Every rendition preset, priced on this machine by the governor. One this machine cannot make says so, with why.
+    pub async fn rendition_presets(&self) -> Result<PresetsResult> {
+        self.call("rendition.presets", &serde_json::json!({})).await
     }
 
     /// Make an empty scene, or one built from a set of sources.

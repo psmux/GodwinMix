@@ -76,6 +76,7 @@ export interface AddItemRequest {
 export interface AddOutputRequest {
   id: string;
   policy?: string | null;
+  rendition?: RenditionChoice | null;
   uri: string;
   [key: string]: unknown;
 }
@@ -167,6 +168,8 @@ export interface Asset {
  */
 export type Audio = "follow" | "always" | "never";
 
+export type AudioCodec = "aac" | "opus" | "mp3" | "ac3" | "pcm" | "other";
+
 /**
  * `source.audio.set` takes an id as well as the levels: the id comes off the
  * path on REST and out of the params on `/rpc`, and both land in one object.
@@ -177,6 +180,14 @@ export interface AudioSetParams {
   media?: Array<number | null>;
   muted?: boolean | null;
   page?: number | null;
+}
+
+/** The audio an output wants. Every field left out is taken from the source. */
+export interface AudioWant {
+  bitrate_kbps?: number | null;
+  channels?: number | null;
+  codec?: AudioCodec | null;
+  sample_rate?: number | null;
 }
 
 export interface BackendInfo {
@@ -220,6 +231,15 @@ export interface BundleAsset {
   path: string;
   sha256: string;
   size: number;
+}
+
+/** `governor.calibrate`. */
+export interface CalibrateRequest {
+  confirm?: boolean;
+}
+
+export interface CalibrateResult {
+  started: boolean;
 }
 
 /**
@@ -428,6 +448,12 @@ export interface ConfigSetResult {
   unchanged: string[];
 }
 
+/**
+ * How the bytes leave. Decides which codecs are allowed: FLV carries H.264
+ * (and HEVC and AV1 in enhanced RTMP), WebRTC wants VP8, VP9, H.264 or AV1.
+ */
+export type Container = "flv" | "mpeg-ts" | "mp4-fragmented" | "mkv" | "hls" | "ll-hls" | "dash" | "rtp" | "webrtc";
+
 export type ConversionPhase = "running" | "done" | "failed";
 
 /** One conversion, in flight or remembered after it finished. */
@@ -452,6 +478,21 @@ export interface CoreInfo {
   token?: TokenInfo | null;
   ui?: UiDefaults | null;
   version: string;
+}
+
+/** What running one piece of work costs, in units the governor adds up. */
+export interface Cost {
+  cpu_millicores: number;
+  device_millis: number;
+  device_sessions: number;
+  egress_kbps: number;
+  memory_mib: number;
+}
+
+export interface CpuUse {
+  cores: number;
+  room_millicores: number;
+  used_millicores: number;
 }
 
 export interface CreateFromRequest {
@@ -493,6 +534,21 @@ export interface Destination {
 
 /** Where a destination has got to. */
 export type DestinationState = "off" | "waiting" | "connecting" | "live" | "reconnecting" | "failed";
+
+/** Use of one hardware device by a plan. */
+export interface DeviceTotal {
+  millis: number;
+  sessions: number;
+}
+
+export interface DeviceUse {
+  id: string;
+  kind: string;
+  room_millis: number;
+  sessions_max?: number | null;
+  sessions_used: number;
+  used_millis: number;
+}
 
 export interface DiscoverAnswer {
   found: Found[];
@@ -671,6 +727,12 @@ export interface Found {
   role: string;
 }
 
+/** A frame rate as a fraction, so 29.97 is exact. */
+export interface Fps {
+  den: number;
+  num: number;
+}
+
 /** The rectangle an item is fitted into. */
 export interface Frame {
   h: number;
@@ -704,6 +766,17 @@ export interface GoLiveResult {
   output?: string | null;
   source: string;
   state: SourceState;
+}
+
+/** `governor.status`. */
+export interface GovernorStatus {
+  calibrated_at?: number | null;
+  calibrating?: boolean;
+  cpu: CpuUse;
+  devices: DeviceUse[];
+  egress_kbps: number;
+  fingerprint?: string | null;
+  shed: ShedNote[];
 }
 
 /** `scene.graphic.list`. */
@@ -896,6 +969,11 @@ export type KeyMode = "query" | "stream";
  */
 export interface KeyRevealed {
   secret: string;
+}
+
+/** A custom ladder. */
+export interface LadderRef {
+  ladder: RenditionRequest[];
 }
 
 /** A scene's geometry, for copying onto another one. */
@@ -1145,6 +1223,8 @@ export interface OutputStatus {
   id: string;
   queue_secs: number;
   reconnects: number;
+  rendition?: RenditionChoice | null;
+  shed?: string | null;
   state: OutputState;
   uri_host: string;
   [key: string]: unknown;
@@ -1230,6 +1310,40 @@ export interface PipelineRequest {
 /** Where an instance runs: core, in-process, sidecar, or node:<name>. */
 export type Place = string;
 
+/** One node of a plan, as the page draws it. */
+export interface PlanNode {
+  cost: Cost;
+  encoder?: string | null;
+  id: string;
+  kind: string;
+  reason?: PlanReason | null;
+  serves: string[];
+  shed?: string | null;
+}
+
+/** Why the planner decided what it did. */
+export interface PlanReason {
+  code: string;
+  text: string;
+}
+
+/** `rendition.plan`. */
+export interface PlanRequest {
+  scope?: string | null;
+}
+
+export interface PlanTotals {
+  cpu_millicores: number;
+  devices: Record<string, unknown>;
+  egress_kbps: number;
+}
+
+/** `rendition.plan`, and the `plan` of `event/rendition.plan`. */
+export interface PlanView {
+  nodes: PlanNode[];
+  totals: PlanTotals;
+}
+
 /** The whole of one plugin, for an agent about to use it. */
 export interface PluginDescription {
   description: string;
@@ -1302,6 +1416,16 @@ export interface PluginUpdated {
   handshake_ms: number;
   plugin: PluginRecord;
   to: string;
+}
+
+/** A preset named by id. */
+export interface PresetRef {
+  preset: string;
+}
+
+/** `rendition.presets`. */
+export interface PresetsResult {
+  presets: RenditionPreset[];
 }
 
 /** What `preview.close` answers with. */
@@ -1385,6 +1509,45 @@ export interface RenameSceneRequest {
   color?: string | null;
   name?: string | null;
   scene: string;
+}
+
+/**
+ * What an output asks for: a whole request, or a preset by id.
+ *
+ * A request's `id` is replaced by the output's own id (a ladder's rungs get
+ * `<output>-<rung>`), so a client may send any slug there.
+ */
+export type RenditionChoice = PresetRef | LadderRef | RenditionRequest;
+
+/** `event/rendition.plan`. */
+export interface RenditionPlanEvent {
+  plan: PlanView;
+  scope: string;
+}
+
+/** One built in preset. */
+export interface RenditionPreset {
+  available?: boolean;
+  cost?: Cost | null;
+  group: string;
+  id: string;
+  ladder?: RenditionRequest[] | null;
+  request: RenditionRequest;
+  title: string;
+  why?: string | null;
+}
+
+/**
+ * What one output wants. A field left out means "whatever the source has",
+ * so an empty request is a plain copy.
+ */
+export interface RenditionRequest {
+  audio?: AudioWant | null;
+  container: Container;
+  id: string;
+  no_audio?: boolean;
+  no_video?: boolean;
+  video?: VideoWant | null;
 }
 
 /** `scene.item.reorder`. */
@@ -1555,6 +1718,7 @@ export interface SetOutputRequest {
   id: string;
   policy?: string | null;
   queue_secs?: number | null;
+  rendition?: RenditionChoice | null;
   uri?: string | null;
   [key: string]: unknown;
 }
@@ -1591,6 +1755,12 @@ export interface SetSourceRequest {
 export type Severity = "error" | "warning" | "info";
 
 export type Severity2 = "info" | "warning" | "error" | "critical";
+
+/** One thing the governor stopped or slowed, and why. */
+export interface ShedNote {
+  what: string;
+  why: string;
+}
 
 /** `event/snapshot`: the full state, and where in the stream it sits. */
 export interface Snapshot {
@@ -1851,6 +2021,19 @@ export interface Vec2 {
   y?: number;
 }
 
+export type VideoCodec = "h264" | "h265" | "av1" | "vp8" | "vp9" | "mpeg2" | "prores" | "other";
+
+/** The video an output wants. Every field left out is taken from the source. */
+export interface VideoWant {
+  bitrate_kbps?: number | null;
+  bitrate_tolerance?: number | null;
+  codec?: VideoCodec | null;
+  fps?: Fps | null;
+  height?: number | null;
+  keyframe_ms?: number | null;
+  width?: number | null;
+}
+
 export interface ProgramTookEvent {
   at_running_time_ms?: number;
   duration_ms?: number;
@@ -1984,6 +2167,8 @@ export interface MethodParams {
   "filter.list": Record<string, never>;
   "filter.remove": FilterIdRequest;
   "filter.set": SetFilterRequest;
+  "governor.calibrate": CalibrateRequest;
+  "governor.status": Record<string, never>;
   "log.gst": LogGstRequest;
   "log.levels": Record<string, never>;
   "log.set": LogSetRequest;
@@ -2031,6 +2216,8 @@ export interface MethodParams {
   "program.history": HistoryRequest;
   "program.revert": Record<string, never>;
   "program.take": TakeRequest;
+  "rendition.plan": PlanRequest;
+  "rendition.presets": Record<string, never>;
   "scene.add": AddSceneRequest;
   "scene.apply_graphic": ApplyGraphicRequest;
   "scene.apply_layout": ApplyLayoutRequest;
@@ -2134,6 +2321,8 @@ export interface MethodResults {
   "filter.list": FilterListing;
   "filter.remove": FilterRemoved;
   "filter.set": FilterRecord;
+  "governor.calibrate": CalibrateResult;
+  "governor.status": GovernorStatus;
   "log.gst": LogGstResult;
   "log.levels": Record<string, unknown>;
   "log.set": Record<string, unknown>;
@@ -2181,6 +2370,8 @@ export interface MethodResults {
   "program.history": TakeRecord[];
   "program.revert": ProgramState;
   "program.take": ProgramState;
+  "rendition.plan": PlanView;
+  "rendition.presets": PresetsResult;
   "scene.add": SceneView;
   "scene.apply_graphic": Record<string, unknown>;
   "scene.apply_layout": Record<string, unknown>;
@@ -2275,6 +2466,8 @@ export interface EventPayloads {
   "preview.frame": Uint8Array;
   "resync": Resync;
   "flush": Flush;
+  "rendition.plan": RenditionPlanEvent;
+  "governor.shed": ShedNote;
 }
 
 export type EventName = keyof EventPayloads;
@@ -2325,6 +2518,8 @@ export const METHODS: readonly MethodInfo[] = [
   { name: "filter.list", summary: "Every filter in place, with what it is and where it sits.", scope: "read", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/filters" } },
   { name: "filter.remove", summary: "Take a filter out of the pipeline.", scope: "operate", mutating: true, destructive: true, rest: { method: "DELETE", path: "/api/v1/filters/{id}" } },
   { name: "filter.set", summary: "Change a filter's settings in place. A filter that cannot take the change while running says so rather than being restarted behind your back.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/filters/{id}/set" } },
+  { name: "governor.calibrate", summary: "Measure this machine's encoders again, in the background, a few seconds of every core. Refused while anything is on air unless `confirm` is true.", scope: "admin", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/governor/calibrate" } },
+  { name: "governor.status", summary: "The resource governor: when this machine was measured, what is in use and free on the CPU and each GPU encoder, and what was shed to keep the programme whole.", scope: "read", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/governor/status" } },
   { name: "log.gst", summary: "Raise GStreamer's own debug categories for a while, then let them fall back on their own.", scope: "admin", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/log/gst" } },
   { name: "log.levels", summary: "Every log level override in force, and the GStreamer categories still raised.", scope: "read", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/log/levels" } },
   { name: "log.set", summary: "Change one instance's or one module's log level while the mixer runs.", scope: "admin", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/log/set" } },
@@ -2372,6 +2567,8 @@ export const METHODS: readonly MethodInfo[] = [
   { name: "program.history", summary: "The last hundred takes, newest first, with the token that asked for each.", scope: "read", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/program/history" } },
   { name: "program.revert", summary: "Take back to the shot before this one.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/program/revert" } },
   { name: "program.take", summary: "Put a scene or a source on programme. The cut is instant and the outgoing stream is not disturbed.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/program/take" } },
+  { name: "rendition.plan", summary: "What the planner built for every output that asked for a rendition: each node, what it serves, which encoder and why, and the totals.", scope: "read", mutating: false, destructive: false, rest: { method: "POST", path: "/api/v1/rendition/plan" } },
+  { name: "rendition.presets", summary: "Every rendition preset, priced on this machine by the governor. One this machine cannot make says so, with why.", scope: "read", mutating: false, destructive: false, rest: { method: "POST", path: "/api/v1/rendition/presets" } },
   { name: "scene.add", summary: "Make an empty scene, or one built from a set of sources.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/scenes" } },
   { name: "scene.apply_graphic", summary: "Fill a graphic that is on a scene, by field name, and optionally play it on or take it off. Answers with the records and, if asked, a still.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/scenes/apply_graphic" } },
   { name: "scene.apply_layout", summary: "Apply a layout, making a scene or reshaping one that exists. Applying onto an existing scene keeps the item ids, so the change is a ramp and not a cut.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/scenes/apply_layout" } },
@@ -2475,6 +2672,8 @@ export const EVENT_NAMES: readonly EventName[] = [
   "preview.frame",
   "resync",
   "flush",
+  "rendition.plan",
+  "governor.shed",
 ];
 
 /**
@@ -2663,6 +2862,16 @@ export class GeneratedMethods {
   /** Change a filter's settings in place. A filter that cannot take the change while running says so rather than being restarted behind your back. */
   filterSet(params: SetFilterRequest): Promise<FilterRecord> {
     return this._call("filter.set", params as unknown as Record<string, unknown>) as Promise<FilterRecord>;
+  }
+
+  /** Measure this machine's encoders again, in the background, a few seconds of every core. Refused while anything is on air unless `confirm` is true. */
+  governorCalibrate(params: CalibrateRequest = {}): Promise<CalibrateResult> {
+    return this._call("governor.calibrate", params as unknown as Record<string, unknown>) as Promise<CalibrateResult>;
+  }
+
+  /** The resource governor: when this machine was measured, what is in use and free on the CPU and each GPU encoder, and what was shed to keep the programme whole. */
+  governorStatus(): Promise<GovernorStatus> {
+    return this._call("governor.status", {}) as Promise<GovernorStatus>;
   }
 
   /** Raise GStreamer's own debug categories for a while, then let them fall back on their own. */
@@ -2898,6 +3107,16 @@ export class GeneratedMethods {
   /** Put a scene or a source on programme. The cut is instant and the outgoing stream is not disturbed. */
   programTake(params: TakeRequest = {}): Promise<ProgramState> {
     return this._call("program.take", params as unknown as Record<string, unknown>) as Promise<ProgramState>;
+  }
+
+  /** What the planner built for every output that asked for a rendition: each node, what it serves, which encoder and why, and the totals. */
+  renditionPlan(params: PlanRequest = {}): Promise<PlanView> {
+    return this._call("rendition.plan", params as unknown as Record<string, unknown>) as Promise<PlanView>;
+  }
+
+  /** Every rendition preset, priced on this machine by the governor. One this machine cannot make says so, with why. */
+  renditionPresets(): Promise<PresetsResult> {
+    return this._call("rendition.presets", {}) as Promise<PresetsResult>;
   }
 
   /** Make an empty scene, or one built from a set of sources. */

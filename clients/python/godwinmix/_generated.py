@@ -105,6 +105,8 @@ class AddOutputRequest(TypedDict, total=False):
     # Stable id for this destination.
     policy: Optional[str]
     # Reconnect policy: "own" retries quickly, for servers you run; "cdn" backs off harder, for platforms that penalise hammering.
+    rendition: Union[RenditionChoice, None]
+    # What to make from the programme for this destination: a rendition request or `{"preset": "youtube-720p30"}` (`rendition.presets` lists them). Absent means the programme encoder, at no extra cost.
     uri: str
     # rtmp:// or rtmps:// URL including the stream key.
 
@@ -212,6 +214,14 @@ class AudioSetParams(TypedDict, total=False):
     page: Optional[float]
     # Gain on a superimposed page's own sound.
 
+class AudioWant(TypedDict, total=False):
+    """The audio an output wants. Every field left out is taken from the source."""
+
+    bitrate_kbps: Optional[int]
+    channels: Optional[int]
+    codec: Union[AudioCodec, None]
+    sample_rate: Optional[int]
+
 class BackendInfo(TypedDict, total=False):
     audio_decoder: str
     audio_encoder: str
@@ -257,6 +267,15 @@ class BundleAsset(TypedDict, total=False):
     # Relative to the bundle root, forward slashes. Never absolute: see the head of this module.
     sha256: str
     size: int
+
+class CalibrateRequest(TypedDict, total=False):
+    """`governor.calibrate`."""
+
+    confirm: bool
+    # Measure even though something is on air. The measurement takes a few seconds of every core and can cost what is on air frames.
+
+class CalibrateResult(TypedDict, total=False):
+    started: bool
 
 class Canvas(TypedDict, total=False):
     """The output raster. One per collection in this release; 11 section 1 leaves room for several."""
@@ -534,6 +553,25 @@ class CoreInfo(TypedDict, total=False):
     version: str
     # The build's own version, as in Cargo.toml.
 
+class Cost(TypedDict, total=False):
+    """What running one piece of work costs, in units the governor adds up."""
+
+    cpu_millicores: int
+    # Thousandths of one CPU core. 1000 is one whole core.
+    device_millis: int
+    # Share of one hardware device, in thousandths of what it can do, when the work runs on one.
+    device_sessions: int
+    # Hardware encoder sessions held (consumer NVIDIA cards cap these).
+    egress_kbps: int
+    # Bytes per second out of the machine, in kbit/s.
+    memory_mib: int
+    # Resident memory the work adds, in MiB.
+
+class CpuUse(TypedDict, total=False):
+    cores: int
+    room_millicores: int
+    used_millicores: int
+
 class CreateFromRequest(TypedDict, total=False):
     layout: Optional[str]
     # A layout name from `scene.layout.list`. Left out, the number of sources picks one.
@@ -572,6 +610,22 @@ class Destination(TypedDict, total=False):
     # Which of the channel's streams to send. `*` is the first live one.
     uri_host: str
     # The scheme, host and port, and nothing that could carry a key.
+
+class DeviceTotal(TypedDict, total=False):
+    """Use of one hardware device by a plan."""
+
+    millis: int
+    sessions: int
+
+class DeviceUse(TypedDict, total=False):
+    id: str
+    kind: str
+    # `videotoolbox`, `nvidia`, `va`.
+    room_millis: int
+    sessions_max: Optional[int]
+    # Absent when the device showed no limit.
+    sessions_used: int
+    used_millis: int
 
 class DiscoverAnswer(TypedDict, total=False):
     found: List[Found]
@@ -752,6 +806,12 @@ class Found(TypedDict, total=False):
     role: str
     # `node` or `core`.
 
+class Fps(TypedDict, total=False):
+    """A frame rate as a fraction, so 29.97 is exact."""
+
+    den: int
+    num: int
+
 class Frame(TypedDict, total=False):
     """The rectangle an item is fitted into."""
 
@@ -797,6 +857,20 @@ class GoLiveResult(TypedDict, total=False):
     # The source that was created or reused.
     state: SourceState
     # Where the source is now. It goes to programme as soon as it is live.
+
+class GovernorStatus(TypedDict, total=False):
+    """`governor.status`."""
+
+    calibrated_at: Optional[int]
+    # Unix seconds of the calibration in use; absent before the first.
+    calibrating: bool
+    # True while a calibration is running.
+    cpu: CpuUse
+    devices: List[DeviceUse]
+    egress_kbps: int
+    fingerprint: Optional[str]
+    # The key the calibration is stored under.
+    shed: List[ShedNote]
 
 class GraphicListing(TypedDict, total=False):
     """`scene.graphic.list`."""
@@ -993,6 +1067,11 @@ class KeyRevealed(TypedDict, total=False):
     """What `channel.key.reveal` answers: the key itself, and nothing a list would carry."""
 
     secret: str
+
+class LadderRef(TypedDict, total=False):
+    """A custom ladder."""
+
+    ladder: List[RenditionRequest]
 
 class Layout(TypedDict, total=False):
     """A scene's geometry, for copying onto another one."""
@@ -1260,6 +1339,10 @@ class OutputStatus(TypedDict, total=False):
     queue_secs: float
     # Seconds of encoded data waiting in the pre-muxer queue. A number that climbs and stays high means the destination cannot keep up.
     reconnects: int
+    rendition: Union[RenditionChoice, None]
+    # Per kind data from whatever plugin owns this output. Empty for the RTMP outputs the core builds itself. What this output asked to be made, when it asked: a rendition request or a preset. Absent means the programme encoder.
+    shed: Optional[str]
+    # Why the governor has this output's rendition stopped just now, while it has. The output stays connected and resumes by itself.
     state: OutputState
     uri_host: str
 
@@ -1350,6 +1433,46 @@ class PipelineRequest(TypedDict, total=False):
 
     name: str
 
+class PlanNode(TypedDict, total=False):
+    """One node of a plan, as the page draws it."""
+
+    cost: Cost
+    encoder: Optional[str]
+    # The catalogue id of the encoder, on an encode node.
+    id: str
+    # Stable across plans: `encode:programme:h264:1280x720p30:2800k:g2000`.
+    kind: str
+    # `source`, `copy`, `decode`, `scale`, `encode`, `audio-convert`, `audio-encode`, `mux`.
+    reason: Union[PlanReason, None]
+    serves: List[str]
+    # The outputs it works for, each once (for a channel's plan, the destination ids), however many rungs of one ladder it serves.
+    shed: Optional[str]
+    # Set while the governor has this node stopped to keep what is on air.
+
+class PlanReason(TypedDict, total=False):
+    """Why the planner decided what it did."""
+
+    code: str
+    # `hardware`, `software-only`, `device-full`, `shape-unsupported`, `copied`, `transcoded`.
+    text: str
+
+class PlanRequest(TypedDict, total=False):
+    """`rendition.plan`."""
+
+    scope: Optional[str]
+    # `programme` (the default) or `channel:<id>`.
+
+class PlanTotals(TypedDict, total=False):
+    cpu_millicores: int
+    devices: Dict[str, Any]
+    egress_kbps: int
+
+class PlanView(TypedDict, total=False):
+    """`rendition.plan`, and the `plan` of `event/rendition.plan`."""
+
+    nodes: List[PlanNode]
+    totals: PlanTotals
+
 class PluginDescription(TypedDict, total=False):
     """The whole of one plugin, for an agent about to use it."""
 
@@ -1434,6 +1557,16 @@ PluginUpdated = TypedDict("PluginUpdated", {
     "plugin": PluginRecord,
     "to": str,
 }, total=False)
+
+class PresetRef(TypedDict, total=False):
+    """A preset named by id."""
+
+    preset: str
+
+class PresetsResult(TypedDict, total=False):
+    """`rendition.presets`."""
+
+    presets: List[RenditionPreset]
 
 class PreviewClosed(TypedDict, total=False):
     """What `preview.close` answers with."""
@@ -1527,6 +1660,46 @@ class RenameSceneRequest(TypedDict, total=False):
     color: Optional[str]
     name: Optional[str]
     scene: str
+
+class RenditionPlanEvent(TypedDict, total=False):
+    """`event/rendition.plan`."""
+
+    plan: PlanView
+    scope: str
+
+class RenditionPreset(TypedDict, total=False):
+    """One built in preset."""
+
+    available: bool
+    # Whether this machine can make it.
+    cost: Union[Cost, None]
+    # What the whole preset would cost here (every rung, the scaling and the sound), as the governor prices it on this machine.
+    group: str
+    # `platform`, `ladder`, `audio` or `copy`, for grouping in a menu.
+    id: str
+    # `youtube-1080p30`, `abr-ladder-4`.
+    ladder: Optional[List[RenditionRequest]]
+    # Every rung, top first, for a ladder preset.
+    request: RenditionRequest
+    # The one rendition, or the top rung of a ladder.
+    title: str
+    # What the page shows: "YouTube 1080p30".
+    why: Optional[str]
+    # Why not, when it cannot.
+
+class RenditionRequest(TypedDict, total=False):
+    """What one output wants. A field left out means "whatever the source has", so an empty request is a plain copy."""
+
+    audio: Union[AudioWant, None]
+    container: Container
+    # How the bytes are wrapped on the way out.
+    id: str
+    # Slug, unique within the show or channel that asks.
+    no_audio: bool
+    # Drop the audio altogether.
+    no_video: bool
+    # Drop the video altogether (an audio only stream).
+    video: Union[VideoWant, None]
 
 class ReorderRequest(TypedDict, total=False):
     """`scene.item.reorder`."""
@@ -1728,6 +1901,8 @@ class SetOutputRequest(TypedDict, total=False):
     # "own" or "cdn", as `output.add`.
     queue_secs: Optional[float]
     # Seconds of encoded data to hold before the muxer.
+    rendition: Union[RenditionChoice, None]
+    # A new rendition, as `output.add` takes it. `null` puts the output back on the programme's own encode; left out keeps what it has.
     uri: Optional[str]
     # The whole new address, stream key and all. Write only: no method ever reads it back, so leaving it out keeps the address already in force and a client can offer "change the buffer" without holding the key.
 
@@ -1755,6 +1930,14 @@ class SetSourceRequest(TypedDict, total=False):
     # Where it runs: `core`, `in-process`, `sidecar` or `node:<name>`.
     transport: Union[BridgeTransport, None]
     # How a remote source's media travels: `rtp`, `srt` or `whip`.
+
+class ShedNote(TypedDict, total=False):
+    """One thing the governor stopped or slowed, and why."""
+
+    what: str
+    # "the 360p30 H.264 rendition for hls-main".
+    why: str
+    # The alert text.
 
 class Snapshot(TypedDict, total=False):
     """`event/snapshot`: the full state, and where in the stream it sits."""
@@ -2019,6 +2202,20 @@ class Vec2(TypedDict, total=False):
     x: float
     y: float
 
+class VideoWant(TypedDict, total=False):
+    """The video an output wants. Every field left out is taken from the source."""
+
+    bitrate_kbps: Optional[int]
+    # Target bitrate. A copy is kept when the source is within `bitrate_tolerance` of it.
+    bitrate_tolerance: Optional[float]
+    # Fraction either way a source's bitrate may differ and still be copied. 0.25 when left out.
+    codec: Union[VideoCodec, None]
+    fps: Union[Fps, None]
+    height: Optional[int]
+    keyframe_ms: Optional[int]
+    # Keyframe interval. Renditions in one ladder share it.
+    width: Optional[int]
+
 class ProgramTookEvent(TypedDict, total=False):
     at_running_time_ms: int
     duration_ms: int
@@ -2123,6 +2320,8 @@ Applies = Literal['live', 'next_source', 'restart']
 # Whether the item's source is heard. A source is audible when any live item of it says so, which is OBS's behaviour and changes no pad topology.
 Audio = Literal['follow', 'always', 'never']
 
+AudioCodec = Literal['aac', 'opus', 'mp3', 'ac3', 'pcm', 'other']
+
 # OBS's blend enum, so an import carries across unchanged.
 Blend = Literal['normal', 'add', 'screen', 'multiply', 'lighten', 'darken', 'subtract']
 
@@ -2131,6 +2330,9 @@ BridgeTransport = Literal['rtp', 'srt', 'whip']
 
 # A way a publisher reaches a channel. RTMPS is `Rtmps`, set apart because it has a port of its own.
 ChannelProtocol = Literal['rtmp', 'srt', 'whip']
+
+# How the bytes leave. Decides which codecs are allowed: FLV carries H.264 (and HEVC and AV1 in enhanced RTMP), WebRTC wants VP8, VP9, H.264 or AV1.
+Container = Literal['flv', 'mpeg-ts', 'mp4-fragmented', 'mkv', 'hls', 'll-hls', 'dash', 'rtp', 'webrtc']
 
 ConversionPhase = Literal['running', 'done', 'failed']
 
@@ -2160,6 +2362,9 @@ Place = str
 # `ext.preview`. Either `"full"`, `false`, or an object.
 PreviewExt = Union[str, bool, Dict[str, Any]]
 
+# What an output asks for: a whole request, or a preset by id. A request's `id` is replaced by the output's own id (a ladder's rungs get `<output>-<rung>`), so a client may send any slug there.
+RenditionChoice = Union[PresetRef, LadderRef, RenditionRequest]
+
 ResponseFormat = Literal['concise', 'detailed']
 
 # How a core that exits gets started again.
@@ -2179,6 +2384,8 @@ TelemetryExt = Union[bool, Dict[str, Any]]
 
 # A name, or an object.
 Transition = Union[str, TransitionRequest]
+
+VideoCodec = Union[Literal['h264', 'h265', 'av1', 'vp8', 'vp9', 'mpeg2', 'prores'], Literal['other']]
 
 METHODS = (
     {"name": "adbreak.end", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/adbreak/end"), "summary": 'Cut a running ad short, or disarm one that is scheduled.'},
@@ -2216,6 +2423,8 @@ METHODS = (
     {"name": "filter.list", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/filters"), "summary": 'Every filter in place, with what it is and where it sits.'},
     {"name": "filter.remove", "scope": "operate", "mutating": True, "destructive": True, "rest": ("DELETE", "/api/v1/filters/{id}"), "summary": 'Take a filter out of the pipeline.'},
     {"name": "filter.set", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/filters/{id}/set"), "summary": "Change a filter's settings in place. A filter that cannot take the change while running says so rather than being restarted behind your back."},
+    {"name": "governor.calibrate", "scope": "admin", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/governor/calibrate"), "summary": "Measure this machine's encoders again, in the background, a few seconds of every core. Refused while anything is on air unless `confirm` is true."},
+    {"name": "governor.status", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/governor/status"), "summary": 'The resource governor: when this machine was measured, what is in use and free on the CPU and each GPU encoder, and what was shed to keep the programme whole.'},
     {"name": "log.gst", "scope": "admin", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/log/gst"), "summary": "Raise GStreamer's own debug categories for a while, then let them fall back on their own."},
     {"name": "log.levels", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/log/levels"), "summary": 'Every log level override in force, and the GStreamer categories still raised.'},
     {"name": "log.set", "scope": "admin", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/log/set"), "summary": "Change one instance's or one module's log level while the mixer runs."},
@@ -2263,6 +2472,8 @@ METHODS = (
     {"name": "program.history", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/program/history"), "summary": 'The last hundred takes, newest first, with the token that asked for each.'},
     {"name": "program.revert", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/program/revert"), "summary": 'Take back to the shot before this one.'},
     {"name": "program.take", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/program/take"), "summary": 'Put a scene or a source on programme. The cut is instant and the outgoing stream is not disturbed.'},
+    {"name": "rendition.plan", "scope": "read", "mutating": False, "destructive": False, "rest": ("POST", "/api/v1/rendition/plan"), "summary": 'What the planner built for every output that asked for a rendition: each node, what it serves, which encoder and why, and the totals.'},
+    {"name": "rendition.presets", "scope": "read", "mutating": False, "destructive": False, "rest": ("POST", "/api/v1/rendition/presets"), "summary": 'Every rendition preset, priced on this machine by the governor. One this machine cannot make says so, with why.'},
     {"name": "scene.add", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/scenes"), "summary": 'Make an empty scene, or one built from a set of sources.'},
     {"name": "scene.apply_graphic", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/scenes/apply_graphic"), "summary": 'Fill a graphic that is on a scene, by field name, and optionally play it on or take it off. Answers with the records and, if asked, a still.'},
     {"name": "scene.apply_layout", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/scenes/apply_layout"), "summary": 'Apply a layout, making a scene or reshaping one that exists. Applying onto an existing scene keeps the item ids, so the change is a ramp and not a cut.'},
@@ -2354,6 +2565,8 @@ EVENT_NAMES = (
     "preview.frame",
     "resync",
     "flush",
+    "rendition.plan",
+    "governor.shed",
 )
 
 EXT_KEYS = {
@@ -2803,6 +3016,24 @@ class GeneratedMethods:
             params["params"] = params
         return await self._call("filter.set", params)
 
+    async def governor_calibrate(
+        self,
+        *,
+        confirm: Optional[bool] = None,
+    ) -> CalibrateResult:
+        """Measure this machine's encoders again, in the background, a few seconds of every core. Refused while anything is on air unless `confirm` is true."""
+        params: Dict[str, Any] = {}
+        if confirm is not None:
+            params["confirm"] = confirm
+        return await self._call("governor.calibrate", params)
+
+    async def governor_status(
+        self,
+    ) -> GovernorStatus:
+        """The resource governor: when this machine was measured, what is in use and free on the CPU and each GPU encoder, and what was shed to keep the programme whole."""
+        params: Dict[str, Any] = {}
+        return await self._call("governor.status", params)
+
     async def log_gst(
         self,
         categories: str,
@@ -2932,6 +3163,7 @@ class GeneratedMethods:
         uri: str,
         *,
         policy: Optional[str] = None,
+        rendition: Optional[Union[RenditionChoice, None]] = None,
         **extra: Any,
     ) -> OutputStatus:
         """Send the programme to another destination. The encoder is shared, so adding one costs nothing on air."""
@@ -2940,6 +3172,8 @@ class GeneratedMethods:
         params["uri"] = uri
         if policy is not None:
             params["policy"] = policy
+        if rendition is not None:
+            params["rendition"] = rendition
         params.update(extra)
         return await self._call("output.add", params)
 
@@ -2983,6 +3217,7 @@ class GeneratedMethods:
         *,
         policy: Optional[str] = None,
         queue_secs: Optional[float] = None,
+        rendition: Optional[Union[RenditionChoice, None]] = None,
         uri: Optional[str] = None,
         **extra: Any,
     ) -> OutputStatus:
@@ -2993,6 +3228,8 @@ class GeneratedMethods:
             params["policy"] = policy
         if queue_secs is not None:
             params["queue_secs"] = queue_secs
+        if rendition is not None:
+            params["rendition"] = rendition
         if uri is not None:
             params["uri"] = uri
         params.update(extra)
@@ -3301,6 +3538,24 @@ class GeneratedMethods:
         if transition is not None:
             params["transition"] = transition
         return await self._call("program.take", params)
+
+    async def rendition_plan(
+        self,
+        *,
+        scope: Optional[str] = None,
+    ) -> PlanView:
+        """What the planner built for every output that asked for a rendition: each node, what it serves, which encoder and why, and the totals."""
+        params: Dict[str, Any] = {}
+        if scope is not None:
+            params["scope"] = scope
+        return await self._call("rendition.plan", params)
+
+    async def rendition_presets(
+        self,
+    ) -> PresetsResult:
+        """Every rendition preset, priced on this machine by the governor. One this machine cannot make says so, with why."""
+        params: Dict[str, Any] = {}
+        return await self._call("rendition.presets", params)
 
     async def scene_add(
         self,
