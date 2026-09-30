@@ -1,0 +1,9 @@
+/* The show tabs' rename box, and the New show dialog. Loaded with them. */
+.showtab-input[type=text] { width: auto; padding: 1px 6px; font: inherit; }
+.show-new { display: grid; gap: 10px; min-width: min(420px, 80vw); }
+.show-new .field { display: grid; gap: 4px; }
+.show-froms { display: grid; gap: 6px; }
+.show-from { display: flex; gap: 10px; align-items: flex-start; padding: 10px 12px; border: var(--border) solid var(--line); border-radius: var(--radius); cursor: pointer; }
+.show-from:has(input:checked) { border-color: var(--accent); background: var(--select-fill); }
+.show-from input { margin-top: 3px; accent-color: var(--accent); }
+.show-from > span { display: grid; gap: 2px; }

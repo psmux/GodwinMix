@@ -25,6 +25,7 @@ export function checked(item) {
   if (item.check === "panel") return showing(item.arg);
   if (item.check === "studio") return !!settings().producer;
   if (item.check === "theme") return currentTheme() === item.arg;
+  if (item.check === "routing") return !!document.querySelector(".routing");
   return null;
 }
 
@@ -37,11 +38,15 @@ async function show(id) {
 }
 
 const project = () => import("./project.js");
+const shows = () => import("./show-file.js");
 
 const ACTIONS = {
   "project.new": (client) => project().then((m) => m.newProject(client)),
   "project.open": (client) => project().then((m) => m.openProject(client)),
   "project.save": (client) => project().then((m) => m.saveProject(client)),
+  "show.new": (client) => shows().then((m) => m.newShow(client)),
+  "show.switch": (client, id) => shows().then((m) => m.switchShow(client, id)),
+  "view.routing": (client) => import("../panels/routing/view.js").then((m) => m.toggleRouting(client)),
   "edit.delete": () => {
     const which = ["tray.delete", "scenes.remove"].find((id) => {
       const cmd = get(id);
