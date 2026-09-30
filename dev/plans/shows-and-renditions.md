@@ -316,6 +316,13 @@ ingest.
    port they choose (443 offered first). The same holds for the RTMP port,
    the SRT port and the WebRTC media port: the first channel that needs one
    opens it, the last one to stop needing it closes it.
+
+   One exception, the owner's decision (2026-09-30): every mixer with the
+   ingest plugin gets a default RTMP channel, `live`, made once at its first
+   start, so the RTMP port is open from that start and a first time user can
+   point OBS at it without making anything. It is made once only. Deleted,
+   it stays deleted, and as the last RTMP channel its deletion closes the
+   port as any other would. A mixer that already had channels gets none.
 2. **Headroom is measured and set by the software, not typed by a person.**
    The governor calibrates each encoder on this machine, watches real load
    while running, and derives how much it can admit from what it measured,
