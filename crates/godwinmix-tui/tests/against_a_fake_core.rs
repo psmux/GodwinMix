@@ -5,7 +5,7 @@ mod support;
 
 use godwinmix_tui::app::Link;
 use godwinmix_tui::client::MultiviewWant;
-use serde_json::{json, Value};
+use serde_json::json;
 use std::sync::atomic::Ordering;
 use support::{Fake, Harness, Push};
 
@@ -74,7 +74,8 @@ async fn a_number_key_takes_that_source() {
     ui.press('0').await;
     ui.pump_ms(100).await;
     let takes = fake.calls("program.take");
-    assert_eq!(takes[2]["params"], json!({"source": Value::Null}));
+    // Empty, not null: null would take a scene that is armed.
+    assert_eq!(takes[2]["params"], json!({"source": ""}));
 }
 
 #[tokio::test]
