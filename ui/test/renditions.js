@@ -204,15 +204,21 @@ async function hlsTests(test, eq, ok) {
 
   const { hlsCard, playsHls } = await import("../panels/renditions/hls-card.js");
   const card = hlsCard(stub, { id: "viewers", type: "hls/output", state: "connecting" });
-  card.update({ id: "viewers", state: "connecting" });
   await wait(30);
-  test("the playback card has the link, a QR code and Copy; Watch waits for live", () => {
-    eq(card.node.querySelector(".rnd-url").textContent, "http://192.168.1.20:8080/hls/viewers/master.m3u8");
+  test("before the output has a link, the card says so and offers nothing to copy", () => {
+    eq(card.node.querySelector(".rnd-url").textContent, "The link appears once the output has started.");
+    ok(!card.node.querySelector(".rnd-qr svg"), "no QR code of nothing");
+    ok(button(card.node, "Copy").disabled);
+  });
+  const playback = { master_url_path: "/hls/viewers/master.m3u8?key=abcdefghijklmnopqrstuvwx" };
+  card.update({ id: "viewers", state: "connecting", playback });
+  test("the playback card has the link with the viewer key, a QR code and Copy; Watch waits for live", () => {
+    eq(card.node.querySelector(".rnd-url").textContent, "http://192.168.1.20:8080/hls/viewers/master.m3u8?key=abcdefghijklmnopqrstuvwx");
     ok(card.node.querySelector(".rnd-qr svg path"), "a QR code");
-    ok(button(card.node, "Copy"));
+    ok(!button(card.node, "Copy").disabled);
     ok(button(card.node, "Watch here").disabled, "nothing to watch yet");
   });
-  card.update({ id: "viewers", state: "live" });
+  card.update({ id: "viewers", state: "live", playback });
   button(card.node, "Watch here").click();
   test("once live, Watch here opens a player or says where to open it", () => {
     const player = card.node.querySelector(".rnd-player");
