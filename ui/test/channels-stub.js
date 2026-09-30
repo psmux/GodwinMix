@@ -49,7 +49,10 @@ export class ChannelStub {
   }
 
   async call(method, params = {}) {
-    this.calls.push({ method, params });
+    // The planner's and the governor's reads are not what these tests are
+    // about, and the Channels panel now makes them on its own; renditions-stub
+    // answers them when a test wants them.
+    if (!/^(rendition|governor)\./.test(method)) this.calls.push({ method, params });
     const fn = METHODS[method];
     if (!fn) throw Object.assign(new Error(`no method ${method}`), { code: -32601, data: {} });
     return structuredClone(fn.call(this, params));
@@ -152,6 +155,7 @@ const METHODS = {
       // A whole address pasted into a custom server carries its own key.
       has_key: !!p.key || p.platform === "srt" || (p.platform === "custom" && /^\w+:\/\/[^/]+\/[^/]+\/./.test(p.server || "")), stream: p.stream || "*", enabled: p.enabled !== false, state: p.enabled === false ? "off" : "waiting",
       since_ms: 0, kbps: 0, reconnects: 0, error: null,
+      ...(p.rendition ? { rendition: p.rendition } : {}),
     });
     this.changed(c.id);
     return c;

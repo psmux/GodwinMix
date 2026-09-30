@@ -17,6 +17,7 @@ import { channelCard } from "./card.js";
 import { emptyArt } from "./art.js";
 import { installCard } from "./install.js";
 import { openPorts, portProblems } from "./ways.js";
+import { ChannelPlans } from "./plans.js";
 
 import { addChannel } from "./create.js";
 
@@ -45,6 +46,7 @@ export class ChannelsView {
     stylesheet();
     this.client = client;
     this.model = new Channels();
+    this.plans = new ChannelPlans(client, () => this.render());
     this.cards = new Map();
     this.list = el("div.chn-list");
     this.count = el("span.chn-count");
@@ -85,6 +87,7 @@ export class ChannelsView {
     if (current === this) current = null;
     this.release();
     for (const off of this.offs) off();
+    this.plans.stop();
     this.clock(false);
   }
 
@@ -138,6 +141,7 @@ export class ChannelsView {
     this.ports.classList.toggle("bad", problems.length > 0);
     if (!this.cards.size) clear(this.list);
     keyed(this.list, this.cards, channels, (c) => c.id, (c) => channelCard(this, c), (c) => (c.enabled ? "on" : "off"));
+    if (this.running) this.plans.sync(channels);
     this.clock(channels.some(isLive));
   }
 
