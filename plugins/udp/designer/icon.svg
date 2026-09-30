@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" role="img" aria-label="UDP">
+  <title>UDP</title>
+  <circle cx="5" cy="12" r="2"/>
+  <path d="M9 8.5a5 5 0 0 1 0 7"/>
+  <path d="M12.5 6a8.5 8.5 0 0 1 0 12"/>
+  <path d="M16 3.5a12 12 0 0 1 0 17"/>
+</svg>
