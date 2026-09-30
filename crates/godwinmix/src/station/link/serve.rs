@@ -17,6 +17,8 @@ pub trait Host: Send + Sync + 'static {
     /// secret).
     fn hello(&self, hello: &Hello) -> bool;
     fn on_air(&self, show: &str, on: bool);
+    /// What the show measures of its own CPU, thousandths of a core.
+    fn load(&self, show: &str, millicores: u32);
     /// Its link closed: it died, or it is stopping.
     fn gone(&self, show: &str, pid: u32);
     fn governor(&self) -> Governor;
@@ -57,9 +59,20 @@ async fn serve(stream: TcpStream, host: Arc<dyn Host>) {
     info!(show = %hello.show, addr = %hello.addr, "a show linked to the station");
     let governor = host.governor();
     let mut tickets: HashMap<u64, Ticket> = HashMap::new();
-    while let Ok(Some(text)) = lines.next_line().await {
-        let Ok(line) = serde_json::from_str::<Line>(&text) else { continue };
-        let reply = handle(&hello.show, line, &governor, &mut tickets, host.as_ref());
+    let mut watch = tokio::time::interval(SHED_EVERY);
+    loop {
+        // The watch wakes only while this show holds something to shed.
+        let holding = !tickets.is_empty();
+        let reply = tokio::select! {
+            line = lines.next_line() => match line {
+                Ok(Some(text)) => match serde_json::from_str::<Line>(&text) {
+                    Ok(line) => handle(&hello.show, line, &governor, &mut tickets, host.as_ref()),
+                    Err(_) => None,
+                },
+                _ => break,
+            },
+            _ = watch.tick(), if holding => shed_for(&governor, &tickets),
+        };
         if let Some(reply) = reply {
             if write.write_all(reply.text().as_bytes()).await.is_err() {
                 break;
@@ -69,6 +82,16 @@ async fn serve(stream: TcpStream, host: Arc<dyn Host>) {
     debug!(show = %hello.show, held = tickets.len(), "the show's link closed; its tickets go back");
     drop(tickets);
     host.gone(&hello.show, hello.pid);
+}
+
+/// How often a show holding tickets is told what to give up, while the
+/// machine is over its line. Nothing is sent while it is not.
+const SHED_EVERY: std::time::Duration = std::time::Duration::from_secs(1);
+
+/// The station's plan for the whole machine, cut down to this show's tickets.
+fn shed_for(governor: &Governor, tickets: &HashMap<u64, Ticket>) -> Option<Line> {
+    let steps: Vec<_> = governor.shed().into_iter().filter(|s| tickets.contains_key(&s.ticket)).collect();
+    (!steps.is_empty()).then(|| Line::call(None, "governor.shed", serde_json::json!({ "steps": steps })))
 }
 
 fn handle(show: &str, line: Line, governor: &Governor, tickets: &mut HashMap<u64, Ticket>, host: &dyn Host) -> Option<Line> {
@@ -85,6 +108,16 @@ fn handle(show: &str, line: Line, governor: &Governor, tickets: &mut HashMap<u64
         "governor.release" => {
             let ticket = line.params.get("ticket").and_then(Value::as_u64)?;
             tickets.remove(&ticket);
+            // It stops reporting once it holds nothing; its last word must
+            // not stand for work it no longer does.
+            if tickets.is_empty() {
+                host.load(show, 0);
+            }
+            None
+        }
+        "show.load" => {
+            let m = line.params.get("millicores").and_then(Value::as_u64).unwrap_or(0);
+            host.load(show, u32::try_from(m).unwrap_or(u32::MAX));
             None
         }
         "show.on_air" => {

@@ -70,6 +70,8 @@ pub struct Station {
     pub http: reqwest::Client,
     /// Shows that have something going out.
     pub on_air: Mutex<BTreeSet<String>>,
+    /// What each show holding a ticket last said it measures of itself.
+    pub loads: Mutex<BTreeMap<String, u32>>,
     pub sampler: Mutex<godwinmix_host::sampler::Sampler>,
     /// Set once the station is shutting down, so a show that exits is not
     /// started again.
@@ -96,6 +98,7 @@ impl Station {
                 .build()
                 .unwrap_or_default(),
             on_air: Mutex::new(BTreeSet::new()),
+            loads: Mutex::new(BTreeMap::new()),
             sampler: Mutex::new(godwinmix_host::sampler::Sampler::new()),
             stopping: AtomicBool::new(false),
             quit: tokio::sync::Notify::new(),

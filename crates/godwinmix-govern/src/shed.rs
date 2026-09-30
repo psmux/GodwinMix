@@ -43,7 +43,7 @@ pub struct Held {
     pub encode: Option<Encode>,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case", tag = "action")]
 pub enum ShedAction {
     /// Stop it; the ticket is dropped with it.
@@ -54,7 +54,7 @@ pub enum ShedAction {
 }
 
 /// One thing to do, in order.
-#[derive(Debug, Clone, PartialEq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ShedStep {
     pub ticket: u64,
     pub what: String,

@@ -1,6 +1,7 @@
 use super::*;
 use crate::testing::{profile, shape, x264};
 use crate::{GovernorConfig, Profile};
+use crate::governor::Claim;
 use godwinmix_protocol::rendition::Cost;
 use parking_lot::Mutex;
 use std::collections::BTreeMap;
@@ -28,6 +29,14 @@ impl Remote for Station {
 
     fn release(&self, ticket: u64) {
         self.tickets.lock().remove(&ticket);
+    }
+
+    /// What the link does: the station's plan, only this show's tickets, as
+    /// they would arrive over the wire.
+    fn shed(&self) -> Vec<crate::ShedStep> {
+        let mine = self.tickets.lock();
+        let steps: Vec<_> = self.governor.shed().into_iter().filter(|s| mine.contains_key(&s.ticket)).collect();
+        serde_json::from_str(&serde_json::to_string(&steps).unwrap()).unwrap()
     }
 }
 
@@ -94,4 +103,23 @@ fn a_station_that_drops_a_dead_shows_tickets_frees_the_machine() {
     st.tickets.lock().clear();
     assert!(st.governor.held().is_empty());
     std::mem::forget(t);
+}
+
+#[test]
+fn the_station_decides_what_a_show_sheds_from_its_own_book_and_load() {
+    let st = station();
+    let a = show(&st);
+    let _programme = a.admit_encode(&x264(), &shape(1920, 1080, 30), "programme", Kind::Programme).granted().unwrap();
+    let preview = a.admit_claim(Claim::new("multiview", cpu(400)).kind(Kind::Preview)).granted().unwrap();
+    assert!(a.shed().is_empty(), "the machine is quiet");
+    st.governor.load_cell().store(&crate::load::Load {
+        system_millicores: 7800,
+        own_millicores: 2400,
+        others_peak_millicores: 5400,
+        samples: 3,
+        ..Default::default()
+    });
+    let steps = a.shed();
+    assert_eq!(steps.first().map(|s| (s.ticket, s.what.as_str())), Some((preview.id(), "multiview")));
+    assert_eq!(steps[0].action, crate::ShedAction::Drop);
 }

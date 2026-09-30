@@ -29,6 +29,7 @@ impl Host for TestHost {
     fn on_air(&self, show: &str, on: bool) {
         self.book.on_air.lock().push((show.into(), on));
     }
+    fn load(&self, _show: &str, _millicores: u32) {}
     fn gone(&self, show: &str, _pid: u32) {
         self.book.gone.lock().push(show.into());
     }
@@ -105,4 +106,40 @@ async fn a_hello_with_the_wrong_secret_is_turned_away() {
     .await
     .unwrap();
     assert!(book.gone.lock().is_empty(), "a show that never said hello never went");
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_show_is_told_what_to_shed_while_the_machine_is_over_its_line() {
+    let governor = Governor::with_machine(GovernorConfig::default(), Profile::uncalibrated(), 8, 16_384);
+    let book = Arc::new(Book::default());
+    let addr = listen(Arc::new(TestHost { governor: governor.clone(), book })).await.unwrap();
+    let load = governor.clone();
+    tokio::task::spawn_blocking(move || {
+        let link = Link::connect(addr, &hello("a", "right"), Box::new(|| {})).unwrap();
+        let show = Governor::with_machine(GovernorConfig::default(), Profile::uncalibrated(), 8, 16_384);
+        show.set_remote(link.clone());
+        let claim = godwinmix_govern::Claim::new("thumbnails", cpu(400)).kind(godwinmix_govern::Kind::Thumbnail);
+        let held = show.admit_claim(claim).granted().unwrap();
+        assert!(show.shed().is_empty());
+        load.load_cell().store(&godwinmix_govern::load::Load {
+            system_millicores: 7900,
+            own_millicores: 2000,
+            others_peak_millicores: 5900,
+            samples: 3,
+            ..Default::default()
+        });
+        let start = Instant::now();
+        let steps = loop {
+            let steps = show.shed();
+            if !steps.is_empty() {
+                break steps;
+            }
+            assert!(start.elapsed() < Duration::from_secs(3), "no shed arrived");
+            std::thread::sleep(Duration::from_millis(20));
+        };
+        assert_eq!(steps[0].ticket, held.id());
+        assert!(show.shed().is_empty(), "taken once");
+    })
+    .await
+    .unwrap();
 }
