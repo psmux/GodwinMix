@@ -33,6 +33,7 @@ pub(crate) mod plugins;
 pub mod presets;
 pub mod renditions;
 pub(crate) mod program;
+pub mod project;
 pub(crate) mod scenes;
 mod sources;
 mod tasks;
@@ -77,6 +78,7 @@ pub fn registry() -> Registry<Call> {
     channels::register_certificate(&mut reg);
     nodes::register(&mut reg);
     presets::register(&mut reg);
+    project::register(&mut reg);
     renditions::register(&mut reg);
     config::register(&mut reg);
     crate::observe::register(&mut reg);
