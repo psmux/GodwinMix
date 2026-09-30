@@ -11,7 +11,9 @@ fn table() -> Table {
 }
 
 fn a_device(table: Table) -> Discover {
-    let settings = Settings::from_params(&json!({"bind": "127.0.0.1", "rtmp_port": 0}));
+    // The open door is asked for, so the tests that use it have a port with
+    // no channels; with channels it makes no difference.
+    let settings = Settings::from_params(&json!({"bind": "127.0.0.1", "rtmp_port": 0, "open_door": true}));
     Discover::start(&settings, table, None).expect("the loopback has a free port")
 }
 
