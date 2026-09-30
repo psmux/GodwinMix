@@ -200,7 +200,7 @@ export const CATEGORIES = [
     icon: "camera",
     devices: true,
     kinds: [],
-    provides: ["camera/source"],
+    provides: ["camera/source", "decklink/source"],
     plugin: {
       name: "camera",
       label: "Install camera support",
