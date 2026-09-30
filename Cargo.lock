@@ -1505,6 +1505,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "godwinmix-render"
+version = "0.2.0"
+dependencies = [
+ "godwinmix-protocol",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "godwinmix-sdk"
 version = "0.1.0"
 dependencies = [
