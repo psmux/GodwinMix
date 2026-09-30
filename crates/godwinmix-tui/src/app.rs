@@ -245,7 +245,9 @@ impl App {
             }
             Action::TakeBlack => {
                 self.say("cutting to black");
-                return Some(call("program.take", json!({ "source": Value::Null })));
+                // An empty source is the slate even while a scene is armed;
+                // a null one takes the armed scene.
+                return Some(call("program.take", json!({ "source": "" })));
             }
             Action::Revert => return self.revert(),
             Action::Mute => return self.mute(),
