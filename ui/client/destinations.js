@@ -111,6 +111,26 @@ export const OUTPUT_KINDS = [
     }),
   },
   {
+    id: "rtsp",
+    provides: ["rtsp/output"],
+    title: "RTSP server",
+    group: "Streams and servers",
+    icon: "output",
+    description: "An rtsp:// address that decoders, recorders, NVRs and VLC pull the programme from. Opens its port only while it exists.",
+    plugin: "rtsp",
+    schema: {
+      type: "object",
+      required: ["id"],
+      properties: {
+        id: { type: "string", title: "Name", examples: ["rtsp"], description: "A short id. It appears in alerts and in the outputs list." },
+        port: { type: "integer", title: "Port", default: 8554, minimum: 1, maximum: 65535, description: "Players connect to this TCP port. 554 needs the machine's administrator." },
+        path: { type: "string", title: "Path", default: "live", description: "What follows the port: live gives rtsp://<this machine>:8554/live." },
+        bind: { type: "string", title: "Listen on", default: "0.0.0.0", "x-gmx-group": "Advanced", description: "0.0.0.0 is every network this machine is on; 127.0.0.1 keeps it to this machine." },
+      },
+    },
+    build: (v) => ({ id: v.id, type: "rtsp/output", uri: "", port: v.port ?? 8554, path: v.path || "live", bind: v.bind || "0.0.0.0" }),
+  },
+  {
     id: "whep",
     provides: ["whep/output"],
     title: "WebRTC viewers (WHEP)",

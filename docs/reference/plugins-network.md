@@ -24,6 +24,7 @@ until then.
 | `ndi/discover` | device | `ndi` | list NDI senders, `list_senders` | yes, with the NDI runtime |
 | `udp/source` | source | `udp` | MPEG-TS over UDP or RTP, unicast or multicast, one program chosen | yes; every setting is in [udp.md](udp.md) |
 | `udp/output` | output | `udp` | the programme as MPEG-TS over UDP or RTP | yes, Linux and macOS |
+| `rtsp/output` | output | `rtsp` | serve the programme over RTSP for players, decoders and NVRs that pull | yes, Linux and macOS |
 
 ### What "needs the core" means, precisely
 
@@ -252,6 +253,25 @@ Annotations: `readOnlyHint = true`, `destructiveHint = false`,
 Where the runtime is absent the tool is an error naming the download page, and
 `discover` answers with an empty list rather than an error, because a machine
 with no NDI on it is not broken.
+
+## `rtsp/output`
+
+Serves the programme at `rtsp://<this machine>:<port>/<path>`. The port opens at
+`start` and closes at `stop`; nothing listens before the output exists. Every
+player shares one media and one packetiser; a player may ask for RTP over UDP
+or interleaved in the RTSP connection (TCP). Nothing is encoded again.
+
+| Key | Type | Default | Meaning |
+|---|---|---|---|
+| `port` | integer 1 to 65535 | `8554` | the TCP port players connect to. 554 needs the machine's administrator |
+| `path` | string | `live` | what follows the port; letters, digits, `-`, `_` and `/` |
+| `bind` | string | `0.0.0.0` | the address to accept players on |
+
+Carries H.264 and H.265 video, AAC, MP3 and Opus audio, as the programme or its
+rendition has them. A player that asks before the programme has arrived is
+answered 404 and tries again; one that joins starts at the next keyframe.
+Health says how many players are connected and how many frames have gone
+out. `stats` answers `{url, clients, bytes_read}`.
 
 ## Where they look for their elements
 

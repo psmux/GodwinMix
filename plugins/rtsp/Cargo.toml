@@ -1,0 +1,28 @@
+[package]
+name = "gmx-rtsp"
+description = "The rtsp/output plugin: the programme served as an RTSP stream for decoders, recorders and players that pull, on a port chosen when the output is added"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[[bin]]
+name = "gmx-rtsp"
+path = "src/main.rs"
+
+[dependencies]
+godwinmix-sdk = { path = "../../crates/godwinmix-sdk" }
+gmx-netkit = { path = "../netkit" }
+# The programme FIFO an output reads, pumped into an appsrc.
+godwinmix-capture-common = { path = "../capture-common" }
+
+gstreamer = { workspace = true }
+gstreamer-app = { workspace = true }
+# The RTSP server: sessions, RTP over UDP or interleaved in TCP, RTCP. It is
+# gst-rtsp-server, which GStreamer ships beside the good plugins, and it is
+# linked by this plugin alone, so a core that never serves RTSP never loads it.
+gstreamer-rtsp-server = "0.24"
+glib = { workspace = true }
+serde_json = { workspace = true }

@@ -1,0 +1,37 @@
+# rtsp/output: the programme as an RTSP stream that decoders, recorders, NVRs
+# and players pull. The port opens when the output is added and closes when it
+# is removed. See docs/how-to/serve-rtsp.md.
+
+[plugin]
+name = "rtsp"
+version = "0.1.0"
+api = 1
+description = "Serve the programme over RTSP for decoders, recorders, NVRs and players that pull a stream, on a port you choose. RTP over UDP or TCP, H.264 or H.265 with AAC or Opus, nothing encoded again."
+license = "Apache-2.0"
+authors = ["GodwinMix"]
+repository = "https://github.com/psmux/godwinmix"
+platforms = ["linux-x86_64", "linux-aarch64", "macos-aarch64", "macos-x86_64"]
+placements = ["sidecar", "node"]
+process = "per-instance"
+
+[run]
+bin = { "linux-x86_64" = "bin/gmx-rtsp", "linux-aarch64" = "bin/gmx-rtsp", "macos-aarch64" = "bin/gmx-rtsp", "macos-x86_64" = "bin/gmx-rtsp" }
+
+[[provides]]
+kind = "output"
+id = "output"
+# No scheme is claimed: rtsp:// on an output would read as "push to that
+# server", and this serves. The kind is named outright.
+uri_schemes = []
+rank = 200
+# The core hands an output the encoded programme on a FIFO. It is packetised
+# here and nothing is decoded or encoded.
+media = { video = "container", audio = "container", alpha = false, thumb = false }
+capabilities = ["restart-in-place", "health"]
+settings = "schemas/output.json"
+skill = "skills/output/SKILL.md"
+
+# `gmx plugin add ./plugins/rtsp` runs this when bin/gmx-rtsp is not there.
+[build]
+command = "sh build"
+output = "bin/gmx-rtsp"
