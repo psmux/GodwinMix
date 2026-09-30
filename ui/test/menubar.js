@@ -68,6 +68,9 @@ export async function menubarTests(test, eq, ok) {
     eq(drop().getAttribute("aria-label"), "Scenes");
     ok([...drop().querySelectorAll("button")].some((b) => b.textContent.includes("Cut to black")), "Cut to black is in Scenes");
   });
+  // A click right after a hover opened it is the same gesture; a second
+  // click a moment later is a person closing it.
+  await tick(450);
   titles[4].click();
   await tick(50);
   test("the second click closed it", () => ok(!drop(), "closed"));

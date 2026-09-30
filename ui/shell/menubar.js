@@ -22,9 +22,13 @@ export function menubar(client) {
     const title = e.target.closest("[data-menu]");
     if (title) menus().then((m) => m.toggle(bar, title.dataset.menu));
   });
+  // Sliding along the bar with a menu open opens the next one. Only when the
+  // pointer moved: a page that scrolls under a still mouse fires these too.
+  let at = "";
   bar.addEventListener("pointerover", (e) => {
     const title = e.target.closest("[data-menu]");
-    if (title && bar.querySelector('[aria-expanded="true"]')) menus().then((m) => m.open(bar, title.dataset.menu));
+    const moved = at !== (at = e.screenX + "," + e.screenY);
+    if (moved && title && bar.querySelector('[aria-expanded="true"]')) menus().then((m) => m.open(bar, title.dataset.menu));
   });
   bar.addEventListener("keydown", (e) => barKey(bar, e));
   const all = el("button.btn.icon.menubar-all", { text: "☰", title: "Menu (F10)", "aria-label": "Menu", "aria-haspopup": "menu", onclick: () => menus().then((m) => m.openAll(bar, all)) });
