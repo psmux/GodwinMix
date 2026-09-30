@@ -308,7 +308,9 @@ async fn take_scene(
     // Only once the mixer has taken it, exactly as `cut` does: a take the
     // pipeline refused must not start the hold on the next one.
     call.app.safety.record(&call.token.id);
-    missing::alert(call, &name, &absent);
+    if !absent.is_empty() {
+        missing::alert(call, &name, &missing::names(call, &absent).await);
+    }
     body(state(call).await?)
 }
 

@@ -45,11 +45,27 @@ function markIn(panel, id, holder, before) {
   return mark;
 }
 
+/**
+ * Names for sources the mixer does not have, which the status cannot give:
+ * asked of `source.missing` once per id, and the marks painted again.
+ */
+const learned = new Map();
+function nameFor(panel, id) {
+  if (learned.has(id)) return learned.get(id) || nameOf(panel.client, id);
+  learned.set(id, null);
+  panel.client.call("source.missing", { ids: [id] }).then((found) => {
+    const one = (found || [])[0];
+    if (one && one.name) learned.set(id, one.name);
+    if (one && one.name) paint(panel);
+  }).catch(() => {});
+  return nameOf(panel.client, id);
+}
+
 function update(panel, id, mark) {
   const ids = sceneNotRunning(panel.client, panel.scenes, id);
   mark.hidden = !ids.length;
   if (!ids.length) return;
-  const names = ids.map((x) => nameOf(panel.client, x)).join(", ");
+  const names = ids.map((x) => (panel.client.store.source(x) ? nameOf(panel.client, x) : nameFor(panel, x))).join(", ");
   const text = `Not running: ${names}. The scene goes to air without ${ids.length > 1 ? "them" : "it"}. Click to fix.`;
   mark.title = text;
   mark.setAttribute("aria-label", text);

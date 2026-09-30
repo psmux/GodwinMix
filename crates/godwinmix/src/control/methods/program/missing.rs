@@ -70,6 +70,17 @@ pub fn refusal(name: &str, drawn: &[String], missing: &[String], here: &[String]
     )
 }
 
+/// The names a person gave the missing sources, where the mixer remembers
+/// them (one that could not start, or was removed), else their ids.
+pub async fn names(call: &Call, missing: &[String]) -> Vec<String> {
+    let Ok(configs) = call.app.mixer.configs().await else { return missing.to_vec() };
+    let named = |id: &String| {
+        let unstarted = configs.unstarted.iter().map(|u| &u.config);
+        unstarted.chain(configs.removed.iter()).find(|c| &c.id == id).and_then(|c| c.name.clone())
+    };
+    missing.iter().map(|id| named(id).unwrap_or_else(|| id.clone())).collect()
+}
+
 /// Tell every client that a scene went to air with holes in it.
 pub fn alert(call: &Call, name: &str, missing: &[String]) {
     if missing.is_empty() {
