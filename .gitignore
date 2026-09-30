@@ -83,3 +83,8 @@ examples/*/target/
 # Runtime state an opencode plugin writes at the repository root, even when it
 # was started inside a worktree somewhere else.
 /.omo/
+
+# What a preset apply writes beside the config it was given: the copy of the
+# file as it was, and the scenes it brought. The running mixer's, not source.
+/*.toml.bak
+/godwinmix.example.scenes.json
