@@ -244,6 +244,11 @@ function fileDrop(client) {
     hide();
     const dt = e.dataTransfer;
     if (!dt) return;
+    if (dt.files && dt.files.length === 1 && /\.gmxproject$/i.test(dt.files[0].name)) {
+      // A project file opens as one, with the same review as File > Open.
+      import("./project.js").then((m) => m.openProject(client, dt.files[0]));
+      return;
+    }
     if (dt.files && dt.files.length) {
       // The media panel claims this when it mounts; without it there is
       // nowhere to put a file and saying so beats swallowing the drop.

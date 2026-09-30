@@ -172,6 +172,22 @@ whether it is this computer or an address. The version comes from
 `/api/status` instead, and the app says "(version not reported)" rather than
 refusing to connect.
 
+## The menu bar
+
+Once the window is showing a mixer, the app's menu bar has the same File,
+Edit, View, Sources, Scenes, Outputs and Help menus as the page, read from
+the mixer's `shell/menus.json`, and the page draws no menu bar of its own.
+Choosing an item runs the same command the page's menu would. On macOS the
+GodwinMix menu (About, Connect, Restart, the folders, Quit) stays first, and
+Edit keeps Cut, Copy, Paste and Select All for text boxes.
+
+Only `Cmd+O` (Open project), `Cmd+S` (Save project as) and `Cmd+K` (the
+command palette) are bound on the native menu; `Ctrl` on Windows and Linux.
+The page keeps every other key, so undo and the number keys still work in a
+text box. File > Save project as asks where with the system's own save
+dialog. A mixer too old to serve `menus.json` leaves the app's own menu as it
+was and the page's menu bar on screen.
+
 ## The content security policy
 
 `app.security.csp` in `tauri.conf.json` is no longer `null`. It applies to the

@@ -107,9 +107,36 @@ the web UI has a pointer, a tray and a scene composer and this has a keyboard.
 | `F2` | rename a tile |
 | `Delete` | remove the selection |
 | `Ctrl+Z`, `Ctrl+Shift+Z` | undo and redo |
+| `Ctrl+O` | open a project file |
+| `Ctrl+S` | save the project as a file |
+| `F10`, or `Alt` pressed and let go | put the keyboard on the menu bar |
 
 That table is a summary. `ui/shell/keymap.js` is the map itself, and it wins
 where the two disagree.
+
+### The menu bar
+
+File, Edit, View, Sources, Scenes, Outputs and Help sit in the top bar, and
+each item shows its shortcut when it has one. `F10`, or `Alt` pressed and
+released on its own, moves the keyboard to File. Then:
+
+| Key | On the bar | In an open menu |
+|---|---|---|
+| `Left`, `Right` | the next title | close this menu and open the next |
+| `Down`, `Enter`, `Space` | open the menu | `Down` moves to the next item; `Enter` runs it |
+| `Up` | | the item above |
+| `Home`, `End` | | the first or last item |
+| `Escape` | leave the bar | close the menu, back to its title |
+| `Tab` | | close the menu |
+
+Every item runs a command from the same registry the palette (`Ctrl+K`) and
+this map use, so an item and its shortcut always do the same thing. The
+items are in `ui/shell/menus.json`, which the desktop app reads too: there
+the menu is the system's own menu bar and the page draws none. In the
+desktop app only `Cmd+O`, `Cmd+S` and `Cmd+K` are bound on the native menu,
+so undo, delete and the number keys keep working in a text box.
+
+Below 760 pixels wide the bar is one Menu button, and `F10` opens it.
 
 ### What a number counts in the web UI
 
