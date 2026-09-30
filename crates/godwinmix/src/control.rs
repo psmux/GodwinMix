@@ -28,6 +28,7 @@ pub mod push;
 pub mod rest;
 pub mod streams;
 mod upload;
+pub mod whep;
 pub mod whip;
 pub mod ws;
 
@@ -380,6 +381,7 @@ pub fn router(app: AppState, snapshots: Arc<Tracker>) -> Router {
         // WHIP ingest for a channel: the channel's key lets a publisher in,
         // not the control token, so it sits outside every token check.
         .merge(whip::router(ctx.clone()))
+        .merge(whep::router(ctx.clone()))
         .merge(legacy(ctx.clone(), max_upload))
         .merge(rest::router(ctx.clone(), max_upload))
         // The Tauri shell and a browser on another origin both need this. It

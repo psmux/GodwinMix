@@ -45,10 +45,15 @@ fn tags(sample: &gst::Sample, kind: TagKind, header: &Mutex<Option<Vec<u8>>>, ba
     let Some(at) = running_time(sample, buffer) else { return Vec::new() };
     let ms = base.wrapping_add((at.mseconds() & 0xffff_ffff) as u32);
     let mut out = Vec::with_capacity(2);
+    let cc = enhanced_fourcc(sample);
+    let prefix = |key: bool, hdr: bool, cts: i64| match cc {
+        Some(cc) => crate::eflv::prefix(cc, key, hdr, cts),
+        None => prefix(kind, key, hdr, cts),
+    };
     if let Some(config) = codec_data(sample) {
         let mut last = header.lock().unwrap_or_else(|e| e.into_inner());
         if last.as_deref() != Some(config.as_slice()) {
-            out.push(make(kind, ms, true, true, &prefix(kind, true, true, 0), &config));
+            out.push(make(kind, ms, true, true, &prefix(true, true, 0), &config));
             *last = Some(config);
         }
     }
@@ -58,8 +63,17 @@ fn tags(sample: &gst::Sample, kind: TagKind, header: &Mutex<Option<Vec<u8>>>, ba
         (Some(pts), Some(dts)) => pts.mseconds() as i64 - dts.mseconds() as i64,
         _ => 0,
     };
-    out.push(make(kind, ms, keyframe, false, &prefix(kind, keyframe, false, cts), map.as_slice()));
+    out.push(make(kind, ms, keyframe, false, &prefix(keyframe, false, cts), map.as_slice()));
     out
+}
+
+/// The enhanced RTMP FourCC for an encoder output classic FLV has no id for.
+fn enhanced_fourcc(sample: &gst::Sample) -> Option<&'static [u8; 4]> {
+    match sample.caps()?.structure(0)?.name().as_str() {
+        "video/x-h265" => Some(crate::eflv::HEVC),
+        "video/x-av1" => Some(crate::eflv::AV1),
+        _ => None,
+    }
 }
 
 fn make(kind: TagKind, timestamp_ms: u32, keyframe: bool, sequence_header: bool, head: &[u8], body: &[u8]) -> MediaTag {

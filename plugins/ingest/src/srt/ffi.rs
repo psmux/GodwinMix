@@ -37,6 +37,7 @@ pub struct Lib {
     close: unsafe extern "C" fn(Socket) -> c_int,
     setsockflag: unsafe extern "C" fn(Socket, c_int, *const c_void, c_int) -> c_int,
     recvmsg: unsafe extern "C" fn(Socket, *mut c_char, c_int) -> c_int,
+    send: unsafe extern "C" fn(Socket, *const c_char, c_int) -> c_int,
     getlasterror: unsafe extern "C" fn(*mut c_int) -> c_int,
     getlasterror_str: unsafe extern "C" fn() -> *const c_char,
     setrejectreason: unsafe extern "C" fn(Socket, c_int) -> c_int,
@@ -97,6 +98,7 @@ fn load() -> Result<Lib, String> {
         close: get!("srt_close"),
         setsockflag: get!("srt_setsockflag"),
         recvmsg: get!("srt_recvmsg"),
+        send: get!("srt_send"),
         getlasterror: get!("srt_getlasterror"),
         getlasterror_str: get!("srt_getlasterror_str"),
         setrejectreason: get!("srt_setrejectreason"),
@@ -178,6 +180,17 @@ impl Lib {
     pub fn reject(&self, sock: Socket, code: i32) {
         // SAFETY: a socket id handed to the listen callback.
         unsafe { (self.setrejectreason)(sock, code) };
+    }
+
+    /// Send one message of at most 1316 bytes, which in live mode is one
+    /// datagram's worth of MPEG-TS.
+    pub fn send(&self, sock: Socket, buf: &[u8]) -> Result<(), String> {
+        // SAFETY: `buf` is readable for its whole length.
+        let n = unsafe { (self.send)(sock, buf.as_ptr().cast(), buf.len() as c_int) };
+        if n < 0 {
+            return Err(self.last_error());
+        }
+        Ok(())
     }
 
     /// One message, up to 1316 bytes in live mode. `Ok(0)` is a timeout.

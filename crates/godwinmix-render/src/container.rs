@@ -9,11 +9,13 @@ use VideoCodec as V;
 
 /// The video codecs `container` can carry, the default first.
 ///
-/// FLV assumes enhanced RTMP, which carries HEVC and AV1 as well as H.264.
+/// FLV assumes enhanced RTMP, which carries HEVC as well as H.264 through
+/// GStreamer 1.28's `eflvmux`. Enhanced RTMP also defines AV1, but no
+/// GStreamer muxer writes it yet, so it is not offered.
 /// An output going to a server that only takes classic RTMP names `h264`.
 pub fn video_codecs(container: Container) -> &'static [VideoCodec] {
     match container {
-        Container::Flv => &[V::H264, V::H265, V::Av1],
+        Container::Flv => &[V::H264, V::H265],
         Container::Webrtc => &[V::H264, V::Vp8, V::Vp9, V::Av1],
         Container::MpegTs => &[V::H264, V::H265, V::Av1, V::Mpeg2],
         Container::Mp4Fragmented => &[V::H264, V::H265, V::Av1, V::Vp9],

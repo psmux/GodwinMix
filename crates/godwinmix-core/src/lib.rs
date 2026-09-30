@@ -67,6 +67,7 @@ pub mod scene;
 pub mod secrets;
 pub mod snapshot;
 pub mod telemetry;
+pub mod whep;
 pub mod state;
 pub mod tasks;
 pub mod tls_cert;

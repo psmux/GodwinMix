@@ -3,6 +3,8 @@
 //! `connected`.
 
 pub mod rtmp;
+pub mod flv;
+pub mod rist;
 pub mod srt;
 
 pub mod record;

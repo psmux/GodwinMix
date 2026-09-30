@@ -79,13 +79,16 @@ pub fn is_sequence_header(kind: TagKind, body: &[u8]) -> bool {
     }
 }
 
-/// Read a video sequence header. Only H.264 carries a size this can read;
-/// the others report their codec and a size of zero.
+/// Read a video sequence header. H.264 and enhanced RTMP HEVC carry a size
+/// this can read; the others (AV1 among them) report their codec and a size
+/// of zero.
 pub fn read_video(tag: &MediaTag) -> Video {
     let body = &tag.payload[..];
     let codec = video_codec(body);
     let (width, height) = if codec == "h264" && !enhanced(body[0]) {
         avc_size(body.get(5..).unwrap_or(&[])).unwrap_or((0, 0))
+    } else if codec == "h265" && enhanced(body[0]) {
+        crate::hevc::size_from_hvcc(body.get(5..).unwrap_or(&[])).unwrap_or((0, 0))
     } else {
         (0, 0)
     };

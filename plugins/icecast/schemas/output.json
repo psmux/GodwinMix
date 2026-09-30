@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Icecast radio",
+  "description": "The programme's sound to an Icecast or SHOUTcast 2 server, for listeners who only want to hear.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "uri": {
+      "title": "Server address",
+      "description": "The whole address your streaming host gave you, with the login and the mount. Or leave it empty and fill in the fields below.",
+      "type": "string",
+      "default": "",
+      "examples": ["icecast://source:password@radio.example.com:8000/live.mp3"]
+    },
+    "host": { "title": "Server", "type": "string", "default": "", "examples": ["radio.example.com"] },
+    "port": { "title": "Port", "type": "integer", "minimum": 1, "maximum": 65535, "default": 8000 },
+    "mount": { "title": "Mount", "description": "The name listeners open, after the port.", "type": "string", "default": "live.mp3" },
+    "password": { "title": "Source password", "type": "string", "format": "secret", "default": "" },
+    "user": { "title": "Source user", "type": "string", "default": "source", "x-gmx-group": "Advanced" },
+    "format": {
+      "title": "Format",
+      "description": "MP3 plays everywhere. Opus sounds better at a low bitrate but some players and car radios do not take it.",
+      "type": "string",
+      "enum": ["mp3", "vorbis", "opus"],
+      "x-gmx-labels": ["MP3", "Ogg Vorbis", "Ogg Opus"],
+      "default": "mp3"
+    },
+    "bitrate_kbps": { "title": "Bitrate", "type": "integer", "minimum": 32, "maximum": 320, "default": 128, "x-gmx-unit": "kbit" },
+    "name": { "title": "Station name", "description": "What listeners see in their player.", "type": "string", "default": "GodwinMix", "x-gmx-group": "Advanced" },
+    "public": { "title": "List in the server's directory", "type": "boolean", "default": false, "x-gmx-group": "Advanced" }
+  }
+}

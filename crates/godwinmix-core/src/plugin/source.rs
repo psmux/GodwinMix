@@ -108,6 +108,7 @@ static REGISTRY: &[Provide] = &[
     kinds::rtmp::PROVIDE,
     kinds::live::PROVIDE,
     kinds::file::PROVIDE,
+    kinds::image::PROVIDE,
     kinds::exec::PROVIDE,
     kinds::browser::PROVIDE,
     kinds::layered::PROVIDE,

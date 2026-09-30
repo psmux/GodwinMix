@@ -1256,6 +1256,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "gmx-decklink"
+version = "0.2.0"
+dependencies = [
+ "godwinmix-capture-common",
+ "godwinmix-sdk",
+ "gstreamer",
+ "serde_json",
+]
+
+[[package]]
 name = "gmx-director"
 version = "0.2.0"
 dependencies = [
@@ -1272,6 +1282,19 @@ dependencies = [
  "godwinmix-capture-common",
  "godwinmix-sdk",
  "gstreamer",
+ "serde_json",
+]
+
+[[package]]
+name = "gmx-icecast"
+version = "0.2.0"
+dependencies = [
+ "base64",
+ "gmx-netkit",
+ "godwinmix-capture-common",
+ "godwinmix-sdk",
+ "gstreamer",
+ "gstreamer-app",
  "serde_json",
 ]
 
@@ -1295,6 +1318,19 @@ dependencies = [
  "rustls",
  "serde_json",
  "webpki-roots 1.0.9",
+]
+
+[[package]]
+name = "gmx-ipcam"
+version = "0.2.0"
+dependencies = [
+ "base64",
+ "gmx-netkit",
+ "godwinmix-sdk",
+ "gstreamer",
+ "gstreamer-app",
+ "ring",
+ "serde_json",
 ]
 
 [[package]]
@@ -1335,6 +1371,20 @@ dependencies = [
  "godwinmix-sdk",
  "serde_json",
  "tokio",
+]
+
+[[package]]
+name = "gmx-rtsp"
+version = "0.2.0"
+dependencies = [
+ "glib",
+ "gmx-netkit",
+ "godwinmix-capture-common",
+ "godwinmix-sdk",
+ "gstreamer",
+ "gstreamer-app",
+ "gstreamer-rtsp-server",
+ "serde_json",
 ]
 
 [[package]]
@@ -1479,7 +1529,9 @@ dependencies = [
  "gstreamer-controller",
  "gstreamer-net",
  "gstreamer-pbutils",
+ "gstreamer-sdp",
  "gstreamer-video",
+ "gstreamer-webrtc",
  "image",
  "libc",
  "parking_lot",
@@ -1792,6 +1844,67 @@ dependencies = [
  "gstreamer-audio-sys",
  "gstreamer-sys",
  "gstreamer-video-sys",
+ "libc",
+ "system-deps",
+]
+
+[[package]]
+name = "gstreamer-rtsp"
+version = "0.24.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5160aef7e62c44a16db7db0ad9aee532650be6cdc6c8777b42208edaf9650a2b"
+dependencies = [
+ "glib",
+ "gstreamer",
+ "gstreamer-rtsp-sys",
+ "gstreamer-sdp",
+ "libc",
+]
+
+[[package]]
+name = "gstreamer-rtsp-server"
+version = "0.24.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a81aa93bf9b8aa02f385644eceebdb25a7e9f778653175ac4ef9f3289a30b3a9"
+dependencies = [
+ "gio",
+ "glib",
+ "gstreamer",
+ "gstreamer-net",
+ "gstreamer-rtsp",
+ "gstreamer-rtsp-server-sys",
+ "gstreamer-sdp",
+ "libc",
+]
+
+[[package]]
+name = "gstreamer-rtsp-server-sys"
+version = "0.24.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b7a8002c2c1cc135c68a07aa7f37da2dfa453d8e2da60ff8cea7ac9b037991b8"
+dependencies = [
+ "gio-sys",
+ "glib-sys",
+ "gobject-sys",
+ "gstreamer-net-sys",
+ "gstreamer-rtsp-sys",
+ "gstreamer-sdp-sys",
+ "gstreamer-sys",
+ "libc",
+ "system-deps",
+]
+
+[[package]]
+name = "gstreamer-rtsp-sys"
+version = "0.24.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "371096fb870d4a96d052f5968e00b7ca336e232f6d9d8f8708ab58c8a9684591"
+dependencies = [
+ "gio-sys",
+ "glib-sys",
+ "gobject-sys",
+ "gstreamer-sdp-sys",
+ "gstreamer-sys",
  "libc",
  "system-deps",
 ]

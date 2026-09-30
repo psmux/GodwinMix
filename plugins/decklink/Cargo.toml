@@ -1,0 +1,20 @@
+[package]
+name = "gmx-decklink"
+description = "The decklink plugin: SDI and HDMI capture through a Blackmagic DeckLink card, with discovery of its inputs"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[[bin]]
+name = "gmx-decklink"
+path = "src/main.rs"
+
+[dependencies]
+godwinmix-sdk = { path = "../../crates/godwinmix-sdk" }
+godwinmix-capture-common = { path = "../capture-common" }
+
+gstreamer = { workspace = true }
+serde_json = { workspace = true }

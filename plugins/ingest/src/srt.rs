@@ -32,6 +32,7 @@ mod addr;
 mod conn;
 mod decide;
 mod ffi;
+mod play;
 mod streamid;
 mod ts;
 
@@ -59,7 +60,9 @@ const PENDING_FOR: Duration = Duration::from_secs(30);
 struct Ctx {
     lib: &'static ffi::Lib,
     gate: Arc<ChannelGate>,
-    pending: Mutex<HashMap<ffi::Socket, (Admit, Instant)>>,
+    /// Callers let in by the hook, until accepted: who, whether to play to
+    /// them rather than take from them, and when.
+    pending: Mutex<HashMap<ffi::Socket, (Admit, bool, Instant)>>,
 }
 
 /// A listening SRT port. Dropping it closes the port; callers already on air
@@ -116,14 +119,14 @@ fn accept_loop(ctx: &'static Ctx, listener: ffi::Socket, stop: &AtomicBool) {
             return;
         }
         let admitted = ctx.pending.lock().unwrap_or_else(|e| e.into_inner()).remove(&sock);
-        let Some((admit, _)) = admitted else {
+        let Some((admit, player, _)) = admitted else {
             ctx.lib.close(sock);
             continue;
         };
         let gate = ctx.gate.clone();
         let started = std::thread::Builder::new()
             .name("gmx-srt-conn".into())
-            .spawn(move || conn::serve(ctx.lib, sock, peer, admit, gate));
+            .spawn(move || if player { play::serve(ctx.lib, sock, peer, admit, gate) } else { conn::serve(ctx.lib, sock, peer, admit, gate) });
         if started.is_err() {
             ctx.lib.close(sock);
         }
@@ -161,20 +164,24 @@ fn on_caller(ctx: &Ctx, ns: ffi::Socket, peer: &str, id: &str) -> c_int {
             ctx.lib.reject(ns, code);
             -1
         }
-        Decision::Take { admit, passphrase } => {
-            if let Some(secret) = passphrase {
-                if !ctx.lib.set_text(ns, ffi::PASSPHRASE, &secret) {
-                    let why = "the key could not be used as an SRT passphrase (it must be 10 to 79 characters). Make a new key.".to_string();
-                    ctx.gate.turn_away(&admit.channel, &admit.stream, peer, why);
-                    return -1;
-                }
-            }
-            let mut pending = ctx.pending.lock().unwrap_or_else(|e| e.into_inner());
-            pending.retain(|_, (_, at)| at.elapsed() < PENDING_FOR);
-            pending.insert(ns, (admit, Instant::now()));
-            0
+        Decision::Take { admit, passphrase } => let_in(ctx, ns, peer, admit, passphrase, false),
+        Decision::Play { admit, passphrase } => let_in(ctx, ns, peer, admit, passphrase, true),
+    }
+}
+
+/// Set the passphrase the key is, and remember the caller for the accept.
+fn let_in(ctx: &Ctx, ns: ffi::Socket, peer: &str, admit: Admit, passphrase: Option<String>, player: bool) -> c_int {
+    if let Some(secret) = passphrase {
+        if !ctx.lib.set_text(ns, ffi::PASSPHRASE, &secret) {
+            let why = "the key could not be used as an SRT passphrase (it must be 10 to 79 characters). Make a new key.".to_string();
+            ctx.gate.turn_away(&admit.channel, &admit.stream, peer, why);
+            return -1;
         }
     }
+    let mut pending = ctx.pending.lock().unwrap_or_else(|e| e.into_inner());
+    pending.retain(|_, (_, _, at)| at.elapsed() < PENDING_FOR);
+    pending.insert(ns, (admit, player, Instant::now()));
+    0
 }
 
 #[cfg(test)]

@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "RTSP server",
+  "description": "The programme served over RTSP, for decoders, recorders, NVRs and players that pull a stream from an address.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "port": {
+      "title": "Port",
+      "description": "The TCP port players connect to. It opens when this output starts and closes when it stops. 8554 is the usual choice; 554 needs the machine's administrator.",
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 65535,
+      "default": 8554,
+      "examples": [8554, 554]
+    },
+    "path": {
+      "title": "Path",
+      "description": "What comes after the port in the address: live gives rtsp://<this machine>:8554/live.",
+      "type": "string",
+      "default": "live",
+      "examples": ["live", "studio/main"]
+    },
+    "bind": {
+      "title": "Listen on",
+      "description": "The address to accept players on. 0.0.0.0 is every network this machine is on; 127.0.0.1 keeps it to this machine.",
+      "type": "string",
+      "default": "0.0.0.0",
+      "examples": ["0.0.0.0", "127.0.0.1"],
+      "x-gmx-group": "Advanced"
+    }
+  }
+}

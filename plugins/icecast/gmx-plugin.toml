@@ -1,0 +1,47 @@
+# icecast/output and icecast/source: audio over HTTP, the way internet radio
+# works. See docs/how-to/radio.md.
+
+[plugin]
+name = "icecast"
+version = "0.1.0"
+api = 1
+description = "Internet radio both ways: the programme's sound to an Icecast or SHOUTcast 2 server as MP3 or Ogg, and a radio station or any audio stream over HTTP as a live source."
+license = "Apache-2.0"
+authors = ["GodwinMix"]
+repository = "https://github.com/psmux/godwinmix"
+platforms = ["linux-x86_64", "linux-aarch64", "macos-aarch64", "macos-x86_64", "windows-x86_64"]
+placements = ["sidecar", "node"]
+process = "per-instance"
+
+[run]
+bin = { "linux-x86_64" = "bin/gmx-icecast", "linux-aarch64" = "bin/gmx-icecast", "macos-aarch64" = "bin/gmx-icecast", "macos-x86_64" = "bin/gmx-icecast", "windows-x86_64" = "bin/gmx-icecast.exe" }
+
+[[provides]]
+kind = "output"
+id = "output"
+uri_schemes = ["icecast://"]
+rank = 240
+# The programme on a FIFO; the sound is decoded and encoded once, the picture
+# dropped at the demuxer.
+media = { video = "container", audio = "container", alpha = false, thumb = false }
+capabilities = ["restart-in-place", "health"]
+settings = "schemas/output.json"
+skill = "skills/output/SKILL.md"
+
+[[provides]]
+kind = "source"
+id = "source"
+# http:// is file/source's and browser/source's by address, so this kind is
+# named outright.
+uri_schemes = []
+rank = 200
+media = { video = "container", audio = "container", alpha = false, thumb = false }
+transports = ["container"]
+capabilities = ["restart-in-place", "health"]
+latency_ms = 500
+settings = "schemas/source.json"
+skill = "skills/output/SKILL.md"
+
+[build]
+command = "sh build"
+output = "bin/gmx-icecast"
