@@ -27,20 +27,52 @@ box as you type, something like `rtmp://192.168.1.20:1935/sunday-service`.
 Press **Create channel**.
 
 The card that opens next is the one to set an encoder up from. It has the two
-boxes OBS asks for under Settings, Stream, with Service set to Custom:
+boxes OBS asks for under Settings, Stream, with Service set to Custom, and the
+whole address for an encoder with one box:
 
 * Server: `rtmp://192.168.1.20:1935/sunday-service`
 * Stream Key: `main?psk=` and the key
+* Full URL: `rtmp://192.168.1.20:1935/sunday-service/main?psk=` and the key
 
-Each has a **Copy** button. The QR code beside them is the whole address, for
-a phone encoder to scan. When the mixer answers on more than one address (the
+Each has a **Copy** button. The QR code beside them is the full URL, for a
+phone encoder to scan. When the mixer answers on more than one address (the
 network, and `127.0.0.1` for an encoder on the same machine), the buttons above
 the boxes switch between them. A phone cannot reach `127.0.0.1`, so give it
 the network one.
 
-The key is shown once. The mixer keeps it sealed and will only ever show its
-last four characters again, so copy it before you press **Done**. A lost key
-is replaced, not recovered.
+Press **Done** when you have what you need. The key is not lost when the card
+closes: the mixer keeps it sealed, and **Connect** on the channel shows it
+again whenever you want it.
+
+## See and copy a key again
+
+Every channel card has **Connect** beside the gear. Press it and the card
+unfolds to list each of the channel's keys by its label, with three fields
+under each: Server, Stream key and Full URL, each with **Copy**.
+
+The key is dots and its last four characters until you press **Show** (the
+eye) on that key. Show puts the key in the fields and draws the QR code of its
+full URL. **Copy** on a hidden key copies the real thing without showing it,
+which is the one to use with somebody looking over your shoulder. Press
+**Connect** again to fold the section; the page forgets every key it was shown,
+and the next Show or Copy asks the mixer again.
+
+Above the keys:
+
+* The address buttons switch every field between the addresses the mixer
+  answers on, as on the first card.
+* **Stream name** is `main` to start with. Type `main_720p` or `cam2` and all
+  three fields and the QR code follow, so you can copy the variant each
+  encoder needs. On a channel whose key is the stream name there is no stream
+  name to type, and the fields carry the key alone.
+
+A stream that is live has a **Copy URL** beside its name, which copies the
+full URL it came in on: its own stream name, and the key that let it in.
+
+Only an admin sees a key. Someone signed in with a read only token sees the
+labels and the last four characters, and Show tells them they cannot. Every
+time a key is shown or copied the mixer writes a line in its log naming the
+key and who asked, never the key itself.
 
 ## Point an encoder at it
 
@@ -89,8 +121,8 @@ The gear on the card opens them:
   is the stream name, for a hardware encoder with one box for the key and
   nothing else. The stream is then named after the key's label.
 * **Keys**, by label and last four characters, each with **Revoke**. Type who a
-  new one is for and press **Make a key**; it is shown once, the same way the
-  first one was.
+  new one is for and press **Make a key**; it opens on the same card the first
+  one did, and is under **Connect** from then on.
 * **Remove channel**, which asks once.
 
 The switches are kept when you press **Save**. A key revoked is revoked at
@@ -103,8 +135,8 @@ sharing one. **Revoke** asks once, then cuts off whoever is on air with that
 key and turns them away from then on; nobody on another key notices.
 Switching Take encoders off does the same for every key at once.
 
-**Connect an encoder** on the card shows the server again, and makes a new key
-for somebody else.
+**Connect** on the card shows every key again, and **Manage keys** at its foot
+opens the settings to make one for somebody else or take one back.
 
 ## When an encoder is turned away
 

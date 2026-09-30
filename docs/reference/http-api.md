@@ -49,9 +49,10 @@ same thing without a mixer. The ones the how to pages reach for:
 | `POST /api/v1/tool/call` | `tool.call`: `{"name","arguments"}`, the name being `<plugin>/<tool>` |
 | `GET /api/v1/plugins/{id}/settings` | a plugin's settings, and `POST` with `{"settings":{...}}` changes the keys it names |
 | `GET /api/v1/channels` | `channel.list`: every RTMP channel with its keys as hints, its streams and its destinations, and the port they share. See [channels.md](channels.md) |
-| `POST /api/v1/channels` | `channel.add`: `{"name","app","auto_source","key_mode"}`, only `name` required. The answer carries the first key, and nothing reads it back later |
-| `POST /api/v1/channels/{id}/key/add` | `channel.key.add`: `{"label"}`. Another key, shown once |
+| `POST /api/v1/channels` | `channel.add`: `{"name","app","auto_source","key_mode"}`, only `name` required. The answer carries the first key; `channel.key.reveal` reads it again |
+| `POST /api/v1/channels/{id}/key/add` | `channel.key.add`: `{"label"}`. Another key, in the answer |
 | `POST /api/v1/channels/{id}/key/remove` | `channel.key.remove`: `{"key"}`. A publisher on air with it is cut off |
+| `POST /api/v1/channels/{id}/key/reveal` | `channel.key.reveal`: `{"key"}`. Answers `{"secret"}`. Admin only, and logged with who asked |
 | `POST /api/v1/channels/{id}/destination/add` | `channel.destination.add`: `{"platform","label","server","key","stream","enabled"}`. See [restream a channel](../how-to/restream-a-channel.md) |
 | `POST /api/v1/channels/{id}/destination` | `channel.destination.set`: `{"destination", ...}`, naming only what moves. A key left out is kept |
 | `POST /api/v1/channels/{id}/destination/remove` | `channel.destination.remove`: `{"destination"}` |

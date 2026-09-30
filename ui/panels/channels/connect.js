@@ -19,6 +19,7 @@ export function connectSection(view, getChannel, manage) {
   let at = 0;
   let stream = "main";
   let urls = [];
+  let drawn = "";
 
   const picker = el("div.chn-seg", { role: "group", "aria-label": "Which address" });
   const name = el("input.chn-mono.chn-streamin", { type: "text", value: stream, autocomplete: "off", spellcheck: "false", "aria-label": "Stream name" });
@@ -73,9 +74,15 @@ export function connectSection(view, getChannel, manage) {
     note.hidden = !byStream;
     const keys = channel.keys || [];
     keyed(list, blocks, keys, (k) => k.id, (k) => ({ ...keyBlock(ctx, k), update: () => {} }), (k) => `${k.label}|${k.hint}`);
-    redraw();
-    empty.replaceChildren(...(keys.length ? [] : noKeys(view, getChannel, secrets)));
-    empty.hidden = !!keys.length;
+    // A channel sends a change every time its numbers move. Only what the
+    // fields are made of redraws them, so a Copy is never remade under a press.
+    const shape = [channel.app, channel.key_mode, channel.publish && channel.publish.server].join("|");
+    if (shape !== drawn) redraw();
+    drawn = shape;
+    if (empty.hidden !== !!keys.length || !empty.firstChild) {
+      empty.replaceChildren(...(keys.length ? [] : noKeys(view, getChannel, secrets)));
+      empty.hidden = !!keys.length;
+    }
   }
 
   function toggle(want = !open) {
@@ -90,11 +97,10 @@ export function connectSection(view, getChannel, manage) {
 
   /** The whole URL a live stream came in on, for its row's Copy. */
   async function streamUrl(s) {
-    const channel = getChannel();
-    const server = obsFields(channel, "", ctx.base()).server;
-    if (channel.key_mode === "stream") return `${server}/${s.name}`;
+    // In "key is the stream name" mode the core names the stream after the
+    // key's id, so the URL is the key alone, never the name.
     const secret = s.key && (await ctx.secret(s.key));
-    return secret ? `${server}/${s.name}?psk=${secret}` : null;
+    return secret ? obsFields(getChannel(), secret, ctx.base(), s.name).url : null;
   }
 
   return { node, update, toggle, streamUrl, get open() { return open; } };
