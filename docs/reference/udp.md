@@ -153,7 +153,7 @@ fails. UDP has no answer from the far end, so `ok` means sent, not received.
 |---|---|---|---|
 | `udp/source`, unicast | yes | not tested | not tested |
 | `udp/source`, multicast, default interface | yes, and two receivers of one group | not tested | not tested |
-| `udp/source`, `interface` by name | yes, joined on `lo0`; an unknown name is refused | not tested; GLib turns an unknown name into the default route | not tested |
+| `udp/source`, `interface` by name | yes, joined on `lo0`; an unknown name is refused | not tested | not tested |
 | `udp/source`, source specific | not tested | not tested | not tested |
 | `udp/output`, unicast and multicast | yes | not tested | refused by the core: a sidecar output gets the programme on a FIFO, and Windows has none |
 | `udp/output`, `interface` | yes, out of `lo0` | not tested | not applicable |

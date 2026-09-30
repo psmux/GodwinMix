@@ -137,6 +137,7 @@ fn a_real_encoder_on_the_loopback_arrives_and_reports_ok() {
 }
 
 /// Send `count` copies of one datagram to a group, out of the named interface.
+#[cfg(target_os = "macos")]
 /// `udpsink` with the interface set the way `udp/output` sets it, because the
 /// standard library cannot choose the interface multicast leaves by.
 fn multicast_out(iface: &str, group: &str, port: u16, count: usize, d: &[u8]) {
@@ -158,16 +159,14 @@ fn multicast_out(iface: &str, group: &str, port: u16, count: usize, d: &[u8]) {
 }
 
 /// Two receivers on one group and port, joined on the loopback interface by
-/// name, both get the feed. The group is joined on `lo0` (macOS) or `lo`
-/// (Linux), which is also the test that the interface setting is honoured:
-/// the datagrams leave by the loopback and nowhere else.
+/// name, both get the feed. It is also the test that the interface setting is
+/// honoured at both ends: the datagrams leave by `lo0` and nowhere else.
+/// macOS only: Linux's `lo` carries multicast only when it has the MULTICAST
+/// flag, which is not the default, and Windows names interfaces differently.
+#[cfg(target_os = "macos")]
 #[test]
 fn two_receivers_of_one_group_on_a_named_interface_both_get_it() {
-    let lo = if cfg!(target_os = "macos") { "lo0" } else { "lo" };
-    if cfg!(windows) {
-        eprintln!("skipping: Windows names interfaces differently and this has not been tried there");
-        return;
-    }
+    let lo = "lo0";
     let port = free_port();
     let (a, b) = (temp("group-a"), temp("group-b"));
     let params = json!({"address": "239.255.71.1", "port": port, "interface": lo});
@@ -186,8 +185,8 @@ fn two_receivers_of_one_group_on_a_named_interface_both_get_it() {
 }
 
 /// macOS refuses a join on an interface that does not exist, and the refusal
-/// says to check the name. Linux's GLib turns an unknown name into index 0,
-/// which is the default route, so there is nothing to refuse there.
+/// says to check the name. What Linux does with an unknown name has not been
+/// tried, so the test runs on macOS only.
 #[cfg(target_os = "macos")]
 #[test]
 fn an_interface_that_does_not_exist_is_refused_with_what_to_check() {
