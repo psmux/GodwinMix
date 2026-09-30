@@ -107,6 +107,9 @@ pub type Ack = oneshot::Sender<Result<(), Refused>>;
 pub struct Refused {
     pub message: String,
     pub action: Option<ErrorAction>,
+    /// A rendition the governor or the planner would not start, with the
+    /// code and `data` the caller answers with.
+    pub refusal: Option<crate::render::Refusal>,
 }
 
 /// The message alone, which is what an embedder reading the ack as a string
@@ -121,6 +124,9 @@ impl std::error::Error for Refused {}
 
 impl Refused {
     pub fn into_error(self) -> anyhow::Error {
+        if let Some(refusal) = self.refusal {
+            return anyhow::Error::new(crate::render::Refusal { message: self.message, ..refusal });
+        }
         match self.action {
             Some(action) => anyhow::Error::new(godwinmix_protocol::Actionable::new(self.message, action)),
             None => anyhow::anyhow!(self.message),
@@ -297,6 +303,7 @@ fn reply(ack: Option<Ack>, outcome: &Result<()>) {
         let _ = tx.send(outcome.as_ref().map(|_| ()).map_err(|e| Refused {
             message: format!("{e:#}"),
             action: ErrorAction::find(e.as_ref()),
+            refusal: e.chain().find_map(|c| c.downcast_ref::<crate::render::Refusal>()).cloned(),
         }));
     }
 }
