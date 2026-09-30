@@ -158,7 +158,10 @@ async fn a_viewer_key_plays_ll_hls_and_nothing_else_gets_in() {
     assert_eq!(part.headers()["content-type"], "video/mp4");
     assert!(part.headers()["cache-control"].to_str().unwrap().contains("immutable"));
     let bytes = part.bytes().await.unwrap();
-    assert_eq!(&bytes[4..8], b"moof");
+    // The first part of a segment opens with the segment's `styp`, as CMAF
+    // has it; the fragment follows. Any other part starts at its `moof`.
+    let first = if &bytes[4..8] == b"styp" { u32::from_be_bytes(bytes[0..4].try_into().unwrap()) as usize } else { 0 };
+    assert_eq!(&bytes[first + 4..first + 8], b"moof", "part {m2}.{p2} starts with {:?}", &bytes[4..8]);
 
     // A whole segment, and the init.
     let whole = after.lines().rev().find(|l| !l.starts_with('#') && l.contains(".m4s")).expect("a segment").to_string();
