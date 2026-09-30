@@ -442,13 +442,26 @@ label { display: block; }
 .shows { display: flex; align-items: center; min-width: 60px; padding-left: 6px; border-left: var(--border) solid var(--line-soft); }
 .showtabs { display: flex; gap: 2px; min-width: 0; overflow-x: auto; scrollbar-width: none; }
 .showtab, .shows-add { display: flex; align-items: center; gap: 6px; padding: 4px 10px; border: 0; border-radius: var(--radius-sm); background: none; color: var(--dim); white-space: nowrap; }
-.showtab-name { max-width: 160px; overflow: hidden; text-overflow: ellipsis; }
+/* Short of room, the other shows' names give way first; the + never does. */
+.showtab { min-width: 0; flex: 0 1 auto; }
+.showtab[aria-selected="true"], .shows-add, .showtab .dot { flex-shrink: 0; }
+.showtab-name { min-width: 0; max-width: 160px; overflow: hidden; text-overflow: ellipsis; }
+.header > .ellipsis { flex-shrink: 4; min-width: 0; }
+/* Several shows on a laptop screen: their own row under the controls. */
+@media (min-width: 761px) and (max-width: 1800px) {
+  .header:has(.shows:not(.one):not([hidden])) { flex-wrap: wrap; height: auto; padding: 6px var(--pad) 2px; }
+  .header > .shows:not(.one) { order: 9; flex-basis: 100%; border: 0; padding: 0; margin-top: -4px; }
+}
 .showtab:hover, .shows-add:hover, .showtab:focus-visible, .shows-add:focus-visible { background: var(--panel2); color: var(--text); outline: none; }
 .showtab[aria-selected="true"] { color: var(--text); background: var(--panel2); box-shadow: inset 0 -2px var(--accent); }
 .shows.one .showtab[aria-selected="true"] { background: none; box-shadow: none; }
 .showtab .dot { background: var(--live); }
-.showtab-state { font-size: var(--fs-sm); color: var(--faint); }
-.showtab-state.failed { color: var(--bad); }
+/* The word is for screen readers and the tooltip; a mark takes its room. */
+.showtab-state { font-size: 0; color: var(--faint); }
+.showtab-state::before { content: "○"; font-size: var(--fs-sm); }
+.showtab-state.starting::before { content: "◌"; color: var(--warn); }
+.showtab-state.failed::before { content: "!"; color: var(--bad); font-weight: 700; }
+.showtab:has(.showtab-state) .showtab-name { color: var(--faint); }
 .project-counts { align-self: flex-start; border-collapse: collapse; }
 .project-counts th, .project-counts td { text-align: left; padding: 2px 24px 2px 0; }
 @media (max-width: 760px) {
