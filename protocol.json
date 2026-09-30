@@ -1575,6 +1575,13 @@
             "null"
           ]
         },
+        "relay": {
+          "description": "Where a mixer on this machine reads it: the listener's own port on\nloopback. Any show adds it as a source with `source.add {type:\n\"ingest/rtmp\", relay, stream: \"<app>/<name>\"}`, and every show that\ndoes reads the one stream the station received.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
         "since_ms": {
           "description": "When it last went live, in milliseconds since 1970.",
           "format": "uint64",

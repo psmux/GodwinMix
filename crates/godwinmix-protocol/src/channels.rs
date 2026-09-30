@@ -114,6 +114,12 @@ pub struct ChannelStream {
     /// Whole GOPs readers of it have lost by falling behind, this session.
     #[serde(default)]
     pub dropped_gops: u64,
+    /// Where a mixer on this machine reads it: the listener's own port on
+    /// loopback. Any show adds it as a source with `source.add {type:
+    /// "ingest/rtmp", relay, stream: "<app>/<name>"}`, and every show that
+    /// does reads the one stream the station received.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub relay: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]

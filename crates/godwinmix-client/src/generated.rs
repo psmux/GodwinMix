@@ -720,6 +720,12 @@ pub struct ChannelStream {
     /// How it arrived: `rtmp`, `rtmps`, `srt` or `whip`.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub protocol: Option<String>,
+    /// Where a mixer on this machine reads it: the listener's own port on
+    /// loopback. Any show adds it as a source with `source.add {type:
+    /// "ingest/rtmp", relay, stream: "<app>/<name>"}`, and every show that
+    /// does reads the one stream the station received.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub relay: Option<String>,
     /// When it last went live, in milliseconds since 1970.
     pub since_ms: u64,
     /// The mixer source it feeds, when it feeds one.

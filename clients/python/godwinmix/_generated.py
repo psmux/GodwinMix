@@ -456,6 +456,7 @@ ChannelStream = TypedDict("ChannelStream", {
     "key": Optional[str],
     "name": str,
     "protocol": Optional[str],
+    "relay": Optional[str],
     "since_ms": int,
     "source": Optional[str],
     "state": str,

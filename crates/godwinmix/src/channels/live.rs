@@ -101,6 +101,7 @@ impl Live {
             audio: self.audio.clone(),
             source: self.source.clone(),
             dropped_gops: self.dropped_gops,
+            relay: (!self.relay.is_empty()).then(|| self.relay.clone()),
         }
     }
 }
