@@ -127,6 +127,17 @@ struct Args {
     #[arg(long, env = "GODWINMIX_SUPERVISED", value_parser = clap::builder::FalseyValueParser::new())]
     supervised: bool,
 
+    /// Run this config as one show in this process, with no station in front
+    /// of it: the single process core, as every release before shows had.
+    /// With `--station`, this is how a station starts each of its shows.
+    #[arg(long, value_name = "ID")]
+    show: Option<String>,
+
+    /// The station's link, for a show a station started. Not for a person to
+    /// type: the station passes it with `--show`.
+    #[arg(long, value_name = "ADDR", requires = "show", hide = true)]
+    station: Option<std::net::SocketAddr>,
+
     #[command(subcommand)]
     command: Option<Command>,
 }
@@ -455,6 +466,47 @@ pub fn install_wasm_host() {
     godwinmix_wasm::install();
 }
 
+/// The flags a station passes on to every show it starts, so a show logs
+/// the way the station does and a rehearsal station runs rehearsal shows.
+fn show_flags(args: &Args) -> Vec<String> {
+    let mut flags = Vec::new();
+    let format = match args.log_format {
+        LogFormat::Auto => None,
+        LogFormat::Json => Some("json"),
+        LogFormat::Human => Some("human"),
+    };
+    if let Some(f) = format {
+        flags.extend(["--log-format".to_string(), f.to_string()]);
+    }
+    if args.rehearsal {
+        flags.push("--rehearsal".into());
+    }
+    if let Some(c) = &args.codecs {
+        flags.extend(["--codecs".to_string(), c.display().to_string()]);
+    }
+    flags
+}
+
+/// Every plugin singleton, as `start_all` starts them, except the ingest
+/// plugin in a show under a station: the station runs it once for every show.
+fn start_singletons(supervisor: &plugin::supervisor::Supervisor) -> Vec<(String, String)> {
+    if !station::show::under_station() {
+        return supervisor.start_all();
+    }
+    let mut failures = Vec::new();
+    for kind in ["service", "device", "transition"] {
+        for provide in plugin::loader::provides_of_kind(kind) {
+            if provide.split('/').next() == Some(channels::PLUGIN) {
+                continue;
+            }
+            if let Err(e) = supervisor.start(&provide) {
+                failures.push((provide, format!("{e:#}")));
+            }
+        }
+    }
+    failures
+}
+
 /// A missing config file is a first run: write the starting one where the
 /// config would be, say so in one line, and carry on. Refused only when the
 /// file cannot be written, and then the error says where and why.
@@ -646,6 +698,25 @@ pub async fn run() -> Result<()> {
 
     // The LiveboxMix config name is still read when there is no GodwinMix one.
     let config_path = config::path_in_force(&args.config);
+    // With no `--show`, this process is the station: it runs this config as
+    // show `main` in a process of its own, beside any other show, and mixes
+    // nothing itself. See `station.rs`.
+    if args.show.is_none() {
+        first_run(&config_path)?;
+        let common = show_flags(&args);
+        return station::run(station::Options {
+            config: config_path,
+            bind: args.bind,
+            rehearsal: args.rehearsal,
+            codecs: args.codecs,
+            common,
+        })
+        .await;
+    }
+    if let (Some(id), Some(link)) = (args.show.as_deref(), args.station) {
+        station::show::enter(id, link);
+        info!(show = id, %link, "a show under a station");
+    }
     let load = core_observe::introspect::stage("config");
     first_run(&config_path)?;
     let cfg = Config::load(&config_path)
@@ -727,12 +798,21 @@ pub async fn run() -> Result<()> {
     // One governor for the machine: this machine's calibration if it has
     // one, the load sampled from now on, and the configured outputs that ask
     // for a rendition admitted by it when `start` attaches them.
-    let station = godwinmix_core::render::Station::start(
-        cfg_for_control.governor.clone(),
-        &godwinmix_core::catalogue::global(),
-        cfg_for_control.hardware.encode,
-        &core_observe::runtime_dir(&config_path),
-    );
+    // Under a station the station's governor is the machine's: this one
+    // neither samples nor measures, and asks the station for everything.
+    let station = match station::show::under_station() {
+        true => godwinmix_core::render::Station::for_show(
+            cfg_for_control.governor.clone(),
+            &godwinmix_core::catalogue::global(),
+            cfg_for_control.hardware.encode,
+        ),
+        false => godwinmix_core::render::Station::start(
+            cfg_for_control.governor.clone(),
+            &godwinmix_core::catalogue::global(),
+            cfg_for_control.hardware.encode,
+            &core_observe::runtime_dir(&config_path),
+        ),
+    };
     mix.set_station(station.clone());
     // A take may name a transition that lives in a plugin. The mixer never
     // launches one: it asks this, with a budget, before the window starts.
@@ -812,8 +892,10 @@ pub async fn run() -> Result<()> {
         mix.start().context("starting mixer")?;
     }
     // After `start`, which says whether anything is on air: a first run
-    // calibration waits for the air to clear.
-    station.begin();
+    // calibration waits for the air to clear. A show leaves it to its station.
+    if !station::show::under_station() {
+        station.begin();
+    }
     control::methods::renditions::configure(mix.renditions().handle());
 
     // The node bridge, if the config asked for one. After `mix.start()`,
@@ -918,7 +1000,7 @@ pub async fn run() -> Result<()> {
     supervisor.attach(handle.clone());
     {
         let _stage = core_observe::introspect::stage("plugin singletons");
-        for (provide, why) in supervisor.start_all() {
+        for (provide, why) in start_singletons(&supervisor) {
             warn!(%provide, %why, "a plugin singleton would not start");
             handle.publish_alert(
                 godwinmix_core::state::Severity::Warning,
@@ -938,8 +1020,22 @@ pub async fn run() -> Result<()> {
             "log": godwinmix_core::observe::session::session().path(),
         })
     });
+    // A show under a station binds the loopback port it was given, tells the
+    // station which one it got, and from then on answers only through it.
+    let linked = match station::show::under_station() {
+        true => {
+            let listener = tokio::net::TcpListener::bind(&bind).await.with_context(|| format!("binding {bind}"))?;
+            let bound = listener.local_addr()?;
+            Some((station::show::link(bound, &station, quit.clone())?, listener))
+        }
+        false => None,
+    };
     let server = tokio::spawn(async move {
-        if let Err(e) = control::serve(&bind, state).await {
+        let served = match linked {
+            Some((_link, listener)) => control::serve_on(listener, state).await,
+            None => control::serve(&bind, state).await,
+        };
+        if let Err(e) = served {
             error!(?e, "control server stopped");
         }
     });

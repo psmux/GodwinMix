@@ -21,6 +21,7 @@ use std::sync::Arc;
 pub mod agent;
 pub mod channel_destinations;
 mod channels;
+mod shows;
 pub mod config;
 mod filters;
 pub mod lifecycle;
@@ -78,6 +79,7 @@ pub fn registry() -> Registry<Call> {
     nodes::register(&mut reg);
     presets::register(&mut reg);
     renditions::register(&mut reg);
+    shows::register(&mut reg);
     config::register(&mut reg);
     crate::observe::register(&mut reg);
     // Other modules add their own here. One line each, and they land on

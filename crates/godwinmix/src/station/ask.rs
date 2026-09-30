@@ -24,7 +24,7 @@ impl Station {
         let addr = (*self.procs.lock().get(id)?.addr.borrow())?;
         let answer = self
             .http
-            .get(format!("http://{addr}/api/v1/status"))
+            .get(format!("http://{addr}/api/v1/core/status"))
             .bearer_auth(self.secret_of(id))
             .timeout(wait)
             .send()
