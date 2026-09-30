@@ -41,6 +41,7 @@ fn inline(value: Value) -> Value {
 pub fn events() -> Vec<EventDef> {
     let mut all = state_events();
     all.extend(stream_events());
+    all.extend(crate::rendition::events());
     all
 }
 

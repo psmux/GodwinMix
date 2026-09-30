@@ -147,7 +147,8 @@ A `Candidate` is one catalogue encoder: its `EncoderSlot`, element, parser,
 software decoder and a `configure` closure that applies the catalogue's
 properties for a shape. The caller builds the list from the codec catalogue
 with the core's own presence check and property code;
-`crates/godwinmix-govern/tests/support/mod.rs` is that glue.
+`godwinmix_core::render::candidates` is that glue, and the station and the
+end to end test both use it.
 
 | Step | What runs |
 |---|---|

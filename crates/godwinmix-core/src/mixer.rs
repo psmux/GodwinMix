@@ -388,6 +388,7 @@ fn needs_superimposed(page: Option<f64>, media: &[Option<f64>]) -> bool {
 use crate::plugin::branch::{BranchCtx, ProgrammeBranch, VideoPads};
 
 pub mod group;
+mod rendered;
 pub mod slots;
 pub mod transition;
 pub use slots::{Placement, SlotPool};
@@ -960,6 +961,9 @@ pub struct Mixer {
     /// One lease per attached output, so an encoder on demand runs for as long
     /// as there is somewhere for its bytes to go.
     output_leases: HashMap<OutputId, crate::encoder::Lease>,
+    /// Outputs that asked for a rendition: the plan, its tickets and the
+    /// running graph off the raw programme tees. See `render/`.
+    renditions: crate::render::Renditions,
     /// Audio monitoring branches, by the shape key they were opened under,
     /// with how many clients are on each. The branch goes when the count does.
     audio_taps: HashMap<String, (crate::preview::audio::AudioTap, u32)>,
@@ -1591,6 +1595,18 @@ impl Mixer {
         crate::input::install_timeline_probe(&vmix, "src", &pgm_out)
             .context("watching where the compositor has got to")?;
 
+        let renditions = crate::render::Renditions::new(
+            rendered::default_station(&cfg),
+            crate::render::Programme {
+                pipeline: program.clone(),
+                video: vraw_tee.clone(),
+                audio: araw_tee.clone(),
+                gfx: sel.graphics.clone(),
+                av_offset_ns,
+            },
+            rendered::programme_info(&cfg),
+        );
+
         let mixer = Self {
             cfg,
             canvas,
@@ -1612,6 +1628,7 @@ impl Mixer {
             encoder,
             enc,
             output_leases: HashMap::new(),
+            renditions,
             audio_taps: HashMap::new(),
             #[cfg(unix)]
             local_previews: HashMap::new(),
@@ -1672,20 +1689,12 @@ impl Mixer {
     /// again when the last one leaves. See `multiview.rs`.
     pub fn start(&mut self) -> Result<()> {
         for out in self.cfg.outputs.clone() {
-            match OutputSlot::attach(
-                &self.program,
-                &self.venc_tee,
-                &self.aenc_tee,
-                &out,
-                self.bus_tx.clone(),
-            ) {
-                Ok(slot) => {
-                    self.hold_encoder_for(&out.id);
-                    self.outputs.push(slot);
-                }
+            match self.attach_output(&out) {
+                Ok(slot) => self.outputs.push(slot),
                 Err(e) => error!(output = %out.id, ?e, "failed to attach output"),
             }
         }
+        self.note_on_air();
 
         self.watches
             .push(gstutil::watch_bus(&self.program, gstutil::BusOwner::Programme, self.bus_tx.clone())?);
@@ -2618,16 +2627,11 @@ impl Mixer {
             "output {} already exists",
             cfg.id
         );
-        let slot = OutputSlot::attach(
-            &self.program,
-            &self.venc_tee,
-            &self.aenc_tee,
-            cfg,
-            self.bus_tx.clone(),
-        )
-        .with_context(|| format!("attaching output {}", cfg.id))?;
-        self.hold_encoder_for(&cfg.id);
+        let slot = self
+            .attach_output(cfg)
+            .with_context(|| format!("attaching output {}", cfg.id))?;
         self.outputs.push(slot);
+        self.note_on_air();
         info!(output = %cfg.id, "output added");
         self.persist_runtime();
         self.broadcast_status();
@@ -2684,6 +2688,8 @@ impl Mixer {
         let slot = self.outputs.remove(pos);
         slot.detach(&self.program);
         self.release_encoder_for(id);
+        self.drop_rendition(id);
+        self.note_on_air();
         self.output_attempts.remove(id);
         info!(output = %id, "output removed");
         self.persist_runtime();
@@ -3787,6 +3793,8 @@ impl Mixer {
         // Reassert visibility so a stall fades to slate and a recovery fades
         // back, without either needing its own event.
         self.apply_visibility(true);
+        // What the governor says to give up, or that there is room again.
+        self.rendition_tick();
 
 
         // Held frames that have run out of time. Before the liveness sweep, so
@@ -4241,7 +4249,11 @@ impl Mixer {
             scene: self.program_scene.as_ref().map(|s| s.name.clone()),
             program: self.program_source.clone(),
             sources,
-            outputs: self.outputs.iter().map(|o| o.status()).collect(),
+            outputs: self
+                .outputs
+                .iter()
+                .map(|o| OutputStatus { shed: self.shed_reason(o.id()), ..o.status() })
+                .collect(),
             // With no mosaic running the configured shape is still what a
             // client would get if it asked, so `enabled` answers "may I have
             // one", not "is one running". The cells are empty because there
@@ -4709,6 +4721,7 @@ impl Mixer {
         #[cfg(unix)]
         self.local_previews.clear();
         self.output_leases.clear();
+        self.renditions.shutdown();
         self.encoder.shutdown();
         let _ = self.program.set_state(gst::State::Null);
     }
@@ -5160,6 +5173,7 @@ mod tests {
             safety: Default::default(),
             browser: Default::default(),
             stall: Default::default(),
+            governor: Default::default(),
             sources: vec![],
             outputs: vec![],
             filters: vec![],
@@ -5198,6 +5212,7 @@ mod tests {
             safety: Default::default(),
             browser: Default::default(),
             stall: Default::default(),
+            governor: Default::default(),
             sources: vec![],
             outputs: vec![],
             filters: vec![],

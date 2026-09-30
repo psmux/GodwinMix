@@ -50,6 +50,11 @@ pub struct Config {
     pub browser: BrowserConfig,
     #[serde(default)]
     pub stall: StallConfig,
+    /// The resource governor. Nothing needs setting: it measures this
+    /// machine and works out its own headroom. `reserve_cores` under
+    /// Advanced keeps cores free for something else. See `render/`.
+    #[serde(default)]
+    pub governor: godwinmix_govern::GovernorConfig,
     #[serde(default)]
     pub sources: Vec<SourceConfig>,
     #[serde(default)]
@@ -1328,6 +1333,11 @@ pub struct OutputConfig {
     /// so a slow remote destination cannot apply backpressure to the encoder.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub place: Option<crate::node::Place>,
+    /// What this output wants made from the programme: a rendition request
+    /// or `{preset = "youtube-720p30"}`. Absent means the programme encoder
+    /// as it has always been, at no extra cost. See `render/`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub rendition: Option<godwinmix_protocol::rendition::RenditionChoice>,
     /// Every key the core does not know, handed to the output's kind.
     #[serde(flatten, default)]
     pub extra: std::collections::BTreeMap<String, toml::Value>,
@@ -1353,6 +1363,7 @@ impl OutputConfig {
             reconnect: None,
             queue_secs: default_queue_secs(),
             place: None,
+            rendition: None,
             extra: Default::default(),
         }
     }
@@ -2034,6 +2045,7 @@ sidecar = \"/opt/b\"\n").unwrap();
             safety: Default::default(),
             browser: Default::default(),
             stall: Default::default(),
+            governor: Default::default(),
             sources: vec![],
             outputs: vec![],
             filters: vec![],

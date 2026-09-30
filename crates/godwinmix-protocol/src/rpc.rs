@@ -246,6 +246,12 @@ pub fn event_name_and_payload(event: &Event) -> Option<(&'static str, Value)> {
             "channel.refused",
             payload(json!({ "id": id, "stream": stream, "from": from, "why": why })),
         ),
+        Event::RenditionPlan { scope, plan } => {
+            ("rendition.plan", payload(json!({ "scope": scope, "plan": plan })))
+        }
+        Event::GovernorShed { what, why } => {
+            ("governor.shed", payload(json!({ "what": what, "why": why })))
+        }
         Event::AudioLevel { .. } | Event::SourceAudioLevel { .. } => return None,
     })
 }

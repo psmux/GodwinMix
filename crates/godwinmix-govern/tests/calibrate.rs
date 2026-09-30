@@ -9,8 +9,6 @@
 //! and skips the hardware assertions. `GMX_SKIP_HARDWARE=1` skips them on a
 //! machine that has one.
 
-mod support;
-
 use godwinmix_govern::calibrate::{calibrate, fingerprint_for, Options};
 use godwinmix_govern::store::{decide, Decision, Store};
 use godwinmix_govern::{Governor, GovernorConfig, Kind, Profile};
@@ -21,8 +19,9 @@ use std::time::Instant;
 fn this_machine_is_measured_stored_and_governed() {
     gstreamer::init().unwrap();
     let cat = godwinmix_core::catalogue::Catalogue::shipped().unwrap();
-    let cands = support::candidates(&cat);
-    let audio = support::audio(&cat);
+    // The station's own list: the catalogue as the core reads it.
+    let cands = godwinmix_core::render::candidates::candidates(&cat, godwinmix_core::config::Accel::Auto);
+    let audio = godwinmix_core::render::candidates::audio(&cat);
     if cands.is_empty() {
         eprintln!("no video encoder from the catalogue is installed here; nothing to calibrate");
         return;

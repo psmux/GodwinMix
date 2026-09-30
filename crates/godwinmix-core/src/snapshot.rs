@@ -715,6 +715,8 @@ mod tests {
                 state: OutputState::Live,
                 reconnects: 2,
                 queue_secs: 0.1,
+                rendition: None,
+                shed: None,
                 extra: Default::default(),
             }],
             multiview: MultiviewStatus {
