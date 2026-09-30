@@ -14,6 +14,8 @@ pub struct Live {
     pub since_ms: u64,
     pub from: String,
     pub key: Option<String>,
+    /// `rtmp`, `rtmps`, `srt` or `whip`.
+    pub protocol: Option<String>,
     pub video: Option<StreamVideo>,
     pub audio: Option<StreamAudio>,
     pub dropped_gops: u64,
@@ -47,6 +49,7 @@ impl Live {
             since_ms: 0,
             from: String::new(),
             key: None,
+            protocol: None,
             video: None,
             audio: None,
             dropped_gops: 0,
@@ -69,6 +72,9 @@ impl Live {
         if let Some(key) = v.get("key").and_then(Value::as_str) {
             self.key = Some(key.to_string());
         }
+        if let Some(via) = v.get("protocol").and_then(Value::as_str) {
+            self.protocol = Some(via.to_string());
+        }
         let relay = text(v, "relay");
         if !relay.is_empty() {
             self.relay = relay;
@@ -85,6 +91,7 @@ impl Live {
             since_ms: self.since_ms,
             from: self.from.clone(),
             key: self.key.clone(),
+            protocol: self.protocol.clone(),
             video: self.video.clone(),
             audio: self.audio.clone(),
             source: self.source.clone(),

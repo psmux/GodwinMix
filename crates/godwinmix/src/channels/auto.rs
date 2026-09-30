@@ -128,6 +128,7 @@ impl Channels {
                 since_ms: 0,
                 from: String::new(),
                 key: None,
+                protocol: None,
                 video: None,
                 audio: None,
                 dropped_gops: 0,

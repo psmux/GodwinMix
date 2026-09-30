@@ -1,5 +1,6 @@
-//! RTMP channels on the wire: the records `channel.*` answers with and the
-//! requests it takes.
+//! Channels on the wire: the records `channel.*` answers with and the
+//! requests it takes. A channel takes its streams over RTMP, RTMPS, SRT and
+//! WHIP with one set of keys; `crate::channel_ingest` has those shapes.
 //!
 //! The shapes are the ones in `dev/plans/channels-contract.md`, which was
 //! written before either half was built so the server and the page could be
@@ -8,6 +9,11 @@
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
+pub use crate::channel_ingest::{
+    CertificateGenerateRequest, CertificateInfo, CertificateSetRequest, ChannelProtocol, Listener,
+    PublishAddress, Rtmps,
+};
+use crate::channel_ingest::rtmp_only;
 pub use crate::destination::Destination;
 
 /// How a publisher gives its key.
@@ -21,7 +27,7 @@ pub enum KeyMode {
     Stream,
 }
 
-/// A named place encoders publish to, on the mixer's own RTMP port.
+/// A named place encoders publish to, over every protocol it has switched on.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 pub struct Channel {
     /// A slug, and never changes once the channel exists.
@@ -35,6 +41,12 @@ pub struct Channel {
     /// A stream that goes live becomes a mixer source by itself.
     pub auto_source: bool,
     pub key_mode: KeyMode,
+    /// The protocols it takes publishers over, besides RTMPS.
+    #[serde(default = "rtmp_only")]
+    pub protocols: Vec<ChannelProtocol>,
+    /// RTMPS, on a port of its own, when a person has turned it on.
+    #[serde(default)]
+    pub rtmps: Rtmps,
     /// The keys as hints, never the key itself: a read token sees only these.
     pub keys: Vec<ChannelKey>,
     pub publish: ChannelPublish,
@@ -75,6 +87,9 @@ pub struct ChannelPublish {
     pub server: String,
     /// `<server>/main?psk=<key>`, with `<key>` left for the person to fill.
     pub example: String,
+    /// The same for every protocol the channel has on, RTMP first.
+    #[serde(default)]
+    pub addresses: Vec<PublishAddress>,
 }
 
 /// One stream on a channel.
@@ -89,6 +104,9 @@ pub struct ChannelStream {
     pub from: String,
     /// The id of the key that let it in.
     pub key: Option<String>,
+    /// How it arrived: `rtmp`, `rtmps`, `srt` or `whip`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub protocol: Option<String>,
     pub video: Option<StreamVideo>,
     pub audio: Option<StreamAudio>,
     /// The mixer source it feeds, when it feeds one.
@@ -120,6 +138,16 @@ pub struct StreamAudio {
 pub struct ChannelList {
     pub channels: Vec<Channel>,
     pub rtmp: RtmpInfo,
+    /// Every listener a channel needs, open or not, and why: the ports this
+    /// mixer has open for ingest, and the channels each is open for.
+    #[serde(default)]
+    pub listeners: Vec<Listener>,
+    /// The addresses an encoder can reach this machine at, first one first.
+    #[serde(default)]
+    pub hosts: Vec<String>,
+    /// The certificate RTMPS answers with, when there is one.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub certificate: Option<CertificateInfo>,
 }
 
 /// The RTMP port every channel shares.
@@ -147,6 +175,9 @@ pub struct ChannelAddRequest {
     pub auto_source: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub key_mode: Option<KeyMode>,
+    /// Defaults to RTMP alone.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub protocols: Option<Vec<ChannelProtocol>>,
 }
 
 /// What `channel.add` answers: the channel and its first key.
@@ -170,6 +201,12 @@ pub struct ChannelSetRequest {
     pub auto_source: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub key_mode: Option<KeyMode>,
+    /// Which protocols it takes, as a whole list: `["rtmp", "srt"]`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub protocols: Option<Vec<ChannelProtocol>>,
+    /// RTMPS on or off, and its port.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub rtmps: Option<Rtmps>,
 }
 
 /// `channel.key.add`.

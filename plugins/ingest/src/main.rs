@@ -315,9 +315,9 @@ impl Publishers {
             let session = params.get("session").and_then(Value::as_str).unwrap_or_default();
             return Some(Ok(json!({"ended": running.whip.end(session)})));
         }
-        Some(running.whip.offer(params).map_err(|(status, why)| {
-            RpcError::new(codes::INVALID_PARAMS, why).with_data(json!({"status": status}))
-        }))
+        // A refusal is an answer, with the HTTP status the core should send:
+        // the core's plugin channel carries an error's message and not its data.
+        Some(Ok(running.whip.offer(params).unwrap_or_else(|(status, why)| json!({"status": status, "why": why}))))
     }
 }
 

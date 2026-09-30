@@ -1,12 +1,15 @@
-//! RTMP channels: the core's half.
+//! Channels: the core's half.
 //!
-//! A channel is a named place encoders publish to on the mixer's own RTMP
-//! port (`dev/plans/channels-contract.md`). The listener is the ingest
-//! plugin's `ingest/discover`; this module owns everything else. It keeps the
+//! A channel is a named place encoders publish to, over RTMP, RTMPS, SRT or
+//! WHIP with one set of keys (`dev/plans/channels-contract.md`,
+//! `dev/plans/shows-and-renditions.md`). The listeners are the ingest
+//! plugin's `ingest/discover`, which opens each port only while a channel
+//! uses it; WHIP arrives on the control port and is handed to it
+//! (`crate::control::whip`). This module owns everything else. It keeps the
 //! channels and their keys, persists them beside the runtime store, seals the
-//! keys in the secret store, hands the listener its table, hears back what
-//! goes live, and turns a live stream into a mixer source when the channel
-//! says to.
+//! keys and the RTMPS certificate in the secret store, hands the listener its
+//! table, hears back what goes live, and turns a live stream into a mixer
+//! source when the channel says to.
 //!
 //! ```text
 //!   channel.* methods ──► Channels ──set_extra + configure──► ingest/discover
@@ -29,10 +32,13 @@ mod events;
 mod keys;
 mod live;
 mod net;
+mod ports;
 mod reveal;
 mod sending;
 mod store;
+mod tls;
 mod view;
+mod whip;
 
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicU16, Ordering};
@@ -42,7 +48,7 @@ use godwinmix_core::mixer::MixerHandle;
 use godwinmix_core::plugin::supervisor::Supervisor;
 use godwinmix_core::scene::server::SceneServer;
 use godwinmix_core::secrets::Secrets;
-use godwinmix_protocol::channels::{Channel, ChannelList, RtmpInfo};
+use godwinmix_protocol::channels::{CertificateInfo, Channel, ChannelList, RtmpInfo};
 use godwinmix_protocol::error::RpcError;
 use godwinmix_protocol::types::Event;
 use parking_lot::Mutex;
@@ -50,6 +56,8 @@ use serde_json::{json, Value};
 use tracing::{error, warn};
 
 pub use live::Live;
+pub use ports::Ports;
+pub use whip::Whip;
 pub use store::Record;
 
 /// The plugin that holds the listener.
@@ -63,6 +71,12 @@ pub struct Channels {
     /// file would not parse: then nothing is written over it.
     store: Option<PathBuf>,
     records: Mutex<Vec<Record>>,
+    /// What RTMPS answers with; the certificate and key are sealed.
+    certificate: Mutex<Option<CertificateInfo>>,
+    /// What the listener last said about its ports.
+    listeners: Mutex<Vec<Value>>,
+    /// The ports from the settings, for addresses of listeners not open yet.
+    ports: Ports,
     live: Mutex<Vec<Live>>,
     /// What the listener last said about each destination.
     sending: Mutex<Vec<sending::Sending>>,
@@ -80,32 +94,35 @@ impl Channels {
     /// start listening for what it says.
     pub fn open(
         runtime_store: Option<PathBuf>,
-        port: u16,
+        ports: Ports,
         plugins: Arc<Supervisor>,
         mixer: MixerHandle,
         scenes: Arc<SceneServer>,
         secrets: &'static Secrets,
     ) -> Arc<Channels> {
         let path = runtime_store.map(|p| store::path_beside(&p));
-        let (records, store) = match path.as_deref().map(store::load) {
-            None => (Vec::new(), None),
-            Some(Ok(records)) => (records, path),
+        let (stored, store) = match path.as_deref().map(store::load) {
+            None => (store::Stored::default(), None),
+            Some(Ok(stored)) => (stored, path),
             Some(Err(e)) => {
                 error!(error = %format!("{e:#}"), "the channels file would not parse; no channel is served and nothing is written over it");
                 mixer.publish_alert(
                     godwinmix_core::state::Severity::Error,
                     format!("the channels file would not parse, so no channel is served: {e:#}. Fix or move it, then restart."),
                 );
-                (Vec::new(), None)
+                (store::Stored::default(), None)
             }
         };
         let channels = Arc::new(Channels {
             store,
-            records: Mutex::new(records),
+            records: Mutex::new(stored.channels),
+            certificate: Mutex::new(stored.certificate),
+            listeners: Mutex::new(Vec::new()),
             live: Mutex::new(Vec::new()),
             sending: Mutex::new(Vec::new()),
             edits: Mutex::new(()),
-            port: AtomicU16::new(port),
+            port: AtomicU16::new(ports.rtmp),
+            ports,
             plugins,
             mixer,
             scenes,
@@ -130,16 +147,23 @@ impl Channels {
                         Some(json!({"id": k.id, "secret": secret}))
                     })
                     .collect();
-                json!({
+                let mut row = json!({
                     "id": r.id,
                     "app": r.app,
                     "enabled": r.enabled,
                     "key_mode": r.key_mode,
                     "keys": keys,
+                    "protocols": r.protocols,
                     "destinations": self.destination_table(r),
-                })
+                });
+                // TOML has no null, so an RTMPS that is off is left out.
+                if r.rtmps.enabled {
+                    row["rtmps_port"] = json!(r.rtmps.port);
+                }
+                row
             })
             .collect();
+        self.hand_over_tls();
         match toml::Value::try_from(Value::Array(table)) {
             Ok(value) => self.plugins.set_extra(PLUGIN, "channels", Some(value)),
             Err(e) => warn!(%e, "the channel table would not convert for the plugin"),
@@ -147,7 +171,7 @@ impl Channels {
         if now {
             for (instance, answer) in self.plugins.configure_plugin(PLUGIN) {
                 if let Err(e) = answer {
-                    warn!(%instance, error = %format!("{e:#}"), "the RTMP listener did not take the new channel table");
+                    warn!(%instance, error = %format!("{e:#}"), "the channel server did not take the new channel table");
                 }
             }
         }
@@ -165,8 +189,8 @@ impl Channels {
 
     fn persist(&self) -> anyhow::Result<()> {
         let Some(path) = &self.store else { return Ok(()) };
-        let records = self.records.lock().clone();
-        store::save(path, &records)
+        let stored = store::Stored { channels: self.records.lock().clone(), certificate: self.certificate.lock().clone() };
+        store::save(path, &stored)
     }
 
     /// `event/channel.changed` for one channel.
@@ -180,7 +204,13 @@ impl Channels {
     pub fn list(&self) -> ChannelList {
         self.refresh();
         let records = self.records.lock().clone();
-        ChannelList { channels: records.iter().map(|r| self.view(r)).collect(), rtmp: self.rtmp() }
+        ChannelList {
+            channels: records.iter().map(|r| self.view(r)).collect(),
+            rtmp: self.rtmp(),
+            listeners: self.listener_rows(),
+            hosts: net::hosts(),
+            certificate: self.certificate.lock().clone(),
+        }
     }
 
     /// `channel.get`.
@@ -194,11 +224,18 @@ impl Channels {
         RpcError::not_found("channel", id, &ids)
     }
 
-    /// The port every channel shares, and whether anything is listening.
+    /// The RTMP port, and whether it is open.
     fn rtmp(&self) -> RtmpInfo {
         let port = self.port.load(Ordering::Relaxed);
-        let listening = self.plugins.is_running(PLUGIN);
-        let problem = (!listening).then(|| net::why_not_listening(PLUGIN));
+        let running = self.plugins.is_running(PLUGIN);
+        let listening = running && self.rtmp_open();
+        // Closed because no channel has RTMP on is not a problem; closed
+        // because the plugin is not there, or the port would not bind, is.
+        let problem = if running {
+            self.listener_rows().into_iter().find(|r| r.protocol == "rtmp").and_then(|r| r.problem)
+        } else {
+            Some(net::why_not_listening(PLUGIN))
+        };
         RtmpInfo { port, urls: net::urls(port), listening, problem }
     }
 }

@@ -120,6 +120,24 @@ impl Supervisor {
         self.routes.events.lock().push((prefix.to_string(), route));
     }
 
+    /// Call a method of one plugin singleton, `<plugin>/<provide>`, with the
+    /// protocol's ceiling on the wait. For a method the core itself needs of
+    /// a plugin, such as handing the ingest plugin a WHIP offer that arrived
+    /// on the control port; tools go through `tool_call`.
+    pub fn call_provide(&self, plugin: &str, provide: &str, method: &str, params: Value) -> Result<Value> {
+        let wanted = format!("{plugin}/{provide}");
+        let caller = {
+            let inner = self.inner.lock();
+            let instance = inner
+                .instances
+                .values()
+                .find(|i| i.provide == wanted && i.running())
+                .ok_or_else(|| anyhow::anyhow!("{wanted} is not running, so `{method}` has nowhere to go"))?;
+            instance.child.caller().ok_or_else(|| anyhow::anyhow!("{wanted} has no channel to call on yet"))?
+        };
+        caller.call_within(method, params, crate::plugin::host::process::CALL_TIMEOUT)
+    }
+
     /// Whether a plugin has a singleton up and answering.
     pub fn is_running(&self, plugin: &str) -> bool {
         self.inner.lock().instances.values().any(|i| i.plugin == plugin && i.running())

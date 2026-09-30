@@ -957,8 +957,70 @@
       ],
       "type": "object"
     },
+    "CertificateGenerateRequest": {
+      "description": "`channel.certificate.generate`: a self signed certificate.",
+      "properties": {
+        "names": {
+          "description": "Host names and addresses it is for. Defaults to this machine's\naddress, `localhost` and `127.0.0.1`.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "type": "object"
+    },
+    "CertificateInfo": {
+      "description": "The certificate RTMPS answers with. The private key never leaves the core.",
+      "properties": {
+        "created": {
+          "description": "When it was set, RFC 3339 in UTC.",
+          "type": "string"
+        },
+        "fingerprint": {
+          "description": "SHA-256 of the certificate, as colon separated hex, to compare with\nwhat an encoder shows.",
+          "type": "string"
+        },
+        "names": {
+          "default": [],
+          "description": "The names it was made for, for a self signed one.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "source": {
+          "description": "`uploaded`, or `self_signed` for one the mixer made.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "source",
+        "fingerprint",
+        "created"
+      ],
+      "type": "object"
+    },
+    "CertificateSetRequest": {
+      "description": "`channel.certificate.set`: a certificate and its private key, as PEM.",
+      "properties": {
+        "cert": {
+          "description": "The certificate, and any chain after it, as PEM.",
+          "type": "string"
+        },
+        "key": {
+          "description": "Its private key, as PEM.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "cert",
+        "key"
+      ],
+      "type": "object"
+    },
     "Channel": {
-      "description": "A named place encoders publish to, on the mixer's own RTMP port.",
+      "description": "A named place encoders publish to, over every protocol it has switched on.",
       "properties": {
         "app": {
           "description": "The RTMP application name: the path segment after the port.",
@@ -998,8 +1060,26 @@
           "description": "What a person calls it.",
           "type": "string"
         },
+        "protocols": {
+          "default": [
+            "rtmp"
+          ],
+          "description": "The protocols it takes publishers over, besides RTMPS.",
+          "items": {
+            "$ref": "#/$defs/ChannelProtocol"
+          },
+          "type": "array"
+        },
         "publish": {
           "$ref": "#/$defs/ChannelPublish"
+        },
+        "rtmps": {
+          "$ref": "#/$defs/Rtmps",
+          "default": {
+            "enabled": false,
+            "port": 443
+          },
+          "description": "RTMPS, on a port of its own, when a person has turned it on."
         },
         "streams": {
           "description": "Live streams, and streams that left while a scene still holds their\nsource.",
@@ -1050,6 +1130,16 @@
         },
         "name": {
           "type": "string"
+        },
+        "protocols": {
+          "description": "Defaults to RTMP alone.",
+          "items": {
+            "$ref": "#/$defs/ChannelProtocol"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
         }
       },
       "required": [
@@ -1152,9 +1242,36 @@
     "ChannelList": {
       "description": "`channel.list`.",
       "properties": {
+        "certificate": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/CertificateInfo"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The certificate RTMPS answers with, when there is one."
+        },
         "channels": {
           "items": {
             "$ref": "#/$defs/Channel"
+          },
+          "type": "array"
+        },
+        "hosts": {
+          "default": [],
+          "description": "The addresses an encoder can reach this machine at, first one first.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "listeners": {
+          "default": [],
+          "description": "Every listener a channel needs, open or not, and why: the ports this\nmixer has open for ingest, and the channels each is open for.",
+          "items": {
+            "$ref": "#/$defs/Listener"
           },
           "type": "array"
         },
@@ -1168,9 +1285,37 @@
       ],
       "type": "object"
     },
+    "ChannelProtocol": {
+      "description": "A way a publisher reaches a channel. RTMPS is `Rtmps`, set apart\nbecause it has a port of its own.",
+      "oneOf": [
+        {
+          "const": "rtmp",
+          "description": "`rtmp://<host>:<rtmp port>/<app>/<stream>?psk=<key>`.",
+          "type": "string"
+        },
+        {
+          "const": "srt",
+          "description": "`srt://<host>:<srt port>?streamid=<app>/<stream>`, the key as the\npassphrase or as `?psk=` in the stream id.",
+          "type": "string"
+        },
+        {
+          "const": "whip",
+          "description": "`POST http://<host>:<control port>/whip/<app>/<stream>`, the key as\nthe bearer token.",
+          "type": "string"
+        }
+      ]
+    },
     "ChannelPublish": {
       "description": "Where an encoder is pointed.",
       "properties": {
+        "addresses": {
+          "default": [],
+          "description": "The same for every protocol the channel has on, RTMP first.",
+          "items": {
+            "$ref": "#/$defs/PublishAddress"
+          },
+          "type": "array"
+        },
         "example": {
           "description": "`<server>/main?psk=<key>`, with `<key>` left for the person to fill.",
           "type": "string"
@@ -1237,6 +1382,27 @@
             "string",
             "null"
           ]
+        },
+        "protocols": {
+          "description": "Which protocols it takes, as a whole list: `[\"rtmp\", \"srt\"]`.",
+          "items": {
+            "$ref": "#/$defs/ChannelProtocol"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "rtmps": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Rtmps"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "RTMPS on or off, and its port."
         }
       },
       "required": [
@@ -1277,6 +1443,13 @@
         },
         "name": {
           "type": "string"
+        },
+        "protocol": {
+          "description": "How it arrived: `rtmp`, `rtmps`, `srt` or `whip`.",
+          "type": [
+            "string",
+            "null"
+          ]
         },
         "since_ms": {
           "description": "When it last went live, in milliseconds since 1970.",
@@ -3438,6 +3611,64 @@
       ],
       "type": "object"
     },
+    "Listener": {
+      "description": "One listener a channel needs, and whether it is open now.",
+      "properties": {
+        "because": {
+          "description": "The channels it is open for. Empty when nothing needs it.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "last_port": {
+          "description": "The last port of a range, for WebRTC media.",
+          "format": "uint16",
+          "maximum": 65535,
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "loopback": {
+          "description": "Bound to 127.0.0.1 only, so nothing off this machine reaches it.",
+          "type": "boolean"
+        },
+        "open": {
+          "type": "boolean"
+        },
+        "port": {
+          "format": "uint16",
+          "maximum": 65535,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "problem": {
+          "description": "Why it is not open although a channel wants it, and what to do.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "protocol": {
+          "description": "`rtmp`, `rtmps`, `srt`, `whip`, `webrtc` (the media ports WHIP\nsessions use) or `relay` (the RTMP port on the loopback alone, for the\nmixer's own sources, while no channel has RTMP on).",
+          "type": "string"
+        },
+        "transport": {
+          "description": "`tcp` or `udp`.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "protocol",
+        "transport",
+        "port",
+        "open",
+        "because"
+      ],
+      "type": "object"
+    },
     "LogGstRequest": {
       "description": "`log.gst`.",
       "properties": {
@@ -4931,6 +5162,29 @@
       ],
       "type": "object"
     },
+    "PublishAddress": {
+      "description": "Where an encoder is pointed for one protocol.",
+      "properties": {
+        "example": {
+          "description": "The whole address with `<key>` where the key goes.",
+          "type": "string"
+        },
+        "protocol": {
+          "description": "`rtmp`, `rtmps`, `srt` or `whip`.",
+          "type": "string"
+        },
+        "server": {
+          "description": "The address without the key: `srt://10.0.0.5:9000`.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "protocol",
+        "server",
+        "example"
+      ],
+      "type": "object"
+    },
     "Record": {
       "description": "One scene or one item.",
       "oneOf": [
@@ -5253,6 +5507,26 @@
         "port",
         "urls",
         "listening"
+      ],
+      "type": "object"
+    },
+    "Rtmps": {
+      "description": "RTMPS for one channel: off, or on at a port.",
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "port": {
+          "description": "The port it listens on while enabled. 443 is offered first.",
+          "format": "uint16",
+          "maximum": 65535,
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "enabled",
+        "port"
       ],
       "type": "object"
     },
@@ -7801,6 +8075,44 @@
     },
     {
       "destructive": false,
+      "idempotent": false,
+      "mutating": true,
+      "name": "channel.certificate.generate",
+      "params": {
+        "$ref": "#/$defs/CertificateGenerateRequest"
+      },
+      "rest": {
+        "method": "POST",
+        "path": "/api/v1/channels/{id}/certificate/generate"
+      },
+      "result": {
+        "$ref": "#/$defs/CertificateInfo"
+      },
+      "scope": "admin",
+      "since": "1",
+      "summary": "Make a self signed certificate for RTMPS, for this machine's addresses unless names are given. Encoders must be told to accept it; one from a certificate authority needs no such step."
+    },
+    {
+      "destructive": false,
+      "idempotent": false,
+      "mutating": true,
+      "name": "channel.certificate.set",
+      "params": {
+        "$ref": "#/$defs/CertificateSetRequest"
+      },
+      "rest": {
+        "method": "POST",
+        "path": "/api/v1/channels/{id}/certificate"
+      },
+      "result": {
+        "$ref": "#/$defs/CertificateInfo"
+      },
+      "scope": "admin",
+      "since": "1",
+      "summary": "Give RTMPS a certificate: the PEM of the certificate (and its chain) and of its private key, as a certificate authority issued them. Checked before it is kept; the key is sealed and never read back."
+    },
+    {
+      "destructive": false,
       "idempotent": true,
       "mutating": true,
       "name": "channel.destination.add",
@@ -7958,7 +8270,7 @@
       },
       "scope": "read",
       "since": "1",
-      "summary": "Every RTMP channel with its keys (as hints), the address to publish to, and what is live on it, beside the port they all share."
+      "summary": "Every channel with its keys (as hints), the address to publish to over each protocol it has on, and what is live on it; and which ingest ports are open and for which channels."
     },
     {
       "destructive": true,
@@ -7996,7 +8308,7 @@
       },
       "scope": "admin",
       "since": "1",
-      "summary": "Rename a channel, switch it on or off, or change its application name, whether its streams become sources, or how its key is given. Only what is named moves."
+      "summary": "Rename a channel, switch it on or off, or change its application name, whether its streams become sources, how its key is given, which protocols it takes (rtmp, srt, whip) or RTMPS and its port. A port opens when the first channel needs it and closes when the last one stops. Only what is named moves."
     },
     {
       "destructive": false,
@@ -10935,6 +11247,21 @@
       "method": "ANY",
       "note": "every method's REST route, generated by the transform rule",
       "path": "/api/v1/{*rest}"
+    },
+    {
+      "method": "POST",
+      "note": "WHIP ingest for a channel that has WHIP on. The body is the SDP offer, the channel's key is the bearer token, and the answer is 201 with the SDP answer and the session's Location.",
+      "path": "/whip/{channel}/{stream}"
+    },
+    {
+      "method": "DELETE",
+      "note": "ends a WHIP session, as the WHIP client does when it stops publishing",
+      "path": "/whip/{channel}/{stream}/{session}"
+    },
+    {
+      "method": "PATCH",
+      "note": "405: every candidate is in the answer, and none are taken later",
+      "path": "/whip/{channel}/{stream}/{session}"
     }
   ]
 }

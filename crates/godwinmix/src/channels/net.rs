@@ -35,18 +35,28 @@ pub fn why_not_listening(plugin: &str) -> String {
     use godwinmix_core::plugin::loader;
     if loader::get(plugin).is_none() {
         return format!(
-            "nothing is listening for RTMP: the {plugin} plugin is not installed. Install it \
+            "nothing is listening for channels: the {plugin} plugin is not installed. Install it \
              from the Plugins page and channels start taking publishers."
         );
     }
     if !loader::enabled().iter().any(|p| p.name() == plugin) {
         return format!(
-            "nothing is listening for RTMP: the {plugin} plugin is switched off. Switch it on \
+            "nothing is listening for channels: the {plugin} plugin is switched off. Switch it on \
              from the Plugins page."
         );
     }
     format!(
-        "the {plugin} plugin is installed but its RTMP listener is not running. Another \
-         program may hold the port; the plugin's log line says which."
+        "the {plugin} plugin is installed but its channel server is not running. Another \
+         program may hold a port; the plugin's log line says which."
     )
+}
+
+/// The addresses an encoder can reach this machine at, first one first.
+pub fn hosts() -> Vec<String> {
+    let first = first_address();
+    let mut out = vec![first.clone()];
+    if first != "127.0.0.1" {
+        out.push("127.0.0.1".into());
+    }
+    out
 }
