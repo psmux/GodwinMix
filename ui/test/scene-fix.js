@@ -80,3 +80,91 @@ export async function sceneFixTests(test, eq, ok) {
     ok(scenes.groups[0].opts.offer, "the removal offers Undo");
   });
 }
+
+/**
+ * The cases a real browser found: a mirror that has not read the scene yet,
+ * a source nothing can bring back, and the mark's press reaching the pointer
+ * pipelines above it. Then the scene list read once the socket opens.
+ */
+export async function sceneFixLoadTests(test, eq, ok) {
+  const sources = [{ id: "cam-wide", name: "Wide", state: "live" }];
+  const records = ["cam-wide", "lyrics", "slides"].map((source, i) => ({ id: `item-${i}`, kind: "item", name: source === "lyrics" ? "Lyrics" : null, content: { source } }));
+  const client = fakeClient(sources, [{ id: "slides", why: "unknown", restore: false }]);
+  const scenes = fakeScenes(client, records);
+  let read = false;
+  scenes.mirror = { descendants: () => (read ? records : []) };
+  scenes.reread = async () => { read = true; };
+  const { openFix } = await import("../panels/scenes/fix.js");
+  const dialog = await openFix({ client, scenes, scene: "default" });
+  const rows = [...dialog.el.querySelectorAll(".fix-row")];
+  test("Fix reads a scene the mirror does not have yet, and lists what it draws", () => {
+    ok(read, "the scene was never read");
+    eq(rows.length, 2);
+  });
+  test("every row has a name, a reason and a button of its own", () => {
+    ok(rows[0].querySelector("strong").textContent === "Lyrics", rows[0].textContent);
+    ok(rows.every((r) => r.querySelector(".fix-text > div.sm").textContent.length > 10), "a row has no reason");
+    ok(rows.every((r) => r.querySelector(".fix-actions button")), "a row has nothing to press");
+  });
+  rows[1].querySelector(".fix-actions button").click();
+  await new Promise((r) => setTimeout(r, 50));
+  test("a row's own Remove takes that one source out, as one undo step", () => {
+    eq(client.calls.filter((c) => c.method === "scene.item.remove").map((c) => c.params.item), ["item-2"]);
+    ok(scenes.groups.length === 1 && scenes.groups[0].opts.offer, "no Undo offered");
+  });
+  dialog.close();
+
+  const marks = await import("../panels/scenes/marks.js");
+  const strip = document.createElement("div");
+  const holder = document.createElement("span");
+  const tab = document.createElement("button");
+  holder.append(tab);
+  strip.append(holder);
+  document.body.append(strip);
+  let pressed = 0;
+  strip.addEventListener("pointerdown", () => pressed++);
+  const panel = { client, scenes, tabs: new Map([["default", tab]]), tiles: new Map() };
+  marks.paint(panel);
+  const mark = holder.querySelector(".scene-warn");
+  mark.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, isPrimary: true, button: 0 }));
+  test("a press on the mark stays on the mark", () => {
+    ok(mark && !mark.hidden, "no mark painted");
+    eq(pressed, 0);
+  });
+  strip.remove();
+
+  const { SceneClient } = await import("../kits/protocol/index.js");
+  const listeners = new Map();
+  let open = false;
+  let lists = 0;
+  const socket = {
+    state: {},
+    on: (name, fn) => { listeners.set(name, fn); return () => listeners.delete(name); },
+    opened: () => new Promise((r) => { const was = listeners.get("open"); listeners.set("open", () => { was && was(); r(true); }); }),
+    call: async (method) => {
+      if (!open) { const e = new Error("not connected"); e.code = -32001; e.data = { retryable: true }; throw e; }
+      if (method === "scene.list") { lists++; return { scenes: [{ id: "a", name: "A", items: 2 }] }; }
+      if (method === "scene.get") return { id: "a", name: "A", records: [] };
+      return {};
+    },
+  };
+  const sc = new SceneClient(socket);
+  const started = sc.start();
+  await new Promise((r) => setTimeout(r, 20));
+  test("no scene list is drawn as empty before the socket opens", () => eq(lists, 0));
+  open = true;
+  listeners.get("open")();
+  await started;
+  test("the scene list is read once the socket opens", () => {
+    eq(sc.scenes().map((s) => s.name), ["A"]);
+    eq(lists, 1);
+  });
+  open = false;
+  await sc.refresh();
+  test("a dropped socket keeps the scenes drawn", () => eq(sc.scenes().length, 1));
+  open = true;
+  listeners.get("open")();
+  await new Promise((r) => setTimeout(r, 20));
+  test("a reconnect reads the scenes again", () => eq(lists, 2));
+  sc.stop();
+}

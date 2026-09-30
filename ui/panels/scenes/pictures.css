@@ -1,0 +1,8 @@
+/* Scene pictures (pictures.js). Linked on first use, so not in the eager page. */
+.scene-pic { display: none; background: #000; }
+.scene-pictures .scene-tabs button[role="tab"] { max-width: 26ch; padding-left: 4px; }
+.scene-pictures .scene-tabs button[role="tab"] > .scene-pic { display: block; flex: none; width: 48px; height: 27px; border-radius: 3px; }
+.scene-pictures .tile .kindbox > .scene-pic { display: block; position: absolute; inset: 0; width: 100%; height: 100%; border-radius: inherit; }
+.scene-pictures .tile .kindbox > .num { position: absolute; left: 8px; bottom: 8px; z-index: 1; font-size: var(--fs-sm) !important; padding: 1px 6px; border-radius: var(--radius-sm); background: color-mix(in srgb, var(--panel) 80%, transparent); }
+.scene-pictures .tile .kindbox > .num:empty { display: none; }
+.scene-pictures .tile .kindbox > button { z-index: 1; }

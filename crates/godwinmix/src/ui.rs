@@ -126,6 +126,9 @@ const ASSETS: &[(&str, &str)] = &[
     ("panels/scenes/fix-note.js", include_str!("../../../ui/panels/scenes/fix-note.js")),
     ("panels/scenes/fix.css", include_str!("../../../ui/panels/scenes/fix.css")),
     ("panels/scenes/marks.js", include_str!("../../../ui/panels/scenes/marks.js")),
+    ("panels/scenes/pictures.js", include_str!("../../../ui/panels/scenes/pictures.js")),
+    ("panels/scenes/pictures.css", include_str!("../../../ui/panels/scenes/pictures.css")),
+    ("panels/scenes/draw.js", include_str!("../../../ui/panels/scenes/draw.js")),
     ("panels/scenes/panel.js", include_str!("../../../ui/panels/scenes/panel.js")),
     ("panels/sources/first-air.js", include_str!("../../../ui/panels/sources/first-air.js")),
     ("panels/sources/local.js", include_str!("../../../ui/panels/sources/local.js")),
@@ -752,6 +755,7 @@ mod tests {
         reachable.extend(closure_of("panels/scenes/more.js"));
         reachable.extend(closure_of("panels/scenes/fix.js"));
         reachable.extend(closure_of("panels/scenes/marks.js"));
+        reachable.extend(closure_of("panels/scenes/pictures.js"));
         reachable.extend(closure_of("client/transport-legacy.js"));
         reachable.extend(closure_of("client/schema-form.js"));
         reachable.extend(closure_of("shell/palette.js"));
@@ -819,6 +823,8 @@ mod tests {
             ("panels/scenes/more.js", "a right click or Ctrl+C on a scene"),
             ("panels/scenes/fix.js", "Fix on a scene whose sources are not running"),
             ("panels/scenes/marks.js", "a scene with a source that is not running"),
+            ("panels/scenes/pictures.js", "the Scenes panel on screen with live pictures on"),
+            ("panels/scenes/draw.js", "the Scenes panel on screen with live pictures on"),
             ("client/transport-legacy.js", "a core with no /rpc"),
             ("client/schema-form.js", "the add picker and the settings drawer"),
             ("shell/palette.js", "Ctrl+K"),
