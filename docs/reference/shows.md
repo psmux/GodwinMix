@@ -177,3 +177,11 @@ watching:
 | The ingest plugin, once, in the station | 0% | 9 MiB |
 | One show (`main`) | 0.7% to 0.9% of one core | 131 to 153 MiB |
 | A single process core, for comparison | 0.7% of one core | 135 MiB |
+| A second, idle show | 0.7% to 0.9% of one core | 124 to 135 MiB, and 52 MiB more for the camera, screen and audio discovery plugins it starts |
+
+Through the relay a call takes about 25 microseconds longer (`core.status`,
+median of 60: 113 direct, 138 through the station) and a call with its event
+about 30 (`scene.add` to `event/scene.patch`, median of 20: 392 and 422).
+Relaying the mosaic and the preview, ten frames a second each, costs the
+station 0.1% of one core. `cargo test -p godwinmix --test station -- --nocapture`
+prints the latency on the machine it runs on.
