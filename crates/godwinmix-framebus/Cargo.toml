@@ -1,0 +1,33 @@
+# The frame bus: one owner decodes a device or a stream once, and any number
+# of readers in this process or in others read the decoded frames from shared
+# memory with no copy. See docs/explanation/frame-bus.md for why it is built
+# this way and docs/reference/frame-bus.md for the surface.
+
+[package]
+name = "godwinmix-framebus"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Decode once, read everywhere: a shared memory ring of decoded video frames with skip on lag readers"
+
+[dependencies]
+# Only the `gst` feature brings a media stack. Without it the crate is the ring,
+# the shared memory and the socket that hands it out, and needs nothing native.
+gstreamer = { workspace = true, optional = true }
+gstreamer-base = { version = "0.24", optional = true }
+gstreamer-video = { workspace = true, optional = true }
+
+[target.'cfg(unix)'.dependencies]
+libc = { workspace = true }
+
+[features]
+default = ["gst"]
+# `Publisher::push_buffer`, and the `gmxbussink` and `gmxbussrc` elements.
+gst = ["dep:gstreamer", "dep:gstreamer-base", "dep:gstreamer-video"]
+
+[[example]]
+name = "framebus-bench"
+path = "examples/bench/main.rs"
+required-features = ["gst"]
