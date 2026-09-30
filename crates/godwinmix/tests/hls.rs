@@ -159,7 +159,7 @@ async fn a_viewer_key_plays_ll_hls_and_nothing_else_gets_in() {
     assert_eq!(&bytes[4..8], b"moof");
 
     // A whole segment, and the init.
-    let whole = after.lines().filter(|l| !l.starts_with('#') && l.contains(".m4s")).last().expect("a segment").to_string();
+    let whole = after.lines().rev().find(|l| !l.starts_with('#') && l.contains(".m4s")).expect("a segment").to_string();
     let seg = get(&format!("{base}/hls/viewers/programme/{whole}")).await;
     assert_eq!(seg.status(), 200);
     let len: usize = seg.headers()["content-length"].to_str().unwrap().parse().unwrap();
@@ -191,7 +191,7 @@ async fn a_viewer_key_plays_ll_hls_and_nothing_else_gets_in() {
 async fn stalled_reader_holds_nobody_up(base: &str, query: &str, media_url: &str) {
     let address = base.trim_start_matches("http://");
     let text = get(media_url).await.text().await.unwrap();
-    let seg = text.lines().filter(|l| !l.starts_with('#') && l.contains(".m4s")).last().unwrap().to_string();
+    let seg = text.lines().rev().find(|l| !l.starts_with('#') && l.contains(".m4s")).unwrap().to_string();
     let mut stalled = Vec::new();
     for _ in 0..8 {
         let mut s = tokio::net::TcpStream::connect(address).await.unwrap();
