@@ -1491,6 +1491,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "godwinmix-framebus"
+version = "0.2.0"
+dependencies = [
+ "glib",
+ "gstreamer",
+ "gstreamer-app",
+ "gstreamer-base",
+ "gstreamer-video",
+ "libc",
+]
+
+[[package]]
 name = "godwinmix-govern"
 version = "0.2.0"
 dependencies = [
@@ -1502,15 +1514,6 @@ dependencies = [
  "serde",
  "serde_json",
  "tracing",
-name = "godwinmix-framebus"
-version = "0.2.0"
-dependencies = [
- "glib",
- "gstreamer",
- "gstreamer-app",
- "gstreamer-base",
- "gstreamer-video",
- "libc",
 ]
 
 [[package]]
