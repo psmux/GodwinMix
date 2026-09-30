@@ -20,15 +20,37 @@ use std::time::Duration;
 pub struct Stream {
     pub id: String,
     pub params: HlsParams,
+    /// The read only way in for viewers: `?key=` on a playlist opens this
+    /// output's playlists and segments and nothing else, so a link can be
+    /// shared without the control token that runs the mixer.
+    pub viewer_key: String,
     tracks: RwLock<Vec<Arc<Track>>>,
     pub viewers: Viewers,
 }
 
 impl Stream {
-    pub fn new(id: &str, params: HlsParams) -> Stream {
+    pub fn new(id: &str, params: HlsParams, viewer_key: &str) -> Stream {
         // A viewer counts for two windows after its last fetch.
         let horizon = Duration::from_secs(u64::from(params.window_s) * 2);
-        Stream { id: id.to_string(), params, tracks: RwLock::new(Vec::new()), viewers: Viewers::new(horizon) }
+        Stream {
+            id: id.to_string(),
+            params,
+            viewer_key: viewer_key.to_string(),
+            tracks: RwLock::new(Vec::new()),
+            viewers: Viewers::new(horizon),
+        }
+    }
+
+    /// Whether `key` is this output's viewer key. Compared in constant time.
+    pub fn admits(&self, key: &str) -> bool {
+        let (a, b) = (self.viewer_key.as_bytes(), key.as_bytes());
+        !a.is_empty() && a.len() == b.len() && a.iter().zip(b).fold(0u8, |d, (x, y)| d | (x ^ y)) == 0
+    }
+
+    /// The multivariant playlist's path with the viewer key on it: what a
+    /// page turns into a link on whatever host it was opened on.
+    pub fn master_url_path(&self) -> String {
+        format!("/hls/{}/master.m3u8?key={}", self.id, self.viewer_key)
     }
 
     /// A rung, or the audio. One already under this id and of this kind is
@@ -121,10 +143,14 @@ impl Stream {
                 })
             })
             .collect();
+        let viewers = self.viewers.count();
         json!({
-            "url": format!("/hls/{}/master.m3u8", self.id),
+            "playback": { "master_url_path": self.master_url_path(), "viewers": viewers },
             "low_latency": self.params.low_latency(),
-            "viewers": self.viewers.count(),
+            "segment_ms": self.params.segment_ms,
+            "part_ms": self.params.part_ms,
+            "window": self.params.window_s,
+            "viewers": viewers,
             "egress_kbps": self.viewers.egress_kbps(),
             "memory_bytes": self.memory(),
             "rungs": rungs,

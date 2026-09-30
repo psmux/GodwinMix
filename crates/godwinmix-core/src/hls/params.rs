@@ -11,7 +11,7 @@ pub struct HlsParams {
     /// after it, so an encoder with a keyframe every `segment_ms` gets
     /// segments of exactly this length.
     pub segment_ms: u32,
-    /// LL-HLS part length. 0 turns low latency off: segments only.
+    /// LL-HLS part length. 0 is plain HLS: segments only.
     pub part_ms: u32,
     /// Seconds of the past each rung keeps in memory and lists.
     pub window_s: u32,
@@ -19,15 +19,25 @@ pub struct HlsParams {
 
 impl Default for HlsParams {
     fn default() -> Self {
-        HlsParams { segment_ms: 2000, part_ms: 333, window_s: 30 }
+        HlsParams { segment_ms: 2000, part_ms: 0, window_s: 30 }
     }
 }
 
 impl HlsParams {
-    /// Read `segment_ms`, `part_ms` and `window` from an output's params.
-    /// Anything else in the table is left for the output's other readers.
+    /// The part length LL-HLS gets when `low_latency = true` names no other.
+    pub const PART_MS: u32 = 333;
+
+    /// Read `segment_ms`, `part_ms`, `low_latency` and `window` from an
+    /// output's params. Low latency is on when `part_ms` is given or
+    /// `low_latency = true`, and plain HLS otherwise. Anything else in the
+    /// table is left for the output's other readers.
     pub fn from_params(params: &Params) -> Result<HlsParams> {
         let mut out = HlsParams::default();
+        match params.get("low_latency") {
+            None => {}
+            Some(toml::Value::Boolean(on)) => out.part_ms = if *on { Self::PART_MS } else { 0 },
+            Some(v) => bail!("hls/output params.low_latency must be true or false, not `{v}`"),
+        }
         if let Some(v) = number(params, "segment_ms")? {
             out.segment_ms = v;
         }
@@ -108,9 +118,10 @@ mod tests {
     }
 
     #[test]
-    fn defaults_are_two_second_segments_and_third_second_parts() {
+    fn defaults_are_two_second_segments_of_plain_hls() {
         let p = HlsParams::from_params(&Params::new()).unwrap();
         assert_eq!(p, HlsParams::default());
+        assert!(!p.low_latency());
         assert_eq!(p.ring_capacity(), 17);
         assert_eq!(p.listed(), 15);
     }
@@ -128,9 +139,14 @@ mod tests {
     }
 
     #[test]
-    fn zero_part_turns_low_latency_off() {
-        let p = HlsParams::from_params(&params("part_ms = 0\nwindow = 60")).unwrap();
-        assert!(!p.low_latency());
+    fn low_latency_is_a_part_length_or_a_switch() {
+        let p = HlsParams::from_params(&params("low_latency = true")).unwrap();
+        assert_eq!(p.part_ms, 333);
+        let p = HlsParams::from_params(&params("segment_ms = 1000\npart_ms = 200")).unwrap();
+        assert!(p.low_latency());
+        let p = HlsParams::from_params(&params("low_latency = true\npart_ms = 0\nwindow = 60")).unwrap();
+        assert!(!p.low_latency(), "an explicit 0 wins");
         assert_eq!(p.window_s, 60);
+        assert!(HlsParams::from_params(&params("low_latency = 1")).is_err());
     }
 }

@@ -81,6 +81,9 @@ impl Position {
 #[derive(Debug, Clone, Default)]
 pub struct View {
     pub segments: Vec<SegmentView>,
+    /// The longest whole segment this ring has ever held, which only grows,
+    /// so `EXT-X-TARGETDURATION` never shrinks under a player.
+    pub longest_ns: u64,
 }
 
 #[derive(Debug, Clone)]
@@ -100,11 +103,12 @@ pub struct Ring {
     inits: Vec<(u32, Bytes)>,
     segments: VecDeque<Segment>,
     version: u64,
+    longest_ns: u64,
 }
 
 impl Ring {
     pub fn new(capacity: usize) -> Ring {
-        Ring { capacity: capacity.max(3), inits: Vec::new(), segments: VecDeque::new(), version: 0 }
+        Ring { capacity: capacity.max(3), inits: Vec::new(), segments: VecDeque::new(), version: 0, longest_ns: 0 }
     }
 
     /// Bumped by every change, so a rendered playlist can be reused until
@@ -173,6 +177,7 @@ impl Ring {
     pub fn close(&mut self) {
         if let Some(open) = self.segments.back_mut().filter(|s| !s.complete) {
             open.complete = true;
+            self.longest_ns = self.longest_ns.max(open.duration_ns());
             self.version += 1;
         }
     }
@@ -217,7 +222,7 @@ impl Ring {
                 parts: s.parts.iter().map(|p| (p.duration_ns, p.independent)).collect(),
             })
             .collect();
-        View { segments }
+        View { segments, longest_ns: self.longest_ns }
     }
 
     /// Bytes held: every segment and every init still referenced.

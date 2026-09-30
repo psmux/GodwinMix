@@ -8,7 +8,7 @@ use bytes::Bytes;
 
 const SEG: u64 = 2_000_000_000;
 const PART: u64 = 333_333_333;
-/// 2026-09-30T12:00:00Z, so the dates in the golden files are fixed.
+/// 2026-10-01T12:00:00Z, so the dates in the golden files are fixed.
 const T0: i64 = 1_790_856_000_000;
 
 fn golden(name: &str, got: &str) {
@@ -44,6 +44,10 @@ fn ring(whole: u64, open: usize) -> Ring {
     r
 }
 
+fn ll() -> HlsParams {
+    HlsParams { part_ms: 333, ..HlsParams::default() }
+}
+
 fn reports() -> Vec<Report> {
     vec![
         Report { id: "720p".into(), last_msn: 104, last_part: Some(1) },
@@ -54,19 +58,19 @@ fn reports() -> Vec<Report> {
 #[test]
 fn low_latency_media_playlist() {
     let view = ring(4, 2).view();
-    golden("ll-media.m3u8", &media(&view, &HlsParams::default(), &reports()));
+    golden("ll-media.m3u8", &media(&view, &ll(), &reports()));
 }
 
 #[test]
 fn low_latency_playlist_at_a_segment_boundary_hints_the_next_one() {
     let view = ring(3, 0).view();
-    let text = media(&view, &HlsParams::default(), &[]);
+    let text = media(&view, &ll(), &[]);
     assert!(text.ends_with("#EXT-X-PRELOAD-HINT:TYPE=PART,URI=\"103.0.m4s\"\n"), "{text}");
 }
 
 #[test]
 fn plain_media_playlist_lists_only_whole_segments() {
-    let p = HlsParams { part_ms: 0, window_s: 6, ..HlsParams::default() };
+    let p = HlsParams { window_s: 6, ..HlsParams::default() };
     let view = ring(5, 3).view();
     golden("media.m3u8", &media(&view, &p, &[]));
 }
@@ -78,7 +82,7 @@ fn a_new_init_is_a_discontinuity() {
     r.begin(102 * SEG, SEG, T0 + 4000);
     r.push_part(Part { bytes: Bytes::from_static(b"x"), duration_ns: SEG, independent: true });
     r.close();
-    let p = HlsParams { part_ms: 0, ..HlsParams::default() };
+    let p = HlsParams::default();
     golden("discontinuity.m3u8", &media(&r.view(), &p, &[]));
 }
 
@@ -122,7 +126,7 @@ fn audio_only_is_one_variant() {
 #[test]
 fn a_query_reaches_every_uri() {
     let view = ring(4, 2).view();
-    let text = with_query(&media(&view, &HlsParams::default(), &reports()), "token=abc");
+    let text = with_query(&media(&view, &ll(), &reports()), "token=abc");
     golden("ll-media-token.m3u8", &text);
     for line in text.lines() {
         if !line.starts_with('#') || line.contains("URI=") {

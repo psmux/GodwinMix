@@ -10,6 +10,7 @@
 //! planner hands [`super::attach`] its own encoders (see `mod.rs`).
 
 use super::ladder::{self, Rung};
+use super::request::ladder_of;
 use super::stream::{self, Stream};
 use super::track::TrackKind;
 use super::{attach, HlsParams, Input};
@@ -50,27 +51,22 @@ pub const MANIFEST: Manifest = Manifest {
 pub const PROVIDE: OutputProvide = OutputProvide { manifest: MANIFEST, claims: |_| None, make: new };
 
 fn new(cfg: &OutputConfig) -> Result<Box<dyn Output>> {
-    Ok(Box::new(HlsOutput { id: cfg.id.clone(), params: HlsParams::default(), ladder: None, stream: None }))
+    Ok(Box::new(HlsOutput {
+        id: cfg.id.clone(),
+        params: HlsParams::default(),
+        ladder: None,
+        viewer_key: String::new(),
+        stream: None,
+    }))
 }
 
 pub struct HlsOutput {
     id: String,
+    /// `params.viewer_key`, or a fresh random one for the life of the output.
+    viewer_key: String,
     params: HlsParams,
     ladder: Option<Vec<Rung>>,
     stream: Option<Arc<Stream>>,
-}
-
-/// The ladder an output's params ask for: `ladder = "abr-ladder-4"`, or the
-/// same name as `rendition = { preset = "abr-ladder-4" }`.
-pub fn ladder_of(params: &Params) -> Result<Option<Vec<Rung>>> {
-    let named = params
-        .get("ladder")
-        .and_then(|v| v.as_str())
-        .or_else(|| params.get("rendition").and_then(|r| r.get("preset")).and_then(|v| v.as_str()));
-    let Some(name) = named else { return Ok(None) };
-    ladder::preset(name).map(Some).with_context(|| {
-        format!("hls/output has no ladder called `{name}`. It has abr-ladder-4 (1080p, 720p, 480p, 360p) and abr-ladder-3 (720p, 480p, 360p); leave it out to serve the programme as it is.")
-    })
 }
 
 fn check_elements(ladder: bool) -> Result<()> {
@@ -96,6 +92,11 @@ impl Output for HlsOutput {
     fn initialize(&mut self, hello: Hello) -> Result<Ready> {
         self.params = HlsParams::from_params(&hello.params)?;
         self.ladder = ladder_of(&hello.params)?;
+        self.viewer_key = match hello.params.get("viewer_key").and_then(|v| v.as_str()) {
+            Some(k) if k.len() >= 16 => k.to_string(),
+            Some(_) => anyhow::bail!("hls/output params.viewer_key must be at least 16 characters, or left out for a random one"),
+            None => crate::secrets::random_key(24)?,
+        };
         check_elements(self.ladder.is_some())?;
         Ok(Ready { manifest: MANIFEST, latency_ms: self.params.segment_ms, capabilities: MANIFEST.capabilities })
     }
@@ -104,7 +105,7 @@ impl Output for HlsOutput {
         let stream = self
             .stream
             .get_or_insert_with(|| {
-                let s = Arc::new(Stream::new(&self.id, self.params));
+                let s = Arc::new(Stream::new(&self.id, self.params, &self.viewer_key));
                 stream::publish(s.clone());
                 s
             })
