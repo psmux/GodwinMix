@@ -89,3 +89,7 @@ examples/*/target/
 # file as it was, and the scenes it brought. The running mixer's, not source.
 /*.toml.bak
 /godwinmix.example.scenes.json
+
+# Third party scripts for the development pages, fetched by
+# dev/fetch-test-vendor.sh and never shipped.
+ui/test/vendor/

@@ -47,6 +47,7 @@
 //! it costs.
 
 pub mod cutter;
+pub mod key;
 pub mod ladder;
 pub mod output;
 pub mod package;

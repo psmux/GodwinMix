@@ -62,7 +62,7 @@ fn new(cfg: &OutputConfig) -> Result<Box<dyn Output>> {
 
 pub struct HlsOutput {
     id: String,
-    /// `params.viewer_key`, or a fresh random one for the life of the output.
+    /// `params.viewer_key`, or the one this machine derives for the id.
     viewer_key: String,
     params: HlsParams,
     ladder: Option<Vec<Rung>>,
@@ -94,8 +94,8 @@ impl Output for HlsOutput {
         self.ladder = ladder_of(&hello.params)?;
         self.viewer_key = match hello.params.get("viewer_key").and_then(|v| v.as_str()) {
             Some(k) if k.len() >= 16 => k.to_string(),
-            Some(_) => anyhow::bail!("hls/output params.viewer_key must be at least 16 characters, or left out for a random one"),
-            None => crate::secrets::random_key(24)?,
+            Some(_) => anyhow::bail!("hls/output params.viewer_key must be at least 16 characters, or left out for the one this machine makes"),
+            None => super::key::viewer_key(&self.id)?,
         };
         check_elements(self.ladder.is_some())?;
         Ok(Ready { manifest: MANIFEST, latency_ms: self.params.segment_ms, capabilities: MANIFEST.capabilities })
