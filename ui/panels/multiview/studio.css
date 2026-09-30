@@ -7,7 +7,8 @@ gmx-program.studio .preview-pane { border-color: var(--ok); cursor: pointer; }
 gmx-program.studio .program { border-color: var(--live); }
 gmx-program.studio .program.on { box-shadow: none; }
 .preview-pane.unarmed .monitor-label span { color: var(--dim); }
-.preview-note { padding: 6px 10px; font-size: var(--fs-sm); color: var(--warn); background: var(--panel2); border-top: 1px solid var(--line); }
+.preview-note[hidden] { display: none; }
+.preview-note { display: flex; align-items: center; gap: 8px; padding: 6px 10px; font-size: var(--fs-sm); color: var(--warn); background: var(--panel2); border-top: 1px solid var(--line); }
 
 .take-bar {
   display: flex; flex-direction: column; justify-content: center; gap: 8px;
