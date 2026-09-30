@@ -124,6 +124,7 @@ Start here if you have never run it.
 * [Hooks](reference/hooks.md)
 * [The session log](reference/session-log.md)
 * [Reference: the shipped codec catalogue](reference/codecs.md)
+* [Renditions and the planner: the rules, the plan, the reasons](reference/renditions.md)
 * [Graphics](reference/graphics.md)
 * [Metrics](reference/metrics.md)
 * [Preview monitor status](reference/preview-monitor.md)
@@ -133,6 +134,7 @@ Start here if you have never run it.
 
 * [Why the programme never stops](explanation/why-the-programme-never-stops.md)
 * [Nothing runs unless asked](explanation/nothing-runs-unless-asked.md)
+* [Why the planner copies first and shares every encoder](explanation/rendition-planner.md)
 * [Why plugins are processes](explanation/why-plugins-are-processes.md)
 * [Why WASM is not on the frame path](explanation/why-wasm-is-not-on-the-frame-path.md)
 * [One plugin, three placements](explanation/one-plugin-three-placements.md)

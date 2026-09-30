@@ -44,6 +44,21 @@ anything that builds a pipeline, and any handler. The method table holds the
 *description* of a method (its name, scope, schemas and REST path); the code
 that carries it out lives in `godwinmix`.
 
+## godwinmix-render
+
+`crates/godwinmix-render/`
+
+The rendition planner. It takes what every output asks for and what every
+source carries and returns the smallest graph of copies, decodes, scales and
+encoders that serves them all, plus the difference between two such graphs.
+It depends on the protocol (for the shared `rendition` types), serde and
+serde_json, and nothing else: no GStreamer, no runtime, no clock. The
+machine is behind a `CostModel` trait it asks and never measures.
+
+What does not belong here: building or editing elements (that is the core's
+graph builder, acting on a plan) and deciding whether the machine can afford
+a plan (that is the governor). See `docs/explanation/rendition-planner.md`.
+
 ## godwinmix-core
 
 `crates/godwinmix-core/`
