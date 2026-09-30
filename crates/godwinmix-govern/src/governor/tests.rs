@@ -121,6 +121,20 @@ fn many_threads_admitting_and_dropping_leave_the_book_empty() {
 }
 
 #[test]
+fn admission_and_release_take_microseconds() {
+    let g = governor();
+    let _programme = g.admit(cpu(2000), "programme").granted().unwrap();
+    let rounds = 10_000u32;
+    let t0 = std::time::Instant::now();
+    for _ in 0..rounds {
+        drop(g.admit(cpu(500), "x").granted());
+    }
+    let per = t0.elapsed() / rounds;
+    eprintln!("governor admit and release: {per:?} each");
+    assert!(per < std::time::Duration::from_micros(50), "{per:?}");
+}
+
+#[test]
 fn a_ticket_outliving_its_governor_is_harmless() {
     let g = governor();
     let t = g.admit(cpu(10), "x").granted().unwrap();

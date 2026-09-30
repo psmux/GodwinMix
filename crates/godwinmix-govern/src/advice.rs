@@ -19,7 +19,8 @@ pub struct Advice {
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct Fit {
-    /// `720p30 H.264 on x264`.
+    /// `720p30 H.264 on h264-software-x264`, `1080p30 H.264 on the GPU
+    /// encoder h264-videotoolbox`.
     pub label: String,
     pub slot: EncoderSlot,
     pub width: u32,
@@ -40,9 +41,8 @@ pub fn advise(what: &str, need: &Cost, have: &Cost, profile: &Profile, have_on: 
     let soft = fits.iter().find(|f| !f.slot.hardware);
     let hard = fits.iter().find(|f| f.slot.hardware);
     match (soft, hard) {
-        (Some(s), Some(h)) => text.push_str(&format!(" {} fits, or {} on the GPU.", s.label, h.label)),
-        (Some(s), None) => text.push_str(&format!(" {} fits.", s.label)),
-        (None, Some(h)) => text.push_str(&format!(" {} on the GPU fits.", h.label)),
+        (Some(s), Some(h)) => text.push_str(&format!(" {} fits, or {}.", s.label, h.label)),
+        (Some(f), None) | (None, Some(f)) => text.push_str(&format!(" {} fits.", f.label)),
         (None, None) => text.push_str(" Nothing more fits now: stop a preview or an output, or make one that is running smaller."),
     }
     if !profile.is_calibrated() {
@@ -61,7 +61,8 @@ fn fits(profile: &Profile, have_on: &impl Fn(Option<&str>) -> Cost) -> Vec<Fit> 
             short(&cost, &have).is_empty().then_some((shape, cost))
         });
         if let Some((s, cost)) = best {
-            let label = format!("{}p{} {} on {}", s.height, s.fps.num, codec_name(slot.codec), slot.id);
+            let on = if slot.hardware { "the GPU encoder " } else { "" };
+            let label = format!("{}p{} {} on {on}{}", s.height, s.fps.num, codec_name(slot.codec), slot.id);
             out.push(Fit { label, slot, width: s.width, height: s.height, fps: s.fps, cost });
         }
     }

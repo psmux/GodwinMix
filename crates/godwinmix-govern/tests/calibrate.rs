@@ -54,7 +54,9 @@ fn this_machine_is_measured_stored_and_governed() {
     let dir = std::env::temp_dir().join(format!("gmx-govern-e2e-{}", std::process::id()));
     let store = Store::new(&dir);
     store.save(&cal).unwrap();
-    assert_eq!(decide(&store, &cal.fingerprint, false, false), Decision::Use(cal.clone()));
+    // Compared by field: a float written as JSON may come back one bit off.
+    let Decision::Use(back) = decide(&store, &cal.fingerprint, false, false) else { panic!("the stored file is used") };
+    assert_eq!((&back.fingerprint, &back.encoders, &back.audio), (&cal.fingerprint, &cal.encoders, &cal.audio));
     let _ = std::fs::remove_dir_all(&dir);
 
     let profile = Profile::from_calibration(cal.clone());

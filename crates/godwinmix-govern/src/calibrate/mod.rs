@@ -14,6 +14,7 @@
 //! timed with no encoder, is taken off. Everything runs one after another,
 //! since process CPU cannot tell two pipelines apart.
 
+mod extra;
 mod pipeline;
 mod probe;
 mod sessions;
@@ -116,13 +117,13 @@ pub fn calibrate(candidates: &[Candidate], audio: &[AudioCandidate], opts: &Opti
         late
     };
     if !over(&mut cal, "scaling") {
-        cal.scale_per_mpix = probe::scale(&baselines, opts.frames, &mut cal.notes);
+        cal.scale_per_mpix = extra::scale(&baselines, opts.frames, &mut cal.notes);
     }
     if !over(&mut cal, "decoding") {
         cal.decoders = decoders(candidates, &cal.encoders, &baselines, opts, &mut cal.notes);
     }
     if !over(&mut cal, "audio") {
-        cal.audio = audio.iter().filter_map(|a| probe::audio(a, &mut cal.notes)).collect::<Vec<AudioCal>>();
+        cal.audio = audio.iter().filter_map(|a| extra::audio(a, &mut cal.notes)).collect::<Vec<AudioCal>>();
     }
     cal.took_ms = started.elapsed().as_millis() as u64;
     cal
@@ -138,7 +139,7 @@ fn decoders(candidates: &[Candidate], encs: &[EncoderCal], base: &probe::Baselin
         }
         let Some(enc) = encs.iter().find(|e| e.slot.id == c.slot.id) else { continue };
         let Some(point) = enc.points.last() else { continue };
-        let Some(total) = probe::round_trip(c, point, base, opts.frames, notes) else { continue };
+        let Some(total) = extra::round_trip(c, point, base, opts.frames, notes) else { continue };
         let decode = total.saturating_sub(point.cpu_millicores);
         if decode == 0 {
             notes.push(format!("decoding {} cost less than the timing can see; the cautious figure is used", c.slot.id));
