@@ -223,6 +223,7 @@ const DEV_ASSETS: &[(&str, &str)] = &[
     ("test/monitor-resize.js", include_str!("../../../ui/test/monitor-resize.js")),
     ("test/dock.js", include_str!("../../../ui/test/dock.js")),
     ("test/welcome.js", include_str!("../../../ui/test/welcome.js")),
+    ("test/menubar.js", include_str!("../../../ui/test/menubar.js")),
     // The Channels panel against a stub of the channel contract, as tests and
     // as a page to look at: /test/channels.html?scene=cards&theme=light.
     ("test/channels.js", include_str!("../../../ui/test/channels.js")),
