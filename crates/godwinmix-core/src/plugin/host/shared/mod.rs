@@ -21,9 +21,13 @@
 //!   mod.rs     whether a source is shared, and where the registry is
 //!   name.rs    the bus name a provide's params make
 //!   source.rs  SharedSource: the `Source` the mixer holds
+//!   control.rs what it asks of its owner thread, and what it reports
 //!   owner.rs   the thread that takes the claim when nobody holds it
 //!   feed.rs    the plugin process and the pipeline that publishes it
-//!   reader.rs  the reading pipeline, and what it measures
+//!   tap.rs     turning a source's pipeline into that one
+//!   reader.rs  the reading pipeline
+//!   retime.rs  keeping a stream's sound and pictures on one timeline
+//!   watch.rs   what a shared source measures of the bus
 //! ```
 //!
 //! The decision is made here, from the manifest's `share` key, and never in a
@@ -31,12 +35,15 @@
 //! device. Windows has no cross process transport yet, so there every source
 //! opens its own device, as before.
 
+mod control;
 mod feed;
 mod name;
 mod owner;
 mod reader;
 mod retime;
 mod source;
+mod tap;
+mod watch;
 
 pub use name::bus_name;
 pub use reader::{Tracks, Watch};

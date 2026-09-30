@@ -5,8 +5,6 @@ use glib::prelude::*;
 use glib::subclass::prelude::*;
 use gst::subclass::prelude::*;
 use gst_base::prelude::*;
-use gst_base::subclass::base_src::CreateSuccess;
-use gst_base::subclass::prelude::*;
 use gstreamer as gst;
 use gstreamer_base as gst_base;
 
@@ -21,7 +19,7 @@ pub struct BusSrc {
     pub(super) caps_for: Mutex<Option<Layout>>,
     /// Stamp buffers with the owner's timestamps rather than on arrival.
     pub(super) owner_time: AtomicBool,
-    flushing: AtomicBool,
+    pub(super) flushing: AtomicBool,
 }
 
 #[glib::object_subclass]
@@ -114,51 +112,5 @@ impl ElementImpl for BusSrc {
             .unwrap()]
         });
         T.as_ref()
-    }
-}
-
-impl BaseSrcImpl for BusSrc {
-    fn start(&self) -> Result<(), gst::ErrorMessage> {
-        self.registry()
-            .map_err(|e| gst::error_msg!(gst::ResourceError::Settings, ["{e}"]))?;
-        Ok(())
-    }
-
-    fn stop(&self) -> Result<(), gst::ErrorMessage> {
-        self.sub.lock().unwrap().take();
-        self.caps_for.lock().unwrap().take();
-        Ok(())
-    }
-
-    /// Caps are set from the first frame, so there is nothing to agree on
-    /// before one arrives.
-    fn negotiate(&self) -> Result<(), gst::LoggableError> {
-        Ok(())
-    }
-
-    fn unlock(&self) -> Result<(), gst::ErrorMessage> {
-        self.flushing.store(true, SeqCst);
-        Ok(())
-    }
-
-    fn unlock_stop(&self) -> Result<(), gst::ErrorMessage> {
-        self.flushing.store(false, SeqCst);
-        Ok(())
-    }
-}
-
-impl PushSrcImpl for BusSrc {
-    fn create(&self, _buf: Option<&mut gst::BufferRef>) -> Result<CreateSuccess, gst::FlowError> {
-        while !self.flushing.load(SeqCst) {
-            match self.frame() {
-                Ok(Some(f)) => return Ok(CreateSuccess::NewBuffer(self.wrap(f)?)),
-                Ok(None) => continue,
-                Err(e) => {
-                    gst::element_imp_error!(self, gst::ResourceError::Read, ["{e}"]);
-                    return Err(gst::FlowError::Error);
-                }
-            }
-        }
-        Err(gst::FlowError::Flushing)
     }
 }
