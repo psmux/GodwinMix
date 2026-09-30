@@ -59,9 +59,9 @@ has switched on. The hub carries what FLV carries.
 
 | Transport | Port | Video | Audio | Tested |
 |---|---|---|---|---|
-| RTMP | one TCP port for every channel, opened by the first RTMP channel (1935) | H.264; enhanced RTMP HEVC and AV1 are recognised and relayed as bytes | AAC | `crates/godwinmix/tests/channel_protocols.rs`, `plugins/ingest/src/rtmp` |
+| RTMP | one TCP port for every channel, opened by the first RTMP channel (1935) | H.264, and enhanced RTMP HEVC with its size read; AV1 relayed as bytes | AAC | `crates/godwinmix/tests/channel_protocols.rs`; `plugins/ingest/src/device_tests.rs` takes an ffmpeg HEVC publisher |
 | RTMPS | a port a person chooses (443 offered) | as RTMP | as RTMP | `crates/godwinmix/tests/channel_protocols.rs` |
-| SRT, one port for every channel by `streamid` | UDP, opened by the first SRT channel | H.264 only; HEVC is refused with a message | AAC only | `plugins/ingest/src/srt/tests.rs` |
+| SRT, one port for every channel by `streamid` | UDP, opened by the first SRT channel | H.264, and HEVC carried on as enhanced RTMP | AAC | `plugins/ingest/src/srt/tests.rs`, an HEVC caller included |
 | WHIP, on the control port | the control port, and UDP for media | H.264 only (the answer offers nothing else) | Opus, made AAC | `plugins/ingest/src/whip_in.rs` |
 | RTMP, one publisher on its own port | `ingest/rtmp` | H.264 | AAC | `plugins/ingest/src/source_tests.rs` |
 
@@ -71,7 +71,7 @@ has switched on. The hub carries what FLV carries.
 
 | Transport | Container | Video | Audio | Kind | Tested |
 |---|---|---|---|---|---|
-| RTMP, RTMPS push | FLV | H.264 only (`flvmux`) | AAC | `rtmp/output` (built in) | `crates/godwinmix/tests/live.rs` |
+| RTMP, RTMPS push | FLV, enhanced RTMP for HEVC | H.264 (`flvmux`), HEVC from a rendition (`eflvmux`); AV1 refused with the way out | AAC | `rtmp/output` (built in) | `crates/godwinmix/tests/live.rs`; `plugin/outputs/flv_tests.rs` sends HEVC to ffmpeg as the server |
 | SRT caller or listener | MPEG-TS | H.264, HEVC, AV1 | AAC, Opus | `srt/output` (built in) | `plugin/outputs/srt.rs` |
 | UDP or RTP, unicast or multicast, CBR | MPEG-TS | copy | copy | `udp/output` (plugin `udp`) | `plugins/udp/src/send/tests.rs`, frame hashes compared at an ffmpeg receiver |
 | HLS, LL-HLS, DASH, served from the control port | CMAF | H.264, HEVC, AV1, one rung or a ladder | AAC, Opus | `hls/output` (built in) | `crates/godwinmix/tests/hls.rs`, `hls/tests.rs` |
@@ -97,8 +97,8 @@ has switched on. The hub carries what FLV carries.
 | Transport | Video | Audio | How | Tested |
 |---|---|---|---|---|
 | RTMP, RTMPS | copy, whatever came in (enhanced RTMP bytes included) | copy | `restream/rtmp_out.rs` | `plugins/ingest/src/restream/tests.rs` |
-| SRT | H.264 copy only (`flvdemux` into `mpegtsmux`) | AAC copy | `restream/srt_out.rs` | `plugins/ingest/src/restream/tests.rs` |
-| RTMP or SRT with a rendition | H.264 encode only; the input must be H.264 | AAC | `transcode/` | `plugins/ingest/src/transcode/tests.rs` |
+| SRT | H.264 or HEVC copy, the parser picked by the stream's caps; AV1 not yet (flvdemux does not read it) | AAC copy | `restream/srt_out.rs`, `restream/ts_video.rs` | `plugins/ingest/src/restream/ts_video.rs` decodes HEVC out of the MPEG-TS |
+| RTMP or SRT with a rendition | H.264 or HEVC in (AV1 in is decoded but its size is not read, so it is not planned yet); H.264, HEVC or AV1 out, HEVC and AV1 as enhanced RTMP | AAC | `transcode/` | `plugins/ingest/src/transcode/tests.rs` and `tests_hevc.rs`: HEVC to H.264 and H.264 to HEVC with real encoders |
 
 ## Decode table
 
