@@ -44,7 +44,8 @@ export async function sourceChooserTests(test, eq, ok) {
   await first.ready;
   test('scene docks share one scene client', () => ok(first.scenes === second.scenes));
   first.release();
-  test('closing one scene dock leaves the shared model subscribed', () => eq(events.size, 1));
+  // Two: the scene events, and the socket opening, which reads the list again.
+  test('closing one scene dock leaves the shared model subscribed', () => eq(events.size, 2));
   second.release();
   test('closing the last scene dock releases the shared model', () => eq(events.size, 0));
 }

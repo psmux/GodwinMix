@@ -337,6 +337,19 @@ class CertificateSetRequest(TypedDict, total=False):
     key: str
     # Its private key, as PEM.
 
+class Change(TypedDict, total=False):
+    """One thing an import does or would do."""
+
+    action: str
+    # `add`, `replace`, `remove`, `keep`, `rename`, `set`, `wait`, `skip` or `missing`.
+    id: str
+    # The id, key, scene name or clip name, as the file has it.
+    note: Optional[str]
+    part: str
+    # `setting`, `source`, `output`, `channel`, `scene` or `media`.
+    to: Optional[str]
+    # The new id or name, for a rename.
+
 class Channel(TypedDict, total=False):
     """A named place encoders publish to, over every protocol it has switched on."""
 
@@ -755,6 +768,16 @@ class ErrorAction(TypedDict, total=False):
     # `set-config`: the value to send.
 
 class ExportRequest(TypedDict, total=False):
+    include_media: bool
+    # Put the clips themselves in, as base64, rather than their names and sizes. Refused past 256 MB: copy the media folder instead.
+    include_secrets: bool
+    # Put stream keys, channel keys, destination addresses and the control token in the file. Off unless asked; admin scope either way.
+    name: Optional[str]
+    # What to call the project. Defaults to "GodwinMix project".
+    page: Any
+    # Whatever the page wants back when the file is opened: its layout and its settings. Carried as it is.
+
+class ExportRequest2(TypedDict, total=False):
     """`scene.export`."""
 
     collection: Optional[str]
@@ -1006,6 +1029,15 @@ class ImportReport(TypedDict, total=False):
     # With `add_sources`: the sources that were not added, each with why.
 
 class ImportRequest(TypedDict, total=False):
+    dry_run: Optional[bool]
+    # Answer with what would change and change nothing. True unless false is sent.
+    file: Any
+    # The project: the object `project.export` answered with, or its text.
+    machine: bool
+    # Also write the file's machine settings: addresses, folders, hardware.
+    mode: Mode
+
+class ImportRequest2(TypedDict, total=False):
     """`scene.import`."""
 
     path: str
@@ -1790,6 +1822,22 @@ class ReorderRequest(TypedDict, total=False):
     seq: Optional[int]
     # A client's own sequence number, echoed on the patch.
 
+class Report(TypedDict, total=False):
+    """What `project.import` answers with."""
+
+    changes: List[Change]
+    dry_run: bool
+    failed: List[str]
+    # What was tried and refused, each with the reason.
+    name: str
+    needs_restart: List[str]
+    # Settings written to the file that take effect on the next start.
+    page: Any
+    # The page part of the file, for the page to put back.
+    waiting: List[str]
+    # What a person still has to do: a key to give again, a clip to copy.
+    written_by: str
+
 class Requirement(TypedDict, total=False):
     """One plugin the collection needs."""
 
@@ -2502,6 +2550,8 @@ KeyMode = Literal['query', 'stream']
 # Why a source is not running.
 MissingWhy = Literal['failed', 'not_started', 'removed', 'unknown']
 
+Mode = Literal['replace', 'merge']
+
 # `ext.multiview`. Accepts `false` to mean off, or an object.
 MultiviewExt = Union[bool, Dict[str, Any]]
 
@@ -2629,6 +2679,8 @@ METHODS = (
     {"name": "program.history", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/program/history"), "summary": 'The last hundred takes, newest first, with the token that asked for each.'},
     {"name": "program.revert", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/program/revert"), "summary": 'Take back to the shot before this one.'},
     {"name": "program.take", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/program/take"), "summary": 'Put a scene or a source on programme. The cut is instant and the outgoing stream is not disturbed.'},
+    {"name": "project.export", "scope": "admin", "mutating": False, "destructive": False, "rest": ("POST", "/api/v1/project/export"), "summary": "This mixer as one project file: settings, sources, outputs and renditions, channels, scenes, the page's layout, and its clips by name and size. Keys only with include_secrets."},
+    {"name": "project.import", "scope": "admin", "mutating": True, "destructive": True, "rest": ("POST", "/api/v1/project/import"), "summary": "Open a project file: answers with what it would change (dry_run is true unless false is sent), then replaces this mixer's setup or merges beside it. Says which settings wait for a restart."},
     {"name": "rendition.plan", "scope": "read", "mutating": False, "destructive": False, "rest": ("POST", "/api/v1/rendition/plan"), "summary": 'What the planner built for every output that asked for a rendition: each node, what it serves, which encoder and why, and the totals.'},
     {"name": "rendition.presets", "scope": "read", "mutating": False, "destructive": False, "rest": ("POST", "/api/v1/rendition/presets"), "summary": 'Every rendition preset, priced on this machine by the governor. One this machine cannot make says so, with why.'},
     {"name": "scene.add", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/scenes"), "summary": 'Make an empty scene, or one built from a set of sources.'},
@@ -3715,6 +3767,45 @@ class GeneratedMethods:
         if transition is not None:
             params["transition"] = transition
         return await self._call("program.take", params)
+
+    async def project_export(
+        self,
+        *,
+        include_media: Optional[bool] = None,
+        include_secrets: Optional[bool] = None,
+        name: Optional[str] = None,
+        page: Any = None,
+    ) -> Dict[str, Any]:
+        """This mixer as one project file: settings, sources, outputs and renditions, channels, scenes, the page's layout, and its clips by name and size. Keys only with include_secrets."""
+        params: Dict[str, Any] = {}
+        if include_media is not None:
+            params["include_media"] = include_media
+        if include_secrets is not None:
+            params["include_secrets"] = include_secrets
+        if name is not None:
+            params["name"] = name
+        if page is not None:
+            params["page"] = page
+        return await self._call("project.export", params)
+
+    async def project_import(
+        self,
+        file: Any,
+        *,
+        dry_run: Optional[bool] = None,
+        machine: Optional[bool] = None,
+        mode: Optional[Mode] = None,
+    ) -> Report:
+        """Open a project file: answers with what it would change (dry_run is true unless false is sent), then replaces this mixer's setup or merges beside it. Says which settings wait for a restart."""
+        params: Dict[str, Any] = {}
+        params["file"] = file
+        if dry_run is not None:
+            params["dry_run"] = dry_run
+        if machine is not None:
+            params["machine"] = machine
+        if mode is not None:
+            params["mode"] = mode
+        return await self._call("project.import", params)
 
     async def rendition_plan(
         self,

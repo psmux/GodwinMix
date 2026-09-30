@@ -57,6 +57,7 @@ export class SheetPainter {
     this.layout = null;
     this.pending = false;
     this.targets = new Map(); // canvas -> cell index
+    this.watchers = new Set(); // fn(bitmap, layout), for pictures made of several cells
     this.blobUrl = null;
   }
 
@@ -72,8 +73,17 @@ export class SheetPainter {
     return () => this.targets.delete(canvas);
   }
 
+  /**
+   * Be handed every decoded sheet, for a picture put together from several
+   * cells (a scene's). Returns a release function.
+   */
+  observe(fn) {
+    this.watchers.add(fn);
+    return () => this.watchers.delete(fn);
+  }
+
   get wanted() {
-    return this.targets.size > 0;
+    return this.targets.size > 0 || this.watchers.size > 0;
   }
 
   /** Take a frame. Decoding is async, so late frames are dropped, not queued. */
@@ -106,12 +116,14 @@ export class SheetPainter {
       if (!ctx) continue;
       ctx.drawImage(this.bitmap, cell.x, cell.y, cell.w, cell.h, 0, 0, w, h);
     }
+    for (const fn of this.watchers) fn(this.bitmap, this.layout);
   }
 
   destroy() {
     if (this.bitmap && this.bitmap.close) this.bitmap.close();
     this.bitmap = null;
     this.targets.clear();
+    this.watchers.clear();
   }
 }
 

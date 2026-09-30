@@ -47,6 +47,8 @@ export const DEFAULT_MAP = {
   "9": "tray.take-slot",
   Space: "program.take-armed",
   "Ctrl+,": "shell.settings",
+  "Ctrl+O": "project.open",
+  "Ctrl+S": "project.save",
   "?": "shell.shortcuts",
 };
 

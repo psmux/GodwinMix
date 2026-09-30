@@ -60,6 +60,33 @@ exactly where it was. So if last Sunday's scene has items called `pulpit` and
 `lyrics` and this week's has the same two names, pasting the layout moves both
 and touches nothing else.
 
+## What each scene looks like
+
+With the input tiles on Live (the choice above the Sources tray, or Tile
+pictures in Settings), each scene tab and tile shows a small moving picture of
+what that scene puts together, three times a second. The page draws it from the
+same mosaic the input tiles use, in the boxes the scene's items sit in, so the
+mixer encodes nothing more for it. It runs only while the Scenes panel is on
+screen: a panel scrolled away or behind another tab asks for nothing. On icons,
+labels or snapshots the scenes show no picture and cost nothing.
+
+A source the mixer does not have is missing from the picture, the same as it is
+missing from the programme when that scene goes on air. Graphics and text are
+not drawn, because the mosaic has no picture of them.
+
+A new scene starts empty. **New scene** makes one, makes it the scene you are
+working on, and Sources shows it with nothing in it and an Add sources button.
+
+## A scene with a source that is not running
+
+A yellow **!** on a scene's tab or tile means it draws a source that is not
+running: one that failed, or one the mixer does not have at all. Hover it to
+see which. Click it for the Fix dialog, which lists each one by name with the
+reason and a button: Retry, Try again, Put back, a way to install what is
+missing, another camera, or Remove when there is nothing the page can do. The
+boxes are all ticked, and **Remove from this scene** at the bottom takes the
+ticked ones out in one step. Undo in the toast, or Ctrl+Z, puts them back.
+
 ## The composer
 
 Press the pencil on a scene: it is beside each tab in the tab view and on the
