@@ -400,6 +400,7 @@ export interface ChannelStream {
   key?: string | null;
   name: string;
   protocol?: string | null;
+  relay?: string | null;
   since_ms: number;
   source?: string | null;
   state: string;
