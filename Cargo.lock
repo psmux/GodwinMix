@@ -1468,6 +1468,7 @@ dependencies = [
  "futures-util",
  "getrandom 0.3.4",
  "glib",
+ "godwinmix-framebus",
  "godwinmix-govern",
  "godwinmix-host",
  "godwinmix-protocol",

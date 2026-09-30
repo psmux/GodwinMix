@@ -15,14 +15,17 @@
 //! and that one backs off.
 
 use crate::format::Layout;
-use crate::header::{Header, Slot, MAGIC, MAX_READERS, MAX_SLOTS};
+use crate::header::{Header, MAGIC, MAX_READERS, MAX_SLOTS};
 use crate::shm::{page_size, Region};
 use crate::Error;
 
+mod access;
 mod owner;
 #[cfg(test)]
 mod pages;
 mod reader;
+#[cfg(test)]
+mod sound_tests;
 #[cfg(test)]
 mod tests;
 
@@ -51,6 +54,8 @@ pub struct Meta {
     pub duration: u64,
     pub captured_ns: u64,
     pub checksum: u64,
+    /// Bytes filled; 0 for the whole slot.
+    pub len: u64,
 }
 
 impl Ring {
@@ -127,24 +132,5 @@ impl Ring {
     pub fn total_len(&self) -> usize {
         let h = self.header();
         (h.data_offset + h.n_slots as u64 * h.slot_stride) as usize
-    }
-
-    /// The first byte of slot `slot`'s frame, `frame_size` bytes long.
-    pub fn data(&self, slot: usize) -> *mut u8 {
-        let h = self.header();
-        self.region
-            .at((h.data_offset + slot as u64 * h.slot_stride) as usize)
-    }
-
-    /// The frame in `slot` as bytes. Only for a slot the caller leases (a
-    /// reader) or has claimed (the owner).
-    pub fn frame(&self, slot: usize) -> &[u8] {
-        // SAFETY: data() points at frame_size mapped bytes; the lease or the
-        // claim is what keeps the other side from writing them.
-        unsafe { std::slice::from_raw_parts(self.data(slot), self.header().frame_size as usize) }
-    }
-
-    pub fn slot(&self, slot: usize) -> &Slot {
-        &self.header().slots[slot]
     }
 }

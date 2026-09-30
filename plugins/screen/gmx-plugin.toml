@@ -35,6 +35,9 @@ capabilities = ["restart-in-place", "health", "programme-timeline"]
 latency_ms = 0
 settings = "schemas/source.json"
 skill = "skills/source/SKILL.md"
+# One capture per picture on this machine: two sources asking for the same
+# monitor, region and cursor setting share one capture through the frame bus.
+share = { bus = "camera", params = ["monitor", "region", "show_cursor", "display", "node_id"] }
 
 [provides.designer]
 icon = "ui/icons/screen.svg"

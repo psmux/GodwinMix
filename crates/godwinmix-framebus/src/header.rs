@@ -10,7 +10,7 @@ use std::sync::atomic::{AtomicU32, AtomicU64};
 use crate::format::{Format, Layout};
 
 /// "GMXBUS" and the layout version. Bump the last byte when a field moves.
-pub const MAGIC: u64 = u64::from_le_bytes(*b"GMXBUS01");
+pub const MAGIC: u64 = u64::from_le_bytes(*b"GMXBUS02");
 /// A lease is one bit in a `u64`, so a region has at most 64 slots.
 pub const MAX_SLOTS: usize = 64;
 /// Readers attached to one region at once.
@@ -36,6 +36,9 @@ pub struct Slot {
     pub published_ns: AtomicU64,
     /// FNV-1a over the frame's bytes, or 0 when the owner does not checksum.
     pub checksum: AtomicU64,
+    /// Bytes of the slot the frame fills. A picture fills it; a chunk of
+    /// sound may not.
+    pub len: AtomicU64,
 }
 
 /// One reader's place in the region. The owner hands a reader its index when

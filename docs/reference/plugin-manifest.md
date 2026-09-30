@@ -212,12 +212,13 @@ registers nothing and is refused.
 | `collection` | path | `collection` only: a `collection.json` |
 | `codecs` | path | `encoder` only: entries merged into the codec catalogue |
 | `designer` | table | `[provides.designer]`, see below |
+| `share` | table | `source` only: which params name what it opens, so it is opened once. See below |
 
 ### Per kind
 
 | Kind | Required | Optional |
 |---|---|---|
-| `source` | `media`, `transports`, `settings` | `uri_schemes`, `rank`, `capabilities`, `latency_ms`, `skill`, `designer` |
+| `source` | `media`, `transports`, `settings` | `uri_schemes`, `rank`, `capabilities`, `latency_ms`, `skill`, `designer`, `share` |
 | `output` | `media`, `settings` | `uri_schemes`, `rank`, `capabilities`, `skill` |
 | `filter` | `media`, `settings`, `latency_ms` | `sides`, `skill`, `designer` |
 | `transition` | `settings` | `skill` |
@@ -270,6 +271,55 @@ capability, not the flag.
 
 `raw` means frames at canvas caps. `container` means a stream `decodebin` can
 open, which the core demuxes and decodes.
+
+## `share`
+
+```toml
+share = { bus = "camera", params = ["device"] }
+share = { bus = "channel", params = ["stream"], scope = ["relay"] }
+```
+
+A source that opens something only one process should open (a camera, a
+capture card, a screen, a stream on a channel) says which of its params name
+that thing. Two sources whose values for those params are equal open the same
+thing, so the core starts your plugin for the first of them only and hands
+every other one the decoded pictures and sound over the
+[frame bus](frame-bus.md), in the same mixer or in another show on the same
+machine. Your plugin does nothing different and never learns it is shared.
+
+| Key | Type | Meaning |
+|---|---|---|
+| `bus` | string | `camera` for a device this machine opens, `channel` for a stream arriving on a channel |
+| `params` | array of strings | The params that together name what is opened. For `channel`, one param holding `<channel>/<stream>` |
+| `scope` | array of strings | Optional. Params that say where it is read from, when one name can mean different things in different places. Sources share only when these match too |
+
+What the bus is called:
+
+| | Name |
+|---|---|
+| the `camera` plugin, `device = "6C707041-05AC-0010-0008-000000000001"` | `camera:6C707041-05AC-0010-0008-000000000001` |
+| any other plugin, or a value that is not a short slug | `camera:<plugin>-<values>`, cut to 40 characters and followed by eight hex digits of a hash of the whole |
+| every `params` value empty | `camera:default` (or `camera:<plugin>-default`) |
+| `bus = "channel"`, `stream = "sunday/main"` | `channel:sunday/main`, in a registry directory of its own for each `scope` value |
+| a `channel` source whose `stream` is empty | not shared: it is a listener of its own |
+
+Sound travels too, as `<name>#audio`. A source with both keeps the two in step
+through the bus; see the explanation.
+
+What the owner's settings decide. The first source to open the thing runs your
+plugin with its own params, so a setting that changes the picture (a camera's
+`resolution` or `framerate`) is that source's. Every other source scales the
+picture it reads to its own canvas. A source that becomes the owner later, when
+the first one stops, runs your plugin with its params from then on.
+
+Where it does nothing. On Windows, which has no cross process transport for the
+bus yet, and with `GODWINMIX_FRAMEBUS=off` in the mixer's environment, every
+source opens its own, as it did before. A source placed on a node is never
+shared.
+
+`share` is refused on anything but a `source`, with a `bus` other than
+`camera` or `channel`, with no `params`, and with more than one param on a
+`channel`.
 
 ## `transports`
 

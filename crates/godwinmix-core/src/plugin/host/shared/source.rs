@@ -1,0 +1,133 @@
+//! `SharedSource`: the `Source` the mixer holds for a device that is shared.
+//!
+//! It always reads the bus. Whether this source is also the owner, running
+//! the plugin that opens the device, is the owner thread's business and can
+//! change while the source runs; the mixer never sees it change.
+
+use super::owner::Owner;
+use super::reader::{self, Watch};
+use crate::caps::CanvasCaps;
+use crate::config::Params;
+use crate::plugin::kinds::BuildCtx;
+use crate::plugin::source::Source;
+use crate::plugin::{Capability, Configure, Health, Hello, Manifest, MediaEnds, PluginState, Ready};
+use anyhow::{Context, Result};
+use godwinmix_framebus::BusName;
+use serde_json::{json, Value};
+use std::path::PathBuf;
+use std::sync::Arc;
+
+pub struct SharedSource {
+    pub(super) type_id: String,
+    pub(super) name: BusName,
+    pub(super) dir: PathBuf,
+    pub(super) manifest: Manifest,
+    pub(super) build: BuildCtx,
+    pub(super) watch: Arc<Watch>,
+    pub(super) owner: Option<Owner>,
+}
+
+impl SharedSource {
+    pub fn make(type_id: String, place: super::Place, build: BuildCtx) -> Result<Box<dyn Source>> {
+        let manifest = crate::plugin::loader::source_provide(&type_id)
+            .map(|p| p.manifest)
+            .with_context(|| format!("`{type_id}` is not a loaded source provide"))?;
+        Ok(Box::new(SharedSource {
+            type_id,
+            name: place.name,
+            dir: place.dir,
+            manifest,
+            build,
+            watch: Arc::default(),
+            owner: None,
+        }))
+    }
+}
+
+impl Source for SharedSource {
+    fn manifest(&self) -> &Manifest {
+        &self.manifest
+    }
+
+    fn initialize(&mut self, hello: Hello) -> Result<Ready> {
+        self.build.canvas = hello.canvas;
+        self.build.cfg.params = hello.params;
+        // Every frame out of the bus is stamped on the clock and base time the
+        // mixer gives this pipeline, on arrival or by `retime`, which is what
+        // `programme-timeline` means, whatever the plugin itself declares.
+        let mut capabilities = self.manifest.capabilities;
+        capabilities.set(Capability::ProgrammeTimeline, true);
+        Ok(Ready { manifest: self.manifest, latency_ms: self.manifest.latency_ms, capabilities })
+    }
+
+    fn start(&mut self, canvas: &CanvasCaps, thumb: bool) -> Result<MediaEnds> {
+        self.build.canvas = canvas.clone();
+        let ends =
+            reader::build(&self.build, thumb, &self.name, &self.dir, self.tracks(), &self.watch)?;
+        if self.owner.is_none() {
+            let owner = Owner::spawn(self.plan(), self.watch.clone());
+            self.owner = Some(owner.context("starting the share thread")?);
+        }
+        Ok(ends)
+    }
+
+    fn stop(&mut self) -> Result<()> {
+        if self.watch.frames() > 0 {
+            tracing::info!(source = %self.build.id, share = %self.report(), "stopping a shared source");
+        }
+        // Dropping the owner stops its thread and, if this source owned the
+        // device, the plugin with it; the claim goes last, and a reader
+        // elsewhere takes it within one tick.
+        self.owner = None;
+        Ok(())
+    }
+
+    fn configure(&mut self, params: &Params) -> Result<Configure> {
+        match super::plan(&self.type_id, params) {
+            Some(p) if p.name == self.name && p.dir == self.dir => {}
+            _ => {
+                return Ok(Configure::RestartRequired(format!(
+                    "the change names a different device than {}",
+                    self.name
+                )))
+            }
+        }
+        self.build.cfg.params = params.clone();
+        if let Some(owner) = &self.owner {
+            if let Some(plan) = owner.shared.plan.lock().as_mut() {
+                plan.build.cfg.params = params.clone();
+            }
+        }
+        if !self.is_owner() {
+            // The owner's settings decide the picture. Saying applied is true
+            // for this source: it will use them if it becomes the owner.
+            return Ok(Configure::Applied);
+        }
+        self.on_plugin(|p| p.configure(params))
+    }
+
+    fn health(&self) -> Health {
+        if self.is_owner() {
+            if let Ok(h) = self.on_plugin(|p| Ok(p.health())) {
+                return h;
+            }
+        }
+        let quiet = self.watch.quiet_ms();
+        Health {
+            state: match quiet {
+                Some(ms) if ms < 2000 => PluginState::Running,
+                Some(_) => PluginState::Stalled,
+                None => PluginState::Starting,
+            },
+            detail: Some(format!("reads {} from the frame bus", self.name)),
+        }
+    }
+
+    fn call(&mut self, method: &str, params: Value) -> Result<Value> {
+        match method {
+            "share" => Ok(self.report()),
+            "restart" if !self.is_owner() => Ok(json!({"respawned": false, "owner": false})),
+            _ => self.on_plugin(|p| p.call(method, params)),
+        }
+    }
+}
