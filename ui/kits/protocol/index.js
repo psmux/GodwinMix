@@ -60,7 +60,8 @@ export class SceneClient {
       this.client.on("event", ({ name, params }) => {
         if (name === "scene.patch") this.onPatch(params);
         else if (name === "flush") this.settle();
-        else if (name === "preview.changed" || name === "program.took") this.changed();
+        else if (name === "preview.changed") this.markArmed(params && params.scene);
+        else if (name === "program.took") this.changed();
         else if (name === "resync") this.refresh();
       })
     );
@@ -186,6 +187,12 @@ export class SceneClient {
       this.liveId = found ? found.id : null;
     }
     return this.liveId;
+  }
+
+  /** The summaries' armed flags follow the event, or a disarm left them stale. */
+  markArmed(scene) {
+    for (const s of this.summaries) s.armed = !!scene && (s.id === scene || s.name === scene);
+    this.changed();
   }
 
   /** The armed scene's id, from the summaries, or null. */

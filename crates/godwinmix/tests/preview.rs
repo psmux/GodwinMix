@@ -257,3 +257,29 @@ async fn a_client_that_asked_for_the_mosaic_alone_is_sent_no_preview_frames() {
     let heard = quiet.preview_frames(1, 3).await;
     assert!(heard.is_empty(), "a client that asked for the mosaic was sent preview frames");
 }
+
+/// Studio mode's two promises about the programme. Cut to black is black
+/// while a scene is armed, because it sends an empty `source`, and taking the
+/// armed scene leaves it armed, so the preview keeps what was just taken
+/// rather than swapping in what went off.
+#[tokio::test(flavor = "multi_thread")]
+async fn an_empty_source_is_black_and_a_take_leaves_the_preview_armed() {
+    let (url, _quit) = serve().await;
+    let mut client = Client::open(&url).await;
+    let scene = client
+        .call("scene.create_from", json!({ "sources": ["ball"], "name": "ball shot" }))
+        .await
+        .expect("a scene to arm");
+    let id = scene["id"].as_str().expect("the new scene's id").to_string();
+    client.call("program.take", json!({ "source": "bars" })).await.expect("bars on air");
+    client.call("scene.preview.set", json!({ "scene": id })).await.expect("arming");
+
+    let black = client.call("program.take", json!({ "source": "" })).await.expect("black");
+    assert_eq!(black["program"], Value::Null, "an empty source took something: {black}");
+    assert_eq!(black["scene"], Value::Null, "an empty source took the armed scene: {black}");
+    assert_eq!(black["preview"], json!("ball shot"), "black disarmed the preview: {black}");
+
+    let taken = client.call("program.take", json!({ "scene": id })).await.expect("the take");
+    assert_eq!(taken["preview"], json!("ball shot"), "the take cleared the preview: {taken}");
+    assert_eq!(taken["program"], json!("ball"), "{taken}");
+}

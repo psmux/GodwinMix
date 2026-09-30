@@ -42,7 +42,7 @@ delete offers an Undo button in the toast rather than asking you first.
 | Gesture | What happens | The command underneath |
 |---|---|---|
 | tap a tile | it goes on air | `program.take {scene}` |
-| tap in producer mode | it is armed instead, and the Take button sends it | `scene.preview.set` then `program.take {}` |
+| tap in Studio mode | it goes into Preview instead, and Take sends it | `scene.preview.set` then `program.take {scene}` |
 | drag inputs onto empty space | a new scene, laid out by count | `scene.create_from` |
 | drag an input onto a scene tile | it joins that scene, in the next free slot | `scene.item.add` |
 | drag an item chip onto another scene | it moves there; hold Alt to copy | `scene.item.move`, `scene.item.copy` |
@@ -117,12 +117,13 @@ and whether its sound is heard, then whatever the plugin behind it offers, then
 its filters. Filters hang on the item and not on the source, so a camera keyed
 in this scene is not keyed in every other one.
 
-## Producer mode
+## Studio mode
 
-Settings has a switch that changes tap from "put it on air" to "arm it". Take
-and Auto appear beside the programme monitor, and the armed scene shows in the
-preview beside it. Nothing else changes and it costs nothing extra: the preview
-stream is the same either way.
+**Studio mode**, under the Programme monitor (or the producer switch in
+Settings), changes a click from "put it on air" to "put it in Preview". A
+click on a scene tab does it too. Take, Cut and the transition sit between
+Preview and Programme. See
+[Use the mixer controls](preview-monitor.md#studio-mode).
 
 ## When there is no scene server
 

@@ -94,6 +94,10 @@ const ASSETS: &[(&str, &str)] = &[
     ("panels/media/panel.js", include_str!("../../../ui/panels/media/panel.js")),
     ("panels/multiview/panel.js", include_str!("../../../ui/panels/multiview/panel.js")),
     ("panels/multiview/wanted.js", include_str!("../../../ui/panels/multiview/wanted.js")),
+    ("panels/multiview/studio.js", include_str!("../../../ui/panels/multiview/studio.js")),
+    ("panels/multiview/studio.css", include_str!("../../../ui/panels/multiview/studio.css")),
+    ("panels/multiview/studio-armed.js", include_str!("../../../ui/panels/multiview/studio-armed.js")),
+    ("panels/multiview/studio-picture.js", include_str!("../../../ui/panels/multiview/studio-picture.js")),
     ("panels/outputs/destination.js", include_str!("../../../ui/panels/outputs/destination.js")),
     ("panels/audio/panel.js", include_str!("../../../ui/panels/audio/panel.js")),
     ("panels/outputs/recording.js", include_str!("../../../ui/panels/outputs/recording.js")),
@@ -704,6 +708,7 @@ mod tests {
         reachable.extend(closure_of("kits/schema/index.js"));
         reachable.extend(closure_of("shell/mixer-settings.js"));
         reachable.extend(closure_of("shell/folder-picker.js"));
+        reachable.extend(closure_of("panels/multiview/studio.js"));
         // Not imported by this page at all: it is what a sandboxed panel's own
         // HTML imports, inside the iframe, to talk the same protocol back.
         reachable.extend(closure_of("client/sandbox-client.js"));
@@ -753,6 +758,7 @@ mod tests {
             ("panels/welcome/install.js", "picking a welcome tile"),
             ("panels/welcome/obs-import.js", "the Import from OBS tile"),
             ("shell/error-actions.js", "a button pressed on an error toast"),
+            ("panels/multiview/studio.js", "Studio mode switched on"),
         ] {
             assert!(known(path).is_some(), "{path} is not served at all");
             assert!(!eager.contains(path), "{path} is fetched at load, but only {who} needs it");

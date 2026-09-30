@@ -12,6 +12,7 @@ export async function monitorResizeTests(test, eq, ok, ProgramPanel) {
   panel.canvas = canvas(); panel.previewCanvas = canvas(); panel.note = document.createElement('div');
   document.body.append(host);
   panel.visible = true;
+  panel.studio = await import('../panels/multiview/studio.js');
   panel.setClient({
     state: { multiview: { enabled: true, cols: 1, cells: [{ source: null, index: 0 }] }, preview: 'scene-wide' },
     sheet: { attach: () => () => {} }, preview: { attach: () => () => {} },

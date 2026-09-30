@@ -123,7 +123,7 @@ export function openSettings(client, opts = {}) {
   );
 
   simple.appendChild(
-    check("Producer mode: tap arms, Take puts it on air", s.producer, (v) => setSetting("producer", v))
+    check("Studio mode: a click fills Preview, Take puts it on air", s.producer, (v) => setSetting("producer", v))
   );
 
   simple.appendChild(check("Show meters on tiles", s.meters, (v) => setSetting("meters", v)));

@@ -22,6 +22,9 @@ use serde_json::{Map, Value};
 /// `program.take`: put a source on programme.
 #[derive(Debug, Clone, Default, Serialize, Deserialize, JsonSchema)]
 pub struct TakeRequest {
+    // An empty string is the slate, even while a scene is armed. Said here
+    // and in docs/reference rather than in the doc comment, which the MCP
+    // take tool inlines and every agent pays for.
     /// Id of the source to put on air.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub source: Option<String>,
