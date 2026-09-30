@@ -795,8 +795,7 @@ impl Manifest {
             if p.kind != "source" {
                 out.push(problem(format!("{at}.share"), "only a source provide can be shared."));
             }
-            let audio = p.media.as_ref().is_some_and(Media::has_audio);
-            for (key, message) in share.problems(audio) {
+            for (key, message) in share.problems() {
                 out.push(problem(format!("{at}.share.{key}"), message));
             }
         }

@@ -30,14 +30,14 @@ pub struct SharedSource {
 }
 
 impl SharedSource {
-    pub fn make(type_id: String, name: BusName, build: BuildCtx) -> Result<Box<dyn Source>> {
+    pub fn make(type_id: String, place: super::Place, build: BuildCtx) -> Result<Box<dyn Source>> {
         let manifest = crate::plugin::loader::source_provide(&type_id)
             .map(|p| p.manifest)
             .with_context(|| format!("`{type_id}` is not a loaded source provide"))?;
         Ok(Box::new(SharedSource {
             type_id,
-            name,
-            dir: super::bus_dir(),
+            name: place.name,
+            dir: place.dir,
             manifest,
             build,
             watch: Arc::default(),
@@ -51,7 +51,13 @@ impl SharedSource {
             name: self.name.clone(),
             dir: self.dir.clone(),
             build: self.build.clone(),
+            tracks: self.tracks(),
         }
+    }
+
+    fn tracks(&self) -> reader::Tracks {
+        let media = self.manifest.media;
+        reader::Tracks { video: media.video.present(), audio: media.audio.present() }
     }
 
     fn is_owner(&self) -> bool {
@@ -103,9 +109,9 @@ impl Source for SharedSource {
     fn initialize(&mut self, hello: Hello) -> Result<Ready> {
         self.build.canvas = hello.canvas;
         self.build.cfg.params = hello.params;
-        // `gmxbussrc` stamps each frame from the clock and base time the mixer
-        // gives this pipeline, which is what `programme-timeline` means,
-        // whatever the plugin itself declares.
+        // Every frame out of the bus is stamped on the clock and base time the
+        // mixer gives this pipeline, on arrival or by `retime`, which is what
+        // `programme-timeline` means, whatever the plugin itself declares.
         let mut capabilities = self.manifest.capabilities;
         capabilities.set(Capability::ProgrammeTimeline, true);
         Ok(Ready { manifest: self.manifest, latency_ms: self.manifest.latency_ms, capabilities })
@@ -113,7 +119,8 @@ impl Source for SharedSource {
 
     fn start(&mut self, canvas: &CanvasCaps, thumb: bool) -> Result<MediaEnds> {
         self.build.canvas = canvas.clone();
-        let ends = reader::build(&self.build, thumb, &self.name, &self.dir, &self.watch)?;
+        let ends =
+            reader::build(&self.build, thumb, &self.name, &self.dir, self.tracks(), &self.watch)?;
         if self.owner.is_none() {
             let owner = Owner::spawn(self.plan(), self.watch.clone());
             self.owner = Some(owner.context("starting the share thread")?);
@@ -134,7 +141,7 @@ impl Source for SharedSource {
 
     fn configure(&mut self, params: &Params) -> Result<Configure> {
         match super::plan(&self.type_id, params) {
-            Some(name) if name == self.name => {}
+            Some(p) if p.name == self.name && p.dir == self.dir => {}
             _ => {
                 return Ok(Configure::RestartRequired(format!(
                     "the change names a different device than {}",

@@ -10,19 +10,16 @@
 
 #![cfg(unix)]
 
-use godwinmix_core::config::{BrowserConfig, SourceConfig};
-use godwinmix_core::plugin::source::{Source, SourceRequest};
-use godwinmix_core::plugin::{harness, loader, Hello, MediaEnds, Tier, API_LEVEL};
-use gstreamer as gst;
-use gstreamer::prelude::*;
-use std::io::{BufRead, BufReader};
-use std::path::{Path, PathBuf};
-use std::process::{Command, Stdio};
-use std::sync::atomic::{AtomicU64, Ordering::Relaxed};
-use std::sync::{Arc, Mutex};
-use std::time::{Duration, Instant};
+mod shared;
 
-const PLUGIN: &str = r#"#!/bin/sh
+use godwinmix_core::plugin::loader;
+use gstreamer as gst;
+use shared::*;
+use std::path::PathBuf;
+use std::time::Duration;
+
+const CAMERA: Fixture = Fixture {
+    script: r#"#!/bin/sh
 say() { printf '%s\n' "$1" >&2; }
 say '{"jsonrpc":"2.0","id":0,"method":"initialize","params":{"plugin":"sharebars","version":"0.1.0","api":1,"transports":["container"],"provides":[]}}'
 read -r _ready
@@ -47,9 +44,8 @@ while IFS= read -r line; do
   esac
 done
 kill %1 2>/dev/null
-"#;
-
-const MANIFEST: &str = r#"
+"#,
+    manifest: r#"
 [plugin]
 name = "sharebars"
 version = "0.1.0"
@@ -72,153 +68,13 @@ capabilities = ["restart-in-place", "health"]
 latency_ms = 0
 settings = "settings.json"
 share = { bus = "camera", params = ["device"] }
-"#;
+"#,
+};
 
-fn which(name: &str) -> Option<PathBuf> {
-    std::env::var_os("PATH")
-        .and_then(|p| std::env::split_paths(&p).map(|d| d.join(name)).find(|p| p.is_file()))
-}
+const TYPE: &str = "sharebars/source";
 
-/// Install the plugin into a directory of its own, point the bus at another,
-/// and say where the open log is. Everything a child needs is in `root`.
-fn setup(root: &Path) {
-    let checkout = root.join("checkout");
-    std::fs::create_dir_all(&checkout).unwrap();
-    std::fs::write(checkout.join("gmx-plugin.toml"), MANIFEST).unwrap();
-    std::fs::write(checkout.join("settings.json"), r#"{"type":"object","properties":{}}"#).unwrap();
-    std::fs::write(checkout.join("run.sh"), PLUGIN).unwrap();
-    use std::os::unix::fs::PermissionsExt;
-    std::fs::set_permissions(checkout.join("run.sh"), std::fs::Permissions::from_mode(0o755)).unwrap();
-    let plugins = root.join("plugins");
-    std::fs::create_dir_all(&plugins).unwrap();
-    loader::set_dir(plugins);
-    loader::set_runtime_dir(root.join(format!("run-{}", std::process::id())));
-    loader::install_from_path(&checkout).expect("it installs");
-}
-
-fn env_for(root: &Path) {
-    std::env::set_var("GODWINMIX_BUS_DIR", root.join("bus"));
-    std::env::set_var("SHAREBARS_LOG", root.join("opens.log"));
-}
-
-fn opens(root: &Path) -> usize {
-    std::fs::read_to_string(root.join("opens.log")).map(|t| t.lines().count()).unwrap_or(0)
-}
-
-/// Frames seen at one source's programme end, and the longest gap between two.
-#[derive(Default)]
-struct Count {
-    frames: AtomicU64,
-    longest_us: AtomicU64,
-    last: Mutex<Option<Instant>>,
-}
-
-impl Count {
-    fn gap_reset(&self) {
-        self.longest_us.store(0, Relaxed);
-    }
-    fn longest(&self) -> Duration {
-        Duration::from_micros(self.longest_us.load(Relaxed))
-    }
-}
-
-struct Running {
-    source: Box<dyn Source>,
-    ends: MediaEnds,
-    count: Arc<Count>,
-}
-
-fn open(id: &str, device: &str) -> Running {
-    let mut cfg = SourceConfig::bare(id, "");
-    cfg.type_id = Some("sharebars/source".into());
-    cfg.params.insert("device".into(), toml::Value::String(device.into()));
-    let canvas = harness::test_canvas();
-    let backends = godwinmix_core::probe::Backends::probe(
-        godwinmix_core::config::Accel::Auto,
-        godwinmix_core::config::Accel::Auto,
-    )
-    .unwrap();
-    let browser = BrowserConfig::default();
-    let provide = godwinmix_core::plugin::source::resolve_config(&cfg).unwrap();
-    let req = SourceRequest {
-        cfg: &cfg,
-        canvas: &canvas,
-        backends: &backends,
-        browser: &browser,
-        allow_exec: false,
-        thumb_fps: 8,
-        origin: Instant::now(),
-        overlay: None,
-    };
-    let mut source = (provide.make)(req).unwrap();
-    source
-        .initialize(Hello {
-            instance: id.into(),
-            canvas: canvas.clone(),
-            api_level: API_LEVEL,
-            params: cfg.effective_params(),
-            tier: Tier::Core,
-        })
-        .unwrap();
-    let ends = source.start(&canvas, false).unwrap();
-    let count = Arc::new(Count::default());
-    let c = count.clone();
-    ends.video.static_pad("sink").unwrap().add_probe(gst::PadProbeType::BUFFER, move |_, _| {
-        let now = Instant::now();
-        if let Some(then) = c.last.lock().unwrap().replace(now) {
-            c.longest_us.fetch_max(now.duration_since(then).as_micros() as u64, Relaxed);
-        }
-        c.frames.fetch_add(1, Relaxed);
-        gst::PadProbeReturn::Ok
-    });
-    ends.pipeline.set_state(gst::State::Playing).unwrap();
-    Running { source, ends, count }
-}
-
-impl Running {
-    fn frames(&self) -> u64 {
-        self.count.frames.load(Relaxed)
-    }
-    fn share(&mut self) -> serde_json::Value {
-        self.source.call("share", serde_json::json!({})).unwrap()
-    }
-    fn close(mut self) {
-        let _ = self.ends.pipeline.set_state(gst::State::Null);
-        self.source.stop().unwrap();
-    }
-}
-
-/// Wait until `f` holds, for at most `limit`.
-fn until(limit: Duration, mut f: impl FnMut() -> bool) -> bool {
-    let end = Instant::now() + limit;
-    while Instant::now() < end {
-        if f() {
-            return true;
-        }
-        std::thread::sleep(Duration::from_millis(20));
-    }
-    f()
-}
-
-/// One test at a time: the plugin registry and the environment are per process.
-fn exclusive() -> std::sync::MutexGuard<'static, ()> {
-    static LOCK: Mutex<()> = Mutex::new(());
-    LOCK.lock().unwrap_or_else(|e| e.into_inner())
-}
-
-fn skip() -> bool {
-    if which("gst-launch-1.0").is_none() {
-        println!("skipping: gst-launch-1.0 is not on PATH");
-        return true;
-    }
-    false
-}
-
-fn temp(tag: &str) -> PathBuf {
-    let path = PathBuf::from(format!("/tmp/gmx-share-{}-{tag}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&path);
-    std::fs::create_dir_all(&path).unwrap();
-    path
+fn camera(id: &str) -> Running {
+    open(TYPE, id, &[("device", "facetime")])
 }
 
 /// The second mixer: open the device, say so, count frames until killed or
@@ -228,8 +84,8 @@ fn child_entry() {
     let Ok(root) = std::env::var("SHARE_CHILD_ROOT") else { return };
     let root = PathBuf::from(root);
     let _ = gst::init();
-    setup(&root);
-    let mut cam = open("cam-b", "facetime");
+    setup(&root, &CAMERA);
+    let mut cam = camera("cam-b");
     let owner = until(Duration::from_secs(10), || cam.share()["owner"] == true);
     println!("RESULT ready=1 owner={}", u8::from(owner));
     let mut line = String::new();
@@ -248,11 +104,11 @@ fn two_sources_in_one_process_open_the_device_once_and_the_second_takes_over() {
     let _ = gst::init();
     let root = temp("one");
     env_for(&root);
-    setup(&root);
+    setup(&root, &CAMERA);
 
-    let mut a = open("cam-a", "facetime");
+    let mut a = camera("cam-a");
     assert!(until(Duration::from_secs(10), || a.frames() > 10), "the first source shows a picture");
-    let mut b = open("cam-a2", "facetime");
+    let mut b = camera("cam-a2");
     assert!(until(Duration::from_secs(5), || b.frames() > 30), "the second reads the same picture");
     assert_eq!(opens(&root), 1, "the device was opened once for two sources");
     assert_eq!(a.share()["owner"], true);
@@ -264,7 +120,7 @@ fn two_sources_in_one_process_open_the_device_once_and_the_second_takes_over() {
     assert!(publish < 10.0, "the feed held frames: {}", owner["publish_ms"]);
     assert!(reader["hop_ms"]["p50"].as_f64().unwrap() < 10.0, "{}", reader["hop_ms"]);
 
-    b.count.gap_reset();
+    b.video.gap_reset();
     let before = b.frames();
     a.close();
     assert!(
@@ -273,8 +129,8 @@ fn two_sources_in_one_process_open_the_device_once_and_the_second_takes_over() {
     );
     assert_eq!(b.share()["owner"], true, "the reader took the device over");
     assert_eq!(opens(&root), 2);
-    println!("handover gap in one process: {:?}", b.count.longest());
-    assert!(b.count.longest() < Duration::from_secs(3), "gap {:?}", b.count.longest());
+    println!("handover gap in one process: {:?}", b.video.longest());
+    assert!(b.video.longest() < Duration::from_secs(3), "gap {:?}", b.video.longest());
     b.close();
     loader::uninstall("sharebars").ok();
 }
@@ -288,29 +144,12 @@ fn a_mixer_killed_with_sigkill_hands_its_camera_to_the_one_reading_it() {
     let _ = gst::init();
     let root = temp("two");
     env_for(&root);
-    let mut child = Command::new(std::env::current_exe().unwrap())
-        .args(["--exact", "child_entry", "--nocapture", "--test-threads=1"])
-        .env("SHARE_CHILD_ROOT", &root)
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .spawn()
-        .unwrap();
-    let mut lines = BufReader::new(child.stdout.take().unwrap());
-    let result = |lines: &mut BufReader<std::process::ChildStdout>| -> String {
-        let mut line = String::new();
-        loop {
-            line.clear();
-            assert!(lines.read_line(&mut line).unwrap() > 0, "the child said nothing");
-            if let Some((_, rest)) = line.split_once("RESULT ") {
-                return rest.trim().to_string();
-            }
-        }
-    };
+    let (mut child, mut lines) = spawn_child("child_entry", &root);
     assert_eq!(result(&mut lines), "ready=1 owner=1", "the first mixer owns the device");
 
     // This process is the second mixer. It must read, not open.
-    setup(&root);
-    let mut b = open("cam-b", "facetime");
+    setup(&root, &CAMERA);
+    let mut b = camera("cam-b");
     assert!(until(Duration::from_secs(10), || b.frames() > 30), "the second mixer has a picture");
     assert_eq!(opens(&root), 1, "one open for two mixers");
     assert_eq!(b.share()["owner"], false);
@@ -318,16 +157,14 @@ fn a_mixer_killed_with_sigkill_hands_its_camera_to_the_one_reading_it() {
     println!("from the owner's publish to this process holding the frame: {hop}");
     assert!(hop["p50"].as_f64().unwrap() < 10.0, "{hop}");
 
-    b.count.gap_reset();
+    b.video.gap_reset();
     let before = b.frames();
-    // SAFETY: a signal to our own child.
-    unsafe { libc::kill(child.id() as i32, libc::SIGKILL) };
-    let _ = child.wait();
+    kill9(&mut child);
     assert!(
         until(Duration::from_secs(10), || b.frames() > before + 30),
         "the picture came back after the owner was killed"
     );
-    let gap = b.count.longest();
+    let gap = b.video.longest();
     println!("handover gap across processes: {gap:?}, took over in {} ms", b.share()["last_start_ms"]);
     assert_eq!(b.share()["owner"], true);
     assert_eq!(opens(&root), 2);
