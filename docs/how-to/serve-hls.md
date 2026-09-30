@@ -1,3 +1,5 @@
+# Serve HLS to viewers
+
 ## From the page
 
 HLS lets anyone on your network watch the programme on a phone, a laptop or a
@@ -36,6 +38,58 @@ Mac and recent Chrome play HLS by themselves. A browser that cannot gets an
 **Open in a player** link instead, and a sentence saying why: the page carries
 no player of its own, because the smallest one would add about 300 kB to it.
 
-The link carries no token. A mixer that asks for a token on its control port
-asks for one on the link as well, and a player that cannot send one will not
-play it.
+The link carries the output's viewer key, never the control token. The key
+lets a player read this one output's playlists and segments and nothing else
+on the mixer, and it stays the same when the mixer restarts, so a link on a
+poster keeps working. If a link gets somewhere it should not, remove the
+output and add it again under a new name.
+
+## From the API
+
+The same thing as one call:
+
+```sh
+curl -X POST http://127.0.0.1:8080/api/v1/outputs \
+  -H "authorization: Bearer $GODWINMIX_TOKEN" -H 'content-type: application/json' \
+  -d '{"id":"viewers","type":"hls/output","uri":"hls://viewers",
+       "rendition":{"preset":"abr-ladder-4"},"params":{"low_latency":true}}'
+```
+
+Leave `rendition` out to serve the programme exactly as it is encoded, one
+size, which costs almost nothing. `docs/reference/hls-output.md` has every
+param.
+
+The link is in the output's status:
+
+```sh
+curl -s -H "authorization: Bearer $GODWINMIX_TOKEN" \
+  http://127.0.0.1:8080/api/v1/outputs/viewers | jq -r .playback.master_url_path
+# /hls/viewers/master.m3u8?key=68ydq4dbicw3d8nhsf42ca9c
+```
+
+Put the address people reach the mixer on in front of it.
+
+## Play it
+
+Any HLS player opens the link: Safari, VLC, a smart TV, `ffplay`, or hls.js
+on a web page of your own. To check it from the mixer's own machine:
+
+```sh
+ffprobe "http://127.0.0.1:8080/hls/viewers/master.m3u8?key=..."
+ffplay "http://127.0.0.1:8080/hls/viewers/master.m3u8?key=..."
+```
+
+With low latency on, hls.js (with `lowLatencyMode`, its default) and Safari
+play about two seconds behind the camera. A player that does not know LL-HLS
+plays the same link a few seconds further back.
+
+A web page on another site can play it too: the control port answers
+cross origin requests.
+
+## See who is watching
+
+`viewers` on the output's row counts players that fetched something in the
+last two windows (a minute, by default), and `egress_kbps` is what they are
+pulling between them. Every viewer adds that rung's bitrate to your upload,
+so on a home connection a few dozen viewers of 1080p is the limit, whatever
+the mixer can do.

@@ -99,11 +99,21 @@ def viewer(master, n, stop):
             time.sleep(1)
 
 
+def cpu_seconds(pid):
+    """The process's CPU time so far, from `ps -o time=` (`[[dd-]hh:]mm:ss.ss`)."""
+    text = subprocess.run(["ps", "-o", "time=", "-p", str(pid)], capture_output=True, text=True).stdout.strip()
+    total = 0.0
+    for part in text.replace("-", ":").split(":"):
+        total = total * 60 + float(part)
+    return total
+
+
 def sample(pid, stop, out):
+    """Resident memory once a second."""
     while not stop.is_set():
         try:
-            line = subprocess.run(["ps", "-o", "%cpu=,rss=", "-p", str(pid)], capture_output=True, text=True).stdout.split()
-            out.append((float(line[0]), int(line[1]) / 1024))
+            rss = subprocess.run(["ps", "-o", "rss=", "-p", str(pid)], capture_output=True, text=True).stdout
+            out.append(int(rss) / 1024)
         except Exception:
             pass
         stop.wait(1)
@@ -120,11 +130,14 @@ def main():
     samples = []
     if a.pid:
         threading.Thread(target=sample, args=(a.pid, stop, samples), daemon=True).start()
+        cpu0, t0 = cpu_seconds(a.pid), time.monotonic()
     threads = [threading.Thread(target=viewer, args=(a.master, i, stop), daemon=True) for i in range(a.viewers)]
     for t in threads:
         t.start()
         time.sleep(0.02)
     time.sleep(a.seconds)
+    if a.pid:
+        cpu = 100 * (cpu_seconds(a.pid) - cpu0) / (time.monotonic() - t0)
     stop.set()
     for t in threads:
         t.join(timeout=20)
@@ -134,11 +147,9 @@ def main():
           f"{totals['bytes'] * 8 / a.seconds / 1e6:.1f} Mbit/s out")
     print(f"media fetch ms: median {statistics.median(media) * 1000:.1f}, "
           f"p95 {media[int(len(media) * 0.95)] * 1000:.1f}, max {media[-1] * 1000:.1f}")
-    if samples:
-        cpu = [c for c, _ in samples[2:]] or [0]
-        rss = [r for _, r in samples]
-        print(f"core cpu %: mean {statistics.mean(cpu):.1f}, max {max(cpu):.1f}; "
-              f"rss MiB: start {rss[0]:.0f}, end {rss[-1]:.0f}, max {max(rss):.0f}")
+    if a.pid and samples:
+        print(f"core cpu {cpu:.1f}% of one core over the run (from its CPU time); "
+              f"rss MiB: start {samples[0]:.0f}, end {samples[-1]:.0f}, max {max(samples):.0f}")
 
 
 if __name__ == "__main__":

@@ -95,6 +95,24 @@ impl HlsParams {
     pub fn segment_ns(&self) -> u64 {
         u64::from(self.segment_ms) * 1_000_000
     }
+
+    /// `fragment-duration` and `chunk-duration` for `cmafmux`.
+    ///
+    /// The muxer ends a fragment only on a chunk boundary, and only once the
+    /// boundary has reached the fragment's length. Six chunks of 333333333 ns
+    /// are 1999999998 ns, two short of two seconds, so a fragment asked for as
+    /// 2 s with 333 ms parts misses the keyframe at 2 s and runs on to the
+    /// next boundary that has one: 2.67 s at 30 fps, measured. So the chunk is
+    /// the segment divided by a whole number of parts, rounded down, and the
+    /// fragment is exactly that many chunks.
+    pub fn mux_durations(&self) -> (u64, Option<u64>) {
+        if !self.low_latency() {
+            return (self.segment_ns(), None);
+        }
+        let parts = u64::from((self.segment_ms + self.part_ms / 2) / self.part_ms).max(1);
+        let chunk = self.segment_ns() / parts;
+        (chunk * parts, Some(chunk))
+    }
 }
 
 fn number(params: &Params, key: &str) -> Result<Option<u32>> {
@@ -136,6 +154,17 @@ mod tests {
         assert!(e.contains("6 to 600"), "{e}");
         let e = HlsParams::from_params(&params("window = \"lots\"")).unwrap_err().to_string();
         assert!(e.contains("whole number"), "{e}");
+    }
+
+    #[test]
+    fn a_fragment_is_a_whole_number_of_chunks() {
+        let p = HlsParams { part_ms: 333, ..HlsParams::default() };
+        assert_eq!(p.mux_durations(), (1_999_999_998, Some(333_333_333)));
+        let p = HlsParams { segment_ms: 1000, part_ms: 250, window_s: 6 };
+        assert_eq!(p.mux_durations(), (1_000_000_000, Some(250_000_000)));
+        let p = HlsParams { segment_ms: 1000, part_ms: 200, window_s: 6 };
+        assert_eq!(p.mux_durations(), (1_000_000_000, Some(200_000_000)));
+        assert_eq!(HlsParams::default().mux_durations(), (2_000_000_000, None));
     }
 
     #[test]

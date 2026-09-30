@@ -49,14 +49,18 @@
 pub mod cutter;
 pub mod key;
 pub mod ladder;
+pub mod master;
 pub mod output;
 pub mod package;
 pub mod params;
+pub mod parse;
 pub mod playlist;
+pub mod registry;
 pub mod request;
 pub mod ring;
 pub mod stream;
 pub mod track;
+pub mod view;
 pub mod viewers;
 
 pub use package::{attach, Attached, Input};

@@ -6,7 +6,11 @@
 //! ```text
 //! cargo run -p godwinmix-core --example clock_ts > /dev/null
 //! source.add {id: "clock", uri: "exec:/path/to/target/debug/examples/clock_ts"}
+//! source.add {id: "busy", uri: "exec:/path/to/target/debug/examples/clock_ts snow"}
 //! ```
+//!
+//! The one argument is the `videotestsrc` pattern, `ball` unless given;
+//! `snow` makes every encoder after it spend its whole bitrate.
 //!
 //! `clockoverlay` would do this if its format had milliseconds; it does not,
 //! so a probe on the overlay's input sets the text from `SystemTime` as each
@@ -18,15 +22,17 @@ use gstreamer::prelude::*;
 
 fn main() -> Result<()> {
     gst::init()?;
-    let pipeline = gst::parse::launch(
-        "videotestsrc is-live=true pattern=ball ! video/x-raw,width=1280,height=720,framerate=30/1 \
+    let pattern = std::env::args().nth(1).unwrap_or_else(|| "ball".into());
+    anyhow::ensure!(pattern.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'-'), "a pattern is one word");
+    let pipeline = gst::parse::launch(&format!(
+        "videotestsrc is-live=true pattern={pattern} ! video/x-raw,width=1280,height=720,framerate=30/1 \
          ! textoverlay name=clock font-desc=\"Monospace Bold 64\" valignment=top halignment=left \
            shaded-background=true \
          ! videoconvert ! x264enc tune=zerolatency speed-preset=ultrafast key-int-max=60 bitrate=3000 \
          ! h264parse ! mux. \
          audiotestsrc is-live=true wave=ticks ! audioconvert ! avenc_aac ! aacparse ! mux. \
-         mpegtsmux name=mux alignment=7 ! fdsink fd=1 sync=false",
-    )?
+         mpegtsmux name=mux alignment=7 ! fdsink fd=1 sync=false"
+    ))?
     .downcast::<gst::Pipeline>()
     .map_err(|_| anyhow::anyhow!("not a pipeline"))?;
     let overlay = pipeline.by_name("clock").expect("the overlay is named clock");
