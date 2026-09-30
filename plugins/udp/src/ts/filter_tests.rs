@@ -1,5 +1,6 @@
 use super::*;
 use crate::ts::tables::{build_pat, build_pmt, parse_pat, parse_pmt, Stream};
+use crate::ts::packetize;
 use crate::ts::tests::packet;
 
 /// A PAT built by hand, because `build_pat` only makes one program.
