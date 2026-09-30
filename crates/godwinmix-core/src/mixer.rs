@@ -397,6 +397,8 @@ fn needs_superimposed(page: Option<f64>, media: &[Option<f64>]) -> bool {
 use crate::plugin::branch::{BranchCtx, ProgrammeBranch, VideoPads};
 
 pub mod group;
+mod lifecycle;
+mod offload;
 mod rendered;
 pub mod slots;
 pub mod transition;
@@ -462,6 +464,12 @@ pub enum Command {
     SetOutput(Box<OutputConfig>, Option<Ack>),
     RemoveOutput(OutputId, Option<Ack>),
     RestartSource(SourceId),
+    /// A restart in place has finished on its own thread, with why it failed
+    /// if it did. Sent by the worker `RestartSource` starts; never by the API.
+    SourceRestarted(SourceId, Option<String>),
+    /// A removed source's pipeline has finished stopping on its own thread,
+    /// so an add under the same id may go ahead. Never sent by the API.
+    SourceStopped(SourceId),
     /// Move a source's audio controls: the operator's own fader and mute, which
     /// every source has, and for a superimposed one the balance between its page
     /// sound and the videos drawn under it. Every part is optional and only what
@@ -740,7 +748,9 @@ impl MixerHandle {
 }
 
 struct SourceSlot {
-    input: InputPipeline,
+    /// Shared with the thread a restart or a stop runs on, so neither holds
+    /// the mixer thread. See `mixer::lifecycle`.
+    input: Arc<InputPipeline>,
     /// This source's side of the proxy boundary: the proxysrcs, the queues,
     /// the fader, the meter, the mute and the two mixer pads. See
     /// `ProgrammeBranch`.
@@ -1053,6 +1063,9 @@ pub struct Mixer {
     /// Superimposed sources being built again from scratch after a failure,
     /// with whether each was on programme when it failed, to put it back.
     rebuilding: std::collections::HashMap<SourceId, bool>,
+    /// Sources whose pipeline is stopping on a thread of its own, and the
+    /// adds under the same id waiting for it. See `mixer::lifecycle`.
+    stopping: HashMap<SourceId, lifecycle::Stopping>,
     /// Consecutive rebuilds of a source that did not bring it back to life,
     /// and the moment before which the next one must not start. Cleared the
     /// moment the source delivers a frame, so a source that recovers is back
@@ -1668,6 +1681,7 @@ impl Mixer {
             runtime_store: None,
             pending: Vec::new(),
             rebuilding: std::collections::HashMap::new(),
+            stopping: HashMap::new(),
             rebuild_failures: HashMap::new(),
             rebuild_not_before: HashMap::new(),
             retired: Vec::new(),
@@ -1759,6 +1773,13 @@ impl Mixer {
     /// and ten seconds of it standing still would freeze the operator's UI
     /// while the programme carried on underneath.
     fn begin_add_source(&mut self, cfg: SourceConfig, ack: Option<Ack>) -> Result<()> {
+        let id = cfg.id.clone();
+        let Some(Command::AddSource(cfg, ack)) =
+            self.park_while_stopping(&id, Command::AddSource(Box::new(cfg), ack))
+        else {
+            return Ok(());
+        };
+        let cfg = *cfg;
         let Some(spec) = InputPipeline::media_probe_spec(&cfg, &self.canvas, &self.cfg.browser)
         else {
             let r = self.add_source(&cfg, None);
@@ -1932,7 +1953,7 @@ impl Mixer {
         // a live pipeline. A leaked failed ad blocked every later break and
         // kept posting its errors.
         self.sources.push(SourceSlot {
-            input,
+            input: Arc::new(input),
             branch,
             stalled_ticks: 0,
             first_reported: false,
@@ -2208,7 +2229,7 @@ impl Mixer {
 
     pub fn remove_source(&mut self, id: &SourceId) -> Result<()> {
         let slot = crate::slow_step!("detach_source", id, self.detach_source(id))?;
-        crate::slow_step!("input.stop", id, slot.input.stop());
+        self.stop_off_thread(slot.input);
         Ok(())
     }
 
@@ -2347,7 +2368,7 @@ impl Mixer {
         if let Some(mv) = &mut self.multiview {
             mv.remove_tile(id).ok();
         }
-        slot.input.stop();
+        self.stop_off_thread(slot.input.clone());
         // Under the live band and over the slate, so whatever is taken next
         // draws straight over it, and silent: the pipeline behind it has
         // stopped and there is nothing left to hear.
@@ -3581,6 +3602,8 @@ impl Mixer {
             Command::SetOutput(..) => "output.set",
             Command::RemoveOutput(..) => "output.remove",
             Command::RestartSource(_) => "source.restart",
+            Command::SourceRestarted(..) => "source.restarted",
+            Command::SourceStopped(_) => "source.stopped",
             Command::SetAudio { .. } => "source.audio.set",
             Command::Seek { .. } => "source.seek",
             Command::AddFilter(..) => "filter.add",
@@ -3683,17 +3706,12 @@ impl Mixer {
                 // is built again from nothing.
                 if self.sources.iter().any(|s| s.input.id == id && !s.input.restarts_in_place()) {
                     self.rebuild_source(&id);
-                } else if let Some(slot) = self.sources.iter_mut().find(|s| s.input.id == id) {
-                    slot.stalled_ticks = 0;
-                    // A restarted source starts counting from zero again.
-                    if let Some(a) = &slot.aligner {
-                        a.reset();
-                    }
-                    if let Err(e) = slot.input.restart() {
-                        error!(source = %id, ?e, "restart failed");
-                    }
+                } else {
+                    self.restart_in_place(&id);
                 }
             }
+            Command::SourceRestarted(id, failed) => self.restarted(&id, failed),
+            Command::SourceStopped(_) => self.release_stopped(),
             Command::SetAudio { source, gain, muted, page, media, reply } => {
                 let _ = reply.send(self.set_audio(&source, gain, muted, page, &media));
             }
@@ -3863,6 +3881,9 @@ impl Mixer {
         // Reassert visibility so a stall fades to slate and a recovery fades
         // back, without either needing its own event.
         self.apply_visibility(true);
+        // An add waiting on a stop that finished, or that has waited long
+        // enough, goes ahead.
+        self.release_stopped();
         // What the governor says to give up, or that there is room again.
         self.rendition_tick();
 
@@ -4022,6 +4043,11 @@ impl Mixer {
         let Some(slot) = self.sources.iter().find(|s| s.input.id == id) else {
             return;
         };
+        // The restart already running is the answer to this stall; a second
+        // one queued behind it would only take the pipeline down again.
+        if slot.input.restarting() {
+            return;
+        }
         // A source that does not declare `restart-in-place` is built again from
         // nothing (see `rebuild_source`), which for a page costs a browser
         // launch, a profile directory and about ten seconds of the operator's
@@ -5014,6 +5040,7 @@ mod tests {
     mod endurance;
     mod restart;
     mod preview_churn;
+    mod slow_restart;
     use crate::plugin::branch::meter_name;
     use super::*;
 
