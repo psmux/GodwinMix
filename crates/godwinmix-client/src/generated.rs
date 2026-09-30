@@ -1970,6 +1970,41 @@ pub struct Meters {
     pub sources: BTreeMap<String, Value>,
 }
 
+/// `source.missing`: the ids a scene draws, or none for every source the
+/// mixer knows is not running.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct MissingRequest {
+    pub ids: Vec<String>,
+}
+
+/// One source that is not running, and what would bring it back.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct MissingSource {
+    /// The button that fixes it, when the error carries one.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub action: Option<ErrorAction>,
+    /// The error it failed with, which names the next step.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
+    pub id: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+    /// True when `source.restore` can ask for it again.
+    pub restore: bool,
+    /// The kind, such as `camera/source`, when the mixer knows it.
+    #[serde(rename = "type")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub r#type: Option<String>,
+    pub why: MissingWhy,
+}
+
+/// Why a source is not running.
+pub type MissingWhy = String;
+/// The values api_level 1 knows for [`MissingWhy`].
+pub const MISSING_WHY_VALUES: &[&str] = &["failed", "not_started", "removed", "unknown"];
+
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct MixerStatus {
@@ -2586,6 +2621,11 @@ pub struct ProgramState {
     /// Present while an ad break is armed or on air.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub ad: Option<AdStatus>,
+    /// Sources the scene on air draws that this mixer does not have. The take
+    /// went ahead without them and they draw nothing, so the slate or whatever
+    /// sits under them shows through, until they are added back. Left out when
+    /// every source is here.
+    pub missing: Vec<String>,
     /// The scene armed for the next `program.take` with no argument.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub preview: Option<String>,
@@ -3772,7 +3812,7 @@ pub struct MethodInfo {
     pub rest: Option<(&'static str, &'static str)>,
 }
 
-pub const METHODS: [MethodInfo; 150] = [
+pub const METHODS: [MethodInfo; 152] = [
     MethodInfo { name: "adbreak.end", summary: "Cut a running ad short, or disarm one that is scheduled.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/adbreak/end")) },
     MethodInfo { name: "adbreak.start", summary: "Interrupt the programme with a clip, then rejoin live when it ends.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/adbreak/start")) },
     MethodInfo { name: "agent.state", summary: "The compact document written for agents: the programme, each source's state and a motion score saying how much its picture is changing.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/agent/state")) },
@@ -3915,7 +3955,9 @@ pub const METHODS: [MethodInfo; 150] = [
     MethodInfo { name: "source.get", summary: "One source. Refused with the ids that exist when there is no such source.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/sources/{id}")) },
     MethodInfo { name: "source.group", summary: "Put sources in a tray folder. A tag for finding things, not a group on the canvas.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/sources/{id}/group")) },
     MethodInfo { name: "source.list", summary: "Every source, with its state, whether it has video and audio, and its fader.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/sources")) },
+    MethodInfo { name: "source.missing", summary: "Sources that are not running, and why: failed, could not be started (with the error and the action that fixes it), removed, or unknown. Pass the ids a scene draws, or none for every one the mixer knows about.", scope: "read", mutating: false, destructive: false, rest: Some(("POST", "/api/v1/sources/{id}/missing")) },
     MethodInfo { name: "source.remove", summary: "Remove a source. If it is on programme the mixer cuts to the slate first.", scope: "operate", mutating: true, destructive: true, rest: Some(("DELETE", "/api/v1/sources/{id}")) },
+    MethodInfo { name: "source.restart", summary: "Build a source's pipeline again now, rather than waiting for its next retry. For a source that could not be started or was removed, use source.restore.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/sources/{id}/restart")) },
     MethodInfo { name: "source.restore", summary: "Put back a source that source.remove took away, as it was: same id, address, settings, fader and mute. The mixer remembers the last sixteen it removed, until it restarts.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/sources/{id}/restore")) },
     MethodInfo { name: "source.seek", summary: "Move a seekable source to a position. Answers with where it actually landed.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/sources/{id}/seek")) },
     MethodInfo { name: "source.set", summary: "Change a running source: its name and colour, its params, or where it runs. The name and colour live on the scene document. Moving a source between the core, a sidecar and a node is `place`; the programme keeps its frame rate across the move and the compositor covers the swap.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/sources/{id}/set")) },
@@ -4880,9 +4922,19 @@ impl Client {
         self.call("source.list", &serde_json::json!({})).await
     }
 
+    /// Sources that are not running, and why: failed, could not be started (with the error and the action that fixes it), removed, or unknown. Pass the ids a scene draws, or none for every one the mixer knows about.
+    pub async fn source_missing(&self, params: &MissingRequest) -> Result<Vec<MissingSource>> {
+        self.call("source.missing", params).await
+    }
+
     /// Remove a source. If it is on programme the mixer cuts to the slate first.
     pub async fn source_remove(&self, params: &IdRequest) -> Result<BTreeMap<String, Value>> {
         self.call("source.remove", params).await
+    }
+
+    /// Build a source's pipeline again now, rather than waiting for its next retry. For a source that could not be started or was removed, use source.restore.
+    pub async fn source_restart(&self, params: &IdRequest) -> Result<SourceStatus> {
+        self.call("source.restart", params).await
     }
 
     /// Put back a source that source.remove took away, as it was: same id, address, settings, fader and mute. The mixer remembers the last sixteen it removed, until it restarts.

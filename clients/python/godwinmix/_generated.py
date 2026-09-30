@@ -1261,6 +1261,26 @@ class Meters(TypedDict, total=False):
     sources: Dict[str, Any]
     # Peak dBFS per channel, per source id.
 
+class MissingRequest(TypedDict, total=False):
+    """`source.missing`: the ids a scene draws, or none for every source the mixer knows is not running."""
+
+    ids: List[str]
+
+class MissingSource(TypedDict, total=False):
+    """One source that is not running, and what would bring it back."""
+
+    action: Union[ErrorAction, None]
+    # The button that fixes it, when the error carries one.
+    error: Optional[str]
+    # The error it failed with, which names the next step.
+    id: str
+    name: Optional[str]
+    restore: bool
+    # True when `source.restore` can ask for it again.
+    type: Optional[str]
+    # The kind, such as `camera/source`, when the mixer knows it.
+    why: MissingWhy
+
 class MixerStatus(TypedDict, total=False):
     ad: Union[AdStatus, None]
     # Present while an ad break is armed or running.
@@ -1652,6 +1672,8 @@ class ProgramState(TypedDict, total=False):
 
     ad: Union[AdStatus, None]
     # Present while an ad break is armed or on air.
+    missing: List[str]
+    # Sources the scene on air draws that this mixer does not have. The take went ahead without them and they draw nothing, so the slate or whatever sits under them shows through, until they are added back. Left out when every source is here.
     preview: Optional[str]
     # The scene armed for the next `program.take` with no argument.
     previous: Optional[str]
@@ -2421,6 +2443,9 @@ Id = str
 # How a publisher gives its key.
 KeyMode = Literal['query', 'stream']
 
+# Why a source is not running.
+MissingWhy = Literal['failed', 'not_started', 'removed', 'unknown']
+
 # `ext.multiview`. Accepts `false` to mean off, or an object.
 MultiviewExt = Union[bool, Dict[str, Any]]
 
@@ -2600,7 +2625,9 @@ METHODS = (
     {"name": "source.get", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/sources/{id}"), "summary": 'One source. Refused with the ids that exist when there is no such source.'},
     {"name": "source.group", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/sources/{id}/group"), "summary": 'Put sources in a tray folder. A tag for finding things, not a group on the canvas.'},
     {"name": "source.list", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/sources"), "summary": 'Every source, with its state, whether it has video and audio, and its fader.'},
+    {"name": "source.missing", "scope": "read", "mutating": False, "destructive": False, "rest": ("POST", "/api/v1/sources/{id}/missing"), "summary": 'Sources that are not running, and why: failed, could not be started (with the error and the action that fixes it), removed, or unknown. Pass the ids a scene draws, or none for every one the mixer knows about.'},
     {"name": "source.remove", "scope": "operate", "mutating": True, "destructive": True, "rest": ("DELETE", "/api/v1/sources/{id}"), "summary": 'Remove a source. If it is on programme the mixer cuts to the slate first.'},
+    {"name": "source.restart", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/sources/{id}/restart"), "summary": "Build a source's pipeline again now, rather than waiting for its next retry. For a source that could not be started or was removed, use source.restore."},
     {"name": "source.restore", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/sources/{id}/restore"), "summary": 'Put back a source that source.remove took away, as it was: same id, address, settings, fader and mute. The mixer remembers the last sixteen it removed, until it restarts.'},
     {"name": "source.seek", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/sources/{id}/seek"), "summary": 'Move a seekable source to a position. Answers with where it actually landed.'},
     {"name": "source.set", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/sources/{id}/set"), "summary": 'Change a running source: its name and colour, its params, or where it runs. The name and colour live on the scene document. Moving a source between the core, a sidecar and a node is `place`; the programme keeps its frame rate across the move and the compositor covers the swap.'},
@@ -4589,6 +4616,17 @@ class GeneratedMethods:
         params: Dict[str, Any] = {}
         return await self._call("source.list", params)
 
+    async def source_missing(
+        self,
+        *,
+        ids: Optional[List[str]] = None,
+    ) -> List[MissingSource]:
+        """Sources that are not running, and why: failed, could not be started (with the error and the action that fixes it), removed, or unknown. Pass the ids a scene draws, or none for every one the mixer knows about."""
+        params: Dict[str, Any] = {}
+        if ids is not None:
+            params["ids"] = ids
+        return await self._call("source.missing", params)
+
     async def source_remove(
         self,
         id: str,
@@ -4597,6 +4635,15 @@ class GeneratedMethods:
         params: Dict[str, Any] = {}
         params["id"] = id
         return await self._call("source.remove", params)
+
+    async def source_restart(
+        self,
+        id: str,
+    ) -> SourceStatus:
+        """Build a source's pipeline again now, rather than waiting for its next retry. For a source that could not be started or was removed, use source.restore."""
+        params: Dict[str, Any] = {}
+        params["id"] = id
+        return await self._call("source.restart", params)
 
     async def source_restore(
         self,

@@ -175,7 +175,9 @@ Keys accepted on every method, handled before a method runs.
 | `source.get` | `GET /api/v1/sources/{id}` | read |  | 1 | One source. Refused with the ids that exist when there is no such source. |
 | `source.group` | `POST /api/v1/sources/{id}/group` | operate |  | 1 | Put sources in a tray folder. A tag for finding things, not a group on the canvas. |
 | `source.list` | `GET /api/v1/sources` | read |  | 1 | Every source, with its state, whether it has video and audio, and its fader. |
+| `source.missing` | `POST /api/v1/sources/{id}/missing` | read |  | 1 | Sources that are not running, and why: failed, could not be started (with the error and the action that fixes it), removed, or unknown. Pass the ids a scene draws, or none for every one the mixer knows about. |
 | `source.remove` | `DELETE /api/v1/sources/{id}` | operate | yes | 1 | Remove a source. If it is on programme the mixer cuts to the slate first. |
+| `source.restart` | `POST /api/v1/sources/{id}/restart` | operate |  | 1 | Build a source's pipeline again now, rather than waiting for its next retry. For a source that could not be started or was removed, use source.restore. |
 | `source.restore` | `POST /api/v1/sources/{id}/restore` | operate |  | 1 | Put back a source that source.remove took away, as it was: same id, address, settings, fader and mute. The mixer remembers the last sixteen it removed, until it restarts. |
 | `source.seek` | `POST /api/v1/sources/{id}/seek` | operate |  | 1 | Move a seekable source to a position. Answers with where it actually landed. |
 | `source.set` | `POST /api/v1/sources/{id}/set` | operate |  | 1 | Change a running source: its name and colour, its params, or where it runs. The name and colour live on the scene document. Moving a source between the core, a sidecar and a node is `place`; the programme keeps its frame rate across the move and the compositor covers the swap. |
@@ -2497,6 +2499,24 @@ MCP tool `list_sources` in the `minimal` profile: readOnlyHint true, destructive
 }
 ```
 
+#### `source.missing`
+
+Sources that are not running, and why: failed, could not be started (with the error and the action that fixes it), removed, or unknown. Pass the ids a scene draws, or none for every one the mixer knows about.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/MissingRequest"
+  },
+  "result": {
+    "items": {
+      "$ref": "#/$defs/MissingSource"
+    },
+    "type": "array"
+  }
+}
+```
+
 #### `source.remove`
 
 Remove a source. If it is on programme the mixer cuts to the slate first.
@@ -2510,6 +2530,21 @@ MCP tool `remove_source` in the `standard` profile: readOnlyHint false, destruct
   },
   "result": {
     "type": "object"
+  }
+}
+```
+
+#### `source.restart`
+
+Build a source's pipeline again now, rather than waiting for its next retry. For a source that could not be started or was removed, use source.restore.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/IdRequest"
+  },
+  "result": {
+    "$ref": "#/$defs/SourceStatus"
   }
 }
 ```
