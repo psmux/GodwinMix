@@ -78,6 +78,10 @@ fn an_open_segment_that_fills_its_fragment_hints_the_next_one() {
     assert!(text.ends_with("#EXT-X-PRELOAD-HINT:TYPE=PART,URI=\"104.0.m4s\"\n"), "{text}");
     let short = ring(3, 5).view();
     assert!(media(&short, &ll(), &[]).ends_with("URI=\"103.5.m4s\"\n"));
+    // Asked for one second segments from a source whose keyframes are two
+    // apart: the segments run two seconds, so a second in is half way.
+    let one = HlsParams { segment_ms: 1000, part_ms: 333, ..HlsParams::default() };
+    assert!(media(&ring(3, 3).view(), &one, &[]).ends_with("URI=\"103.3.m4s\"\n"));
 }
 
 #[test]

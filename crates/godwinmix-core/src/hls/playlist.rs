@@ -90,7 +90,7 @@ pub fn media(view: &View, p: &HlsParams, reports: &[Report]) -> String {
         segment(&mut out, s, ll && i >= parts_from);
     }
     if ll {
-        let (msn, part) = next_part(listed.last().copied(), p);
+        let (msn, part) = next_part(&listed, p);
         let _ = writeln!(out, "#EXT-X-PRELOAD-HINT:TYPE=PART,URI=\"{msn}.{part}.m4s\"");
         for r in reports {
             let _ = write!(out, "#EXT-X-RENDITION-REPORT:URI=\"../{}/index.m3u8\",LAST-MSN={}", r.id, r.last_msn);
@@ -104,17 +104,20 @@ pub fn media(view: &View, p: &HlsParams, reports: &[Report]) -> String {
 }
 
 /// The part a player should ask for next, for `EXT-X-PRELOAD-HINT`. An open
-/// segment whose parts already fill a fragment ends at the next keyframe, so
-/// the next part starts the next segment; hinting one more part of this one
-/// names a file that never comes, and a player that preloads it gets a 404
-/// and a blocking reload that answers without it.
-fn next_part(last: Option<&SegmentView>, p: &HlsParams) -> (u64, usize) {
+/// segment whose parts already reach the length segments have been running
+/// at ends at the next keyframe, so the next part starts the next segment;
+/// hinting one more part of this one names a file that never comes, and a
+/// player that preloads it gets a 404 and a blocking reload that answers
+/// without it. The length is the fragment the muxer was asked for, or the
+/// last whole segment when keyframes come further apart than that.
+fn next_part(listed: &[&SegmentView], p: &HlsParams) -> (u64, usize) {
     let (fragment, chunk) = p.mux_durations();
+    let last_whole = listed.iter().rev().find(|s| s.complete).map_or(0, |s| s.duration_ns);
     let full = |s: &SegmentView| {
         let held: u64 = s.parts.iter().map(|(d, _)| *d).sum();
-        held + chunk.unwrap_or(0) / 2 >= fragment
+        held + chunk.unwrap_or(0) / 2 >= fragment.max(last_whole)
     };
-    match last {
+    match listed.last() {
         Some(s) if !s.complete && !full(s) => (s.msn, s.parts.len()),
         Some(s) => (s.msn + 1, 0),
         None => (0, 0),
