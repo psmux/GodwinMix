@@ -62,6 +62,10 @@ gstreamer-controller = "0.24"
 # family as the rest of the bindings.
 gstreamer-net = "0.24"
 glib = "0.21"
+# Reference counted byte buffers. Already in the tree under axum and hyper; the
+# HLS packager holds its segments in them so every viewer is handed the same
+# memory rather than a copy.
+bytes = "1.9"
 
 tokio = "1"
 axum = "0.8"

@@ -213,6 +213,10 @@ const DEV_ASSETS: &[(&str, &str)] = &[
     ("test/channels-ways.js", include_str!("../../../ui/test/channels-ways.js")),
     ("test/channels-preview.js", include_str!("../../../ui/test/channels-preview.js")),
     ("test/channels.html", include_str!("../../../ui/test/channels.html")),
+    // hls.js against an HLS output on this core, beside a clock to the
+    // millisecond: /test/hls.html?out=<output>&key=<viewer key>.
+    ("test/hls.html", include_str!("../../../ui/test/hls.html")),
+    ("test/hls.js", include_str!("../../../ui/test/hls.js")),
     // Renditions against a stub of the wave 2 contract, as tests and as a
     // page to look at: /test/renditions.html?scene=format.
     ("test/renditions.js", include_str!("../../../ui/test/renditions.js")),
@@ -298,8 +302,28 @@ where
             let p = *path;
             router = router.route(&format!("/{p}"), get(move || async move { dev_asset(p) }));
         }
+        router = router.route("/test/vendor/{file}", get(dev_vendor));
     }
     router
+}
+
+/// A third party script a development page needs and the product never
+/// ships, read from disk: `ui/test/vendor/` in the source tree, which
+/// `dev/fetch-test-vendor.sh` fills, or `GMX_UI_VENDOR`. Only routed when
+/// `GMX_UI_DEV=1`, and only plain `.js` names.
+async fn dev_vendor(axum::extract::Path(file): axum::extract::Path<String>) -> Response {
+    let plain = file.ends_with(".js") && file.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'.' || b == b'-');
+    let dir = std::env::var_os("GMX_UI_VENDOR")
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|| std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../ui/test/vendor"));
+    match std::fs::read(dir.join(&file)).ok().filter(|_| plain) {
+        Some(body) => ([(header::CONTENT_TYPE, "text/javascript; charset=utf-8")], body).into_response(),
+        None => (
+            StatusCode::NOT_FOUND,
+            format!("no {file} in {}; run dev/fetch-test-vendor.sh", dir.display()),
+        )
+            .into_response(),
+    }
 }
 
 /// One of the development pages. Only routed when `GMX_UI_DEV=1`.
