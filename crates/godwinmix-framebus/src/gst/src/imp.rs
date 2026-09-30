@@ -19,6 +19,8 @@ pub struct BusSrc {
     pub(super) dir: Mutex<String>,
     pub(super) sub: Mutex<Option<Subscriber>>,
     pub(super) caps_for: Mutex<Option<Layout>>,
+    /// Stamp buffers with the owner's timestamps rather than on arrival.
+    pub(super) owner_time: AtomicBool,
     flushing: AtomicBool,
 }
 
@@ -41,6 +43,14 @@ impl ObjectImpl for BusSrc {
                     .nick("Bus directory")
                     .blurb("The registry directory; empty for GODWINMIX_BUS_DIR or the default")
                     .build(),
+                glib::ParamSpecString::builder("timestamps")
+                    .nick("Timestamps")
+                    .blurb(
+                        "arrival: stamp each buffer when it arrives, on this pipeline's clock. \
+                         owner: keep the owner's timestamps, for a reader that places them itself",
+                    )
+                    .default_value(Some("arrival"))
+                    .build(),
             ]
         });
         P.as_ref()
@@ -50,6 +60,11 @@ impl ObjectImpl for BusSrc {
         let v = value.get::<Option<String>>().unwrap().unwrap_or_default();
         match pspec.name() {
             "bus-name" => *self.name.lock().unwrap() = v,
+            "timestamps" => {
+                let owner = v == "owner";
+                self.owner_time.store(owner, SeqCst);
+                self.obj().set_do_timestamp(!owner);
+            }
             _ => *self.dir.lock().unwrap() = v,
         }
     }
@@ -57,6 +72,9 @@ impl ObjectImpl for BusSrc {
     fn property(&self, _id: usize, pspec: &glib::ParamSpec) -> glib::Value {
         match pspec.name() {
             "bus-name" => self.name.lock().unwrap().to_value(),
+            "timestamps" => {
+                if self.owner_time.load(SeqCst) { "owner" } else { "arrival" }.to_value()
+            }
             _ => self.dir.lock().unwrap().to_value(),
         }
     }
