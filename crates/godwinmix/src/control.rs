@@ -183,7 +183,7 @@ impl AppState {
         } = engine;
         let channels = channels_for(cfg, &plugins, &mixer, &scenes);
         join_channels_to_renditions(&channels);
-        let tokens = cfg.tokens(rehearsal);
+        let tokens = crate::station::show::with_station_token(cfg.tokens(rehearsal));
         let safety =
             godwinmix_core::safety::Guard::new(cfg.safety.clone(), cfg.canvas.fps.max(1) as u32);
         // The flash guard needs a luminance measurement and the telemetry
@@ -286,14 +286,17 @@ fn channels_for(
     scenes: &Arc<godwinmix_core::scene::server::SceneServer>,
 ) -> Arc<crate::channels::Channels> {
     let path = cfg.source_path.clone();
-    let runtime = (!path.as_os_str().is_empty()).then(|| Config::runtime_store_path(&path));
+    // A show under a station keeps no channels of its own: they are the
+    // station's, and the channel file beside this config is the station's too.
+    let own = !path.as_os_str().is_empty() && !crate::station::show::under_station();
+    let runtime = own.then(|| Config::runtime_store_path(&path));
     let ports = crate::channels::Ports::from_config(cfg);
     crate::channels::Channels::open(
         runtime,
         ports,
         plugins.clone(),
         mixer.clone(),
-        scenes.clone(),
+        std::sync::Arc::new(crate::channels::target::Local { mixer: mixer.clone(), scenes: scenes.clone() }),
         methods::plugins::secrets(),
     )
 }

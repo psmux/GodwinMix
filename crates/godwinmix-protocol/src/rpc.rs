@@ -252,6 +252,8 @@ pub fn event_name_and_payload(event: &Event) -> Option<(&'static str, Value)> {
         Event::GovernorShed { what, why } => {
             ("governor.shed", payload(json!({ "what": what, "why": why })))
         }
+        Event::ShowChanged { show } => ("show.changed", payload(json!({ "show": show }))),
+        Event::ShowRemoved { id } => ("show.removed", payload(json!({ "id": id }))),
         Event::AudioLevel { .. } | Event::SourceAudioLevel { .. } => return None,
     })
 }

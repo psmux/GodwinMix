@@ -376,6 +376,11 @@ pub enum Event {
     RenditionPlan { scope: String, plan: crate::rendition::PlanView },
     /// The governor stopped something to keep what is on air whole.
     GovernorShed { what: String, why: String },
+    /// A show was added, renamed, started, stopped, died or came back. Sent
+    /// by the station, never by a show.
+    ShowChanged { show: Box<crate::shows::Show> },
+    /// A show was removed.
+    ShowRemoved { id: String },
 }
 
 /// What a surface starts with: the layout, the theme and the gallery mode.
