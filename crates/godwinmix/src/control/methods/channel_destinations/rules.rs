@@ -6,13 +6,17 @@ use godwinmix_protocol::destination::{
     SetDestinationRequest, StoredDestination,
 };
 use godwinmix_protocol::error::RpcError;
+use godwinmix_protocol::rendition::RenditionChoice;
+use godwinmix_render::presets::builtin;
+
+use crate::channels::transcode::request_for;
 
 /// Add a destination to `list`, and answer its id.
 pub fn add(list: &mut Vec<StoredDestination>, req: &AddDestinationRequest) -> Result<String, RpcError> {
     let p = platform(&req.platform).ok_or_else(|| unknown_platform(&req.platform))?;
     let label = clean(req.label.as_deref()).unwrap_or_else(|| p.title.to_string());
     let server = clean(req.server.as_deref()).unwrap_or_else(|| p.server.to_string());
-    let d = StoredDestination {
+    let mut d = StoredDestination {
         id: unique_id(list, &slug(&label).unwrap_or_else(|| p.id.to_string())),
         platform: p.id.to_string(),
         label,
@@ -20,7 +24,9 @@ pub fn add(list: &mut Vec<StoredDestination>, req: &AddDestinationRequest) -> Re
         key: key_for(p, req.key.as_deref()),
         stream: clean(req.stream.as_deref()).unwrap_or_else(|| "*".into()),
         enabled: req.enabled.unwrap_or(true),
+        rendition: None,
     };
+    d.rendition = rendition(req.rendition.as_ref(), &d.id)?;
     check(p, &d)?;
     let id = d.id.clone();
     list.push(d);
@@ -51,6 +57,9 @@ pub fn set(list: &mut [StoredDestination], req: &SetDestinationRequest) -> Resul
     if let Some(enabled) = req.enabled {
         wanted.enabled = enabled;
     }
+    if let Some(ask) = &req.rendition {
+        wanted.rendition = rendition(ask.as_ref(), &wanted.id)?;
+    }
     check(p, &wanted)?;
     *d = wanted;
     Ok(())
@@ -65,6 +74,19 @@ pub fn remove(
     let ids: Vec<String> = list.iter().map(|d| d.id.clone()).collect();
     let at = list.iter().position(|d| d.id == id).ok_or_else(|| not_found(channel, id, &ids))?;
     Ok(list.remove(at))
+}
+
+/// What to keep of a rendition ask: nothing for a copy, the ask itself
+/// when it names a preset or a request that can be read.
+fn rendition(ask: Option<&RenditionChoice>, id: &str) -> Result<Option<RenditionChoice>, RpcError> {
+    let Some(ask) = ask else { return Ok(None) };
+    let request = request_for(id, ask).map_err(|why| {
+        let singles: Vec<String> = builtin().into_iter().filter(|p| p.ladder.is_none()).map(|p| p.id).collect();
+        RpcError::invalid_params(format!("That rendition cannot be used here: {why}"))
+            .with("field", "rendition")
+            .with("presets", singles)
+    })?;
+    Ok(request.map(|_| ask.clone()))
 }
 
 fn clean(s: Option<&str>) -> Option<String> {

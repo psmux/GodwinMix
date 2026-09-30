@@ -53,6 +53,8 @@ class AddDestinationRequest(TypedDict, total=False):
     # What the list calls it. The platform's name when left out.
     platform: str
     # youtube, facebook, twitch, custom or srt.
+    rendition: Union[RenditionChoice, None]
+    # Convert the stream before sending it: `{"preset": "youtube-720p30"}` or a rendition request written out. Left out, or one the stream already matches, the stream is sent as it arrives.
     server: Optional[str]
     # The ingest address. Left out, the platform's own; custom and srt need one.
     stream: Optional[str]
@@ -213,6 +215,15 @@ class AudioSetParams(TypedDict, total=False):
     # Mute the whole source. Held apart from the fader, so unmuting comes back to the level that was set.
     page: Optional[float]
     # Gain on a superimposed page's own sound.
+
+class AudioShape(TypedDict, total=False):
+    """A sound as it is."""
+
+    bitrate_kbps: int
+    # 0 when unknown.
+    channels: int
+    codec: AudioCodec
+    sample_rate: int
 
 class AudioWant(TypedDict, total=False):
     """The audio an output wants. Every field left out is taken from the source."""
@@ -599,10 +610,16 @@ class Destination(TypedDict, total=False):
     kbps: int
     # What is going out, over the last second.
     label: str
+    plan: Union[DestinationPlan, None]
+    # What the plan gave it, while its stream is live.
     platform: str
     # A platform id from the table: youtube, facebook, twitch, custom, srt.
     reconnects: int
     # Connections lost and made again since it was switched on.
+    refused: Union[DestinationRefusal, None]
+    # Why it is not sending what it asked for, and what would fit.
+    rendition: Union[RenditionChoice, None]
+    # What it asked to be converted to. Absent: sent as it arrives.
     since_ms: int
     # Milliseconds since `state` last changed.
     state: DestinationState
@@ -610,6 +627,34 @@ class Destination(TypedDict, total=False):
     # Which of the channel's streams to send. `*` is the first live one.
     uri_host: str
     # The scheme, host and port, and nothing that could carry a key.
+
+class DestinationPlan(TypedDict, total=False):
+    """The plan's answer for one destination."""
+
+    audio: Union[AudioShape, None]
+    encoder: Optional[str]
+    # The video encoder, `h264-videotoolbox`, and why that one. Absent for a copy.
+    encoder_reason: Optional[str]
+    mode: DestinationMode
+    nodes: List[str]
+    # The plan's nodes this destination reads, so a page can show which work it shares with the channel's other destinations.
+    reason: str
+    # One sentence: "copied: the source's video goes out as it is", "encoded because the source is 1920x1080 and this output wants 1280x720".
+    stream: str
+    # The stream it was planned against, when the destination names `*`.
+    video: Union[VideoShape, None]
+    # What goes out.
+
+class DestinationRefusal(TypedDict, total=False):
+    """Why a destination that asked for a rendition is not sending, and what would. `error` on the destination carries the same sentence."""
+
+    advice: List[RenditionAdvice]
+    # Renditions that would fit now, largest first.
+    code: str
+    # `governor` (the machine has no room), `plan` (nothing here can make it), `shed` (it ran and was stopped to keep what is on air).
+    have: Union[Cost, None]
+    message: str
+    need: Union[Cost, None]
 
 class DeviceTotal(TypedDict, total=False):
     """Use of one hardware device by a plan."""
@@ -1661,6 +1706,14 @@ class RenameSceneRequest(TypedDict, total=False):
     name: Optional[str]
     scene: str
 
+class RenditionAdvice(TypedDict, total=False):
+    """One thing a refused rendition could be instead, as a button."""
+
+    request: RenditionRequest
+    # Send this as the output's `rendition` to take the advice.
+    text: str
+    # "720p30 H.264 on h264-videotoolbox fits".
+
 class RenditionPlanEvent(TypedDict, total=False):
     """`event/rendition.plan`."""
 
@@ -1692,9 +1745,9 @@ class RenditionRequest(TypedDict, total=False):
 
     audio: Union[AudioWant, None]
     container: Container
-    # How the bytes are wrapped on the way out.
+    # How the bytes are wrapped on the way out. FLV when left out.
     id: str
-    # Slug, unique within the show or channel that asks.
+    # Slug, unique within the show or channel that asks. Left out, the output's own id is used.
     no_audio: bool
     # Drop the audio altogether.
     no_video: bool
@@ -1867,6 +1920,8 @@ class SetDestinationRequest(TypedDict, total=False):
     key: Optional[str]
     # A new stream key. Left out keeps the one it has; an empty string clears it, where the platform allows none.
     label: Optional[str]
+    rendition: Union[RenditionChoice, None]
+    # A new rendition. Left out keeps the one it has; `null` or `{"preset": "copy"}` goes back to sending the stream as it arrives.
     server: Optional[str]
     stream: Optional[str]
 
@@ -2202,6 +2257,18 @@ class Vec2(TypedDict, total=False):
     x: float
     y: float
 
+class VideoShape(TypedDict, total=False):
+    """A picture as it is: codec, size, rate, bitrate."""
+
+    bitrate_kbps: int
+    # Measured or configured. 0 when unknown (a raw source).
+    codec: VideoCodec
+    fps: Fps
+    height: int
+    keyframe_ms: int
+    # 0 when unknown.
+    width: int
+
 class VideoWant(TypedDict, total=False):
     """The video an output wants. Every field left out is taken from the source."""
 
@@ -2335,6 +2402,9 @@ ChannelProtocol = Literal['rtmp', 'srt', 'whip']
 Container = Literal['flv', 'mpeg-ts', 'mp4-fragmented', 'mkv', 'hls', 'll-hls', 'dash', 'rtp', 'webrtc']
 
 ConversionPhase = Literal['running', 'done', 'failed']
+
+# Copied as it arrives, or converted.
+DestinationMode = Literal['copy', 'transcode']
 
 # Where a destination has got to.
 DestinationState = Literal['off', 'waiting', 'connecting', 'live', 'reconnecting', 'failed']
@@ -2679,6 +2749,7 @@ class GeneratedMethods:
         enabled: Optional[bool] = None,
         key: Optional[str] = None,
         label: Optional[str] = None,
+        rendition: Optional[Union[RenditionChoice, None]] = None,
         server: Optional[str] = None,
         stream: Optional[str] = None,
     ) -> Dict[str, Any]:
@@ -2692,6 +2763,8 @@ class GeneratedMethods:
             params["key"] = key
         if label is not None:
             params["label"] = label
+        if rendition is not None:
+            params["rendition"] = rendition
         if server is not None:
             params["server"] = server
         if stream is not None:
@@ -2717,6 +2790,7 @@ class GeneratedMethods:
         enabled: Optional[bool] = None,
         key: Optional[str] = None,
         label: Optional[str] = None,
+        rendition: Optional[Union[RenditionChoice, None]] = None,
         server: Optional[str] = None,
         stream: Optional[str] = None,
     ) -> Dict[str, Any]:
@@ -2730,6 +2804,8 @@ class GeneratedMethods:
             params["key"] = key
         if label is not None:
             params["label"] = label
+        if rendition is not None:
+            params["rendition"] = rendition
         if server is not None:
             params["server"] = server
         if stream is not None:

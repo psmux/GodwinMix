@@ -143,6 +143,17 @@
             "description": "youtube, facebook, twitch, custom or srt.",
             "type": "string"
           },
+          "rendition": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RenditionChoice"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Convert the stream before sending it: `{\"preset\": \"youtube-720p30\"}`\nor a rendition request written out. Left out, or one the stream\nalready matches, the stream is sent as it arrives."
+          },
           "server": {
             "description": "The ingest address. Left out, the platform's own; custom and srt need\none.",
             "type": [
@@ -677,6 +688,38 @@
         },
         "required": [
           "id"
+        ],
+        "type": "object"
+      },
+      "AudioShape": {
+        "description": "A sound as it is.",
+        "properties": {
+          "bitrate_kbps": {
+            "description": "0 when unknown.",
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "channels": {
+            "format": "uint8",
+            "maximum": 255,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "codec": {
+            "$ref": "#/components/schemas/AudioCodec"
+          },
+          "sample_rate": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "codec",
+          "channels",
+          "sample_rate",
+          "bitrate_kbps"
         ],
         "type": "object"
       },
@@ -2043,6 +2086,17 @@
           "label": {
             "type": "string"
           },
+          "plan": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DestinationPlan"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "What the plan gave it, while its stream is live."
+          },
           "platform": {
             "description": "A platform id from the table: youtube, facebook, twitch, custom, srt.",
             "type": "string"
@@ -2052,6 +2106,28 @@
             "format": "uint32",
             "minimum": 0,
             "type": "integer"
+          },
+          "refused": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DestinationRefusal"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Why it is not sending what it asked for, and what would fit."
+          },
+          "rendition": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RenditionChoice"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "What it asked to be converted to. Absent: sent as it arrives."
           },
           "since_ms": {
             "description": "Milliseconds since `state` last changed.",
@@ -2083,6 +2159,122 @@
           "since_ms",
           "kbps",
           "reconnects"
+        ],
+        "type": "object"
+      },
+      "DestinationMode": {
+        "description": "Copied as it arrives, or converted.",
+        "enum": [
+          "copy",
+          "transcode"
+        ],
+        "type": "string"
+      },
+      "DestinationPlan": {
+        "description": "The plan's answer for one destination.",
+        "properties": {
+          "audio": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AudioShape"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "encoder": {
+            "description": "The video encoder, `h264-videotoolbox`, and why that one. Absent for a\ncopy.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "encoder_reason": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "mode": {
+            "$ref": "#/components/schemas/DestinationMode"
+          },
+          "nodes": {
+            "description": "The plan's nodes this destination reads, so a page can show which\nwork it shares with the channel's other destinations.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "reason": {
+            "description": "One sentence: \"copied: the source's video goes out as it is\", \"encoded\nbecause the source is 1920x1080 and this output wants 1280x720\".",
+            "type": "string"
+          },
+          "stream": {
+            "description": "The stream it was planned against, when the destination names `*`.",
+            "type": "string"
+          },
+          "video": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/VideoShape"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "What goes out."
+          }
+        },
+        "required": [
+          "mode",
+          "stream",
+          "reason",
+          "nodes"
+        ],
+        "type": "object"
+      },
+      "DestinationRefusal": {
+        "description": "Why a destination that asked for a rendition is not sending, and what\nwould. `error` on the destination carries the same sentence.",
+        "properties": {
+          "advice": {
+            "description": "Renditions that would fit now, largest first.",
+            "items": {
+              "$ref": "#/components/schemas/RenditionAdvice"
+            },
+            "type": "array"
+          },
+          "code": {
+            "description": "`governor` (the machine has no room), `plan` (nothing here can make\nit), `shed` (it ran and was stopped to keep what is on air).",
+            "type": "string"
+          },
+          "have": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Cost"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "message": {
+            "type": "string"
+          },
+          "need": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Cost"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "code",
+          "message"
         ],
         "type": "object"
       },
@@ -5515,6 +5707,24 @@
         ],
         "type": "object"
       },
+      "RenditionAdvice": {
+        "description": "One thing a refused rendition could be instead, as a button.",
+        "properties": {
+          "request": {
+            "$ref": "#/components/schemas/RenditionRequest",
+            "description": "Send this as the output's `rendition` to take the advice."
+          },
+          "text": {
+            "description": "\"720p30 H.264 on h264-videotoolbox fits\".",
+            "type": "string"
+          }
+        },
+        "required": [
+          "text",
+          "request"
+        ],
+        "type": "object"
+      },
       "RenditionChoice": {
         "anyOf": [
           {
@@ -5607,10 +5817,12 @@
           },
           "container": {
             "$ref": "#/components/schemas/Container",
-            "description": "How the bytes are wrapped on the way out."
+            "default": "flv",
+            "description": "How the bytes are wrapped on the way out. FLV when left out."
           },
           "id": {
-            "description": "Slug, unique within the show or channel that asks.",
+            "default": "",
+            "description": "Slug, unique within the show or channel that asks. Left out, the\noutput's own id is used.",
             "type": "string"
           },
           "no_audio": {
@@ -5634,10 +5846,6 @@
             ]
           }
         },
-        "required": [
-          "id",
-          "container"
-        ],
         "type": "object"
       },
       "ReorderRequest": {
@@ -6119,6 +6327,17 @@
               "string",
               "null"
             ]
+          },
+          "rendition": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RenditionChoice"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "A new rendition. Left out keeps the one it has; `null` or\n`{\"preset\": \"copy\"}` goes back to sending the stream as it arrives."
           },
           "server": {
             "type": [
@@ -7263,6 +7482,48 @@
             "type": "string"
           }
         ]
+      },
+      "VideoShape": {
+        "description": "A picture as it is: codec, size, rate, bitrate.",
+        "properties": {
+          "bitrate_kbps": {
+            "description": "Measured or configured. 0 when unknown (a raw source).",
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "codec": {
+            "$ref": "#/components/schemas/VideoCodec"
+          },
+          "fps": {
+            "$ref": "#/components/schemas/Fps"
+          },
+          "height": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "keyframe_ms": {
+            "description": "0 when unknown.",
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "width": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "codec",
+          "width",
+          "height",
+          "fps",
+          "bitrate_kbps",
+          "keyframe_ms"
+        ],
+        "type": "object"
       },
       "VideoWant": {
         "description": "The video an output wants. Every field left out is taken from the source.",
