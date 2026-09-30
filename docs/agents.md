@@ -71,7 +71,8 @@ of it a director needs, in the order a director needs it:
 
 `program` is the id on air, or `null` when the programme is showing the slate.
 A source's `state` is one of `connecting`, `live`, `stalled` or `failed`, and
-only `live` may be taken. `motion` is a number from 0.0 to 1.0 saying how much
+only `live` may be taken. A source that failed stays `failed` while the core
+retries it, until a retry brings a frame and it reads `live` again. `motion` is a number from 0.0 to 1.0 saying how much
 the source's picture changed between its last two frames: a static slide is
 near 0, a talking head is around 0.1 to 0.3, a sports feed with the camera
 panning goes higher. `program_motion` is the same number for what is on air.

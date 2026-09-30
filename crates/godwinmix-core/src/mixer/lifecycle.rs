@@ -46,21 +46,26 @@ impl Mixer {
             a.reset();
         }
         let input = slot.input.clone();
+        let generation = slot.generation;
         let handle = self.handle.clone();
         let back = id.clone();
         let started = offload::run("restart", id.as_str(), move || {
             let failed = input.restart().err().map(|e| format!("{e:#}"));
-            let _ = handle.send(Command::SourceRestarted(back, failed));
+            let _ = handle.send(Command::SourceRestarted(back, generation, failed));
         });
         if !started {
             slot.input.restart_abandoned();
         }
     }
 
-    /// A restart has come back from its thread.
-    pub(super) fn restarted(&mut self, id: &SourceId, failed: Option<String>) {
-        let Some(slot) = self.sources.iter_mut().find(|s| &s.input.id == id) else {
-            debug!(source = %id, "a restart finished for a source that has since gone");
+    /// A restart has come back from its thread. Applied only to the instance
+    /// it was started for: the source may have been removed and added again
+    /// while it ran, and the new one has nothing to do with this result.
+    pub(super) fn restarted(&mut self, id: &SourceId, generation: u64, failed: Option<String>) {
+        let Some(slot) =
+            self.sources.iter_mut().find(|s| &s.input.id == id && s.generation == generation)
+        else {
+            debug!(source = %id, generation, "a restart finished for a source that has since gone");
             return;
         };
         // The ticks it spent restarting were not a stall.
@@ -143,11 +148,10 @@ impl Mixer {
             return;
         }
         let handle = self.handle.clone();
-        let id = out.id().clone();
         let worker = out.clone();
         let started = offload::run("reconnect", out.id().as_str(), move || {
             let failed = worker.reconnect().err().map(|e| format!("{e:#}"));
-            let _ = handle.send(Command::OutputReconnected(id, failed));
+            let _ = handle.send(Command::OutputReconnected(worker, failed));
         });
         if !started {
             out.reconnect_abandoned();

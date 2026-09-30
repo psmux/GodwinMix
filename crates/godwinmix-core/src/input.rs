@@ -233,6 +233,11 @@ pub struct InputPipeline {
     placement: Vec<Arc<Placement>>,
     /// Set when the pipeline posts an error; the supervisor restarts it.
     failed: Arc<AtomicBool>,
+    /// Set when a restart began with the source failed, until the restart
+    /// brings media. A retry of a source that keeps failing reads as failed
+    /// the whole time, rather than as connecting for the few milliseconds
+    /// between each attempt starting and being refused.
+    retrying: AtomicBool,
     /// Whether this pipeline can be scrubbed, once it has said. `None` until
     /// then, because nothing upstream answers a SEEKING query before the chain
     /// from the source to the proxies is built, and a query nobody answered is
@@ -808,6 +813,7 @@ impl InputPipeline {
             counts: parts.layer_counts,
             placement: parts.placement,
             failed: Arc::new(AtomicBool::new(false)),
+            retrying: AtomicBool::new(false),
             seekable: Mutex::new(None),
             restart_armed: AtomicBool::new(false),
             manifest: ready.manifest,
@@ -1273,7 +1279,7 @@ impl InputPipeline {
         self.health.reset();
         self.has_video.store(false, Ordering::Relaxed);
         self.has_audio.store(false, Ordering::Relaxed);
-        self.failed.store(false, Ordering::Relaxed);
+        self.retrying.store(self.failed.swap(false, Ordering::Relaxed), Ordering::Relaxed);
         self.start()?;
         // The source pads were reactivated by NULL to PLAYING, but the
         // programme and mosaic are separate pipelines and stayed running.
@@ -1422,7 +1428,9 @@ impl InputPipeline {
     }
 
     pub fn observed_state(&self) -> SourceState {
-        if self.failed.load(Ordering::Relaxed) {
+        if self.failed.load(Ordering::Relaxed)
+            || (self.retrying.load(Ordering::Relaxed) && self.never_connected())
+        {
             SourceState::Failed
         } else if self.health.is_stalled(self.config.stall_timeout_secs) {
             SourceState::Stalled
@@ -3300,6 +3308,28 @@ mod tests {
 
         input.mark_failed();
         assert_eq!(input.observed_state(), SourceState::Failed);
+        input.stop();
+    }
+
+    /// A retry of a source that keeps failing reads as failed the whole way
+    /// through, rather than as connecting between each attempt and the refusal
+    /// that follows it. It reads as live again once media arrives, and a
+    /// restart of a source that had not failed reads as connecting.
+    #[test]
+    fn a_retry_of_a_failed_source_reads_as_failed_until_media_arrives() {
+        init();
+        let canvas = CanvasCaps::new(&Canvas::default());
+        let backends = Backends::probe(Accel::Auto, Accel::Auto).unwrap();
+        let input = InputPipeline::build(&test_source(), &canvas, &backends, 15, Instant::now()).unwrap();
+
+        input.mark_failed();
+        let _ = input.restart();
+        assert_eq!(input.observed_state(), SourceState::Failed);
+        input.health.mark_video();
+        assert_eq!(input.observed_state(), SourceState::Live);
+
+        let _ = input.restart();
+        assert_eq!(input.observed_state(), SourceState::Connecting);
         input.stop();
     }
 
