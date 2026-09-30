@@ -5,8 +5,12 @@
 //! frame bus and every transport speak these types and nothing else, so each
 //! can be built, tested and replaced without the others.
 
+mod ask;
+mod presets;
 mod shape;
 
+pub use ask::*;
+pub use presets::*;
 pub use shape::*;
 
 use schemars::JsonSchema;
@@ -16,9 +20,12 @@ use serde::{Deserialize, Serialize};
 /// so an empty request is a plain copy.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
 pub struct RenditionRequest {
-    /// Slug, unique within the show or channel that asks.
+    /// Slug, unique within the show or channel that asks. Left out, the
+    /// output's own id is used.
+    #[serde(default)]
     pub id: String,
-    /// How the bytes are wrapped on the way out.
+    /// How the bytes are wrapped on the way out. FLV when left out.
+    #[serde(default)]
     pub container: Container,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub video: Option<VideoWant>,
