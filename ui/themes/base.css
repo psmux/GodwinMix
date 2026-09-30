@@ -411,6 +411,26 @@ label { display: block; }
 .menu .swatches { display: flex; gap: 4px; padding: 5px 8px; }
 .menu .swatches button { width: 18px; height: 18px; border-radius: 50%; padding: 0; border: var(--border) solid var(--line); }
 
+/* ---------------------------------------------------------------- menu bar */
+
+.menubar-wrap { display: flex; align-items: center; flex: none; }
+.menubar { display: flex; align-items: center; }
+.menubar-title { background: none; border: 0; color: var(--text); padding: 4px 8px; border-radius: var(--radius-sm); }
+.menubar-title:hover, .menubar-title:focus-visible, .menubar-title[aria-expanded="true"] { background: var(--panel2); outline: none; }
+.menubar-all { display: none; }
+.menubar-drop { min-width: 240px; max-height: calc(100vh - 56px); overflow: auto; }
+.menubar-drop button { justify-content: flex-start; align-items: center; }
+.menubar-drop button:focus { background: var(--panel2); outline: none; }
+.menubar-tick { width: 1em; flex: none; color: var(--accent); }
+.menubar-heading { padding: 6px 8px 2px; color: var(--faint); font-size: var(--fs-sm); }
+[data-native-menu] .menubar-wrap { display: none; }
+.project-counts th { text-align: left; font-weight: 600; padding-right: 16px; }
+@media (max-width: 760px) {
+  .menubar { display: none; }
+  .menubar-all { display: inline-block; }
+  .menubar-every { right: 8px; }
+}
+
 /* ---------------------------------------------------------------- empty */
 
 .empty { display: grid; place-items: center; padding: 40px var(--pad); text-align: center; color: var(--dim); }

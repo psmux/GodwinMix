@@ -8,6 +8,7 @@ import { addView, dropView, meterElement, takeMeters } from "../../shell/meter.j
 import { openSettings } from "../../shell/settings.js";
 import { errorToast } from "../../shell/toast.js";
 import { programLabel } from "../../client/store.js";
+import { menubar } from "../../shell/menubar.js";
 
 class HeaderPanel extends HTMLElement {
   static get panel() {
@@ -36,6 +37,9 @@ class HeaderPanel extends HTMLElement {
 
     this.append(
       el("strong", { text: "GodwinMix" }),
+      // File, Edit, View and the rest, before the live controls so they keep
+      // their size; one button in their place on a phone.
+      menubar(this.client),
       this.tally,
       this.ad,
       this.destinations,
