@@ -6,7 +6,7 @@
 // Those are asked for when the group scrolls into view, followed while it
 // stays there, and let go a few seconds after it leaves (AGENTS.md rule 1).
 
-import { showLink } from "./link.js";
+import { showLink, readDetail } from "./link.js";
 import { groups } from "./model.js";
 
 const NO_METHOD = -32601;
@@ -83,7 +83,7 @@ export class RoutingData {
     if (on) this.onscreen.add(group.key);
     else this.onscreen.delete(group.key);
     if (on) return this.want(group);
-    this.timers.set(group.key, setTimeout(() => this.release(group.key), LET_GO_MS));
+    this.timers.set(group.key, setTimeout(() => this.release(group.key), this.letGo ?? LET_GO_MS));
   }
 
   want(group) {
@@ -132,20 +132,8 @@ export class RoutingData {
   }
 
   async readShow(id, link) {
-    const quiet = (p) => p.catch((e) => (e && e.code !== NO_METHOD && console.debug("routing", e), null));
-    const [outputs, sources, plan] = await Promise.all([
-      quiet(link.call("output.list", {})),
-      quiet(link.call("source.list", {})),
-      quiet(link.call("rendition.plan", {})),
-    ]);
-    const s = link.client && link.client.state;
-    const tally = { ...(s && s.tally) };
-    if (s && s.program && !tally[s.program]) tally[s.program] = "program";
-    this.detail[id] = {
-      outputs: list(outputs, "outputs"),
-      sources: list(sources, "sources"),
-      tally: link.tally || tally,
-    };
+    const { detail, plan } = await readDetail(link);
+    this.detail[id] = detail;
     if (plan) this.plans[`s:${id}`] = plan;
     this.changed();
   }
@@ -156,10 +144,4 @@ export class RoutingData {
     for (const t of this.timers.values()) clearTimeout(t);
     for (const off of this.offs) off();
   }
-}
-
-/** `/rpc` answers with the array; some answers wrap it in an object. */
-function list(answer, field) {
-  if (Array.isArray(answer)) return answer;
-  return (answer && answer[field]) || [];
 }

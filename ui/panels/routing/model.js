@@ -71,7 +71,7 @@ function route(plan, id, rendition, destPlan, copyable) {
   if (!rendition || (destPlan && destPlan.mode === "copy") || (nodes.length && !enc)) {
     return copyable
       ? { kind: "route", format: "Copy", where: "no encode", cost: 0, tone: "copy" }
-      : { kind: "route", format: "Programme encode", where: "no extra encode", cost: 0, tone: "copy" };
+      : { kind: "route", format: "Programme encode", where: "no extra encode", cost: 0, tone: "prog" };
   }
   const out = (destPlan && destPlan.video) || null;
   const format = formatWords(rendition, out);

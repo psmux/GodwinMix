@@ -65,10 +65,13 @@ function key(view, show, tab, e) {
   }
 }
 
+/** Where the page goes; a test puts its own `go` here. */
+export const nav = { go: (url) => location.assign(url) };
+
 export function switchTo(id) {
   const url = new URL(location.href);
   url.searchParams.set("show", id);
-  location.assign(url.toString());
+  nav.go(url.toString());
 }
 
 function tabMenu(view, show, x, y) {
