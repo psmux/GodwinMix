@@ -143,6 +143,19 @@ export function obsFields(channel, secret, base, stream = "main") {
   return { server, key, url: server + "/" + key };
 }
 
+/**
+ * A stream name as typed, cut to what every encoder sends in a URL: letters,
+ * digits, dot, dash and underscore. Nothing left is `main`.
+ */
+export function streamName(raw) {
+  return String(raw || "").trim().replace(/[^A-Za-z0-9_.-]/g, "") || "main";
+}
+
+/** A key before Show is pressed: dots, then the last four characters a list already shows. */
+export function masked(hint) {
+  return "\u2022".repeat(12) + (hint || "");
+}
+
 /** The addresses an encoder can reach this mixer at, first one first. */
 export function bases(model, channel) {
   const urls = (model.rtmp && model.rtmp.urls) || [];

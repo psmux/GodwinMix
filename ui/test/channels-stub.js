@@ -110,6 +110,11 @@ const METHODS = {
     this.changed(id);
     return { key };
   },
+  "channel.key.reveal"({ id, key }) {
+    const c = this.channel(id);
+    if (!c.keys.some((k) => k.id === key)) throw Object.assign(new Error(`there is no key '${key}'.`), { code: -32004, data: { channel: id } });
+    return { secret: this.secrets.get(key) };
+  },
   "channel.key.remove"({ id, key }) {
     const c = this.channel(id);
     c.keys = c.keys.filter((k) => k.id !== key);

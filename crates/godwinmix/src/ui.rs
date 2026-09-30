@@ -67,6 +67,8 @@ const ASSETS: &[(&str, &str)] = &[
     ("panels/channels/brands.js", include_str!("../../../ui/panels/channels/brands.js")),
     ("panels/channels/card.js", include_str!("../../../ui/panels/channels/card.js")),
     ("panels/channels/channels.css", include_str!("../../../ui/panels/channels/channels.css")),
+    ("panels/channels/connect-key.js", include_str!("../../../ui/panels/channels/connect-key.js")),
+    ("panels/channels/connect.js", include_str!("../../../ui/panels/channels/connect.js")),
     ("panels/channels/create.js", include_str!("../../../ui/panels/channels/create.js")),
     ("panels/channels/destination-form.js", include_str!("../../../ui/panels/channels/destination-form.js")),
     ("panels/channels/distribute.js", include_str!("../../../ui/panels/channels/distribute.js")),
