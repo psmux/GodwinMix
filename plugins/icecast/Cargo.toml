@@ -1,0 +1,27 @@
+[package]
+name = "gmx-icecast"
+description = "The icecast plugin: the programme's sound to an Icecast or SHOUTcast 2 mount as MP3 or Ogg, and an internet radio stream as a live source"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[[bin]]
+name = "gmx-icecast"
+path = "src/main.rs"
+
+[dependencies]
+godwinmix-sdk = { path = "../../crates/godwinmix-sdk" }
+gmx-netkit = { path = "../netkit" }
+# The programme FIFO an output reads, pumped into an appsrc.
+godwinmix-capture-common = { path = "../capture-common" }
+
+gstreamer = { workspace = true }
+gstreamer-app = { workspace = true }
+serde_json = { workspace = true }
+
+[dev-dependencies]
+# The test's Icecast server checks the source login.
+base64 = { workspace = true }

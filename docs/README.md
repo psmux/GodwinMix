@@ -79,6 +79,7 @@ Start here if you have never run it.
 * [Send and receive RIST](how-to/rist.md)
 * [Show a picture, or a run of pictures](how-to/show-a-picture.md)
 * [Add an IP camera](how-to/add-an-ip-camera.md)
+* [Internet radio: send the sound out, or play a station in](how-to/radio.md)
 * [Run your own code when something happens](how-to/hooks.md)
 * [Turn a bug into a test](how-to/turn-a-bug-into-a-test.md)
 * [Add a built in source kind](how-to/add-a-built-in-source-kind.md)
