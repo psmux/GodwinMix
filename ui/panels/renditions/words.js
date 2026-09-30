@@ -58,7 +58,7 @@ export function planShort(plan, id) {
   if (!node) return "Copied";
   const enc = encoderOf(node);
   const others = (node.serves || []).length - 1;
-  return `${enc.hardware ? "GPU" : "CPU"} ${enc.id}${others > 0 ? `, shared` : ""}`;
+  return `${enc.hardware ? "GPU" : "CPU"} encode${others > 0 ? ", shared" : ""}`;
 }
 
 /** The reason as a clause, "the GPU is full", or "" when it was the first choice. */
@@ -71,10 +71,10 @@ function because(node) {
 
 /** Millicores as a person says them: "half a core", "1.8 cores". */
 export function cores(m) {
-  if (!m) return "none";
-  if (m < 1000) return `${Math.max(1, Math.round(m / 10))}% of one core`;
+  if (!m) return "no CPU";
+  if (m < 1000) return `${Math.max(1, Math.round(m / 10))}% of one CPU core`;
   const n = Math.round(m / 100) / 10;
-  return `${n} core${n === 1 ? "" : "s"}`;
+  return `${n} CPU core${n === 1 ? "" : "s"}`;
 }
 
 function sessions(n) {
@@ -85,7 +85,7 @@ function sessions(n) {
 export function costPhrases(cost) {
   const c = cost || {};
   const out = [];
-  if (c.cpu_millicores) out.push(`${cores(c.cpu_millicores)} of the CPU`);
+  if (c.cpu_millicores) out.push(cores(c.cpu_millicores));
   if (c.device_millis) out.push(`${Math.round(c.device_millis / 10)}% of the GPU`);
   if (c.device_sessions) out.push(sessions(c.device_sessions));
   if (c.egress_kbps) out.push(`${upload(c.egress_kbps)} of upload`);
@@ -111,13 +111,13 @@ export function refusalWords(data) {
   const have = (data && data.have) || {};
   const needs = costPhrases(need);
   const room = [];
-  if (need.cpu_millicores) room.push(have.cpu_millicores ? `${cores(have.cpu_millicores)} of the CPU` : "no CPU to spare");
+  if (need.cpu_millicores) room.push(have.cpu_millicores ? cores(have.cpu_millicores) : "no CPU to spare");
   if (need.device_millis) room.push(have.device_millis ? `${Math.round(have.device_millis / 10)}% of the GPU` : "no GPU time");
   if (need.device_sessions) room.push(have.device_sessions ? sessions(have.device_sessions) : "no GPU sessions");
   if (need.egress_kbps) room.push(`${upload(have.egress_kbps || 0)} of upload`);
   return {
-    need: needs.length ? `This needs about ${list(needs)}.` : "This needs more than the machine has left.",
-    room: room.length ? `Without dropping what is on air, there is room for ${list(room)}.` : "",
+    need: needs.length ? `This format needs about ${list(needs)}.` : "This format needs more than the machine has left.",
+    room: room.length ? `Right now there is room for ${list(room)}.` : "",
   };
 }
 

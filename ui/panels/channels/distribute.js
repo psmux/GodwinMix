@@ -36,7 +36,8 @@ export function destinationStrip(view, first) {
   function update(next) {
     channel = next;
     const list = next.destinations || [];
-    write(lede, "textContent", list.length ? "Straight from the encoder, nothing re-encoded." : "Pick a platform and paste its stream key.");
+    const converted = list.some((d) => d.rendition && d.rendition.preset !== "copy");
+    write(lede, "textContent", !list.length ? "Pick a platform and paste its stream key." : converted ? "Copied from the encoder, or converted here where a platform asked for its own format." : "Straight from the encoder, nothing re-encoded.");
     keyed(tiles, rows, list, (d) => d.id, () => destinationTile(view, () => channel), (d) => d.platform);
     if (add.parentNode !== tiles || tiles.lastChild !== add) tiles.appendChild(add);
     add.hidden = !list.length;

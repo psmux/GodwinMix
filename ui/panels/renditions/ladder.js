@@ -29,7 +29,8 @@ export function ladderError(rungs) {
 
 /** The ladder as a small picture: one rectangle per rung, nested at scale. */
 export function ladderArt(requests) {
-  const tallest = Math.max(...requests.map((r) => (r.video || {}).height || 0), 1);
+  // To one scale for every card, 1080p full, so three sizes look smaller than four.
+  const tallest = Math.max(1080, ...requests.map((r) => (r.video || {}).height || 0));
   const ns = "http://www.w3.org/2000/svg";
   const svg = document.createElementNS(ns, "svg");
   svg.setAttribute("viewBox", "0 0 64 36");

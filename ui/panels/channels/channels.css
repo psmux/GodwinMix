@@ -362,3 +362,7 @@
 .chn-certline { font-size: 12px; font-family: var(--num); margin: 0; }
 .chn-certline.bad { color: var(--warn); font-family: inherit; }
 .chn-certbtns { display: flex; gap: 8px; flex-wrap: wrap; }
+
+/* What the planner did for a destination: "Copied", or which encoder. */
+.chn-tplan { font-size: 10.5px; color: var(--faint); margin: -4px 8px 8px; text-align: center; }
+.chn-tplan:empty { display: none; }

@@ -272,7 +272,7 @@ async function openForm(client, p, output, onDone) {
   const refused = el("div", { hidden: true });
   const m = modal({
     title: editing ? `Edit ${output.id}` : p.title,
-    body: el("div", {}, [el("p.dim.sm", { text: p.where, style: { marginTop: "0" } }), form.el, format.node, refused]),
+    body: el("div", {}, [el("p.dim.sm", { text: p.where, style: { marginTop: "0" } }), form.el, refused]),
     footer: [el("button.btn", { text: "Cancel", onclick: () => m.close() }), save],
   });
 
@@ -345,6 +345,10 @@ async function openForm(client, p, output, onDone) {
     return true;
   }
 
+  // Format sits under the key and above Advanced, which stays last.
+  const advanced = form.el.querySelector("details");
+  if (advanced) advanced.before(format.node);
+  else form.el.after(format.node);
   form.focusFirst();
   return m;
 }

@@ -23,7 +23,7 @@ export function refusalBox(err, retry) {
   const advice = Array.isArray(d.advice) ? d.advice : [];
   const buttons = advice.map((a) => adviceButton(a, retry));
   return el("div.rnd-refusal", { role: "alert" }, [
-    el("strong", { text: "Not started, so nothing on air drops a frame." }),
+    el("strong", { text: "Not started: it would make what is on air drop frames." }),
     el("p", { text: `${words.need} ${words.room}`.trim() }),
     buttons.length ? el("p.rnd-dim", { text: "Any of these fits. Press one to start it instead:" }) : el("p.rnd-dim", { text: "Stop another output, or pick a smaller format above." }),
     buttons.length ? el("div.rnd-advice", {}, buttons) : null,
@@ -32,7 +32,7 @@ export function refusalBox(err, retry) {
 
 function adviceButton(a, retry) {
   const d = describe(a.request);
-  const detail = [d.size, d.fps, d.bitrate, d.codec].filter(Boolean).join(" · ");
+  const detail = [d.size, d.fps, d.bitrate, d.codec].filter(Boolean).join(" · ") || (a.request && !a.request.video ? "No re-encoding" : "");
   const b = el("button.btn.rnd-try", { type: "button", title: detail }, [el("span", { text: a.text || detail || "Try this" }), detail && a.text ? el("span.rnd-dim", { text: detail }) : null]);
   b.onclick = async () => {
     const all = [...b.parentNode.children];

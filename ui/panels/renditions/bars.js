@@ -15,20 +15,25 @@ export function capacityBar(total, used, room, say) {
   const sum = used.reduce((n, u) => n + u.value, 0);
   const kept = Math.max(0, total - sum - room);
   const pct = (n) => `${Math.max(0, Math.min(100, (100 * n) / (total || 1)))}%`;
-  const pieces = used.filter((u) => u.value > 0).map((u) => el("span.rnd-seg", { style: { width: pct(u.value) }, title: `${u.label}: ${say(u.value)}` }));
+  // One hue, strongest for the largest, so a piece and its legend row match
+  // by shade and by order without a rainbow.
+  const shown = used.filter((u) => u.value > 0);
+  const shade = (i) => `color-mix(in srgb, var(--accent) ${Math.max(35, 100 - i * 18)}%, var(--bg))`;
+  const pieces = shown.map((u, i) => el("span.rnd-seg", { style: { width: pct(u.value), background: shade(i) }, title: `${u.label}: ${say(u.value)}` }));
   if (room > 0) pieces.push(el("span.rnd-seg.room", { style: { width: pct(room) }, title: `Room for more: ${say(room)}` }));
   if (kept > 0) pieces.push(el("span.rnd-seg.kept", { style: { width: pct(kept) }, title: `Kept free for what is on air and the page: ${say(kept)}` }));
   const bar = el("div.rnd-bar", { role: "img", "aria-label": `${say(sum)} in use, room for ${say(room)} more` }, pieces);
   const legend = el("ul.rnd-legend", {}, [
-    ...used.filter((u) => u.value > 0).map((u) => row("in", u.label, say(u.value), u.title)),
+    ...shown.map((u, i) => row("in", u.label, say(u.value), u.title, shade(i))),
     row("room", "Room for more", say(room)),
     kept > 0 ? row("kept", "Kept free", say(kept), "What is on air and the page need, which nothing new may take") : null,
   ]);
   return el("div.rnd-barwrap", {}, [bar, legend]);
 }
 
-function row(kind, label, value, title) {
-  return el("li", { title: title || "" }, [el(`span.rnd-key.${kind}`), el("span.rnd-lname", { text: label }), el("span.rnd-lval", { text: value })]);
+function row(kind, label, value, title, colour) {
+  const key = el(`span.rnd-key.${kind}`, colour ? { style: { background: colour } } : {});
+  return el("li", { title: title || label }, [key, el("span.rnd-lname", { text: label }), el("span.rnd-lval", { text: value })]);
 }
 
 /** Encoder sessions as pips: filled for each one held, hollow for each free. */

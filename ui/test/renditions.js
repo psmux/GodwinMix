@@ -23,7 +23,7 @@ export async function renditionTests(test, eq, ok) {
 
   test("a preset is described by its size, rate and bitrate, and badged by its cost", () => {
     eq(model.describe(PRESETS[0].request), { size: "1920×1080", fps: "30 fps", bitrate: "6 Mb/s" });
-    eq(model.describe(PRESETS[5].request), { size: "Sound only", bitrate: "128 kb/s" });
+    eq(model.describe(PRESETS[5].request), { size: "No picture", bitrate: "128 kb/s" });
     eq(model.costClass({ id: "copy" }), "free");
     eq(model.costClass(PRESETS[1], 6000), "light", "720p30 on a machine with room");
     eq(model.costClass(PRESETS[0], 6000), "heavy", "1080p30 on the CPU");
@@ -47,13 +47,13 @@ export async function renditionTests(test, eq, ok) {
     eq(words.planLine(plan, "twitch"), "Encoded on the CPU (x264) because the GPU is full");
     eq(words.planLine(plan, "nobody"), "");
     eq(words.planLine({ nodes: [{ kind: "encode", serves: ["a"], encoder: "x264" }] }, "a"), "Encoded on the CPU (x264)", "an encoder named by id alone");
-    eq(words.planShort(plan, "youtube"), "GPU h264-videotoolbox, shared");
+    eq(words.planShort(plan, "youtube"), "GPU encode, shared");
   });
 
   test("a refusal says what it needs and what is left, in words", () => {
     const w = words.refusalWords(refusal("youtube").data);
-    eq(w.need, "This needs about 1.8 cores of the CPU, one GPU encoder session and 6 Mb/s of upload.");
-    eq(w.room, "Without dropping what is on air, there is room for 60% of one core of the CPU, no GPU sessions and 30 Mb/s of upload.");
+    eq(w.need, "This format needs about 1.8 CPU cores, one GPU encoder session and 6 Mb/s of upload.");
+    eq(w.room, "Right now there is room for 60% of one CPU core, no GPU sessions and 30 Mb/s of upload.");
     ok(words.isRefusal(refusal("x")), "a governor refusal");
     ok(!words.isRefusal({ data: { action: {} } }), "not any other");
   });
@@ -162,8 +162,8 @@ async function addAndRefuseTests(test, eq, ok) {
     eq(stub.rcalls.filter((c) => c.method === "output.add").at(-1).params.rendition, { preset: "youtube-1080p30" });
     const box = form.querySelector(".rnd-refusal");
     ok(box, "the refusal is in the form");
-    ok(box.textContent.includes("This needs about 1.8 cores"), box.textContent);
-    ok(box.textContent.includes("there is room for 60% of one core"), box.textContent);
+    ok(box.textContent.includes("This format needs about 1.8 CPU cores"), box.textContent);
+    ok(box.textContent.includes("there is room for 60% of one CPU core"), box.textContent);
     eq([...box.querySelectorAll(".rnd-try")].map((b) => b.firstChild.textContent), ["720p30 fits", "Same as the source"]);
     ok(dialogs().includes(form), "the form is still open");
   });
@@ -291,7 +291,7 @@ async function channelTileTests(test, eq, ok) {
   await wait(120);
   test("a channel's destination tile says what the plan did, whole on hover", () => {
     const line = host.querySelector(".chn-tplan");
-    eq(line.textContent, "CPU x264");
+    eq(line.textContent, "CPU encode");
     eq(line.title, "Encoded on the CPU (x264) because this machine has no GPU encoder");
     eq(stub.patterns.get("rendition.*"), 1);
   });
