@@ -1,11 +1,12 @@
-// One key in a card's Connect section: its label, and the three things an
-// encoder is given (Server, Stream key and the full URL), each with Copy.
+// One key in a card's Connect section: its label, and what an encoder is
+// given for the protocol chosen above (for RTMP: Server, Stream key and the
+// full URL), each with Copy.
 // The key is dots until Show. Show and Copy ask the core for it once, and
 // the section keeps it only while it is open.
 
 import { el, svg } from "../../shell/dom.js";
 import { errorToast } from "../../shell/toast.js";
-import { obsFields, masked } from "./model.js";
+import { masked } from "./model.js";
 import { copy } from "./keyed.js";
 import { qrPath } from "./qr.js";
 
@@ -14,7 +15,9 @@ const SHUT = "M3 3l18 18M10.6 5.1A10.4 10.4 0 0 1 12 5c6.4 0 10 7 10 7a17 17 0 0
 const KEY = "M14.5 9.5a4 4 0 1 1-2.9-3.8 4 4 0 0 1 2.9 3.8zM13.3 12.3 20 19M17 16l2-2M19 18l1.5-1.5";
 
 /**
- * @param {object} ctx  {channel(), base(), stream(), known(keyId), secret(keyId)}.
+ * @param {object} ctx  {channel(), fields(secret), known(keyId), secret(keyId)}.
+ *   `fields` answers `{rows: [[label, value, holdsKey]], url}` for the
+ *   protocol, address and stream name chosen above.
  *   `known` answers from the section's memory and never asks; `secret` asks
  *   the core when memory has nothing, and is null when the core said no.
  */
@@ -28,15 +31,15 @@ export function keyBlock(ctx, key) {
     el("div.chn-cbody", {}, [rows, qr]),
   ]);
 
-  const fields = (secret) => obsFields(ctx.channel(), secret, ctx.base(), ctx.stream());
+  const fields = (secret) => ctx.fields(secret);
 
   function draw() {
     const secret = shown ? ctx.known(key.id) : null;
     const f = fields(secret || masked(key.hint));
     rows.replaceChildren(
-      line("Server", f.server, async () => f.server),
-      line("Stream key", f.key, async () => (await real())?.key, !secret),
-      line("Full URL", f.url, async () => (await real())?.url, !secret),
+      ...f.rows.map(([label, value, holds], i) =>
+        line(label, value, async () => (holds ? (await real())?.rows[i][1] : value), holds && !secret),
+      ),
     );
     eye.replaceChildren(svg(shown ? SHUT : EYE, 15), el("span", { text: shown ? "Hide" : "Show" }));
     eye.setAttribute("aria-pressed", String(shown));
