@@ -74,8 +74,9 @@ You are on air.
   tile between live, snapshot, icon and label. On a Raspberry Pi choose icon:
   the sources keep running and stay takeable, only the tiles stop showing
   moving pictures, and the mixer stops encoding them.
-* **Producer mode**: Settings, first tab. Tapping a tile then arms it instead of
-  taking it, and Take and Auto buttons appear beside the programme.
+* **Studio mode**: the button under the programme monitor. Clicking a scene or
+  a source then puts it in Preview, and the big Take button between the two
+  monitors (or Space) sends it live.
 
 ## If something is wrong
 

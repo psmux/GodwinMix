@@ -12,7 +12,7 @@ not this table: see [The web UI's keys](#the-web-uis-keys) below.
 | Key | What it does | Method |
 |---|---|---|
 | `1` to `9` | take the nth source on screen | `program.take {source}` |
-| `0` | cut to black, which is the slate | `program.take {source: null}` |
+| `0` | cut to black, which is the slate | `program.take {source: ""}` |
 | `Enter` | take the selected source, for when there are more than nine | `program.take {source}` |
 | `r` | revert to the shot before this one | `program.revert {}` |
 
@@ -100,6 +100,7 @@ the web UI has a pointer, a tray and a scene composer and this has a keyboard.
 |---|---|
 | `1` to `9` | take the nth scene, or the nth input when there are no scenes |
 | `0` | cut to the slate |
+| `Space` | in Studio mode, take Preview to Programme with the chosen transition |
 | `Ctrl+K` | the command palette |
 | `Ctrl+N` | add an input |
 | `Ctrl+F` | filter the tray |
@@ -127,12 +128,15 @@ A number past the end of whichever list is in force does nothing. It does not
 fall through to the other list, because an operator who presses `7` expecting
 the seventh scene should get silence rather than the seventh camera.
 
-In producer mode the number arms rather than takes, the same as a tap on the
+In Studio mode the number arms rather than takes, the same as a tap on the
 tile. Both go through the panel's own activate, so there is one rule about
 arming and it lives with the tiles.
 
-`0` sends `program.take {}`, named neither a source nor a scene. With nothing
-armed that is the slate. The one exception is a scene that is armed: the core
-takes the armed scene when nothing is named, which is what `program.take` has
-meant since before scenes and is not this key's to change. Clear the arming
-first if `0` has to be black.
+`0` sends `program.take {source: ""}`. An empty source is the slate even while
+a scene is armed, so `0` is black in Studio mode as well. `program.take {}`,
+naming nothing, would take the armed scene.
+
+`Space` is `program.take-armed`, which only exists once Studio mode has been
+switched on and does nothing outside it, so outside Studio mode the space bar
+still presses the focused button. `Enter` stays with the tray, where it opens
+the selected tile's settings.

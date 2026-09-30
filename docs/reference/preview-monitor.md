@@ -11,3 +11,30 @@ Nonseekable source tiles show "Continuous live source". Seekable sources retain 
 The `monitor` slot holds the programme panel. Saved layouts that put it in `main` are migrated automatically. The built in control panels use collapsible sections in `main`; outputs and media previously placed in the footer move there as well.
 
 The source audio and seek calls send the required `id` field. Source and output management controls follow the same id contract. `program.take` continues to use `source` or `scene`.
+
+## Studio mode
+
+Loaded the first time Studio mode is switched on (`panels/multiview/studio.js`
+and its stylesheet), so a page that never uses it does not download it.
+
+| What is in Preview | How it got there | What Take sends |
+|---|---|---|
+| a scene | `scene.preview.set {scene}` | `program.take {scene, transition}` |
+| a source | kept by this page only | `program.take {source, transition}` |
+
+Cut sends the same request with no `transition`. Take sends
+`transition: {type, duration_ms}` with the type and length chosen under the
+button, remembered in this browser.
+
+The core's preview holds scenes only, so a source in Preview is this page's
+own: it is drawn from the source's tile in the mosaic the Programme monitor
+already receives, and other pages do not see it. Putting a source in Preview
+disarms the scene with `scene.preview.set {}`, and arming a scene after that
+replaces the source, so there is one thing in Preview.
+
+A page loaded after a scene was armed reads the armed scene from `scene.list`,
+since the status document has no field for it; `event/preview.changed` keeps it
+current after that.
+
+`program.take {source: ""}` is the slate even while a scene is armed. Cut to
+black and `0` send that.

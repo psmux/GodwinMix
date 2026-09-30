@@ -6,12 +6,6 @@ to resize. **Panels and layout** reopens panels and resets the workspace. The
 arrangement is remembered in this browser. See
 [Customize the workspace](customize-the-workspace.md).
 
-Choose **Studio mode** in Programme to prepare a scene in Preview before taking
-it live. **Cut** takes immediately; **Fade** uses the duration selected beside
-it. Preview appears to the left of Programme on a wide panel and above it when
-the panel is narrow. These controls use the same public commands as the CLI.
-Closing or hiding the monitor releases its preview subscriptions.
-
 Sources are shared inputs. A scene arranges those inputs on screen, and the same source can be used in several scenes. A new empty collection starts with a Default scene, containing the configured sources when available. Drag sources onto a scene to add them, then double click the scene to edit its layout. Creating a scene does not put it on air.
 
 Outputs are destinations for the programme feed. They are separate from scenes, so changing a scene does not restart the stream or recording. Media is the shared file library.
@@ -28,6 +22,36 @@ max_takes_per_minute = 120
 A configured shot hold still applies to sources, scenes and media takes. Automation installations may choose a longer hold. Set `flash_guard = true` to retain the separate brightness based cut hold.
 
 The audio slider changes volume. Mute is independent of volume, and unmuting restores that level. Seekable clips have a position slider. Test generators, cameras and live streams show "Continuous live source" because they have no end position or loop setting.
+
+## Studio mode
+
+Press **Studio mode** under the Programme monitor to get a Preview beside it.
+You set up the next shot in Preview, then send it to Programme when you are
+ready. Nothing reaches the audience until you do.
+
+* Preview is on the left with a green frame, Programme on the right with a red
+  one. On a narrow panel Preview sits above Programme.
+* Click a scene tab, a scene tile or a source tile and it goes into Preview.
+  The number keys do the same for scenes 1 to 9. Nothing goes on air.
+* **Take**, the big button between the monitors, sends Preview to Programme
+  with the transition and length chosen under it (Fade or Move, 0.25 s to 2 s).
+  Space does the same, and so does a double click on the Preview picture.
+* **Cut** sends it at once, with no transition.
+* **Take the preview to programme** and **Cut the preview to programme** are in
+  the palette (Ctrl+K) as well.
+
+After a take, Preview keeps what you just sent, so both monitors show the same
+shot until you pick the next one. That is what the mixer does with an armed
+scene, and a source behaves the same way.
+
+A scene whose sources are not all running cannot be taken. The Preview says
+which ones are missing, and the picture shows the scene without them. Get them
+running, or open the scene with the pencil beside its tab and delete them.
+
+**Cut to black** at the top of the page, and `0`, go to black even while
+something is in Preview.
+
+Closing or hiding the monitor releases its preview subscriptions.
 
 ## Audio desk
 
