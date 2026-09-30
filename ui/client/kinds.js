@@ -282,6 +282,23 @@ export function categoryOf(kind) {
  * purpose and only for the picker's first guess: the server decides, and
  * anything this gets wrong is corrected the moment the source reports back.
  */
+/**
+ * The kind a source's tile is drawn as. Its type says it plainly; a plugin
+ * source's address is hidden ("…"), and reading the address alone drew every
+ * camera, microphone and test pattern as a video file.
+ */
+const KIND_OF_TYPE = {
+  camera: "camera", screen: "screen", "audio-device": "mic", test: "pattern", image: "media",
+  browser: "page", layered: "page", ndi: "stream", srt: "stream", rtmp: "stream", hls: "stream",
+  rtsp: "stream", rtp: "stream", udp: "stream", ingest: "stream", ipcam: "camera", decklink: "camera",
+  icecast: "mic", file: "file", exec: "exec",
+};
+
+export function kindOfSource(source) {
+  const prefix = String((source && (source.type || source.kind)) || "").split("/")[0];
+  return KIND_OF_TYPE[prefix] || kindOfUri(source && source.uri);
+}
+
 export function kindOfUri(uri) {
   const u = String(uri || "").trim();
   if (!u) return "file";
