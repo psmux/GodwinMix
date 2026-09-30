@@ -27,6 +27,11 @@ export class Channels {
   load(answer) {
     this.byId.clear();
     if (answer && answer.rtmp) this.rtmp = answer.rtmp;
+    // Which ports are open and why, where this machine is, and what RTMPS
+    // answers with. A core from before protocols sends none of them.
+    this.listeners = (answer && answer.listeners) || [];
+    this.hosts = (answer && answer.hosts) || [];
+    this.certificate = (answer && answer.certificate) || null;
     for (const c of (answer && answer.channels) || []) this.put(c);
   }
 

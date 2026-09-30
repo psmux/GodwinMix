@@ -6792,6 +6792,82 @@
         "x-scope": "admin"
       }
     },
+    "/api/v1/channels/certificate/generate": {
+      "post": {
+        "description": "JSON-RPC method `channel.certificate.generate`. Needs the `admin` scope. Accepts `idempotency_key`, honoured for 24 hours.",
+        "operationId": "channel.certificate.generate",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CertificateGenerateRequest"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CertificateInfo"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Make a self signed certificate for RTMPS, for this machine's addresses unless names are given. Encoders must be told to accept it; one from a certificate authority needs no such step.",
+        "tags": [
+          "channel"
+        ],
+        "x-destructive": false,
+        "x-idempotent": false,
+        "x-scope": "admin"
+      }
+    },
+    "/api/v1/channels/certificate/set": {
+      "post": {
+        "description": "JSON-RPC method `channel.certificate.set`. Needs the `admin` scope. Accepts `idempotency_key`, honoured for 24 hours.",
+        "operationId": "channel.certificate.set",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CertificateSetRequest"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CertificateInfo"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Give RTMPS a certificate: the PEM of the certificate (and its chain) and of its private key, as a certificate authority issued them. Checked before it is kept; the key is sealed and never read back.",
+        "tags": [
+          "channel"
+        ],
+        "x-destructive": false,
+        "x-idempotent": false,
+        "x-scope": "admin"
+      }
+    },
     "/api/v1/channels/{id}": {
       "delete": {
         "description": "JSON-RPC method `channel.remove`. Needs the `admin` scope. Destructive: accepts `dry_run: true`, and on a token whose policy is `confirm = required` it is refused once with -32020 and a confirm token. Accepts `idempotency_key`, honoured for 24 hours.",
@@ -6876,104 +6952,6 @@
         "x-destructive": false,
         "x-idempotent": true,
         "x-scope": "read"
-      }
-    },
-    "/api/v1/channels/{id}/certificate": {
-      "post": {
-        "description": "JSON-RPC method `channel.certificate.set`. Needs the `admin` scope. Accepts `idempotency_key`, honoured for 24 hours.",
-        "operationId": "channel.certificate.set",
-        "parameters": [
-          {
-            "description": "The id, as listed by the matching list call.",
-            "in": "path",
-            "name": "id",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/CertificateSetRequest"
-              }
-            }
-          },
-          "required": false
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/CertificateInfo"
-                }
-              }
-            },
-            "description": "the full resulting object, so no follow up read is needed"
-          },
-          "default": {
-            "$ref": "#/components/responses/Error"
-          }
-        },
-        "summary": "Give RTMPS a certificate: the PEM of the certificate (and its chain) and of its private key, as a certificate authority issued them. Checked before it is kept; the key is sealed and never read back.",
-        "tags": [
-          "channel"
-        ],
-        "x-destructive": false,
-        "x-idempotent": false,
-        "x-scope": "admin"
-      }
-    },
-    "/api/v1/channels/{id}/certificate/generate": {
-      "post": {
-        "description": "JSON-RPC method `channel.certificate.generate`. Needs the `admin` scope. Accepts `idempotency_key`, honoured for 24 hours.",
-        "operationId": "channel.certificate.generate",
-        "parameters": [
-          {
-            "description": "The id, as listed by the matching list call.",
-            "in": "path",
-            "name": "id",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/CertificateGenerateRequest"
-              }
-            }
-          },
-          "required": false
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/CertificateInfo"
-                }
-              }
-            },
-            "description": "the full resulting object, so no follow up read is needed"
-          },
-          "default": {
-            "$ref": "#/components/responses/Error"
-          }
-        },
-        "summary": "Make a self signed certificate for RTMPS, for this machine's addresses unless names are given. Encoders must be told to accept it; one from a certificate authority needs no such step.",
-        "tags": [
-          "channel"
-        ],
-        "x-destructive": false,
-        "x-idempotent": false,
-        "x-scope": "admin"
       }
     },
     "/api/v1/channels/{id}/destination": {

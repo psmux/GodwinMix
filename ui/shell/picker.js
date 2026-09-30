@@ -260,9 +260,9 @@ function openSourcePicker(client, kinds, plugins, opts) {
   function channelEntry() {
     return {
       icon: "stream",
-      name: "An RTMP channel that OBS, a phone or an encoder publishes to",
+      name: "A channel that OBS, a phone or an encoder publishes to",
       note: "Each live stream on it becomes a source by itself",
-      label: "Add RTMP Channel",
+      label: "Add Channel",
       run: () => addChannel(client),
       added: () => false,
     };
