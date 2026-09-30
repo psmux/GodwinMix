@@ -18,11 +18,14 @@ gstreamer = { workspace = true }
 gstreamer-video = { workspace = true }
 gstreamer-audio = { workspace = true }
 gstreamer-app = { workspace = true }
-gstreamer-pbutils = { workspace = true }
+# `v1_20` for the RFC 6381 codec string an HLS playlist names each rung by.
+gstreamer-pbutils = { workspace = true, features = ["v1_20"] }
 gstreamer-controller = { workspace = true }
 # The net clock: a time provider on the core, a client clock on a node.
 gstreamer-net = { workspace = true }
 glib = { workspace = true }
+# HLS segments, shared by reference with every viewer. See `hls/`.
+bytes = { workspace = true }
 
 tokio = { workspace = true, features = ["rt-multi-thread", "macros", "sync", "signal", "time", "io-std", "io-util", "fs", "net", "process"] }
 

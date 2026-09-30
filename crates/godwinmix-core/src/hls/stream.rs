@@ -1,0 +1,165 @@
+//! One HLS output as the server sees it: its rungs, its viewers, and the
+//! registry the control port looks outputs up in.
+//!
+//! The registry is process wide because the two halves never meet
+//! otherwise: an output is built by the mixer thread from its config, and a
+//! request arrives on the server's runtime with only an output id. The map is
+//! read on every request and written when an output comes or goes, so it is
+//! an `RwLock` held for a lookup and a clone of an `Arc`.
+
+use super::playlist::{self, Report, Variant};
+use super::track::{Track, TrackKind};
+use super::viewers::Viewers;
+use super::HlsParams;
+use parking_lot::RwLock;
+use serde_json::{json, Value};
+use std::collections::BTreeMap;
+use std::sync::{Arc, OnceLock};
+use std::time::Duration;
+
+pub struct Stream {
+    pub id: String,
+    pub params: HlsParams,
+    tracks: RwLock<Vec<Arc<Track>>>,
+    pub viewers: Viewers,
+}
+
+impl Stream {
+    pub fn new(id: &str, params: HlsParams) -> Stream {
+        // A viewer counts for two windows after its last fetch.
+        let horizon = Duration::from_secs(u64::from(params.window_s) * 2);
+        Stream { id: id.to_string(), params, tracks: RwLock::new(Vec::new()), viewers: Viewers::new(horizon) }
+    }
+
+    /// A rung, or the audio. One already under this id and of this kind is
+    /// kept, ring and all, so an output rebuilt after an error carries on
+    /// numbering where it was and players see one discontinuity, not a new
+    /// stream.
+    pub fn add_track(&self, id: &str, kind: TrackKind, declared_kbps: u32) -> Arc<Track> {
+        let mut tracks = self.tracks.write();
+        if let Some(t) = tracks.iter().find(|t| t.id == id && t.kind == kind) {
+            t.update_info(|i| i.declared_kbps = declared_kbps);
+            return t.clone();
+        }
+        tracks.retain(|t| t.id != id);
+        let track = Arc::new(Track::new(id, kind, self.params, declared_kbps));
+        tracks.push(track.clone());
+        track
+    }
+
+    pub fn remove_track(&self, id: &str) {
+        self.tracks.write().retain(|t| t.id != id);
+    }
+
+    pub fn track(&self, id: &str) -> Option<Arc<Track>> {
+        self.tracks.read().iter().find(|t| t.id == id).cloned()
+    }
+
+    pub fn tracks(&self) -> Vec<Arc<Track>> {
+        self.tracks.read().clone()
+    }
+
+    /// Where every other video rung has got, for one rung's playlist.
+    pub fn reports_for(&self, id: &str) -> Vec<Report> {
+        self.tracks()
+            .iter()
+            .filter(|t| t.id != id && t.kind == TrackKind::Video)
+            .filter_map(|t| {
+                let pos = t.position();
+                let (last_msn, last_part) = match pos.open {
+                    Some((m, n)) if n > 0 => (m, Some(n - 1)),
+                    _ => (pos.complete?, None),
+                };
+                Some(Report { id: t.id.clone(), last_msn, last_part })
+            })
+            .collect()
+    }
+
+    /// Every track has a whole segment and knows its codec, which is when a
+    /// multivariant playlist can say anything true.
+    pub fn ready(&self) -> bool {
+        let tracks = self.tracks();
+        !tracks.is_empty()
+            && tracks.iter().all(|t| t.position().complete.is_some() && !t.info().codecs.is_empty())
+    }
+
+    /// The multivariant playlist. Peak bandwidth is what was measured over
+    /// the window, or what the rendition asked for if that is higher.
+    pub fn master(&self) -> String {
+        let variant = |t: &Arc<Track>| {
+            let info = t.info();
+            let declared = u64::from(info.declared_kbps) * 1000;
+            let (peak, average) = t.measured_bps().map(|(p, a)| (p, Some(a))).unwrap_or((0, None));
+            Variant { id: t.id.clone(), bandwidth: peak.max(declared).max(1), average, info }
+        };
+        let tracks = self.tracks();
+        let video: Vec<Variant> = tracks.iter().filter(|t| t.kind == TrackKind::Video).map(variant).collect();
+        let audio = tracks.iter().find(|t| t.kind == TrackKind::Audio).map(variant);
+        playlist::master(&video, audio.as_ref())
+    }
+
+    pub fn memory(&self) -> usize {
+        self.tracks().iter().map(|t| t.memory()).sum()
+    }
+
+    /// What `output.list` shows for this output.
+    pub fn status(&self) -> Value {
+        let rungs: Vec<Value> = self
+            .tracks()
+            .iter()
+            .map(|t| {
+                let info = t.info();
+                json!({
+                    "id": t.id,
+                    "kind": if t.kind == TrackKind::Video { "video" } else { "audio" },
+                    "codecs": info.codecs,
+                    "width": info.width,
+                    "height": info.height,
+                    "segments": t.view().segments.iter().filter(|s| s.complete).count(),
+                    "last_msn": t.position().newest(),
+                    "memory_bytes": t.memory(),
+                })
+            })
+            .collect();
+        json!({
+            "url": format!("/hls/{}/master.m3u8", self.id),
+            "low_latency": self.params.low_latency(),
+            "viewers": self.viewers.count(),
+            "egress_kbps": self.viewers.egress_kbps(),
+            "memory_bytes": self.memory(),
+            "rungs": rungs,
+        })
+    }
+}
+
+fn registry() -> &'static RwLock<BTreeMap<String, Arc<Stream>>> {
+    static STREAMS: OnceLock<RwLock<BTreeMap<String, Arc<Stream>>>> = OnceLock::new();
+    STREAMS.get_or_init(Default::default)
+}
+
+/// Publish an output under its id, replacing one of the same id.
+pub fn publish(stream: Arc<Stream>) {
+    registry().write().insert(stream.id.clone(), stream);
+}
+
+/// Take an output down, if the one published under its id is still this one.
+pub fn withdraw(stream: &Arc<Stream>) {
+    let mut map = registry().write();
+    if map.get(&stream.id).is_some_and(|s| Arc::ptr_eq(s, stream)) {
+        map.remove(&stream.id);
+    }
+}
+
+pub fn get(id: &str) -> Option<Arc<Stream>> {
+    registry().read().get(id).cloned()
+}
+
+pub fn ids() -> Vec<String> {
+    registry().read().keys().cloned().collect()
+}
+
+/// Everything every HLS output is sending, in kbit/s: the number the
+/// governor adds to its uplink budget.
+pub fn egress_kbps() -> u32 {
+    registry().read().values().map(|s| s.viewers.egress_kbps()).sum()
+}
