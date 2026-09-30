@@ -14,7 +14,7 @@ impl Relay {
             .map_err(|e| RpcError::internal(format!("show {} would not open /rpc: {e}", self.show)).with("show", self.show.as_str()))
     }
 
-    pub(super) async fn to_show(&mut self, m: Up) {
+    pub(super) async fn send_show(&mut self, m: Up) {
         if let Some(up) = self.up.as_mut() {
             let _ = up.send(m).await;
         }

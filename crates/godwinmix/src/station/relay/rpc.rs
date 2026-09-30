@@ -72,11 +72,11 @@ impl Relay {
             tokio::select! {
                 m = c_rx.next() => match m {
                     Some(Ok(Message::Text(text))) => {
-                        if let Some(reply) = self.from_client(text.as_str(), &mut up_rx, &answers).await {
+                        if let Some(reply) = self.client_frame(text.as_str(), &mut up_rx, &answers).await {
                             if send(&mut c_tx, reply).await.is_err() { break "the client stopped reading"; }
                         }
                     }
-                    Some(Ok(Message::Binary(b))) => { self.to_show(Up::Binary(b)).await; }
+                    Some(Ok(Message::Binary(b))) => { self.send_show(Up::Binary(b)).await; }
                     Some(Ok(_)) => {}
                     _ => break "the client hung up",
                 },
@@ -112,7 +112,7 @@ impl Relay {
 
     /// One frame from the client. Answers with a frame to write back, when
     /// there is one to write now.
-    async fn from_client(&mut self, text: &str, up_rx: &mut Option<SplitStream<Upstream>>, answers: &mpsc::Sender<Value>) -> Option<Value> {
+    async fn client_frame(&mut self, text: &str, up_rx: &mut Option<SplitStream<Upstream>>, answers: &mpsc::Sender<Value>) -> Option<Value> {
         let frame: Value = serde_json::from_str(text).unwrap_or(Value::Null);
         let method = frame.get("method").and_then(Value::as_str).unwrap_or_default().to_string();
         let params = frame.get("params").cloned().unwrap_or(Value::Null);
@@ -140,7 +140,7 @@ impl Relay {
                 Err(e) => return frame.get("id").map(|id| rpc::error_frame(id, &e, "")),
             }
         }
-        self.to_show(Up::Text(text.into())).await;
+        self.send_show(Up::Text(text.into())).await;
         None
     }
 }
