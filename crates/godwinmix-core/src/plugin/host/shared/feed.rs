@@ -29,7 +29,7 @@ const MAX_READERS: u32 = 16;
 /// Frames one reader may hold. A mixer's programme queue, its thumbnail and
 /// `videorate` each keep a frame, so three was too few to never wait.
 const LEASES: u32 = 8;
-/// A device that has said nothing for this long is reopened.
+/// A device that sent pictures and then nothing for this long is reopened.
 const SILENT_NS: u64 = 3_000_000_000;
 
 /// What a feed needs to start, kept by the source across handovers.
@@ -44,12 +44,14 @@ pub struct Plan {
 
 pub struct Feed {
     id: String,
+    /// Whether silence means the device failed. A camera that stops is
+    /// broken; a channel with nobody publishing to it is only waiting.
+    silence_is_failure: bool,
     sidecar: SidecarSource,
     pipeline: gst::Pipeline,
     published: Arc<AtomicU64>,
     /// From a frame reaching this process from the plugin to its publish.
     pub through: Arc<Samples>,
-    started_ns: u64,
     /// Held for as long as the feed lives, and dropped after everything else.
     _claim: Claim,
 }
@@ -82,11 +84,11 @@ impl Feed {
         }
         Ok(Feed {
             id: plan.build.id.clone(),
+            silence_is_failure: matches!(plan.name, BusName::Camera(_)),
             sidecar,
             pipeline,
             published,
             through,
-            started_ns: monotonic_ns(),
             _claim: claim,
         })
     }
@@ -115,9 +117,12 @@ impl Feed {
                 }
             }
         }
-        let quiet_since = self.published.load(Relaxed).max(self.started_ns);
-        (monotonic_ns().saturating_sub(quiet_since) > SILENT_NS)
-            .then(|| "the device sent no picture for 3 s".to_string())
+        // Only once it has sent something: a camera that takes its time to wake
+        // is starting, not failing, and the plugin's own handshake and health
+        // say when it will not start at all.
+        let last = self.published.load(Relaxed);
+        let silent = last != 0 && monotonic_ns().saturating_sub(last) > SILENT_NS;
+        (silent && self.silence_is_failure).then(|| "the device sent nothing for 3 s".to_string())
     }
 
     pub fn sidecar(&mut self) -> &mut SidecarSource {
