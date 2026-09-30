@@ -6,7 +6,7 @@
 name = "udp"
 version = "0.1.0"
 api = 1
-description = "Receive and send MPEG-TS over UDP or RTP, unicast or multicast. Joins a group on the interface you choose, source specific where the network supports it, picks one program out of a multiplex, drops stuffing and counts lost packets without ever stalling. Sends with a TTL, seven packets to a datagram and an optional constant bitrate for hardware receivers."
+description = "MPEG-TS over UDP or RTP, unicast or multicast. Takes one program out of an IRD, encoder or IPTV feed, or puts the programme on a group."
 license = "Apache-2.0"
 authors = ["GodwinMix"]
 repository = "https://github.com/psmux/godwinmix"

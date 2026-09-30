@@ -100,7 +100,7 @@ pub fn explain(failure: &str, address: &str) -> String {
              receiving on that port. Choose another port, or remove the other source. ({failure})"
         );
     }
-    if lower.contains("multicast") || lower.contains("no such device") {
+    if ["multicast", "membership", "no such device", "interface not found"].iter().any(|w| lower.contains(w)) {
         return format!(
             "could not join the group on {address}. Check the interface name in the source's \
              settings (leave it empty for the default route). ({failure})"

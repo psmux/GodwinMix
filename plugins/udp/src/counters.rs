@@ -76,8 +76,11 @@ impl Counters {
         }
     }
 
+    /// TS packets lost, which is what health reports. An RTP datagram that
+    /// went missing shows here too, as the seven packets it carried, so the
+    /// RTP count is not added on top.
     pub fn lost(&self) -> u64 {
-        self.ts_lost.load(Relaxed) + self.rtp_lost.load(Relaxed)
+        self.ts_lost.load(Relaxed)
     }
 
     pub fn json(&self) -> Value {

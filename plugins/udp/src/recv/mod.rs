@@ -160,7 +160,7 @@ fn udpsrc(s: &Settings) -> Result<gst::Element, String> {
     src.set_property("buffer-size", (s.receive_buffer_kb * 1024) as i32);
     src.set_property("retrieve-sender-address", false);
     if !s.interface.is_empty() {
-        src.set_property("multicast-iface", &s.interface);
+        src.set_property("multicast-iface", crate::iface::name_of(&s.interface));
     }
     if let Some(source) = &e.source {
         src.set_property("multicast-source", format!("+{source}"));

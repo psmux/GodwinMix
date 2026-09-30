@@ -136,6 +136,72 @@ fn a_real_encoder_on_the_loopback_arrives_and_reports_ok() {
     assert!(ok, "{health:?}");
 }
 
+/// Send `count` copies of one datagram to a group, out of the named interface.
+/// `udpsink` with the interface set the way `udp/output` sets it, because the
+/// standard library cannot choose the interface multicast leaves by.
+fn multicast_out(iface: &str, group: &str, port: u16, count: usize, d: &[u8]) {
+    let line = format!(
+        "appsrc name=in format=bytes ! udpsink name=out host={group} port={port} multicast-iface={iface} \
+         auto-multicast=false sync=false"
+    );
+    let pipeline = gst::parse::launch(&line).unwrap().downcast::<gst::Pipeline>().unwrap();
+    let src = pipeline.by_name("in").unwrap();
+    pipeline.set_state(gst::State::Playing).unwrap();
+    let sink = pipeline.by_name("out").unwrap();
+    crate::iface::send_multicast_out(&sink, iface).expect("the interface is set");
+    for _ in 0..count {
+        let _: gst::FlowReturn = src.emit_by_name("push-buffer", &[&gst::Buffer::from_slice(d.to_vec())]);
+        std::thread::sleep(Duration::from_millis(20));
+    }
+    std::thread::sleep(Duration::from_millis(200));
+    let _ = pipeline.set_state(gst::State::Null);
+}
+
+/// Two receivers on one group and port, joined on the loopback interface by
+/// name, both get the feed. The group is joined on `lo0` (macOS) or `lo`
+/// (Linux), which is also the test that the interface setting is honoured:
+/// the datagrams leave by the loopback and nowhere else.
+#[test]
+fn two_receivers_of_one_group_on_a_named_interface_both_get_it() {
+    let lo = if cfg!(target_os = "macos") { "lo0" } else { "lo" };
+    if cfg!(windows) {
+        eprintln!("skipping: Windows names interfaces differently and this has not been tried there");
+        return;
+    }
+    let port = free_port();
+    let (a, b) = (temp("group-a"), temp("group-b"));
+    let params = json!({"address": "239.255.71.1", "port": port, "interface": lo});
+    let (ra, rb) = (receiver(params.clone(), &a), receiver(params, &b));
+    let mut d = Vec::new();
+    packetize(0, &tables::build_pat(1, 0, 1, 0x1000), &mut 0, &mut d);
+    let p = tables::Program { number: 1, pmt_pid: 0x1000, pcr_pid: 256, ..Default::default() };
+    let s = tables::Stream { pid: 256, stream_type: 0x1B, info: vec![] };
+    packetize(0x1000, &tables::build_pmt(&p, 0, &[&s]), &mut 0, &mut d);
+    multicast_out(lo, "239.255.71.1", port, 25, &d);
+    let both = eventually(|| ra.stats()["datagrams"] == 25 && rb.stats()["datagrams"] == 25);
+    let (sa, sb) = (ra.stats(), rb.stats());
+    drop((ra, rb));
+    let _ = (std::fs::remove_file(&a), std::fs::remove_file(&b));
+    assert!(both, "a: {sa}, b: {sb}");
+}
+
+/// macOS refuses a join on an interface that does not exist, and the refusal
+/// says to check the name. Linux's GLib turns an unknown name into index 0,
+/// which is the default route, so there is nothing to refuse there.
+#[cfg(target_os = "macos")]
+#[test]
+fn an_interface_that_does_not_exist_is_refused_with_what_to_check() {
+    let s = Settings::from_params(&json!({"address": "239.255.71.2", "port": free_port(), "interface": "nosuch0"})).unwrap();
+    let err = match Receiver::start(&s, None, Sink::File(temp("nosuch"))) {
+        Ok(r) => {
+            assert!(eventually(|| r.health().state == HealthState::Failing), "{:?}", r.health());
+            r.health().detail.unwrap_or_default()
+        }
+        Err(e) => e,
+    };
+    assert!(err.contains("Check the interface name"), "{err}");
+}
+
 pub fn which(program: &str) -> Option<std::path::PathBuf> {
     let path = std::env::var_os("PATH")?;
     std::env::split_paths(&path).map(|d| d.join(program)).find(|c| c.is_file())
