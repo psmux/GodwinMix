@@ -40,7 +40,8 @@ export function draw(view) {
   view.row.classList.toggle("one", shows.length === 1);
   view.list.replaceChildren(...shows.map((s) => {
     const on = s.id === current;
-    return el("button.showtab", { role: "tab", type: "button", "aria-selected": String(on), tabindex: on ? "0" : "-1", "data-show": s.id, title: s.error || (s.on_air ? `${s.name}, on air: ${s.on_air}` : s.name) }, [
+    const title = `${s.name}${s.on_air ? `, on air: ${s.on_air}` : WORD[s.state] ? `, ${s.state}` : ""}${s.error ? `. ${s.error}` : ""}`;
+    return el("button.showtab", { role: "tab", type: "button", "aria-selected": String(on), tabindex: on ? "0" : "-1", "data-show": s.id, title }, [
       s.on_air ? el("span.dot.onair", { "aria-label": "on air" }) : null,
       el("span.showtab-name", { text: s.name }),
       WORD[s.state] ? el(`span.showtab-state.${s.state}`, { text: WORD[s.state] }) : null,
