@@ -2375,7 +2375,10 @@ async function liveSuite() {
   const { nameOf } = await import("../panels/sources/local.js");
   const addButton = choose.el.querySelector(`[aria-label="Add ${nameOf(nextSource)}"]`);
   addButton.click();
-  await waitFor(() => panel.scenes.mirror.items(addCheck.id).length === 2, 3000, "the chooser to add an existing source");
+  // The item lands in the mirror before the chooser has finished its own
+  // awaits and redrawn the row, so wait for the row as well.
+  await waitFor(() => panel.scenes.mirror.items(addCheck.id).length === 2 &&
+    choose.el.querySelector(`[aria-label="Already in scene: ${nameOf(nextSource)}"]`), 3000, "the chooser to add an existing source");
   test("the scene chooser reuses an existing source through scene.item.add", () => {
     eq(panel.scenes.mirror.items(addCheck.id).length, 2);
     eq(panel.scenes.summary(addCheck.id).sources.slice().sort(), sources.slice().sort());
