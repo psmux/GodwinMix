@@ -92,6 +92,13 @@ reverse proxy with HTTPS (`docs/how-to/reverse-proxy.md`). hls.js needs
 nothing more: it keeps two or three requests open, well inside the six a
 browser allows one host.
 
+## The same thing as DASH
+
+A player that wants DASH opens `/hls/viewers/manifest.mpd?key=...` instead
+(`playback.dash_url_path` in the output's status). It lists the very same
+segments, so it costs nothing more to serve; dash.js plays it about six
+seconds behind.
+
 ## See who is watching
 
 `viewers` on the output's row counts players that fetched something in the

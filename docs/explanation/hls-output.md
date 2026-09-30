@@ -113,6 +113,20 @@ ladder, the programme's own encode is packaged as it is, and its segments are
 as long as its keyframe interval makes them; `EXT-X-TARGETDURATION` follows
 the longest and never shrinks.
 
+## DASH from the same ring
+
+CMAF segments are what DASH plays too, so DASH is one more way of listing
+the ring rather than a second packager. The MPD needs two numbers the
+playlists do not: each track's timescale, read from the init segment's
+`mdhd`, and each segment's decode time, read from its first `moof`'s `tfdt`
+as the cutter sees it go by (`hls/boxes.rs`, which reads those two boxes and
+nothing else). Each `<S>` in a timeline takes its `d` from the gap to the
+next segment's `tfdt`, so the timeline cannot drift from the media, and a run
+of equal gaps collapses to one `r`. dash.js played the four rung ladder at
+1080p, six seconds behind, with no errors. GStreamer's own `dashdemux2`, in
+playbin3, read the MPD, placed itself at the live edge and fetched nothing
+in the few tries it was given, and why is still open.
+
 ## Who may read
 
 The page never puts the control token in a link, because a link is handed to
