@@ -126,6 +126,10 @@ export class Workspace {
   }
   show(id) {
     this.state.hidden = this.state.hidden.filter(x => x !== id);
+    // Already open somewhere: bring that tab forward. Adding it again put a
+    // second "Channels" tab beside the first.
+    const open = model.leaves(this.state.tree).find(g => g.tabs.includes(id));
+    if (open) { open.active = id; this.render(); return; }
     const group = model.leaves(this.state.tree)[0];
     if (group) { group.tabs.push(id); group.active = id; }
     else this.state.tree = model.leaf([id]);

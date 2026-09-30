@@ -64,6 +64,11 @@ export function dockTests(test, eq, ok) {
       workspace.show('test/dock-probe');
       eq(connected, 2);
       ok(workspace.frames.get('test/dock-probe').made.node !== original);
+      // Shown again while it is open: one tab, brought forward, not two.
+      workspace.show('test/dock-probe');
+      const copies = model.leaves(workspace.state.tree).flatMap(g => g.tabs).filter(id => id === 'test/dock-probe');
+      eq(copies.length, 1);
+      eq(connected, 2);
     } finally {
       workspace.destroy(); host.remove();
       if (saved === null) localStorage.removeItem(model.KEY); else localStorage.setItem(model.KEY, saved);
