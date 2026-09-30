@@ -1,11 +1,7 @@
-// The menu bar: File, Edit, View, Sources, Scenes, Outputs, Help.
-//
-// Only the seven titles and the command names are here, because they are on
-// screen from the first paint. What is inside each menu is menus.json, read
-// by menus.js the first time a menu opens, and the same file is what the
-// desktop app builds its native menu from. Every item is a command from the
-// palette's registry, so the menu, the palette and the keyboard can never
-// disagree about what a thing does.
+// The menu bar. Only the titles are here; what is in each menu is
+// menus.json, read by menus.js when a menu first opens, and the desktop app
+// builds its native menu from the same file. Every item is a command from
+// the palette's registry, so menu, palette and keys cannot disagree.
 
 import { el } from "./dom.js";
 import { registerAll, run } from "./commands.js";
@@ -33,6 +29,7 @@ export function menubar(client) {
   bar.addEventListener("keydown", (e) => barKey(bar, e));
   const all = el("button.btn.icon.menubar-all", { text: "☰", title: "Menu (F10)", "aria-label": "Menu", "aria-haspopup": "menu", onclick: () => menus().then((m) => m.openAll(bar, all)) });
   altKeys(bar, all);
+  opened();
   return el("div.menubar-wrap", {}, [bar, all]);
 }
 
@@ -88,9 +85,19 @@ function enter(bar, all) {
   else focusTitle(bar, first);
 }
 
+/** A project was just opened and the page started again: say what it did. */
+function opened() {
+  let said = null;
+  try {
+    said = sessionStorage.getItem("gmx.project.opened");
+    sessionStorage.removeItem("gmx.project.opened");
+  } catch { /* nothing to say */ }
+  if (said) import("./project-open.js").then((m) => m.finished(JSON.parse(said)));
+}
+
 let registered = false;
 
-/** The commands the menu adds. Each one's work is in menus.js or project.js. */
+/** The commands the menu adds; their work is in menu-actions.js. */
 function commands(client) {
   if (registered) return;
   registered = true;
@@ -111,8 +118,7 @@ function commands(client) {
     cmd("help.docs", "Documentation", "Help"),
     cmd("help.about", "About GodwinMix", "Help"),
   ]);
-  // How the desktop app's native menu reaches the page: it runs one of these
-  // in the window, with no other channel into the page and none out of it.
+  // The desktop app's native menu runs these in the window: its one way in.
   window.gmxMenu = {
     run: (id, arg) => run(id, arg),
     native: (on) => document.documentElement.toggleAttribute("data-native-menu", !!on),

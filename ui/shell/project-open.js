@@ -8,6 +8,8 @@ import { modal } from "./modal.js";
 import { toast, errorText } from "./toast.js";
 import { applyPage } from "./project.js";
 
+export const OPENED = "gmx.project.opened";
+
 const PARTS = [["setting", "Settings"], ["source", "Sources"], ["output", "Outputs"], ["channel", "Channels"], ["scene", "Scenes"], ["media", "Clips"]];
 const WORDS = { add: "added", replace: "replaced", remove: "removed", keep: "kept", rename: "renamed", set: "changed", wait: "waiting", skip: "skipped", missing: "missing" };
 
@@ -51,7 +53,15 @@ export function review(client, file, fileName) {
       const done = await client.call("project.import", { file, mode, dry_run: false });
       dialog.close();
       if (mode === "replace") await applyPage(done.page);
-      finished(done);
+      // The page starts again on the project, so every panel draws it from
+      // the mixer rather than from a whole collection arriving as one patch.
+      // What the import said is shown once it is back.
+      try {
+        sessionStorage.setItem(OPENED, JSON.stringify(done));
+        location.reload();
+      } catch {
+        finished(done);
+      }
     } catch (e) {
       openButton.textContent = "Open project";
       openButton.disabled = false;
@@ -92,7 +102,8 @@ function list(title, items) {
   return el("div.col", {}, [el("strong", { text: title }), el("ul.sm", {}, items.map((t) => el("li", { text: t })))]);
 }
 
-function finished(done) {
+/** What an import did, said after the page has started again on it. */
+export function finished(done) {
   const left = [...done.failed, ...done.waiting];
   if (!left.length && !done.needs_restart.length) return toast({ text: `Opened ${done.name || "the project"}.` });
   modal({
