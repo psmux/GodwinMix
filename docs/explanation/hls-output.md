@@ -161,6 +161,7 @@ plus or minus half a point.
 
 The viewer rows are what sharing by reference buys: two percent of one core
 to send 157 Mbit/s, and no memory per viewer at all. The simulated viewers
-are `dev/hls-viewers.py`, each a thread doing what an LL-HLS player does:
-blocking reloads, then every new part. The page is `/test/hls.html` with
-`GMX_UI_DEV=1`.
+are the `hls_viewers` example (`cargo run --release -p godwinmix --example
+hls_viewers -- <master url> --viewers 50 --seconds 60 --pid <core pid>`),
+each a task doing what an LL-HLS player does: blocking reloads, then every
+new part. The page is `/test/hls.html` with `GMX_UI_DEV=1`.
