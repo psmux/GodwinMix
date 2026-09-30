@@ -9,6 +9,7 @@ use std::time::Duration;
 
 use crate::link::{self, Event, Inbox, RegionMsg};
 use crate::ring::Ring;
+use crate::{BusName, Error};
 
 pub struct Conn {
     pub stream: UnixStream,
@@ -57,4 +58,17 @@ pub fn poll_all(fds: &[RawFd], timeout_ms: i32) -> Vec<bool> {
     // SAFETY: a valid array of pollfd of the given length.
     let n = unsafe { libc::poll(p.as_mut_ptr(), p.len() as libc::nfds_t, timeout_ms) };
     p.iter().map(|x| n > 0 && x.revents != 0).collect()
+}
+
+/// Take `path` for this owner: refused if a live owner answers on it,
+/// cleared if the socket was left by one that died.
+pub fn claim_path(name: &BusName, path: &std::path::Path) -> Result<(), Error> {
+    if !path.exists() {
+        return Ok(());
+    }
+    if std::os::unix::net::UnixStream::connect(path).is_ok() {
+        return Err(Error::NameTaken { name: name.to_string(), pid: 0 });
+    }
+    std::fs::remove_file(path)
+        .map_err(|e| Error::Os(format!("removing the stale socket {}: {e}", path.display())))
 }

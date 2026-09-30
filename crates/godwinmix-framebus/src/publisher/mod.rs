@@ -61,7 +61,7 @@ impl Publisher {
         opts: PublisherOptions,
     ) -> Result<Publisher, Error> {
         let path = registry.path(name)?;
-        claim_path(name, &path)?;
+        conn::claim_path(name, &path)?;
         let listener = UnixListener::bind(&path)
             .map_err(|e| Error::Os(format!("binding {}: {e}", path.display())))?;
         listener.set_nonblocking(true)?;
@@ -129,19 +129,6 @@ impl Publisher {
     pub fn stats(&self) -> PublisherStats {
         PublisherStats::read(&self.ring)
     }
-}
-
-/// Take `path` for this owner: refused if a live owner answers on it,
-/// cleared if the socket was left by one that died.
-fn claim_path(name: &BusName, path: &std::path::Path) -> Result<(), Error> {
-    if !path.exists() {
-        return Ok(());
-    }
-    if std::os::unix::net::UnixStream::connect(path).is_ok() {
-        return Err(Error::NameTaken { name: name.to_string(), pid: 0 });
-    }
-    std::fs::remove_file(path)
-        .map_err(|e| Error::Os(format!("removing the stale socket {}: {e}", path.display())))
 }
 
 impl Drop for Publisher {
