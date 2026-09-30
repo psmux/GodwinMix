@@ -41,7 +41,8 @@ pub fn register(reg: &mut Registry<Call>) {
         MethodDef::new(
             "channel.add",
             Scope::Admin,
-            "Make a channel and its first key. The key is in this answer and never again.",
+            "Make a channel and its first key, which is in this answer. channel.key.reveal \
+             reads it again later.",
             handler(add),
         )
         .params(schema_of::<ChannelAddRequest>)
@@ -77,7 +78,7 @@ pub fn register(reg: &mut Registry<Call>) {
             "channel.key.add",
             Scope::Admin,
             "Make another key for a channel, to give to one more person or encoder. The key \
-             is in this answer and never again.",
+             is in this answer, and channel.key.reveal reads it again later.",
             handler(key_add),
         )
         .params(schema_of::<ChannelKeyAddRequest>)
@@ -95,6 +96,19 @@ pub fn register(reg: &mut Registry<Call>) {
         .params(schema_of::<ChannelKeyRemoveRequest>)
         .result(schema_of::<Channel>)
         .destructive(),
+    );
+    reg.register(
+        MethodDef::new(
+            "channel.key.reveal",
+            Scope::Admin,
+            "Read one key of a channel back, to give it to an encoder again. Admin only; \
+             a list shows only the last four characters. Each read is logged with who \
+             asked, never with the key.",
+            handler(key_reveal),
+        )
+        .params(schema_of::<ChannelKeyRevealRequest>)
+        .result(schema_of::<KeyRevealed>)
+        .mutating(false),
     );
 }
 
@@ -139,4 +153,10 @@ async fn key_add(call: Call, params: Value) -> Result<Value, RpcError> {
 async fn key_remove(call: Call, params: Value) -> Result<Value, RpcError> {
     let req: ChannelKeyRemoveRequest = call.params(&params)?;
     run(&call, move |c| c.key_remove(req)).await
+}
+
+async fn key_reveal(call: Call, params: Value) -> Result<Value, RpcError> {
+    let req: ChannelKeyRevealRequest = call.params(&params)?;
+    let caller = call.token.id.clone();
+    run(&call, move |c| c.key_reveal(req, &caller)).await
 }

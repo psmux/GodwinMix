@@ -29,6 +29,7 @@ mod events;
 mod keys;
 mod live;
 mod net;
+mod reveal;
 mod sending;
 mod store;
 mod view;
