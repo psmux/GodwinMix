@@ -20,7 +20,7 @@
 mod board;
 mod io;
 mod link;
-mod meta;
+pub(crate) mod meta;
 mod queue;
 mod rtmp_out;
 mod run;

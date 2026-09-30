@@ -29,6 +29,7 @@ mod auto;
 mod destinations;
 mod edit;
 mod events;
+mod handover;
 mod keys;
 mod live;
 mod net;
@@ -37,12 +38,13 @@ mod reveal;
 mod sending;
 mod store;
 mod tls;
+mod transcode;
 mod view;
 mod whip;
 
 use std::path::PathBuf;
-use std::sync::atomic::{AtomicU16, Ordering};
-use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, AtomicU16, Ordering};
+use std::sync::{Arc, OnceLock, Weak};
 
 use godwinmix_core::mixer::MixerHandle;
 use godwinmix_core::plugin::supervisor::Supervisor;
@@ -52,8 +54,8 @@ use godwinmix_protocol::channels::{CertificateInfo, Channel, ChannelList, RtmpIn
 use godwinmix_protocol::error::RpcError;
 use godwinmix_protocol::types::Event;
 use parking_lot::Mutex;
-use serde_json::{json, Value};
-use tracing::{error, warn};
+use serde_json::Value;
+use tracing::error;
 
 pub use live::Live;
 pub use ports::Ports;
@@ -83,6 +85,15 @@ pub struct Channels {
     /// Destination edits, one at a time, so two cannot seal over each other.
     edits: Mutex<()>,
     port: AtomicU16,
+    /// Destinations that asked for a rendition: their plans and tickets.
+    transcode: transcode::Transcode,
+    /// The table the listener was last handed, so a replan that changes
+    /// nothing does not call it.
+    handed: Mutex<Option<Value>>,
+    /// The renditions' watch thread is running.
+    watching: AtomicBool,
+    /// Itself, for the watch thread.
+    me: OnceLock<Weak<Channels>>,
     plugins: Arc<Supervisor>,
     mixer: MixerHandle,
     scenes: Arc<SceneServer>,
@@ -100,6 +111,7 @@ impl Channels {
         scenes: Arc<SceneServer>,
         secrets: &'static Secrets,
     ) -> Arc<Channels> {
+        let data_dir = runtime_store.as_deref().and_then(|p| p.parent()).map(|p| p.to_path_buf());
         let path = runtime_store.map(|p| store::path_beside(&p));
         let (stored, store) = match path.as_deref().map(store::load) {
             None => (store::Stored::default(), None),
@@ -122,59 +134,20 @@ impl Channels {
             sending: Mutex::new(Vec::new()),
             edits: Mutex::new(()),
             port: AtomicU16::new(ports.rtmp),
+            transcode: transcode::Transcode::new(data_dir),
+            handed: Mutex::new(None),
+            watching: AtomicBool::new(false),
+            me: OnceLock::new(),
             ports,
             plugins,
             mixer,
             scenes,
             secrets,
         });
+        let _ = channels.me.set(Arc::downgrade(&channels));
         channels.hand_over(false);
         events::start(&channels);
         channels
-    }
-
-    /// Give the listener the table: at its next start, and now if `now`.
-    fn hand_over(&self, now: bool) {
-        let records = self.records.lock().clone();
-        let table: Vec<Value> = records
-            .iter()
-            .map(|r| {
-                let keys: Vec<Value> = r
-                    .keys
-                    .iter()
-                    .filter_map(|k| {
-                        let secret = self.secrets.get(&keys::scope(&r.id), &k.id)?;
-                        Some(json!({"id": k.id, "secret": secret}))
-                    })
-                    .collect();
-                let mut row = json!({
-                    "id": r.id,
-                    "app": r.app,
-                    "enabled": r.enabled,
-                    "key_mode": r.key_mode,
-                    "keys": keys,
-                    "protocols": r.protocols,
-                    "destinations": self.destination_table(r),
-                });
-                // TOML has no null, so an RTMPS that is off is left out.
-                if r.rtmps.enabled {
-                    row["rtmps_port"] = json!(r.rtmps.port);
-                }
-                row
-            })
-            .collect();
-        self.hand_over_tls();
-        match toml::Value::try_from(Value::Array(table)) {
-            Ok(value) => self.plugins.set_extra(PLUGIN, "channels", Some(value)),
-            Err(e) => warn!(%e, "the channel table would not convert for the plugin"),
-        }
-        if now {
-            for (instance, answer) in self.plugins.configure_plugin(PLUGIN) {
-                if let Err(e) = answer {
-                    warn!(%instance, error = %format!("{e:#}"), "the channel server did not take the new channel table");
-                }
-            }
-        }
     }
 
     /// Persist, hand the listener the new table, and say what changed.

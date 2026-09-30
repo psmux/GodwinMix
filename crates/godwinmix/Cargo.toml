@@ -30,6 +30,11 @@ godwinmix-core = { workspace = true }
 # For `gmx plugin test --offline`, which replays a transcript against a plugin
 # binary with no core running at all.
 godwinmix-host = { workspace = true }
+# Channel destinations that ask for a rendition are planned by the pure
+# planner and admitted by the governor, both in the core, where the codec
+# catalogue and the streams' shapes are (src/channels/transcode/).
+godwinmix-render = { workspace = true }
+godwinmix-govern = { workspace = true }
 # Tier W, behind the `wasm` feature. Optional because wasmtime is a compiler
 # and most builds do not want one; `docs/reference/wasm.md` has the
 # measurement and the rule.

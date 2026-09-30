@@ -1,7 +1,9 @@
 //! The three destination methods' params.
 
 use schemars::JsonSchema;
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize};
+
+use crate::rendition::RenditionAsk;
 
 /// `channel.destination.add`. Send a channel's stream on to a platform.
 #[derive(Debug, Clone, Default, Serialize, Deserialize, JsonSchema)]
@@ -27,6 +29,11 @@ pub struct AddDestinationRequest {
     /// On by default.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub enabled: Option<bool>,
+    /// Convert the stream before sending it: `{"preset": "youtube-720p30"}`
+    /// or a rendition request written out. Left out, or one the stream
+    /// already matches, the stream is sent as it arrives.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub rendition: Option<RenditionAsk>,
 }
 
 /// `channel.destination.set`. Change one destination, naming only what moves.
@@ -48,6 +55,16 @@ pub struct SetDestinationRequest {
     pub stream: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub enabled: Option<bool>,
+    /// A new rendition. Left out keeps the one it has; `null` or
+    /// `{"preset": "copy"}` goes back to sending the stream as it arrives.
+    #[serde(default, deserialize_with = "present", skip_serializing_if = "Option::is_none")]
+    #[schemars(with = "Option<RenditionAsk>")]
+    pub rendition: Option<Option<RenditionAsk>>,
+}
+
+/// A field that is there, even as `null`, is `Some`; one left out is `None`.
+fn present<'de, D: Deserializer<'de>>(d: D) -> Result<Option<Option<RenditionAsk>>, D::Error> {
+    Option::<RenditionAsk>::deserialize(d).map(Some)
 }
 
 /// `channel.destination.remove`.

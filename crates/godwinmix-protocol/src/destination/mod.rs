@@ -2,14 +2,18 @@
 //! arrives, by remuxing. The wire shapes, the stored shape and the platform
 //! table. `dev/plans/channels-contract.md` is the contract these follow.
 
+mod plan;
 mod platforms;
 mod requests;
 
+pub use plan::*;
 pub use platforms::*;
 pub use requests::*;
 
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
+
+use crate::rendition::RenditionAsk;
 
 /// Where a destination has got to.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
@@ -48,6 +52,15 @@ pub struct Destination {
     pub enabled: bool,
     #[serde(flatten)]
     pub live: DestinationLive,
+    /// What it asked to be converted to. Absent: sent as it arrives.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub rendition: Option<RenditionAsk>,
+    /// What the plan gave it, while its stream is live.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub plan: Option<DestinationPlan>,
+    /// Why it is not sending what it asked for, and what would fit.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub refused: Option<DestinationRefusal>,
 }
 
 /// What a running destination reports. The restreamer fills it in.
@@ -78,6 +91,8 @@ pub struct StoredDestination {
     pub key: Option<String>,
     pub stream: String,
     pub enabled: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub rendition: Option<RenditionAsk>,
 }
 
 impl StoredDestination {
@@ -113,6 +128,9 @@ impl StoredDestination {
             stream: self.stream.clone(),
             enabled: self.enabled,
             live,
+            rendition: self.rendition.clone(),
+            plan: None,
+            refused: None,
         }
     }
 }
@@ -146,6 +164,7 @@ mod tests {
             key: key.map(Into::into),
             stream: "*".into(),
             enabled: true,
+            rendition: None,
         }
     }
 
