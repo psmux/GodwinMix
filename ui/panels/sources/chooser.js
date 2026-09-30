@@ -4,6 +4,7 @@ import { confirmModal } from '../../shell/modal.js';
 import { openPicker } from '../../shell/picker.js';
 import { nameOf } from './local.js';
 import { sourcePreview } from './chooser-preview.js';
+import { airIfNothingIs } from './first-air.js';
 
 /** Reuse a mixer source in a scene without creating another capture pipeline. */
 export async function openSceneSources(client, scenes, scene) {
@@ -22,6 +23,7 @@ export async function openSceneSources(client, scenes, scene) {
       added.add(source.id);
       scenes.undo.record(`Added ${nameOf(source)} to ${scene.name}`);
       await scenes.reread([scene.id]);
+      await airIfNothingIs(client, scenes, scene);
     } finally {
       pending.delete(source.id);
       if (!closed) render(true);

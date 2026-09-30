@@ -58,9 +58,12 @@ gmx-shell.has-workspace {
 @media (max-width: 760px) {
   .dock-frame[data-dock-panel="core/program"] .dock-content { max-height: none; }
 }
-.source-add-tile { min-height: 150px; display: flex; flex-direction: column; justify-content: center; align-items: center; gap: 8px; border: 1px dashed var(--dim); background: transparent; color: var(--dim); }
+/* As tall as the tiles beside it (the grid row stretches it), and its own
+   16:10 when it is alone. The + follows the tile's width, not a fixed 48px. */
+.source-add-tile { container-type: inline-size; min-height: 0; aspect-ratio: 16 / 10; display: flex; flex-direction: column; justify-content: center; align-items: center; gap: clamp(2px, 4cqi, 8px); border: 1px dashed var(--dim); border-radius: var(--radius); background: transparent; color: var(--dim); font-size: clamp(11px, 8cqi, 14px); }
+.gallery:has(.tile) > .source-add-tile { aspect-ratio: auto; }
 .source-add-tile:hover, .source-add-tile:focus-visible { color: var(--accent); border-color: var(--accent); background: var(--select-fill); }
-.source-add-icon { font-size: 48px; line-height: 1; font-weight: 300; }
+.source-add-icon { font-size: clamp(20px, 22cqi, 44px); line-height: 1; font-weight: 300; }
 .scene-add-source { position: absolute; right: 8px; bottom: 8px; font-size: 28px; width: 44px; height: 44px; padding: 0; background: var(--panel); }
 .scene-tab { display: inline-flex; align-items: center; gap: 0; }
 .scene-tabs button.scene-edit:not(.btn), .tile .scene-edit { border: 0; border-radius: var(--radius-sm); background: transparent; color: var(--dim); cursor: pointer; line-height: 1; padding: 0; width: 28px; height: 28px; font-size: 16px; }

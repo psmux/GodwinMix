@@ -4,21 +4,21 @@
 
 :root {
   /* Surfaces, back to front. */
-  --bg: #090b0e;
-  --panel: #12151a;
-  --panel2: #171b21;
-  --raise: #1f242c;
-  --overlay: rgba(4, 6, 9, 0.72);
+  --bg: #232323;
+  --panel: #2d2d2d;
+  --panel2: #353535;
+  --raise: #3e3e3e;
+  --overlay: rgba(0, 0, 0, 0.6);
 
   /* Lines. */
-  --line: #262c35;
-  --line-soft: #1b2028;
+  --line: #474747;
+  --line-soft: #3a3a3a;
 
   /* Text. */
-  --text: #e8ebf0;
-  --dim: #8b93a2;
-  --faint: #5b6373;
-  --on-accent: #06080c;
+  --text: #e6e6e6;
+  --dim: #a6a6a6;
+  --faint: #787878;
+  --on-accent: #101010;
 
   /* Meaning. Saturated red is spent only on what is going out: the tally, the
      on air frame, the ad pill, the top of a meter. Faults use --bad, which is
@@ -60,7 +60,7 @@
   /* Motion. Set --anim to 0s for a still interface. */
   --anim: 0.14s;
   --anim-take: 0.45s;
-  --shadow: 0 8px 28px rgba(0, 0, 0, 0.5);
+  --shadow: 0 8px 28px rgba(0, 0, 0, 0.45);
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -185,6 +185,10 @@ label { display: block; }
 }
 .meter.h { flex-direction: column; align-items: stretch; }
 .meter.h .fill { top: 0; right: auto; background: linear-gradient(to right, var(--ok) 0%, var(--ok) 62%, var(--warn) 82%, var(--live) 100%); }
+
+/* A scroll bar that belongs to the theme: thin, and the colour of a line,
+   so a panel that does scroll does not grow a bright grey gutter. */
+* { scrollbar-width: thin; scrollbar-color: var(--line) transparent; }
 
 /* ---------------------------------------------------------------- gallery */
 

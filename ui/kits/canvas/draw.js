@@ -21,7 +21,7 @@ function palette(root) {
     live: read("--live", "#ff2a36"),
     guide: read("--accent", "#3b82f6"),
     dim: read("--dim", "#9aa0a6"),
-    panel: read("--panel", "#1b1d1f"),
+    panel: read("--panel", "#2d2d2d"),
   };
 }
 

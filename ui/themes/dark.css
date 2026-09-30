@@ -1,18 +1,20 @@
-/* dark: the default. Near black so a lit studio picture is the brightest thing
-   on the screen. Only custom properties here; structure lives in base.css. */
+/* dark: the default. Neutral greys with no tint, the way a broadcast desk
+   looks (Wirecast, vMix), dark enough that a lit studio picture is still the
+   brightest thing on the screen. Only custom properties here; structure
+   lives in base.css. */
 
 :root {
-  --bg: #090b0e;
-  --panel: #12151a;
-  --panel2: #171b21;
-  --raise: #1f242c;
-  --overlay: rgba(4, 6, 9, 0.72);
-  --line: #262c35;
-  --line-soft: #1b2028;
-  --text: #e8ebf0;
-  --dim: #8b93a2;
-  --faint: #5b6373;
-  --on-accent: #06080c;
+  --bg: #232323;
+  --panel: #2d2d2d;
+  --panel2: #353535;
+  --raise: #3e3e3e;
+  --overlay: rgba(0, 0, 0, 0.6);
+  --line: #474747;
+  --line-soft: #3a3a3a;
+  --text: #e6e6e6;
+  --dim: #a6a6a6;
+  --faint: #787878;
+  --on-accent: #101010;
   --live: #ff2a36;
   --bad: #d9584c;
   --ok: #34d07f;
@@ -20,5 +22,5 @@
   --accent: #5590ff;
   --select: #5590ff;
   --select-fill: rgba(85, 144, 255, 0.16);
-  --shadow: 0 8px 28px rgba(0, 0, 0, 0.5);
+  --shadow: 0 8px 28px rgba(0, 0, 0, 0.45);
 }
