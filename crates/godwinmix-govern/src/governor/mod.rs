@@ -48,6 +48,8 @@ pub(crate) struct Inner {
     load: Arc<LoadCell>,
     pub(crate) book: Mutex<Book>,
     sampler: Mutex<Option<Sampler>>,
+    /// The station, for a show: every claim goes there. See `remote.rs`.
+    pub(crate) remote: RwLock<Option<Arc<dyn crate::remote::Remote>>>,
 }
 
 /// One per machine. Cheap to clone; every clone is the same governor.
@@ -76,6 +78,7 @@ impl Governor {
                 load: Arc::new(LoadCell::default()),
                 book: Mutex::new(Book::default()),
                 sampler: Mutex::new(None),
+                remote: RwLock::new(None),
             }),
         }
     }
@@ -130,6 +133,13 @@ impl Governor {
 impl Inner {
     pub(crate) fn release(&self, id: u64) {
         self.book.lock().held.remove(&id);
+    }
+
+    /// A ticket the station holds for this show.
+    pub(crate) fn release_remote(&self, id: u64) {
+        if let Some(remote) = self.remote.read().clone() {
+            remote.release(id);
+        }
     }
 }
 

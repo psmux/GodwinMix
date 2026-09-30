@@ -8,10 +8,10 @@
 
 use crate::profile::Profile;
 use godwinmix_protocol::rendition::{Cost, EncoderSlot, VideoShape};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 /// What a piece of work is, which decides when it is shed.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case", tag = "kind")]
 pub enum Kind {
     Thumbnail,

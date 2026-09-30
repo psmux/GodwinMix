@@ -114,5 +114,11 @@ pub fn short(need: &Cost, have: &Cost) -> Vec<&'static str> {
     out
 }
 
+/// One of the names [`short`] gives, back from a string that crossed a
+/// process boundary. `None` for a name this build does not know.
+pub fn short_name(name: &str) -> Option<&'static str> {
+    ["cpu", "device", "sessions", "memory", "uplink"].into_iter().find(|n| *n == name)
+}
+
 #[cfg(test)]
 mod tests;

@@ -532,6 +532,11 @@ pub struct SubscribeRequest {
     /// client asks for it.
     #[serde(default)]
     pub ext: Ext,
+    /// Which show this connection follows, on a station running several. The
+    /// station opens the connection to that show from here on. Omitted means
+    /// the show the URL named with `?show=`, or the first show.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub show: Option<String>,
 }
 
 /// The `ext` table from 03 section 6.
