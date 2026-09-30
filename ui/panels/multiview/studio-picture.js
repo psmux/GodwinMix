@@ -4,6 +4,7 @@
 
 import { sheetWidthFor } from "../../client/frames.js";
 import { settings } from "../../shell/settings.js";
+import { armedScene } from "./studio-armed.js";
 
 /** The mosaic cell a source is drawn in, or null. */
 function cellOf(s, source) {
@@ -22,9 +23,10 @@ function cellOf(s, source) {
  */
 export function retunePreview(panel, s) {
   const seen = settings().producer && panel.visible && panel.workspaceActive !== false && !document.hidden;
-  const source = seen && !s.preview && document.body.dataset.armed;
+  const scene = seen && armedScene(s);
+  const source = seen && !scene && document.body.dataset.armed;
   const cell = source ? cellOf(s, source) : null;
-  if (!seen || (!s.preview && cell === null)) {
+  if (!seen || (!scene && cell === null)) {
     releasePreview(panel);
     return;
   }

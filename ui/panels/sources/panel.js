@@ -448,7 +448,8 @@ class SourcesPanel extends HTMLElement {
       // Only a scene can be armed on the core's preview; a source is armed
       // here, and the scene is disarmed so one thing is in preview.
       document.body.dataset.armed = id;
-      if (this.client.state.preview) this.client.call("scene.preview.set", {}).catch((e) => errorToast(e, "Preview"));
+      const scenes = this.sceneClient();
+      if (this.client.state.preview || (scenes && scenes.armed())) this.client.call("scene.preview.set", {}).catch((e) => errorToast(e, "Preview"));
       document.dispatchEvent(new Event("gmx-armed"));
       this.render(this.client.state);
       return;

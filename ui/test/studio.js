@@ -87,6 +87,7 @@ export async function studioTests(test, eq, ok) {
     tiles: new Map(),
     scopedTo: () => ({ id: 'wide' }),
     putOnAir: SourcesPanel.prototype.putOnAir,
+    sceneClient: () => null,
     render() {},
     client: { state: { preview: 'Two shot' }, call: async (method, params) => trayCalls.push({ method, params }) },
   };

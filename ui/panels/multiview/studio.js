@@ -128,7 +128,8 @@ export async function take(panel, durationMs) {
     toast({ text: "Nothing is in preview. Click a scene or a source first." });
     return;
   }
-  const request = panel.client.state.preview === target ? { scene: target } : { source: target };
+  const scene = panel.client.state.preview === target || panel.armedScene === target;
+  const request = scene ? { scene: target } : { source: target };
   if (durationMs) {
     request.transition = { type: panel.typeSelect ? panel.typeSelect.value : "fade", duration_ms: durationMs };
   }
