@@ -254,6 +254,8 @@ fn the_table_matches_the_scopes_in_the_protocol_document() {
             "plugin.remove",
             "plugin.update",
             "preset.apply",
+            // It can replace every source, output, channel and scene at once.
+            "project.import",
             // A scene and an item are documents: deleting one cannot be undone
             // by repeating the call, so both are confirmed like the rest.
             "scene.item.filter.remove",

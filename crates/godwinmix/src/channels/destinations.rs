@@ -55,6 +55,16 @@ impl Channels {
             .collect()
     }
 
+    /// Seal one destination's address and key as a project file carried
+    /// them. The record beside it is the caller's to keep.
+    pub(super) fn seal_one(&self, channel: &str, id: &str, server: &str, key: Option<String>) -> Result<(), RpcError> {
+        let text = serde_json::to_string(&Sealed { server: server.to_string(), key })
+            .map_err(|e| RpcError::internal(format!("sealing a destination: {e}")))?;
+        self.secrets
+            .set(&scope(channel), id, &text)
+            .map_err(|e| RpcError::internal(format!("sealing a destination: {e:#}")))
+    }
+
     /// Seal what changed, forget what went, and answer the records to keep.
     fn seal(
         &self,
