@@ -5,13 +5,14 @@
 //! frame bus and every transport speak these types and nothing else, so each
 //! can be built, tested and replaced without the others.
 
-mod ask;
-mod presets;
 mod shape;
+mod table;
+mod wire;
 
-pub use ask::*;
-pub use presets::*;
+pub use table::events;
+
 pub use shape::*;
+pub use wire::*;
 
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};

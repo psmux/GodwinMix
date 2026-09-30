@@ -7,6 +7,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use godwinmix_core::state::Severity;
+use godwinmix_protocol::types::Event;
 use tracing::warn;
 
 use crate::channels::Channels;
@@ -45,6 +46,7 @@ fn look(channels: &Arc<Channels>) {
     for alert in &tick.alerts {
         warn!(%alert, "a channel rendition was shed");
         channels.mixer.publish_alert(Severity::Warning, alert.clone());
+        channels.mixer.emit(Event::GovernorShed { what: "a channel rendition".into(), why: alert.clone() });
     }
     if tick.replan {
         channels.replan();

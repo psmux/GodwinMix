@@ -8,7 +8,7 @@ use godwinmix_core::catalogue::Catalogue;
 use godwinmix_govern::load::Load;
 use godwinmix_govern::{Governor, GovernorConfig, Profile};
 use godwinmix_protocol::destination::{DestinationMode, StoredDestination};
-use godwinmix_protocol::rendition::RenditionAsk;
+use godwinmix_protocol::rendition::RenditionChoice;
 use serde_json::{json, Value};
 
 use super::outcome::Outcome;
@@ -40,7 +40,7 @@ fn dest(id: &str, ask: Option<Value>) -> StoredDestination {
         key: None,
         stream: "*".into(),
         enabled: true,
-        rendition: ask.map(|a| serde_json::from_value::<RenditionAsk>(a).unwrap()),
+        rendition: ask.map(|a| serde_json::from_value::<RenditionChoice>(a).unwrap()),
     }
 }
 
@@ -155,6 +155,11 @@ fn the_governor_refuses_what_a_small_cpu_cannot_carry_and_says_what_fits() {
     assert!(!no.advice.is_empty(), "something smaller is offered: {no:?}");
     assert!(no.advice[0].request.video.as_ref().unwrap().height.unwrap() < 1080 || no.advice[0].request.video.as_ref().unwrap().fps.unwrap().num == 30);
     assert_eq!(t.row("church", &dests[1], base(&dests[1])), None, "a refused destination is not handed to the listener");
+    let e = t.refusal_error("church", &dests[1]).expect("the edit that asked for it is answered with the refusal");
+    assert_eq!(e.code, godwinmix_protocol::error::ErrorCode::Safety.number());
+    assert!(e.data["need"]["cpu_millicores"].as_u64().unwrap() > e.data["have"]["cpu_millicores"].as_u64().unwrap());
+    assert!(e.data["advice"][0]["request"]["video"]["height"].is_number(), "{}", e.data);
+    assert!(t.refusal_error("church", &dests[0]).is_none());
     assert!(matches!(t.state.lock().outcome("church", "one"), Some(Outcome::Transcode { .. })));
 }
 

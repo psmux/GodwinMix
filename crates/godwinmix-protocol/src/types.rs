@@ -364,6 +364,10 @@ pub enum Event {
     ChannelRemoved { id: String },
     /// A publisher was turned away, with the reason it was given.
     ChannelRefused { id: String, stream: String, from: String, why: String },
+    /// The programme's rendition plan changed.
+    RenditionPlan { scope: String, plan: crate::rendition::PlanView },
+    /// The governor stopped something to keep what is on air whole.
+    GovernorShed { what: String, why: String },
 }
 
 /// What a surface starts with: the layout, the theme and the gallery mode.

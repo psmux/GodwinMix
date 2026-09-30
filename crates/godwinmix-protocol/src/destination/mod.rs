@@ -13,7 +13,7 @@ pub use requests::*;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
-use crate::rendition::RenditionAsk;
+use crate::rendition::RenditionChoice;
 
 /// Where a destination has got to.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
@@ -54,7 +54,7 @@ pub struct Destination {
     pub live: DestinationLive,
     /// What it asked to be converted to. Absent: sent as it arrives.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub rendition: Option<RenditionAsk>,
+    pub rendition: Option<RenditionChoice>,
     /// What the plan gave it, while its stream is live.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub plan: Option<DestinationPlan>,
@@ -92,7 +92,7 @@ pub struct StoredDestination {
     pub stream: String,
     pub enabled: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub rendition: Option<RenditionAsk>,
+    pub rendition: Option<RenditionChoice>,
 }
 
 impl StoredDestination {

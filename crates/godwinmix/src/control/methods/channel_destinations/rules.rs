@@ -6,7 +6,10 @@ use godwinmix_protocol::destination::{
     SetDestinationRequest, StoredDestination,
 };
 use godwinmix_protocol::error::RpcError;
-use godwinmix_protocol::rendition::{rendition_presets, RenditionAsk};
+use godwinmix_protocol::rendition::RenditionChoice;
+use godwinmix_render::presets::builtin;
+
+use crate::channels::transcode::request_for;
 
 /// Add a destination to `list`, and answer its id.
 pub fn add(list: &mut Vec<StoredDestination>, req: &AddDestinationRequest) -> Result<String, RpcError> {
@@ -75,14 +78,15 @@ pub fn remove(
 
 /// What to keep of a rendition ask: nothing for a copy, the ask itself
 /// when it names a preset or a request that can be read.
-fn rendition(ask: Option<&RenditionAsk>, id: &str) -> Result<Option<RenditionAsk>, RpcError> {
-    let Some(ask) = ask.filter(|a| !a.is_copy()) else { return Ok(None) };
-    ask.request(id).map_err(|why| {
-        RpcError::invalid_params(format!("the rendition cannot be used: {why}"))
+fn rendition(ask: Option<&RenditionChoice>, id: &str) -> Result<Option<RenditionChoice>, RpcError> {
+    let Some(ask) = ask else { return Ok(None) };
+    let request = request_for(id, ask).map_err(|why| {
+        let singles: Vec<String> = builtin().into_iter().filter(|p| p.ladder.is_none()).map(|p| p.id).collect();
+        RpcError::invalid_params(format!("That rendition cannot be used here: {why}"))
             .with("field", "rendition")
-            .with("presets", rendition_presets().into_iter().filter(|p| !p.is_ladder()).map(|p| p.id).collect::<Vec<_>>())
+            .with("presets", singles)
     })?;
-    Ok(Some(ask.clone()))
+    Ok(request.map(|_| ask.clone()))
 }
 
 fn clean(s: Option<&str>) -> Option<String> {
