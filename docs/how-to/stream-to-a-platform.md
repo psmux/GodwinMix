@@ -33,7 +33,11 @@ the mixer will not give the key back to be reused.
 
 A preset writes a destination with `YOUR-STREAM-KEY` where the key goes,
 because a preset cannot know yours. The row then says **Needs a stream key**
-rather than counting reconnect attempts at you.
+rather than counting reconnect attempts at you. The mixer never dials an
+address that still carries a placeholder (`YOUR-STREAM-KEY`, `your-key`,
+`change-me`), so a destination waiting for its key sends nothing to the
+platform, has no **Reconnect** button, and the header says destinations need a
+key. The example config's YouTube and Facebook destinations start this way.
 
 Press **Add key** on that row, then **Replace key**, paste, and save. The
 destination reconnects on its own; the programme and every other destination
