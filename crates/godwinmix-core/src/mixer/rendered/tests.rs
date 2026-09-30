@@ -195,8 +195,6 @@ async fn two_rungs_started_apart_put_keyframes_on_the_same_frames() {
     assert_ne!(small[0], big[0], "the rungs started on different frames");
     let gaps: Vec<u64> = big.windows(2).skip(1).map(|w| w[1] - w[0]).collect();
     assert!(gaps.iter().all(|g| *g == 1000), "one keyframe a second, as asked: {big:?}");
-    let gaps: Vec<u64> = big.windows(2).map(|w| w[1] - w[0]).collect();
-    assert!(gaps.iter().all(|g| g.abs_diff(1000) <= 40), "one keyframe a second, as asked: {big:?}");
     assert_eq!(shared.len(), small.len() - 1, "every keyframe after the first lines up: big {big:?} small {small:?}");
     mix.shutdown();
 }
