@@ -38,7 +38,7 @@ export function describe(request) {
   const r = request || {};
   const v = r.video || {};
   const out = {};
-  if (r.no_video) out.size = "Sound only";
+  if (r.no_video) out.size = "No picture";
   else if (v.width && v.height) out.size = `${v.width}×${v.height}`;
   else if (v.height) out.size = `${v.height}p`;
   if (!r.no_video && v.fps) out.fps = `${trim(v.fps.num / (v.fps.den || 1))} fps`;

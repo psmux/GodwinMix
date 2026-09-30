@@ -31,7 +31,7 @@ export function cpuUsers(plan, status) {
   const used = (status && status.cpu && status.cpu.used_millicores) || 0;
   const rest = used - merged.reduce((s, r) => s + r.value, 0);
   if (rest > 20) merged.push({ label: "The mixer itself", value: rest, title: "The programme, the previews and this page" });
-  return merged;
+  return merged.sort((a, b) => b.value - a.value);
 }
 
 /** What is using one GPU, in thousandths of it. */
@@ -47,7 +47,7 @@ export function deviceUsers(plan, device, deviceCount) {
   const merged = merge(rows);
   const rest = (device.used_millis || 0) - merged.reduce((s, r) => s + r.value, 0);
   if (rest > 20) merged.push({ label: "Other work on this device", value: rest });
-  return merged;
+  return merged.sort((a, b) => b.value - a.value);
 }
 
 /** True while anything goes out: a destination live or connecting, or a recording. */
@@ -65,4 +65,4 @@ export function deviceTitle(d) {
 export const share = (m) => `${Math.round((m || 0) / 10)}%`;
 
 /** Millicores in the unit a heading uses: "3.2 cores". */
-export const coresShort = (m) => `${Math.round((m || 0) / 100) / 10} cores`;
+export const coresShort = (m) => (m > 0 && m < 50 ? "under 0.1 cores" : `${Math.round((m || 0) / 100) / 10} cores`);

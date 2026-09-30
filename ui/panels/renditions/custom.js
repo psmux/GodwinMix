@@ -46,7 +46,6 @@ export function customSchema(codecs) {
       keyframe_s: {
         type: "number", title: "Keyframe every", minimum: 0.5, maximum: 10, default: 2, "x-gmx-unit": "s",
         description: "Two seconds is what the platforms ask for.",
-        "x-gmx-group": "Advanced",
       },
       sound: { type: "string", title: "Sound", oneOf: choice(SOUND), default: "aac-160" },
     },

@@ -1,7 +1,7 @@
 // Renditions against the stub, one state per address, for looking at and
 // for screenshots: /test/renditions.html?scene=format&theme=dark
 //
-// Scenes: format, custom, refused, hls, outputs, resources, channel,
+// Scenes: format, custom, refused, hls, outputs, watch, resources, channel,
 // chanform. Nothing here talks to a core.
 
 import { renditionStub } from "./renditions-stub.js";
@@ -57,6 +57,11 @@ async function main() {
     (await import("../panels/renditions/hls-add.js")).addHls(stub);
   } else if (scene === "outputs") await outputs();
   else if (scene === "resources") await outputs("resources");
+  else if (scene === "watch") {
+    await outputs();
+    await wait(200);
+    [...document.querySelectorAll(".rnd-hls button")].find((b) => b.textContent === "Watch here").click();
+  }
   else if (scene === "channel" || scene === "chanform") await channel();
   await wait(300);
   document.body.dataset.ready = "1";

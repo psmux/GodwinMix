@@ -95,7 +95,7 @@ class OutputsPanel extends HTMLElement {
     const tab = (id, kids) => el("button", { role: "tab", "aria-selected": String(id < 1), onclick: () => this.show(id ? "resources" : "outputs") }, kids);
     this.tabs = el("div.out-tabs", { role: "tablist" }, [tab(0, [el("strong", { text: "Outputs " }), this.count]), tab(1, ["Resources"])]);
     this.append(
-      el("div.row.pad", {}, [
+      el("div.row.pad.out-head", {}, [
         this.tabs,
         el("span.grow"),
         el("button.btn", { text: "Record", onclick: () => startRecording(this.client) }),

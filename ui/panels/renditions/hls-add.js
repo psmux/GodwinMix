@@ -47,14 +47,14 @@ export async function addHls(client, onDone) {
   const low = el("input", { type: "checkbox" });
   const refused = el("div", { hidden: true });
   const start = el("button.btn.primary", { text: "Start serving" });
-  const body = el("div.rnd-hlsform", {}, [
+  const body = el("div.form.rnd-hlsform", {}, [
     el("p.dim.sm", { style: { marginTop: "0" }, text: "Players pick the size that suits their connection, and switch as it changes." }),
     el("label.field", {}, [el("span.lbl", { text: "Name" }), name, el("span.hint", { text: "It becomes part of the link." })]),
     el("section.rnd-step", {}, [el("div.rnd-steph", {}, [el("span.rnd-kicker", { text: "Sizes" }), el("span.rnd-dim", { text: "Each one is a separate encode" })]), picker.node]),
     el("label.rnd-check", {}, [low, el("span", { text: "Low latency (about two seconds behind, for players that support it)" })]),
     refused,
   ]);
-  const m = modal({ title: "HLS for viewers", body, wide: true, footer: [el("button.btn", { text: "Cancel", onclick: () => m.close() }), start] });
+  const m = modal({ title: "HLS for viewers", body, footer: [el("button.btn", { text: "Cancel", onclick: () => m.close() }), start] });
 
   async function send(params) {
     try {

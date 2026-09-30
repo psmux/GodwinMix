@@ -9,7 +9,7 @@ import { el } from "../../shell/dom.js";
 import { toast, errorToast } from "../../shell/toast.js";
 import { capacityBar, sessionPips } from "./bars.js";
 import { cpuUsers, deviceUsers, onAir, deviceTitle, share, coresShort } from "./usage.js";
-import { cores, measuredWhen, upload } from "./words.js";
+import { measuredWhen, upload } from "./words.js";
 import { followPlan, missing, stylesheet } from "./shared.js";
 
 const POLL_MS = 2000;
@@ -103,9 +103,9 @@ export class ResourcesView {
     this.when.textContent = measuredWhen(s.calibrated_at);
     const total = (s.cpu.cores || 1) * 1000;
     const devices = s.devices || [];
-    const cpu = card("CPU", `${s.cpu.cores} cores`, `${coresShort(s.cpu.used_millicores)} of ${s.cpu.cores} in use`,
-      capacityBar(total, cpuUsers(this.plan, s), s.cpu.room_millicores || 0, cores));
-    const gpus = devices.map((d) => card(deviceTitle(d), share(d.used_millis) + " busy", `${share(d.used_millis)} busy, room for ${share(d.room_millis)} more`,
+    const cpu = card("CPU", `${s.cpu.cores} cores`, `${coresShort(s.cpu.used_millicores)} in use`,
+      capacityBar(total, cpuUsers(this.plan, s), s.cpu.room_millicores || 0, coresShort));
+    const gpus = devices.map((d) => card(deviceTitle(d), "", `${share(d.used_millis)} busy`,
       capacityBar(1000, deviceUsers(this.plan, d, devices.length), d.room_millis || 0, share), sessionPips(d.sessions_used || 0, d.sessions_max || 0)));
     const none = devices.length ? [] : [card("GPU", "none found", "Everything is encoded on the CPU", el("p.rnd-dim", { text: "No hardware encoder was found when this machine was measured. The CPU does it all, which is what GodwinMix is built for." }))];
     const up = card("Upload", "", `${upload(s.egress_kbps || 0)} going out`, el("p.rnd-dim", { text: "Copies cost no CPU, only upload. The governor counts this too." }));

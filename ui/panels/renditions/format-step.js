@@ -91,7 +91,8 @@ function copyCard(shape, suggestion, pick) {
 
 function presetCard(p, room, suggestedFor, pick) {
   const d = describe(p.request);
-  const meta = [d.size, d.fps, d.bitrate, d.codec].filter(Boolean).join(" · ");
+  // Each piece kept whole, so a narrow card breaks between them, never inside "6 Mb/s".
+  const meta = [d.size, d.fps, d.bitrate, d.codec].filter(Boolean).map((x) => x.replace(/ /g, "\u00a0")).join(" · ");
   const note = !usable(p) ? p.why || "This machine cannot make it" : suggestedFor ? `Suggested for ${suggestedFor}` : "";
   const c = card(p.id, p.title, meta, usable(p) ? costClass(p, room) : null, note, pick, !usable(p));
   if (!usable(p)) c.classList.add("off");
