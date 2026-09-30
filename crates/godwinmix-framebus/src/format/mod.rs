@@ -24,6 +24,10 @@ pub enum Format {
     Bgra = 6,
     Rgba = 7,
     Bgrx = 8,
+    /// Sound: 32 bit float samples, interleaved. See `audio.rs`.
+    F32 = 100,
+    /// Sound: 16 bit signed samples, interleaved.
+    S16 = 101,
 }
 
 impl Format {
@@ -49,17 +53,20 @@ impl Format {
             Format::Bgra => "BGRA",
             Format::Rgba => "RGBA",
             Format::Bgrx => "BGRx",
+            Format::F32 => "F32LE",
+            Format::S16 => "S16LE",
         }
     }
 
     pub fn from_name(name: &str) -> Option<Format> {
         Format::ALL
             .into_iter()
+            .chain(Format::AUDIO)
             .find(|f| f.name().eq_ignore_ascii_case(name))
     }
 
     pub fn from_code(code: u32) -> Option<Format> {
-        Format::ALL.into_iter().find(|f| *f as u32 == code)
+        Format::ALL.into_iter().chain(Format::AUDIO).find(|f| *f as u32 == code)
     }
 
     /// Per plane: bytes per pixel in a row, and the vertical subsampling shift.
@@ -71,6 +78,8 @@ impl Format {
             Format::P010 => &[(2, 1, 0), (4, 2, 1)],
             Format::Yuy2 | Format::Uyvy => &[(2, 1, 0)],
             Format::Bgra | Format::Rgba | Format::Bgrx => &[(4, 1, 0)],
+            // Sound has no planes; `Layout::new` refuses it before asking.
+            Format::F32 | Format::S16 => &[],
         }
     }
 }
@@ -94,6 +103,12 @@ pub struct Layout {
 impl Layout {
     /// The layout for a frame of this format and size.
     pub fn new(format: Format, width: u32, height: u32) -> Result<Layout, Error> {
+        if format.is_audio() {
+            return Err(Error::BadLayout(format!(
+                "{} is sound, not a picture. Use Layout::audio",
+                format.name()
+            )));
+        }
         if width == 0 || height == 0 || width > 16384 || height > 16384 {
             return Err(Error::BadLayout(format!(
                 "a frame of {width}x{height} is outside 1x1 to 16384x16384. \
@@ -143,6 +158,9 @@ impl Layout {
         (self.width as usize).div_ceil(hdiv) * bpp
     }
 }
+
+mod audio;
+pub use audio::MAX_CHUNK_MS;
 
 #[cfg(test)]
 mod tests;

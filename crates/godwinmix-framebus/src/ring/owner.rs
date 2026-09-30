@@ -4,7 +4,7 @@
 use std::sync::atomic::Ordering::{Relaxed, Release, SeqCst};
 
 use super::{Meta, Ring};
-use crate::header::{pack_latest, unpack_latest, WRITING};
+use crate::header::{pack_latest, unpack_latest, MAX_SLOTS, WRITING};
 
 impl Ring {
     fn leased(&self) -> u64 {
@@ -16,12 +16,23 @@ impl Ring {
 
     /// A slot to write the next frame into, or `None` when every slot is
     /// leased, in which case the frame is counted as dropped.
+    ///
+    /// A picture goes in the lowest numbered free slot, which keeps the pages
+    /// touched few. A chunk of sound goes in the oldest, so the chunks a reader
+    /// has not reached yet are the last to be overwritten.
     pub fn claim(&self) -> Option<usize> {
         let h = self.header();
         let latest = h.latest.load(Relaxed);
         let newest = (latest != 0).then(|| unpack_latest(latest).1);
         let busy = self.leased();
-        for s in 0..h.n_slots as usize {
+        let n = h.n_slots as usize;
+        let mut order = [0usize; MAX_SLOTS];
+        order.iter_mut().enumerate().for_each(|(i, s)| *s = i);
+        let order = &mut order[..n];
+        if self.in_order() {
+            order.sort_by_key(|&s| h.slots[s].seq.load(Relaxed));
+        }
+        for &s in order.iter() {
             if Some(s) == newest || busy & (1 << s) != 0 {
                 continue;
             }
@@ -45,6 +56,7 @@ impl Ring {
         s.captured_ns.store(meta.captured_ns, Relaxed);
         s.published_ns.store(now_ns, Relaxed);
         s.checksum.store(meta.checksum, Relaxed);
+        s.len.store(meta.len, Relaxed);
         s.seq.store(seq, Release);
         h.latest.store(pack_latest(seq, slot), Release);
         h.published.fetch_add(1, Relaxed);
