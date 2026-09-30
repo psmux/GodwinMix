@@ -7,12 +7,12 @@
 //! Everything here runs on the mixer thread, which owns the programme
 //! pipeline's state changes; never on a streaming thread or the bus handler.
 
-use super::elements::{self, Body};
-use super::keyframes;
+use super::elements;
+use super::wiring::{self, is_audio, take_down, Live};
 use crate::catalogue::select::GraphicsChoice;
 use crate::catalogue::Catalogue;
 use anyhow::{Context, Result};
-use godwinmix_render::{Node, NodeKind, Plan, Track};
+use godwinmix_render::{Node, NodeKind, Plan};
 use gstreamer as gst;
 use gstreamer::prelude::*;
 use std::collections::HashMap;
@@ -24,12 +24,6 @@ struct Running {
     /// False for the programme's own tee, which this does not own.
     owned: bool,
     body: Option<Live>,
-}
-
-struct Live {
-    elements: Vec<gst::Element>,
-    /// The pad on the upstream outlet the body's head hangs off.
-    upstream: Option<(gst::Element, gst::Pad)>,
 }
 
 /// Where the programme's raw frames and samples are.
@@ -62,10 +56,6 @@ impl Graph {
         self.nodes.get(id).map(|n| n.outlet.clone())
     }
 
-    pub fn is_running(&self, id: &str) -> bool {
-        self.nodes.get(id).is_some_and(|n| n.body.is_some() || !n.owned)
-    }
-
     /// Bring a node into the running graph: its outlet, then its body.
     pub fn start(&mut self, node: &Node, plan: &Plan, cat: &Catalogue, preset: Option<&str>) -> Result<()> {
         if self.nodes.contains_key(&node.id) {
@@ -80,7 +70,7 @@ impl Graph {
                 return Ok(());
             }
         }
-        let outlet = elements::outlet(&name)?;
+        let outlet = wiring::outlet(&name)?;
         self.programme.pipeline.add(&outlet).context("adding a rendition outlet")?;
         outlet.sync_state_with_parent().ok();
         self.nodes.insert(node.id.clone(), Running { outlet, owned: true, body: None });
@@ -99,7 +89,7 @@ impl Graph {
             return Ok(());
         };
         let upstream = self.upstream(node)?;
-        let live = self.link_body(body, &upstream, &outlet, node, plan)?;
+        let live = wiring::link(&self.programme.pipeline, self.programme.av_offset_ns, body, &upstream, &outlet, node, plan)?;
         if let Some(r) = self.nodes.get_mut(&node.id) {
             r.body = Some(live);
         }
@@ -117,33 +107,6 @@ impl Graph {
             return Ok(self.programme.audio.clone());
         }
         self.outlet(input).with_context(|| format!("{} reads {input}, which is not running", node.id))
-    }
-
-    fn link_body(&self, body: Body, upstream: &gst::Element, outlet: &gst::Element, node: &Node, plan: &Plan) -> Result<Live> {
-        let pipeline = &self.programme.pipeline;
-        let els = body.elements;
-        pipeline.add_many(&els).context("adding a rendition node")?;
-        gst::Element::link_many(&els).context("linking a rendition node")?;
-        els.last().context("an empty node")?.link(outlet).context("linking a node to its outlet")?;
-        if let (Some(enc), NodeKind::Encode { source, .. }) = (&body.encoder, &node.kind) {
-            let ms = plan.keyframe_ms.get(source).copied().unwrap_or(godwinmix_render::DEFAULT_KEYFRAME_MS);
-            keyframes::align(enc, ms);
-            // On the head queue rather than the encoder, as the programme
-            // chain has it on its encoder: an offset on the pad the keyframe
-            // request crosses would move the time it asks for.
-            if let Some(pad) = els[0].static_pad("src") {
-                pad.set_offset(self.programme.av_offset_ns);
-            }
-        }
-        // Tail first, and up before it is linked to a live tee: a flushing
-        // pad handed to a tee pauses its source for good.
-        for el in els.iter().rev() {
-            el.sync_state_with_parent().ok();
-        }
-        let head = els[0].static_pad("sink").context("a node head with no sink")?;
-        let pad = upstream.request_pad_simple("src_%u").context("the upstream tee refused a pad")?;
-        pad.link(&head).context("linking a node to what it reads")?;
-        Ok(Live { elements: els, upstream: Some((upstream.clone(), pad)) })
     }
 
     /// Take a node's body down, leaving its outlet and its consumers.
@@ -175,34 +138,4 @@ impl Graph {
         }
     }
 
-    /// Element names of every running body, for tests that count encoders.
-    pub fn element_names(&self) -> Vec<String> {
-        self.nodes
-            .values()
-            .filter_map(|r| r.body.as_ref())
-            .flat_map(|l| l.elements.iter().map(|e| e.name().to_string()))
-            .collect()
-    }
-}
-
-fn is_audio(kind: &NodeKind) -> bool {
-    matches!(
-        kind,
-        NodeKind::AudioConvert { .. } | NodeKind::AudioEncode { .. } | NodeKind::Decode { track: Track::Audio, .. } | NodeKind::Copy { track: Track::Audio, .. }
-    )
-}
-
-/// Unlink first, so nothing is pushed into an element on its way to NULL.
-fn take_down(pipeline: &gst::Pipeline, live: Live) {
-    if let Some((tee, pad)) = live.upstream {
-        if let Some(peer) = pad.peer() {
-            let _ = pad.unlink(&peer);
-        }
-        tee.release_request_pad(&pad);
-    }
-    for el in live.elements.iter() {
-        el.set_locked_state(true);
-        let _ = el.set_state(gst::State::Null);
-        let _ = pipeline.remove(el);
-    }
 }
