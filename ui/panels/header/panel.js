@@ -35,7 +35,7 @@ class HeaderPanel extends HTMLElement {
     this.ad = el("span.pill.live", { text: "AD BREAK", hidden: true });
 
     this.append(
-      el("strong", { text: "GodwinMix" }),
+      el("strong.wordmark", { "aria-label": "GodwinMix" }, [el("span.wm-godwin", { text: "Godwin" }), el("span.wm-mix", { text: "Mix" })]),
       this.tally,
       this.ad,
       this.destinations,

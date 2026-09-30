@@ -182,6 +182,7 @@ const ASSETS: &[(&str, &str)] = &[
     ("shell/sandbox.js", include_str!("../../../ui/shell/sandbox.js")),
     ("shell/selection.js", include_str!("../../../ui/shell/selection.js")),
     ("shell/settings.js", include_str!("../../../ui/shell/settings.js")),
+    ("shell/settings-dialog.js", include_str!("../../../ui/shell/settings-dialog.js")),
     ("shell/shell.js", include_str!("../../../ui/shell/shell.js")),
     ("shell/theme.js", include_str!("../../../ui/shell/theme.js")),
     ("shell/toast.js", include_str!("../../../ui/shell/toast.js")),
@@ -760,6 +761,7 @@ mod tests {
         reachable.extend(closure_of("client/transport-legacy.js"));
         reachable.extend(closure_of("client/schema-form.js"));
         reachable.extend(closure_of("shell/palette.js"));
+        reachable.extend(closure_of("shell/settings-dialog.js"));
         reachable.extend(closure_of("shell/dock-menu.js"));
         reachable.extend(closure_of("shell/picker.js"));
         reachable.extend(closure_of("panels/sources/chooser.js"));
