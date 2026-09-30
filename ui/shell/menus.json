@@ -1,0 +1,282 @@
+{
+  "version": 1,
+  "about": "The menu bar, once, for the page and for the desktop app's native menu. Each item names a command id from ui/shell/commands.js; `arg` is passed to it. `check` names a state the page shows as a tick. `native: false` keeps an item out of the native menu.",
+  "menus": [
+    {
+      "id": "file",
+      "title": "File",
+      "items": [
+        {
+          "command": "project.new",
+          "title": "New project…"
+        },
+        {
+          "command": "project.open",
+          "title": "Open project…"
+        },
+        {
+          "command": "project.save",
+          "title": "Save project as…"
+        },
+        {
+          "separator": true
+        },
+        {
+          "command": "mixer.settings",
+          "title": "Mixer settings…"
+        },
+        {
+          "command": "shell.settings",
+          "title": "Page settings…"
+        }
+      ]
+    },
+    {
+      "id": "edit",
+      "title": "Edit",
+      "items": [
+        {
+          "command": "shell.undo",
+          "title": "Undo"
+        },
+        {
+          "command": "shell.redo",
+          "title": "Redo"
+        },
+        {
+          "separator": true
+        },
+        {
+          "command": "edit.delete",
+          "title": "Delete",
+          "key": "Delete"
+        },
+        {
+          "separator": true
+        },
+        {
+          "command": "shell.palette",
+          "title": "Command palette…"
+        }
+      ]
+    },
+    {
+      "id": "view",
+      "title": "View",
+      "items": [
+        {
+          "command": "view.panel",
+          "arg": "core/program",
+          "title": "Programme",
+          "check": "panel"
+        },
+        {
+          "command": "view.panel",
+          "arg": "core/sources",
+          "title": "Sources",
+          "check": "panel"
+        },
+        {
+          "command": "view.panel",
+          "arg": "core/scenes",
+          "title": "Scenes",
+          "check": "panel"
+        },
+        {
+          "command": "view.panel",
+          "arg": "core/outputs",
+          "title": "Outputs",
+          "check": "panel"
+        },
+        {
+          "command": "view.panel",
+          "arg": "core/channels",
+          "title": "Channels",
+          "check": "panel"
+        },
+        {
+          "command": "view.panel",
+          "arg": "core/audio",
+          "title": "Audio",
+          "check": "panel"
+        },
+        {
+          "command": "view.panel",
+          "arg": "core/media",
+          "title": "Media",
+          "check": "panel"
+        },
+        {
+          "command": "view.panel",
+          "arg": "core/alerts",
+          "title": "Alerts",
+          "check": "panel"
+        },
+        {
+          "plugins": true
+        },
+        {
+          "separator": true
+        },
+        {
+          "command": "view.studio",
+          "title": "Studio mode",
+          "check": "studio"
+        },
+        {
+          "command": "view.reset-layout",
+          "title": "Reset layout"
+        },
+        {
+          "separator": true
+        },
+        {
+          "command": "view.theme",
+          "arg": "dark",
+          "title": "Dark theme",
+          "check": "theme"
+        },
+        {
+          "command": "view.theme",
+          "arg": "light",
+          "title": "Light theme",
+          "check": "theme"
+        },
+        {
+          "command": "view.theme",
+          "arg": "high-contrast",
+          "title": "High contrast theme",
+          "check": "theme"
+        },
+        {
+          "command": "view.theme",
+          "arg": "system",
+          "title": "Theme follows the system",
+          "check": "theme"
+        }
+      ]
+    },
+    {
+      "id": "sources",
+      "title": "Sources",
+      "items": [
+        {
+          "command": "tray.add",
+          "title": "Add source…",
+          "panel": "core/sources"
+        },
+        {
+          "separator": true
+        },
+        {
+          "command": "source.add-kind",
+          "arg": "cameras",
+          "title": "Camera…"
+        },
+        {
+          "command": "source.add-kind",
+          "arg": "screens",
+          "title": "Screen…"
+        },
+        {
+          "command": "source.add-kind",
+          "arg": "audio",
+          "title": "Microphone or audio input…"
+        },
+        {
+          "command": "source.add-kind",
+          "arg": "files",
+          "title": "Video or image…"
+        },
+        {
+          "command": "source.add-kind",
+          "arg": "web",
+          "title": "Web page…"
+        },
+        {
+          "command": "source.add-kind",
+          "arg": "streams",
+          "title": "Stream or feed…"
+        },
+        {
+          "command": "source.add-kind",
+          "arg": "test",
+          "title": "Test pattern…"
+        }
+      ]
+    },
+    {
+      "id": "scenes",
+      "title": "Scenes",
+      "items": [
+        {
+          "command": "scenes.new",
+          "title": "New scene",
+          "panel": "core/scenes"
+        },
+        {
+          "separator": true
+        },
+        {
+          "command": "program.take-armed",
+          "title": "Take"
+        },
+        {
+          "command": "program.cut-armed",
+          "title": "Cut"
+        },
+        {
+          "command": "program.black",
+          "title": "Cut to black"
+        }
+      ]
+    },
+    {
+      "id": "outputs",
+      "title": "Outputs",
+      "items": [
+        {
+          "command": "output.add-destination",
+          "title": "Add destination…",
+          "panel": "core/outputs"
+        },
+        {
+          "command": "channel.add",
+          "title": "Add channel…"
+        },
+        {
+          "separator": true
+        },
+        {
+          "command": "output.record",
+          "title": "Record"
+        },
+        {
+          "command": "output.resources",
+          "title": "Resources"
+        }
+      ]
+    },
+    {
+      "id": "help",
+      "title": "Help",
+      "items": [
+        {
+          "command": "shell.shortcuts",
+          "title": "Keyboard shortcuts"
+        },
+        {
+          "command": "help.docs",
+          "title": "Documentation"
+        },
+        {
+          "separator": true
+        },
+        {
+          "command": "help.about",
+          "title": "About GodwinMix"
+        }
+      ]
+    }
+  ]
+}
