@@ -60,6 +60,12 @@ settings = "schemas/source.json"   # JSON Schema draft 2020-12. It is the only U
 skill = "skills/source/SKILL.md"
 ```
 
+A source that opens a device only one process should hold (a camera, a
+capture card, a screen) adds one line, `share = { bus = "camera", params =
+["device"] }`, naming the params that say which device. The core then runs the
+plugin once per device on the machine and hands every other source the frames
+over the frame bus; the plugin itself changes nothing.
+
 Full key list in `docs/reference/plugin-manifest.md`. The validator reports every
 problem at once with the key path that caused it, so fix the whole file in one
 pass: `cargo run --bin check-manifest` in the Rust template, or
