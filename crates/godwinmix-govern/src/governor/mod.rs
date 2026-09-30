@@ -50,6 +50,9 @@ pub(crate) struct Inner {
     sampler: Mutex<Option<Sampler>>,
     /// The station, for a show: every claim goes there. See `remote.rs`.
     pub(crate) remote: RwLock<Option<Arc<dyn crate::remote::Remote>>>,
+    /// What the shows a station runs measure of themselves, thousandths of a
+    /// core. Their work is this governor's own, not another program's.
+    elsewhere: std::sync::atomic::AtomicU32,
 }
 
 /// One per machine. Cheap to clone; every clone is the same governor.
@@ -79,6 +82,7 @@ impl Governor {
                 book: Mutex::new(Book::default()),
                 sampler: Mutex::new(None),
                 remote: RwLock::new(None),
+                elsewhere: std::sync::atomic::AtomicU32::new(0),
             }),
         }
     }
@@ -102,9 +106,21 @@ impl Governor {
         self.inner.profile.read().clone()
     }
 
-    /// The latest load. Lock free.
+    /// The latest load. Lock free. Work this governor admitted in other
+    /// processes (a station's shows) counts as its own, so it is not counted
+    /// twice: once as a ticket and again as another program's load.
     pub fn load(&self) -> Load {
-        self.inner.load.load()
+        let mut l = self.inner.load.load();
+        let elsewhere = self.inner.elsewhere.load(std::sync::atomic::Ordering::Relaxed);
+        l.own_millicores = l.own_millicores.saturating_add(elsewhere);
+        l.others_peak_millicores = l.others_peak_millicores.saturating_sub(elsewhere);
+        l
+    }
+
+    /// What the processes this governor admits for measure of themselves,
+    /// summed. A station sets it from what its shows report.
+    pub fn set_elsewhere(&self, millicores: u32) {
+        self.inner.elsewhere.store(millicores, std::sync::atomic::Ordering::Relaxed);
     }
 
     /// Where the sampler writes. A test or another sampler may write here too.
@@ -114,14 +130,14 @@ impl Governor {
 
     /// The CPU kept free, thousandths of a core, as things stand.
     pub fn reserve(&self) -> u32 {
-        let l = self.inner.load.load();
+        let l = self.load();
         headroom::reserve(self.inner.cores, self.inner.config.desktop, l.jitter_millicores, self.inner.config.reserve_override())
     }
 
     /// What could be admitted now on the CPU alone, or on `device`.
     pub fn headroom(&self, device: Option<&str>) -> Cost {
         let book = self.inner.book.lock();
-        self.have(&book, &self.inner.load.load(), device)
+        self.have(&book, &self.load(), device)
     }
 
     /// Every ticket held, for a status page.

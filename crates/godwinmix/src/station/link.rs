@@ -10,6 +10,8 @@
 //!   governor.admit    Ask            -> Answer    the one budget
 //!   governor.release  {ticket}                    a node stopped
 //!   show.on_air       {on}                        something started or stopped going out
+//!   show.load         {millicores}                its own CPU, each second it holds a ticket
+//!   governor.shed     {steps}                     station to show: what to give up now
 //! ```
 //!
 //! When the connection closes the station drops every ticket it held for
@@ -18,6 +20,7 @@
 //! no use to anybody. See `client.rs` for the show's half.
 
 pub mod client;
+mod report;
 pub mod serve;
 
 use serde::{Deserialize, Serialize};

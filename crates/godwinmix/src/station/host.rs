@@ -47,8 +47,24 @@ impl Host for Linked {
         st.render.set_on_air(any);
     }
 
+    fn load(&self, show: &str, millicores: u32) {
+        let st = &self.0;
+        let sum = {
+            let mut loads = st.loads.lock();
+            loads.insert(show.to_string(), millicores);
+            loads.values().sum()
+        };
+        st.render.governor().set_elsewhere(sum);
+    }
+
     fn gone(&self, show: &str, pid: u32) {
         let st = &self.0;
+        let sum = {
+            let mut loads = st.loads.lock();
+            loads.remove(show);
+            loads.values().sum()
+        };
+        st.render.governor().set_elsewhere(sum);
         let mut procs = st.procs.lock();
         if let Some(p) = procs.get_mut(show).filter(|p| p.pid == Some(pid)) {
             p.addr.send_replace(None);

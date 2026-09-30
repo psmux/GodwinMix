@@ -56,6 +56,12 @@ pub trait Remote: Send + Sync {
     /// The station's ticket is no longer needed. Must not block: it is
     /// called from a ticket's drop, which can be on any thread.
     fn release(&self, ticket: u64);
+    /// What the station last said this show should give up, taken once.
+    /// Must not block: the mixer thread asks on every watchdog tick. The
+    /// station sends it only while the machine is over its line.
+    fn shed(&self) -> Vec<crate::ShedStep> {
+        Vec::new()
+    }
 }
 
 impl Governor {
