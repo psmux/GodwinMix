@@ -2,9 +2,14 @@
 //!
 //! # The seam with the graph builder
 //!
-//! The rendition planner builds one encoder per distinct rendition and a tee
-//! after each. To serve a ladder, it asks for an output's stream and hands
-//! this module one encoded pad per rung, and one for the audio:
+//! An `hls/output` with a rendition makes no encoder of its own. The mixer
+//! plans its rungs with every other output's ([`request::choice`] says what
+//! it asks for: a ladder whose keyframes fall on every segment boundary), and
+//! the output's kind is handed one [`crate::render::Tap`] per rung.
+//! [`rungs`] packages them: the top rung arrives on the core's own feed, and
+//! each lower one on a feed of its own off its tee.
+//!
+//! Anything else that has encoded pads can package them the same way:
 //!
 //! ```ignore
 //! let stream = hls::stream::get("viewers").expect("the hls/output is up");
@@ -22,14 +27,10 @@
 //! H.264, HEVC, AV1, AAC or Opus, and [`package::Attached::detach`]. The
 //! module finds the codec from the caps. It never asks the encoder for a
 //! keyframe: every rung of one ladder must already have its keyframes on the
-//! same frames, every `segment_ms` (see [`ladder::force_keyframes`] for one
-//! way). The pads may be in the programme pipeline or any other; the packager
-//! adds a leaky queue of its own, so a slow packager drops its own frames and
-//! never holds up the encoder.
-//!
-//! Until the planner does that, an `hls/output` asked for a ladder makes one
-//! itself from the programme encode ([`output`] and [`ladder`]), and the tests
-//! make one from a `videotestsrc`.
+//! same frames, every `segment_ms` (`render::keyframes::align` does it for
+//! the planner's encoders). The pads may be in the programme pipeline or any
+//! other; the packager adds a leaky queue of its own, so a slow packager
+//! drops its own frames and never holds up the encoder.
 //!
 //! # The parts
 //!
@@ -50,7 +51,8 @@ pub mod boxes;
 pub mod cutter;
 pub mod dash;
 pub mod key;
-pub mod ladder;
+#[cfg(test)]
+mod ladder;
 pub mod master;
 pub mod output;
 pub mod package;
@@ -60,6 +62,7 @@ pub mod playlist;
 pub mod registry;
 pub mod request;
 pub mod ring;
+pub mod rungs;
 pub mod stream;
 pub mod track;
 pub mod view;

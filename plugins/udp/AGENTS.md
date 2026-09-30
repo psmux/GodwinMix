@@ -24,7 +24,7 @@ cargo test -p gmx-udp                      # unit tests plus real sockets on thi
 cargo clippy -p gmx-udp --all-targets      # add no warning
 ./build                                    # stage bin/gmx-udp
 gmx plugin test plugins/udp --offline      # replay tests/transcript.jsonl
-python3 tests/drive.py --uri udp://@239.1.1.1:5000 --seconds 60   # a soak, with counters
+cargo run -p gmx-udp --example drive -- --uri udp://@239.1.1.1:5000 --seconds 60   # a soak, with counters
 ```
 
 On macOS, replace an installed `bin/gmx-udp` by removing it first and copying
@@ -47,7 +47,7 @@ the plugin never sent `initialize`.
 | `schemas/` | the settings of each provide, JSON Schema 2020-12 |
 | `skills/` | what an agent operating the mixer needs |
 | `tests/transcript.jsonl` | a recorded conversation, replayed offline |
-| `tests/drive.py`, `tests/lossy_send.py` | a stand in core and a lossy sender, for measuring by hand |
+| `examples/drive.rs`, `examples/lossy_send.rs` | a stand in core and a lossy sender, for measuring by hand |
 
 ## The rules that matter
 

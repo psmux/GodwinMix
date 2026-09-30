@@ -69,6 +69,22 @@ fn low_latency_playlist_at_a_segment_boundary_hints_the_next_one() {
 }
 
 #[test]
+fn an_open_segment_that_fills_its_fragment_hints_the_next_one() {
+    // Six parts of 333 ms are the whole two seconds: the next part is 104.0,
+    // never 103.6, which would not come.
+    let view = ring(3, 6).view();
+    let text = media(&view, &ll(), &[]);
+    assert!(text.contains("URI=\"103.5.m4s\""), "{text}");
+    assert!(text.ends_with("#EXT-X-PRELOAD-HINT:TYPE=PART,URI=\"104.0.m4s\"\n"), "{text}");
+    let short = ring(3, 5).view();
+    assert!(media(&short, &ll(), &[]).ends_with("URI=\"103.5.m4s\"\n"));
+    // Asked for one second segments from a source whose keyframes are two
+    // apart: the segments run two seconds, so a second in is half way.
+    let one = HlsParams { segment_ms: 1000, part_ms: 333, ..HlsParams::default() };
+    assert!(media(&ring(3, 3).view(), &one, &[]).ends_with("URI=\"103.3.m4s\"\n"));
+}
+
+#[test]
 fn plain_media_playlist_lists_only_whole_segments() {
     let p = HlsParams { window_s: 6, ..HlsParams::default() };
     let view = ring(5, 3).view();
