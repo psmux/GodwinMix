@@ -59,6 +59,7 @@ mod ids;
 mod model;
 mod nearest;
 mod plan;
+pub mod presets;
 mod resolve;
 mod sizing;
 mod static_model;

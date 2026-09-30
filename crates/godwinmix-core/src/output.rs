@@ -91,6 +91,8 @@ pub struct OutputSlot {
     /// What the implementation said about itself at `initialize`.
     manifest: crate::plugin::Manifest,
     capabilities: crate::plugin::CapabilitySet,
+    /// The rendition's rungs, when this output asked for one.
+    taps: Vec<crate::render::Tap>,
 }
 
 impl OutputSlot {
@@ -101,6 +103,18 @@ impl OutputSlot {
         audio_tee: &gst::Element,
         cfg: &OutputConfig,
         bus_tx: mpsc::Sender<BusEvent>,
+    ) -> Result<Arc<Self>> {
+        Self::attach_to(program, video_tee, audio_tee, cfg, bus_tx, Vec::new())
+    }
+
+    /// The same, onto a rendition's tees, with every rung for the kind.
+    pub fn attach_to(
+        program: &gst::Pipeline,
+        video_tee: &gst::Element,
+        audio_tee: &gst::Element,
+        cfg: &OutputConfig,
+        bus_tx: mpsc::Sender<BusEvent>,
+        taps: Vec<crate::render::Tap>,
     ) -> Result<Arc<Self>> {
         let id = &cfg.id;
         // As in `InputPipeline::build_kind`: the instance tag on every line
@@ -155,6 +169,7 @@ impl OutputSlot {
             kind: Mutex::new(kind),
             manifest: ready.manifest,
             capabilities: ready.capabilities,
+            taps,
         });
         // A destination that cannot be built takes its feed back out with it.
         if let Err(e) = slot.spin_up(false) {
@@ -231,6 +246,7 @@ impl OutputSlot {
                     pipeline: &pipeline,
                     params: &params,
                     cfg: &self.cfg,
+                    taps: &self.taps,
                 },
                 &vq,
                 &aq,

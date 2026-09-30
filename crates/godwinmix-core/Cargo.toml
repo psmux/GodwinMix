@@ -13,6 +13,11 @@ godwinmix-protocol = { workspace = true }
 # lifecycle and the budgets. No GStreamer, no server, no runtime of its own; it
 # is the half of a sidecar that is not a pipeline. See `plugin/host/`.
 godwinmix-host = { workspace = true }
+# The rendition planner (pure) and the resource governor. The governor's
+# `calibrate` feature times the catalogue's encoders with GStreamer, which
+# this crate has anyway. See `render/`.
+godwinmix-render = { workspace = true }
+godwinmix-govern = { workspace = true, features = ["calibrate"] }
 
 gstreamer = { workspace = true }
 gstreamer-video = { workspace = true }
