@@ -149,8 +149,8 @@ impl Discover {
     }
 
     /// Run the destinations the channel table asks for, and no others.
-    pub fn set_sends(&self, wanted: Vec<Wanted>) {
-        self.sends.apply(wanted);
+    pub fn set_sends(&self, wanted: Vec<Wanted>, specs: Vec<crate::transcode::StreamSpec>) {
+        self.sends.apply(wanted, specs);
     }
 
     /// Take a new channel table. A publisher it no longer lets in (its key

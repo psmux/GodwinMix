@@ -98,8 +98,8 @@ impl Router {
     }
 
     fn open_missing(&self, inner: &mut Inner) {
-        let wanted = inner.wanted.clone();
-        for output in wanted.into_iter().filter(|w| !inner.open.iter().any(|o| &o.output == w)) {
+        let missing: Vec<Output> = inner.wanted.iter().filter(|w| !inner.open.iter().any(|o| &o.output == *w)).cloned().collect();
+        for output in missing {
             let Ok(publication) = self.hub.publish_via(&self.app, &output.key, "transcode", None, "transcode") else { continue };
             let script = metadata(inner, &output, self.base.load(Ordering::Relaxed));
             publication.push(script);

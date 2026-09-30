@@ -57,7 +57,7 @@ impl Runner {
 
     fn run(&self, hub: &Hub) {
         while !self.stopped() {
-            let Some(stream) = pick(hub, &self.wanted.app, &self.wanted.stream) else {
+            let Some(stream) = pick(hub, &self.wanted.app, &self.wanted.reads()) else {
                 std::thread::sleep(LOOK);
                 continue;
             };
@@ -106,8 +106,12 @@ impl Runner {
 }
 
 /// Which stream to send now: the one named if it is live, or for `*` the
-/// channel's stream that has been live longest.
+/// channel's stream that has been live longest. A converting destination
+/// with nothing planned yet names nothing, and waits.
 fn pick(hub: &Hub, app: &str, wanted: &str) -> Option<String> {
+    if wanted.is_empty() {
+        return None;
+    }
     if wanted != "*" {
         return hub.is_live(app, wanted).then(|| wanted.to_string());
     }
