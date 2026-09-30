@@ -15,6 +15,8 @@
 
 use serde_json::Value;
 
+pub use crate::proto::{Protocol, Tls};
+
 /// The query parameters a key may arrive in, in the order they are looked for.
 const KEY_PARAMS: [&str; 4] = ["psk", "key", "token", "Token"];
 
@@ -28,6 +30,20 @@ pub struct Channel {
     pub key_in_name: bool,
     /// `(id, secret)`.
     pub keys: Vec<(String, String)>,
+    /// What it takes publishers over. RTMPS is `rtmps_port`, not in here.
+    pub protocols: Vec<Protocol>,
+    /// RTMPS, on this port, when a person has turned it on.
+    pub rtmps_port: Option<u16>,
+}
+
+impl Channel {
+    /// Does this channel take publishers over `protocol`?
+    pub fn takes(&self, protocol: Protocol) -> bool {
+        match protocol {
+            Protocol::Rtmps => self.rtmps_port.is_some(),
+            other => self.protocols.contains(&other),
+        }
+    }
 }
 
 /// A publisher let in.
@@ -53,6 +69,8 @@ pub struct Refusal {
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct Table {
     pub channels: Vec<Channel>,
+    /// The certificate RTMPS answers with, when there is one.
+    pub tls: Option<Tls>,
 }
 
 impl Table {
@@ -61,15 +79,21 @@ impl Table {
     pub fn from_params(params: &Value) -> Table {
         let list = params.get("channels").and_then(Value::as_array).cloned().unwrap_or_default();
         let channels = list.iter().filter_map(channel_of).collect();
-        Table { channels }
+        Table { channels, tls: Tls::from_params(params) }
     }
 
     pub fn is_open(&self) -> bool {
         self.channels.is_empty()
     }
 
-    /// Decide on one publisher.
+    /// Decide on one RTMP publisher. The tests ask it this way.
+    #[cfg(test)]
     pub fn admit(&self, app_raw: &str, stream_raw: &str) -> Result<Admit, Refusal> {
+        self.admit_via(Protocol::Rtmp, app_raw, stream_raw)
+    }
+
+    /// Decide on one publisher arriving over `protocol`.
+    pub fn admit_via(&self, protocol: Protocol, app_raw: &str, stream_raw: &str) -> Result<Admit, Refusal> {
         let (app, app_query) = split_query(app_raw);
         let (name, stream_query) = split_query(stream_raw);
         let refuse = |stream: &str, why: String| Refusal {
@@ -94,6 +118,9 @@ impl Table {
                 "the channel '{app}' is switched off. Switch it on in the mixer's Channels \
                  page and publish again."
             )));
+        }
+        if !channel.takes(protocol) {
+            return Err(refuse(shown, protocol.not_taken(app)));
         }
         let offered = if channel.key_in_name {
             Some(name.to_string())
@@ -125,10 +152,10 @@ impl Table {
 impl Table {
     /// Would a publisher on this channel, with this key, still be let in?
     /// Asked of everyone on air when the table changes.
-    pub fn still_admits(&self, channel: &str, key: &str) -> bool {
-        self.channels
-            .iter()
-            .any(|c| c.id == channel && c.enabled && c.keys.iter().any(|(id, _)| id == key))
+    pub fn still_admits(&self, channel: &str, key: &str, protocol: Protocol) -> bool {
+        self.channels.iter().any(|c| {
+            c.id == channel && c.enabled && c.takes(protocol) && c.keys.iter().any(|(id, _)| id == key)
+        })
     }
 }
 
@@ -150,7 +177,22 @@ fn channel_of(value: &Value) -> Option<Channel> {
         enabled: value.get("enabled").and_then(Value::as_bool).unwrap_or(true),
         key_in_name: text("key_mode").as_deref() == Some("stream"),
         keys,
+        protocols: protocols_of(value),
+        rtmps_port: value
+            .get("rtmps_port")
+            .and_then(Value::as_u64)
+            .and_then(|p| u16::try_from(p).ok())
+            .filter(|p| *p > 0),
     })
+}
+
+/// A table from a core that predates `protocols` meant RTMP, so no list is
+/// RTMP alone.
+fn protocols_of(value: &Value) -> Vec<Protocol> {
+    match value.get("protocols").and_then(Value::as_array) {
+        None => vec![Protocol::Rtmp],
+        Some(list) => list.iter().filter_map(Value::as_str).filter_map(Protocol::parse).collect(),
+    }
 }
 
 /// `name?a=b` into `name` and `a=b`.
@@ -162,7 +204,7 @@ pub fn split_query(raw: &str) -> (&str, &str) {
     }
 }
 
-fn key_param(query: &str) -> Option<String> {
+pub fn key_param(query: &str) -> Option<String> {
     let pairs: Vec<(&str, &str)> =
         query.split('&').filter_map(|p| p.split_once('=')).collect();
     KEY_PARAMS
