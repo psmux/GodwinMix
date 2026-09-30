@@ -224,7 +224,16 @@ fn preview(reg: &mut Registry<Call>) {
                 // mixer holds it either way, so arming before anybody is
                 // watching still costs one message.
                 push_preview(&call);
-                body(json!({ "preview": armed }))
+                // What the take would go to air without, said now rather than
+                // at Take, so a page can offer the fix while it is armed.
+                let missing = match &armed {
+                    Some(s) => {
+                        let here = call.source_ids().await?;
+                        crate::control::methods::program::missing::in_scene(&call, &s.name, &here)
+                    }
+                    None => Vec::new(),
+                };
+                body(json!({ "preview": armed, "missing": missing }))
             }),
         )
         .params(schema_of::<PreviewRequest>)

@@ -32,7 +32,7 @@ mod preview;
 pub(crate) mod plugins;
 pub mod presets;
 pub mod renditions;
-mod program;
+pub(crate) mod program;
 pub(crate) mod scenes;
 mod sources;
 mod tasks;
