@@ -27,6 +27,8 @@ pub mod registry;
 mod time;
 
 #[cfg(unix)]
+mod claim;
+#[cfg(unix)]
 mod link;
 #[cfg(unix)]
 mod publisher;
@@ -65,6 +67,8 @@ pub fn available() -> Result<(), Error> {
     ))
 }
 
+#[cfg(unix)]
+pub use claim::Claim;
 #[cfg(unix)]
 pub use publisher::{Publisher, PublisherOptions, PublisherStats, ReaderStats};
 #[cfg(unix)]
