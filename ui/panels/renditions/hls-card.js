@@ -60,9 +60,13 @@ export function hlsCard(client, output) {
     qr,
     el("div.rnd-hlsmain", {}, [el("span.rnd-kicker", { text: "Link for viewers" }), el("div.rnd-urlrow", {}, [link, copyBtn]), waiting, el("div.rnd-urlrow", {}, [watch]), player]),
   ]);
-  let base = (client.transport && client.transport.base) || location.origin;
+  // The page's own address plays the preview: the network address is for a
+  // phone, and a core bound to loopback does not answer on it.
+  const own = (client.transport && client.transport.base) || location.origin;
+  let base = own;
   let current = output;
   let url = null;
+  const local = () => hlsUrl(current, own);
   const draw = () => {
     url = hlsUrl(current, base);
     link.textContent = url || "The link appears once the output has started.";
@@ -73,17 +77,17 @@ export function hlsCard(client, output) {
   draw();
   reachableBase(client).then((b) => { base = b; draw(); });
   copyBtn.onclick = () => url && copy(copyBtn, url);
-  watch.onclick = () => url && togglePlayer(player, watch, url);
+  watch.onclick = () => url && togglePlayer(player, watch, local());
   return {
     node,
     update(next) {
-      const before = url;
+      const before = local();
       current = next;
       draw();
       const live = next.state === "live" && !!url;
       waiting.hidden = live;
       watch.disabled = !live;
-      if ((!live || url !== before) && !player.hidden) togglePlayer(player, watch, before);
+      if ((!live || local() !== before) && !player.hidden) togglePlayer(player, watch, before);
     },
   };
 }
