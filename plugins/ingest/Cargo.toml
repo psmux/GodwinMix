@@ -58,3 +58,8 @@ gstreamer-sdp = { version = "0.24", optional = true }
 [features]
 default = ["webrtc"]
 webrtc = ["dep:gstreamer-webrtc", "dep:gstreamer-sdp"]
+
+[dev-dependencies]
+# A self signed certificate for the RTMPS test; already in the tree under the
+# core's node certificate authority.
+rcgen = { workspace = true }
