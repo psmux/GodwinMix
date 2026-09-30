@@ -53,6 +53,9 @@ pub struct Launch {
     pub exe: PathBuf,
     /// Flags every show gets, such as `--log-format json` and `--rehearsal`.
     pub common: Vec<String>,
+    /// Where the station keeps this machine's calibration, so a show prices
+    /// its renditions from what was measured rather than from a guess.
+    pub calibration: Option<PathBuf>,
 }
 
 pub struct Station {

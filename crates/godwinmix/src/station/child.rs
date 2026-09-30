@@ -40,6 +40,9 @@ pub fn command(launch: &Launch, start: &Start) -> Command {
     if let Some(dir) = &start.runtime_dir {
         cmd.env("GODWINMIX_RUNTIME_DIR", dir);
     }
+    if let Some(dir) = &launch.calibration {
+        cmd.env(godwinmix_core::render::CALIBRATION_ENV, dir);
+    }
     cmd.stdin(Stdio::null()).stdout(Stdio::inherit()).stderr(Stdio::inherit());
     cmd.kill_on_drop(true);
     #[cfg(unix)]
@@ -73,7 +76,7 @@ mod tests {
 
     #[test]
     fn a_show_is_told_who_it_is_where_its_station_is_and_to_pick_its_own_port() {
-        let launch = Launch { exe: "/bin/godwinmix".into(), common: vec!["--log-format".into(), "json".into()] };
+        let launch = Launch { exe: "/bin/godwinmix".into(), common: vec!["--log-format".into(), "json".into()], calibration: None };
         let start = Start { id: "b", config: Path::new("/data/shows/b/godwinmix.toml"), link: "127.0.0.1:4000".parse().unwrap(), secret: "s", runtime_dir: None };
         let cmd = command(&launch, &start);
         let args: Vec<String> = cmd.as_std().get_args().map(|a| a.to_string_lossy().into_owned()).collect();

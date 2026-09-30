@@ -34,6 +34,10 @@ struct Inner {
 pub type OnAirHook = Box<dyn Fn(bool) + Send + Sync>;
 
 /// Cheap to clone; every clone is the same station.
+/// Set by a station on each show it starts: where this machine's
+/// calibration is kept.
+pub const CALIBRATION_ENV: &str = "GODWINMIX_CALIBRATION_DIR";
+
 #[derive(Clone)]
 pub struct Station {
     inner: Arc<Inner>,
@@ -106,7 +110,34 @@ impl Station {
     /// machine. The caller gives the governor its remote before the first
     /// claim.
     pub fn for_show(config: GovernorConfig, cat: &Catalogue, pin: Accel) -> Station {
-        Self::build(Governor::new(config, Profile::uncalibrated()), cat, pin, None)
+        let st = Self::build(Governor::new(config, Profile::uncalibrated()), cat, pin, None);
+        // Read, never measured: the station measures for the machine. Without
+        // this a show priced a hardware encode as if it ran on the CPU.
+        if let Some(dir) = std::env::var_os(CALIBRATION_ENV) {
+            let store = Store::new(std::path::Path::new(&dir));
+            let fp = fingerprint_for(&candidates::candidates(cat, pin));
+            let read = move |governor: &Governor| match store.load(&fp).or_else(|| store.latest()) {
+                Some(cal) => {
+                    governor.set_profile(Profile::from_calibration(cal));
+                    true
+                }
+                None => false,
+            };
+            // A show started before the station finished measuring looks again
+            // every ten seconds until the figures are there, then stops.
+            if !read(&st.inner.governor) {
+                let governor = st.inner.governor.clone();
+                let _ = std::thread::Builder::new().name("gmx-calibration-wait".into()).spawn(move || {
+                    for _ in 0..360 {
+                        std::thread::sleep(std::time::Duration::from_secs(10));
+                        if read(&governor) {
+                            return;
+                        }
+                    }
+                });
+            }
+        }
+        st
     }
 
     /// Say when on air changes, from now on.
