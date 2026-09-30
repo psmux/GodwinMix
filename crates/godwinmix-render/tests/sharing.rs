@@ -115,7 +115,8 @@ fn a_codec_the_container_cannot_carry_is_refused_with_the_ones_it_can() {
     let reqs = on("cam", vec![with_video(request("yt", Container::Flv), want)]);
     let err = plan(&src, &reqs, &software()).unwrap_err();
     assert_eq!(err.code(), "container-codec");
-    assert!(err.to_string().contains("h264, h265, av1"), "{err}");
+    assert!(err.to_string().contains("h264, h265"), "{err}");
+    assert!(!err.to_string().contains("av1"), "no GStreamer muxer writes AV1 in FLV: {err}");
     assert_eq!(err.data()["allowed"][0], "h264");
 }
 
