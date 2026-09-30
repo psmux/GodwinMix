@@ -464,9 +464,14 @@ pub enum Command {
     /// and the swap happens here so nothing can land between the two halves.
     SetOutput(Box<OutputConfig>, Option<Ack>),
     RemoveOutput(OutputId, Option<Ack>),
-    /// An output's reconnect has finished on its own thread, with why it
-    /// failed if it did. Never sent by the API.
-    OutputReconnected(OutputId, Option<String>),
+    /// An output's reconnect has finished on its own thread, with the output
+    /// it was started for and why it failed if it did. Applied only if that
+    /// output is still in place. Never sent by the API.
+    OutputReconnected(Arc<OutputSlot>, Option<String>),
+    /// A reconnect the supervisor armed for one output, held weakly so that
+    /// an output removed or changed meanwhile is not reconnected, and neither
+    /// is the one put in its place. Never sent by the API.
+    RetryOutput(std::sync::Weak<OutputSlot>),
     RestartSource(SourceId),
     /// A restart the supervisor armed for one instance of a source, named by
     /// its generation. Dropped if that instance has gone by the time it
@@ -3649,6 +3654,7 @@ impl Mixer {
             Command::SetOutput(..) => "output.set",
             Command::RemoveOutput(..) => "output.remove",
             Command::OutputReconnected(..) => "output.reconnected",
+            Command::RetryOutput(_) => "output.retry",
             Command::RestartSource(_) => "source.restart",
             Command::RetrySource(..) => "source.retry",
             Command::SourceRestarted(..) => "source.restarted",
@@ -3759,7 +3765,8 @@ impl Mixer {
                 self.restarted(&id, generation, failed)
             }
             Command::SourceStopped(_) => self.release_stopped(),
-            Command::OutputReconnected(id, failed) => self.output_reconnected(&id, failed),
+            Command::OutputReconnected(out, failed) => self.output_reconnected(&out, failed),
+            Command::RetryOutput(out) => self.retry_output(&out),
             Command::SetAudio { source, gain, muted, page, media, reply } => {
                 let _ = reply.send(self.set_audio(&source, gain, muted, page, &media));
             }
@@ -4063,11 +4070,14 @@ impl Mixer {
         self.reconnect_off_thread(out);
     }
 
-    /// A reconnect has come back from its thread.
-    fn output_reconnected(&mut self, id: &OutputId, failed: Option<String>) {
-        let Some(out) = self.outputs.iter().find(|o| o.id() == id).cloned() else {
+    /// A reconnect has come back from its thread, for the output it was
+    /// started on. See `mixer::generation` for why it is not looked up by id.
+    fn output_reconnected(&mut self, done: &Arc<OutputSlot>, failed: Option<String>) {
+        let Some(out) = self.current_output(done) else {
+            debug!(output = %done.id(), "a reconnect finished for an output that has since gone");
             return;
         };
+        let id = out.id();
         // On success the backoff is deliberately not reset. Building a
         // pipeline succeeding is not the same as the far end accepting us; the
         // counter is cleared in `tick` once data actually flows, so a
@@ -4086,10 +4096,11 @@ impl Mixer {
         let delay = out.cfg.reconnect_policy().delay_for(*attempt);
         *attempt += 1;
         let handle = self.handle.clone();
+        let out = Arc::downgrade(out);
         info!(output = %id, ?delay, "scheduling output reconnect");
         self.rt.spawn(async move {
             tokio::time::sleep(delay).await;
-            let _ = handle.send(Command::ReconnectOutput(id, None));
+            let _ = handle.send(Command::RetryOutput(out));
         });
     }
 

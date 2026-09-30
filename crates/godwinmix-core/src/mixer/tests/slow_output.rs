@@ -5,7 +5,7 @@ const STUCK: Duration = Duration::from_secs(3);
 /// A destination that takes the connection and never says a word, which is
 /// what `rtmp2sink` met on port 1935 on 2026-10-01. The connections are held
 /// open for the life of the test process.
-fn silent_server() -> u16 {
+pub(super) fn silent_server() -> u16 {
     let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
     let port = listener.local_addr().unwrap().port();
     std::thread::spawn(move || {

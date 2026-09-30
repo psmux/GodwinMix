@@ -15,9 +15,15 @@
 //! for a generation that is no longer there is dropped with a line in the
 //! debug log. A restart the operator asks for by name still goes to whatever
 //! is under that name now, which is what they meant.
+//!
+//! An output has the same problem and a simpler answer. Its slot is already
+//! shared behind an `Arc`, so the worker and the timer carry the slot itself
+//! (the timer weakly) and what comes back is matched by identity.
 
 use super::Mixer;
+use crate::output::OutputSlot;
 use crate::state::SourceId;
+use std::sync::{Arc, Weak};
 use tracing::debug;
 
 impl Mixer {
@@ -50,6 +56,23 @@ impl Mixer {
                 now = ?now,
                 "dropping a retry armed for a source that has since been removed or replaced"
             ),
+        }
+    }
+
+    /// The output in place that is `out` itself, if it still is.
+    pub(super) fn current_output(&self, out: &Arc<OutputSlot>) -> Option<Arc<OutputSlot>> {
+        self.outputs.iter().find(|o| Arc::ptr_eq(o, out)).cloned()
+    }
+
+    /// A reconnect the supervisor armed for one output. Goes ahead only if
+    /// that output is still the one in place and has a key to connect with.
+    pub(super) fn retry_output(&mut self, out: &Weak<OutputSlot>) {
+        let Some(out) = out.upgrade().and_then(|o| self.current_output(&o)) else {
+            debug!("dropping a reconnect armed for an output that has since been removed or changed");
+            return;
+        };
+        if out.has_key() {
+            self.reconnect_off_thread(out);
         }
     }
 }
