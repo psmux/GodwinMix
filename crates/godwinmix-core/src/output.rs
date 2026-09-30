@@ -591,7 +591,12 @@ mod tests {
         let bad = OutputConfig::bare("retry", "127.0.0.1:1935/live");
         assert!(OutputSlot::attach(&program, &vtee, &atee, &bad, tx.clone()).is_err());
         assert!(program.by_name("out-retry-vq").is_none(), "the refused add left its feed behind");
-        OutputSlot::attach(&program, &vtee, &atee, &cfg("retry"), tx).expect("the same id, a good address");
+        let slot = OutputSlot::attach(&program, &vtee, &atee, &cfg("retry"), tx).expect("the same id, a good address");
+        // Stopped like every other test here: a slot dropped while its sink
+        // is still dialling left GLib waiting on a condition that was gone,
+        // and the whole test binary aborted.
+        slot.shutdown();
+        let _ = program.set_state(gst::State::Null);
     }
 
     #[test]
